@@ -1,13 +1,26 @@
-import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Switch } from '@/components/ui/switch'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Puzzle, RefreshCw, Loader2, AlertCircle, CheckCircle2, Info } from 'lucide-react'
-import { apiClient } from '@/lib/api'
+import { createFileRoute } from '@tanstack/react-router'
+import {
+  Puzzle,
+  RefreshCw,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  Info,
+} from 'lucide-react'
 import { toast } from 'sonner'
+import { apiClient } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 
 export const Route = createFileRoute('/_authenticated/extensions/')({
   component: ExtensionsPage,
@@ -91,7 +104,9 @@ function ExtensionsPage() {
   const { data, isLoading, error } = useQuery<ListExtensionsResponse>({
     queryKey: ['extensions'],
     queryFn: async () => {
-      const response = await apiClient.get<ListExtensionsResponse>('/api/v1/admin/extensions')
+      const response = await apiClient.get<ListExtensionsResponse>(
+        '/api/v1/admin/extensions'
+      )
       return response.data
     },
   })
@@ -112,8 +127,11 @@ function ExtensionsPage() {
       }
     },
     onError: (error: unknown) => {
-      const axiosError = error as { response?: { data?: EnableDisableResponse } }
-      const message = axiosError.response?.data?.message || 'Failed to enable extension'
+      const axiosError = error as {
+        response?: { data?: EnableDisableResponse }
+      }
+      const message =
+        axiosError.response?.data?.message || 'Failed to enable extension'
       toast.error(message)
     },
   })
@@ -134,8 +152,11 @@ function ExtensionsPage() {
       }
     },
     onError: (error: unknown) => {
-      const axiosError = error as { response?: { data?: EnableDisableResponse } }
-      const message = axiosError.response?.data?.message || 'Failed to disable extension'
+      const axiosError = error as {
+        response?: { data?: EnableDisableResponse }
+      }
+      const message =
+        axiosError.response?.data?.message || 'Failed to disable extension'
       toast.error(message)
     },
   })
@@ -178,19 +199,21 @@ function ExtensionsPage() {
   )
 
   // Sort categories by defined order
-  const sortedCategories = Object.keys(extensionsByCategory || {}).sort((a, b) => {
-    const aIndex = categoryOrder.indexOf(a)
-    const bIndex = categoryOrder.indexOf(b)
-    if (aIndex === -1 && bIndex === -1) return a.localeCompare(b)
-    if (aIndex === -1) return 1
-    if (bIndex === -1) return -1
-    return aIndex - bIndex
-  })
+  const sortedCategories = Object.keys(extensionsByCategory || {}).sort(
+    (a, b) => {
+      const aIndex = categoryOrder.indexOf(a)
+      const bIndex = categoryOrder.indexOf(b)
+      if (aIndex === -1 && bIndex === -1) return a.localeCompare(b)
+      if (aIndex === -1) return 1
+      if (bIndex === -1) return -1
+      return aIndex - bIndex
+    }
+  )
 
   if (error) {
     return (
       <div className='flex flex-1 flex-col gap-6 p-6'>
-        <div className='flex items-center gap-2 text-destructive'>
+        <div className='text-destructive flex items-center gap-2'>
           <AlertCircle className='h-5 w-5' />
           <span>Failed to load extensions</span>
         </div>
@@ -202,11 +225,11 @@ function ExtensionsPage() {
     <div className='flex flex-1 flex-col gap-6 p-6'>
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-3xl font-bold tracking-tight flex items-center gap-2'>
+          <h1 className='flex items-center gap-2 text-3xl font-bold tracking-tight'>
             <Puzzle className='h-8 w-8' />
             Extensions
           </h1>
-          <p className='text-sm text-muted-foreground mt-2'>
+          <p className='text-muted-foreground mt-2 text-sm'>
             Manage PostgreSQL extensions for your database
           </p>
         </div>
@@ -217,9 +240,9 @@ function ExtensionsPage() {
           disabled={syncMutation.isPending}
         >
           {syncMutation.isPending ? (
-            <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+            <Loader2 className='mr-2 h-4 w-4 animate-spin' />
           ) : (
-            <RefreshCw className='h-4 w-4 mr-2' />
+            <RefreshCw className='mr-2 h-4 w-4' />
           )}
           Sync from Database
         </Button>
@@ -227,7 +250,7 @@ function ExtensionsPage() {
 
       {isLoading ? (
         <div className='flex justify-center py-12'>
-          <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
+          <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
         </div>
       ) : (
         <div className='space-y-6'>
@@ -250,19 +273,26 @@ function ExtensionsPage() {
                     'Extensions for optimizing and improving query performance.'}
                   {category === 'maintenance' &&
                     'Extensions for database maintenance and administrative tasks.'}
-                  {category === 'scheduling' && 'Extensions for scheduling jobs within PostgreSQL.'}
-                  {category === 'data_types' && 'Extensions that add additional data types.'}
+                  {category === 'scheduling' &&
+                    'Extensions for scheduling jobs within PostgreSQL.'}
+                  {category === 'data_types' &&
+                    'Extensions that add additional data types.'}
                   {category === 'text_search' &&
                     'Extensions for full-text search and text processing.'}
-                  {category === 'indexing' && 'Extensions for advanced indexing capabilities.'}
+                  {category === 'indexing' &&
+                    'Extensions for advanced indexing capabilities.'}
                   {category === 'foreign_data' &&
                     'Extensions for accessing external data sources and foreign tables.'}
                   {category === 'networking' &&
                     'Extensions for network operations from within PostgreSQL.'}
-                  {category === 'triggers' && 'Extensions for trigger-based functionality.'}
-                  {category === 'sampling' && 'Extensions for data sampling and statistics.'}
-                  {category === 'testing' && 'Extensions for database testing and validation.'}
-                  {category === 'utilities' && 'General-purpose utility extensions.'}
+                  {category === 'triggers' &&
+                    'Extensions for trigger-based functionality.'}
+                  {category === 'sampling' &&
+                    'Extensions for data sampling and statistics.'}
+                  {category === 'testing' &&
+                    'Extensions for database testing and validation.'}
+                  {category === 'utilities' &&
+                    'General-purpose utility extensions.'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -271,14 +301,16 @@ function ExtensionsPage() {
                     <div
                       key={extension.id}
                       className={cn(
-                        'flex items-start justify-between p-4 rounded-lg border',
+                        'flex items-start justify-between rounded-lg border p-4',
                         extension.is_enabled && 'bg-muted/30'
                       )}
                     >
-                      <div className='space-y-1 flex-1'>
+                      <div className='flex-1 space-y-1'>
                         <div className='flex items-center gap-2'>
-                          <span className='font-medium'>{extension.display_name}</span>
-                          <code className='text-xs bg-muted px-1.5 py-0.5 rounded'>
+                          <span className='font-medium'>
+                            {extension.display_name}
+                          </span>
+                          <code className='bg-muted rounded px-1.5 py-0.5 text-xs'>
                             {extension.name}
                           </code>
                           {extension.is_core && (
@@ -287,21 +319,27 @@ function ExtensionsPage() {
                             </Badge>
                           )}
                           {extension.requires_restart && !extension.is_core && (
-                            <Badge variant='outline' className='text-xs text-orange-600'>
+                            <Badge
+                              variant='outline'
+                              className='text-xs text-orange-600'
+                            >
                               Requires Restart
                             </Badge>
                           )}
                         </div>
                         {extension.description && (
-                          <p className='text-sm text-muted-foreground'>{extension.description}</p>
+                          <p className='text-muted-foreground text-sm'>
+                            {extension.description}
+                          </p>
                         )}
-                        <div className='flex items-center gap-3 text-xs text-muted-foreground pt-1'>
-                          {extension.is_enabled && extension.installed_version && (
-                            <span className='flex items-center gap-1'>
-                              <CheckCircle2 className='h-3 w-3 text-green-500' />
-                              v{extension.installed_version}
-                            </span>
-                          )}
+                        <div className='text-muted-foreground flex items-center gap-3 pt-1 text-xs'>
+                          {extension.is_enabled &&
+                            extension.installed_version && (
+                              <span className='flex items-center gap-1'>
+                                <CheckCircle2 className='h-3 w-3 text-green-500' />
+                                v{extension.installed_version}
+                              </span>
+                            )}
                           {extension.is_installed && !extension.is_enabled && (
                             <span className='flex items-center gap-1'>
                               <Info className='h-3 w-3' />
@@ -325,15 +363,16 @@ function ExtensionsPage() {
             </Card>
           ))}
 
-          <div className='rounded-lg bg-muted p-4'>
+          <div className='bg-muted rounded-lg p-4'>
             <div className='flex gap-2'>
-              <AlertCircle className='h-5 w-5 text-muted-foreground shrink-0 mt-0.5' />
-              <div className='text-sm space-y-1'>
+              <AlertCircle className='text-muted-foreground mt-0.5 h-5 w-5 shrink-0' />
+              <div className='space-y-1 text-sm'>
                 <p className='font-medium'>Extension Management</p>
                 <p className='text-muted-foreground'>
-                  Extensions are installed into the PostgreSQL database. Some extensions may require
-                  a database restart to take effect. Core extensions are required for Fluxbase
-                  functionality and cannot be disabled.
+                  Extensions are installed into the PostgreSQL database. Some
+                  extensions may require a database restart to take effect. Core
+                  extensions are required for Fluxbase functionality and cannot
+                  be disabled.
                 </p>
               </div>
             </div>

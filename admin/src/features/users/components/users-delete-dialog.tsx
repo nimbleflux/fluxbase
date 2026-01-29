@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { userManagementApi } from '@/lib/api'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'

@@ -1,11 +1,17 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { createFileRoute } from '@tanstack/react-router'
+import { Database } from 'lucide-react'
+import { monitoringApi } from '@/lib/api'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Database } from 'lucide-react'
-import { useState } from 'react'
-import { monitoringApi } from '@/lib/api'
 
 export const Route = createFileRoute('/_authenticated/database-config/')({
   component: DatabaseConfigPage,
@@ -41,11 +47,13 @@ function DatabaseConfigPage() {
   return (
     <div className='flex flex-1 flex-col gap-6 p-6'>
       <div>
-        <h1 className='text-3xl font-bold tracking-tight flex items-center gap-2'>
+        <h1 className='flex items-center gap-2 text-3xl font-bold tracking-tight'>
           <Database className='h-8 w-8' />
           Database
         </h1>
-        <p className='text-sm text-muted-foreground mt-2'>PostgreSQL connection settings and connection pool configuration</p>
+        <p className='text-muted-foreground mt-2 text-sm'>
+          PostgreSQL connection settings and connection pool configuration
+        </p>
       </div>
 
       <Card>
@@ -54,13 +62,17 @@ function DatabaseConfigPage() {
             <Database className='h-5 w-5' />
             Database Configuration
           </CardTitle>
-          <CardDescription>PostgreSQL connection settings and connection pool configuration</CardDescription>
+          <CardDescription>
+            PostgreSQL connection settings and connection pool configuration
+          </CardDescription>
         </CardHeader>
         <CardContent className='space-y-6'>
           {/* Connection Settings */}
           <div className='space-y-4'>
-            <h3 className='text-sm font-semibold'>Connection Settings (Read-only)</h3>
-            <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+            <h3 className='text-sm font-semibold'>
+              Connection Settings (Read-only)
+            </h3>
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
               <div className='space-y-2'>
                 <Label>Host</Label>
                 <Input value={dbConfig.host} disabled />
@@ -74,57 +86,92 @@ function DatabaseConfigPage() {
                 <Input value={dbConfig.database} disabled />
               </div>
             </div>
-            <p className='text-xs text-muted-foreground'>
-              Database connection settings are configured via environment variables (POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB)
+            <p className='text-muted-foreground text-xs'>
+              Database connection settings are configured via environment
+              variables (POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB)
             </p>
           </div>
 
           {/* Connection Pool Settings */}
-          <div className='space-y-4 pt-4 border-t'>
+          <div className='space-y-4 border-t pt-4'>
             <h3 className='text-sm font-semibold'>Connection Pool Settings</h3>
-            <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
               <div className='space-y-2'>
                 <Label>Max Connections</Label>
-                <Input type='number' value={dbConfig.max_connections} disabled />
-                <p className='text-xs text-muted-foreground'>Maximum number of connections in the pool</p>
+                <Input
+                  type='number'
+                  value={dbConfig.max_connections}
+                  disabled
+                />
+                <p className='text-muted-foreground text-xs'>
+                  Maximum number of connections in the pool
+                </p>
               </div>
               <div className='space-y-2'>
                 <Label>Min Connections</Label>
-                <Input type='number' value={dbConfig.min_connections} disabled />
-                <p className='text-xs text-muted-foreground'>Minimum number of idle connections</p>
+                <Input
+                  type='number'
+                  value={dbConfig.min_connections}
+                  disabled
+                />
+                <p className='text-muted-foreground text-xs'>
+                  Minimum number of idle connections
+                </p>
               </div>
               <div className='space-y-2'>
                 <Label>Max Connection Lifetime</Label>
-                <Input type='number' value={dbConfig.max_lifetime_seconds} disabled />
-                <p className='text-xs text-muted-foreground'>Maximum lifetime in seconds</p>
+                <Input
+                  type='number'
+                  value={dbConfig.max_lifetime_seconds}
+                  disabled
+                />
+                <p className='text-muted-foreground text-xs'>
+                  Maximum lifetime in seconds
+                </p>
               </div>
               <div className='space-y-2'>
                 <Label>Max Idle Time</Label>
-                <Input type='number' value={dbConfig.max_idle_seconds} disabled />
-                <p className='text-xs text-muted-foreground'>Maximum idle time in seconds</p>
+                <Input
+                  type='number'
+                  value={dbConfig.max_idle_seconds}
+                  disabled
+                />
+                <p className='text-muted-foreground text-xs'>
+                  Maximum idle time in seconds
+                </p>
               </div>
             </div>
           </div>
 
           {/* Current Pool Status */}
-          <div className='space-y-4 pt-4 border-t'>
+          <div className='space-y-4 border-t pt-4'>
             <h3 className='text-sm font-semibold'>Current Pool Status</h3>
-            <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
-              <div className='border rounded-lg p-3'>
-                <div className='text-2xl font-bold'>{systemInfo?.database.total_conns || 0}</div>
-                <p className='text-xs text-muted-foreground mt-1'>Total Connections</p>
+            <div className='grid grid-cols-2 gap-4 md:grid-cols-4'>
+              <div className='rounded-lg border p-3'>
+                <div className='text-2xl font-bold'>
+                  {systemInfo?.database.total_conns || 0}
+                </div>
+                <p className='text-muted-foreground mt-1 text-xs'>
+                  Total Connections
+                </p>
               </div>
-              <div className='border rounded-lg p-3'>
-                <div className='text-2xl font-bold'>{systemInfo?.database.idle_conns || 0}</div>
-                <p className='text-xs text-muted-foreground mt-1'>Idle</p>
+              <div className='rounded-lg border p-3'>
+                <div className='text-2xl font-bold'>
+                  {systemInfo?.database.idle_conns || 0}
+                </div>
+                <p className='text-muted-foreground mt-1 text-xs'>Idle</p>
               </div>
-              <div className='border rounded-lg p-3'>
-                <div className='text-2xl font-bold'>{systemInfo?.database.acquired_conns || 0}</div>
-                <p className='text-xs text-muted-foreground mt-1'>Acquired</p>
+              <div className='rounded-lg border p-3'>
+                <div className='text-2xl font-bold'>
+                  {systemInfo?.database.acquired_conns || 0}
+                </div>
+                <p className='text-muted-foreground mt-1 text-xs'>Acquired</p>
               </div>
-              <div className='border rounded-lg p-3'>
-                <div className='text-2xl font-bold'>{systemInfo?.database.max_conns || 0}</div>
-                <p className='text-xs text-muted-foreground mt-1'>Max</p>
+              <div className='rounded-lg border p-3'>
+                <div className='text-2xl font-bold'>
+                  {systemInfo?.database.max_conns || 0}
+                </div>
+                <p className='text-muted-foreground mt-1 text-xs'>Max</p>
               </div>
             </div>
           </div>

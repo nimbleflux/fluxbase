@@ -1,5 +1,5 @@
-import { type ColumnDef } from '@tanstack/react-table'
 import { formatDistanceToNow } from 'date-fns'
+import { type ColumnDef } from '@tanstack/react-table'
 import { Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'

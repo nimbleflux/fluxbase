@@ -5,8 +5,8 @@ import { useFluxbaseClient } from '@fluxbase/sdk-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { useImpersonationStore } from '@/stores/impersonation-store'
-import { syncAuthToken } from '@/lib/fluxbase-client'
 import { dashboardAuthAPI, type DashboardLoginRequest } from '@/lib/api'
+import { syncAuthToken } from '@/lib/fluxbase-client'
 
 export function useAuth() {
   const { auth } = useAuthStore()
@@ -71,7 +71,8 @@ export function useAuth() {
     onError: (error: unknown) => {
       // Extract error message from axios error response
       const axiosError = error as { response?: { data?: { error?: string } } }
-      const message = axiosError.response?.data?.error ||
+      const message =
+        axiosError.response?.data?.error ||
         (error instanceof Error ? error.message : 'Failed to sign in')
       toast.error(message)
     },

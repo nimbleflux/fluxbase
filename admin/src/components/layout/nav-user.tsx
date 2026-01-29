@@ -1,8 +1,8 @@
-import { SidebarMenu, SidebarMenuItem } from '@/components/ui/sidebar'
-import { Button } from '@/components/ui/button'
-import { logout } from '@/lib/auth'
 import { LogOut, User } from 'lucide-react'
+import { logout } from '@/lib/auth'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { SidebarMenu, SidebarMenuItem } from '@/components/ui/sidebar'
 
 // Component to display user name in sidebar footer
 type NavUserProps = {
@@ -26,7 +26,9 @@ export function NavUser({ user }: NavUserProps) {
           </Avatar>
           <div className='grid flex-1 text-start text-sm leading-tight'>
             <span className='truncate font-semibold'>{user.name}</span>
-            <span className='truncate text-xs text-muted-foreground'>{user.email}</span>
+            <span className='text-muted-foreground truncate text-xs'>
+              {user.email}
+            </span>
           </div>
           <Button
             variant='ghost'

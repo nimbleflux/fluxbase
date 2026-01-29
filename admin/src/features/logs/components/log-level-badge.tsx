@@ -1,7 +1,7 @@
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { LOG_LEVEL_CONFIG } from '../constants'
 import type { LogLevel } from '../types'
-import { cn } from '@/lib/utils'
 
 interface LogLevelBadgeProps {
   level: LogLevel
@@ -20,13 +20,13 @@ export function LogLevelBadge({
   return (
     <Badge
       className={cn(
-        'text-[10px] px-1.5 py-0 h-4 uppercase font-medium',
+        'h-4 px-1.5 py-0 text-[10px] font-medium uppercase',
         config.color,
-        'text-white border-0',
+        'border-0 text-white',
         className
       )}
     >
-      {showIcon && <Icon className="h-2.5 w-2.5 mr-1" />}
+      {showIcon && <Icon className='mr-1 h-2.5 w-2.5' />}
       {level}
     </Badge>
   )
@@ -40,12 +40,19 @@ interface LogLevelIndicatorProps {
 /**
  * Simple colored dot indicator for log level
  */
-export function LogLevelIndicator({ level, className }: LogLevelIndicatorProps) {
+export function LogLevelIndicator({
+  level,
+  className,
+}: LogLevelIndicatorProps) {
   const config = LOG_LEVEL_CONFIG[level] || LOG_LEVEL_CONFIG.info
 
   return (
     <span
-      className={cn('inline-block w-2 h-2 rounded-full', config.color, className)}
+      className={cn(
+        'inline-block h-2 w-2 rounded-full',
+        config.color,
+        className
+      )}
       title={config.label}
     />
   )

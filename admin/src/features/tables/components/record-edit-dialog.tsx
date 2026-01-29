@@ -1,7 +1,10 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useInsert, useUpdate } from '@fluxbase/sdk-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Sheet,
   SheetContent,
@@ -10,10 +13,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { toast } from 'sonner'
 
 interface TableColumn {
   name: string
@@ -72,7 +72,8 @@ export function RecordEditDialog({
     return {}
   }, [record, isCreate, tableSchema])
 
-  const [formData, setFormData] = useState<Record<string, string>>(initialFormData)
+  const [formData, setFormData] =
+    useState<Record<string, string>>(initialFormData)
 
   useEffect(() => {
     setFormData(initialFormData)
@@ -85,8 +86,12 @@ export function RecordEditDialog({
     mutateAsync: async (data: Record<string, unknown>) => {
       try {
         await insertMutation.mutateAsync(data)
-        queryClient.invalidateQueries({ queryKey: ['table-data', tableDisplayName] })
-        queryClient.invalidateQueries({ queryKey: ['table-count', tableDisplayName] })
+        queryClient.invalidateQueries({
+          queryKey: ['table-data', tableDisplayName],
+        })
+        queryClient.invalidateQueries({
+          queryKey: ['table-count', tableDisplayName],
+        })
         toast.success('Record created successfully')
         onClose()
       } catch (error) {
@@ -95,10 +100,15 @@ export function RecordEditDialog({
       }
     },
     mutate: (data: Record<string, unknown>) => {
-      insertMutation.mutateAsync(data)
+      insertMutation
+        .mutateAsync(data)
         .then(() => {
-          queryClient.invalidateQueries({ queryKey: ['table-data', tableDisplayName] })
-          queryClient.invalidateQueries({ queryKey: ['table-count', tableDisplayName] })
+          queryClient.invalidateQueries({
+            queryKey: ['table-data', tableDisplayName],
+          })
+          queryClient.invalidateQueries({
+            queryKey: ['table-count', tableDisplayName],
+          })
           toast.success('Record created successfully')
           onClose()
         })
@@ -116,7 +126,9 @@ export function RecordEditDialog({
           data,
           buildQuery: (q) => q.eq('id', record!.id),
         })
-        queryClient.invalidateQueries({ queryKey: ['table-data', tableDisplayName] })
+        queryClient.invalidateQueries({
+          queryKey: ['table-data', tableDisplayName],
+        })
         toast.success('Record updated successfully')
         onClose()
       } catch (error) {
@@ -125,12 +137,15 @@ export function RecordEditDialog({
       }
     },
     mutate: (data: Record<string, unknown>) => {
-      updateFluxbase.mutateAsync({
-        data,
-        buildQuery: (q) => q.eq('id', record!.id),
-      })
+      updateFluxbase
+        .mutateAsync({
+          data,
+          buildQuery: (q) => q.eq('id', record!.id),
+        })
         .then(() => {
-          queryClient.invalidateQueries({ queryKey: ['table-data', tableDisplayName] })
+          queryClient.invalidateQueries({
+            queryKey: ['table-data', tableDisplayName],
+          })
           toast.success('Record updated successfully')
           onClose()
         })
@@ -147,7 +162,7 @@ export function RecordEditDialog({
     // Convert string values back to appropriate types
     const processedData: Record<string, unknown> = {}
     Object.entries(formData).forEach(([key, value]) => {
-      const colSchema = tableSchema.find(col => col.name === key)
+      const colSchema = tableSchema.find((col) => col.name === key)
 
       // Skip empty values for columns with defaults (let DB handle it)
       if (value === '' && colSchema?.default_value) {
@@ -202,7 +217,7 @@ export function RecordEditDialog({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className='w-full sm:max-w-xl overflow-y-auto p-6'>
+      <SheetContent className='w-full overflow-y-auto p-6 sm:max-w-xl'>
         <SheetHeader className='mb-6'>
           <SheetTitle>
             {isCreate ? 'Create New Record' : 'Edit Record'}
@@ -216,61 +231,78 @@ export function RecordEditDialog({
 
         <form onSubmit={handleSubmit} className='flex flex-col gap-6'>
           <div className='space-y-4'>
-              {Object.entries(formData).map(([key, value]) => {
-                const colSchema = tableSchema.find(col => col.name === key)
-                const defaultHint = colSchema?.default_value ? `Default: ${colSchema.default_value}` : ''
-                const typeHint = colSchema?.data_type || ''
-                const isRequired = colSchema ? !colSchema.is_nullable && !colSchema.default_value : false
+            {Object.entries(formData).map(([key, value]) => {
+              const colSchema = tableSchema.find((col) => col.name === key)
+              const defaultHint = colSchema?.default_value
+                ? `Default: ${colSchema.default_value}`
+                : ''
+              const typeHint = colSchema?.data_type || ''
+              const isRequired = colSchema
+                ? !colSchema.is_nullable && !colSchema.default_value
+                : false
 
-                return (
-                  <div key={key} className='space-y-2'>
-                    <div className='flex flex-col gap-0.5'>
-                      <Label htmlFor={key} className='flex items-center gap-1.5'>
-                        {key}
-                        {isRequired && <span className='text-destructive'>*</span>}
-                      </Label>
-                      {typeHint && (
-                        <span className='text-xs text-muted-foreground'>{typeHint}</span>
+              return (
+                <div key={key} className='space-y-2'>
+                  <div className='flex flex-col gap-0.5'>
+                    <Label htmlFor={key} className='flex items-center gap-1.5'>
+                      {key}
+                      {isRequired && (
+                        <span className='text-destructive'>*</span>
                       )}
-                    </div>
-                    {colSchema?.data_type === 'text' ||
-                    colSchema?.data_type === 'json' ||
-                    colSchema?.data_type === 'jsonb' ? (
-                      <Textarea
-                        id={key}
-                        value={value}
-                        onChange={(e) => handleChange(key, e.target.value)}
-                        disabled={colSchema?.is_primary_key && colSchema.default_value !== null}
-                        placeholder={defaultHint || `Enter ${key}`}
-                        className='min-h-[100px] font-mono text-sm'
-                      />
-                    ) : (
-                      <Input
-                        id={key}
-                        value={value}
-                        onChange={(e) => handleChange(key, e.target.value)}
-                        disabled={colSchema?.is_primary_key && colSchema.default_value !== null}
-                        placeholder={defaultHint || `Enter ${key}`}
-                      />
-                    )}
-                    {defaultHint && value === '' && (
-                      <p className='text-xs text-muted-foreground'>{defaultHint}</p>
+                    </Label>
+                    {typeHint && (
+                      <span className='text-muted-foreground text-xs'>
+                        {typeHint}
+                      </span>
                     )}
                   </div>
-                )
-              })}
+                  {colSchema?.data_type === 'text' ||
+                  colSchema?.data_type === 'json' ||
+                  colSchema?.data_type === 'jsonb' ? (
+                    <Textarea
+                      id={key}
+                      value={value}
+                      onChange={(e) => handleChange(key, e.target.value)}
+                      disabled={
+                        colSchema?.is_primary_key &&
+                        colSchema.default_value !== null
+                      }
+                      placeholder={defaultHint || `Enter ${key}`}
+                      className='min-h-[100px] font-mono text-sm'
+                    />
+                  ) : (
+                    <Input
+                      id={key}
+                      value={value}
+                      onChange={(e) => handleChange(key, e.target.value)}
+                      disabled={
+                        colSchema?.is_primary_key &&
+                        colSchema.default_value !== null
+                      }
+                      placeholder={defaultHint || `Enter ${key}`}
+                    />
+                  )}
+                  {defaultHint && value === '' && (
+                    <p className='text-muted-foreground text-xs'>
+                      {defaultHint}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
           <SheetFooter className='flex-row gap-2 pt-4'>
-            <Button type='button' variant='outline' onClick={onClose} className='flex-1'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={onClose}
+              className='flex-1'
+            >
               Cancel
             </Button>
             <Button type='submit' disabled={isLoading} className='flex-1'>
-              {isLoading
-                ? 'Saving...'
-                : isCreate
-                  ? 'Create'
-                  : 'Update'}
+              {isLoading ? 'Saving...' : isCreate ? 'Create' : 'Update'}
             </Button>
           </SheetFooter>
         </form>

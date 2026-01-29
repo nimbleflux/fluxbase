@@ -1,21 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import z from 'zod'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, getRouteApi } from '@tanstack/react-router'
 import { Loader2, User, Shield, AlertCircle, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { dashboardAuthAPI, type DashboardUser } from '@/lib/api'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { clearTokens } from '@/lib/auth'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
@@ -28,7 +18,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { clearTokens } from '@/lib/auth'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const settingsSearchSchema = z.object({
   tab: z.string().optional().catch('profile'),
@@ -124,9 +124,11 @@ function SettingsPage() {
       setConfirmPassword('')
     },
     onError: (error: unknown) => {
-      const errorMessage = error instanceof Error && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to change password'
-        : 'Failed to change password'
+      const errorMessage =
+        error instanceof Error && 'response' in error
+          ? (error as { response?: { data?: { error?: string } } }).response
+              ?.data?.error || 'Failed to change password'
+          : 'Failed to change password'
       toast.error(errorMessage)
     },
   })
@@ -140,9 +142,11 @@ function SettingsPage() {
       toast.success('Scan the QR code with your authenticator app')
     },
     onError: (error: unknown) => {
-      const errorMessage = error instanceof Error && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to setup 2FA'
-        : 'Failed to setup 2FA'
+      const errorMessage =
+        error instanceof Error && 'response' in error
+          ? (error as { response?: { data?: { error?: string } } }).response
+              ?.data?.error || 'Failed to setup 2FA'
+          : 'Failed to setup 2FA'
       toast.error(errorMessage)
     },
   })
@@ -159,9 +163,11 @@ function SettingsPage() {
       toast.success('2FA enabled successfully. Save your backup codes!')
     },
     onError: (error: unknown) => {
-      const errorMessage = error instanceof Error && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Invalid verification code'
-        : 'Invalid verification code'
+      const errorMessage =
+        error instanceof Error && 'response' in error
+          ? (error as { response?: { data?: { error?: string } } }).response
+              ?.data?.error || 'Invalid verification code'
+          : 'Invalid verification code'
       toast.error(errorMessage)
     },
   })
@@ -175,9 +181,11 @@ function SettingsPage() {
       toast.success('2FA disabled successfully')
     },
     onError: (error: unknown) => {
-      const errorMessage = error instanceof Error && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to disable 2FA'
-        : 'Failed to disable 2FA'
+      const errorMessage =
+        error instanceof Error && 'response' in error
+          ? (error as { response?: { data?: { error?: string } } }).response
+              ?.data?.error || 'Failed to disable 2FA'
+          : 'Failed to disable 2FA'
       toast.error(errorMessage)
     },
   })
@@ -191,9 +199,11 @@ function SettingsPage() {
       window.location.href = '/login'
     },
     onError: (error: unknown) => {
-      const errorMessage = error instanceof Error && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to delete account'
-        : 'Failed to delete account'
+      const errorMessage =
+        error instanceof Error && 'response' in error
+          ? (error as { response?: { data?: { error?: string } } }).response
+              ?.data?.error || 'Failed to delete account'
+          : 'Failed to delete account'
       toast.error(errorMessage)
     },
   })
@@ -262,37 +272,41 @@ function SettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className='flex h-full items-center justify-center'>
+        <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
+    <div className='flex flex-1 flex-col gap-6 p-6'>
       <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <User className="h-8 w-8" />
+        <h1 className='flex items-center gap-2 text-3xl font-bold tracking-tight'>
+          <User className='h-8 w-8' />
           Account
         </h1>
-        <p className="text-muted-foreground mt-2">
+        <p className='text-muted-foreground mt-2'>
           Manage your profile and account security settings.
         </p>
       </div>
 
-      <Tabs value={search.tab || 'profile'} onValueChange={(tab) => navigate({ search: { tab } })} className="space-y-4">
+      <Tabs
+        value={search.tab || 'profile'}
+        onValueChange={(tab) => navigate({ search: { tab } })}
+        className='space-y-4'
+      >
         <TabsList>
-          <TabsTrigger value="profile" className="flex items-center gap-2">
-            <User className="h-4 w-4" />
+          <TabsTrigger value='profile' className='flex items-center gap-2'>
+            <User className='h-4 w-4' />
             Profile
           </TabsTrigger>
-          <TabsTrigger value="security" className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
+          <TabsTrigger value='security' className='flex items-center gap-2'>
+            <Shield className='h-4 w-4' />
             Security
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile" className="space-y-4">
+        <TabsContent value='profile' className='space-y-4'>
           <Card>
             <CardHeader>
               <CardTitle>Personal Information</CardTitle>
@@ -322,7 +336,10 @@ function SettingsPage() {
                     Your email address cannot be changed.
                   </p>
                 </div>
-                <Button type='submit' disabled={updateProfileMutation.isPending}>
+                <Button
+                  type='submit'
+                  disabled={updateProfileMutation.isPending}
+                >
                   {updateProfileMutation.isPending && (
                     <Loader2 className='mr-2 h-4 w-4 animate-spin' />
                   )}
@@ -333,7 +350,7 @@ function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="security" className="space-y-4">
+        <TabsContent value='security' className='space-y-4'>
           {/* Change Password */}
           <Card>
             <CardHeader>
@@ -374,7 +391,10 @@ function SettingsPage() {
                     required
                   />
                 </div>
-                <Button type='submit' disabled={changePasswordMutation.isPending}>
+                <Button
+                  type='submit'
+                  disabled={changePasswordMutation.isPending}
+                >
                   {changePasswordMutation.isPending && (
                     <Loader2 className='mr-2 h-4 w-4 animate-spin' />
                   )}
@@ -398,7 +418,8 @@ function SettingsPage() {
                   <Alert>
                     <AlertCircle className='h-4 w-4' />
                     <AlertDescription>
-                      Two-factor authentication is currently <strong>enabled</strong> for your account.
+                      Two-factor authentication is currently{' '}
+                      <strong>enabled</strong> for your account.
                     </AlertDescription>
                   </Alert>
                   <form onSubmit={handleDisable2FA} className='space-y-4'>
@@ -413,7 +434,11 @@ function SettingsPage() {
                         required
                       />
                     </div>
-                    <Button type='submit' variant='destructive' disabled={disable2FAMutation.isPending}>
+                    <Button
+                      type='submit'
+                      variant='destructive'
+                      disabled={disable2FAMutation.isPending}
+                    >
                       {disable2FAMutation.isPending && (
                         <Loader2 className='mr-2 h-4 w-4 animate-spin' />
                       )}
@@ -425,16 +450,28 @@ function SettingsPage() {
                 <>
                   <div className='space-y-4'>
                     <div>
-                      <p className='text-sm font-medium mb-2'>Scan this QR code with your authenticator app:</p>
-                      <img src={qrCodeUrl} alt='QR Code' className='border rounded-lg p-4 bg-white' />
+                      <p className='mb-2 text-sm font-medium'>
+                        Scan this QR code with your authenticator app:
+                      </p>
+                      <img
+                        src={qrCodeUrl}
+                        alt='QR Code'
+                        className='rounded-lg border bg-white p-4'
+                      />
                     </div>
                     <div>
-                      <p className='text-sm font-medium mb-2'>Or enter this secret manually:</p>
-                      <code className='block p-2 bg-muted rounded text-sm'>{totpSecret}</code>
+                      <p className='mb-2 text-sm font-medium'>
+                        Or enter this secret manually:
+                      </p>
+                      <code className='bg-muted block rounded p-2 text-sm'>
+                        {totpSecret}
+                      </code>
                     </div>
                     <form onSubmit={handleEnable2FA} className='space-y-4'>
                       <div className='space-y-2'>
-                        <Label htmlFor='verification-code'>Verification Code</Label>
+                        <Label htmlFor='verification-code'>
+                          Verification Code
+                        </Label>
                         <Input
                           id='verification-code'
                           placeholder='Enter 6-digit code'
@@ -443,7 +480,10 @@ function SettingsPage() {
                           required
                         />
                       </div>
-                      <Button type='submit' disabled={enable2FAMutation.isPending}>
+                      <Button
+                        type='submit'
+                        disabled={enable2FAMutation.isPending}
+                      >
                         {enable2FAMutation.isPending && (
                           <Loader2 className='mr-2 h-4 w-4 animate-spin' />
                         )}
@@ -457,12 +497,17 @@ function SettingsPage() {
                   <Alert>
                     <AlertCircle className='h-4 w-4' />
                     <AlertDescription>
-                      Save these backup codes in a safe place. You can use them to access your account if you lose your authenticator device.
+                      Save these backup codes in a safe place. You can use them
+                      to access your account if you lose your authenticator
+                      device.
                     </AlertDescription>
                   </Alert>
                   <div className='grid grid-cols-2 gap-2'>
                     {backupCodes.map((code) => (
-                      <div key={code} className='flex items-center justify-between p-2 bg-muted rounded'>
+                      <div
+                        key={code}
+                        className='bg-muted flex items-center justify-between rounded p-2'
+                      >
                         <code className='text-sm'>{code}</code>
                         <Button
                           size='sm'
@@ -478,17 +523,24 @@ function SettingsPage() {
                       </div>
                     ))}
                   </div>
-                  <Button onClick={() => setBackupCodes([])}>I've Saved My Codes</Button>
+                  <Button onClick={() => setBackupCodes([])}>
+                    I've Saved My Codes
+                  </Button>
                 </div>
               ) : (
                 <>
                   <Alert>
                     <AlertCircle className='h-4 w-4' />
                     <AlertDescription>
-                      Two-factor authentication is not currently enabled for your account.
+                      Two-factor authentication is not currently enabled for
+                      your account.
                     </AlertDescription>
                   </Alert>
-                  <Button variant='outline' onClick={handleSetup2FA} disabled={setup2FAMutation.isPending}>
+                  <Button
+                    variant='outline'
+                    onClick={handleSetup2FA}
+                    disabled={setup2FAMutation.isPending}
+                  >
                     {setup2FAMutation.isPending && (
                       <Loader2 className='mr-2 h-4 w-4 animate-spin' />
                     )}
@@ -510,7 +562,8 @@ function SettingsPage() {
             <CardContent className='space-y-4'>
               <div className='space-y-2'>
                 <p className='text-sm'>
-                  Once you delete your account, there is no going back. Please be certain.
+                  Once you delete your account, there is no going back. Please
+                  be certain.
                 </p>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -518,14 +571,19 @@ function SettingsPage() {
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogTitle>
+                        Are you absolutely sure?
+                      </AlertDialogTitle>
                       <AlertDialogDescription className='space-y-4'>
                         <p>
-                          This action cannot be undone. This will permanently delete your
-                          account and remove your data from our servers.
+                          This action cannot be undone. This will permanently
+                          delete your account and remove your data from our
+                          servers.
                         </p>
                         <div className='space-y-2'>
-                          <Label htmlFor='delete-password'>Enter your password to confirm:</Label>
+                          <Label htmlFor='delete-password'>
+                            Enter your password to confirm:
+                          </Label>
                           <Input
                             id='delete-password'
                             type='password'
@@ -537,7 +595,9 @@ function SettingsPage() {
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel onClick={() => setDeletePassword('')}>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel onClick={() => setDeletePassword('')}>
+                        Cancel
+                      </AlertDialogCancel>
                       <AlertDialogAction
                         onClick={handleDeleteAccount}
                         className='bg-destructive text-destructive-foreground hover:bg-destructive/90'

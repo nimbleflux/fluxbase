@@ -74,6 +74,7 @@ make build
 ```
 
 This will:
+
 1. Build the admin UI (`npm run build`)
 2. Copy `dist/` to `internal/adminui/dist/`
 3. Embed it into the Go binary

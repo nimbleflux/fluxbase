@@ -1,4 +1,22 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
+import { FluxbaseAIChat } from '@fluxbase/sdk'
+import {
+  Bot,
+  Send,
+  Loader2,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  User,
+  Copy,
+  Check,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import type { AIChatbotSummary } from '@/lib/api'
+import { getAccessToken } from '@/lib/auth'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Sheet,
   SheetContent,
@@ -6,8 +24,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -16,17 +32,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Bot, Send, Loader2, AlertCircle, ChevronDown, ChevronUp, User, Copy, Check } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
-import { FluxbaseAIChat } from '@fluxbase/sdk'
-import type { AIChatbotSummary } from '@/lib/api'
-import { getAccessToken } from '@/lib/auth'
 import { UserSearch } from '@/features/impersonation/components/user-search'
 
 // Helper to get active token (impersonation takes precedence, same pattern as api.ts)
 function getActiveToken(): string | null {
-  const impersonationToken = localStorage.getItem('fluxbase_impersonation_token')
+  const impersonationToken = localStorage.getItem(
+    'fluxbase_impersonation_token'
+  )
   return impersonationToken || getAccessToken()
 }
 
@@ -62,10 +74,18 @@ function getWebSocketUrl(): string {
 }
 
 function formatTimestamp(date: Date): string {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
 }
 
-const QueryResultDisplay = memo(function QueryResultDisplay({ result }: { result: QueryResultMetadata }) {
+const QueryResultDisplay = memo(function QueryResultDisplay({
+  result,
+}: {
+  result: QueryResultMetadata
+}) {
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -80,9 +100,9 @@ const QueryResultDisplay = memo(function QueryResultDisplay({ result }: { result
   }
 
   return (
-    <div className='mt-3 space-y-2 border-t pt-2 min-w-0 w-full'>
+    <div className='mt-3 w-full min-w-0 space-y-2 border-t pt-2'>
       <div>
-        <div className='flex items-center justify-between mb-1'>
+        <div className='mb-1 flex items-center justify-between'>
           <span className='text-xs font-medium'>SQL Query</span>
           {result.data.length > 0 && (
             <Button
@@ -93,45 +113,47 @@ const QueryResultDisplay = memo(function QueryResultDisplay({ result }: { result
             >
               {expanded ? (
                 <>
-                  <ChevronUp className='h-3 w-3 mr-1' />
+                  <ChevronUp className='mr-1 h-3 w-3' />
                   Hide Data
                 </>
               ) : (
                 <>
-                  <ChevronDown className='h-3 w-3 mr-1' />
+                  <ChevronDown className='mr-1 h-3 w-3' />
                   Show Data
                 </>
               )}
             </Button>
           )}
         </div>
-        <div className='relative group'>
-          <pre className='text-xs bg-black/10 dark:bg-white/10 p-2 pr-10 rounded overflow-x-auto'>
+        <div className='group relative'>
+          <pre className='overflow-x-auto rounded bg-black/10 p-2 pr-10 text-xs dark:bg-white/10'>
             <code>{result.query}</code>
           </pre>
           <Button
             variant='ghost'
             size='icon'
-            className='absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity'
+            className='absolute top-1 right-1 h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100'
             onClick={handleCopy}
           >
-            <Copy className={copied ? 'h-3 w-3 hidden' : 'h-3 w-3'} />
-            <Check className={copied ? 'h-3 w-3 text-green-500' : 'h-3 w-3 hidden'} />
+            <Copy className={copied ? 'hidden h-3 w-3' : 'h-3 w-3'} />
+            <Check
+              className={copied ? 'h-3 w-3 text-green-500' : 'hidden h-3 w-3'}
+            />
           </Button>
         </div>
       </div>
 
-      <div className='text-xs text-muted-foreground'>
+      <div className='text-muted-foreground text-xs'>
         {result.summary} ({result.rowCount} rows)
       </div>
 
       {expanded && result.data.length > 0 && (
-        <div className='max-h-60 overflow-auto rounded border w-full'>
+        <div className='max-h-60 w-full overflow-auto rounded border'>
           <Table>
             <TableHeader>
               <TableRow>
                 {Object.keys(result.data[0]).map((key) => (
-                  <TableHead key={key} className='text-xs py-1 px-2'>
+                  <TableHead key={key} className='px-2 py-1 text-xs'>
                     {key}
                   </TableHead>
                 ))}
@@ -141,9 +163,11 @@ const QueryResultDisplay = memo(function QueryResultDisplay({ result }: { result
               {result.data.slice(0, 10).map((row, idx) => (
                 <TableRow key={idx}>
                   {Object.values(row).map((value, vidx) => (
-                    <TableCell key={vidx} className='text-xs py-1 px-2'>
+                    <TableCell key={vidx} className='px-2 py-1 text-xs'>
                       {value === null ? (
-                        <span className='text-muted-foreground italic'>null</span>
+                        <span className='text-muted-foreground italic'>
+                          null
+                        </span>
                       ) : (
                         String(value)
                       )}
@@ -154,7 +178,7 @@ const QueryResultDisplay = memo(function QueryResultDisplay({ result }: { result
             </TableBody>
           </Table>
           {result.data.length > 10 && (
-            <div className='text-xs text-center text-muted-foreground py-2 border-t'>
+            <div className='text-muted-foreground border-t py-2 text-center text-xs'>
               Showing 10 of {result.data.length} rows
             </div>
           )}
@@ -164,36 +188,47 @@ const QueryResultDisplay = memo(function QueryResultDisplay({ result }: { result
   )
 })
 
-const MessageBubble = memo(function MessageBubble({ message }: { message: ChatMessage }) {
+const MessageBubble = memo(function MessageBubble({
+  message,
+}: {
+  message: ChatMessage
+}) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isError = message.metadata?.type === 'error'
 
   return (
-    <div className={cn('flex w-full', isUser ? 'justify-end' : 'justify-start')}>
+    <div
+      className={cn('flex w-full', isUser ? 'justify-end' : 'justify-start')}
+    >
       <div
         className={cn(
-          'max-w-[85%] min-w-0 rounded-lg px-4 py-2 overflow-hidden',
+          'max-w-[85%] min-w-0 overflow-hidden rounded-lg px-4 py-2',
           isUser && 'bg-primary text-primary-foreground',
-          isSystem && !isError && 'bg-muted text-muted-foreground text-sm italic w-full text-center',
-          isSystem && isError && 'bg-destructive/10 text-destructive text-sm w-full',
+          isSystem &&
+            !isError &&
+            'bg-muted text-muted-foreground w-full text-center text-sm italic',
+          isSystem &&
+            isError &&
+            'bg-destructive/10 text-destructive w-full text-sm',
           !isUser && !isSystem && 'bg-muted'
         )}
       >
-        <div className='whitespace-pre-wrap break-words'>
+        <div className='break-words whitespace-pre-wrap'>
           {message.content}
           {message.metadata?.isStreaming && (
-            <span className='inline-block w-1.5 h-4 bg-current animate-pulse ml-0.5' />
+            <span className='ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-current' />
           )}
         </div>
 
-        {message.metadata?.queryResults && message.metadata.queryResults.length > 0 && (
-          <div className='space-y-3'>
-            {message.metadata.queryResults.map((result, idx) => (
-              <QueryResultDisplay key={idx} result={result} />
-            ))}
-          </div>
-        )}
+        {message.metadata?.queryResults &&
+          message.metadata.queryResults.length > 0 && (
+            <div className='space-y-3'>
+              {message.metadata.queryResults.map((result, idx) => (
+                <QueryResultDisplay key={idx} result={result} />
+              ))}
+            </div>
+          )}
 
         {!isSystem && (
           <div className='mt-1 text-xs opacity-70'>
@@ -207,10 +242,12 @@ const MessageBubble = memo(function MessageBubble({ message }: { message: ChatMe
 
 function ConnectionLoadingState() {
   return (
-    <div className='flex items-center justify-center py-12 flex-1'>
-      <div className='text-center space-y-2'>
-        <Loader2 className='h-8 w-8 animate-spin mx-auto text-muted-foreground' />
-        <p className='text-sm text-muted-foreground'>Connecting to chatbot...</p>
+    <div className='flex flex-1 items-center justify-center py-12'>
+      <div className='space-y-2 text-center'>
+        <Loader2 className='text-muted-foreground mx-auto h-8 w-8 animate-spin' />
+        <p className='text-muted-foreground text-sm'>
+          Connecting to chatbot...
+        </p>
       </div>
     </div>
   )
@@ -218,11 +255,13 @@ function ConnectionLoadingState() {
 
 function ConnectionErrorState({ error }: { error: string }) {
   return (
-    <div className='flex items-center justify-center py-12 flex-1'>
-      <div className='text-center space-y-2'>
-        <AlertCircle className='h-8 w-8 mx-auto text-destructive' />
-        <p className='text-sm text-muted-foreground'>Failed to connect to chatbot</p>
-        <p className='text-xs text-destructive'>{error}</p>
+    <div className='flex flex-1 items-center justify-center py-12'>
+      <div className='space-y-2 text-center'>
+        <AlertCircle className='text-destructive mx-auto h-8 w-8' />
+        <p className='text-muted-foreground text-sm'>
+          Failed to connect to chatbot
+        </p>
+        <p className='text-destructive text-xs'>{error}</p>
       </div>
     </div>
   )
@@ -244,8 +283,12 @@ export function ChatbotTestDialog({
   const [currentProgress, setCurrentProgress] = useState<string | null>(null)
 
   // Impersonation state
-  const [impersonateUserId, setImpersonateUserId] = useState<string | null>(null)
-  const [impersonateUserEmail, setImpersonateUserEmail] = useState<string | null>(null)
+  const [impersonateUserId, setImpersonateUserId] = useState<string | null>(
+    null
+  )
+  const [impersonateUserEmail, setImpersonateUserEmail] = useState<
+    string | null
+  >(null)
 
   const chatClientRef = useRef<FluxbaseAIChat | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -253,7 +296,10 @@ export function ChatbotTestDialog({
   const scrollToBottom = useCallback(() => {
     // Use requestAnimationFrame to ensure DOM has updated before scrolling
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      messagesEndRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'end',
+      })
     })
   }, [])
 
@@ -261,16 +307,19 @@ export function ChatbotTestDialog({
     scrollToBottom()
   }, [messages, scrollToBottom])
 
-  const addSystemMessage = useCallback((content: string, type: 'info' | 'error' = 'info') => {
-    const systemMsg: ChatMessage = {
-      id: `system-${Date.now()}`,
-      role: 'system',
-      content,
-      timestamp: new Date(),
-      metadata: { type },
-    }
-    setMessages((prev) => [...prev, systemMsg])
-  }, [])
+  const addSystemMessage = useCallback(
+    (content: string, type: 'info' | 'error' = 'info') => {
+      const systemMsg: ChatMessage = {
+        id: `system-${Date.now()}`,
+        role: 'system',
+        content,
+        timestamp: new Date(),
+        metadata: { type },
+      }
+      setMessages((prev) => [...prev, systemMsg])
+    },
+    []
+  )
 
   const handleContentChunk = useCallback((delta: string, _convId: string) => {
     setMessages((prev) => {
@@ -297,13 +346,22 @@ export function ChatbotTestDialog({
     })
   }, [])
 
-  const handleProgress = useCallback((step: string, message: string, _convId: string) => {
-    setCurrentProgress(`${step}: ${message}`)
-    setIsThinking(true)
-  }, [])
+  const handleProgress = useCallback(
+    (step: string, message: string, _convId: string) => {
+      setCurrentProgress(`${step}: ${message}`)
+      setIsThinking(true)
+    },
+    []
+  )
 
   const handleQueryResult = useCallback(
-    (query: string, summary: string, rowCount: number, data: Record<string, unknown>[], _convId: string) => {
+    (
+      query: string,
+      summary: string,
+      rowCount: number,
+      data: Record<string, unknown>[],
+      _convId: string
+    ) => {
       const newResult: QueryResultMetadata = { query, summary, rowCount, data }
 
       setMessages((prev) => {
@@ -317,7 +375,10 @@ export function ChatbotTestDialog({
                   ...msg,
                   metadata: {
                     ...msg.metadata,
-                    queryResults: [...(msg.metadata?.queryResults || []), newResult],
+                    queryResults: [
+                      ...(msg.metadata?.queryResults || []),
+                      newResult,
+                    ],
                   },
                 }
               : msg
@@ -424,7 +485,8 @@ export function ChatbotTestDialog({
         )
       } catch (error) {
         if (mounted) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error'
           setConnectionError(errorMessage)
           toast.error('Failed to connect to chatbot')
         }
@@ -469,7 +531,12 @@ export function ChatbotTestDialog({
     (e: React.FormEvent) => {
       e.preventDefault()
 
-      if (!inputValue.trim() || !isConnected || !chatClientRef.current || !conversationId) {
+      if (
+        !inputValue.trim() ||
+        !isConnected ||
+        !chatClientRef.current ||
+        !conversationId
+      ) {
         return
       }
 
@@ -499,15 +566,20 @@ export function ChatbotTestDialog({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side='right' className='w-full sm:max-w-2xl h-full flex flex-col p-0'>
-        <SheetHeader className='px-6 py-4 border-b shrink-0'>
+      <SheetContent
+        side='right'
+        className='flex h-full w-full flex-col p-0 sm:max-w-2xl'
+      >
+        <SheetHeader className='shrink-0 border-b px-6 py-4'>
           <SheetTitle className='flex items-center gap-2'>
             <Bot className='h-5 w-5' />
             Test {chatbot.name}
           </SheetTitle>
           <SheetDescription>
             {chatbot.model ? (
-              <>Model: <span className='font-medium'>{chatbot.model}</span></>
+              <>
+                Model: <span className='font-medium'>{chatbot.model}</span>
+              </>
             ) : (
               'Chat with this bot to test its responses'
             )}
@@ -515,9 +587,9 @@ export function ChatbotTestDialog({
         </SheetHeader>
 
         {/* User impersonation selector */}
-        <div className='px-6 py-3 border-b bg-muted/30 shrink-0'>
+        <div className='bg-muted/30 shrink-0 border-b px-6 py-3'>
           <div className='flex items-center gap-3'>
-            <User className='h-4 w-4 text-muted-foreground shrink-0' />
+            <User className='text-muted-foreground h-4 w-4 shrink-0' />
             <div className='flex-1'>
               {impersonateUserId ? (
                 <div className='flex items-center gap-2'>
@@ -548,7 +620,7 @@ export function ChatbotTestDialog({
             </div>
           </div>
           {impersonateUserId && (
-            <p className='text-xs text-muted-foreground mt-1.5 ml-7'>
+            <p className='text-muted-foreground mt-1.5 ml-7 text-xs'>
               Queries will run with this user's RLS context
             </p>
           )}
@@ -562,14 +634,14 @@ export function ChatbotTestDialog({
 
         {isConnected && !connectionError && (
           <>
-            <div className='flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-4'>
+            <div className='min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-4'>
               <div className='space-y-4'>
                 {messages.map((msg) => (
                   <MessageBubble key={msg.id} message={msg} />
                 ))}
 
                 {isThinking && (
-                  <div className='flex items-center gap-2 text-sm text-muted-foreground'>
+                  <div className='text-muted-foreground flex items-center gap-2 text-sm'>
                     <Loader2 className='h-4 w-4 animate-spin' />
                     {currentProgress || 'Thinking...'}
                   </div>
@@ -579,7 +651,7 @@ export function ChatbotTestDialog({
               </div>
             </div>
 
-            <div className='border-t px-6 py-4 shrink-0'>
+            <div className='shrink-0 border-t px-6 py-4'>
               <form onSubmit={handleSendMessage} className='flex gap-2'>
                 <Input
                   value={inputValue}

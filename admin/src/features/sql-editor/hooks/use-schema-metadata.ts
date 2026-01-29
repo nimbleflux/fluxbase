@@ -1,8 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import {
-  databaseApi,
-  type TableInfo,
-} from '@/lib/api'
+import { databaseApi, type TableInfo } from '@/lib/api'
 
 export interface SchemaMetadata {
   schemas: string[]

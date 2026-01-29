@@ -1,10 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useRef } from 'react'
+import { createFileRoute } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { setAuthToken } from '@/lib/fluxbase-client'
 import { useAuthStore } from '@/stores/auth-store'
-import { decodeJWT } from '@/lib/jwt'
 import type { DashboardUser } from '@/lib/auth'
+import { setAuthToken } from '@/lib/fluxbase-client'
+import { decodeJWT } from '@/lib/jwt'
 
 export const Route = createFileRoute('/login/callback')({
   component: SSOCallbackPage,
@@ -67,7 +67,9 @@ function SSOCallbackPage() {
           is_active: true,
           is_locked: false,
           last_login_at: new Date().toISOString(),
-          created_at: tokenPayload.iat ? new Date(tokenPayload.iat * 1000).toISOString() : new Date().toISOString(),
+          created_at: tokenPayload.iat
+            ? new Date(tokenPayload.iat * 1000).toISOString()
+            : new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }
 
@@ -82,7 +84,8 @@ function SSOCallbackPage() {
         })
 
         // Redirect to the intended destination or dashboard
-        const destination = redirect_to && redirect_to !== '/' ? redirect_to : '/admin'
+        const destination =
+          redirect_to && redirect_to !== '/' ? redirect_to : '/admin'
         window.location.href = destination
       } catch (_error) {
         toast.error('SSO Login Failed', {
@@ -96,10 +99,10 @@ function SSOCallbackPage() {
   }, [access_token, refresh_token, redirect_to, error, auth])
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-      <div className="text-center space-y-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
-        <p className="text-muted-foreground">Completing SSO login...</p>
+    <div className='from-background to-muted flex min-h-screen flex-col items-center justify-center bg-gradient-to-br p-4'>
+      <div className='space-y-4 text-center'>
+        <div className='border-primary mx-auto h-12 w-12 animate-spin rounded-full border-b-2' />
+        <p className='text-muted-foreground'>Completing SSO login...</p>
       </div>
     </div>
   )

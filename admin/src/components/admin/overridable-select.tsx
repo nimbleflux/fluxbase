@@ -1,7 +1,13 @@
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { OverrideBadge } from './override-badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import type { SettingOverride } from './overridable-switch'
+import { OverrideBadge } from './override-badge'
 
 interface OverridableSelectProps {
   id: string
@@ -30,31 +36,26 @@ export function OverridableSelect({
   const isDisabled = disabled || isOverridden
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
+    <div className='space-y-2'>
+      <div className='flex items-center gap-2'>
         <Label htmlFor={id}>{label}</Label>
         {isOverridden && <OverrideBadge envVar={override?.env_var} />}
       </div>
       {description && (
-        <p className="text-sm text-muted-foreground">
-          {description}
-        </p>
+        <p className='text-muted-foreground text-sm'>{description}</p>
       )}
-      <Select
-        value={value}
-        onValueChange={onValueChange}
-        disabled={isDisabled}
-      >
+      <Select value={value} onValueChange={onValueChange} disabled={isDisabled}>
         <SelectTrigger id={id}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
-        <SelectContent>
-          {children}
-        </SelectContent>
+        <SelectContent>{children}</SelectContent>
       </Select>
       {isOverridden && (
-        <p className="text-xs text-muted-foreground">
-          Controlled by <code className="bg-muted px-1 py-0.5 rounded">{override?.env_var}</code>
+        <p className='text-muted-foreground text-xs'>
+          Controlled by{' '}
+          <code className='bg-muted rounded px-1 py-0.5'>
+            {override?.env_var}
+          </code>
         </p>
       )}
     </div>

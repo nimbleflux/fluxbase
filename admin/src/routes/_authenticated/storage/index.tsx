@@ -1,33 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect, useRef } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Checkbox } from '@/components/ui/checkbox'
+import { formatDistanceToNow } from 'date-fns'
+import { createFileRoute } from '@tanstack/react-router'
+import type { AdminStorageObject, AdminBucket } from '@fluxbase/sdk'
+import { useFluxbaseClient } from '@fluxbase/sdk-react'
 import {
   FolderOpen,
   FolderPlus,
@@ -54,13 +29,38 @@ import {
   FileType,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { formatDistanceToNow } from 'date-fns'
-import { useFluxbaseClient } from '@fluxbase/sdk-react'
-import type { AdminStorageObject, AdminBucket } from '@fluxbase/sdk'
-import { ImpersonationPopover } from '@/features/impersonation/components/impersonation-popover'
-import { ImpersonationBanner } from '@/components/impersonation-banner'
 import { useImpersonationStore } from '@/stores/impersonation-store'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { ImpersonationBanner } from '@/components/impersonation-banner'
+import { ImpersonationPopover } from '@/features/impersonation/components/impersonation-popover'
 
 export const Route = createFileRoute('/_authenticated/storage/')({
   component: StorageBrowser,
@@ -78,7 +78,9 @@ function StorageBrowser() {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>(
+    {}
+  )
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name')
   const [fileTypeFilter, setFileTypeFilter] = useState<string>('all')
@@ -87,28 +89,36 @@ function StorageBrowser() {
   const [showFilePreview, setShowFilePreview] = useState(false)
   const [showCreateFolder, setShowCreateFolder] = useState(false)
   const [showDeleteBucketConfirm, setShowDeleteBucketConfirm] = useState(false)
-  const [deletingBucketName, setDeletingBucketName] = useState<string | null>(null)
+  const [deletingBucketName, setDeletingBucketName] = useState<string | null>(
+    null
+  )
   const [showDeleteFileConfirm, setShowDeleteFileConfirm] = useState(false)
   const [deletingFilePath, setDeletingFilePath] = useState<string | null>(null)
-  const [previewFile, setPreviewFile] = useState<AdminStorageObject | null>(null)
+  const [previewFile, setPreviewFile] = useState<AdminStorageObject | null>(
+    null
+  )
   const [previewUrl, setPreviewUrl] = useState<string>('')
   const [newBucketName, setNewBucketName] = useState('')
   const [newFolderName, setNewFolderName] = useState('')
   const [dragActive, setDragActive] = useState(false)
   const [showMetadata, setShowMetadata] = useState(false)
-  const [metadataFile, setMetadataFile] = useState<AdminStorageObject | null>(null)
+  const [metadataFile, setMetadataFile] = useState<AdminStorageObject | null>(
+    null
+  )
   const [signedUrl, setSignedUrl] = useState<string>('')
   const [signedUrlExpiry, setSignedUrlExpiry] = useState<number>(3600)
   const [generatingUrl, setGeneratingUrl] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Breadcrumb navigation
-  const breadcrumbs = currentPrefix ? currentPrefix.split('/').filter(Boolean) : []
+  const breadcrumbs = currentPrefix
+    ? currentPrefix.split('/').filter(Boolean)
+    : []
 
   // Load buckets on mount
   useEffect(() => {
     loadBuckets()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Load objects when bucket or prefix changes
@@ -116,7 +126,7 @@ function StorageBrowser() {
     if (selectedBucket) {
       loadObjects()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBucket, currentPrefix])
 
   const loadBuckets = async () => {
@@ -129,7 +139,8 @@ function StorageBrowser() {
         setSelectedBucket(data.buckets[0].name)
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       toast.error(`Failed to load buckets: ${errorMessage}`)
     } finally {
       setLoading(false)
@@ -141,12 +152,17 @@ function StorageBrowser() {
 
     setLoading(true)
     try {
-      const { data, error } = await client.admin.storage.listObjects(selectedBucket, currentPrefix || undefined, '/')
+      const { data, error } = await client.admin.storage.listObjects(
+        selectedBucket,
+        currentPrefix || undefined,
+        '/'
+      )
       if (error) throw error
       setObjects(data?.objects || [])
       setPrefixes(data?.prefixes || [])
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       toast.error(`Failed to load files: ${errorMessage}`)
     } finally {
       setLoading(false)
@@ -169,7 +185,8 @@ function StorageBrowser() {
       await loadBuckets()
       setSelectedBucket(newBucketName)
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       toast.error(`Failed to create bucket: ${errorMessage}`)
     } finally {
       setLoading(false)
@@ -187,7 +204,8 @@ function StorageBrowser() {
         setSelectedBucket(buckets[0]?.name || '')
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       toast.error(`Failed to delete bucket: ${errorMessage}`)
     } finally {
       setLoading(false)
@@ -209,10 +227,14 @@ function StorageBrowser() {
       for (const file of filesArray) {
         const key = currentPrefix ? `${currentPrefix}${file.name}` : file.name
         // Use impersonation token if active, otherwise use admin token
-        const { isImpersonating: isImpersonatingNow, impersonationToken: impersonationTokenNow } = useImpersonationStore.getState()
-        const token = isImpersonatingNow && impersonationTokenNow
-          ? impersonationTokenNow
-          : localStorage.getItem('fluxbase-auth-token')
+        const {
+          isImpersonating: isImpersonatingNow,
+          impersonationToken: impersonationTokenNow,
+        } = useImpersonationStore.getState()
+        const token =
+          isImpersonatingNow && impersonationTokenNow
+            ? impersonationTokenNow
+            : localStorage.getItem('fluxbase-auth-token')
 
         // Set initial progress
         setUploadProgress((prev) => ({ ...prev, [file.name]: 0 }))
@@ -231,7 +253,10 @@ function StorageBrowser() {
             xhr.upload.addEventListener('progress', (e) => {
               if (e.lengthComputable) {
                 const percentComplete = Math.round((e.loaded / e.total) * 100)
-                setUploadProgress((prev) => ({ ...prev, [file.name]: percentComplete }))
+                setUploadProgress((prev) => ({
+                  ...prev,
+                  [file.name]: percentComplete,
+                }))
               }
             })
 
@@ -250,7 +275,9 @@ function StorageBrowser() {
                 resolve()
               } else {
                 // eslint-disable-next-line no-console
-                console.error(`Failed to upload ${file.name}: ${xhr.status} ${xhr.statusText}`)
+                console.error(
+                  `Failed to upload ${file.name}: ${xhr.status} ${xhr.statusText}`
+                )
                 // eslint-disable-next-line no-console
                 console.error('Response:', xhr.responseText)
                 setUploadProgress((prev) => {
@@ -293,7 +320,8 @@ function StorageBrowser() {
             xhr.send(formData)
           })
         } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error'
           // eslint-disable-next-line no-console
           console.error(`Error uploading ${file.name}:`, errorMessage)
           setUploadProgress((prev) => {
@@ -310,10 +338,13 @@ function StorageBrowser() {
       }
 
       if (successCount < filesArray.length) {
-        toast.error(`Failed to upload ${filesArray.length - successCount} file(s)`)
+        toast.error(
+          `Failed to upload ${filesArray.length - successCount} file(s)`
+        )
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       toast.error(`Failed to upload files: ${errorMessage}`)
     } finally {
       setUploading(false)
@@ -325,7 +356,10 @@ function StorageBrowser() {
     if (!selectedBucket) return
 
     try {
-      const { data: blob, error } = await client.admin.storage.downloadObject(selectedBucket, key)
+      const { data: blob, error } = await client.admin.storage.downloadObject(
+        selectedBucket,
+        key
+      )
       if (error) throw error
       if (!blob) throw new Error('No data received')
       const url = window.URL.createObjectURL(blob)
@@ -338,7 +372,8 @@ function StorageBrowser() {
       document.body.removeChild(a)
       toast.success('File downloaded')
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       toast.error(`Failed to download file: ${errorMessage}`)
     }
   }
@@ -347,17 +382,21 @@ function StorageBrowser() {
     if (!selectedBucket) return
 
     try {
-      const { error } = await client.admin.storage.deleteObject(selectedBucket, key)
+      const { error } = await client.admin.storage.deleteObject(
+        selectedBucket,
+        key
+      )
       if (error) throw error
       toast.success('File deleted')
       await loadObjects()
-      setSelectedFiles(prev => {
+      setSelectedFiles((prev) => {
         const next = new Set(prev)
         next.delete(key)
         return next
       })
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       toast.error(`Failed to delete file: ${errorMessage}`)
     }
   }
@@ -371,11 +410,15 @@ function StorageBrowser() {
 
     for (const key of files) {
       try {
-        const { error } = await client.admin.storage.deleteObject(selectedBucket, key)
+        const { error } = await client.admin.storage.deleteObject(
+          selectedBucket,
+          key
+        )
         if (error) throw error
         successCount++
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error'
         // eslint-disable-next-line no-console
         console.error(`Failed to delete ${key}:`, errorMessage)
       }
@@ -400,7 +443,8 @@ function StorageBrowser() {
 
     // Check if file is previewable
     const isImage = obj.mime_type?.startsWith('image/')
-    const isText = obj.mime_type?.startsWith('text/') ||
+    const isText =
+      obj.mime_type?.startsWith('text/') ||
       obj.mime_type?.includes('json') ||
       obj.mime_type?.includes('javascript')
 
@@ -410,7 +454,10 @@ function StorageBrowser() {
     }
 
     try {
-      const { data: blob, error } = await client.admin.storage.downloadObject(selectedBucket, obj.path)
+      const { data: blob, error } = await client.admin.storage.downloadObject(
+        selectedBucket,
+        obj.path
+      )
       if (error) throw error
       if (!blob) throw new Error('No data received')
       if (isImage) {
@@ -423,7 +470,8 @@ function StorageBrowser() {
       setPreviewFile(obj)
       setShowFilePreview(true)
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       toast.error(`Failed to load file preview: ${errorMessage}`)
     }
   }
@@ -446,14 +494,18 @@ function StorageBrowser() {
         ? `${currentPrefix}${newFolderName.trim()}/.keep`
         : `${newFolderName.trim()}/.keep`
 
-      const { error } = await client.admin.storage.createFolder(selectedBucket, folderPath)
+      const { error } = await client.admin.storage.createFolder(
+        selectedBucket,
+        folderPath
+      )
       if (error) throw error
       toast.success(`Folder "${newFolderName}" created`)
       setShowCreateFolder(false)
       setNewFolderName('')
       await loadObjects()
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       toast.error(`Failed to create folder: ${errorMessage}`)
     } finally {
       setLoading(false)
@@ -474,13 +526,18 @@ function StorageBrowser() {
 
     setGeneratingUrl(true)
     try {
-      const { data, error } = await client.admin.storage.generateSignedUrl(selectedBucket, metadataFile.path, signedUrlExpiry)
+      const { data, error } = await client.admin.storage.generateSignedUrl(
+        selectedBucket,
+        metadataFile.path,
+        signedUrlExpiry
+      )
       if (error) throw error
       if (!data) throw new Error('No data received')
       setSignedUrl(data.url)
       toast.success('Signed URL generated')
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       toast.error(`Failed to generate signed URL: ${errorMessage}`)
     } finally {
       setGeneratingUrl(false)
@@ -523,16 +580,30 @@ function StorageBrowser() {
     // First escape HTML to prevent XSS, then apply syntax highlighting
     const escaped = escapeHtml(formatted)
     return escaped
-      .replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)\s*:/g, '<span style="color: #94a3b8">$1</span>:')
-      .replace(/:\s*(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g, ': <span style="color: #86efac">$1</span>')
-      .replace(/:\s*(\d+(?:\.\d+)?)/g, ': <span style="color: #fbbf24">$1</span>')
-      .replace(/:\s*(true|false|null)/g, ': <span style="color: #f472b6">$1</span>')
+      .replace(
+        /(&quot;(?:[^&]|&(?!quot;))*?&quot;)\s*:/g,
+        '<span style="color: #94a3b8">$1</span>:'
+      )
+      .replace(
+        /:\s*(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g,
+        ': <span style="color: #86efac">$1</span>'
+      )
+      .replace(
+        /:\s*(\d+(?:\.\d+)?)/g,
+        ': <span style="color: #fbbf24">$1</span>'
+      )
+      .replace(
+        /:\s*(true|false|null)/g,
+        ': <span style="color: #f472b6">$1</span>'
+      )
   }
 
   const isJsonFile = (contentType?: string, fileName?: string) => {
-    return contentType?.includes('json') ||
+    return (
+      contentType?.includes('json') ||
       fileName?.endsWith('.json') ||
       fileName?.endsWith('.jsonl')
+    )
   }
 
   const handleDrag = (e: React.DragEvent) => {
@@ -556,7 +627,7 @@ function StorageBrowser() {
   }
 
   const toggleFileSelection = (key: string) => {
-    setSelectedFiles(prev => {
+    setSelectedFiles((prev) => {
       const next = new Set(prev)
       if (next.has(key)) {
         next.delete(key)
@@ -568,14 +639,18 @@ function StorageBrowser() {
   }
 
   const getFileIcon = (contentType?: string) => {
-    if (!contentType) return <File className="h-4 w-4" />
-    if (contentType.startsWith('image/')) return <ImageIcon className="h-4 w-4" />
-    if (contentType.includes('json')) return <FileJson className="h-4 w-4" />
-    if (contentType.startsWith('text/')) return <FileText className="h-4 w-4" />
-    if (contentType.includes('javascript') || contentType.includes('typescript')) {
-      return <FileCode className="h-4 w-4" />
+    if (!contentType) return <File className='h-4 w-4' />
+    if (contentType.startsWith('image/'))
+      return <ImageIcon className='h-4 w-4' />
+    if (contentType.includes('json')) return <FileJson className='h-4 w-4' />
+    if (contentType.startsWith('text/')) return <FileText className='h-4 w-4' />
+    if (
+      contentType.includes('javascript') ||
+      contentType.includes('typescript')
+    ) {
+      return <FileCode className='h-4 w-4' />
     }
-    return <FileCog className="h-4 w-4" />
+    return <FileCog className='h-4 w-4' />
   }
 
   const formatBytes = (bytes: number) => {
@@ -588,7 +663,7 @@ function StorageBrowser() {
 
   // Filter and sort objects
   const filteredObjects = objects
-    .filter(obj => {
+    .filter((obj) => {
       // Search filter
       if (!obj.path.toLowerCase().includes(searchQuery.toLowerCase())) {
         return false
@@ -597,12 +672,53 @@ function StorageBrowser() {
       // File type filter
       if (fileTypeFilter !== 'all') {
         const contentType = obj.mime_type || ''
-        if (fileTypeFilter === 'image' && !contentType.startsWith('image/')) return false
-        if (fileTypeFilter === 'video' && !contentType.startsWith('video/')) return false
-        if (fileTypeFilter === 'audio' && !contentType.startsWith('audio/')) return false
-        if (fileTypeFilter === 'document' && !['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument', 'text/plain'].some(t => contentType.includes(t))) return false
-        if (fileTypeFilter === 'code' && !['text/javascript', 'text/typescript', 'application/json', 'text/html', 'text/css', 'text/x-python', 'text/x-go'].some(t => contentType.includes(t)) && !['.js', '.ts', '.json', '.html', '.css', '.py', '.go', '.tsx', '.jsx'].some(ext => obj.path.endsWith(ext))) return false
-        if (fileTypeFilter === 'archive' && !['application/zip', 'application/x-tar', 'application/gzip'].some(t => contentType.includes(t))) return false
+        if (fileTypeFilter === 'image' && !contentType.startsWith('image/'))
+          return false
+        if (fileTypeFilter === 'video' && !contentType.startsWith('video/'))
+          return false
+        if (fileTypeFilter === 'audio' && !contentType.startsWith('audio/'))
+          return false
+        if (
+          fileTypeFilter === 'document' &&
+          ![
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument',
+            'text/plain',
+          ].some((t) => contentType.includes(t))
+        )
+          return false
+        if (
+          fileTypeFilter === 'code' &&
+          ![
+            'text/javascript',
+            'text/typescript',
+            'application/json',
+            'text/html',
+            'text/css',
+            'text/x-python',
+            'text/x-go',
+          ].some((t) => contentType.includes(t)) &&
+          ![
+            '.js',
+            '.ts',
+            '.json',
+            '.html',
+            '.css',
+            '.py',
+            '.go',
+            '.tsx',
+            '.jsx',
+          ].some((ext) => obj.path.endsWith(ext))
+        )
+          return false
+        if (
+          fileTypeFilter === 'archive' &&
+          !['application/zip', 'application/x-tar', 'application/gzip'].some(
+            (t) => contentType.includes(t)
+          )
+        )
+          return false
       }
 
       return true
@@ -614,7 +730,9 @@ function StorageBrowser() {
         case 'size':
           return b.size - a.size
         case 'date':
-          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+          return (
+            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+          )
         default:
           return 0
       }
@@ -624,65 +742,66 @@ function StorageBrowser() {
   const selectedCount = selectedFiles.size
 
   return (
-    <div className="flex h-full">
+    <div className='flex h-full'>
       {/* Sidebar - Buckets */}
-      <div className="w-64 border-r bg-muted/10 p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold">Buckets</h3>
+      <div className='bg-muted/10 w-64 space-y-4 border-r p-4'>
+        <div className='flex items-center justify-between'>
+          <h3 className='font-semibold'>Buckets</h3>
           <Button
-            variant="ghost"
-            size="icon"
+            variant='ghost'
+            size='icon'
             onClick={() => setShowCreateBucket(true)}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className='h-4 w-4' />
           </Button>
         </div>
 
-        <ScrollArea className="h-[calc(100vh-200px)]">
-          <div className="space-y-1">
-            {buckets.map(bucket => (
+        <ScrollArea className='h-[calc(100vh-200px)]'>
+          <div className='space-y-1'>
+            {buckets.map((bucket) => (
               <div
                 key={bucket.id}
-                className={`group flex items-center justify-between p-2 rounded cursor-pointer hover:bg-muted/50 ${selectedBucket === bucket.name ? 'bg-muted' : ''
-                  }`}
+                className={`group hover:bg-muted/50 flex cursor-pointer items-center justify-between rounded p-2 ${
+                  selectedBucket === bucket.name ? 'bg-muted' : ''
+                }`}
                 onClick={() => {
                   setSelectedBucket(bucket.name)
                   setCurrentPrefix('')
                   setSelectedFiles(new Set())
                 }}
               >
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <HardDrive className="h-4 w-4 flex-shrink-0" />
-                  <span className="text-sm truncate">{bucket.name}</span>
+                <div className='flex min-w-0 flex-1 items-center gap-2'>
+                  <HardDrive className='h-4 w-4 flex-shrink-0' />
+                  <span className='truncate text-sm'>{bucket.name}</span>
                 </div>
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                  variant='ghost'
+                  size='icon'
+                  className='h-6 w-6 opacity-0 group-hover:opacity-100'
                   onClick={(e) => {
                     e.stopPropagation()
                     setDeletingBucketName(bucket.name)
                     setShowDeleteBucketConfirm(true)
                   }}
                 >
-                  <Trash2 className="h-3 w-3" />
+                  <Trash2 className='h-3 w-3' />
                 </Button>
               </div>
             ))}
             {buckets.length === 0 && !loading && (
-              <p className="text-sm text-muted-foreground">No buckets</p>
+              <p className='text-muted-foreground text-sm'>No buckets</p>
             )}
           </div>
         </ScrollArea>
 
         {selectedBucket && (
-          <div className="pt-4 border-t space-y-2">
-            <div className="text-xs text-muted-foreground">
-              <div className="flex justify-between">
+          <div className='space-y-2 border-t pt-4'>
+            <div className='text-muted-foreground text-xs'>
+              <div className='flex justify-between'>
                 <span>Files:</span>
                 <span>{objects.length}</span>
               </div>
-              <div className="flex justify-between">
+              <div className='flex justify-between'>
                 <span>Total Size:</span>
                 <span>{formatBytes(totalSize)}</span>
               </div>
@@ -692,33 +811,34 @@ function StorageBrowser() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className='flex flex-1 flex-col'>
         <ImpersonationBanner />
         {selectedBucket ? (
           <>
             {/* Toolbar */}
-            <div className="border-b p-4 space-y-4">
+            <div className='space-y-4 border-b p-4'>
               {/* Breadcrumb */}
-              <div className="flex items-center gap-2 text-sm">
+              <div className='flex items-center gap-2 text-sm'>
                 <Button
-                  variant="ghost"
-                  size="sm"
+                  variant='ghost'
+                  size='sm'
                   onClick={() => navigateToPrefix('')}
-                  className="h-7 px-2"
+                  className='h-7 px-2'
                 >
-                  <Home className="h-3 w-3" />
+                  <Home className='h-3 w-3' />
                 </Button>
                 {breadcrumbs.map((crumb, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                  <div key={i} className='flex items-center gap-2'>
+                    <ChevronRight className='text-muted-foreground h-3 w-3' />
                     <Button
-                      variant="ghost"
-                      size="sm"
+                      variant='ghost'
+                      size='sm'
                       onClick={() => {
-                        const prefix = breadcrumbs.slice(0, i + 1).join('/') + '/'
+                        const prefix =
+                          breadcrumbs.slice(0, i + 1).join('/') + '/'
                         navigateToPrefix(prefix)
                       }}
-                      className="h-7 px-2"
+                      className='h-7 px-2'
                     >
                       {crumb}
                     </Button>
@@ -727,42 +847,49 @@ function StorageBrowser() {
               </div>
 
               {/* Actions */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center gap-2">
-                    <div className="relative flex-1 max-w-sm">
+              <div className='space-y-3'>
+                <div className='flex items-center gap-2'>
+                  <div className='flex flex-1 items-center gap-2'>
+                    <div className='relative max-w-sm flex-1'>
                       <Input
-                        placeholder="Search files..."
+                        placeholder='Search files...'
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                       />
                     </div>
-                    <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'name' | 'size' | 'date')}>
-                      <SelectTrigger className="w-32">
+                    <Select
+                      value={sortBy}
+                      onValueChange={(v) =>
+                        setSortBy(v as 'name' | 'size' | 'date')
+                      }
+                    >
+                      <SelectTrigger className='w-32'>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="name">Name</SelectItem>
-                        <SelectItem value="size">Size</SelectItem>
-                        <SelectItem value="date">Date</SelectItem>
+                        <SelectItem value='name'>Name</SelectItem>
+                        <SelectItem value='size'>Size</SelectItem>
+                        <SelectItem value='date'>Date</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <Button
-                    variant="outline"
-                    size="sm"
+                    variant='outline'
+                    size='sm'
                     onClick={loadObjects}
                     disabled={loading}
                   >
-                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                    <RefreshCw
+                      className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+                    />
                   </Button>
 
                   <input
                     ref={fileInputRef}
-                    type="file"
+                    type='file'
                     multiple
-                    className="hidden"
+                    className='hidden'
                     onChange={(e) => {
                       if (e.target.files) {
                         uploadFiles(e.target.files)
@@ -772,115 +899,126 @@ function StorageBrowser() {
                   />
 
                   <Button
-                    variant="outline"
+                    variant='outline'
                     onClick={() => setShowCreateFolder(true)}
-                    size="sm"
+                    size='sm'
                   >
-                    <FolderPlus className="h-4 w-4 mr-2" />
+                    <FolderPlus className='mr-2 h-4 w-4' />
                     New Folder
                   </Button>
 
                   <Button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
-                    size="sm"
+                    size='sm'
                   >
-                    <Upload className="h-4 w-4 mr-2" />
+                    <Upload className='mr-2 h-4 w-4' />
                     {uploading ? 'Uploading...' : 'Upload'}
                   </Button>
 
                   <ImpersonationPopover
-                    contextLabel="Browsing as"
-                    defaultReason="Storage browser testing"
+                    contextLabel='Browsing as'
+                    defaultReason='Storage browser testing'
                   />
                 </div>
 
                 {/* File Type Filter Chips */}
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className='flex flex-wrap items-center gap-2'>
                   <Badge
                     variant={fileTypeFilter === 'all' ? 'default' : 'outline'}
-                    className="cursor-pointer"
+                    className='cursor-pointer'
                     onClick={() => setFileTypeFilter('all')}
                   >
                     All Files
                   </Badge>
                   <Badge
                     variant={fileTypeFilter === 'image' ? 'default' : 'outline'}
-                    className="cursor-pointer"
+                    className='cursor-pointer'
                     onClick={() => setFileTypeFilter('image')}
                   >
-                    <ImageIcon className="h-3 w-3 mr-1" />
+                    <ImageIcon className='mr-1 h-3 w-3' />
                     Images
                   </Badge>
                   <Badge
                     variant={fileTypeFilter === 'video' ? 'default' : 'outline'}
-                    className="cursor-pointer"
+                    className='cursor-pointer'
                     onClick={() => setFileTypeFilter('video')}
                   >
-                    <FileCode className="h-3 w-3 mr-1" />
+                    <FileCode className='mr-1 h-3 w-3' />
                     Videos
                   </Badge>
                   <Badge
                     variant={fileTypeFilter === 'audio' ? 'default' : 'outline'}
-                    className="cursor-pointer"
+                    className='cursor-pointer'
                     onClick={() => setFileTypeFilter('audio')}
                   >
-                    <FileText className="h-3 w-3 mr-1" />
+                    <FileText className='mr-1 h-3 w-3' />
                     Audio
                   </Badge>
                   <Badge
-                    variant={fileTypeFilter === 'document' ? 'default' : 'outline'}
-                    className="cursor-pointer"
+                    variant={
+                      fileTypeFilter === 'document' ? 'default' : 'outline'
+                    }
+                    className='cursor-pointer'
                     onClick={() => setFileTypeFilter('document')}
                   >
-                    <FileText className="h-3 w-3 mr-1" />
+                    <FileText className='mr-1 h-3 w-3' />
                     Documents
                   </Badge>
                   <Badge
                     variant={fileTypeFilter === 'code' ? 'default' : 'outline'}
-                    className="cursor-pointer"
+                    className='cursor-pointer'
                     onClick={() => setFileTypeFilter('code')}
                   >
-                    <FileCode className="h-3 w-3 mr-1" />
+                    <FileCode className='mr-1 h-3 w-3' />
                     Code
                   </Badge>
                   <Badge
-                    variant={fileTypeFilter === 'archive' ? 'default' : 'outline'}
-                    className="cursor-pointer"
+                    variant={
+                      fileTypeFilter === 'archive' ? 'default' : 'outline'
+                    }
+                    className='cursor-pointer'
                     onClick={() => setFileTypeFilter('archive')}
                   >
-                    <FileCog className="h-3 w-3 mr-1" />
+                    <FileCog className='mr-1 h-3 w-3' />
                     Archives
                   </Badge>
                 </div>
 
                 {filteredObjects.length > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div className='flex items-center gap-2'>
                     <Checkbox
-                      checked={selectedCount === filteredObjects.length && filteredObjects.length > 0}
+                      checked={
+                        selectedCount === filteredObjects.length &&
+                        filteredObjects.length > 0
+                      }
                       onCheckedChange={(checked) => {
                         if (checked) {
                           // Select all filtered files
-                          setSelectedFiles(new Set(filteredObjects.map(obj => obj.path)))
+                          setSelectedFiles(
+                            new Set(filteredObjects.map((obj) => obj.path))
+                          )
                         } else {
                           // Deselect all
                           setSelectedFiles(new Set())
                         }
                       }}
                     />
-                    <span className="text-sm text-muted-foreground">
-                      {selectedCount === 0 ? 'Select All' : `${selectedCount} selected`}
+                    <span className='text-muted-foreground text-sm'>
+                      {selectedCount === 0
+                        ? 'Select All'
+                        : `${selectedCount} selected`}
                     </span>
                   </div>
                 )}
 
                 {selectedCount > 0 && (
                   <Button
-                    variant="destructive"
-                    size="sm"
+                    variant='destructive'
+                    size='sm'
                     onClick={() => setShowDeleteConfirm(true)}
                   >
-                    <Trash2 className="h-4 w-4 mr-2" />
+                    <Trash2 className='mr-2 h-4 w-4' />
                     Delete ({selectedCount})
                   </Button>
                 )}
@@ -889,17 +1027,19 @@ function StorageBrowser() {
 
             {/* Upload Progress */}
             {Object.keys(uploadProgress).length > 0 && (
-              <div className="border-b bg-muted/40 p-4 space-y-3">
-                <div className="text-sm font-medium">Uploading files...</div>
+              <div className='bg-muted/40 space-y-3 border-b p-4'>
+                <div className='text-sm font-medium'>Uploading files...</div>
                 {Object.entries(uploadProgress).map(([filename, progress]) => (
-                  <div key={filename} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground truncate flex-1">{filename}</span>
-                      <span className="ml-2 font-medium">{progress}%</span>
+                  <div key={filename} className='space-y-1.5'>
+                    <div className='flex items-center justify-between text-xs'>
+                      <span className='text-muted-foreground flex-1 truncate'>
+                        {filename}
+                      </span>
+                      <span className='ml-2 font-medium'>{progress}%</span>
                     </div>
-                    <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div className='bg-muted relative h-2 w-full overflow-hidden rounded-full'>
                       <div
-                        className="h-full bg-primary transition-all duration-300"
+                        className='bg-primary h-full transition-all duration-300'
                         style={{ width: `${progress}%` }}
                       />
                     </div>
@@ -910,127 +1050,133 @@ function StorageBrowser() {
 
             {/* File List */}
             <div
-              className="flex-1 p-4 overflow-auto"
+              className='flex-1 overflow-auto p-4'
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
               onDragOver={handleDrag}
               onDrop={handleDrop}
             >
               {dragActive && (
-                <div className="fixed inset-0 bg-primary/10 border-4 border-dashed border-primary flex items-center justify-center z-50">
-                  <div className="text-center">
-                    <Upload className="h-12 w-12 mx-auto mb-4 text-primary" />
-                    <p className="text-lg font-semibold">Drop files to upload</p>
+                <div className='bg-primary/10 border-primary fixed inset-0 z-50 flex items-center justify-center border-4 border-dashed'>
+                  <div className='text-center'>
+                    <Upload className='text-primary mx-auto mb-4 h-12 w-12' />
+                    <p className='text-lg font-semibold'>
+                      Drop files to upload
+                    </p>
                   </div>
                 </div>
               )}
 
-              <div className="space-y-2">
+              <div className='space-y-2'>
                 {/* Folders */}
-                {prefixes.map(prefix => (
+                {prefixes.map((prefix) => (
                   <Card
                     key={prefix}
-                    className="p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                    className='hover:bg-muted/50 cursor-pointer p-3 transition-colors'
                     onClick={() => navigateToPrefix(prefix)}
                   >
-                    <div className="flex items-center gap-3">
-                      <FolderOpen className="h-5 w-5 text-blue-500" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">
+                    <div className='flex items-center gap-3'>
+                      <FolderOpen className='h-5 w-5 text-blue-500' />
+                      <div className='min-w-0 flex-1'>
+                        <p className='truncate font-medium'>
                           {prefix.replace(currentPrefix, '').replace('/', '')}
                         </p>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <ChevronRight className='text-muted-foreground h-4 w-4' />
                     </div>
                   </Card>
                 ))}
 
                 {/* Files */}
-                {filteredObjects.map(obj => (
+                {filteredObjects.map((obj) => (
                   <Card
                     key={obj.path}
-                    className="p-3 hover:bg-muted/50 transition-colors"
+                    className='hover:bg-muted/50 p-3 transition-colors'
                   >
-                    <div className="flex items-center gap-3">
+                    <div className='flex items-center gap-3'>
                       <Checkbox
                         checked={selectedFiles.has(obj.path)}
                         onCheckedChange={() => toggleFileSelection(obj.path)}
                       />
                       {getFileIcon(obj.mime_type)}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">
+                      <div className='min-w-0 flex-1'>
+                        <p className='truncate font-medium'>
                           {obj.path.replace(currentPrefix, '')}
                         </p>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <div className='text-muted-foreground flex items-center gap-3 text-xs'>
                           <span>{formatBytes(obj.size)}</span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatDistanceToNow(new Date(obj.updated_at), { addSuffix: true })}
+                          <span className='flex items-center gap-1'>
+                            <Clock className='h-3 w-3' />
+                            {formatDistanceToNow(new Date(obj.updated_at), {
+                              addSuffix: true,
+                            })}
                           </span>
                           {obj.mime_type && (
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant='outline' className='text-xs'>
                               {obj.mime_type.split('/')[1]}
                             </Badge>
                           )}
                         </div>
                       </div>
-                      <div className="flex gap-1">
+                      <div className='flex gap-1'>
                         <Button
-                          variant="ghost"
-                          size="icon"
+                          variant='ghost'
+                          size='icon'
                           onClick={() => openFileMetadata(obj)}
-                          title="File info"
+                          title='File info'
                         >
-                          <Info className="h-4 w-4" />
+                          <Info className='h-4 w-4' />
                         </Button>
                         <Button
-                          variant="ghost"
-                          size="icon"
+                          variant='ghost'
+                          size='icon'
                           onClick={() => previewFileHandler(obj)}
-                          title="Preview"
+                          title='Preview'
                         >
-                          <Eye className="h-4 w-4" />
+                          <Eye className='h-4 w-4' />
                         </Button>
                         <Button
-                          variant="ghost"
-                          size="icon"
+                          variant='ghost'
+                          size='icon'
                           onClick={() => downloadFile(obj.path)}
-                          title="Download"
+                          title='Download'
                         >
-                          <Download className="h-4 w-4" />
+                          <Download className='h-4 w-4' />
                         </Button>
                         <Button
-                          variant="ghost"
-                          size="icon"
+                          variant='ghost'
+                          size='icon'
                           onClick={() => {
                             setDeletingFilePath(obj.path)
                             setShowDeleteFileConfirm(true)
                           }}
-                          title="Delete"
+                          title='Delete'
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className='h-4 w-4' />
                         </Button>
                       </div>
                     </div>
                   </Card>
                 ))}
 
-                {filteredObjects.length === 0 && prefixes.length === 0 && !loading && (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <FolderOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No files in this folder</p>
-                    <p className="text-sm mt-2">
-                      Drag and drop files here or click Upload
-                    </p>
-                  </div>
-                )}
+                {filteredObjects.length === 0 &&
+                  prefixes.length === 0 &&
+                  !loading && (
+                    <div className='text-muted-foreground py-12 text-center'>
+                      <FolderOpen className='mx-auto mb-4 h-12 w-12 opacity-50' />
+                      <p>No files in this folder</p>
+                      <p className='mt-2 text-sm'>
+                        Drag and drop files here or click Upload
+                      </p>
+                    </div>
+                  )}
               </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <div className="text-center">
-              <HardDrive className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <div className='text-muted-foreground flex flex-1 items-center justify-center'>
+            <div className='text-center'>
+              <HardDrive className='mx-auto mb-4 h-12 w-12 opacity-50' />
               <p>Select a bucket to browse files</p>
             </div>
           </div>
@@ -1047,7 +1193,7 @@ function StorageBrowser() {
             </DialogDescription>
           </DialogHeader>
           <Input
-            placeholder="my-bucket"
+            placeholder='my-bucket'
             value={newBucketName}
             onChange={(e) => setNewBucketName(e.target.value)}
             onKeyDown={(e) => {
@@ -1055,7 +1201,10 @@ function StorageBrowser() {
             }}
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateBucket(false)}>
+            <Button
+              variant='outline'
+              onClick={() => setShowCreateBucket(false)}
+            >
               Cancel
             </Button>
             <Button onClick={createBucket} disabled={loading}>
@@ -1075,7 +1224,7 @@ function StorageBrowser() {
             </DialogDescription>
           </DialogHeader>
           <Input
-            placeholder="my-folder"
+            placeholder='my-folder'
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
             onKeyDown={(e) => {
@@ -1083,7 +1232,10 @@ function StorageBrowser() {
             }}
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateFolder(false)}>
+            <Button
+              variant='outline'
+              onClick={() => setShowCreateFolder(false)}
+            >
               Cancel
             </Button>
             <Button onClick={createFolder} disabled={loading}>
@@ -1099,14 +1251,22 @@ function StorageBrowser() {
           <DialogHeader>
             <DialogTitle>Delete Files</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete {selectedCount} file(s)? This action cannot be undone.
+              Are you sure you want to delete {selectedCount} file(s)? This
+              action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+            <Button
+              variant='outline'
+              onClick={() => setShowDeleteConfirm(false)}
+            >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={deleteSelected} disabled={loading}>
+            <Button
+              variant='destructive'
+              onClick={deleteSelected}
+              disabled={loading}
+            >
               Delete
             </Button>
           </DialogFooter>
@@ -1115,58 +1275,68 @@ function StorageBrowser() {
 
       {/* File Preview Dialog */}
       <Dialog open={showFilePreview} onOpenChange={setShowFilePreview}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogContent className='max-h-[90vh] max-w-4xl'>
           <DialogHeader>
             <DialogTitle>{previewFile?.path}</DialogTitle>
             <DialogDescription>
               {previewFile && (
-                <div className="flex items-center gap-4 text-sm">
+                <div className='flex items-center gap-4 text-sm'>
                   <span>{formatBytes(previewFile.size)}</span>
                   <span>{previewFile.mime_type}</span>
-                  <span>{formatDistanceToNow(new Date(previewFile.updated_at), { addSuffix: true })}</span>
+                  <span>
+                    {formatDistanceToNow(new Date(previewFile.updated_at), {
+                      addSuffix: true,
+                    })}
+                  </span>
                 </div>
               )}
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[60vh]">
+          <ScrollArea className='max-h-[60vh]'>
             {previewFile?.mime_type?.startsWith('image/') ? (
-              <img src={previewUrl} alt={previewFile.path} className="w-full" />
+              <img src={previewUrl} alt={previewFile.path} className='w-full' />
             ) : isJsonFile(previewFile?.mime_type, previewFile?.path) ? (
-              <div className="p-4 bg-slate-950 rounded-lg">
-                <pre className="text-sm font-mono">
-                  <code className="language-json text-slate-100"
+              <div className='rounded-lg bg-slate-950 p-4'>
+                <pre className='font-mono text-sm'>
+                  <code
+                    className='language-json text-slate-100'
                     dangerouslySetInnerHTML={{
-                      __html: formatJsonWithHighlighting(previewUrl)
+                      __html: formatJsonWithHighlighting(previewUrl),
                     }}
                   />
                 </pre>
               </div>
             ) : (
-              <pre className="text-sm p-4 bg-muted/50 rounded font-mono">{previewUrl}</pre>
+              <pre className='bg-muted/50 rounded p-4 font-mono text-sm'>
+                {previewUrl}
+              </pre>
             )}
           </ScrollArea>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowFilePreview(false)}>
+            <Button variant='outline' onClick={() => setShowFilePreview(false)}>
               Close
             </Button>
             {previewFile && !previewFile.mime_type?.startsWith('image/') && (
               <Button
-                variant="outline"
+                variant='outline'
                 onClick={() => {
-                  const textToCopy = isJsonFile(previewFile.mime_type, previewFile.path)
+                  const textToCopy = isJsonFile(
+                    previewFile.mime_type,
+                    previewFile.path
+                  )
                     ? formatJson(previewUrl)
                     : previewUrl
                   navigator.clipboard.writeText(textToCopy)
                   toast.success('Copied to clipboard')
                 }}
               >
-                <Copy className="h-4 w-4 mr-2" />
+                <Copy className='mr-2 h-4 w-4' />
                 Copy
               </Button>
             )}
             {previewFile && (
               <Button onClick={() => downloadFile(previewFile.path)}>
-                <Download className="h-4 w-4 mr-2" />
+                <Download className='mr-2 h-4 w-4' />
                 Download
               </Button>
             )}
@@ -1178,9 +1348,9 @@ function StorageBrowser() {
       <ConfirmDialog
         open={showDeleteBucketConfirm}
         onOpenChange={setShowDeleteBucketConfirm}
-        title="Delete Bucket"
+        title='Delete Bucket'
         desc={`Are you sure you want to delete the bucket "${deletingBucketName}"? This action cannot be undone.`}
-        confirmText="Delete"
+        confirmText='Delete'
         destructive
         handleConfirm={() => {
           if (deletingBucketName) {
@@ -1195,9 +1365,9 @@ function StorageBrowser() {
       <ConfirmDialog
         open={showDeleteFileConfirm}
         onOpenChange={setShowDeleteFileConfirm}
-        title="Delete File"
+        title='Delete File'
         desc={`Are you sure you want to delete "${deletingFilePath}"? This action cannot be undone.`}
-        confirmText="Delete"
+        confirmText='Delete'
         destructive
         handleConfirm={() => {
           if (deletingFilePath) {
@@ -1210,92 +1380,97 @@ function StorageBrowser() {
 
       {/* File Metadata Sheet */}
       <Sheet open={showMetadata} onOpenChange={setShowMetadata}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent className='w-full overflow-y-auto sm:max-w-lg'>
           <SheetHeader>
             <SheetTitle>File Details</SheetTitle>
-            <SheetDescription>
-              View and manage file metadata
-            </SheetDescription>
+            <SheetDescription>View and manage file metadata</SheetDescription>
           </SheetHeader>
 
           {metadataFile && (
-            <div className="mt-6 space-y-6">
+            <div className='mt-6 space-y-6'>
               {/* File Info */}
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
+              <div className='space-y-4'>
+                <div className='flex items-start gap-3'>
                   {getFileIcon(metadataFile.mime_type)}
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium truncate">
+                  <div className='min-w-0 flex-1'>
+                    <h3 className='truncate font-medium'>
                       {metadataFile.path.replace(currentPrefix, '')}
                     </h3>
-                    <p className="text-sm text-muted-foreground truncate">
+                    <p className='text-muted-foreground truncate text-sm'>
                       {metadataFile.path}
                     </p>
                   </div>
                 </div>
 
-                <div className="grid gap-3">
-                  <div className="flex items-center justify-between py-2 border-b">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <HardDrive className="h-4 w-4" />
+                <div className='grid gap-3'>
+                  <div className='flex items-center justify-between border-b py-2'>
+                    <div className='text-muted-foreground flex items-center gap-2 text-sm'>
+                      <HardDrive className='h-4 w-4' />
                       <span>Size</span>
                     </div>
-                    <span className="text-sm font-medium">{formatBytes(metadataFile.size)}</span>
+                    <span className='text-sm font-medium'>
+                      {formatBytes(metadataFile.size)}
+                    </span>
                   </div>
 
-                  <div className="flex items-center justify-between py-2 border-b">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <FileType className="h-4 w-4" />
+                  <div className='flex items-center justify-between border-b py-2'>
+                    <div className='text-muted-foreground flex items-center gap-2 text-sm'>
+                      <FileType className='h-4 w-4' />
                       <span>Type</span>
                     </div>
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant='outline' className='text-xs'>
                       {metadataFile.mime_type || 'Unknown'}
                     </Badge>
                   </div>
 
-                  <div className="flex items-center justify-between py-2 border-b">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
+                  <div className='flex items-center justify-between border-b py-2'>
+                    <div className='text-muted-foreground flex items-center gap-2 text-sm'>
+                      <Calendar className='h-4 w-4' />
                       <span>Modified</span>
                     </div>
-                    <span className="text-sm font-medium">
-                      {formatDistanceToNow(new Date(metadataFile.updated_at), { addSuffix: true })}
+                    <span className='text-sm font-medium'>
+                      {formatDistanceToNow(new Date(metadataFile.updated_at), {
+                        addSuffix: true,
+                      })}
                     </span>
                   </div>
                 </div>
               </div>
 
               {/* Public URL */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Public URL</label>
-                <div className="flex gap-2">
+              <div className='space-y-2'>
+                <label className='text-sm font-medium'>Public URL</label>
+                <div className='flex gap-2'>
                   <Input
                     value={getPublicUrl(metadataFile.path)}
                     readOnly
-                    className="flex-1 font-mono text-xs"
+                    className='flex-1 font-mono text-xs'
                   />
                   <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(getPublicUrl(metadataFile.path), 'URL')}
+                    variant='outline'
+                    size='icon'
+                    onClick={() =>
+                      copyToClipboard(getPublicUrl(metadataFile.path), 'URL')
+                    }
                   >
-                    <Copy className="h-4 w-4" />
+                    <Copy className='h-4 w-4' />
                   </Button>
                 </div>
               </div>
 
               {/* Signed URL Generator */}
-              <div className="space-y-3 pt-4 border-t">
-                <div className="flex items-center gap-2">
-                  <Link className="h-4 w-4" />
-                  <h4 className="font-medium">Generate Signed URL</h4>
+              <div className='space-y-3 border-t pt-4'>
+                <div className='flex items-center gap-2'>
+                  <Link className='h-4 w-4' />
+                  <h4 className='font-medium'>Generate Signed URL</h4>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Create a temporary URL with an expiration time for secure file sharing.
+                <p className='text-muted-foreground text-sm'>
+                  Create a temporary URL with an expiration time for secure file
+                  sharing.
                 </p>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Expires In</label>
+                <div className='space-y-2'>
+                  <label className='text-sm font-medium'>Expires In</label>
                   <Select
                     value={signedUrlExpiry.toString()}
                     onValueChange={(val) => setSignedUrlExpiry(parseInt(val))}
@@ -1304,13 +1479,13 @@ function StorageBrowser() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="900">15 minutes</SelectItem>
-                      <SelectItem value="1800">30 minutes</SelectItem>
-                      <SelectItem value="3600">1 hour</SelectItem>
-                      <SelectItem value="7200">2 hours</SelectItem>
-                      <SelectItem value="21600">6 hours</SelectItem>
-                      <SelectItem value="86400">24 hours</SelectItem>
-                      <SelectItem value="604800">7 days</SelectItem>
+                      <SelectItem value='900'>15 minutes</SelectItem>
+                      <SelectItem value='1800'>30 minutes</SelectItem>
+                      <SelectItem value='3600'>1 hour</SelectItem>
+                      <SelectItem value='7200'>2 hours</SelectItem>
+                      <SelectItem value='21600'>6 hours</SelectItem>
+                      <SelectItem value='86400'>24 hours</SelectItem>
+                      <SelectItem value='604800'>7 days</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1318,80 +1493,93 @@ function StorageBrowser() {
                 <Button
                   onClick={generateSignedURL}
                   disabled={generatingUrl}
-                  className="w-full"
+                  className='w-full'
                 >
                   {generatingUrl ? (
                     <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      <RefreshCw className='mr-2 h-4 w-4 animate-spin' />
                       Generating...
                     </>
                   ) : (
                     <>
-                      <Link className="h-4 w-4 mr-2" />
+                      <Link className='mr-2 h-4 w-4' />
                       Generate Signed URL
                     </>
                   )}
                 </Button>
 
                 {signedUrl && (
-                  <div className="space-y-2 p-3 bg-muted rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Signed URL</span>
+                  <div className='bg-muted space-y-2 rounded-lg p-3'>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-sm font-medium'>Signed URL</span>
                       <Button
-                        variant="ghost"
-                        size="sm"
+                        variant='ghost'
+                        size='sm'
                         onClick={() => copyToClipboard(signedUrl, 'Signed URL')}
                       >
-                        <Copy className="h-3 w-3 mr-1" />
+                        <Copy className='mr-1 h-3 w-3' />
                         Copy
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground break-all font-mono">
+                    <p className='text-muted-foreground font-mono text-xs break-all'>
                       {signedUrl}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      Expires in {signedUrlExpiry < 3600 ? `${signedUrlExpiry / 60} minutes` : `${signedUrlExpiry / 3600} hours`}
+                    <p className='text-muted-foreground text-xs'>
+                      Expires in{' '}
+                      {signedUrlExpiry < 3600
+                        ? `${signedUrlExpiry / 60} minutes`
+                        : `${signedUrlExpiry / 3600} hours`}
                     </p>
                   </div>
                 )}
               </div>
 
               {/* Custom Metadata */}
-              {metadataFile.metadata && Object.keys(metadataFile.metadata).length > 0 && (
-                <div className="space-y-3 pt-4 border-t">
-                  <h4 className="font-medium">Custom Metadata</h4>
-                  <div className="space-y-2">
-                    {Object.entries(metadataFile.metadata).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between py-2 border-b">
-                        <span className="text-sm text-muted-foreground">{key}</span>
-                        <span className="text-sm font-medium truncate max-w-[200px]">
-                          {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                        </span>
-                      </div>
-                    ))}
+              {metadataFile.metadata &&
+                Object.keys(metadataFile.metadata).length > 0 && (
+                  <div className='space-y-3 border-t pt-4'>
+                    <h4 className='font-medium'>Custom Metadata</h4>
+                    <div className='space-y-2'>
+                      {Object.entries(metadataFile.metadata).map(
+                        ([key, value]) => (
+                          <div
+                            key={key}
+                            className='flex items-center justify-between border-b py-2'
+                          >
+                            <span className='text-muted-foreground text-sm'>
+                              {key}
+                            </span>
+                            <span className='max-w-[200px] truncate text-sm font-medium'>
+                              {typeof value === 'object'
+                                ? JSON.stringify(value)
+                                : String(value)}
+                            </span>
+                          </div>
+                        )
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Actions */}
-              <div className="flex gap-2 pt-4 border-t">
+              <div className='flex gap-2 border-t pt-4'>
                 <Button
-                  variant="outline"
-                  className="flex-1"
+                  variant='outline'
+                  className='flex-1'
                   onClick={() => downloadFile(metadataFile.path)}
                 >
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className='mr-2 h-4 w-4' />
                   Download
                 </Button>
                 <Button
-                  variant="outline"
-                  className="flex-1"
+                  variant='outline'
+                  className='flex-1'
                   onClick={() => {
                     setShowMetadata(false)
                     previewFileHandler(metadataFile)
                   }}
                 >
-                  <Eye className="h-4 w-4 mr-2" />
+                  <Eye className='mr-2 h-4 w-4' />
                   Preview
                 </Button>
               </div>

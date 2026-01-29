@@ -39,7 +39,10 @@ export interface TokenPair {
 export function getAccessToken(): string | null {
   if (typeof window === 'undefined') return null
   // Check both new key and legacy key for backwards compatibility
-  return localStorage.getItem(ACCESS_TOKEN_KEY) || localStorage.getItem('access_token')
+  return (
+    localStorage.getItem(ACCESS_TOKEN_KEY) ||
+    localStorage.getItem('access_token')
+  )
 }
 
 // Get refresh token from localStorage
@@ -52,7 +55,8 @@ export function getRefreshToken(): string | null {
 export function getStoredUser(): AdminUser | DashboardUser | null {
   if (typeof window === 'undefined') return null
   // Check both new key and legacy key for backwards compatibility
-  const userJson = localStorage.getItem(USER_KEY) || localStorage.getItem('user')
+  const userJson =
+    localStorage.getItem(USER_KEY) || localStorage.getItem('user')
   if (!userJson) return null
   try {
     return JSON.parse(userJson)

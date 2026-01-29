@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Check, X } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 interface EditableCellProps {
   value: unknown
@@ -150,7 +150,7 @@ export function EditableCell({
       onClick={handleStartEdit}
       disabled={isReadOnly}
       className={cn(
-        'w-full text-left hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 -mx-2 -my-1 transition-colors',
+        'hover:bg-accent hover:text-accent-foreground -mx-2 -my-1 w-full rounded px-2 py-1 text-left transition-colors',
         value === null && 'text-muted-foreground italic',
         isReadOnly && 'cursor-default hover:bg-transparent'
       )}

@@ -1,4 +1,5 @@
-import { getRouteApi } from '@tanstack/react-router'
+import { getRouteApi, Link } from '@tanstack/react-router'
+import { LayoutDashboard } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -7,12 +8,9 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { FluxbaseStats } from './components/fluxbase-stats'
+import { SecuritySummary } from './components/security-summary'
 
 const route = getRouteApi('/_authenticated/')
 
@@ -20,24 +18,14 @@ export function Dashboard() {
   const search = route.useSearch()
   const navigate = route.useNavigate()
   return (
-    <>
-      {/* ===== Top Heading ===== */}
-      <Header>
-        <div className='ms-auto flex items-center space-x-4'>
-          <Search />
-          <ThemeSwitch />
-          <ConfigDrawer />
-        </div>
-      </Header>
-
-      {/* ===== Main ===== */}
-      <Main>
+    <Main>
         <div className='mb-2 flex items-center justify-between space-y-2'>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>
-              Fluxbase Dashboard
+            <h1 className='flex items-center gap-2 text-3xl font-bold tracking-tight'>
+              <LayoutDashboard className='h-8 w-8' />
+              Dashboard
             </h1>
-            <p className='text-muted-foreground text-sm'>
+            <p className='text-muted-foreground mt-2 text-sm'>
               Monitor your Backend as a Service
             </p>
           </div>
@@ -52,6 +40,9 @@ export function Dashboard() {
             {/* Fluxbase System Stats */}
             <FluxbaseStats />
 
+            {/* Security Summary */}
+            <SecuritySummary />
+
             {/* Quick Actions */}
             <Card>
               <CardHeader>
@@ -62,46 +53,45 @@ export function Dashboard() {
                 <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
                   <div className='text-sm'>
                     <p className='text-muted-foreground mb-1'>Database</p>
-                    <a
-                      href='/admin/tables'
+                    <Link
+                      to='/tables'
                       className='text-primary hover:underline'
                     >
                       Browse database tables →
-                    </a>
+                    </Link>
                   </div>
                   <div className='text-sm'>
                     <p className='text-muted-foreground mb-1'>Users</p>
-                    <a
-                      href='/admin/users'
+                    <Link
+                      to='/users'
                       className='text-primary hover:underline'
                     >
                       Manage user accounts →
-                    </a>
+                    </Link>
                   </div>
                   <div className='text-sm'>
                     <p className='text-muted-foreground mb-1'>Functions</p>
-                    <a
-                      href='/admin/functions'
+                    <Link
+                      to='/functions'
                       className='text-primary hover:underline'
                     >
                       Manage Edge Functions →
-                    </a>
+                    </Link>
                   </div>
                   <div className='text-sm'>
                     <p className='text-muted-foreground mb-1'>Settings</p>
-                    <a
-                      href='/admin/settings'
+                    <Link
+                      to='/settings'
                       className='text-primary hover:underline'
                     >
                       Configure system settings →
-                    </a>
+                    </Link>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
-      </Main>
-    </>
+    </Main>
   )
 }

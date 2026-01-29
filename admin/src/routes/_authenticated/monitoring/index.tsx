@@ -1,10 +1,34 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Activity, Database, HardDrive, Zap, Cpu, MemoryStick, Network, CheckCircle2, AlertCircle, XCircle, Bot } from 'lucide-react'
 import { useState } from 'react'
-import { monitoringApi, type SystemMetrics, type SystemHealth, aiMetricsApi, type AIMetrics } from '@/lib/api'
+import { useQuery } from '@tanstack/react-query'
+import { createFileRoute } from '@tanstack/react-router'
+import {
+  Activity,
+  Database,
+  HardDrive,
+  Zap,
+  Cpu,
+  MemoryStick,
+  Network,
+  CheckCircle2,
+  AlertCircle,
+  XCircle,
+  Bot,
+} from 'lucide-react'
+import {
+  monitoringApi,
+  type SystemMetrics,
+  type SystemHealth,
+  aiMetricsApi,
+  type AIMetrics,
+} from '@/lib/api'
+import { Badge } from '@/components/ui/badge'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -86,98 +110,131 @@ function MonitoringPage() {
       <div className='flex items-center justify-between'>
         <div>
           <h1 className='text-3xl font-bold'>System Monitoring</h1>
-          <p className='text-sm text-muted-foreground mt-1'>Real-time system metrics and health status</p>
+          <p className='text-muted-foreground mt-1 text-sm'>
+            Real-time system metrics and health status
+          </p>
         </div>
         <div className='flex items-center gap-2'>
           <label className='flex items-center gap-2 text-sm'>
-            <input type='checkbox' checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} className='rounded' />
+            <input
+              type='checkbox'
+              checked={autoRefresh}
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+              className='rounded'
+            />
             Auto-refresh
           </label>
         </div>
       </div>
 
       {/* System Status Cards */}
-      <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
+      <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
         <Card>
           <CardHeader className='pb-2'>
-            <CardTitle className='text-sm font-medium text-muted-foreground flex items-center gap-2'>
+            <CardTitle className='text-muted-foreground flex items-center gap-2 text-sm font-medium'>
               <Activity className='h-4 w-4' />
               Uptime
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold'>{metrics ? formatUptime(metrics.uptime_seconds) : '-'}</div>
-            <p className='text-xs text-muted-foreground mt-1'>{metrics?.go_version}</p>
+            <div className='text-2xl font-bold'>
+              {metrics ? formatUptime(metrics.uptime_seconds) : '-'}
+            </div>
+            <p className='text-muted-foreground mt-1 text-xs'>
+              {metrics?.go_version}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className='pb-2'>
-            <CardTitle className='text-sm font-medium text-muted-foreground flex items-center gap-2'>
+            <CardTitle className='text-muted-foreground flex items-center gap-2 text-sm font-medium'>
               <Cpu className='h-4 w-4' />
               Goroutines
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold'>{metrics?.num_goroutines || 0}</div>
-            <p className='text-xs text-muted-foreground mt-1'>Active goroutines</p>
+            <div className='text-2xl font-bold'>
+              {metrics?.num_goroutines || 0}
+            </div>
+            <p className='text-muted-foreground mt-1 text-xs'>
+              Active goroutines
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className='pb-2'>
-            <CardTitle className='text-sm font-medium text-muted-foreground flex items-center gap-2'>
+            <CardTitle className='text-muted-foreground flex items-center gap-2 text-sm font-medium'>
               <MemoryStick className='h-4 w-4' />
               Memory
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold'>{metrics?.memory_alloc_mb || 0} MB</div>
-            <p className='text-xs text-muted-foreground mt-1'>Allocated / {metrics?.memory_sys_mb || 0} MB system</p>
+            <div className='text-2xl font-bold'>
+              {metrics?.memory_alloc_mb || 0} MB
+            </div>
+            <p className='text-muted-foreground mt-1 text-xs'>
+              Allocated / {metrics?.memory_sys_mb || 0} MB system
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className='pb-2'>
-            <CardTitle className='text-sm font-medium text-muted-foreground flex items-center gap-2'>
+            <CardTitle className='text-muted-foreground flex items-center gap-2 text-sm font-medium'>
               <Network className='h-4 w-4' />
               Health
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className='flex items-center gap-2'>{health && getStatusBadge(health.status)}</div>
-            <p className='text-xs text-muted-foreground mt-1'>All systems operational</p>
+            <div className='flex items-center gap-2'>
+              {health && getStatusBadge(health.status)}
+            </div>
+            <p className='text-muted-foreground mt-1 text-xs'>
+              All systems operational
+            </p>
           </CardContent>
         </Card>
       </div>
 
       {/* System Resources & Service Status */}
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+      <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
         <Card>
           <CardHeader>
             <CardTitle>System Resources</CardTitle>
-            <CardDescription>CPU, memory, and garbage collection metrics</CardDescription>
+            <CardDescription>
+              CPU, memory, and garbage collection metrics
+            </CardDescription>
           </CardHeader>
           <CardContent className='space-y-3'>
-            <div className='flex justify-between items-center'>
+            <div className='flex items-center justify-between'>
               <span className='text-sm'>Memory Allocated</span>
-              <span className='font-mono font-semibold'>{metrics?.memory_alloc_mb} MB</span>
+              <span className='font-mono font-semibold'>
+                {metrics?.memory_alloc_mb} MB
+              </span>
             </div>
-            <div className='flex justify-between items-center'>
+            <div className='flex items-center justify-between'>
               <span className='text-sm'>Total Allocated</span>
-              <span className='font-mono font-semibold'>{metrics?.memory_total_alloc_mb} MB</span>
+              <span className='font-mono font-semibold'>
+                {metrics?.memory_total_alloc_mb} MB
+              </span>
             </div>
-            <div className='flex justify-between items-center'>
+            <div className='flex items-center justify-between'>
               <span className='text-sm'>System Memory</span>
-              <span className='font-mono font-semibold'>{metrics?.memory_sys_mb} MB</span>
+              <span className='font-mono font-semibold'>
+                {metrics?.memory_sys_mb} MB
+              </span>
             </div>
-            <div className='flex justify-between items-center'>
+            <div className='flex items-center justify-between'>
               <span className='text-sm'>GC Runs</span>
               <span className='font-mono font-semibold'>{metrics?.num_gc}</span>
             </div>
-            <div className='flex justify-between items-center'>
+            <div className='flex items-center justify-between'>
               <span className='text-sm'>Last GC Pause</span>
-              <span className='font-mono font-semibold'>{metrics?.gc_pause_ms.toFixed(2)} ms</span>
+              <span className='font-mono font-semibold'>
+                {metrics?.gc_pause_ms.toFixed(2)} ms
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -185,15 +242,21 @@ function MonitoringPage() {
         <Card>
           <CardHeader>
             <CardTitle>Service Status</CardTitle>
-            <CardDescription>Health status of all system components</CardDescription>
+            <CardDescription>
+              Health status of all system components
+            </CardDescription>
           </CardHeader>
           <CardContent className='space-y-3'>
             {health?.services &&
               Object.entries(health.services).map(([name, status]) => (
-                <div key={name} className='flex justify-between items-center'>
+                <div key={name} className='flex items-center justify-between'>
                   <span className='text-sm capitalize'>{name}</span>
                   <div className='flex items-center gap-2'>
-                    {status.latency_ms !== undefined && <span className='text-xs text-muted-foreground'>{status.latency_ms}ms</span>}
+                    {status.latency_ms !== undefined && (
+                      <span className='text-muted-foreground text-xs'>
+                        {status.latency_ms}ms
+                      </span>
+                    )}
                     {getStatusBadge(status.status)}
                   </div>
                 </div>
@@ -209,68 +272,98 @@ function MonitoringPage() {
             <Database className='h-5 w-5' />
             Database Connection Pool
           </CardTitle>
-          <CardDescription>PostgreSQL connection pool statistics</CardDescription>
+          <CardDescription>
+            PostgreSQL connection pool statistics
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+          <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
             <div className='space-y-2'>
-              <h4 className='text-sm font-medium text-muted-foreground'>Connections</h4>
+              <h4 className='text-muted-foreground text-sm font-medium'>
+                Connections
+              </h4>
               <div className='space-y-1'>
                 <div className='flex justify-between'>
                   <span className='text-sm'>Total</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.total_conns}</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.total_conns}
+                  </span>
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-sm'>Idle</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.idle_conns}</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.idle_conns}
+                  </span>
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-sm'>Acquired</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.acquired_conns}</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.acquired_conns}
+                  </span>
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-sm'>Max</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.max_conns}</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.max_conns}
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className='space-y-2'>
-              <h4 className='text-sm font-medium text-muted-foreground'>Acquire Stats</h4>
+              <h4 className='text-muted-foreground text-sm font-medium'>
+                Acquire Stats
+              </h4>
               <div className='space-y-1'>
                 <div className='flex justify-between'>
                   <span className='text-sm'>Total Acquires</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.acquire_count}</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.acquire_count}
+                  </span>
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-sm'>Canceled</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.canceled_acquire_count}</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.canceled_acquire_count}
+                  </span>
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-sm'>Empty</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.empty_acquire_count}</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.empty_acquire_count}
+                  </span>
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-sm'>Duration</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.acquire_duration_ms} ms</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.acquire_duration_ms} ms
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className='space-y-2'>
-              <h4 className='text-sm font-medium text-muted-foreground'>Lifecycle</h4>
+              <h4 className='text-muted-foreground text-sm font-medium'>
+                Lifecycle
+              </h4>
               <div className='space-y-1'>
                 <div className='flex justify-between'>
                   <span className='text-sm'>New Conns</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.new_conns_count}</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.new_conns_count}
+                  </span>
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-sm'>Max Lifetime Destroys</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.max_lifetime_destroy_count}</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.max_lifetime_destroy_count}
+                  </span>
                 </div>
                 <div className='flex justify-between'>
                   <span className='text-sm'>Max Idle Destroys</span>
-                  <span className='font-mono font-semibold'>{metrics?.database.max_idle_destroy_count}</span>
+                  <span className='font-mono font-semibold'>
+                    {metrics?.database.max_idle_destroy_count}
+                  </span>
                 </div>
               </div>
             </div>
@@ -285,21 +378,35 @@ function MonitoringPage() {
             <Zap className='h-5 w-5' />
             Realtime WebSocket
           </CardTitle>
-          <CardDescription>Active WebSocket connections and subscriptions</CardDescription>
+          <CardDescription>
+            Active WebSocket connections and subscriptions
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+          <div className='grid grid-cols-1 gap-6 md:grid-cols-3'>
             <div className='text-center'>
-              <div className='text-4xl font-bold'>{metrics?.realtime.total_connections || 0}</div>
-              <p className='text-sm text-muted-foreground mt-1'>Active Connections</p>
+              <div className='text-4xl font-bold'>
+                {metrics?.realtime.total_connections || 0}
+              </div>
+              <p className='text-muted-foreground mt-1 text-sm'>
+                Active Connections
+              </p>
             </div>
             <div className='text-center'>
-              <div className='text-4xl font-bold'>{metrics?.realtime.active_channels || 0}</div>
-              <p className='text-sm text-muted-foreground mt-1'>Active Channels</p>
+              <div className='text-4xl font-bold'>
+                {metrics?.realtime.active_channels || 0}
+              </div>
+              <p className='text-muted-foreground mt-1 text-sm'>
+                Active Channels
+              </p>
             </div>
             <div className='text-center'>
-              <div className='text-4xl font-bold'>{metrics?.realtime.total_subscriptions || 0}</div>
-              <p className='text-sm text-muted-foreground mt-1'>Total Subscriptions</p>
+              <div className='text-4xl font-bold'>
+                {metrics?.realtime.total_subscriptions || 0}
+              </div>
+              <p className='text-muted-foreground mt-1 text-sm'>
+                Total Subscriptions
+              </p>
             </div>
           </div>
         </CardContent>
@@ -316,18 +423,24 @@ function MonitoringPage() {
             <CardDescription>File storage usage statistics</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+            <div className='grid grid-cols-1 gap-6 md:grid-cols-3'>
               <div className='text-center'>
-                <div className='text-4xl font-bold'>{metrics.storage.total_buckets}</div>
-                <p className='text-sm text-muted-foreground mt-1'>Buckets</p>
+                <div className='text-4xl font-bold'>
+                  {metrics.storage.total_buckets}
+                </div>
+                <p className='text-muted-foreground mt-1 text-sm'>Buckets</p>
               </div>
               <div className='text-center'>
-                <div className='text-4xl font-bold'>{metrics.storage.total_files}</div>
-                <p className='text-sm text-muted-foreground mt-1'>Files</p>
+                <div className='text-4xl font-bold'>
+                  {metrics.storage.total_files}
+                </div>
+                <p className='text-muted-foreground mt-1 text-sm'>Files</p>
               </div>
               <div className='text-center'>
-                <div className='text-4xl font-bold'>{metrics.storage.total_size_gb.toFixed(2)} GB</div>
-                <p className='text-sm text-muted-foreground mt-1'>Total Size</p>
+                <div className='text-4xl font-bold'>
+                  {metrics.storage.total_size_gb.toFixed(2)} GB
+                </div>
+                <p className='text-muted-foreground mt-1 text-sm'>Total Size</p>
               </div>
             </div>
           </CardContent>
@@ -335,36 +448,52 @@ function MonitoringPage() {
       )}
 
       {/* AI Chatbots */}
-      <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
+      <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4'>
         <Card>
           <CardHeader className='pb-2'>
-            <CardTitle className='text-sm font-medium text-muted-foreground'>Total Requests</CardTitle>
+            <CardTitle className='text-muted-foreground text-sm font-medium'>
+              Total Requests
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold'>{aiMetrics?.total_requests?.toLocaleString() || 0}</div>
-            <p className='text-xs text-muted-foreground mt-1'>AI chat requests</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className='pb-2'>
-            <CardTitle className='text-sm font-medium text-muted-foreground'>Total Tokens</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className='text-2xl font-bold'>{aiMetrics?.total_tokens?.toLocaleString() || 0}</div>
-            <p className='text-xs text-muted-foreground mt-1'>
-              {aiMetrics?.total_prompt_tokens?.toLocaleString() || 0} prompt + {aiMetrics?.total_completion_tokens?.toLocaleString() || 0} completion
+            <div className='text-2xl font-bold'>
+              {aiMetrics?.total_requests?.toLocaleString() || 0}
+            </div>
+            <p className='text-muted-foreground mt-1 text-xs'>
+              AI chat requests
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className='pb-2'>
-            <CardTitle className='text-sm font-medium text-muted-foreground'>Active Conversations</CardTitle>
+            <CardTitle className='text-muted-foreground text-sm font-medium'>
+              Total Tokens
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold'>{aiMetrics?.active_conversations || 0}</div>
-            <p className='text-xs text-muted-foreground mt-1'>
+            <div className='text-2xl font-bold'>
+              {aiMetrics?.total_tokens?.toLocaleString() || 0}
+            </div>
+            <p className='text-muted-foreground mt-1 text-xs'>
+              {aiMetrics?.total_prompt_tokens?.toLocaleString() || 0} prompt +{' '}
+              {aiMetrics?.total_completion_tokens?.toLocaleString() || 0}{' '}
+              completion
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className='pb-2'>
+            <CardTitle className='text-muted-foreground text-sm font-medium'>
+              Active Conversations
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold'>
+              {aiMetrics?.active_conversations || 0}
+            </div>
+            <p className='text-muted-foreground mt-1 text-xs'>
               of {aiMetrics?.total_conversations || 0} total
             </p>
           </CardContent>
@@ -372,14 +501,21 @@ function MonitoringPage() {
 
         <Card>
           <CardHeader className='pb-2'>
-            <CardTitle className='text-sm font-medium text-muted-foreground'>Error Rate</CardTitle>
+            <CardTitle className='text-muted-foreground text-sm font-medium'>
+              Error Rate
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className='text-2xl font-bold'>
-              {aiMetrics?.error_rate ? aiMetrics.error_rate.toFixed(2) : '0.00'}%
+              {aiMetrics?.error_rate ? aiMetrics.error_rate.toFixed(2) : '0.00'}
+              %
             </div>
-            <p className='text-xs text-muted-foreground mt-1'>
-              Avg: {aiMetrics?.avg_response_time_ms ? aiMetrics.avg_response_time_ms.toFixed(0) : '0'}ms
+            <p className='text-muted-foreground mt-1 text-xs'>
+              Avg:{' '}
+              {aiMetrics?.avg_response_time_ms
+                ? aiMetrics.avg_response_time_ms.toFixed(0)
+                : '0'}
+              ms
             </p>
           </CardContent>
         </Card>
@@ -393,7 +529,9 @@ function MonitoringPage() {
               <Bot className='h-5 w-5' />
               Chatbot Usage Breakdown
             </CardTitle>
-            <CardDescription>Request counts, token usage, and errors by chatbot</CardDescription>
+            <CardDescription>
+              Request counts, token usage, and errors by chatbot
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -408,22 +546,37 @@ function MonitoringPage() {
               </TableHeader>
               <TableBody>
                 {aiMetrics.chatbot_stats.map((stat) => {
-                  const errorRate = stat.requests > 0 ? (stat.error_count / stat.requests) * 100 : 0
+                  const errorRate =
+                    stat.requests > 0
+                      ? (stat.error_count / stat.requests) * 100
+                      : 0
                   return (
                     <TableRow key={stat.chatbot_id}>
-                      <TableCell className='font-medium'>{stat.chatbot_name}</TableCell>
-                      <TableCell className='text-right font-mono'>{stat.requests.toLocaleString()}</TableCell>
-                      <TableCell className='text-right font-mono'>{stat.tokens.toLocaleString()}</TableCell>
+                      <TableCell className='font-medium'>
+                        {stat.chatbot_name}
+                      </TableCell>
+                      <TableCell className='text-right font-mono'>
+                        {stat.requests.toLocaleString()}
+                      </TableCell>
+                      <TableCell className='text-right font-mono'>
+                        {stat.tokens.toLocaleString()}
+                      </TableCell>
                       <TableCell className='text-right font-mono'>
                         {stat.error_count > 0 ? (
-                          <span className='text-destructive'>{stat.error_count}</span>
+                          <span className='text-destructive'>
+                            {stat.error_count}
+                          </span>
                         ) : (
                           stat.error_count
                         )}
                       </TableCell>
                       <TableCell className='text-right font-mono'>
                         {errorRate > 0 ? (
-                          <Badge variant={errorRate > 5 ? 'destructive' : 'secondary'}>
+                          <Badge
+                            variant={
+                              errorRate > 5 ? 'destructive' : 'secondary'
+                            }
+                          >
                             {errorRate.toFixed(2)}%
                           </Badge>
                         ) : (
@@ -443,21 +596,28 @@ function MonitoringPage() {
       <Card>
         <CardHeader>
           <CardTitle>Health Checks</CardTitle>
-          <CardDescription>System component health status and latency</CardDescription>
+          <CardDescription>
+            System component health status and latency
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+          <div className='grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
             {health?.services &&
               Object.entries(health.services).map(([name, status]) => (
-                <div key={name} className='border rounded-lg p-4'>
-                  <div className='flex items-center justify-between mb-2'>
+                <div key={name} className='rounded-lg border p-4'>
+                  <div className='mb-2 flex items-center justify-between'>
                     <h4 className='font-medium capitalize'>{name}</h4>
                     {getStatusBadge(status.status)}
                   </div>
-                  {status.message && <p className='text-sm text-muted-foreground mb-2'>{status.message}</p>}
+                  {status.message && (
+                    <p className='text-muted-foreground mb-2 text-sm'>
+                      {status.message}
+                    </p>
+                  )}
                   {status.latency_ms !== undefined && (
-                    <div className='text-xs text-muted-foreground'>
-                      Response time: <span className='font-mono'>{status.latency_ms}ms</span>
+                    <div className='text-muted-foreground text-xs'>
+                      Response time:{' '}
+                      <span className='font-mono'>{status.latency_ms}ms</span>
                     </div>
                   )}
                 </div>

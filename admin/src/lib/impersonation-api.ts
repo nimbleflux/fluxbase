@@ -1,8 +1,8 @@
-import { apiClient } from './api'
 import type {
   ImpersonationSession,
   ImpersonatedUser,
 } from '../stores/impersonation-store'
+import { apiClient } from './api'
 
 export interface StartImpersonationRequest {
   target_user_id?: string

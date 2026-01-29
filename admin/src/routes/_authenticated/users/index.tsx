@@ -1,16 +1,16 @@
 import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
 import { z } from 'zod'
+import { useQuery } from '@tanstack/react-query'
+import { createFileRoute } from '@tanstack/react-router'
 import { Users, UserPlus, UserCheck, Clock } from 'lucide-react'
 import { userManagementApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { UsersTable } from '@/features/users/components/users-table'
+import { UsersDialogs } from '@/features/users/components/users-dialogs'
 import { UsersInviteDialog } from '@/features/users/components/users-invite-dialog'
 import { UsersProvider } from '@/features/users/components/users-provider'
-import { UsersDialogs } from '@/features/users/components/users-dialogs'
+import { UsersTable } from '@/features/users/components/users-table'
 
 const usersSearchSchema = z.object({
   page: z.number().optional(),
@@ -62,7 +62,9 @@ function UsersPage() {
       lastSignIn.getFullYear() === today.getFullYear()
     )
   }).length
-  const pendingInvites = users.filter((u) => u.provider === 'invite_pending').length
+  const pendingInvites = users.filter(
+    (u) => u.provider === 'invite_pending'
+  ).length
 
   if (isLoading) {
     return (
@@ -78,8 +80,11 @@ function UsersPage() {
         {/* Header */}
         <div className='flex items-center justify-between'>
           <div>
-            <h1 className='text-3xl font-bold'>Users</h1>
-            <p className='text-muted-foreground'>
+            <h1 className='flex items-center gap-2 text-3xl font-bold tracking-tight'>
+              <Users className='h-8 w-8' />
+              Users
+            </h1>
+            <p className='text-muted-foreground mt-2'>
               {activeTab === 'app'
                 ? 'Manage application users who access your app through the REST API'
                 : 'Manage Fluxbase dashboard administrators and operators'}
@@ -105,17 +110,19 @@ function UsersPage() {
             <TabsTrigger value='dashboard'>Fluxbase Users</TabsTrigger>
           </TabsList>
 
-          <TabsContent value={activeTab} className='space-y-4 mt-6'>
+          <TabsContent value={activeTab} className='mt-6 space-y-4'>
             {/* Stats Cards */}
             <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Total Users</CardTitle>
-                  <Users className='h-4 w-4 text-muted-foreground' />
+                  <CardTitle className='text-sm font-medium'>
+                    Total Users
+                  </CardTitle>
+                  <Users className='text-muted-foreground h-4 w-4' />
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>{totalUsers}</div>
-                  <p className='text-xs text-muted-foreground'>
+                  <p className='text-muted-foreground text-xs'>
                     {verifiedUsers} verified
                   </p>
                 </CardContent>
@@ -123,12 +130,14 @@ function UsersPage() {
 
               <Card>
                 <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-                  <CardTitle className='text-sm font-medium'>Active Today</CardTitle>
-                  <Clock className='h-4 w-4 text-muted-foreground' />
+                  <CardTitle className='text-sm font-medium'>
+                    Active Today
+                  </CardTitle>
+                  <Clock className='text-muted-foreground h-4 w-4' />
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>{activeToday}</div>
-                  <p className='text-xs text-muted-foreground'>
+                  <p className='text-muted-foreground text-xs'>
                     Users signed in today
                   </p>
                 </CardContent>
@@ -139,11 +148,11 @@ function UsersPage() {
                   <CardTitle className='text-sm font-medium'>
                     Pending Invites
                   </CardTitle>
-                  <UserPlus className='h-4 w-4 text-muted-foreground' />
+                  <UserPlus className='text-muted-foreground h-4 w-4' />
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>{pendingInvites}</div>
-                  <p className='text-xs text-muted-foreground'>
+                  <p className='text-muted-foreground text-xs'>
                     Awaiting first sign in
                   </p>
                 </CardContent>
@@ -154,12 +163,13 @@ function UsersPage() {
                   <CardTitle className='text-sm font-medium'>
                     Verified Users
                   </CardTitle>
-                  <UserCheck className='h-4 w-4 text-muted-foreground' />
+                  <UserCheck className='text-muted-foreground h-4 w-4' />
                 </CardHeader>
                 <CardContent>
                   <div className='text-2xl font-bold'>{verifiedUsers}</div>
-                  <p className='text-xs text-muted-foreground'>
-                    {Math.round((verifiedUsers / totalUsers) * 100) || 0}% of total
+                  <p className='text-muted-foreground text-xs'>
+                    {Math.round((verifiedUsers / totalUsers) * 100) || 0}% of
+                    total
                   </p>
                 </CardContent>
               </Card>

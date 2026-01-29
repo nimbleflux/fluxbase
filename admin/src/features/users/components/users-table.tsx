@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { getRouteApi } from '@tanstack/react-router'
 import {
   type SortingState,
   type VisibilityState,
@@ -11,7 +12,6 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { getRouteApi } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import {

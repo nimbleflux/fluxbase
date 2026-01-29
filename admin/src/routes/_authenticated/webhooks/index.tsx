@@ -1,8 +1,8 @@
-import z from 'zod'
-import { createFileRoute, getRouteApi } from '@tanstack/react-router'
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import z from 'zod'
 import { formatDistanceToNow } from 'date-fns'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { createFileRoute, getRouteApi } from '@tanstack/react-router'
 import {
   Webhook,
   Plus,
@@ -14,17 +14,13 @@ import {
   Clock,
 } from 'lucide-react'
 import { toast } from 'sonner'
-
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  webhooksApi,
+  databaseApi,
+  type WebhookDelivery,
+  type WebhookType,
+  type EventConfig,
+} from '@/lib/api'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,15 +32,35 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -53,17 +69,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Switch } from '@/components/ui/switch'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { webhooksApi, databaseApi, type WebhookDelivery, type WebhookType, type EventConfig } from '@/lib/api'
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 const webhooksSearchSchema = z.object({
   tab: z.string().optional().catch('webhooks'),
@@ -83,7 +94,9 @@ function WebhooksPage() {
   const navigate = route.useNavigate()
   const queryClient = useQueryClient()
   const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [selectedWebhook, setSelectedWebhook] = useState<WebhookType | null>(null)
+  const [selectedWebhook, setSelectedWebhook] = useState<WebhookType | null>(
+    null
+  )
   const [searchQuery, setSearchQuery] = useState('')
 
   // Form state
@@ -93,7 +106,11 @@ function WebhooksPage() {
   const [secret, setSecret] = useState('')
   const [enabled, setEnabled] = useState(true)
   const [tableName, setTableName] = useState('')
-  const [selectedOps, setSelectedOps] = useState<string[]>(['INSERT', 'UPDATE', 'DELETE'])
+  const [selectedOps, setSelectedOps] = useState<string[]>([
+    'INSERT',
+    'UPDATE',
+    'DELETE',
+  ])
   const [events, setEvents] = useState<EventConfig[]>([])
   const [maxRetries, setMaxRetries] = useState(3)
   const [timeoutSeconds, setTimeoutSeconds] = useState(30)
@@ -241,20 +258,22 @@ function WebhooksPage() {
       webhook.url.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const getStatusVariant = (status: string): 'default' | 'secondary' | 'destructive' => {
+  const getStatusVariant = (
+    status: string
+  ): 'default' | 'secondary' | 'destructive' => {
     if (status === 'success') return 'default'
     if (status === 'failed') return 'destructive'
     return 'secondary'
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
+    <div className='flex flex-1 flex-col gap-6 p-6'>
       <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Webhook className="h-8 w-8" />
+        <h1 className='flex items-center gap-2 text-3xl font-bold tracking-tight'>
+          <Webhook className='h-8 w-8' />
           Webhooks
         </h1>
-        <p className="text-muted-foreground mt-2">
+        <p className='text-muted-foreground mt-2'>
           Configure webhooks to receive real-time event notifications
         </p>
       </div>
@@ -263,8 +282,10 @@ function WebhooksPage() {
       <div className='grid gap-4 md:grid-cols-3'>
         <Card>
           <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-            <CardTitle className='text-sm font-medium'>Total Webhooks</CardTitle>
-            <Webhook className='h-4 w-4 text-muted-foreground' />
+            <CardTitle className='text-sm font-medium'>
+              Total Webhooks
+            </CardTitle>
+            <Webhook className='text-muted-foreground h-4 w-4' />
           </CardHeader>
           <CardContent>
             <div className='text-2xl font-bold'>{webhooks?.length || 0}</div>
@@ -273,7 +294,7 @@ function WebhooksPage() {
         <Card>
           <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
             <CardTitle className='text-sm font-medium'>Active</CardTitle>
-            <Check className='h-4 w-4 text-muted-foreground' />
+            <Check className='text-muted-foreground h-4 w-4' />
           </CardHeader>
           <CardContent>
             <div className='text-2xl font-bold'>
@@ -284,7 +305,7 @@ function WebhooksPage() {
         <Card>
           <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
             <CardTitle className='text-sm font-medium'>Disabled</CardTitle>
-            <X className='h-4 w-4 text-muted-foreground' />
+            <X className='text-muted-foreground h-4 w-4' />
           </CardHeader>
           <CardContent>
             <div className='text-2xl font-bold'>
@@ -294,7 +315,11 @@ function WebhooksPage() {
         </Card>
       </div>
 
-      <Tabs value={search.tab || 'webhooks'} onValueChange={(tab) => navigate({ search: { tab } })} className='space-y-4'>
+      <Tabs
+        value={search.tab || 'webhooks'}
+        onValueChange={(tab) => navigate({ search: { tab } })}
+        className='space-y-4'
+      >
         <TabsList>
           <TabsTrigger value='webhooks'>Webhooks</TabsTrigger>
           <TabsTrigger value='deliveries' disabled={!selectedWebhook}>
@@ -308,7 +333,9 @@ function WebhooksPage() {
               <div className='flex items-center justify-between'>
                 <div>
                   <CardTitle>Webhooks</CardTitle>
-                  <CardDescription>Manage webhook configurations</CardDescription>
+                  <CardDescription>
+                    Manage webhook configurations
+                  </CardDescription>
                 </div>
                 <Button onClick={() => setShowCreateDialog(true)}>
                   <Plus className='mr-2 h-4 w-4' />
@@ -319,7 +346,7 @@ function WebhooksPage() {
             <CardContent>
               <div className='mb-4'>
                 <div className='relative'>
-                  <Search className='absolute left-2 top-2.5 h-4 w-4 text-muted-foreground' />
+                  <Search className='text-muted-foreground absolute top-2.5 left-2 h-4 w-4' />
                   <Input
                     placeholder='Search webhooks...'
                     value={searchQuery}
@@ -341,26 +368,34 @@ function WebhooksPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {Array(3).fill(0).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell>
-                          <div className='space-y-1'>
-                            <Skeleton className='h-4 w-32' />
-                            <Skeleton className='h-3 w-24' />
-                          </div>
-                        </TableCell>
-                        <TableCell><Skeleton className='h-4 w-48' /></TableCell>
-                        <TableCell><Skeleton className='h-5 w-20' /></TableCell>
-                        <TableCell><Skeleton className='h-5 w-16' /></TableCell>
-                        <TableCell className='text-right'>
-                          <div className='flex justify-end gap-1'>
-                            <Skeleton className='h-8 w-8' />
-                            <Skeleton className='h-8 w-8' />
-                            <Skeleton className='h-8 w-8' />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {Array(3)
+                      .fill(0)
+                      .map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell>
+                            <div className='space-y-1'>
+                              <Skeleton className='h-4 w-32' />
+                              <Skeleton className='h-3 w-24' />
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className='h-4 w-48' />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className='h-5 w-20' />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className='h-5 w-16' />
+                          </TableCell>
+                          <TableCell className='text-right'>
+                            <div className='flex justify-end gap-1'>
+                              <Skeleton className='h-8 w-8' />
+                              <Skeleton className='h-8 w-8' />
+                              <Skeleton className='h-8 w-8' />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
                   </TableBody>
                 </Table>
               ) : filteredWebhooks && filteredWebhooks.length > 0 ? (
@@ -381,7 +416,7 @@ function WebhooksPage() {
                           <div>
                             <div className='font-medium'>{webhook.name}</div>
                             {webhook.description && (
-                              <div className='text-xs text-muted-foreground'>
+                              <div className='text-muted-foreground text-xs'>
                                 {webhook.description}
                               </div>
                             )}
@@ -393,7 +428,11 @@ function WebhooksPage() {
                         <TableCell>
                           <div className='flex flex-wrap gap-1'>
                             {webhook.events.slice(0, 2).map((event, i) => (
-                              <Badge key={i} variant='outline' className='text-xs'>
+                              <Badge
+                                key={i}
+                                variant='outline'
+                                className='text-xs'
+                              >
                                 {event.table}: {event.operations.join(', ')}
                               </Badge>
                             ))}
@@ -409,10 +448,17 @@ function WebhooksPage() {
                             <Switch
                               checked={webhook.enabled}
                               onCheckedChange={(checked) =>
-                                toggleMutation.mutate({ id: webhook.id, enabled: checked })
+                                toggleMutation.mutate({
+                                  id: webhook.id,
+                                  enabled: checked,
+                                })
                               }
                             />
-                            <Badge variant={webhook.enabled ? 'default' : 'secondary'}>
+                            <Badge
+                              variant={
+                                webhook.enabled ? 'default' : 'secondary'
+                              }
+                            >
                               {webhook.enabled ? 'Enabled' : 'Disabled'}
                             </Badge>
                           </div>
@@ -429,14 +475,18 @@ function WebhooksPage() {
                                   <Clock className='h-4 w-4' />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>View delivery history</TooltipContent>
+                              <TooltipContent>
+                                View delivery history
+                              </TooltipContent>
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
                                   variant='ghost'
                                   size='sm'
-                                  onClick={() => testMutation.mutate(webhook.id)}
+                                  onClick={() =>
+                                    testMutation.mutate(webhook.id)
+                                  }
                                   disabled={testMutation.isPending}
                                 >
                                   <Send className='h-4 w-4' />
@@ -462,15 +512,21 @@ function WebhooksPage() {
                               </Tooltip>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete Webhook</AlertDialogTitle>
+                                  <AlertDialogTitle>
+                                    Delete Webhook
+                                  </AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Are you sure you want to delete "{webhook.name}"? This action cannot be undone.
+                                    Are you sure you want to delete "
+                                    {webhook.name}"? This action cannot be
+                                    undone.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                                   <AlertDialogAction
-                                    onClick={() => deleteMutation.mutate(webhook.id)}
+                                    onClick={() =>
+                                      deleteMutation.mutate(webhook.id)
+                                    }
                                     className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
                                   >
                                     Delete
@@ -486,9 +542,11 @@ function WebhooksPage() {
                 </Table>
               ) : (
                 <div className='flex flex-col items-center justify-center py-12 text-center'>
-                  <Webhook className='mb-4 h-12 w-12 text-muted-foreground' />
+                  <Webhook className='text-muted-foreground mb-4 h-12 w-12' />
                   <p className='text-muted-foreground'>
-                    {searchQuery ? 'No webhooks match your search' : 'No webhooks yet'}
+                    {searchQuery
+                      ? 'No webhooks match your search'
+                      : 'No webhooks yet'}
                   </p>
                   {!searchQuery && (
                     <Button
@@ -509,7 +567,9 @@ function WebhooksPage() {
           <Card>
             <CardHeader>
               <CardTitle>Delivery History</CardTitle>
-              <CardDescription>Recent webhook delivery attempts</CardDescription>
+              <CardDescription>
+                Recent webhook delivery attempts
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {deliveries && deliveries.length > 0 ? (
@@ -535,9 +595,13 @@ function WebhooksPage() {
                             {delivery.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>{delivery.http_status_code || 'N/A'}</TableCell>
-                        <TableCell className='text-sm text-muted-foreground'>
-                          {formatDistanceToNow(new Date(delivery.created_at), { addSuffix: true })}
+                        <TableCell>
+                          {delivery.http_status_code || 'N/A'}
+                        </TableCell>
+                        <TableCell className='text-muted-foreground text-sm'>
+                          {formatDistanceToNow(new Date(delivery.created_at), {
+                            addSuffix: true,
+                          })}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -545,8 +609,10 @@ function WebhooksPage() {
                 </Table>
               ) : (
                 <div className='flex flex-col items-center justify-center py-12 text-center'>
-                  <Clock className='mb-4 h-12 w-12 text-muted-foreground' />
-                  <p className='text-muted-foreground'>No delivery history yet</p>
+                  <Clock className='text-muted-foreground mb-4 h-12 w-12' />
+                  <p className='text-muted-foreground'>
+                    No delivery history yet
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -556,11 +622,12 @@ function WebhooksPage() {
 
       {/* Create Webhook Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className='max-w-2xl max-h-[90vh] overflow-y-auto'>
+        <DialogContent className='max-h-[90vh] max-w-2xl overflow-y-auto'>
           <DialogHeader>
             <DialogTitle>Create Webhook</DialogTitle>
             <DialogDescription>
-              Configure a webhook to receive HTTP notifications for database events
+              Configure a webhook to receive HTTP notifications for database
+              events
             </DialogDescription>
           </DialogHeader>
           <div className='grid gap-4 py-4'>
@@ -617,7 +684,10 @@ function WebhooksPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {tables?.map((table) => (
-                          <SelectItem key={`${table.schema}.${table.name}`} value={table.name}>
+                          <SelectItem
+                            key={`${table.schema}.${table.name}`}
+                            value={table.name}
+                          >
                             {table.schema}.{table.name}
                           </SelectItem>
                         ))}
@@ -636,7 +706,9 @@ function WebhooksPage() {
                               if (checked) {
                                 setSelectedOps([...selectedOps, op])
                               } else {
-                                setSelectedOps(selectedOps.filter((o) => o !== op))
+                                setSelectedOps(
+                                  selectedOps.filter((o) => o !== op)
+                                )
                               }
                             }}
                           />
@@ -648,7 +720,12 @@ function WebhooksPage() {
                     </div>
                   </div>
                 </div>
-                <Button type='button' variant='outline' size='sm' onClick={addEvent}>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={addEvent}
+                >
                   Add Event
                 </Button>
 
@@ -661,7 +738,8 @@ function WebhooksPage() {
                         className='flex items-center justify-between rounded border p-2'
                       >
                         <span className='text-sm'>
-                          <strong>{event.table}</strong>: {event.operations.join(', ')}
+                          <strong>{event.table}</strong>:{' '}
+                          {event.operations.join(', ')}
                         </span>
                         <Button
                           type='button'
@@ -698,18 +776,27 @@ function WebhooksPage() {
                   min='5'
                   max='300'
                   value={timeoutSeconds}
-                  onChange={(e) => setTimeoutSeconds(parseInt(e.target.value) || 30)}
+                  onChange={(e) =>
+                    setTimeoutSeconds(parseInt(e.target.value) || 30)
+                  }
                 />
               </div>
             </div>
 
             <div className='flex items-center space-x-2'>
-              <Switch id='enabled' checked={enabled} onCheckedChange={setEnabled} />
+              <Switch
+                id='enabled'
+                checked={enabled}
+                onCheckedChange={setEnabled}
+              />
               <Label htmlFor='enabled'>Enable webhook immediately</Label>
             </div>
           </div>
           <DialogFooter>
-            <Button variant='outline' onClick={() => setShowCreateDialog(false)}>
+            <Button
+              variant='outline'
+              onClick={() => setShowCreateDialog(false)}
+            >
               Cancel
             </Button>
             <Button onClick={handleCreate} disabled={createMutation.isPending}>

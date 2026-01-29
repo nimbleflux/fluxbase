@@ -1,10 +1,20 @@
 import { useState, useEffect } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { BookOpen, Plus, RefreshCw, Trash2, Settings, Search, FileText } from 'lucide-react'
+import {
+  BookOpen,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Settings,
+  Search,
+  FileText,
+} from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  knowledgeBasesApi,
+  type KnowledgeBaseSummary,
+  type CreateKnowledgeBaseRequest,
+} from '@/lib/api'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,6 +25,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -24,21 +43,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  knowledgeBasesApi,
-  type KnowledgeBaseSummary,
-  type CreateKnowledgeBaseRequest,
-} from '@/lib/api'
 
 export const Route = createFileRoute('/_authenticated/knowledge-bases/')({
   component: KnowledgeBasesPage,
@@ -46,7 +60,9 @@ export const Route = createFileRoute('/_authenticated/knowledge-bases/')({
 
 function KnowledgeBasesPage() {
   const navigate = useNavigate()
-  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseSummary[]>([])
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseSummary[]>(
+    []
+  )
   const [loading, setLoading] = useState(true)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -148,7 +164,10 @@ function KnowledgeBasesPage() {
           </div>
           <div className='flex items-center gap-1.5'>
             <span className='text-muted-foreground'>Active:</span>
-            <Badge variant='secondary' className='h-5 px-2 bg-green-500/10 text-green-600 dark:text-green-400'>
+            <Badge
+              variant='secondary'
+              className='h-5 bg-green-500/10 px-2 text-green-600 dark:text-green-400'
+            >
               {knowledgeBases.filter((kb) => kb.enabled).length}
             </Badge>
           </div>
@@ -160,7 +179,11 @@ function KnowledgeBasesPage() {
           </div>
         </div>
         <div className='flex items-center gap-2'>
-          <Button onClick={() => fetchKnowledgeBases()} variant='outline' size='sm'>
+          <Button
+            onClick={() => fetchKnowledgeBases()}
+            variant='outline'
+            size='sm'
+          >
             <RefreshCw className='mr-2 h-4 w-4' />
             Refresh
           </Button>
@@ -175,7 +198,8 @@ function KnowledgeBasesPage() {
               <DialogHeader>
                 <DialogTitle>Create Knowledge Base</DialogTitle>
                 <DialogDescription>
-                  Create a new knowledge base for storing documents and providing context to AI chatbots.
+                  Create a new knowledge base for storing documents and
+                  providing context to AI chatbots.
                 </DialogDescription>
               </DialogHeader>
               <div className='grid gap-4 py-4'>
@@ -184,7 +208,9 @@ function KnowledgeBasesPage() {
                   <Input
                     id='name'
                     value={newKB.name}
-                    onChange={(e) => setNewKB({ ...newKB, name: e.target.value })}
+                    onChange={(e) =>
+                      setNewKB({ ...newKB, name: e.target.value })
+                    }
                     placeholder='e.g., product-docs'
                   />
                 </div>
@@ -193,7 +219,9 @@ function KnowledgeBasesPage() {
                   <Textarea
                     id='description'
                     value={newKB.description || ''}
-                    onChange={(e) => setNewKB({ ...newKB, description: e.target.value })}
+                    onChange={(e) =>
+                      setNewKB({ ...newKB, description: e.target.value })
+                    }
                     placeholder='What kind of documents will this knowledge base contain?'
                   />
                 </div>
@@ -204,9 +232,16 @@ function KnowledgeBasesPage() {
                       id='chunk_size'
                       type='number'
                       value={newKB.chunk_size}
-                      onChange={(e) => setNewKB({ ...newKB, chunk_size: parseInt(e.target.value) || 512 })}
+                      onChange={(e) =>
+                        setNewKB({
+                          ...newKB,
+                          chunk_size: parseInt(e.target.value) || 512,
+                        })
+                      }
                     />
-                    <p className='text-xs text-muted-foreground'>Characters per chunk</p>
+                    <p className='text-muted-foreground text-xs'>
+                      Characters per chunk
+                    </p>
                   </div>
                   <div className='grid gap-2'>
                     <Label htmlFor='chunk_overlap'>Chunk Overlap</Label>
@@ -214,14 +249,24 @@ function KnowledgeBasesPage() {
                       id='chunk_overlap'
                       type='number'
                       value={newKB.chunk_overlap}
-                      onChange={(e) => setNewKB({ ...newKB, chunk_overlap: parseInt(e.target.value) || 50 })}
+                      onChange={(e) =>
+                        setNewKB({
+                          ...newKB,
+                          chunk_overlap: parseInt(e.target.value) || 50,
+                        })
+                      }
                     />
-                    <p className='text-xs text-muted-foreground'>Overlap between chunks</p>
+                    <p className='text-muted-foreground text-xs'>
+                      Overlap between chunks
+                    </p>
                   </div>
                 </div>
               </div>
               <DialogFooter>
-                <Button variant='outline' onClick={() => setCreateDialogOpen(false)}>
+                <Button
+                  variant='outline'
+                  onClick={() => setCreateDialogOpen(false)}
+                >
                   Cancel
                 </Button>
                 <Button onClick={handleCreate}>Create</Button>
@@ -238,7 +283,8 @@ function KnowledgeBasesPage() {
               <BookOpen className='text-muted-foreground mx-auto mb-4 h-12 w-12' />
               <p className='mb-2 text-lg font-medium'>No knowledge bases yet</p>
               <p className='text-muted-foreground mb-4 text-sm'>
-                Create a knowledge base to store documents for RAG-powered AI chatbots
+                Create a knowledge base to store documents for RAG-powered AI
+                chatbots
               </p>
               <Button onClick={() => setCreateDialogOpen(true)}>
                 <Plus className='mr-2 h-4 w-4' />
@@ -267,7 +313,12 @@ function KnowledgeBasesPage() {
                             variant='ghost'
                             size='sm'
                             className='h-8 w-8 p-0'
-                            onClick={() => navigate({ to: `/knowledge-bases/$id`, params: { id: kb.id } })}
+                            onClick={() =>
+                              navigate({
+                                to: `/knowledge-bases/$id`,
+                                params: { id: kb.id },
+                              })
+                            }
                           >
                             <FileText className='h-4 w-4' />
                           </Button>
@@ -280,7 +331,12 @@ function KnowledgeBasesPage() {
                             variant='ghost'
                             size='sm'
                             className='h-8 w-8 p-0'
-                            onClick={() => navigate({ to: `/knowledge-bases/$id/search`, params: { id: kb.id } })}
+                            onClick={() =>
+                              navigate({
+                                to: `/knowledge-bases/$id/search`,
+                                params: { id: kb.id },
+                              })
+                            }
                           >
                             <Search className='h-4 w-4' />
                           </Button>
@@ -293,7 +349,12 @@ function KnowledgeBasesPage() {
                             variant='ghost'
                             size='sm'
                             className='h-8 w-8 p-0'
-                            onClick={() => navigate({ to: `/knowledge-bases/$id/settings`, params: { id: kb.id } })}
+                            onClick={() =>
+                              navigate({
+                                to: `/knowledge-bases/$id/settings`,
+                                params: { id: kb.id },
+                              })
+                            }
                           >
                             <Settings className='h-4 w-4' />
                           </Button>
@@ -305,7 +366,7 @@ function KnowledgeBasesPage() {
                           <Button
                             variant='ghost'
                             size='sm'
-                            className='h-8 w-8 p-0 text-destructive hover:text-destructive'
+                            className='text-destructive hover:text-destructive h-8 w-8 p-0'
                             onClick={() => setDeleteConfirm(kb.id)}
                           >
                             <Trash2 className='h-4 w-4' />
@@ -329,11 +390,10 @@ function KnowledgeBasesPage() {
                   )}
                   <div className='flex flex-wrap gap-2 text-xs'>
                     <Badge variant='secondary'>
-                      {kb.document_count} {kb.document_count === 1 ? 'document' : 'documents'}
+                      {kb.document_count}{' '}
+                      {kb.document_count === 1 ? 'document' : 'documents'}
                     </Badge>
-                    <Badge variant='secondary'>
-                      {kb.total_chunks} chunks
-                    </Badge>
+                    <Badge variant='secondary'>{kb.total_chunks} chunks</Badge>
                     {kb.embedding_model && (
                       <Badge variant='outline' className='text-[10px]'>
                         {kb.embedding_model}
@@ -348,12 +408,17 @@ function KnowledgeBasesPage() {
       </ScrollArea>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteConfirm !== null} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+      <AlertDialog
+        open={deleteConfirm !== null}
+        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Knowledge Base</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this knowledge base? This will permanently delete all documents and chunks. This action cannot be undone.
+              Are you sure you want to delete this knowledge base? This will
+              permanently delete all documents and chunks. This action cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

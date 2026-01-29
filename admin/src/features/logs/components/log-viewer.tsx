@@ -111,7 +111,13 @@ export function LogViewer() {
       return streamLogs.filter((log) => !isStaticAssetLog(log))
     }
     return streamLogs
-  }, [isLiveMode, streamLogs, data?.entries, filters.hideStaticAssets, isStaticAssetLog])
+  }, [
+    isLiveMode,
+    streamLogs,
+    data?.entries,
+    filters.hideStaticAssets,
+    isStaticAssetLog,
+  ])
 
   const totalCount = isLiveMode ? streamLogs.length : data?.total_count || 0
 

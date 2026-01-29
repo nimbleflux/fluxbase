@@ -89,7 +89,9 @@ export function PasswordStrength({
                 key={req.label}
                 className={cn(
                   'flex items-center gap-2 text-xs transition-colors',
-                  met ? 'text-green-600 dark:text-green-500' : 'text-muted-foreground'
+                  met
+                    ? 'text-green-600 dark:text-green-500'
+                    : 'text-muted-foreground'
                 )}
               >
                 {met ? (

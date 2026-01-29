@@ -372,13 +372,8 @@ function ChatbotsPage() {
             <Bot className='text-muted-foreground mx-auto mb-4 h-12 w-12' />
             <p className='mb-2 text-lg font-medium'>No chatbots yet</p>
             <p className='text-muted-foreground mb-4 text-sm'>
-              Create chatbot files in the ./chatbots directory and sync them to
-              get started
+              Create chatbot files and sync them to get started
             </p>
-            <Button onClick={handleReloadClick}>
-              <HardDrive className='mr-2 h-4 w-4' />
-              Sync from Filesystem
-            </Button>
           </CardContent>
         </Card>
       ) : (

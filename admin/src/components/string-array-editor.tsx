@@ -1,7 +1,7 @@
 import { useState } from 'react'
+import { X } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
-import { X } from 'lucide-react'
 
 interface StringArrayEditorProps {
   value: string[]
@@ -37,33 +37,33 @@ export function StringArrayEditor({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex gap-2">
+    <div className='space-y-2'>
+      <div className='flex gap-2'>
         <Input
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
         />
-        <Button type="button" onClick={handleAdd} variant="outline">
+        <Button type='button' onClick={handleAdd} variant='outline'>
           {addButtonText}
         </Button>
       </div>
       {value.length > 0 && (
-        <div className="space-y-1">
+        <div className='space-y-1'>
           {value.map((item, index) => (
             <div
               key={index}
-              className="flex items-center gap-2 bg-muted px-3 py-2 rounded-md"
+              className='bg-muted flex items-center gap-2 rounded-md px-3 py-2'
             >
-              <span className="flex-1 text-sm font-mono">{item}</span>
+              <span className='flex-1 font-mono text-sm'>{item}</span>
               <Button
-                type="button"
-                variant="ghost"
-                size="sm"
+                type='button'
+                variant='ghost'
+                size='sm'
                 onClick={() => handleRemove(index)}
               >
-                <X className="h-4 w-4" />
+                <X className='h-4 w-4' />
               </Button>
             </div>
           ))}

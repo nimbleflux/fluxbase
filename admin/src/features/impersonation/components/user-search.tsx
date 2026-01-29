@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react'
+import { impersonationApi } from '@/lib/impersonation-api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,7 +16,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { impersonationApi } from '@/lib/impersonation-api'
 
 interface User {
   id: string
@@ -41,7 +41,10 @@ export function UserSearch({ value, onSelect, disabled }: UserSearchProps) {
   const loadUsers = useCallback(async (searchTerm: string) => {
     try {
       setLoading(true)
-      const response = await impersonationApi.listUsers(searchTerm || undefined, 20)
+      const response = await impersonationApi.listUsers(
+        searchTerm || undefined,
+        20
+      )
       setUsers(response.users || [])
     } catch {
       setUsers([])
@@ -72,31 +75,31 @@ export function UserSearch({ value, onSelect, disabled }: UserSearchProps) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
-          role="combobox"
+          variant='outline'
+          role='combobox'
           aria-expanded={open}
-          className="w-full justify-between"
+          className='w-full justify-between'
           disabled={disabled}
         >
           {selectedUser ? (
-            <span className="truncate">{selectedUser.email}</span>
+            <span className='truncate'>{selectedUser.email}</span>
           ) : (
             'Select user...'
           )}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronsUpDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0">
+      <PopoverContent className='w-[400px] p-0'>
         <Command shouldFilter={false}>
           <CommandInput
-            placeholder="Search users by email..."
+            placeholder='Search users by email...'
             value={search}
             onValueChange={setSearch}
           />
           <CommandList>
             {loading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-4 w-4 animate-spin" />
+              <div className='flex items-center justify-center py-6'>
+                <Loader2 className='h-4 w-4 animate-spin' />
               </div>
             ) : (
               <>
@@ -107,7 +110,9 @@ export function UserSearch({ value, onSelect, disabled }: UserSearchProps) {
                       key={user.id}
                       value={user.id}
                       onSelect={(currentValue) => {
-                        const selectedUser = users.find((u) => u.id === currentValue)
+                        const selectedUser = users.find(
+                          (u) => u.id === currentValue
+                        )
                         if (selectedUser) {
                           onSelect(selectedUser.id, selectedUser.email)
                           setOpen(false)
@@ -120,10 +125,11 @@ export function UserSearch({ value, onSelect, disabled }: UserSearchProps) {
                           value === user.id ? 'opacity-100' : 'opacity-0'
                         )}
                       />
-                      <div className="flex flex-col">
-                        <span className="font-medium">{user.email}</span>
-                        <span className="text-xs text-muted-foreground">
-                          Created: {new Date(user.created_at).toLocaleDateString()}
+                      <div className='flex flex-col'>
+                        <span className='font-medium'>{user.email}</span>
+                        <span className='text-muted-foreground text-xs'>
+                          Created:{' '}
+                          {new Date(user.created_at).toLocaleDateString()}
                         </span>
                       </div>
                     </CommandItem>

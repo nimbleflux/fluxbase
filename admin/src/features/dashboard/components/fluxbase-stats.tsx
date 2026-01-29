@@ -1,19 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { useFluxbaseClient } from '@fluxbase/sdk-react'
 import { Database, Users, Activity, Server } from 'lucide-react'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export function FluxbaseStats() {
   const client = useFluxbaseClient()
 
   // Fetch health status using SDK
-  const { data: health, isLoading: isLoadingHealth} = useQuery({
+  const { data: health, isLoading: isLoadingHealth } = useQuery({
     queryKey: ['health'],
     queryFn: async () => {
       const { data, error } = await client.admin.getHealth()
@@ -28,7 +23,11 @@ export function FluxbaseStats() {
     queryKey: ['dashboard', 'table-count'],
     queryFn: async () => {
       const response = await client.admin.ddl.listTables()
-      return response.tables.map((t: { schema: string; name: string }) => `${t.schema}.${t.name}`) || []
+      return (
+        response.tables.map(
+          (t: { schema: string; name: string }) => `${t.schema}.${t.name}`
+        ) || []
+      )
     },
     refetchInterval: 30000, // Refresh every 30 seconds
   })
@@ -88,7 +87,9 @@ export function FluxbaseStats() {
           <Users className='text-muted-foreground h-4 w-4' />
         </CardHeader>
         <CardContent>
-          <div className='text-2xl font-bold'>{users?.toLocaleString() || 0}</div>
+          <div className='text-2xl font-bold'>
+            {users?.toLocaleString() || 0}
+          </div>
           <p className='text-muted-foreground text-xs'>Registered accounts</p>
         </CardContent>
       </Card>
@@ -126,14 +127,15 @@ export function FluxbaseStats() {
             <>
               <div className='text-2xl font-bold'>
                 {health?.status === 'ok' ? (
-                  <span className='text-green-600 dark:text-green-400'>Live</span>
+                  <span className='text-green-600 dark:text-green-400'>
+                    Live
+                  </span>
                 ) : (
                   <span className='text-red-600 dark:text-red-400'>Down</span>
                 )}
               </div>
               <p className='text-muted-foreground text-xs'>
-                Realtime:{' '}
-                {health?.services.realtime ? 'Enabled' : 'Disabled'}
+                Realtime: {health?.services.realtime ? 'Enabled' : 'Disabled'}
               </p>
             </>
           )}

@@ -1,9 +1,15 @@
-import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { createFileRoute } from '@tanstack/react-router'
 import { Zap, AlertCircle, Loader2 } from 'lucide-react'
-import { apiClient } from '@/lib/api'
 import { toast } from 'sonner'
+import { apiClient } from '@/lib/api'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { OverridableSwitch } from '@/components/admin/overridable-switch'
 
 export const Route = createFileRoute('/_authenticated/features/')({
@@ -48,15 +54,30 @@ function FeaturesPage() {
   const { data: features, isLoading } = useQuery<FeatureSettings>({
     queryKey: ['feature-settings'],
     queryFn: async () => {
-      const [realtime, storage, functions, ai, rpc, jobs, email] = await Promise.all([
-        apiClient.get<SystemSetting>('/api/v1/admin/system/settings/app.realtime.enabled'),
-        apiClient.get<SystemSetting>('/api/v1/admin/system/settings/app.storage.enabled'),
-        apiClient.get<SystemSetting>('/api/v1/admin/system/settings/app.functions.enabled'),
-        apiClient.get<SystemSetting>('/api/v1/admin/system/settings/app.ai.enabled'),
-        apiClient.get<SystemSetting>('/api/v1/admin/system/settings/app.rpc.enabled'),
-        apiClient.get<SystemSetting>('/api/v1/admin/system/settings/app.jobs.enabled'),
-        apiClient.get<SystemSetting>('/api/v1/admin/system/settings/app.email.enabled'),
-      ])
+      const [realtime, storage, functions, ai, rpc, jobs, email] =
+        await Promise.all([
+          apiClient.get<SystemSetting>(
+            '/api/v1/admin/system/settings/app.realtime.enabled'
+          ),
+          apiClient.get<SystemSetting>(
+            '/api/v1/admin/system/settings/app.storage.enabled'
+          ),
+          apiClient.get<SystemSetting>(
+            '/api/v1/admin/system/settings/app.functions.enabled'
+          ),
+          apiClient.get<SystemSetting>(
+            '/api/v1/admin/system/settings/app.ai.enabled'
+          ),
+          apiClient.get<SystemSetting>(
+            '/api/v1/admin/system/settings/app.rpc.enabled'
+          ),
+          apiClient.get<SystemSetting>(
+            '/api/v1/admin/system/settings/app.jobs.enabled'
+          ),
+          apiClient.get<SystemSetting>(
+            '/api/v1/admin/system/settings/app.email.enabled'
+          ),
+        ])
       return {
         enable_realtime: realtime.data.value.value,
         enable_storage: storage.data.value.value,
@@ -66,34 +87,48 @@ function FeaturesPage() {
         enable_jobs: jobs.data.value.value,
         enable_email: email.data.value.value,
         _overrides: {
-          enable_realtime: realtime.data.is_overridden ? {
-            is_overridden: true,
-            env_var: realtime.data.override_source || '',
-          } : undefined,
-          enable_storage: storage.data.is_overridden ? {
-            is_overridden: true,
-            env_var: storage.data.override_source || '',
-          } : undefined,
-          enable_functions: functions.data.is_overridden ? {
-            is_overridden: true,
-            env_var: functions.data.override_source || '',
-          } : undefined,
-          enable_ai: ai.data.is_overridden ? {
-            is_overridden: true,
-            env_var: ai.data.override_source || '',
-          } : undefined,
-          enable_rpc: rpc.data.is_overridden ? {
-            is_overridden: true,
-            env_var: rpc.data.override_source || '',
-          } : undefined,
-          enable_jobs: jobs.data.is_overridden ? {
-            is_overridden: true,
-            env_var: jobs.data.override_source || '',
-          } : undefined,
-          enable_email: email.data.is_overridden ? {
-            is_overridden: true,
-            env_var: email.data.override_source || '',
-          } : undefined,
+          enable_realtime: realtime.data.is_overridden
+            ? {
+                is_overridden: true,
+                env_var: realtime.data.override_source || '',
+              }
+            : undefined,
+          enable_storage: storage.data.is_overridden
+            ? {
+                is_overridden: true,
+                env_var: storage.data.override_source || '',
+              }
+            : undefined,
+          enable_functions: functions.data.is_overridden
+            ? {
+                is_overridden: true,
+                env_var: functions.data.override_source || '',
+              }
+            : undefined,
+          enable_ai: ai.data.is_overridden
+            ? {
+                is_overridden: true,
+                env_var: ai.data.override_source || '',
+              }
+            : undefined,
+          enable_rpc: rpc.data.is_overridden
+            ? {
+                is_overridden: true,
+                env_var: rpc.data.override_source || '',
+              }
+            : undefined,
+          enable_jobs: jobs.data.is_overridden
+            ? {
+                is_overridden: true,
+                env_var: jobs.data.override_source || '',
+              }
+            : undefined,
+          enable_email: email.data.is_overridden
+            ? {
+                is_overridden: true,
+                env_var: email.data.override_source || '',
+              }
+            : undefined,
         },
       }
     },
@@ -111,9 +146,16 @@ function FeaturesPage() {
     },
     onError: (error: unknown) => {
       if (error && typeof error === 'object' && 'response' in error) {
-        const err = error as { response?: { status?: number; data?: { code?: string } } }
-        if (err.response?.status === 409 && err.response?.data?.code === 'ENV_OVERRIDE') {
-          toast.error('This setting is controlled by an environment variable and cannot be changed')
+        const err = error as {
+          response?: { status?: number; data?: { code?: string } }
+        }
+        if (
+          err.response?.status === 409 &&
+          err.response?.data?.code === 'ENV_OVERRIDE'
+        ) {
+          toast.error(
+            'This setting is controlled by an environment variable and cannot be changed'
+          )
           return
         }
       }
@@ -124,11 +166,13 @@ function FeaturesPage() {
   return (
     <div className='flex flex-1 flex-col gap-6 p-6'>
       <div>
-        <h1 className='text-3xl font-bold tracking-tight flex items-center gap-2'>
+        <h1 className='flex items-center gap-2 text-3xl font-bold tracking-tight'>
           <Zap className='h-8 w-8' />
           Features
         </h1>
-        <p className='text-sm text-muted-foreground mt-2'>Enable or disable platform features</p>
+        <p className='text-muted-foreground mt-2 text-sm'>
+          Enable or disable platform features
+        </p>
       </div>
 
       <Card>
@@ -142,7 +186,7 @@ function FeaturesPage() {
         <CardContent className='space-y-6'>
           {isLoading ? (
             <div className='flex justify-center py-8'>
-              <Loader2 className='h-6 w-6 animate-spin text-muted-foreground' />
+              <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />
             </div>
           ) : (
             <>
@@ -251,14 +295,15 @@ function FeaturesPage() {
                 disabled={updateFeatureMutation.isPending}
               />
 
-              <div className='rounded-lg bg-muted p-4'>
+              <div className='bg-muted rounded-lg p-4'>
                 <div className='flex gap-2'>
-                  <AlertCircle className='h-5 w-5 text-muted-foreground shrink-0 mt-0.5' />
-                  <div className='text-sm space-y-1'>
+                  <AlertCircle className='text-muted-foreground mt-0.5 h-5 w-5 shrink-0' />
+                  <div className='space-y-1 text-sm'>
                     <p className='font-medium'>Feature Availability</p>
                     <p className='text-muted-foreground'>
-                      Disabling features will prevent users from accessing related functionality.
-                      Existing data will be preserved but inaccessible until re-enabled.
+                      Disabling features will prevent users from accessing
+                      related functionality. Existing data will be preserved but
+                      inaccessible until re-enabled.
                     </p>
                   </div>
                 </div>

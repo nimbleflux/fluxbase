@@ -16,7 +16,7 @@ const UsersContext = React.createContext<UsersContextType | null>(null)
 
 export function UsersProvider({
   children,
-  userType = 'app'
+  userType = 'app',
 }: {
   children: React.ReactNode
   userType?: 'app' | 'dashboard'
@@ -25,7 +25,9 @@ export function UsersProvider({
   const [currentRow, setCurrentRow] = useState<User | null>(null)
 
   return (
-    <UsersContext value={{ open, setOpen, currentRow, setCurrentRow, userType }}>
+    <UsersContext
+      value={{ open, setOpen, currentRow, setCurrentRow, userType }}
+    >
       {children}
     </UsersContext>
   )

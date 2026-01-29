@@ -1,7 +1,7 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type Row } from '@tanstack/react-table'
 import { Lock, Trash2, Unlock, UserPen } from 'lucide-react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {

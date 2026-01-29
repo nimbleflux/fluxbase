@@ -1,17 +1,23 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
+import { dashboardAuthAPI } from '@/lib/api'
+import { setAuthToken } from '@/lib/fluxbase-client'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
   InputOTPSeparator,
 } from '@/components/ui/input-otp'
-import { dashboardAuthAPI } from '@/lib/api'
-import { setAuthToken } from '@/lib/fluxbase-client'
-import { useAuthStore } from '@/stores/auth-store'
 
 export const Route = createFileRoute('/login/otp')({
   component: OtpPage,
@@ -71,7 +77,10 @@ function OtpPage() {
 
       // Store tokens and user in localStorage
       localStorage.setItem('fluxbase_admin_access_token', response.access_token)
-      localStorage.setItem('fluxbase_admin_refresh_token', response.refresh_token)
+      localStorage.setItem(
+        'fluxbase_admin_refresh_token',
+        response.refresh_token
+      )
       localStorage.setItem('fluxbase_admin_user', JSON.stringify(response.user))
 
       // Also set token in Fluxbase SDK
@@ -84,9 +93,11 @@ function OtpPage() {
       // Redirect to dashboard
       navigate({ to: '/' })
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Invalid verification code'
-        : 'Invalid verification code'
+      const errorMessage =
+        error instanceof Error && 'response' in error
+          ? (error as { response?: { data?: { error?: string } } }).response
+              ?.data?.error || 'Invalid verification code'
+          : 'Invalid verification code'
       toast.error('Verification failed', {
         description: errorMessage,
       })
@@ -96,7 +107,7 @@ function OtpPage() {
   }
 
   return (
-    <div className='flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background to-muted p-4'>
+    <div className='from-background to-muted flex min-h-screen flex-col items-center justify-center bg-gradient-to-br p-4'>
       <div className='w-full max-w-md space-y-8'>
         {/* Logo and Title */}
         <div className='text-center'>
@@ -105,8 +116,10 @@ function OtpPage() {
             alt='Fluxbase'
             className='mx-auto h-16 w-16'
           />
-          <h1 className='mt-6 text-3xl font-bold tracking-tight'>Two-Factor Authentication</h1>
-          <p className='mt-2 text-sm text-muted-foreground'>
+          <h1 className='mt-6 text-3xl font-bold tracking-tight'>
+            Two-Factor Authentication
+          </h1>
+          <p className='text-muted-foreground mt-2 text-sm'>
             Enter the 6-digit code from your authenticator app
           </p>
         </div>
@@ -115,7 +128,9 @@ function OtpPage() {
         <Card>
           <CardHeader>
             <CardTitle>Verification Code</CardTitle>
-            <CardDescription>Open your authenticator app to view your code</CardDescription>
+            <CardDescription>
+              Open your authenticator app to view your code
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className='space-y-6'>
@@ -140,7 +155,11 @@ function OtpPage() {
                 </InputOTP>
               </div>
 
-              <Button type='submit' className='w-full' disabled={code.length !== 6 || isLoading}>
+              <Button
+                type='submit'
+                className='w-full'
+                disabled={code.length !== 6 || isLoading}
+              >
                 {isLoading ? 'Verifying...' : 'Verify'}
               </Button>
 

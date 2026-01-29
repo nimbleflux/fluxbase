@@ -87,8 +87,16 @@ const SCOPE_GROUPS = [
     name: 'Tables',
     description: 'Database table access',
     scopes: [
-      { id: 'read:tables', label: 'Read', description: 'Query database tables' },
-      { id: 'write:tables', label: 'Write', description: 'Insert, update, delete records' },
+      {
+        id: 'read:tables',
+        label: 'Read',
+        description: 'Query database tables',
+      },
+      {
+        id: 'write:tables',
+        label: 'Write',
+        description: 'Insert, update, delete records',
+      },
     ],
   },
   {
@@ -96,7 +104,11 @@ const SCOPE_GROUPS = [
     description: 'File storage access',
     scopes: [
       { id: 'read:storage', label: 'Read', description: 'Download files' },
-      { id: 'write:storage', label: 'Write', description: 'Upload and delete files' },
+      {
+        id: 'write:storage',
+        label: 'Write',
+        description: 'Upload and delete files',
+      },
     ],
   },
   {
@@ -104,7 +116,11 @@ const SCOPE_GROUPS = [
     description: 'Edge Functions',
     scopes: [
       { id: 'read:functions', label: 'Read', description: 'View functions' },
-      { id: 'execute:functions', label: 'Execute', description: 'Invoke functions' },
+      {
+        id: 'execute:functions',
+        label: 'Execute',
+        description: 'Invoke functions',
+      },
     ],
   },
   {
@@ -112,7 +128,11 @@ const SCOPE_GROUPS = [
     description: 'Authentication',
     scopes: [
       { id: 'read:auth', label: 'Read', description: 'View user profile' },
-      { id: 'write:auth', label: 'Write', description: 'Update profile, manage 2FA' },
+      {
+        id: 'write:auth',
+        label: 'Write',
+        description: 'Update profile, manage 2FA',
+      },
     ],
   },
   {
@@ -120,7 +140,11 @@ const SCOPE_GROUPS = [
     description: 'API key management',
     scopes: [
       { id: 'read:clientkeys', label: 'Read', description: 'List client keys' },
-      { id: 'write:clientkeys', label: 'Write', description: 'Create, update, revoke' },
+      {
+        id: 'write:clientkeys',
+        label: 'Write',
+        description: 'Create, update, revoke',
+      },
     ],
   },
   {
@@ -128,22 +152,38 @@ const SCOPE_GROUPS = [
     description: 'Webhook management',
     scopes: [
       { id: 'read:webhooks', label: 'Read', description: 'List webhooks' },
-      { id: 'write:webhooks', label: 'Write', description: 'Create, update, delete' },
+      {
+        id: 'write:webhooks',
+        label: 'Write',
+        description: 'Create, update, delete',
+      },
     ],
   },
   {
     name: 'Monitoring',
     description: 'System monitoring',
     scopes: [
-      { id: 'read:monitoring', label: 'Read', description: 'View metrics, health, logs' },
+      {
+        id: 'read:monitoring',
+        label: 'Read',
+        description: 'View metrics, health, logs',
+      },
     ],
   },
   {
     name: 'Realtime',
     description: 'WebSocket channels',
     scopes: [
-      { id: 'realtime:connect', label: 'Connect', description: 'Connect to channels' },
-      { id: 'realtime:broadcast', label: 'Broadcast', description: 'Send messages' },
+      {
+        id: 'realtime:connect',
+        label: 'Connect',
+        description: 'Connect to channels',
+      },
+      {
+        id: 'realtime:broadcast',
+        label: 'Broadcast',
+        description: 'Send messages',
+      },
     ],
   },
   {
@@ -175,15 +215,27 @@ const SCOPE_GROUPS = [
     description: 'Secret management',
     scopes: [
       { id: 'read:secrets', label: 'Read', description: 'View secret names' },
-      { id: 'write:secrets', label: 'Write', description: 'Create, update, delete' },
+      {
+        id: 'write:secrets',
+        label: 'Write',
+        description: 'Create, update, delete',
+      },
     ],
   },
   {
     name: 'Migrations',
     description: 'Database migrations',
     scopes: [
-      { id: 'migrations:read', label: 'Read', description: 'View migration status' },
-      { id: 'migrations:execute', label: 'Execute', description: 'Apply migrations' },
+      {
+        id: 'migrations:read',
+        label: 'Read',
+        description: 'View migration status',
+      },
+      {
+        id: 'migrations:execute',
+        label: 'Execute',
+        description: 'Apply migrations',
+      },
     ],
   },
 ]
@@ -193,7 +245,9 @@ function ServiceKeysPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showKeyDialog, setShowKeyDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
-  const [createdKey, setCreatedKey] = useState<ServiceKeyWithPlaintext | null>(null)
+  const [createdKey, setCreatedKey] = useState<ServiceKeyWithPlaintext | null>(
+    null
+  )
   const [editingKey, setEditingKey] = useState<ServiceKey | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -201,16 +255,24 @@ function ServiceKeysPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [selectedScopes, setSelectedScopes] = useState<string[]>(['*'])
-  const [rateLimitPerMinute, setRateLimitPerMinute] = useState<number | undefined>(undefined)
-  const [rateLimitPerHour, setRateLimitPerHour] = useState<number | undefined>(undefined)
+  const [rateLimitPerMinute, setRateLimitPerMinute] = useState<
+    number | undefined
+  >(undefined)
+  const [rateLimitPerHour, setRateLimitPerHour] = useState<number | undefined>(
+    undefined
+  )
   const [expiresAt, setExpiresAt] = useState('')
 
   // Form state for edit
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [editScopes, setEditScopes] = useState<string[]>([])
-  const [editRateLimitPerMinute, setEditRateLimitPerMinute] = useState<number | undefined>(undefined)
-  const [editRateLimitPerHour, setEditRateLimitPerHour] = useState<number | undefined>(undefined)
+  const [editRateLimitPerMinute, setEditRateLimitPerMinute] = useState<
+    number | undefined
+  >(undefined)
+  const [editRateLimitPerHour, setEditRateLimitPerHour] = useState<
+    number | undefined
+  >(undefined)
 
   // Revocation state
   const [showRevokeDialog, setShowRevokeDialog] = useState(false)
@@ -222,8 +284,12 @@ function ServiceKeysPage() {
   const [revokeReason, setRevokeReason] = useState('')
   const [deprecateReason, setDeprecateReason] = useState('')
   const [gracePeriod, setGracePeriod] = useState('24h')
-  const [rotatedKey, setRotatedKey] = useState<RotateServiceKeyResponse | null>(null)
-  const [revocationHistory, setRevocationHistory] = useState<ServiceKeyRevocation[]>([])
+  const [rotatedKey, setRotatedKey] = useState<RotateServiceKeyResponse | null>(
+    null
+  )
+  const [revocationHistory, setRevocationHistory] = useState<
+    ServiceKeyRevocation[]
+  >([])
 
   // Fetch service keys
   const { data: serviceKeys, isLoading } = useQuery<ServiceKey[]>({
@@ -254,8 +320,13 @@ function ServiceKeysPage() {
 
   // Update service key
   const updateMutation = useMutation({
-    mutationFn: ({ id, request }: { id: string; request: UpdateServiceKeyRequest }) =>
-      serviceKeysApi.update(id, request),
+    mutationFn: ({
+      id,
+      request,
+    }: {
+      id: string
+      request: UpdateServiceKeyRequest
+    }) => serviceKeysApi.update(id, request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['service-keys'] })
       setShowEditDialog(false)
@@ -305,8 +376,13 @@ function ServiceKeysPage() {
 
   // Revoke service key
   const revokeMutation = useMutation({
-    mutationFn: ({ id, request }: { id: string; request: RevokeServiceKeyRequest }) =>
-      serviceKeysApi.revoke(id, request),
+    mutationFn: ({
+      id,
+      request,
+    }: {
+      id: string
+      request: RevokeServiceKeyRequest
+    }) => serviceKeysApi.revoke(id, request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['service-keys'] })
       setShowRevokeDialog(false)
@@ -321,8 +397,13 @@ function ServiceKeysPage() {
 
   // Deprecate service key
   const deprecateMutation = useMutation({
-    mutationFn: ({ id, request }: { id: string; request: DeprecateServiceKeyRequest }) =>
-      serviceKeysApi.deprecate(id, request),
+    mutationFn: ({
+      id,
+      request,
+    }: {
+      id: string
+      request: DeprecateServiceKeyRequest
+    }) => serviceKeysApi.deprecate(id, request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['service-keys'] })
       setShowDeprecateDialog(false)
@@ -338,8 +419,13 @@ function ServiceKeysPage() {
 
   // Rotate service key
   const rotateMutation = useMutation({
-    mutationFn: ({ id, request }: { id: string; request: RotateServiceKeyRequest }) =>
-      serviceKeysApi.rotate(id, request),
+    mutationFn: ({
+      id,
+      request,
+    }: {
+      id: string
+      request: RotateServiceKeyRequest
+    }) => serviceKeysApi.rotate(id, request),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['service-keys'] })
       setRotatedKey(data)
@@ -411,7 +497,10 @@ function ServiceKeysPage() {
       return { label: 'Revoked', variant: 'destructive' as const }
     // Check if deprecated (within grace period)
     if (key.deprecated_at) {
-      if (key.grace_period_ends_at && new Date(key.grace_period_ends_at) > new Date()) {
+      if (
+        key.grace_period_ends_at &&
+        new Date(key.grace_period_ends_at) > new Date()
+      ) {
         return { label: 'Deprecated', variant: 'outline' as const }
       }
       return { label: 'Expired', variant: 'destructive' as const }
@@ -520,7 +609,8 @@ function ServiceKeysPage() {
           Service Keys
         </h1>
         <p className='text-muted-foreground mt-2'>
-          Manage service keys for server-to-server API access (e.g., migrations, CLI tools)
+          Manage service keys for server-to-server API access (e.g., migrations,
+          CLI tools)
         </p>
       </div>
 
@@ -542,9 +632,8 @@ function ServiceKeysPage() {
           </CardHeader>
           <CardContent>
             <div className='text-2xl font-bold'>
-              {serviceKeys?.filter(
-                (k) => k.enabled && !isExpired(k.expires_at)
-              ).length || 0}
+              {serviceKeys?.filter((k) => k.enabled && !isExpired(k.expires_at))
+                .length || 0}
             </div>
           </CardContent>
         </Card>
@@ -568,7 +657,8 @@ function ServiceKeysPage() {
             <div>
               <CardTitle>Service Keys</CardTitle>
               <CardDescription>
-                Service keys are used for programmatic access to admin APIs like migrations
+                Service keys are used for programmatic access to admin APIs like
+                migrations
               </CardDescription>
             </div>
             <Button onClick={() => setShowCreateDialog(true)}>
@@ -733,50 +823,61 @@ function ServiceKeysPage() {
                             </Tooltip>
                           )}
                           {/* Rotate - only if active */}
-                          {canModify(key) && key.enabled && !key.deprecated_at && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant='ghost'
-                                  size='sm'
-                                  onClick={() => openRotateDialog(key)}
-                                >
-                                  <RefreshCw className='h-4 w-4' />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Rotate key</TooltipContent>
-                            </Tooltip>
-                          )}
-                          {/* Deprecate - only if active and not already deprecated */}
-                          {canModify(key) && key.enabled && !key.deprecated_at && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant='ghost'
-                                  size='sm'
-                                  onClick={() => openDeprecateDialog(key)}
-                                >
-                                  <Clock className='h-4 w-4' />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Deprecate with grace period</TooltipContent>
-                            </Tooltip>
-                          )}
-                          {/* Enable/Disable - only if not revoked */}
-                          {canModify(key) && !key.deprecated_at && (
-                            key.enabled ? (
+                          {canModify(key) &&
+                            key.enabled &&
+                            !key.deprecated_at && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
                                     variant='ghost'
                                     size='sm'
-                                    onClick={() => disableMutation.mutate(key.id)}
+                                    onClick={() => openRotateDialog(key)}
+                                  >
+                                    <RefreshCw className='h-4 w-4' />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Rotate key</TooltipContent>
+                              </Tooltip>
+                            )}
+                          {/* Deprecate - only if active and not already deprecated */}
+                          {canModify(key) &&
+                            key.enabled &&
+                            !key.deprecated_at && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() => openDeprecateDialog(key)}
+                                  >
+                                    <Clock className='h-4 w-4' />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Deprecate with grace period
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          {/* Enable/Disable - only if not revoked */}
+                          {canModify(key) &&
+                            !key.deprecated_at &&
+                            (key.enabled ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() =>
+                                      disableMutation.mutate(key.id)
+                                    }
                                     disabled={disableMutation.isPending}
                                   >
                                     <PowerOff className='h-4 w-4' />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Disable service key</TooltipContent>
+                                <TooltipContent>
+                                  Disable service key
+                                </TooltipContent>
                               </Tooltip>
                             ) : (
                               <Tooltip>
@@ -784,16 +885,19 @@ function ServiceKeysPage() {
                                   <Button
                                     variant='ghost'
                                     size='sm'
-                                    onClick={() => enableMutation.mutate(key.id)}
+                                    onClick={() =>
+                                      enableMutation.mutate(key.id)
+                                    }
                                     disabled={enableMutation.isPending}
                                   >
                                     <Power className='h-4 w-4' />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Enable service key</TooltipContent>
+                                <TooltipContent>
+                                  Enable service key
+                                </TooltipContent>
                               </Tooltip>
-                            )
-                          )}
+                            ))}
                           {/* Revoke - only if not already revoked */}
                           {canModify(key) && (
                             <Tooltip>
@@ -807,7 +911,9 @@ function ServiceKeysPage() {
                                   <ShieldAlert className='h-4 w-4' />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Revoke (emergency)</TooltipContent>
+                              <TooltipContent>
+                                Revoke (emergency)
+                              </TooltipContent>
                             </Tooltip>
                           )}
                           <AlertDialog>
@@ -824,7 +930,9 @@ function ServiceKeysPage() {
                                   </Button>
                                 </AlertDialogTrigger>
                               </TooltipTrigger>
-                              <TooltipContent>Delete service key</TooltipContent>
+                              <TooltipContent>
+                                Delete service key
+                              </TooltipContent>
                             </Tooltip>
                             <AlertDialogContent>
                               <AlertDialogHeader>
@@ -883,8 +991,8 @@ function ServiceKeysPage() {
           <DialogHeader>
             <DialogTitle>Create Service Key</DialogTitle>
             <DialogDescription>
-              Generate a new service key for server-to-server API access. The key will be
-              shown only once.
+              Generate a new service key for server-to-server API access. The
+              key will be shown only once.
             </DialogDescription>
           </DialogHeader>
           <div className='grid gap-4 py-4'>
@@ -907,8 +1015,8 @@ function ServiceKeysPage() {
                   placeholder='Used by CI/CD pipeline'
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
+                />
+              </div>
             </div>
             <div className='grid gap-2'>
               <div className='flex items-center justify-between'>
@@ -927,7 +1035,10 @@ function ServiceKeysPage() {
                     }}
                     className='h-4 w-4 rounded border-gray-300'
                   />
-                  <label htmlFor='wildcard-scope' className='text-sm font-medium'>
+                  <label
+                    htmlFor='wildcard-scope'
+                    className='text-sm font-medium'
+                  >
                     All Scopes
                   </label>
                 </div>
@@ -936,25 +1047,39 @@ function ServiceKeysPage() {
                 {SCOPE_GROUPS.map((group) => (
                   <div key={group.name} className='space-y-1'>
                     <div className='text-sm font-medium'>{group.name}</div>
-                    <div className='text-muted-foreground text-xs'>{group.description}</div>
+                    <div className='text-muted-foreground text-xs'>
+                      {group.description}
+                    </div>
                     <div className='flex flex-wrap gap-3 pt-1'>
                       {group.scopes.map((scope) => (
-                        <div key={scope.id} className='flex items-center space-x-1.5'>
+                        <div
+                          key={scope.id}
+                          className='flex items-center space-x-1.5'
+                        >
                           <input
                             type='checkbox'
                             id={`create-${scope.id}`}
-                            checked={selectedScopes.includes(scope.id) || selectedScopes.includes('*')}
+                            checked={
+                              selectedScopes.includes(scope.id) ||
+                              selectedScopes.includes('*')
+                            }
                             disabled={selectedScopes.includes('*')}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setSelectedScopes([...selectedScopes, scope.id])
                               } else {
-                                setSelectedScopes(selectedScopes.filter((s) => s !== scope.id))
+                                setSelectedScopes(
+                                  selectedScopes.filter((s) => s !== scope.id)
+                                )
                               }
                             }}
                             className='h-3.5 w-3.5 rounded border-gray-300'
                           />
-                          <label htmlFor={`create-${scope.id}`} className='text-xs' title={scope.description}>
+                          <label
+                            htmlFor={`create-${scope.id}`}
+                            className='text-xs'
+                            title={scope.description}
+                          >
                             {scope.label}
                           </label>
                         </div>
@@ -975,20 +1100,26 @@ function ServiceKeysPage() {
                   min='0'
                   placeholder='Unlimited'
                   value={rateLimitPerMinute ?? ''}
-                  onChange={(e) => setRateLimitPerMinute(e.target.value ? parseInt(e.target.value) : undefined)}
+                  onChange={(e) =>
+                    setRateLimitPerMinute(
+                      e.target.value ? parseInt(e.target.value) : undefined
+                    )
+                  }
                 />
               </div>
               <div className='grid gap-2'>
-                <Label htmlFor='rateLimitPerHour'>
-                  Rate Limit (per hour)
-                </Label>
+                <Label htmlFor='rateLimitPerHour'>Rate Limit (per hour)</Label>
                 <Input
                   id='rateLimitPerHour'
                   type='number'
                   min='0'
                   placeholder='Unlimited'
                   value={rateLimitPerHour ?? ''}
-                  onChange={(e) => setRateLimitPerHour(e.target.value ? parseInt(e.target.value) : undefined)}
+                  onChange={(e) =>
+                    setRateLimitPerHour(
+                      e.target.value ? parseInt(e.target.value) : undefined
+                    )
+                  }
                 />
               </div>
             </div>
@@ -1016,7 +1147,9 @@ function ServiceKeysPage() {
               onClick={handleCreateKey}
               disabled={createMutation.isPending}
             >
-              {createMutation.isPending ? 'Creating...' : 'Generate Service Key'}
+              {createMutation.isPending
+                ? 'Creating...'
+                : 'Generate Service Key'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1067,7 +1200,10 @@ function ServiceKeysPage() {
                     }}
                     className='h-4 w-4 rounded border-gray-300'
                   />
-                  <label htmlFor='edit-wildcard-scope' className='text-sm font-medium'>
+                  <label
+                    htmlFor='edit-wildcard-scope'
+                    className='text-sm font-medium'
+                  >
                     All Scopes
                   </label>
                 </div>
@@ -1076,25 +1212,39 @@ function ServiceKeysPage() {
                 {SCOPE_GROUPS.map((group) => (
                   <div key={group.name} className='space-y-1'>
                     <div className='text-sm font-medium'>{group.name}</div>
-                    <div className='text-muted-foreground text-xs'>{group.description}</div>
+                    <div className='text-muted-foreground text-xs'>
+                      {group.description}
+                    </div>
                     <div className='flex flex-wrap gap-3 pt-1'>
                       {group.scopes.map((scope) => (
-                        <div key={scope.id} className='flex items-center space-x-1.5'>
+                        <div
+                          key={scope.id}
+                          className='flex items-center space-x-1.5'
+                        >
                           <input
                             type='checkbox'
                             id={`edit-${scope.id}`}
-                            checked={editScopes.includes(scope.id) || editScopes.includes('*')}
+                            checked={
+                              editScopes.includes(scope.id) ||
+                              editScopes.includes('*')
+                            }
                             disabled={editScopes.includes('*')}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setEditScopes([...editScopes, scope.id])
                               } else {
-                                setEditScopes(editScopes.filter((s) => s !== scope.id))
+                                setEditScopes(
+                                  editScopes.filter((s) => s !== scope.id)
+                                )
                               }
                             }}
                             className='h-3.5 w-3.5 rounded border-gray-300'
                           />
-                          <label htmlFor={`edit-${scope.id}`} className='text-xs' title={scope.description}>
+                          <label
+                            htmlFor={`edit-${scope.id}`}
+                            className='text-xs'
+                            title={scope.description}
+                          >
                             {scope.label}
                           </label>
                         </div>
@@ -1115,7 +1265,11 @@ function ServiceKeysPage() {
                   min='0'
                   placeholder='Unlimited'
                   value={editRateLimitPerMinute ?? ''}
-                  onChange={(e) => setEditRateLimitPerMinute(e.target.value ? parseInt(e.target.value) : undefined)}
+                  onChange={(e) =>
+                    setEditRateLimitPerMinute(
+                      e.target.value ? parseInt(e.target.value) : undefined
+                    )
+                  }
                 />
               </div>
               <div className='grid gap-2'>
@@ -1128,22 +1282,20 @@ function ServiceKeysPage() {
                   min='0'
                   placeholder='Unlimited'
                   value={editRateLimitPerHour ?? ''}
-                  onChange={(e) => setEditRateLimitPerHour(e.target.value ? parseInt(e.target.value) : undefined)}
+                  onChange={(e) =>
+                    setEditRateLimitPerHour(
+                      e.target.value ? parseInt(e.target.value) : undefined
+                    )
+                  }
                 />
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant='outline'
-              onClick={() => setShowEditDialog(false)}
-            >
+            <Button variant='outline' onClick={() => setShowEditDialog(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={handleEditKey}
-              disabled={updateMutation.isPending}
-            >
+            <Button onClick={handleEditKey} disabled={updateMutation.isPending}>
               {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
@@ -1169,8 +1321,8 @@ function ServiceKeysPage() {
                   </h3>
                   <div className='mt-2 text-sm text-yellow-700 dark:text-yellow-300'>
                     <p>
-                      This is the only time you'll see the full service key. Store
-                      it securely.
+                      This is the only time you'll see the full service key.
+                      Store it securely.
                     </p>
                   </div>
                 </div>
@@ -1220,14 +1372,14 @@ function ServiceKeysPage() {
       <Dialog open={showRevokeDialog} onOpenChange={setShowRevokeDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className='flex items-center gap-2 text-destructive'>
+            <DialogTitle className='text-destructive flex items-center gap-2'>
               <ShieldAlert className='h-5 w-5' />
               Emergency Revoke
             </DialogTitle>
             <DialogDescription>
-              This action is irreversible. The key "{targetKey?.name}" will be immediately
-              disabled and marked as revoked. Any applications using this key will lose
-              access instantly.
+              This action is irreversible. The key "{targetKey?.name}" will be
+              immediately disabled and marked as revoked. Any applications using
+              this key will lose access instantly.
             </DialogDescription>
           </DialogHeader>
           <div className='space-y-4 py-4'>
@@ -1240,8 +1392,8 @@ function ServiceKeysPage() {
                   </h3>
                   <div className='mt-2 text-sm text-red-700 dark:text-red-300'>
                     <p>
-                      Use this only for security incidents. For planned key rotation,
-                      use the Rotate or Deprecate options instead.
+                      Use this only for security incidents. For planned key
+                      rotation, use the Rotate or Deprecate options instead.
                     </p>
                   </div>
                 </div>
@@ -1249,7 +1401,8 @@ function ServiceKeysPage() {
             </div>
             <div className='grid gap-2'>
               <Label htmlFor='revokeReason'>
-                Reason for revocation <span className='text-destructive'>*</span>
+                Reason for revocation{' '}
+                <span className='text-destructive'>*</span>
               </Label>
               <Input
                 id='revokeReason'
@@ -1289,8 +1442,9 @@ function ServiceKeysPage() {
               Deprecate Service Key
             </DialogTitle>
             <DialogDescription>
-              Mark "{targetKey?.name}" as deprecated with a grace period. The key will
-              continue working during the grace period, allowing time for migration.
+              Mark "{targetKey?.name}" as deprecated with a grace period. The
+              key will continue working during the grace period, allowing time
+              for migration.
             </DialogDescription>
           </DialogHeader>
           <div className='space-y-4 py-4'>
@@ -1300,7 +1454,7 @@ function ServiceKeysPage() {
                 id='gracePeriodDeprecate'
                 value={gracePeriod}
                 onChange={(e) => setGracePeriod(e.target.value)}
-                className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background'
+                className='border-input bg-background ring-offset-background flex h-10 w-full rounded-md border px-3 py-2 text-sm'
               >
                 <option value='1h'>1 hour</option>
                 <option value='6h'>6 hours</option>
@@ -1351,18 +1505,20 @@ function ServiceKeysPage() {
               Rotate Service Key
             </DialogTitle>
             <DialogDescription>
-              Create a new key to replace "{targetKey?.name}". The old key will be
-              deprecated with a grace period for migration.
+              Create a new key to replace "{targetKey?.name}". The old key will
+              be deprecated with a grace period for migration.
             </DialogDescription>
           </DialogHeader>
           <div className='space-y-4 py-4'>
             <div className='grid gap-2'>
-              <Label htmlFor='gracePeriodRotate'>Grace Period for Old Key</Label>
+              <Label htmlFor='gracePeriodRotate'>
+                Grace Period for Old Key
+              </Label>
               <select
                 id='gracePeriodRotate'
                 value={gracePeriod}
                 onChange={(e) => setGracePeriod(e.target.value)}
-                className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background'
+                className='border-input bg-background ring-offset-background flex h-10 w-full rounded-md border px-3 py-2 text-sm'
               >
                 <option value='1h'>1 hour</option>
                 <option value='6h'>6 hours</option>
@@ -1380,7 +1536,7 @@ function ServiceKeysPage() {
             <div className='rounded-md bg-blue-50 p-4 dark:bg-blue-950'>
               <div className='text-sm text-blue-700 dark:text-blue-300'>
                 <p className='font-medium'>What happens on rotation:</p>
-                <ul className='mt-2 list-disc pl-5 space-y-1'>
+                <ul className='mt-2 list-disc space-y-1 pl-5'>
                   <li>A new key is created with the same configuration</li>
                   <li>The old key is marked as deprecated</li>
                   <li>The old key continues working during the grace period</li>
@@ -1396,10 +1552,7 @@ function ServiceKeysPage() {
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleRotate}
-              disabled={rotateMutation.isPending}
-            >
+            <Button onClick={handleRotate} disabled={rotateMutation.isPending}>
               {rotateMutation.isPending ? 'Rotating...' : 'Rotate Key'}
             </Button>
           </DialogFooter>
@@ -1407,7 +1560,10 @@ function ServiceKeysPage() {
       </Dialog>
 
       {/* Show Rotated Key Dialog */}
-      <Dialog open={showRotatedKeyDialog} onOpenChange={setShowRotatedKeyDialog}>
+      <Dialog
+        open={showRotatedKeyDialog}
+        onOpenChange={setShowRotatedKeyDialog}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Key Rotated Successfully</DialogTitle>
@@ -1425,8 +1581,8 @@ function ServiceKeysPage() {
                   </h3>
                   <div className='mt-2 text-sm text-yellow-700 dark:text-yellow-300'>
                     <p>
-                      This is the only time you'll see the new service key. The old key
-                      will continue working during the grace period.
+                      This is the only time you'll see the new service key. The
+                      old key will continue working during the grace period.
                     </p>
                   </div>
                 </div>
@@ -1457,7 +1613,9 @@ function ServiceKeysPage() {
               <div className='grid gap-2'>
                 <Label>Old Key Expires</Label>
                 <Input
-                  value={new Date(rotatedKey.grace_period_ends_at).toLocaleString()}
+                  value={new Date(
+                    rotatedKey.grace_period_ends_at
+                  ).toLocaleString()}
                   readOnly
                 />
               </div>
@@ -1485,8 +1643,8 @@ function ServiceKeysPage() {
           </DialogHeader>
           <div className='py-4'>
             {revocationHistory.length === 0 ? (
-              <div className='text-center py-8 text-muted-foreground'>
-                <History className='h-12 w-12 mx-auto mb-4 opacity-50' />
+              <div className='text-muted-foreground py-8 text-center'>
+                <History className='mx-auto mb-4 h-12 w-12 opacity-50' />
                 <p>No revocation history for this key.</p>
               </div>
             ) : (
@@ -1508,8 +1666,8 @@ function ServiceKeysPage() {
                             rev.revocation_type === 'emergency'
                               ? 'destructive'
                               : rev.revocation_type === 'rotation'
-                              ? 'default'
-                              : 'secondary'
+                                ? 'default'
+                                : 'secondary'
                           }
                         >
                           {rev.revocation_type}
@@ -1518,10 +1676,10 @@ function ServiceKeysPage() {
                       <TableCell className='max-w-[200px] truncate'>
                         {rev.reason || '-'}
                       </TableCell>
-                      <TableCell className='text-sm text-muted-foreground'>
+                      <TableCell className='text-muted-foreground text-sm'>
                         {rev.revoked_by || '-'}
                       </TableCell>
-                      <TableCell className='text-sm text-muted-foreground'>
+                      <TableCell className='text-muted-foreground text-sm'>
                         {formatDistanceToNow(new Date(rev.created_at), {
                           addSuffix: true,
                         })}
@@ -1533,9 +1691,7 @@ function ServiceKeysPage() {
             )}
           </div>
           <DialogFooter>
-            <Button onClick={() => setShowHistoryDialog(false)}>
-              Close
-            </Button>
+            <Button onClick={() => setShowHistoryDialog(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

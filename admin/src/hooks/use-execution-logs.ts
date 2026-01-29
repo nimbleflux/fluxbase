@@ -4,8 +4,8 @@
  */
 import { useEffect, useState, useRef, useCallback } from 'react'
 import type { ExecutionLogEvent, ExecutionType } from '@fluxbase/sdk'
-import { fluxbaseClient } from '@/lib/fluxbase-client'
 import { logsApi } from '@/lib/api'
+import { fluxbaseClient } from '@/lib/fluxbase-client'
 
 export type { ExecutionType }
 

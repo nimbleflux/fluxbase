@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import { Search, ChevronRight, ChevronDown, Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -10,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { cn } from '@/lib/utils'
 import type { OpenAPISpec, EndpointGroup, EndpointInfo } from '../types'
 
 interface EndpointBrowserProps {
@@ -27,7 +27,11 @@ const METHOD_COLORS = {
   DELETE: 'bg-red-500/10 text-red-700 hover:bg-red-500/20',
 }
 
-export function EndpointBrowser({ spec, onSelectEndpoint, selectedEndpoint }: EndpointBrowserProps) {
+export function EndpointBrowser({
+  spec,
+  onSelectEndpoint,
+  selectedEndpoint,
+}: EndpointBrowserProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [filterTag, setFilterTag] = useState<string>('all')
@@ -55,7 +59,7 @@ export function EndpointBrowser({ spec, onSelectEndpoint, selectedEndpoint }: En
           }
 
           const tags = operation.tags || ['Other']
-          tags.forEach(tag => {
+          tags.forEach((tag) => {
             if (!tagMap.has(tag)) {
               tagMap.set(tag, new Map())
             }
@@ -132,7 +136,7 @@ export function EndpointBrowser({ spec, onSelectEndpoint, selectedEndpoint }: En
   }, [spec])
 
   const toggleGroup = (groupName: string) => {
-    setExpandedGroups(prev => {
+    setExpandedGroups((prev) => {
       const next = new Set(prev)
       if (next.has(groupName)) {
         next.delete(groupName)
@@ -144,136 +148,171 @@ export function EndpointBrowser({ spec, onSelectEndpoint, selectedEndpoint }: En
   }
 
   // Filter endpoints based on search and filters
-  const filteredGroups = groups.map(group => {
-    // For hierarchical groups with children
-    if (group.children && group.children.length > 0) {
-      const filteredChildren = group.children.map(child => {
-        const filteredEndpoints = child.endpoints.filter(endpoint => {
-          // Search filter
-          if (searchQuery) {
-            const query = searchQuery.toLowerCase()
-            const matchesPath = endpoint.path.toLowerCase().includes(query)
-            const matchesSummary = endpoint.summary?.toLowerCase().includes(query)
-            const matchesDescription = endpoint.description?.toLowerCase().includes(query)
-            const matchesOperationId = endpoint.operationId?.toLowerCase().includes(query)
-            const matchesResourceName = child.name.toLowerCase().includes(query)
-            if (!matchesPath && !matchesSummary && !matchesDescription && !matchesOperationId && !matchesResourceName) {
-              return false
+  const filteredGroups = groups
+    .map((group) => {
+      // For hierarchical groups with children
+      if (group.children && group.children.length > 0) {
+        const filteredChildren = group.children
+          .map((child) => {
+            const filteredEndpoints = child.endpoints.filter((endpoint) => {
+              // Search filter
+              if (searchQuery) {
+                const query = searchQuery.toLowerCase()
+                const matchesPath = endpoint.path.toLowerCase().includes(query)
+                const matchesSummary = endpoint.summary
+                  ?.toLowerCase()
+                  .includes(query)
+                const matchesDescription = endpoint.description
+                  ?.toLowerCase()
+                  .includes(query)
+                const matchesOperationId = endpoint.operationId
+                  ?.toLowerCase()
+                  .includes(query)
+                const matchesResourceName = child.name
+                  .toLowerCase()
+                  .includes(query)
+                if (
+                  !matchesPath &&
+                  !matchesSummary &&
+                  !matchesDescription &&
+                  !matchesOperationId &&
+                  !matchesResourceName
+                ) {
+                  return false
+                }
+              }
+
+              // Method filter
+              if (filterMethod !== 'all' && endpoint.method !== filterMethod) {
+                return false
+              }
+
+              // Tag filter
+              if (filterTag !== 'all' && !endpoint.tags?.includes(filterTag)) {
+                return false
+              }
+
+              return true
+            })
+
+            return {
+              ...child,
+              endpoints: filteredEndpoints,
             }
-          }
-
-          // Method filter
-          if (filterMethod !== 'all' && endpoint.method !== filterMethod) {
-            return false
-          }
-
-          // Tag filter
-          if (filterTag !== 'all' && !endpoint.tags?.includes(filterTag)) {
-            return false
-          }
-
-          return true
-        })
+          })
+          .filter((child) => child.endpoints.length > 0)
 
         return {
-          ...child,
-          endpoints: filteredEndpoints,
+          ...group,
+          children: filteredChildren,
         }
-      }).filter(child => child.endpoints.length > 0)
+      }
+
+      // For flat groups with direct endpoints
+      const filteredEndpoints = group.endpoints.filter((endpoint) => {
+        if (searchQuery) {
+          const query = searchQuery.toLowerCase()
+          const matchesPath = endpoint.path.toLowerCase().includes(query)
+          const matchesSummary = endpoint.summary?.toLowerCase().includes(query)
+          const matchesDescription = endpoint.description
+            ?.toLowerCase()
+            .includes(query)
+          const matchesOperationId = endpoint.operationId
+            ?.toLowerCase()
+            .includes(query)
+          if (
+            !matchesPath &&
+            !matchesSummary &&
+            !matchesDescription &&
+            !matchesOperationId
+          ) {
+            return false
+          }
+        }
+
+        if (filterMethod !== 'all' && endpoint.method !== filterMethod) {
+          return false
+        }
+
+        if (filterTag !== 'all' && !endpoint.tags?.includes(filterTag)) {
+          return false
+        }
+
+        return true
+      })
 
       return {
         ...group,
-        children: filteredChildren,
+        endpoints: filteredEndpoints,
       }
-    }
-
-    // For flat groups with direct endpoints
-    const filteredEndpoints = group.endpoints.filter(endpoint => {
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase()
-        const matchesPath = endpoint.path.toLowerCase().includes(query)
-        const matchesSummary = endpoint.summary?.toLowerCase().includes(query)
-        const matchesDescription = endpoint.description?.toLowerCase().includes(query)
-        const matchesOperationId = endpoint.operationId?.toLowerCase().includes(query)
-        if (!matchesPath && !matchesSummary && !matchesDescription && !matchesOperationId) {
-          return false
-        }
-      }
-
-      if (filterMethod !== 'all' && endpoint.method !== filterMethod) {
-        return false
-      }
-
-      if (filterTag !== 'all' && !endpoint.tags?.includes(filterTag)) {
-        return false
-      }
-
-      return true
     })
-
-    return {
-      ...group,
-      endpoints: filteredEndpoints,
-    }
-  }).filter(group => (group.children && group.children.length > 0) || group.endpoints.length > 0)
-
-  const allTags = Array.from(new Set(
-    groups.flatMap(g =>
-      g.children
-        ? g.children.flatMap(c => c.endpoints.flatMap(e => e.tags || []))
-        : g.endpoints.flatMap(e => e.tags || [])
+    .filter(
+      (group) =>
+        (group.children && group.children.length > 0) ||
+        group.endpoints.length > 0
     )
-  ))
+
+  const allTags = Array.from(
+    new Set(
+      groups.flatMap((g) =>
+        g.children
+          ? g.children.flatMap((c) => c.endpoints.flatMap((e) => e.tags || []))
+          : g.endpoints.flatMap((e) => e.tags || [])
+      )
+    )
+  )
 
   // Show loading state when spec is not available
   if (!spec) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="p-4 flex items-center gap-3 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <p className="text-sm">Loading API endpoints...</p>
+      <div className='flex h-full flex-col'>
+        <div className='text-muted-foreground flex items-center gap-3 p-4'>
+          <Loader2 className='h-5 w-5 animate-spin' />
+          <p className='text-sm'>Loading API endpoints...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className='flex h-full flex-col'>
       {/* Search and Filters */}
-      <div className="p-4 border-b space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className='space-y-3 border-b p-4'>
+        <div className='relative'>
+          <Search className='text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />
           <Input
-            placeholder="Search endpoints..."
+            placeholder='Search endpoints...'
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className='pl-9'
           />
         </div>
 
-        <div className="flex gap-2">
+        <div className='flex gap-2'>
           <Select value={filterMethod} onValueChange={setFilterMethod}>
-            <SelectTrigger className="flex-1">
-              <SelectValue placeholder="Method" />
+            <SelectTrigger className='flex-1'>
+              <SelectValue placeholder='Method' />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Methods</SelectItem>
-              <SelectItem value="GET">GET</SelectItem>
-              <SelectItem value="POST">POST</SelectItem>
-              <SelectItem value="PUT">PUT</SelectItem>
-              <SelectItem value="PATCH">PATCH</SelectItem>
-              <SelectItem value="DELETE">DELETE</SelectItem>
+              <SelectItem value='all'>All Methods</SelectItem>
+              <SelectItem value='GET'>GET</SelectItem>
+              <SelectItem value='POST'>POST</SelectItem>
+              <SelectItem value='PUT'>PUT</SelectItem>
+              <SelectItem value='PATCH'>PATCH</SelectItem>
+              <SelectItem value='DELETE'>DELETE</SelectItem>
             </SelectContent>
           </Select>
 
           <Select value={filterTag} onValueChange={setFilterTag}>
-            <SelectTrigger className="flex-1">
-              <SelectValue placeholder="Tag" />
+            <SelectTrigger className='flex-1'>
+              <SelectValue placeholder='Tag' />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Tags</SelectItem>
-              {allTags.map(tag => (
-                <SelectItem key={tag} value={tag}>{tag}</SelectItem>
+              <SelectItem value='all'>All Tags</SelectItem>
+              {allTags.map((tag) => (
+                <SelectItem key={tag} value={tag}>
+                  {tag}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -281,56 +320,63 @@ export function EndpointBrowser({ spec, onSelectEndpoint, selectedEndpoint }: En
       </div>
 
       {/* Endpoint List */}
-      <ScrollArea className="flex-1">
-        <div className="p-2">
-          {filteredGroups.map(group => (
-            <div key={group.name} className="mb-1">
+      <ScrollArea className='flex-1'>
+        <div className='p-2'>
+          {filteredGroups.map((group) => (
+            <div key={group.name} className='mb-1'>
               {/* Parent Tag Group (collapsible) */}
               <button
-                className="w-full flex items-center gap-2 p-2 hover:bg-muted/50 rounded text-left"
+                className='hover:bg-muted/50 flex w-full items-center gap-2 rounded p-2 text-left'
                 onClick={() => toggleGroup(group.name)}
               >
                 {expandedGroups.has(group.name) ? (
-                  <ChevronDown className="h-4 w-4 shrink-0" />
+                  <ChevronDown className='h-4 w-4 shrink-0' />
                 ) : (
-                  <ChevronRight className="h-4 w-4 shrink-0" />
+                  <ChevronRight className='h-4 w-4 shrink-0' />
                 )}
-                <span className="font-semibold text-sm">{group.name}</span>
-                <span className="text-xs text-muted-foreground ml-auto">
+                <span className='text-sm font-semibold'>{group.name}</span>
+                <span className='text-muted-foreground ml-auto text-xs'>
                   {group.children?.length || 0}
                 </span>
               </button>
 
               {/* Child Resources (with method badges) */}
               {expandedGroups.has(group.name) && group.children && (
-                <div className="ml-6 mt-1 space-y-1">
-                  {group.children.map(resource => {
+                <div className='mt-1 ml-6 space-y-1'>
+                  {group.children.map((resource) => {
                     const isSelected = resource.endpoints.some(
-                      e => selectedEndpoint?.path === e.path && selectedEndpoint?.method === e.method
+                      (e) =>
+                        selectedEndpoint?.path === e.path &&
+                        selectedEndpoint?.method === e.method
                     )
 
                     // Get unique methods and their corresponding endpoints
                     const methodMap = new Map<string, EndpointInfo>()
-                    resource.endpoints.forEach(endpoint => {
+                    resource.endpoints.forEach((endpoint) => {
                       // Prefer endpoints without {id} for list operations (GET, POST)
                       // Prefer endpoints with {id} for single operations (PUT, PATCH, DELETE)
                       const current = methodMap.get(endpoint.method)
                       if (!current) {
                         methodMap.set(endpoint.method, endpoint)
                       } else if (
-                        (endpoint.method === 'GET' || endpoint.method === 'POST') &&
+                        (endpoint.method === 'GET' ||
+                          endpoint.method === 'POST') &&
                         !endpoint.path.includes('{id}')
                       ) {
                         methodMap.set(endpoint.method, endpoint)
                       } else if (
-                        (endpoint.method === 'PUT' || endpoint.method === 'PATCH' || endpoint.method === 'DELETE') &&
+                        (endpoint.method === 'PUT' ||
+                          endpoint.method === 'PATCH' ||
+                          endpoint.method === 'DELETE') &&
                         endpoint.path.includes('{id}')
                       ) {
                         methodMap.set(endpoint.method, endpoint)
                       }
                     })
 
-                    const uniqueEndpoints = Array.from(methodMap.entries()).sort((a, b) => {
+                    const uniqueEndpoints = Array.from(
+                      methodMap.entries()
+                    ).sort((a, b) => {
                       const methodOrder: Record<string, number> = {
                         GET: 1,
                         POST: 2,
@@ -338,16 +384,18 @@ export function EndpointBrowser({ spec, onSelectEndpoint, selectedEndpoint }: En
                         PATCH: 4,
                         DELETE: 5,
                       }
-                      return (methodOrder[a[0]] || 99) - (methodOrder[b[0]] || 99)
+                      return (
+                        (methodOrder[a[0]] || 99) - (methodOrder[b[0]] || 99)
+                      )
                     })
 
                     return (
                       <button
                         key={resource.name}
                         className={cn(
-                          "w-full flex flex-col gap-1 p-2 rounded text-left transition-colors",
-                          "hover:bg-muted/50",
-                          isSelected && "bg-muted"
+                          'flex w-full flex-col gap-1 rounded p-2 text-left transition-colors',
+                          'hover:bg-muted/50',
+                          isSelected && 'bg-muted'
                         )}
                         onClick={() => {
                           // Select the first endpoint (usually GET)
@@ -356,17 +404,19 @@ export function EndpointBrowser({ spec, onSelectEndpoint, selectedEndpoint }: En
                           }
                         }}
                       >
-                        <div className="text-xs font-mono text-muted-foreground truncate">
+                        <div className='text-muted-foreground truncate font-mono text-xs'>
                           {resource.name}
                         </div>
-                        <div className="flex gap-1 flex-wrap">
+                        <div className='flex flex-wrap gap-1'>
                           {uniqueEndpoints.map(([method, endpoint]) => (
                             <Badge
                               key={method}
-                              variant="outline"
+                              variant='outline'
                               className={cn(
-                                "text-xs font-mono shrink-0 cursor-pointer",
-                                METHOD_COLORS[method as keyof typeof METHOD_COLORS]
+                                'shrink-0 cursor-pointer font-mono text-xs',
+                                METHOD_COLORS[
+                                  method as keyof typeof METHOD_COLORS
+                                ]
                               )}
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -386,7 +436,7 @@ export function EndpointBrowser({ spec, onSelectEndpoint, selectedEndpoint }: En
           ))}
 
           {filteredGroups.length === 0 && (
-            <div className="text-center text-muted-foreground py-8">
+            <div className='text-muted-foreground py-8 text-center'>
               {searchQuery || filterMethod !== 'all' || filterTag !== 'all'
                 ? 'No endpoints match your filters'
                 : 'No endpoints available'}
@@ -396,17 +446,21 @@ export function EndpointBrowser({ spec, onSelectEndpoint, selectedEndpoint }: En
       </ScrollArea>
 
       {/* Stats */}
-      <div className="p-3 border-t text-xs text-muted-foreground">
+      <div className='text-muted-foreground border-t p-3 text-xs'>
         {spec && (
-          <div className="space-y-1">
+          <div className='space-y-1'>
             <div>
-              {Object.keys(spec.paths).length} paths, {
-                Object.values(spec.paths).reduce((acc, methods) =>
-                  acc + Object.keys(methods).length, 0
-                )
-              } endpoints
+              {Object.keys(spec.paths).length} paths,{' '}
+              {Object.values(spec.paths).reduce(
+                (acc, methods) => acc + Object.keys(methods).length,
+                0
+              )}{' '}
+              endpoints
             </div>
-            <div>{filteredGroups.reduce((acc, g) => acc + g.endpoints.length, 0)} visible</div>
+            <div>
+              {filteredGroups.reduce((acc, g) => acc + g.endpoints.length, 0)}{' '}
+              visible
+            </div>
           </div>
         )}
       </div>

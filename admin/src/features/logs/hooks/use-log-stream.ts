@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { getAccessToken } from '@/lib/auth'
-import type { LogEntry, LogCategory, LogLevel } from '../types'
 import { STREAM_MAX_ENTRIES } from '../constants'
+import type { LogEntry, LogCategory, LogLevel } from '../types'
 
 interface UseLogStreamOptions {
   /** Enable streaming (default: true) */
@@ -87,7 +87,8 @@ export function useLogStream(
 
     // Build WebSocket URL
     const baseUrl =
-      import.meta.env.VITE_API_URL || window.location.origin.replace(/^http/, 'ws')
+      import.meta.env.VITE_API_URL ||
+      window.location.origin.replace(/^http/, 'ws')
     const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/realtime?token=${encodeURIComponent(token)}`
 
     let ws: WebSocket

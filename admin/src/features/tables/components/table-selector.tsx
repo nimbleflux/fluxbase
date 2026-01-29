@@ -1,6 +1,16 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
-import { Database, MoreVertical, Pencil, Trash2, Plus, Table2, Eye, Layers } from 'lucide-react'
+import {
+  Database,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  Plus,
+  Table2,
+  Eye,
+  Layers,
+  Shield,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { databaseApi, type TableInfo } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -40,13 +50,13 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 
 interface TableSelectorProps {
   selectedTable?: string
@@ -94,9 +104,15 @@ export function TableSelector({
   const [newColumnDefault, setNewColumnDefault] = useState('')
   const [editTableName, setEditTableName] = useState('')
   const [showDeleteTableConfirm, setShowDeleteTableConfirm] = useState(false)
-  const [deletingTableFull, setDeletingTableFull] = useState<string | null>(null)
+  const [deletingTableFull, setDeletingTableFull] = useState<string | null>(
+    null
+  )
   const [showDropColumnConfirm, setShowDropColumnConfirm] = useState(false)
-  const [droppingColumn, setDroppingColumn] = useState<{ schema: string; table: string; column: string } | null>(null)
+  const [droppingColumn, setDroppingColumn] = useState<{
+    schema: string
+    table: string
+    column: string
+  } | null>(null)
 
   const { data: schemas, isLoading: schemasLoading } = useQuery({
     queryKey: ['schemas'],
@@ -196,8 +212,15 @@ export function TableSelector({
 
   // Rename Table Mutation
   const renameTableMutation = useMutation({
-    mutationFn: ({ schema, table, newName }: { schema: string; table: string; newName: string }) =>
-      databaseApi.renameTable(schema, table, newName),
+    mutationFn: ({
+      schema,
+      table,
+      newName,
+    }: {
+      schema: string
+      table: string
+      newName: string
+    }) => databaseApi.renameTable(schema, table, newName),
     onSuccess: (data, variables) => {
       toast.success(data.message)
       queryClient.invalidateQueries({ queryKey: ['tables', variables.schema] })
@@ -219,15 +242,26 @@ export function TableSelector({
 
   // Add Column Mutation
   const addColumnMutation = useMutation({
-    mutationFn: ({ schema, table, column }: {
+    mutationFn: ({
+      schema,
+      table,
+      column,
+    }: {
       schema: string
       table: string
-      column: { name: string; type: string; nullable: boolean; defaultValue?: string }
+      column: {
+        name: string
+        type: string
+        nullable: boolean
+        defaultValue?: string
+      }
     }) => databaseApi.addColumn(schema, table, column),
     onSuccess: (data, variables) => {
       toast.success(data.message)
       queryClient.invalidateQueries({ queryKey: ['tables', variables.schema] })
-      queryClient.invalidateQueries({ queryKey: ['table-schema', variables.schema, variables.table] })
+      queryClient.invalidateQueries({
+        queryKey: ['table-schema', variables.schema, variables.table],
+      })
       // Reset form
       setNewColumnName('')
       setNewColumnType('text')
@@ -235,7 +269,10 @@ export function TableSelector({
       setNewColumnDefault('')
       // Refresh editing table info
       if (editingTable) {
-        const updatedTable = tables?.find(t => t.name === editingTable.name && t.schema === editingTable.schema)
+        const updatedTable = tables?.find(
+          (t) =>
+            t.name === editingTable.name && t.schema === editingTable.schema
+        )
         if (updatedTable) setEditingTable(updatedTable)
       }
     },
@@ -251,12 +288,21 @@ export function TableSelector({
 
   // Drop Column Mutation
   const dropColumnMutation = useMutation({
-    mutationFn: ({ schema, table, column }: { schema: string; table: string; column: string }) =>
-      databaseApi.dropColumn(schema, table, column),
+    mutationFn: ({
+      schema,
+      table,
+      column,
+    }: {
+      schema: string
+      table: string
+      column: string
+    }) => databaseApi.dropColumn(schema, table, column),
     onSuccess: (data, variables) => {
       toast.success(data.message)
       queryClient.invalidateQueries({ queryKey: ['tables', variables.schema] })
-      queryClient.invalidateQueries({ queryKey: ['table-schema', variables.schema, variables.table] })
+      queryClient.invalidateQueries({
+        queryKey: ['table-schema', variables.schema, variables.table],
+      })
     },
     onError: (error: unknown) => {
       const errorMessage =
@@ -297,7 +343,9 @@ export function TableSelector({
       case 'materialized_view':
         return <Layers className='mr-2 h-4 w-4 shrink-0 text-purple-500' />
       default:
-        return <Table2 className='mr-2 h-4 w-4 shrink-0 text-muted-foreground' />
+        return (
+          <Table2 className='text-muted-foreground mr-2 h-4 w-4 shrink-0' />
+        )
     }
   }
 
@@ -367,47 +415,59 @@ export function TableSelector({
                     </TooltipContent>
                   </Tooltip>
                   <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      className='absolute right-1 h-7 w-7 p-0 opacity-0 group-hover:opacity-100'
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <MoreVertical className='h-4 w-4' />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align='end'>
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const tableInfo = tables?.find(t => `${t.schema}.${t.name}` === full)
-                        if (tableInfo) {
-                          setEditingTable(tableInfo)
-                          setEditTableName(tableInfo.name)
-                          setShowEditTable(true)
-                        }
-                      }}
-                    >
-                      <Pencil className='mr-2 h-4 w-4' />
-                      Edit Table
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className='text-destructive'
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setDeletingTableFull(full)
-                        setShowDeleteTableConfirm(true)
-                      }}
-                    >
-                      <Trash2 className='mr-2 h-4 w-4' />
-                      Delete Table
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ))}
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        className='absolute right-1 h-7 w-7 p-0 opacity-0 group-hover:opacity-100'
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className='h-4 w-4' />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align='end'>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const tableInfo = tables?.find(
+                            (t) => `${t.schema}.${t.name}` === full
+                          )
+                          if (tableInfo) {
+                            setEditingTable(tableInfo)
+                            setEditTableName(tableInfo.name)
+                            setShowEditTable(true)
+                          }
+                        }}
+                      >
+                        <Pencil className='mr-2 h-4 w-4' />
+                        Edit Table
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const [schema, tableName] = full.split('.')
+                          window.location.href = `/policies?schema=${encodeURIComponent(schema)}&table=${encodeURIComponent(tableName)}`
+                        }}
+                      >
+                        <Shield className='mr-2 h-4 w-4' />
+                        Manage RLS Policies
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className='text-destructive'
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDeletingTableFull(full)
+                          setShowDeleteTableConfirm(true)
+                        }}
+                      >
+                        <Trash2 className='mr-2 h-4 w-4' />
+                        Delete Table
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              ))}
             </TooltipProvider>
           </div>
         </div>
@@ -767,7 +827,8 @@ export function TableSelector({
           <SheetHeader>
             <SheetTitle>Edit Table</SheetTitle>
             <SheetDescription>
-              Modify table structure for {editingTable?.schema}.{editingTable?.name}
+              Modify table structure for {editingTable?.schema}.
+              {editingTable?.name}
             </SheetDescription>
           </SheetHeader>
 
@@ -835,7 +896,9 @@ export function TableSelector({
                       variant='ghost'
                       size='sm'
                       className='text-destructive hover:text-destructive'
-                      disabled={col.is_primary_key || dropColumnMutation.isPending}
+                      disabled={
+                        col.is_primary_key || dropColumnMutation.isPending
+                      }
                       onClick={() => {
                         if (editingTable) {
                           setDroppingColumn({
@@ -846,7 +909,11 @@ export function TableSelector({
                           setShowDropColumnConfirm(true)
                         }
                       }}
-                      title={col.is_primary_key ? 'Cannot drop primary key' : 'Drop column'}
+                      title={
+                        col.is_primary_key
+                          ? 'Cannot drop primary key'
+                          : 'Drop column'
+                      }
                     >
                       <Trash2 className='h-4 w-4' />
                     </Button>
@@ -874,7 +941,10 @@ export function TableSelector({
                 </div>
                 <div className='space-y-2'>
                   <Label>Data Type</Label>
-                  <Select value={newColumnType} onValueChange={setNewColumnType}>
+                  <Select
+                    value={newColumnType}
+                    onValueChange={setNewColumnType}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -905,15 +975,22 @@ export function TableSelector({
                   <Checkbox
                     id='new-column-nullable'
                     checked={newColumnNullable}
-                    onCheckedChange={(checked) => setNewColumnNullable(checked === true)}
+                    onCheckedChange={(checked) =>
+                      setNewColumnNullable(checked === true)
+                    }
                   />
-                  <Label htmlFor='new-column-nullable' className='cursor-pointer text-sm font-normal'>
+                  <Label
+                    htmlFor='new-column-nullable'
+                    className='cursor-pointer text-sm font-normal'
+                  >
                     Nullable
                   </Label>
                 </div>
                 <Button
                   className='w-full'
-                  disabled={!newColumnName.trim() || addColumnMutation.isPending}
+                  disabled={
+                    !newColumnName.trim() || addColumnMutation.isPending
+                  }
                   onClick={() => {
                     if (editingTable && newColumnName.trim()) {
                       addColumnMutation.mutate({
@@ -960,20 +1037,23 @@ export function TableSelector({
       <ConfirmDialog
         open={showDeleteTableConfirm}
         onOpenChange={setShowDeleteTableConfirm}
-        title="Delete Table"
+        title='Delete Table'
         desc={`Are you sure you want to delete table "${deletingTableFull}"? This action cannot be undone.`}
-        confirmText="Delete"
+        confirmText='Delete'
         destructive
         isLoading={deleteTableMutation.isPending}
         handleConfirm={() => {
           if (deletingTableFull) {
             const [schema, table] = deletingTableFull.split('.')
-            deleteTableMutation.mutate({ schema, table }, {
-              onSuccess: () => {
-                setShowDeleteTableConfirm(false)
-                setDeletingTableFull(null)
-              },
-            })
+            deleteTableMutation.mutate(
+              { schema, table },
+              {
+                onSuccess: () => {
+                  setShowDeleteTableConfirm(false)
+                  setDeletingTableFull(null)
+                },
+              }
+            )
           }
         }}
       />
@@ -982,9 +1062,9 @@ export function TableSelector({
       <ConfirmDialog
         open={showDropColumnConfirm}
         onOpenChange={setShowDropColumnConfirm}
-        title="Drop Column"
+        title='Drop Column'
         desc={`Are you sure you want to drop column "${droppingColumn?.column}"? This will delete all data in this column.`}
-        confirmText="Drop Column"
+        confirmText='Drop Column'
         destructive
         isLoading={dropColumnMutation.isPending}
         handleConfirm={() => {

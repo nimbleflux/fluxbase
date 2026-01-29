@@ -1,8 +1,8 @@
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { ConfirmDialog } from '@/components/confirm-dialog'
 import { adminAuthAPI } from '@/lib/api'
 import { clearTokens } from '@/lib/auth'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 
 interface SignOutDialogProps {
   open: boolean

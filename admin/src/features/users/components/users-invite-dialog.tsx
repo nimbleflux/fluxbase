@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { MailPlus, Send, Copy, Check, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { userManagementApi } from '@/lib/api'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -28,14 +29,17 @@ import {
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
 import { SelectDropdown } from '@/components/select-dropdown'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { roles } from '../data/data'
 import { useUsers } from './users-provider'
 
 const formSchema = z.object({
   email: z.string().email('Please enter a valid email address.'),
   role: z.string().min(1, 'Role is required.'),
-  password: z.string().min(8, 'Password must be at least 8 characters.').optional().or(z.literal('')),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters.')
+    .optional()
+    .or(z.literal('')),
 })
 
 type UserInviteForm = z.infer<typeof formSchema>
@@ -64,7 +68,8 @@ export function UsersInviteDialog({
   })
 
   const inviteMutation = useMutation({
-    mutationFn: (data: { email: string; role: string; password?: string }) => userManagementApi.inviteUser(data, userType),
+    mutationFn: (data: { email: string; role: string; password?: string }) =>
+      userManagementApi.inviteUser(data, userType),
     onSuccess: (data) => {
       // Invalidate users query to refresh the list
       queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -83,9 +88,15 @@ export function UsersInviteDialog({
       }
     },
     onError: (error: unknown) => {
-      const errorMessage = error instanceof Error && 'response' in error
-        ? (error as { response?: { data?: { error?: string } }; message?: string }).response?.data?.error || (error as Error).message
-        : 'Unknown error'
+      const errorMessage =
+        error instanceof Error && 'response' in error
+          ? (
+              error as {
+                response?: { data?: { error?: string } }
+                message?: string
+              }
+            ).response?.data?.error || (error as Error).message
+          : 'Unknown error'
       toast.error('Failed to invite user', {
         description: errorMessage,
       })
@@ -238,7 +249,8 @@ export function UsersInviteDialog({
                     />
                   </FormControl>
                   <FormDescription>
-                    If left empty, a secure random password will be generated. Must be at least 8 characters if provided.
+                    If left empty, a secure random password will be generated.
+                    Must be at least 8 characters if provided.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

@@ -6,8 +6,8 @@ import {
   type ImpersonationType,
   type ImpersonatedUser,
 } from '@/stores/impersonation-store'
-import { impersonationApi } from '@/lib/impersonation-api'
 import { syncAuthToken } from '@/lib/fluxbase-client'
+import { impersonationApi } from '@/lib/impersonation-api'
 
 export interface UseImpersonationOptions {
   /** Default reason for audit trail when not requiring user input */
@@ -63,13 +63,15 @@ export function useImpersonation(
           reason || defaultReason
         )
 
-        useImpersonationStore.getState().startImpersonation(
-          response.access_token,
-          response.refresh_token,
-          response.target_user,
-          response.session,
-          'user'
-        )
+        useImpersonationStore
+          .getState()
+          .startImpersonation(
+            response.access_token,
+            response.refresh_token,
+            response.target_user,
+            response.session,
+            'user'
+          )
 
         syncAuthToken()
         queryClient.invalidateQueries()
@@ -92,13 +94,15 @@ export function useImpersonation(
           reason || defaultReason
         )
 
-        useImpersonationStore.getState().startImpersonation(
-          response.access_token,
-          response.refresh_token,
-          response.target_user,
-          response.session,
-          'anon'
-        )
+        useImpersonationStore
+          .getState()
+          .startImpersonation(
+            response.access_token,
+            response.refresh_token,
+            response.target_user,
+            response.session,
+            'anon'
+          )
 
         syncAuthToken()
         queryClient.invalidateQueries()
@@ -121,13 +125,15 @@ export function useImpersonation(
           reason || defaultReason
         )
 
-        useImpersonationStore.getState().startImpersonation(
-          response.access_token,
-          response.refresh_token,
-          response.target_user,
-          response.session,
-          'service'
-        )
+        useImpersonationStore
+          .getState()
+          .startImpersonation(
+            response.access_token,
+            response.refresh_token,
+            response.target_user,
+            response.session,
+            'service'
+          )
 
         syncAuthToken()
         queryClient.invalidateQueries()

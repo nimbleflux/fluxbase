@@ -114,18 +114,13 @@ export function PromptDialog(props: PromptDialogProps) {
             disabled={isLoading}
             className={cn(error && 'border-destructive')}
           />
-          {error && (
-            <p className='text-destructive mt-1.5 text-sm'>{error}</p>
-          )}
+          {error && <p className='text-destructive mt-1.5 text-sm'>{error}</p>}
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>
             {cancelText}
           </AlertDialogCancel>
-          <Button
-            onClick={handleConfirm}
-            disabled={disabled || isLoading}
-          >
+          <Button onClick={handleConfirm} disabled={disabled || isLoading}>
             {confirmText}
           </Button>
         </AlertDialogFooter>

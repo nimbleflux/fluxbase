@@ -1,9 +1,9 @@
 import path from 'path'
-import type { ServerResponse } from 'http'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
+import type { ServerResponse } from 'http'
 
 // Helper to handle proxy errors gracefully during backend restarts
 const handleProxyError = (err: Error, res: ServerResponse) => {
@@ -43,12 +43,21 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       // Force all React imports to use the admin's version (React 19)
-      'react': path.resolve(__dirname, './node_modules/react'),
+      react: path.resolve(__dirname, './node_modules/react'),
       'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
-      'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime'),
-      'react/jsx-dev-runtime': path.resolve(__dirname, './node_modules/react/jsx-dev-runtime'),
+      'react/jsx-runtime': path.resolve(
+        __dirname,
+        './node_modules/react/jsx-runtime'
+      ),
+      'react/jsx-dev-runtime': path.resolve(
+        __dirname,
+        './node_modules/react/jsx-dev-runtime'
+      ),
       // Force React Query to use admin's version for consistent context
-      '@tanstack/react-query': path.resolve(__dirname, './node_modules/@tanstack/react-query'),
+      '@tanstack/react-query': path.resolve(
+        __dirname,
+        './node_modules/@tanstack/react-query'
+      ),
     },
   },
   optimizeDeps: {

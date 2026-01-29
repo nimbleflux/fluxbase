@@ -1,14 +1,20 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { PasswordInput } from '@/components/password-input'
 import { adminAuthAPI } from '@/lib/api'
 import { setTokens } from '@/lib/auth'
 import { setAuthToken } from '@/lib/fluxbase-client'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/password-input'
 
 export const Route = createFileRoute('/setup')({
   component: SetupPage,
@@ -94,9 +100,11 @@ function SetupPage() {
       // Redirect to dashboard
       navigate({ to: '/' })
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error && 'response' in error
-        ? (error as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to create admin account'
-        : 'Failed to create admin account'
+      const errorMessage =
+        error instanceof Error && 'response' in error
+          ? (error as { response?: { data?: { error?: string } } }).response
+              ?.data?.error || 'Failed to create admin account'
+          : 'Failed to create admin account'
       toast.error('Setup failed', {
         description: errorMessage,
       })
@@ -106,7 +114,7 @@ function SetupPage() {
   }
 
   return (
-    <div className='flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background to-muted p-4'>
+    <div className='from-background to-muted flex min-h-screen flex-col items-center justify-center bg-gradient-to-br p-4'>
       <div className='w-full max-w-md space-y-8'>
         {/* Logo and Title */}
         <div className='text-center'>
@@ -115,8 +123,10 @@ function SetupPage() {
             alt='Fluxbase'
             className='mx-auto h-16 w-16'
           />
-          <h1 className='mt-6 text-3xl font-bold tracking-tight'>Welcome to Fluxbase</h1>
-          <p className='mt-2 text-sm text-muted-foreground'>
+          <h1 className='mt-6 text-3xl font-bold tracking-tight'>
+            Welcome to Fluxbase
+          </h1>
+          <p className='text-muted-foreground mt-2 text-sm'>
             Set up your admin account to get started
           </p>
         </div>
@@ -126,7 +136,8 @@ function SetupPage() {
           <CardHeader>
             <CardTitle>Create Admin Account</CardTitle>
             <CardDescription>
-              This will be the first admin user with full access to your Fluxbase instance.
+              This will be the first admin user with full access to your
+              Fluxbase instance.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -137,14 +148,19 @@ function SetupPage() {
                   id='setupToken'
                   placeholder='Enter your setup token from deployment config'
                   value={formData.setupToken}
-                  onChange={(e) => setFormData({ ...formData, setupToken: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, setupToken: e.target.value })
+                  }
                   disabled={isLoading}
                 />
                 {errors.setupToken && (
-                  <p className='text-sm text-destructive'>{errors.setupToken}</p>
+                  <p className='text-destructive text-sm'>
+                    {errors.setupToken}
+                  </p>
                 )}
-                <p className='text-xs text-muted-foreground'>
-                  This is the FLUXBASE_SECURITY_SETUP_TOKEN value from your deployment configuration.
+                <p className='text-muted-foreground text-xs'>
+                  This is the FLUXBASE_SECURITY_SETUP_TOKEN value from your
+                  deployment configuration.
                 </p>
               </div>
 
@@ -154,10 +170,14 @@ function SetupPage() {
                   id='name'
                   placeholder='John Doe'
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
                   disabled={isLoading}
                 />
-                {errors.name && <p className='text-sm text-destructive'>{errors.name}</p>}
+                {errors.name && (
+                  <p className='text-destructive text-sm'>{errors.name}</p>
+                )}
               </div>
 
               <div className='space-y-2'>
@@ -167,10 +187,14 @@ function SetupPage() {
                   type='email'
                   placeholder='admin@example.com'
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
                   disabled={isLoading}
                 />
-                {errors.email && <p className='text-sm text-destructive'>{errors.email}</p>}
+                {errors.email && (
+                  <p className='text-destructive text-sm'>{errors.email}</p>
+                )}
               </div>
 
               <div className='space-y-2'>
@@ -179,11 +203,13 @@ function SetupPage() {
                   id='password'
                   placeholder='Enter a strong password (min 12 characters)'
                   value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
                   disabled={isLoading}
                 />
                 {errors.password && (
-                  <p className='text-sm text-destructive'>{errors.password}</p>
+                  <p className='text-destructive text-sm'>{errors.password}</p>
                 )}
               </div>
 
@@ -194,12 +220,17 @@ function SetupPage() {
                   placeholder='Confirm your password'
                   value={formData.confirmPassword}
                   onChange={(e) =>
-                    setFormData({ ...formData, confirmPassword: e.target.value })
+                    setFormData({
+                      ...formData,
+                      confirmPassword: e.target.value,
+                    })
                   }
                   disabled={isLoading}
                 />
                 {errors.confirmPassword && (
-                  <p className='text-sm text-destructive'>{errors.confirmPassword}</p>
+                  <p className='text-destructive text-sm'>
+                    {errors.confirmPassword}
+                  </p>
                 )}
               </div>
 
@@ -213,10 +244,11 @@ function SetupPage() {
         {/* Security Note */}
         <Card className='border-muted-foreground/20'>
           <CardContent>
-            <p className='text-xs text-muted-foreground'>
-              <strong>Security Note:</strong> This setup page will only be accessible when no users
-              exist in the database. After creating your admin account, you'll need to sign in to
-              access the admin panel.
+            <p className='text-muted-foreground text-xs'>
+              <strong>Security Note:</strong> This setup page will only be
+              accessible when no users exist in the database. After creating
+              your admin account, you'll need to sign in to access the admin
+              panel.
             </p>
           </CardContent>
         </Card>

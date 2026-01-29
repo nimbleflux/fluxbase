@@ -2,13 +2,19 @@ import { useState, useEffect } from 'react'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { ArrowLeft, CheckCircle, Loader2, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
+import { dashboardAuthAPI } from '@/lib/api'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/password-input'
 import { PasswordStrength } from '@/components/password-strength'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { dashboardAuthAPI } from '@/lib/api'
 
 const route = getRouteApi('/(auth)/reset-password')
 
@@ -83,7 +89,8 @@ export function ResetPassword() {
         navigate({ to: '/login' })
       }, 2000)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to reset password'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to reset password'
       toast.error(errorMessage)
     } finally {
       setIsLoading(false)
@@ -94,7 +101,7 @@ export function ResetPassword() {
     if (isValidating) {
       return (
         <div className='flex items-center justify-center py-8'>
-          <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
+          <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
         </div>
       )
     }
@@ -105,7 +112,8 @@ export function ResetPassword() {
           <Alert variant='destructive'>
             <AlertCircle className='h-4 w-4' />
             <AlertDescription>
-              {tokenError || 'Invalid or expired reset token. Please request a new password reset.'}
+              {tokenError ||
+                'Invalid or expired reset token. Please request a new password reset.'}
             </AlertDescription>
           </Alert>
           <Button
@@ -164,7 +172,7 @@ export function ResetPassword() {
           {isLoading ? (
             <>
               Resetting password...
-              <Loader2 className='animate-spin ml-2 h-4 w-4' />
+              <Loader2 className='ml-2 h-4 w-4 animate-spin' />
             </>
           ) : (
             'Reset Password'
@@ -185,7 +193,7 @@ export function ResetPassword() {
   }
 
   return (
-    <div className='flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background to-muted p-4'>
+    <div className='from-background to-muted flex min-h-screen flex-col items-center justify-center bg-gradient-to-br p-4'>
       <div className='w-full max-w-md space-y-8'>
         {/* Logo and Title */}
         <div className='text-center'>
@@ -194,8 +202,10 @@ export function ResetPassword() {
             alt='Fluxbase'
             className='mx-auto h-16 w-16'
           />
-          <h1 className='mt-6 text-3xl font-bold tracking-tight'>Reset Password</h1>
-          <p className='mt-2 text-sm text-muted-foreground'>
+          <h1 className='mt-6 text-3xl font-bold tracking-tight'>
+            Reset Password
+          </h1>
+          <p className='text-muted-foreground mt-2 text-sm'>
             Create a new password for your account
           </p>
         </div>
@@ -204,13 +214,9 @@ export function ResetPassword() {
         <Card>
           <CardHeader>
             <CardTitle>New Password</CardTitle>
-            <CardDescription>
-              Enter your new password below
-            </CardDescription>
+            <CardDescription>Enter your new password below</CardDescription>
           </CardHeader>
-          <CardContent>
-            {renderContent()}
-          </CardContent>
+          <CardContent>{renderContent()}</CardContent>
         </Card>
       </div>
     </div>

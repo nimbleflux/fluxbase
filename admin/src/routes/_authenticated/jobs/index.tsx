@@ -57,11 +57,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -76,6 +71,11 @@ import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { ImpersonationBanner } from '@/components/impersonation-banner'
 import { ImpersonationPopover } from '@/features/impersonation/components/impersonation-popover'
 
@@ -125,7 +125,10 @@ function JobsPage() {
   })
 
   // Delete confirmation state
-  const [deleteConfirm, setDeleteConfirm] = useState<{ namespace: string; name: string } | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    namespace: string
+    name: string
+  } | null>(null)
 
   // Execution history dialog state
   const [showHistoryDialog, setShowHistoryDialog] = useState(false)
@@ -206,8 +209,8 @@ function JobsPage() {
       }
     }
     fetchNamespaces()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])  // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run on mount
 
   const fetchJobFunctions = useCallback(async () => {
     try {
@@ -664,13 +667,17 @@ function JobsPage() {
   const updateJobFunction = async () => {
     if (!selectedFunction) return
     try {
-      await jobsApi.updateFunction(selectedFunction.namespace, selectedFunction.name, {
-        description: editFormData.description || undefined,
-        code: editFormData.code || undefined,
-        timeout_seconds: editFormData.timeout_seconds,
-        max_retries: editFormData.max_retries,
-        schedule: editFormData.schedule || undefined,
-      })
+      await jobsApi.updateFunction(
+        selectedFunction.namespace,
+        selectedFunction.name,
+        {
+          description: editFormData.description || undefined,
+          code: editFormData.code || undefined,
+          timeout_seconds: editFormData.timeout_seconds,
+          max_retries: editFormData.max_retries,
+          schedule: editFormData.schedule || undefined,
+        }
+      )
       toast.success('Job function updated')
       setShowEditDialog(false)
       await fetchJobFunctions()
@@ -1404,13 +1411,13 @@ function JobsPage() {
                     <div className='flex shrink-0 items-center gap-0.5'>
                       {fn.source === 'filesystem' && fn.updated_at && (
                         <span
-                          className='text-muted-foreground text-[10px] mr-1'
+                          className='text-muted-foreground mr-1 text-[10px]'
                           title={`Last synced: ${new Date(fn.updated_at).toLocaleString()}`}
                         >
                           synced {new Date(fn.updated_at).toLocaleDateString()}
                         </span>
                       )}
-                      <span className='text-muted-foreground text-[10px] mr-1'>
+                      <span className='text-muted-foreground mr-1 text-[10px]'>
                         {fn.timeout_seconds}s / {fn.max_retries}r
                       </span>
                       <Tooltip>
@@ -1456,10 +1463,15 @@ function JobsPage() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
-                            onClick={() => setDeleteConfirm({ namespace: fn.namespace, name: fn.name })}
+                            onClick={() =>
+                              setDeleteConfirm({
+                                namespace: fn.namespace,
+                                name: fn.name,
+                              })
+                            }
                             size='sm'
                             variant='ghost'
-                            className='h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10'
+                            className='text-destructive hover:text-destructive hover:bg-destructive/10 h-6 w-6 p-0'
                           >
                             <Trash2 className='h-3 w-3' />
                           </Button>
@@ -1905,87 +1917,94 @@ function JobsPage() {
           <DialogHeader>
             <DialogTitle>Edit Job Function</DialogTitle>
             <DialogDescription>
-              Update job function code and settings for "{selectedFunction?.name}"
+              Update job function code and settings for "
+              {selectedFunction?.name}"
             </DialogDescription>
           </DialogHeader>
 
           {fetchingFunction ? (
             <div className='flex items-center justify-center py-12'>
-              <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
+              <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
             </div>
           ) : (
-          <div className='space-y-4'>
-            <div>
-              <Label htmlFor='edit-description'>Description</Label>
-              <Input
-                id='edit-description'
-                value={editFormData.description}
-                onChange={(e) =>
-                  setEditFormData({ ...editFormData, description: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <Label htmlFor='edit-code'>Code</Label>
-              <Textarea
-                id='edit-code'
-                className='min-h-[400px] font-mono text-sm'
-                value={editFormData.code}
-                onChange={(e) =>
-                  setEditFormData({ ...editFormData, code: e.target.value })
-                }
-              />
-            </div>
-
-            <div className='grid grid-cols-3 gap-4'>
+            <div className='space-y-4'>
               <div>
-                <Label htmlFor='edit-timeout'>Timeout (seconds)</Label>
+                <Label htmlFor='edit-description'>Description</Label>
                 <Input
-                  id='edit-timeout'
-                  type='number'
-                  min={1}
-                  max={3600}
-                  value={editFormData.timeout_seconds}
+                  id='edit-description'
+                  value={editFormData.description}
                   onChange={(e) =>
                     setEditFormData({
                       ...editFormData,
-                      timeout_seconds: parseInt(e.target.value),
+                      description: e.target.value,
                     })
                   }
                 />
               </div>
 
               <div>
-                <Label htmlFor='edit-retries'>Max Retries</Label>
-                <Input
-                  id='edit-retries'
-                  type='number'
-                  min={0}
-                  max={10}
-                  value={editFormData.max_retries}
+                <Label htmlFor='edit-code'>Code</Label>
+                <Textarea
+                  id='edit-code'
+                  className='min-h-[400px] font-mono text-sm'
+                  value={editFormData.code}
                   onChange={(e) =>
-                    setEditFormData({
-                      ...editFormData,
-                      max_retries: parseInt(e.target.value),
-                    })
+                    setEditFormData({ ...editFormData, code: e.target.value })
                   }
                 />
               </div>
 
-              <div>
-                <Label htmlFor='edit-schedule'>Schedule (cron)</Label>
-                <Input
-                  id='edit-schedule'
-                  placeholder='0 0 * * *'
-                  value={editFormData.schedule}
-                  onChange={(e) =>
-                    setEditFormData({ ...editFormData, schedule: e.target.value })
-                  }
-                />
+              <div className='grid grid-cols-3 gap-4'>
+                <div>
+                  <Label htmlFor='edit-timeout'>Timeout (seconds)</Label>
+                  <Input
+                    id='edit-timeout'
+                    type='number'
+                    min={1}
+                    max={3600}
+                    value={editFormData.timeout_seconds}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        timeout_seconds: parseInt(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor='edit-retries'>Max Retries</Label>
+                  <Input
+                    id='edit-retries'
+                    type='number'
+                    min={0}
+                    max={10}
+                    value={editFormData.max_retries}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        max_retries: parseInt(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor='edit-schedule'>Schedule (cron)</Label>
+                  <Input
+                    id='edit-schedule'
+                    placeholder='0 0 * * *'
+                    value={editFormData.schedule}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        schedule: e.target.value,
+                      })
+                    }
+                  />
+                </div>
               </div>
             </div>
-          </div>
           )}
 
           <DialogFooter>
@@ -2000,12 +2019,16 @@ function JobsPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteConfirm !== null} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+      <AlertDialog
+        open={deleteConfirm !== null}
+        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Job Function</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deleteConfirm?.name}"? This action cannot be undone.
+              Are you sure you want to delete "{deleteConfirm?.name}"? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2035,11 +2058,11 @@ function JobsPage() {
 
           {historyLoading ? (
             <div className='flex items-center justify-center py-12'>
-              <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
+              <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
             </div>
           ) : historyJobs.length === 0 ? (
-            <div className='text-center py-12'>
-              <Activity className='mx-auto h-12 w-12 text-muted-foreground mb-4' />
+            <div className='py-12 text-center'>
+              <Activity className='text-muted-foreground mx-auto mb-4 h-12 w-12' />
               <p className='text-muted-foreground'>No executions found</p>
             </div>
           ) : (
@@ -2048,7 +2071,7 @@ function JobsPage() {
                 {historyJobs.map((job) => (
                   <div
                     key={job.id}
-                    className='flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 cursor-pointer'
+                    className='hover:bg-muted/50 flex cursor-pointer items-center justify-between rounded-lg border p-3'
                     onClick={() => {
                       setShowHistoryDialog(false)
                       viewJobDetails(job)
@@ -2058,18 +2081,24 @@ function JobsPage() {
                       {getStatusIcon(job.status)}
                       <div>
                         <div className='flex items-center gap-2'>
-                          <span className='text-sm font-medium'>{job.id.slice(0, 8)}...</span>
-                          <Badge variant={getStatusBadgeVariant(job.status)}>{job.status}</Badge>
+                          <span className='text-sm font-medium'>
+                            {job.id.slice(0, 8)}...
+                          </span>
+                          <Badge variant={getStatusBadgeVariant(job.status)}>
+                            {job.status}
+                          </Badge>
                         </div>
-                        <span className='text-xs text-muted-foreground'>
+                        <span className='text-muted-foreground text-xs'>
                           {new Date(job.created_at).toLocaleString()}
                         </span>
                       </div>
                     </div>
                     <div className='text-right'>
                       {job.started_at && job.completed_at && (
-                        <span className='text-xs text-muted-foreground'>
-                          {new Date(job.completed_at).getTime() - new Date(job.started_at).getTime()}ms
+                        <span className='text-muted-foreground text-xs'>
+                          {new Date(job.completed_at).getTime() -
+                            new Date(job.started_at).getTime()}
+                          ms
                         </span>
                       )}
                     </div>
@@ -2080,7 +2109,10 @@ function JobsPage() {
           )}
 
           <DialogFooter>
-            <Button variant='outline' onClick={() => setShowHistoryDialog(false)}>
+            <Button
+              variant='outline'
+              onClick={() => setShowHistoryDialog(false)}
+            >
               Close
             </Button>
           </DialogFooter>

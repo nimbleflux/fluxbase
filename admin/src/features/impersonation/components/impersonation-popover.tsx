@@ -1,13 +1,11 @@
 import { useState } from 'react'
 import { UserCog, User, UserX, Shield, X } from 'lucide-react'
+import type { ImpersonationType } from '@/stores/impersonation-store'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
-import { useImpersonation } from '../hooks/use-impersonation'
-import type { ImpersonationType } from '@/stores/impersonation-store'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Popover,
   PopoverContent,
@@ -20,6 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { useImpersonation } from '../hooks/use-impersonation'
 import { UserSearch } from './user-search'
 
 export interface ImpersonationPopoverProps {
@@ -96,7 +96,11 @@ export function ImpersonationPopover({
 
     switch (impersonationType) {
       case 'user':
-        await startUserImpersonation(selectedUserId, selectedUserEmail, reasonToUse)
+        await startUserImpersonation(
+          selectedUserId,
+          selectedUserEmail,
+          reasonToUse
+        )
         break
       case 'anon':
         await startAnonImpersonation(reasonToUse)
@@ -151,10 +155,10 @@ export function ImpersonationPopover({
       <div className={cn('flex items-center gap-2', className)}>
         <Badge
           variant='outline'
-          className={cn('gap-1.5 py-1.5 px-3', getBadgeColors())}
+          className={cn('gap-1.5 px-3 py-1.5', getBadgeColors())}
         >
           {getTypeIcon(activeType!)}
-          <span className='truncate max-w-[200px]'>
+          <span className='max-w-[200px] truncate'>
             {contextLabel}: {getDisplayLabel()}
           </span>
         </Badge>
@@ -188,8 +192,8 @@ export function ImpersonationPopover({
       <PopoverContent className='w-80' align='end'>
         <div className='grid gap-4'>
           <div className='space-y-2'>
-            <h4 className='font-medium leading-none'>Impersonate User</h4>
-            <p className='text-sm text-muted-foreground'>
+            <h4 className='leading-none font-medium'>Impersonate User</h4>
+            <p className='text-muted-foreground text-sm'>
               Execute operations as a different user or role
             </p>
           </div>
@@ -252,7 +256,7 @@ export function ImpersonationPopover({
                   rows={2}
                   className='resize-none'
                 />
-                <p className='text-xs text-muted-foreground'>
+                <p className='text-muted-foreground text-xs'>
                   Logged for audit trail
                 </p>
               </div>

@@ -1,7 +1,6 @@
 /**
  * Fluxbase SDK client configuration for Admin UI
  */
-
 import { createClient } from '@fluxbase/sdk'
 import { getAccessToken } from './auth'
 

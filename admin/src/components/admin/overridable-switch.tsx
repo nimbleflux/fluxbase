@@ -30,20 +30,21 @@ export function OverridableSwitch({
   const isDisabled = disabled || isOverridden
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="space-y-0.5 flex-1">
-        <div className="flex items-center gap-2">
+    <div className='flex items-center justify-between'>
+      <div className='flex-1 space-y-0.5'>
+        <div className='flex items-center gap-2'>
           <Label htmlFor={id}>{label}</Label>
           {isOverridden && <OverrideBadge envVar={override?.env_var} />}
         </div>
         {description && (
-          <p className="text-sm text-muted-foreground">
-            {description}
-          </p>
+          <p className='text-muted-foreground text-sm'>{description}</p>
         )}
         {isOverridden && (
-          <p className="text-xs text-muted-foreground mt-1">
-            Controlled by <code className="bg-muted px-1 py-0.5 rounded">{override?.env_var}</code>
+          <p className='text-muted-foreground mt-1 text-xs'>
+            Controlled by{' '}
+            <code className='bg-muted rounded px-1 py-0.5'>
+              {override?.env_var}
+            </code>
           </p>
         )}
       </div>

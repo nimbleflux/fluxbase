@@ -32,8 +32,10 @@ import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedServiceKeysIndexRouteImport } from './routes/_authenticated/service-keys/index'
 import { Route as AuthenticatedSecuritySettingsIndexRouteImport } from './routes/_authenticated/security-settings/index'
 import { Route as AuthenticatedSecretsIndexRouteImport } from './routes/_authenticated/secrets/index'
+import { Route as AuthenticatedSchemaIndexRouteImport } from './routes/_authenticated/schema/index'
 import { Route as AuthenticatedRpcIndexRouteImport } from './routes/_authenticated/rpc/index'
 import { Route as AuthenticatedRealtimeIndexRouteImport } from './routes/_authenticated/realtime/index'
+import { Route as AuthenticatedPoliciesIndexRouteImport } from './routes/_authenticated/policies/index'
 import { Route as AuthenticatedMonitoringIndexRouteImport } from './routes/_authenticated/monitoring/index'
 import { Route as AuthenticatedMcpToolsIndexRouteImport } from './routes/_authenticated/mcp-tools/index'
 import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
@@ -178,6 +180,12 @@ const AuthenticatedSecretsIndexRoute =
     path: '/secrets/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSchemaIndexRoute =
+  AuthenticatedSchemaIndexRouteImport.update({
+    id: '/schema/',
+    path: '/schema/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedRpcIndexRoute = AuthenticatedRpcIndexRouteImport.update({
   id: '/rpc/',
   path: '/rpc/',
@@ -187,6 +195,12 @@ const AuthenticatedRealtimeIndexRoute =
   AuthenticatedRealtimeIndexRouteImport.update({
     id: '/realtime/',
     path: '/realtime/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPoliciesIndexRoute =
+  AuthenticatedPoliciesIndexRouteImport.update({
+    id: '/policies/',
+    path: '/policies/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedMonitoringIndexRoute =
@@ -337,8 +351,10 @@ export interface FileRoutesByFullPath {
   '/logs': typeof AuthenticatedLogsIndexRoute
   '/mcp-tools': typeof AuthenticatedMcpToolsIndexRoute
   '/monitoring': typeof AuthenticatedMonitoringIndexRoute
+  '/policies': typeof AuthenticatedPoliciesIndexRoute
   '/realtime': typeof AuthenticatedRealtimeIndexRoute
   '/rpc': typeof AuthenticatedRpcIndexRoute
+  '/schema': typeof AuthenticatedSchemaIndexRoute
   '/secrets': typeof AuthenticatedSecretsIndexRoute
   '/security-settings': typeof AuthenticatedSecuritySettingsIndexRoute
   '/service-keys': typeof AuthenticatedServiceKeysIndexRoute
@@ -383,8 +399,10 @@ export interface FileRoutesByTo {
   '/logs': typeof AuthenticatedLogsIndexRoute
   '/mcp-tools': typeof AuthenticatedMcpToolsIndexRoute
   '/monitoring': typeof AuthenticatedMonitoringIndexRoute
+  '/policies': typeof AuthenticatedPoliciesIndexRoute
   '/realtime': typeof AuthenticatedRealtimeIndexRoute
   '/rpc': typeof AuthenticatedRpcIndexRoute
+  '/schema': typeof AuthenticatedSchemaIndexRoute
   '/secrets': typeof AuthenticatedSecretsIndexRoute
   '/security-settings': typeof AuthenticatedSecuritySettingsIndexRoute
   '/service-keys': typeof AuthenticatedServiceKeysIndexRoute
@@ -431,8 +449,10 @@ export interface FileRoutesById {
   '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
   '/_authenticated/mcp-tools/': typeof AuthenticatedMcpToolsIndexRoute
   '/_authenticated/monitoring/': typeof AuthenticatedMonitoringIndexRoute
+  '/_authenticated/policies/': typeof AuthenticatedPoliciesIndexRoute
   '/_authenticated/realtime/': typeof AuthenticatedRealtimeIndexRoute
   '/_authenticated/rpc/': typeof AuthenticatedRpcIndexRoute
+  '/_authenticated/schema/': typeof AuthenticatedSchemaIndexRoute
   '/_authenticated/secrets/': typeof AuthenticatedSecretsIndexRoute
   '/_authenticated/security-settings/': typeof AuthenticatedSecuritySettingsIndexRoute
   '/_authenticated/service-keys/': typeof AuthenticatedServiceKeysIndexRoute
@@ -479,8 +499,10 @@ export interface FileRouteTypes {
     | '/logs'
     | '/mcp-tools'
     | '/monitoring'
+    | '/policies'
     | '/realtime'
     | '/rpc'
+    | '/schema'
     | '/secrets'
     | '/security-settings'
     | '/service-keys'
@@ -525,8 +547,10 @@ export interface FileRouteTypes {
     | '/logs'
     | '/mcp-tools'
     | '/monitoring'
+    | '/policies'
     | '/realtime'
     | '/rpc'
+    | '/schema'
     | '/secrets'
     | '/security-settings'
     | '/service-keys'
@@ -572,8 +596,10 @@ export interface FileRouteTypes {
     | '/_authenticated/logs/'
     | '/_authenticated/mcp-tools/'
     | '/_authenticated/monitoring/'
+    | '/_authenticated/policies/'
     | '/_authenticated/realtime/'
     | '/_authenticated/rpc/'
+    | '/_authenticated/schema/'
     | '/_authenticated/secrets/'
     | '/_authenticated/security-settings/'
     | '/_authenticated/service-keys/'
@@ -767,6 +793,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSecretsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/schema/': {
+      id: '/_authenticated/schema/'
+      path: '/schema'
+      fullPath: '/schema'
+      preLoaderRoute: typeof AuthenticatedSchemaIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/rpc/': {
       id: '/_authenticated/rpc/'
       path: '/rpc'
@@ -779,6 +812,13 @@ declare module '@tanstack/react-router' {
       path: '/realtime'
       fullPath: '/realtime'
       preLoaderRoute: typeof AuthenticatedRealtimeIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/policies/': {
+      id: '/_authenticated/policies/'
+      path: '/policies'
+      fullPath: '/policies'
+      preLoaderRoute: typeof AuthenticatedPoliciesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/monitoring/': {
@@ -943,8 +983,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
   AuthenticatedMcpToolsIndexRoute: typeof AuthenticatedMcpToolsIndexRoute
   AuthenticatedMonitoringIndexRoute: typeof AuthenticatedMonitoringIndexRoute
+  AuthenticatedPoliciesIndexRoute: typeof AuthenticatedPoliciesIndexRoute
   AuthenticatedRealtimeIndexRoute: typeof AuthenticatedRealtimeIndexRoute
   AuthenticatedRpcIndexRoute: typeof AuthenticatedRpcIndexRoute
+  AuthenticatedSchemaIndexRoute: typeof AuthenticatedSchemaIndexRoute
   AuthenticatedSecretsIndexRoute: typeof AuthenticatedSecretsIndexRoute
   AuthenticatedSecuritySettingsIndexRoute: typeof AuthenticatedSecuritySettingsIndexRoute
   AuthenticatedServiceKeysIndexRoute: typeof AuthenticatedServiceKeysIndexRoute
@@ -979,8 +1021,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,
   AuthenticatedMcpToolsIndexRoute: AuthenticatedMcpToolsIndexRoute,
   AuthenticatedMonitoringIndexRoute: AuthenticatedMonitoringIndexRoute,
+  AuthenticatedPoliciesIndexRoute: AuthenticatedPoliciesIndexRoute,
   AuthenticatedRealtimeIndexRoute: AuthenticatedRealtimeIndexRoute,
   AuthenticatedRpcIndexRoute: AuthenticatedRpcIndexRoute,
+  AuthenticatedSchemaIndexRoute: AuthenticatedSchemaIndexRoute,
   AuthenticatedSecretsIndexRoute: AuthenticatedSecretsIndexRoute,
   AuthenticatedSecuritySettingsIndexRoute:
     AuthenticatedSecuritySettingsIndexRoute,

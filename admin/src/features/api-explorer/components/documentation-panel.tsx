@@ -1,13 +1,13 @@
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
 import type { EndpointInfo, OpenAPISchema } from '../types'
 
 interface DocumentationPanelProps {
@@ -26,7 +26,7 @@ const TYPE_COLORS = {
 export function DocumentationPanel({ endpoint }: DocumentationPanelProps) {
   if (!endpoint) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
+      <div className='text-muted-foreground flex h-full items-center justify-center'>
         Select an endpoint to view documentation
       </div>
     )
@@ -38,7 +38,7 @@ export function DocumentationPanel({ endpoint }: DocumentationPanelProps) {
     if (schema.$ref) {
       const refName = schema.$ref.split('/').pop()
       return (
-        <span className="text-muted-foreground italic">
+        <span className='text-muted-foreground italic'>
           Reference: {refName}
         </span>
       )
@@ -49,49 +49,55 @@ export function DocumentationPanel({ endpoint }: DocumentationPanelProps) {
     if (schema.type === 'object' && schema.properties) {
       return (
         <div className={padding}>
-          <div className="text-xs text-muted-foreground mb-2">Object</div>
+          <div className='text-muted-foreground mb-2 text-xs'>Object</div>
           {Object.entries(schema.properties).map(([key, prop]) => (
-            <div key={key} className="mb-2">
-              <div className="flex items-start gap-2">
-                <span className="font-mono text-sm">
+            <div key={key} className='mb-2'>
+              <div className='flex items-start gap-2'>
+                <span className='font-mono text-sm'>
                   {key}
                   {schema.required?.includes(key) && (
-                    <span className="text-red-500 ml-1">*</span>
+                    <span className='ml-1 text-red-500'>*</span>
                   )}
                 </span>
-                <span className={cn(
-                  "text-xs",
-                  TYPE_COLORS[prop.type as keyof typeof TYPE_COLORS] || 'text-gray-600'
-                )}>
+                <span
+                  className={cn(
+                    'text-xs',
+                    TYPE_COLORS[prop.type as keyof typeof TYPE_COLORS] ||
+                      'text-gray-600'
+                  )}
+                >
                   {prop.type}
                   {prop.format && ` (${prop.format})`}
                 </span>
               </div>
               {prop.description && (
-                <div className="text-xs text-muted-foreground mt-1 ml-4">
+                <div className='text-muted-foreground mt-1 ml-4 text-xs'>
                   {prop.description}
                 </div>
               )}
               {prop.enum && (
-                <div className="text-xs text-muted-foreground mt-1 ml-4">
+                <div className='text-muted-foreground mt-1 ml-4 text-xs'>
                   Enum: {prop.enum.join(', ')}
                 </div>
               )}
               {prop.example !== undefined && (
-                <div className="text-xs text-muted-foreground mt-1 ml-4">
-                  Example: <code className="bg-muted px-1 rounded">
+                <div className='text-muted-foreground mt-1 ml-4 text-xs'>
+                  Example:{' '}
+                  <code className='bg-muted rounded px-1'>
                     {JSON.stringify(prop.example)}
                   </code>
                 </div>
               )}
               {prop.type === 'object' && prop.properties && (
-                <div className="ml-4 mt-2 border-l pl-4">
+                <div className='mt-2 ml-4 border-l pl-4'>
                   {renderSchema(prop, indent + 1)}
                 </div>
               )}
               {prop.type === 'array' && prop.items && (
-                <div className="ml-4 mt-2 border-l pl-4">
-                  <span className="text-xs text-muted-foreground">Array of:</span>
+                <div className='mt-2 ml-4 border-l pl-4'>
+                  <span className='text-muted-foreground text-xs'>
+                    Array of:
+                  </span>
                   {renderSchema(prop.items, indent + 1)}
                 </div>
               )}
@@ -104,7 +110,7 @@ export function DocumentationPanel({ endpoint }: DocumentationPanelProps) {
     if (schema.type === 'array' && schema.items) {
       return (
         <div className={padding}>
-          <div className="text-xs text-muted-foreground mb-2">Array</div>
+          <div className='text-muted-foreground mb-2 text-xs'>Array</div>
           {renderSchema(schema.items, indent + 1)}
         </div>
       )
@@ -112,26 +118,30 @@ export function DocumentationPanel({ endpoint }: DocumentationPanelProps) {
 
     return (
       <div className={padding}>
-        <span className={cn(
-          "text-xs",
-          TYPE_COLORS[schema.type as keyof typeof TYPE_COLORS] || 'text-gray-600'
-        )}>
+        <span
+          className={cn(
+            'text-xs',
+            TYPE_COLORS[schema.type as keyof typeof TYPE_COLORS] ||
+              'text-gray-600'
+          )}
+        >
           {schema.type}
           {schema.format && ` (${schema.format})`}
         </span>
         {schema.description && (
-          <div className="text-xs text-muted-foreground mt-1">
+          <div className='text-muted-foreground mt-1 text-xs'>
             {schema.description}
           </div>
         )}
         {schema.enum && (
-          <div className="text-xs text-muted-foreground mt-1">
+          <div className='text-muted-foreground mt-1 text-xs'>
             Enum: {schema.enum.join(', ')}
           </div>
         )}
         {schema.example !== undefined && (
-          <div className="text-xs text-muted-foreground mt-1">
-            Example: <code className="bg-muted px-1 rounded">
+          <div className='text-muted-foreground mt-1 text-xs'>
+            Example:{' '}
+            <code className='bg-muted rounded px-1'>
               {JSON.stringify(schema.example)}
             </code>
           </div>
@@ -141,18 +151,18 @@ export function DocumentationPanel({ endpoint }: DocumentationPanelProps) {
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-6 space-y-6">
+    <ScrollArea className='h-full'>
+      <div className='space-y-6 p-6'>
         {/* Endpoint Header */}
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Badge variant="outline" className="text-xs">
+          <div className='mb-2 flex items-center gap-2'>
+            <Badge variant='outline' className='text-xs'>
               {endpoint.method}
             </Badge>
-            <code className="text-sm font-mono">{endpoint.path}</code>
+            <code className='font-mono text-sm'>{endpoint.path}</code>
           </div>
           {endpoint.operationId && (
-            <div className="text-xs text-muted-foreground">
+            <div className='text-muted-foreground text-xs'>
               Operation ID: <code>{endpoint.operationId}</code>
             </div>
           )}
@@ -162,10 +172,10 @@ export function DocumentationPanel({ endpoint }: DocumentationPanelProps) {
         {(endpoint.summary || endpoint.description) && (
           <div>
             {endpoint.summary && (
-              <h3 className="font-semibold mb-2">{endpoint.summary}</h3>
+              <h3 className='mb-2 font-semibold'>{endpoint.summary}</h3>
             )}
             {endpoint.description && (
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+              <p className='text-muted-foreground text-sm whitespace-pre-wrap'>
                 {endpoint.description}
               </p>
             )}
@@ -177,35 +187,41 @@ export function DocumentationPanel({ endpoint }: DocumentationPanelProps) {
         {/* Parameters */}
         {endpoint.parameters && endpoint.parameters.length > 0 && (
           <div>
-            <h3 className="font-semibold mb-3">Parameters</h3>
-            <div className="space-y-3">
+            <h3 className='mb-3 font-semibold'>Parameters</h3>
+            <div className='space-y-3'>
               {endpoint.parameters.map((param, idx) => (
-                <div key={`${param.name}-${idx}`} className="border rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <code className="font-mono text-sm">{param.name}</code>
+                <div
+                  key={`${param.name}-${idx}`}
+                  className='rounded-lg border p-3'
+                >
+                  <div className='mb-1 flex items-center gap-2'>
+                    <code className='font-mono text-sm'>{param.name}</code>
                     {param.required && (
-                      <Badge variant="destructive" className="text-xs">Required</Badge>
+                      <Badge variant='destructive' className='text-xs'>
+                        Required
+                      </Badge>
                     )}
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge variant='secondary' className='text-xs'>
                       in: {param.in}
                     </Badge>
                     {param.deprecated && (
-                      <Badge variant="outline" className="text-xs">Deprecated</Badge>
+                      <Badge variant='outline' className='text-xs'>
+                        Deprecated
+                      </Badge>
                     )}
                   </div>
                   {param.description && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className='text-muted-foreground mt-1 text-xs'>
                       {param.description}
                     </p>
                   )}
                   {param.schema && (
-                    <div className="mt-2">
-                      {renderSchema(param.schema)}
-                    </div>
+                    <div className='mt-2'>{renderSchema(param.schema)}</div>
                   )}
                   {param.example !== undefined && (
-                    <div className="text-xs text-muted-foreground mt-2">
-                      Example: <code className="bg-muted px-1 rounded">
+                    <div className='text-muted-foreground mt-2 text-xs'>
+                      Example:{' '}
+                      <code className='bg-muted rounded px-1'>
                         {JSON.stringify(param.example)}
                       </code>
                     </div>
@@ -219,55 +235,67 @@ export function DocumentationPanel({ endpoint }: DocumentationPanelProps) {
         {/* Request Body */}
         {endpoint.requestBody && (
           <div>
-            <h3 className="font-semibold mb-3">
+            <h3 className='mb-3 font-semibold'>
               Request Body
               {endpoint.requestBody.required && (
-                <Badge variant="destructive" className="ml-2 text-xs">Required</Badge>
+                <Badge variant='destructive' className='ml-2 text-xs'>
+                  Required
+                </Badge>
               )}
             </h3>
             {endpoint.requestBody.description && (
-              <p className="text-sm text-muted-foreground mb-3">
+              <p className='text-muted-foreground mb-3 text-sm'>
                 {endpoint.requestBody.description}
               </p>
             )}
-            <Accordion type="single" collapsible defaultValue="application/json">
-              {Object.entries(endpoint.requestBody.content).map(([mediaType, content]) => (
-                <AccordionItem key={mediaType} value={mediaType}>
-                  <AccordionTrigger className="text-sm">
-                    <code>{mediaType}</code>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    {content.schema && renderSchema(content.schema)}
-                    {content.example !== undefined && (
-                      <div className="mt-4">
-                        <div className="text-xs font-semibold mb-2">Example:</div>
-                        <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
-                          {JSON.stringify(content.example, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                    {content.examples && (
-                      <div className="mt-4 space-y-3">
-                        {Object.entries(content.examples).map(([name, example]) => (
-                          <div key={name}>
-                            <div className="text-xs font-semibold mb-2">
-                              Example: {name}
-                              {example.summary && (
-                                <span className="font-normal text-muted-foreground ml-2">
-                                  - {example.summary}
-                                </span>
-                              )}
-                            </div>
-                            <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
-                              {JSON.stringify(example.value, null, 2)}
-                            </pre>
+            <Accordion
+              type='single'
+              collapsible
+              defaultValue='application/json'
+            >
+              {Object.entries(endpoint.requestBody.content).map(
+                ([mediaType, content]) => (
+                  <AccordionItem key={mediaType} value={mediaType}>
+                    <AccordionTrigger className='text-sm'>
+                      <code>{mediaType}</code>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      {content.schema && renderSchema(content.schema)}
+                      {content.example !== undefined && (
+                        <div className='mt-4'>
+                          <div className='mb-2 text-xs font-semibold'>
+                            Example:
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
+                          <pre className='bg-muted overflow-x-auto rounded p-3 text-xs'>
+                            {JSON.stringify(content.example, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                      {content.examples && (
+                        <div className='mt-4 space-y-3'>
+                          {Object.entries(content.examples).map(
+                            ([name, example]) => (
+                              <div key={name}>
+                                <div className='mb-2 text-xs font-semibold'>
+                                  Example: {name}
+                                  {example.summary && (
+                                    <span className='text-muted-foreground ml-2 font-normal'>
+                                      - {example.summary}
+                                    </span>
+                                  )}
+                                </div>
+                                <pre className='bg-muted overflow-x-auto rounded p-3 text-xs'>
+                                  {JSON.stringify(example.value, null, 2)}
+                                </pre>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                )
+              )}
             </Accordion>
           </div>
         )}
@@ -275,47 +303,59 @@ export function DocumentationPanel({ endpoint }: DocumentationPanelProps) {
         {/* Responses */}
         {endpoint.responses && (
           <div>
-            <h3 className="font-semibold mb-3">Responses</h3>
-            <Accordion type="single" collapsible defaultValue="200">
-              {Object.entries(endpoint.responses).map(([statusCode, response]) => (
-                <AccordionItem key={statusCode} value={statusCode}>
-                  <AccordionTrigger className="text-sm">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant={statusCode.startsWith('2') ? 'default' :
-                                statusCode.startsWith('4') ? 'destructive' : 'secondary'}
-                        className="text-xs"
-                      >
-                        {statusCode}
-                      </Badge>
-                      <span className="text-sm">{response.description}</span>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    {response.content && Object.entries(response.content).map(([mediaType, content]) => (
-                      <div key={mediaType} className="space-y-3">
-                        <div className="text-xs text-muted-foreground">
-                          Content-Type: <code>{mediaType}</code>
-                        </div>
-                        {content.schema && renderSchema(content.schema)}
-                        {content.example !== undefined && (
-                          <div>
-                            <div className="text-xs font-semibold mb-2">Example:</div>
-                            <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
-                              {JSON.stringify(content.example, null, 2)}
-                            </pre>
-                          </div>
+            <h3 className='mb-3 font-semibold'>Responses</h3>
+            <Accordion type='single' collapsible defaultValue='200'>
+              {Object.entries(endpoint.responses).map(
+                ([statusCode, response]) => (
+                  <AccordionItem key={statusCode} value={statusCode}>
+                    <AccordionTrigger className='text-sm'>
+                      <div className='flex items-center gap-2'>
+                        <Badge
+                          variant={
+                            statusCode.startsWith('2')
+                              ? 'default'
+                              : statusCode.startsWith('4')
+                                ? 'destructive'
+                                : 'secondary'
+                          }
+                          className='text-xs'
+                        >
+                          {statusCode}
+                        </Badge>
+                        <span className='text-sm'>{response.description}</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      {response.content &&
+                        Object.entries(response.content).map(
+                          ([mediaType, content]) => (
+                            <div key={mediaType} className='space-y-3'>
+                              <div className='text-muted-foreground text-xs'>
+                                Content-Type: <code>{mediaType}</code>
+                              </div>
+                              {content.schema && renderSchema(content.schema)}
+                              {content.example !== undefined && (
+                                <div>
+                                  <div className='mb-2 text-xs font-semibold'>
+                                    Example:
+                                  </div>
+                                  <pre className='bg-muted overflow-x-auto rounded p-3 text-xs'>
+                                    {JSON.stringify(content.example, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          )
                         )}
-                      </div>
-                    ))}
-                    {!response.content && (
-                      <div className="text-sm text-muted-foreground">
-                        No response body
-                      </div>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
+                      {!response.content && (
+                        <div className='text-muted-foreground text-sm'>
+                          No response body
+                        </div>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                )
+              )}
             </Accordion>
           </div>
         )}
