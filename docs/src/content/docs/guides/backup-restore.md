@@ -1,5 +1,6 @@
 ---
 title: "Backup & Restore"
+description: Backup and restore procedures for Fluxbase deployments. Database dumps, storage backups, and disaster recovery best practices.
 ---
 
 This guide covers backup and restore procedures for Fluxbase deployments. Regular backups are critical for disaster recovery and should be part of your operational practices.

@@ -1,5 +1,6 @@
 ---
 title: "Admin Dashboard"
+description: Manage your Fluxbase instance with the built-in admin dashboard. Database explorer, user management, storage browser, and real-time monitoring.
 ---
 
 The Fluxbase Admin Dashboard provides powerful tools for managing your Fluxbase instance, debugging issues, and providing customer support.

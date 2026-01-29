@@ -1,5 +1,6 @@
 ---
 title: "Kubernetes Deployment"
+description: Deploy Fluxbase on Kubernetes using Helm charts. High availability, horizontal pod autoscaling, Prometheus metrics, and TLS support.
 ---
 
 Deploy Fluxbase on Kubernetes using Helm for production-grade, highly available infrastructure.

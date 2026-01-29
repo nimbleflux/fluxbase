@@ -1,5 +1,6 @@
 ---
 title: DDL SDK
+description: Programmatic database schema management with the Fluxbase DDL SDK. Create schemas, manage tables, and modify database structure from TypeScript.
 ---
 
 The DDL (Data Definition Language) SDK provides programmatic control over database schemas and tables. Use this module to create schemas, manage tables, and modify your database structure directly from your TypeScript application.

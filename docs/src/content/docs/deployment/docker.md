@@ -1,5 +1,6 @@
 ---
 title: "Docker Deployment"
+description: Deploy Fluxbase using Docker and Docker Compose. Official images with health checks, embedded admin UI, and automatic migrations.
 ---
 
 Deploy Fluxbase using Docker and Docker Compose for simple production environments and development.

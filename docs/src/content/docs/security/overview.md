@@ -1,5 +1,6 @@
 ---
 title: Security Overview
+description: Fluxbase security architecture with authentication, authorization, network protection, and database-level security. Defense in depth approach.
 ---
 
 Fluxbase is built with security as a top priority. This page provides an overview of the security features and best practices implemented throughout the platform.

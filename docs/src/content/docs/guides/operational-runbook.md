@@ -1,5 +1,6 @@
 ---
 title: "Operational Runbook"
+description: Production operations guide for Fluxbase. Troubleshooting common issues, incident response, performance debugging, and security procedures.
 ---
 
 This runbook provides guidance for operating Fluxbase in production, including troubleshooting common issues, handling incidents, and maintaining system health.

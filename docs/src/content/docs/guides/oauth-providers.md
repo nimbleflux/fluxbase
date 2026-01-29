@@ -1,5 +1,6 @@
 ---
 title: "OAuth Providers"
+description: Configure OAuth 2.0 and OpenID Connect authentication in Fluxbase. Integrate Google, GitHub, Microsoft, Apple, and custom OIDC providers for social login.
 ---
 
 Fluxbase supports OAuth 2.0 and OpenID Connect (OIDC) authentication with multiple providers. Integrate with identity providers like Google, GitHub, Microsoft, Apple, and any OIDC-compliant provider.

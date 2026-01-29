@@ -1,5 +1,6 @@
 ---
 title: "Configuration Reference"
+description: Complete reference for configuring Fluxbase via YAML config file or environment variables including database, authentication, storage, and realtime settings.
 ---
 
 Complete reference for configuring Fluxbase via configuration file or environment variables.

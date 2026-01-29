@@ -1,5 +1,6 @@
 ---
 title: "CAPTCHA Protection"
+description: Protect authentication endpoints with CAPTCHA verification in Fluxbase. Support for hCaptcha, reCAPTCHA v3, Cloudflare Turnstile, and self-hosted Cap.
 ---
 
 Fluxbase supports CAPTCHA verification to protect authentication endpoints from bots and automated abuse. Multiple providers are supported including hCaptcha, reCAPTCHA v3, Cloudflare Turnstile, and the self-hosted Cap provider.

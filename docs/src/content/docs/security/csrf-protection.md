@@ -1,5 +1,6 @@
 ---
 title: CSRF Protection
+description: Built-in CSRF protection in Fluxbase to prevent cross-site request forgery attacks. SameSite cookies and origin validation.
 ---
 
 Cross-Site Request Forgery (CSRF) is an attack that tricks users into performing unwanted actions on a web application where they're authenticated. Fluxbase provides built-in CSRF protection to prevent these attacks.

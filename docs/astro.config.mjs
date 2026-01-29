@@ -1,10 +1,12 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import starlightTypeDoc from "starlight-typedoc";
+import sitemap from "@astrojs/sitemap";
 
 export default defineConfig({
   site: "https://fluxbase.eu",
   integrations: [
+    sitemap(),
     starlight({
       title: "Fluxbase",
       description: "Lightweight Backend-as-a-Service Alternative to Supabase",
@@ -33,6 +35,84 @@ export default defineConfig({
         Footer: "./src/components/Footer.astro",
       },
       head: [
+        // OpenGraph meta tags for social sharing
+        {
+          tag: "meta",
+          attrs: { property: "og:type", content: "website" },
+        },
+        {
+          tag: "meta",
+          attrs: { property: "og:site_name", content: "Fluxbase" },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image",
+            content: "https://fluxbase.eu/og-image.png",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: { property: "og:image:width", content: "1200" },
+        },
+        {
+          tag: "meta",
+          attrs: { property: "og:image:height", content: "630" },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image:alt",
+            content: "Fluxbase - Lightweight Backend-as-a-Service",
+          },
+        },
+        // Twitter Card meta tags
+        {
+          tag: "meta",
+          attrs: { name: "twitter:card", content: "summary_large_image" },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "twitter:image",
+            content: "https://fluxbase.eu/og-image.png",
+          },
+        },
+        // JSON-LD structured data
+        {
+          tag: "script",
+          attrs: { type: "application/ld+json" },
+          content: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "Fluxbase",
+            applicationCategory: "DeveloperApplication",
+            operatingSystem: "Cross-platform",
+            description:
+              "Lightweight Backend-as-a-Service (BaaS) - a single-binary Supabase alternative with PostgreSQL as the only dependency.",
+            url: "https://fluxbase.eu",
+            offers: {
+              "@type": "Offer",
+              price: "0",
+              priceCurrency: "USD",
+            },
+            author: {
+              "@type": "Organization",
+              name: "Fluxbase",
+              url: "https://fluxbase.eu",
+            },
+          }),
+        },
+        // Preconnect for external resources
+        {
+          tag: "link",
+          attrs: { rel: "preconnect", href: "https://umami.wayli.app" },
+        },
+        {
+          tag: "link",
+          attrs: { rel: "dns-prefetch", href: "https://cdn.jsdelivr.net" },
+        },
+        // Analytics
         {
           tag: "script",
           attrs: {

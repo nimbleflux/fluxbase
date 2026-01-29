@@ -1,5 +1,6 @@
 ---
 title: "Deployment Overview"
+description: Choose the right Fluxbase deployment option for your needs. Docker Compose, Kubernetes Helm charts, or cloud platforms for any scale.
 ---
 
 Fluxbase offers multiple deployment options to suit different production scenarios. Choose the deployment method that best fits your infrastructure and scaling needs.

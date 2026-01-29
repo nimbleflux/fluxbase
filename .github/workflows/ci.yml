@@ -540,7 +540,7 @@ jobs:
       - name: Check for broken links
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --config .lychee.toml docs/dist
+          args: --config .lychee.toml --root-dir ${{ github.workspace }}/docs/dist docs/dist
           fail: true
 
       - name: Verify build output

@@ -1,5 +1,6 @@
 ---
 title: "Knowledge Bases & RAG"
+description: Create knowledge bases for RAG-powered chatbots in Fluxbase. Upload documents, automatic chunking and embedding, and semantic search with pgvector.
 ---
 
 Fluxbase provides built-in support for Retrieval-Augmented Generation (RAG), allowing you to create knowledge bases that provide context to AI chatbots. This enables chatbots to answer questions based on your custom documentation, product information, or any text content.

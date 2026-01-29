@@ -1,5 +1,6 @@
 ---
 title: "File Storage"
+description: Configure file storage in Fluxbase with local filesystem or S3-compatible backends. Upload, download, and manage files with signed URLs and access policies.
 ---
 
 Fluxbase provides file storage supporting local filesystem or S3-compatible storage (MinIO, AWS S3, Wasabi, DigitalOcean Spaces, etc.).

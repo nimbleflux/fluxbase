@@ -1,5 +1,6 @@
 ---
 title: "Production Deployment Checklist"
+description: Complete production deployment checklist for Fluxbase. Security, database, monitoring, and performance configuration requirements.
 ---
 
 Complete this checklist before deploying Fluxbase to production to ensure security, reliability, and performance.

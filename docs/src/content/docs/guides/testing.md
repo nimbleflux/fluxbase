@@ -1,5 +1,6 @@
 ---
 title: Testing Guide
+description: Test your Fluxbase application with comprehensive testing infrastructure. Unit tests, integration tests, E2E tests, and performance testing for Go and TypeScript.
 ---
 
 Fluxbase has comprehensive testing infrastructure covering unit tests, integration tests, end-to-end tests, and performance tests for both backend (Go) and SDK (TypeScript).

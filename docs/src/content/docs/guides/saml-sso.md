@@ -1,5 +1,6 @@
 ---
 title: "SAML SSO"
+description: Configure SAML 2.0 Single Sign-On in Fluxbase for enterprise authentication. Integrate with Okta, Azure AD, OneLogin, and other SAML identity providers.
 ---
 
 Fluxbase supports SAML 2.0 Single Sign-On (SSO) for enterprise authentication. Integrate with identity providers like Okta, Azure AD, OneLogin, Google Workspace, and any SAML 2.0 compliant IdP.

@@ -1,5 +1,6 @@
 ---
 title: "User Impersonation SDK"
+description: View data as different users with the Fluxbase Impersonation SDK. Debug issues, test RLS policies, and provide customer support with full audit trails.
 ---
 
 The Impersonation SDK allows administrators to view data as different users, anonymous visitors, or with service-level permissions. This is invaluable for debugging issues, testing RLS policies, and providing customer support.

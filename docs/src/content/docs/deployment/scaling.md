@@ -1,5 +1,6 @@
 ---
 title: "Scaling Guide"
+description: Scale Fluxbase for production workloads. Horizontal and vertical scaling strategies, database optimization, caching, and load balancing.
 ---
 
 Learn how to scale Fluxbase to handle increased traffic and optimize performance for production workloads.

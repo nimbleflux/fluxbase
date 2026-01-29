@@ -1,5 +1,6 @@
 ---
 title: "Rate Limiting"
+description: Configure API rate limiting in Fluxbase to protect against abuse. IP-based, user-based, and API key limits with endpoint-specific rules and tiered access.
 ---
 
 Fluxbase includes built-in rate limiting to protect your API from abuse, prevent brute-force attacks, and ensure fair resource usage across users.

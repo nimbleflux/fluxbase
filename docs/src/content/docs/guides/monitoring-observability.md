@@ -1,5 +1,6 @@
 ---
 title: Monitoring & Observability
+description: Monitor Fluxbase with Prometheus metrics, health checks, and structured logging. Integrate with Grafana dashboards for production observability.
 ---
 
 Fluxbase provides comprehensive monitoring and observability features to help you track system health, performance, and troubleshoot issues in production.

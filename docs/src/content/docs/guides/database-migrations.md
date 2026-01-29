@@ -1,5 +1,6 @@
 ---
 title: Database Migrations
+description: Manage database schema changes in Fluxbase with automatic migrations. Use the dual migration system for platform and custom application migrations.
 ---
 
 Fluxbase supports automatic database migrations that run on startup. The platform includes a dual migration system:

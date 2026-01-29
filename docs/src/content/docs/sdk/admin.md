@@ -1,5 +1,6 @@
 ---
 title: "Admin SDK"
+description: Programmatic access to Fluxbase admin features. User management, authentication, and system configuration for building admin dashboards and automation.
 ---
 
 The Admin SDK provides programmatic access to Fluxbase instance management, including user management, authentication, and system configuration.

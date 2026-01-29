@@ -1,5 +1,6 @@
 ---
 title: "Email Services"
+description: Configure email services in Fluxbase for authentication emails. Support for SMTP, SendGrid, Mailgun, and AWS SES with customizable HTML templates.
 ---
 
 Fluxbase includes a built-in email system for sending authentication emails (magic links, password resets, email verification) and custom transactional emails.

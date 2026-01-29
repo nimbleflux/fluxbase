@@ -1,5 +1,6 @@
 ---
 title: "Background Jobs"
+description: Execute long-running tasks asynchronously in Fluxbase with progress tracking, retry logic, cron scheduling, and real-time updates via WebSockets.
 ---
 
 Fluxbase provides a powerful background jobs system for executing long-running tasks asynchronously with progress tracking, retry logic, and role-based access control.

@@ -1,5 +1,6 @@
 ---
 title: "Webhooks"
+description: Configure webhooks in Fluxbase to receive real-time HTTP notifications for database events like INSERT, UPDATE, and DELETE operations.
 ---
 
 Webhooks allow you to receive real-time notifications when events occur in your Fluxbase database. Instead of continuously polling for changes, webhooks push data to your application instantly.

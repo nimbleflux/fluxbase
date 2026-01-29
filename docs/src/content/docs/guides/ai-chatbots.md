@@ -1,5 +1,6 @@
 ---
 title: "AI Chatbots"
+description: Build natural language interfaces to your database with Fluxbase AI chatbots. WebSocket streaming, custom TypeScript chatbots, and RAG support with OpenAI or Ollama.
 ---
 
 Fluxbase provides WebSocket-based AI chatbot integration, allowing you to build natural language interfaces to your database with streaming responses and custom behavior.

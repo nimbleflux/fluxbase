@@ -2,6 +2,8 @@
 # https://lychee.cli.rs/configuration/
 
 # Root directory for resolving root-relative links in local files
+# Note: In CI, this is overridden with an absolute path via --root-dir
+# For local use, run from the repo root: lychee --root-dir $(pwd)/docs/dist docs/dist
 root_dir = "docs/dist"
 
 # Exclude these URL patterns from checking

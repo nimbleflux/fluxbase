@@ -1,5 +1,6 @@
 ---
 title: "RPC (Remote Procedures)"
+description: Define custom SQL-based remote procedures in Fluxbase with type-safe schemas, access control, and execution tracking for complex queries and business logic.
 ---
 
 Fluxbase provides a Remote Procedure Call (RPC) system that allows you to define custom SQL-based procedures with type-safe input/output schemas, access control, and execution tracking.

@@ -1,5 +1,6 @@
 ---
 title: "Advanced Features"
+description: Overview of advanced Fluxbase SDK features including admin management, client keys, webhooks, DDL operations, and configuration management.
 ---
 
 This guide provides an overview of all advanced SDK features for admin operations, covering the complete suite of management and configuration tools available in Fluxbase.

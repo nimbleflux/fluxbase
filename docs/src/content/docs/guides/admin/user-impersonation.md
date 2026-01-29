@@ -1,5 +1,6 @@
 ---
 title: "User Impersonation"
+description: Debug user issues and test RLS policies by impersonating users in the Fluxbase admin dashboard. View data exactly as different user types see it.
 ---
 
 User impersonation allows admins to view the database explorer as different user types to debug issues, test Row Level Security (RLS) policies, and provide customer support.

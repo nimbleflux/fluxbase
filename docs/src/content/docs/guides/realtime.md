@@ -1,5 +1,6 @@
 ---
 title: "Realtime Subscriptions"
+description: Subscribe to real-time database changes via WebSockets in Fluxbase. Get instant notifications for INSERT, UPDATE, and DELETE events with RLS support.
 ---
 
 Fluxbase provides real-time database change notifications via WebSockets, powered by PostgreSQL's LISTEN/NOTIFY system.

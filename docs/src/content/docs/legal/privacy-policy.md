@@ -1,5 +1,6 @@
 ---
 title: Privacy Policy
+description: Fluxbase privacy policy explaining data handling for the documentation website, admin dashboard, and self-hosted software.
 ---
 
 This privacy policy explains how Fluxbase handles data when you use our software and services.

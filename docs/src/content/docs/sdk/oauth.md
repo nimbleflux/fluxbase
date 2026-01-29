@@ -1,5 +1,6 @@
 ---
 title: "OAuth Provider Configuration SDK"
+description: Configure OAuth providers programmatically with the Fluxbase SDK. Manage GitHub, Google, and other identity providers plus authentication settings.
 ---
 
 The OAuth SDK provides comprehensive tools for managing OAuth providers and authentication settings in Fluxbase. Configure third-party authentication providers (GitHub, Google, GitLab, etc.) and customize authentication behavior including password requirements, session management, and signup controls.

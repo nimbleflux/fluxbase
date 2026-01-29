@@ -1,5 +1,6 @@
 ---
 title: Logging
+description: Configure structured JSON logging in Fluxbase with zerolog. Control log levels, output formats, and integrate with log aggregation systems.
 ---
 
 Fluxbase provides comprehensive structured logging using [zerolog](https://github.com/rs/zerolog), a fast and lightweight logging library that outputs JSON-formatted logs for easy parsing and analysis.

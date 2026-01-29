@@ -1,5 +1,6 @@
 ---
 title: "Row Level Security (RLS)"
+description: Implement PostgreSQL Row Level Security in Fluxbase for fine-grained access control. Build secure multi-tenant applications with automatic database-level enforcement.
 ---
 
 Row Level Security (RLS) is PostgreSQL's feature for controlling which rows users can access in database tables. Fluxbase provides seamless RLS integration for building secure multi-tenant applications.

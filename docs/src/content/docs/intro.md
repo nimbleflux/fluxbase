@@ -1,5 +1,6 @@
 ---
 title: Introduction
+description: Learn about Fluxbase, a lightweight single-binary Backend-as-a-Service (BaaS) alternative to Supabase with PostgreSQL, authentication, realtime, storage, and edge functions.
 ---
 
 :::caution[Beta Software]

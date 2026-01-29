@@ -1,5 +1,6 @@
 ---
 title: Configuration Management
+description: Manage Fluxbase settings through environment variables or the admin UI. Understand configuration precedence and infrastructure-as-code practices.
 ---
 
 Fluxbase settings can be configured through environment variables or the admin UI. Understanding how these interact is crucial for proper system administration.

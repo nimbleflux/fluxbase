@@ -1,5 +1,6 @@
 ---
 title: "Authentication"
+description: Implement JWT-based authentication in Fluxbase with email/password, magic links, OAuth providers, anonymous auth, and two-factor authentication (TOTP).
 ---
 
 Fluxbase provides JWT-based authentication with support for email/password, magic links, OAuth, anonymous auth, and two-factor authentication.

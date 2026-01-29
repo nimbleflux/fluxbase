@@ -1,5 +1,6 @@
 ---
 title: "Application Settings Guide"
+description: Manage Fluxbase application settings with the unified app.settings table. Database schema, SDK usage, RLS policies, and migration guide.
 ---
 
 This guide explains how to use Fluxbase's unified application settings system with the `app.settings` table.

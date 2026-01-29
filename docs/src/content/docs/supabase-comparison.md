@@ -1,5 +1,6 @@
 ---
 title: "Fluxbase vs Supabase"
+description: Compare Fluxbase and Supabase features, deployment complexity, SDK compatibility, and migration considerations for choosing the right BaaS platform.
 ---
 
 Fluxbase provides API-compatible alternatives to Supabase's core features in a single container (or binary). If you're evaluating Fluxbase as a Supabase or Firebase alternative, this guide highlights key differences.

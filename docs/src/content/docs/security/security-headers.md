@@ -1,5 +1,6 @@
 ---
 title: Security Headers
+description: HTTP security headers in Fluxbase including Content-Security-Policy, HSTS, X-Frame-Options, and other browser security controls.
 ---
 
 HTTP security headers are an essential part of web application security. They instruct browsers how to handle your application's content and help protect against common web vulnerabilities. Fluxbase automatically sets secure headers on all responses.

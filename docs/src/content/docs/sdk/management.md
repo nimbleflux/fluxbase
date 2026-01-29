@@ -1,5 +1,6 @@
 ---
 title: Management SDK
+description: Manage client keys, webhooks, and user invitations with the Fluxbase Management SDK. Service-to-service authentication and event-driven integrations.
 ---
 
 The Management SDK provides tools for managing client keys, webhooks, and invitations in your Fluxbase instance. These features allow you to:

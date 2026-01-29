@@ -1,5 +1,6 @@
 ---
 title: "Image Transformations"
+description: Transform images on-the-fly in Fluxbase storage. Resize, crop, convert formats (JPEG, PNG, WebP, AVIF), and adjust quality via URL parameters.
 ---
 
 Fluxbase provides on-the-fly image transformation for files stored in Storage buckets. Transform images by adding query parameters to download URLs - resize, crop, convert formats, and adjust quality without modifying original files.

@@ -1,5 +1,6 @@
 ---
 title: "Edge Functions"
+description: Deploy serverless TypeScript/JavaScript functions with Deno runtime in Fluxbase. Process webhooks, integrate APIs, and run scheduled tasks.
 ---
 
 Edge Functions are serverless functions powered by Deno that execute JavaScript/TypeScript code in response to HTTP requests.

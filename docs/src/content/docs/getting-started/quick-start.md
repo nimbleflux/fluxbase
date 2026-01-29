@@ -1,5 +1,6 @@
 ---
 title: "Quick Start"
+description: Get Fluxbase running in under 5 minutes with Docker. Set up PostgreSQL, authentication, and your first API endpoint.
 ---
 
 Get Fluxbase running in under 5 minutes using Docker.

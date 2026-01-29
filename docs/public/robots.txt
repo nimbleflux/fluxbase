@@ -1,0 +1,8 @@
+# Fluxbase Documentation
+# https://fluxbase.eu
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://fluxbase.eu/sitemap-index.xml

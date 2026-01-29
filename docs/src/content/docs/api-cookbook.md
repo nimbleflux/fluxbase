@@ -1,5 +1,6 @@
 ---
 title: "API Cookbook"
+description: Production-ready code examples for Fluxbase including authentication, database queries, realtime subscriptions, storage operations, and edge functions.
 ---
 
 Production-ready code examples for common Fluxbase use cases.

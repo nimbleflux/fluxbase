@@ -1,5 +1,6 @@
 ---
 title: Security Best Practices
+description: Comprehensive security best practices for Fluxbase deployment. Authentication, database security, secrets management, and incident response.
 ---
 
 This guide provides comprehensive security best practices for deploying and maintaining a secure Fluxbase instance.

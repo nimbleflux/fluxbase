@@ -1,5 +1,6 @@
 ---
 title: Settings SDK
+description: Manage system and application settings with the Fluxbase Settings SDK. Authentication, features, email, and security configuration programmatically.
 ---
 
 The Settings SDK provides comprehensive tools for managing system and application settings in your Fluxbase instance. These features allow you to:
