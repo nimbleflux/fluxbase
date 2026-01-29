@@ -699,44 +699,6 @@ func (s *Server) GetSecurityWarnings(c *fiber.Ctx) error {
 		}
 	}
 
-	// Check 8: Tables without user ownership pattern (no user_id/owner_id column) - excluding extension-owned tables
-	rows8, err := s.db.Query(ctx, `
-		SELECT t.table_schema, t.table_name
-		FROM information_schema.tables t
-		JOIN pg_class c ON c.relname = t.table_name
-		JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = t.table_schema
-		LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
-		WHERE t.table_schema = 'public'
-		AND t.table_type = 'BASE TABLE'
-		AND c.relrowsecurity = true
-		AND NOT EXISTS (
-			SELECT 1 FROM information_schema.columns col
-			WHERE col.table_schema = t.table_schema
-			AND col.table_name = t.table_name
-			AND col.column_name ~* '(user_id|owner_id|created_by|author_id)'
-		)
-		AND t.table_name NOT IN ('_migrations', 'schema_migrations')
-		AND d.objid IS NULL
-	`)
-	if err == nil {
-		defer rows8.Close()
-		for rows8.Next() {
-			var schemaName, tableName string
-			if err := rows8.Scan(&schemaName, &tableName); err != nil {
-				continue
-			}
-			warnings = append(warnings, SecurityWarning{
-				ID:         fmt.Sprintf("no-owner-column-%s-%s", schemaName, tableName),
-				Severity:   "medium",
-				Category:   "design",
-				Schema:     schemaName,
-				Table:      tableName,
-				Message:    fmt.Sprintf("Table '%s.%s' has RLS but no user_id/owner_id column - row-level ownership may be difficult", schemaName, tableName),
-				Suggestion: "Consider adding a user_id or owner_id column to enable user-based access control",
-			})
-		}
-	}
-
 	// Calculate summary
 	summary := struct {
 		Total    int `json:"total"`
