@@ -28,8 +28,8 @@ auth:
   jwt_secret: "your-secret-key-change-in-production"
   jwt_expiry: "15m"
   refresh_expiry: "168h"    # 7 days
-  password_min_length: 12           # Increased for better security
-  enable_signup: true
+  password_min_length: 12   # Increased for better security
+  signup_enabled: true      # Enable user registration
 
 # Security configuration
 security:

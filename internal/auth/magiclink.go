@@ -234,6 +234,7 @@ type MagicLinkService struct {
 type EmailSender interface {
 	SendMagicLink(ctx context.Context, to, token, link string) error
 	SendPasswordReset(ctx context.Context, to, token, link string) error
+	SendInvitationEmail(ctx context.Context, to, inviterName, inviteLink string) error
 }
 
 // NewMagicLinkService creates a new magic link service

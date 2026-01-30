@@ -910,6 +910,13 @@ func setDefaults() {
 	viper.SetDefault("mcp.oauth.token_expiry", "1h")           // 1 hour access token expiry
 	viper.SetDefault("mcp.oauth.refresh_token_expiry", "168h") // 7 days refresh token expiry
 
+	// MCP OAuth defaults (OAuth 2.1 authentication for MCP clients)
+	viper.SetDefault("mcp.oauth.enabled", true)                     // Enable OAuth for MCP
+	viper.SetDefault("mcp.oauth.dcr_enabled", true)                 // Enable Dynamic Client Registration
+	viper.SetDefault("mcp.oauth.token_expiry", "1h")                // Access token lifetime
+	viper.SetDefault("mcp.oauth.refresh_token_expiry", "168h")      // Refresh token lifetime (7 days)
+	viper.SetDefault("mcp.oauth.allowed_redirect_uris", []string{}) // Empty = use defaults
+
 	// Branching defaults (database branching for isolated environments)
 	viper.SetDefault("branching.enabled", false)                         // Disabled by default
 	viper.SetDefault("branching.max_branches_per_user", 5)               // Max 5 branches per user

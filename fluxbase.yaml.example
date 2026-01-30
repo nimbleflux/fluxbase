@@ -16,6 +16,18 @@ server:
   write_timeout: "300s"                  # FLUXBASE_SERVER_WRITE_TIMEOUT - HTTP write timeout (5 minutes for large file streaming)
   idle_timeout: "120s"                   # FLUXBASE_SERVER_IDLE_TIMEOUT - HTTP idle timeout (2 minutes)
   body_limit: 2147483648                # FLUXBASE_SERVER_BODY_LIMIT - Maximum request body size (2GB)
+  allowed_ip_ranges: []                 # FLUXBASE_SERVER_ALLOWED_IP_RANGES - Global IP allowlist (empty = allow all)
+
+  # Per-endpoint body limits (granular control over request sizes)
+  body_limits:
+    enabled: true                       # FLUXBASE_SERVER_BODY_LIMITS_ENABLED - Enable per-endpoint body limits
+    default_limit: 1048576              # FLUXBASE_SERVER_BODY_LIMITS_DEFAULT_LIMIT - Default limit (1MB)
+    rest_limit: 1048576                 # FLUXBASE_SERVER_BODY_LIMITS_REST_LIMIT - REST CRUD operations (1MB)
+    auth_limit: 65536                   # FLUXBASE_SERVER_BODY_LIMITS_AUTH_LIMIT - Auth endpoints (64KB)
+    storage_limit: 524288000            # FLUXBASE_SERVER_BODY_LIMITS_STORAGE_LIMIT - File uploads (500MB)
+    bulk_limit: 10485760                # FLUXBASE_SERVER_BODY_LIMITS_BULK_LIMIT - Bulk operations/RPC (10MB)
+    admin_limit: 5242880                # FLUXBASE_SERVER_BODY_LIMITS_ADMIN_LIMIT - Admin endpoints (5MB)
+    max_json_depth: 64                  # FLUXBASE_SERVER_BODY_LIMITS_MAX_JSON_DEPTH - Maximum JSON nesting depth
 
 # Database Configuration
 database:
@@ -281,12 +293,24 @@ storage:
 realtime:
   enabled: true                         # FLUXBASE_REALTIME_ENABLED - Enable realtime subscriptions
   max_connections: 1000                 # FLUXBASE_REALTIME_MAX_CONNECTIONS - Maximum WebSocket connections
+  max_connections_per_user: 10          # FLUXBASE_REALTIME_MAX_CONNECTIONS_PER_USER - Max connections per user (0 = unlimited)
+  max_connections_per_ip: 20            # FLUXBASE_REALTIME_MAX_CONNECTIONS_PER_IP - Max connections per IP for anonymous (0 = unlimited)
   ping_interval: "30s"                  # FLUXBASE_REALTIME_PING_INTERVAL - WebSocket ping interval
   pong_timeout: "60s"                   # FLUXBASE_REALTIME_PONG_TIMEOUT - WebSocket pong timeout
   write_buffer_size: 1024               # FLUXBASE_REALTIME_WRITE_BUFFER_SIZE - WebSocket write buffer size (bytes)
   read_buffer_size: 1024                # FLUXBASE_REALTIME_READ_BUFFER_SIZE - WebSocket read buffer size (bytes)
   message_size_limit: 524288            # FLUXBASE_REALTIME_MESSAGE_SIZE_LIMIT - Maximum message size (512KB)
   channel_buffer_size: 100              # FLUXBASE_REALTIME_CHANNEL_BUFFER_SIZE - Channel buffer size
+  rls_cache_size: 100000                # FLUXBASE_REALTIME_RLS_CACHE_SIZE - RLS permission cache entries
+  rls_cache_ttl: "30s"                  # FLUXBASE_REALTIME_RLS_CACHE_TTL - RLS cache TTL
+
+  # Advanced performance tuning
+  listener_pool_size: 2                 # FLUXBASE_REALTIME_LISTENER_POOL_SIZE - LISTEN connections for redundancy
+  notification_workers: 4               # FLUXBASE_REALTIME_NOTIFICATION_WORKERS - Workers for notification processing
+  notification_queue_size: 1000         # FLUXBASE_REALTIME_NOTIFICATION_QUEUE_SIZE - Queue size per worker
+  client_message_queue_size: 256        # FLUXBASE_REALTIME_CLIENT_MESSAGE_QUEUE_SIZE - Per-client message queue
+  slow_client_threshold: 100            # FLUXBASE_REALTIME_SLOW_CLIENT_THRESHOLD - Queue threshold for slow client detection
+  slow_client_timeout: "30s"            # FLUXBASE_REALTIME_SLOW_CLIENT_TIMEOUT - Duration before disconnecting slow clients
 
 # Email Configuration
 email:
@@ -336,6 +360,13 @@ functions:
     - "10.0.0.0/8"                      # Private networks (AWS VPC, etc.)
     - "192.168.0.0/16"                  # Private networks
     - "127.0.0.0/8"                     # Loopback (localhost)
+
+# Deno Runtime Configuration
+# Global settings for the Deno runtime used by edge functions and background jobs
+deno:
+  npm_registry: ""                      # FLUXBASE_DENO_NPM_REGISTRY - Custom npm registry URL (e.g., https://npm.your-company.com/)
+  jsr_registry: ""                      # FLUXBASE_DENO_JSR_REGISTRY - Custom JSR registry URL (e.g., https://jsr.your-company.com/)
+  # Note: Set these for air-gapped environments without internet access
 
 # REST API Configuration
 api:
@@ -387,6 +418,9 @@ jobs:
   rpc_logs_retention_days: 30           # FLUXBASE_JOBS_RPC_LOGS_RETENTION_DAYS - RPC execution logs retention
   jobs_logs_retention_days: 30          # FLUXBASE_JOBS_JOBS_LOGS_RETENTION_DAYS - Job execution logs retention
 
+  # Graceful shutdown
+  graceful_shutdown_timeout: "5m"       # FLUXBASE_JOBS_GRACEFUL_SHUTDOWN_TIMEOUT - Time to wait for running jobs during shutdown
+
 # OpenTelemetry Tracing Configuration
 # Distributed tracing for observability (Jaeger, Tempo, Honeycomb, etc.)
 tracing:
@@ -396,6 +430,12 @@ tracing:
   environment: "development"            # FLUXBASE_TRACING_ENVIRONMENT - Environment name (development, staging, production)
   sample_rate: 1.0                      # FLUXBASE_TRACING_SAMPLE_RATE - Sampling rate (0.0-1.0, 1.0 = 100%)
   insecure: true                        # FLUXBASE_TRACING_INSECURE - Use insecure connection (disable TLS)
+
+# Prometheus Metrics Configuration
+metrics:
+  enabled: true                         # FLUXBASE_METRICS_ENABLED - Enable Prometheus metrics endpoint
+  port: 9090                            # FLUXBASE_METRICS_PORT - Port for metrics server
+  path: "/metrics"                      # FLUXBASE_METRICS_PATH - Path for metrics endpoint
 
 # AI/Chatbot Configuration
 ai:
@@ -503,6 +543,15 @@ mcp:
   rate_limit_per_min: 100               # FLUXBASE_MCP_RATE_LIMIT_PER_MIN - Rate limit per minute per client key
   tools_dir: "/app/mcp-tools"           # FLUXBASE_MCP_TOOLS_DIR - Directory for custom MCP tool files
   auto_load_on_boot: true               # FLUXBASE_MCP_AUTO_LOAD_ON_BOOT - Auto-load custom tools on startup
+
+  # MCP OAuth 2.1 Configuration
+  # Enables zero-config authentication for MCP clients like Claude Desktop
+  oauth:
+    enabled: true                       # FLUXBASE_MCP_OAUTH_ENABLED - Enable OAuth 2.1 for MCP clients
+    dcr_enabled: true                   # FLUXBASE_MCP_OAUTH_DCR_ENABLED - Enable Dynamic Client Registration
+    token_expiry: "1h"                  # FLUXBASE_MCP_OAUTH_TOKEN_EXPIRY - Access token lifetime
+    refresh_token_expiry: "168h"        # FLUXBASE_MCP_OAUTH_REFRESH_TOKEN_EXPIRY - Refresh token lifetime (7 days)
+    allowed_redirect_uris: []           # FLUXBASE_MCP_OAUTH_ALLOWED_REDIRECT_URIS - Allowed redirect URIs (empty = use defaults)
 
 # Database Branching Configuration
 # Create isolated database branches for development/testing

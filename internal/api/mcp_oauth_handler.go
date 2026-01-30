@@ -1,157 +1,152 @@
 package api
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/fluxbase-eu/fluxbase/internal/auth"
 	"github.com/fluxbase-eu/fluxbase/internal/config"
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 )
 
-// MCPOAuthHandler handles OAuth 2.1 endpoints for MCP authentication
+// MCPOAuthHandler handles OAuth 2.1 authentication for MCP clients
 type MCPOAuthHandler struct {
-	db        *pgxpool.Pool
-	config    *config.MCPConfig
-	baseURL   string
-	publicURL string
+	db          *pgxpool.Pool
+	config      *config.MCPConfig
+	authService *auth.Service
+	baseURL     string
+	publicURL   string
 }
 
 // NewMCPOAuthHandler creates a new MCP OAuth handler
-func NewMCPOAuthHandler(db *pgxpool.Pool, mcpConfig *config.MCPConfig, baseURL, publicURL string) *MCPOAuthHandler {
+func NewMCPOAuthHandler(db *pgxpool.Pool, cfg *config.MCPConfig, authService *auth.Service, baseURL, publicURL string) *MCPOAuthHandler {
 	return &MCPOAuthHandler{
-		db:        db,
-		config:    mcpConfig,
-		baseURL:   baseURL,
-		publicURL: publicURL,
+		db:          db,
+		config:      cfg,
+		authService: authService,
+		baseURL:     baseURL,
+		publicURL:   publicURL,
 	}
 }
 
-// RegisterRoutes registers the MCP OAuth routes
+// RegisterRoutes registers OAuth routes
+// wellKnownGroup is for /.well-known endpoints (public, no auth)
+// mcpGroup is for /mcp/oauth/* endpoints
 func (h *MCPOAuthHandler) RegisterRoutes(app fiber.Router, mcpGroup fiber.Router) {
-	// Discovery endpoint (public, no auth required)
-	app.Get("/.well-known/oauth-authorization-server", h.handleDiscovery)
+	// Public discovery endpoints (no auth required)
+	app.Get("/.well-known/oauth-authorization-server", h.handleAuthorizationServerMetadata)
+	app.Get("/.well-known/oauth-protected-resource", h.handleProtectedResourceMetadata)
+	app.Get("/.well-known/oauth-protected-resource/mcp", h.handleProtectedResourceMetadata)
 
-	// OAuth endpoints under MCP group
-	mcpGroup.Post("/oauth/register", h.handleRegister)
-	mcpGroup.Get("/oauth/authorize", h.handleAuthorize)
-	mcpGroup.Post("/oauth/authorize", h.handleAuthorizeConsent)
-	mcpGroup.Post("/oauth/token", h.handleToken)
-	mcpGroup.Post("/oauth/revoke", h.handleRevoke)
+	// OAuth endpoints (under /mcp/oauth/*)
+	oauth := mcpGroup.Group("/oauth")
+
+	// Dynamic Client Registration (public)
+	oauth.Post("/register", h.handleClientRegistration)
+
+	// Authorization endpoints
+	oauth.Get("/authorize", h.handleAuthorize)
+	oauth.Post("/authorize", h.handleAuthorizeConsent)
+
+	// Token endpoints
+	oauth.Post("/token", h.handleToken)
+	oauth.Post("/revoke", h.handleRevoke)
 }
 
-// OAuth 2.0 Authorization Server Metadata (RFC 8414)
-type OAuthServerMetadata struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	RegistrationEndpoint              string   `json:"registration_endpoint,omitempty"`
-	RevocationEndpoint                string   `json:"revocation_endpoint,omitempty"`
-	ScopesSupported                   []string `json:"scopes_supported"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
-}
-
-// handleDiscovery handles GET /.well-known/oauth-authorization-server
-func (h *MCPOAuthHandler) handleDiscovery(c *fiber.Ctx) error {
+// handleAuthorizationServerMetadata returns OAuth 2.0 Authorization Server Metadata
+// RFC 8414: https://datatracker.ietf.org/doc/html/rfc8414
+func (h *MCPOAuthHandler) handleAuthorizationServerMetadata(c *fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":             "oauth_disabled",
-			"error_description": "OAuth is not enabled for this MCP server",
+			"error": "OAuth is not enabled for MCP",
 		})
 	}
 
-	baseURL := h.publicURL
-	if baseURL == "" {
-		baseURL = h.baseURL
-	}
+	issuer := h.getIssuer()
 
-	metadata := OAuthServerMetadata{
-		Issuer:                baseURL,
-		AuthorizationEndpoint: fmt.Sprintf("%s%s/oauth/authorize", baseURL, h.config.BasePath),
-		TokenEndpoint:         fmt.Sprintf("%s%s/oauth/token", baseURL, h.config.BasePath),
-		RevocationEndpoint:    fmt.Sprintf("%s%s/oauth/revoke", baseURL, h.config.BasePath),
-		ScopesSupported: []string{
+	metadata := fiber.Map{
+		"issuer":                                issuer,
+		"authorization_endpoint":                issuer + h.config.BasePath + "/oauth/authorize",
+		"token_endpoint":                        issuer + h.config.BasePath + "/oauth/token",
+		"revocation_endpoint":                   issuer + h.config.BasePath + "/oauth/revoke",
+		"response_types_supported":              []string{"code"},
+		"response_modes_supported":              []string{"query"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+		"token_endpoint_auth_methods_supported": []string{"none"}, // Public clients only (PKCE required)
+		"code_challenge_methods_supported":      []string{"S256"},
+		"scopes_supported": []string{
 			"read:tables", "write:tables",
 			"execute:functions", "execute:rpc",
 			"read:storage", "write:storage",
-			"execute:jobs",
-			"read:vectors",
-			"read:schema",
+			"execute:jobs", "read:vectors",
+			"read:schema", "admin:ddl",
 		},
-		ResponseTypesSupported:            []string{"code"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-		CodeChallengeMethodsSupported:     []string{"S256"},
-		TokenEndpointAuthMethodsSupported: []string{"none"},
 	}
 
+	// Add DCR endpoint if enabled
 	if h.config.OAuth.DCREnabled {
-		metadata.RegistrationEndpoint = fmt.Sprintf("%s%s/oauth/register", baseURL, h.config.BasePath)
+		metadata["registration_endpoint"] = issuer + h.config.BasePath + "/oauth/register"
 	}
 
 	return c.JSON(metadata)
 }
 
-// DCR Request (RFC 7591)
-type DCRRequest struct {
-	ClientName    string   `json:"client_name"`
-	RedirectURIs  []string `json:"redirect_uris"`
-	GrantTypes    []string `json:"grant_types,omitempty"`
-	ResponseTypes []string `json:"response_types,omitempty"`
-	Scope         string   `json:"scope,omitempty"`
-	ClientURI     string   `json:"client_uri,omitempty"`
-	LogoURI       string   `json:"logo_uri,omitempty"`
-	Contacts      []string `json:"contacts,omitempty"`
-	TosURI        string   `json:"tos_uri,omitempty"`
-	PolicyURI     string   `json:"policy_uri,omitempty"`
+// handleProtectedResourceMetadata returns OAuth 2.0 Protected Resource Metadata
+// This tells clients where to get authorization
+func (h *MCPOAuthHandler) handleProtectedResourceMetadata(c *fiber.Ctx) error {
+	if !h.config.OAuth.Enabled {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "OAuth is not enabled for MCP",
+		})
+	}
+
+	issuer := h.getIssuer()
+
+	return c.JSON(fiber.Map{
+		"resource":                 issuer + h.config.BasePath,
+		"authorization_servers":    []string{issuer},
+		"scopes_supported":         []string{"read:tables", "write:tables", "read:schema"},
+		"bearer_methods_supported": []string{"header"},
+	})
 }
 
-// DCR Response
-type DCRResponse struct {
-	ClientID         string   `json:"client_id"`
-	ClientName       string   `json:"client_name"`
-	RedirectURIs     []string `json:"redirect_uris"`
-	GrantTypes       []string `json:"grant_types"`
-	ResponseTypes    []string `json:"response_types"`
-	Scope            string   `json:"scope,omitempty"`
-	ClientIDIssuedAt int64    `json:"client_id_issued_at"`
-}
-
-// handleRegister handles POST /mcp/oauth/register (Dynamic Client Registration)
-func (h *MCPOAuthHandler) handleRegister(c *fiber.Ctx) error {
+// handleClientRegistration handles Dynamic Client Registration (DCR)
+// RFC 7591: https://datatracker.ietf.org/doc/html/rfc7591
+func (h *MCPOAuthHandler) handleClientRegistration(c *fiber.Ctx) error {
 	if !h.config.OAuth.Enabled || !h.config.OAuth.DCREnabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":             "registration_not_supported",
+			"error":             "invalid_request",
 			"error_description": "Dynamic Client Registration is not enabled",
 		})
 	}
 
-	var req DCRRequest
+	var req struct {
+		ClientName   string   `json:"client_name"`
+		RedirectURIs []string `json:"redirect_uris"`
+		Scopes       string   `json:"scope"`
+	}
+
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_client_metadata",
+			"error":             "invalid_request",
 			"error_description": "Invalid request body",
 		})
 	}
 
-	// Validate required fields
+	// Validate client name
 	if req.ClientName == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_client_metadata",
-			"error_description": "client_name is required",
-		})
+		req.ClientName = "MCP Client"
 	}
 
+	// Validate redirect URIs
 	if len(req.RedirectURIs) == 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_redirect_uri",
@@ -159,7 +154,6 @@ func (h *MCPOAuthHandler) handleRegister(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate redirect URIs against allowed patterns
 	for _, uri := range req.RedirectURIs {
 		if !h.isRedirectURIAllowed(uri) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -169,66 +163,72 @@ func (h *MCPOAuthHandler) handleRegister(c *fiber.Ctx) error {
 		}
 	}
 
-	// Set defaults
-	grantTypes := req.GrantTypes
-	if len(grantTypes) == 0 {
-		grantTypes = []string{"authorization_code", "refresh_token"}
+	// Parse and validate scopes (default to safe scopes)
+	scopes := []string{"read:tables", "read:schema"}
+	if req.Scopes != "" {
+		scopes = strings.Split(req.Scopes, " ")
 	}
 
-	responseTypes := req.ResponseTypes
-	if len(responseTypes) == 0 {
-		responseTypes = []string{"code"}
+	// Generate client ID
+	clientID, err := generateSecureToken("mcp_", 32)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to generate client ID")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "server_error",
+			"error_description": "Failed to generate client credentials",
+		})
 	}
 
-	// Generate client_id
-	clientID := fmt.Sprintf("mcp_%s", generateRandomString(24))
-
-	// Insert into database
-	ctx := context.Background()
-	_, err := h.db.Exec(ctx, `
-		INSERT INTO auth.mcp_oauth_clients
-		(client_id, client_name, redirect_uris, grant_types, response_types, scope, client_uri, logo_uri, contacts, tos_uri, policy_uri)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, clientID, req.ClientName, req.RedirectURIs, grantTypes, responseTypes, req.Scope,
-		nullIfEmpty(req.ClientURI), nullIfEmpty(req.LogoURI), req.Contacts,
-		nullIfEmpty(req.TosURI), nullIfEmpty(req.PolicyURI))
+	// Insert client into database
+	_, err = h.db.Exec(c.Context(), `
+		INSERT INTO auth.mcp_oauth_clients (client_id, client_name, client_type, redirect_uris, scopes, metadata)
+		VALUES ($1, $2, 'public', $3, $4, $5)
+	`, clientID, req.ClientName, req.RedirectURIs, scopes, map[string]any{
+		"user_agent":    c.Get("User-Agent"),
+		"registered_at": time.Now().UTC(),
+	})
 
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to register MCP OAuth client")
+		log.Error().Err(err).Msg("Failed to register OAuth client")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "server_error",
 			"error_description": "Failed to register client",
 		})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(DCRResponse{
-		ClientID:         clientID,
-		ClientName:       req.ClientName,
-		RedirectURIs:     req.RedirectURIs,
-		GrantTypes:       grantTypes,
-		ResponseTypes:    responseTypes,
-		Scope:            req.Scope,
-		ClientIDIssuedAt: time.Now().Unix(),
+	log.Info().
+		Str("client_id", clientID).
+		Str("client_name", req.ClientName).
+		Strs("redirect_uris", req.RedirectURIs).
+		Msg("MCP OAuth client registered")
+
+	// Return client credentials
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"client_id":                  clientID,
+		"client_name":                req.ClientName,
+		"redirect_uris":              req.RedirectURIs,
+		"scope":                      strings.Join(scopes, " "),
+		"token_endpoint_auth_method": "none",
+		"grant_types":                []string{"authorization_code", "refresh_token"},
+		"response_types":             []string{"code"},
 	})
 }
 
-// handleAuthorize handles GET /mcp/oauth/authorize
+// handleAuthorize handles the authorization endpoint
 func (h *MCPOAuthHandler) handleAuthorize(c *fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":             "oauth_disabled",
-			"error_description": "OAuth is not enabled",
+			"error": "OAuth is not enabled",
 		})
 	}
 
-	// Parse OAuth parameters
 	clientID := c.Query("client_id")
 	redirectURI := c.Query("redirect_uri")
 	responseType := c.Query("response_type")
 	scope := c.Query("scope")
 	state := c.Query("state")
 	codeChallenge := c.Query("code_challenge")
-	codeChallengeMethod := c.Query("code_challenge_method", "S256")
+	codeChallengeMethod := c.Query("code_challenge_method")
 
 	// Validate required parameters
 	if clientID == "" {
@@ -238,21 +238,14 @@ func (h *MCPOAuthHandler) handleAuthorize(c *fiber.Ctx) error {
 		})
 	}
 
-	if redirectURI == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_request",
-			"error_description": "redirect_uri is required",
-		})
-	}
-
 	if responseType != "code" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "unsupported_response_type",
-			"error_description": "Only 'code' response type is supported",
+			"error_description": "Only response_type=code is supported",
 		})
 	}
 
-	// PKCE is required (OAuth 2.1)
+	// PKCE is required for public clients
 	if codeChallenge == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_request",
@@ -260,20 +253,30 @@ func (h *MCPOAuthHandler) handleAuthorize(c *fiber.Ctx) error {
 		})
 	}
 
-	if codeChallengeMethod != "S256" {
+	if codeChallengeMethod != "S256" && codeChallengeMethod != "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_request",
-			"error_description": "Only S256 code_challenge_method is supported",
+			"error_description": "code_challenge_method must be S256",
 		})
 	}
+	if codeChallengeMethod == "" {
+		codeChallengeMethod = "S256"
+	}
 
-	// Validate client exists and redirect_uri matches
-	ctx := context.Background()
-	var clientName string
-	var registeredURIs []string
-	err := h.db.QueryRow(ctx, `
-		SELECT client_name, redirect_uris FROM auth.mcp_oauth_clients WHERE client_id = $1
-	`, clientID).Scan(&clientName, &registeredURIs)
+	// Look up client
+	var client struct {
+		ClientID     string   `db:"client_id"`
+		ClientName   string   `db:"client_name"`
+		RedirectURIs []string `db:"redirect_uris"`
+		Scopes       []string `db:"scopes"`
+		IsActive     bool     `db:"is_active"`
+	}
+
+	err := h.db.QueryRow(c.Context(), `
+		SELECT client_id, client_name, redirect_uris, scopes, is_active
+		FROM auth.mcp_oauth_clients
+		WHERE client_id = $1
+	`, clientID).Scan(&client.ClientID, &client.ClientName, &client.RedirectURIs, &client.Scopes, &client.IsActive)
 
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -282,138 +285,116 @@ func (h *MCPOAuthHandler) handleAuthorize(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate redirect_uri
-	uriValid := false
-	for _, uri := range registeredURIs {
-		if matchRedirectURI(uri, redirectURI) {
-			uriValid = true
-			break
-		}
+	if !client.IsActive {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":             "invalid_client",
+			"error_description": "Client is inactive",
+		})
 	}
-	if !uriValid {
+
+	// Validate redirect URI
+	if redirectURI == "" && len(client.RedirectURIs) == 1 {
+		redirectURI = client.RedirectURIs[0]
+	}
+
+	if !h.isURIInList(redirectURI, client.RedirectURIs) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_redirect_uri",
-			"error_description": "Redirect URI does not match registered URIs",
+			"error_description": "Redirect URI not registered for this client",
 		})
+	}
+
+	// Parse requested scopes (default to client's scopes)
+	requestedScopes := client.Scopes
+	if scope != "" {
+		requestedScopes = strings.Split(scope, " ")
+		// Validate scopes are subset of client's allowed scopes
+		for _, s := range requestedScopes {
+			if !h.contains(client.Scopes, s) {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error":             "invalid_scope",
+					"error_description": fmt.Sprintf("Scope '%s' not allowed for this client", s),
+				})
+			}
+		}
 	}
 
 	// Check if user is authenticated
-	userID := c.Locals("user_id")
+	// Try to get user from session cookie or Bearer token
+	userID := h.extractUserFromRequest(c)
+
+	// If no user is authenticated, redirect to login
+	// The login page should redirect back here after authentication
 	if userID == nil {
-		// Redirect to login with return URL
-		loginURL := fmt.Sprintf("%s/login?return_to=%s", h.publicURL, c.OriginalURL())
-		return c.Redirect(loginURL, fiber.StatusFound)
-	}
+		// Build the authorization URL to return to after login
+		authURL := h.getIssuer() + h.config.BasePath + "/oauth/authorize?" + string(c.Request().URI().QueryString())
 
-	// Parse requested scopes
-	requestedScopes := strings.Fields(scope)
-	if len(requestedScopes) == 0 {
-		requestedScopes = []string{"read:tables"}
-	}
-
-	// Return consent page HTML
-	return c.Type("html").Send([]byte(h.renderConsentPage(
-		clientName, clientID, redirectURI, requestedScopes, state, codeChallenge, codeChallengeMethod,
-	)))
-}
-
-// handleAuthorizeConsent handles POST /mcp/oauth/authorize (consent form submission)
-func (h *MCPOAuthHandler) handleAuthorizeConsent(c *fiber.Ctx) error {
-	if !h.config.OAuth.Enabled {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "oauth_disabled",
-		})
-	}
-
-	// Get form data
-	clientID := c.FormValue("client_id")
-	redirectURI := c.FormValue("redirect_uri")
-	scope := c.FormValue("scope")
-	state := c.FormValue("state")
-	codeChallenge := c.FormValue("code_challenge")
-	codeChallengeMethod := c.FormValue("code_challenge_method")
-	action := c.FormValue("action")
-
-	// Get user ID from auth
-	userID := c.Locals("user_id")
-	if userID == nil {
+		// For now, return an error asking user to authenticate first
+		// In a full implementation, redirect to login page with return_to parameter
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "unauthorized",
+			"error":             "login_required",
+			"error_description": "User authentication required. Please log in to Fluxbase first.",
+			"login_url":         h.getIssuer() + "/auth/login?return_to=" + url.QueryEscape(authURL),
 		})
-	}
-
-	// Handle denial
-	if action == "deny" {
-		return c.Redirect(fmt.Sprintf("%s?error=access_denied&state=%s", redirectURI, state), fiber.StatusFound)
 	}
 
 	// Generate authorization code
-	code := generateRandomString(32)
+	code, err := generateSecureToken("", 32)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to generate authorization code")
+		return h.redirectWithError(c, redirectURI, "server_error", "Failed to generate authorization code", state)
+	}
 
-	// Store authorization code
-	ctx := context.Background()
-	expiresAt := time.Now().Add(10 * time.Minute) // Codes expire in 10 minutes
-
-	_, err := h.db.Exec(ctx, `
-		INSERT INTO auth.mcp_oauth_codes
-		(code, client_id, user_id, redirect_uri, scope, code_challenge, code_challenge_method, state, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, code, clientID, userID, redirectURI, scope, codeChallenge, codeChallengeMethod, state, expiresAt)
+	// Store authorization code (now includes user_id)
+	_, err = h.db.Exec(c.Context(), `
+		INSERT INTO auth.mcp_oauth_codes (code, client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, state)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, code, clientID, userID, redirectURI, requestedScopes, codeChallenge, codeChallengeMethod, state)
 
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to store authorization code")
-		return c.Redirect(fmt.Sprintf("%s?error=server_error&state=%s", redirectURI, state), fiber.StatusFound)
+		return h.redirectWithError(c, redirectURI, "server_error", "Failed to process authorization", state)
 	}
+
+	log.Debug().
+		Str("client_id", clientID).
+		Str("code", code[:8]+"...").
+		Msg("MCP OAuth authorization code issued")
 
 	// Redirect with code
-	redirectURL := fmt.Sprintf("%s?code=%s", redirectURI, code)
+	redirectURL, _ := url.Parse(redirectURI)
+	q := redirectURL.Query()
+	q.Set("code", code)
 	if state != "" {
-		redirectURL += "&state=" + state
+		q.Set("state", state)
 	}
+	redirectURL.RawQuery = q.Encode()
 
-	return c.Redirect(redirectURL, fiber.StatusFound)
+	return c.Redirect(redirectURL.String(), fiber.StatusFound)
 }
 
-// TokenRequest represents an OAuth token request
-type TokenRequest struct {
-	GrantType    string `json:"grant_type" form:"grant_type"`
-	Code         string `json:"code" form:"code"`
-	RedirectURI  string `json:"redirect_uri" form:"redirect_uri"`
-	ClientID     string `json:"client_id" form:"client_id"`
-	CodeVerifier string `json:"code_verifier" form:"code_verifier"`
-	RefreshToken string `json:"refresh_token" form:"refresh_token"`
+// handleAuthorizeConsent handles POST to authorization endpoint (consent form submission)
+func (h *MCPOAuthHandler) handleAuthorizeConsent(c *fiber.Ctx) error {
+	// For now, redirect to GET handler
+	// In a full implementation, this would process user consent
+	return h.handleAuthorize(c)
 }
 
-// TokenResponse represents an OAuth token response
-type TokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-	Scope        string `json:"scope"`
-}
-
-// handleToken handles POST /mcp/oauth/token
+// handleToken handles the token endpoint
 func (h *MCPOAuthHandler) handleToken(c *fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "oauth_disabled",
+			"error": "OAuth is not enabled",
 		})
 	}
 
-	var req TokenRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_request",
-			"error_description": "Invalid request body",
-		})
-	}
+	grantType := c.FormValue("grant_type")
 
-	switch req.GrantType {
+	switch grantType {
 	case "authorization_code":
-		return h.handleAuthorizationCodeGrant(c, &req)
+		return h.handleAuthorizationCodeGrant(c)
 	case "refresh_token":
-		return h.handleRefreshTokenGrant(c, &req)
+		return h.handleRefreshTokenGrant(c)
 	default:
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "unsupported_grant_type",
@@ -422,26 +403,39 @@ func (h *MCPOAuthHandler) handleToken(c *fiber.Ctx) error {
 	}
 }
 
-func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c *fiber.Ctx, req *TokenRequest) error {
-	if req.Code == "" || req.ClientID == "" || req.RedirectURI == "" || req.CodeVerifier == "" {
+// handleAuthorizationCodeGrant exchanges an authorization code for tokens
+func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c *fiber.Ctx) error {
+	code := c.FormValue("code")
+	clientID := c.FormValue("client_id")
+	redirectURI := c.FormValue("redirect_uri")
+	codeVerifier := c.FormValue("code_verifier")
+
+	if code == "" || clientID == "" || codeVerifier == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_request",
-			"error_description": "Missing required parameters",
+			"error_description": "code, client_id, and code_verifier are required",
 		})
 	}
 
 	// Look up and validate authorization code
-	ctx := context.Background()
-	var userID uuid.UUID
-	var storedRedirectURI, storedScope, codeChallenge, codeChallengeMethod string
-	var storedClientID string
-	var expiresAt time.Time
-	var usedAt *time.Time
+	var authCode struct {
+		ClientID            string
+		UserID              *string
+		RedirectURI         string
+		Scopes              []string
+		CodeChallenge       string
+		CodeChallengeMethod string
+		ExpiresAt           time.Time
+	}
 
-	err := h.db.QueryRow(ctx, `
-		SELECT client_id, user_id, redirect_uri, scope, code_challenge, code_challenge_method, expires_at, used_at
-		FROM auth.mcp_oauth_codes WHERE code = $1
-	`, req.Code).Scan(&storedClientID, &userID, &storedRedirectURI, &storedScope, &codeChallenge, &codeChallengeMethod, &expiresAt, &usedAt)
+	err := h.db.QueryRow(c.Context(), `
+		SELECT client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, expires_at
+		FROM auth.mcp_oauth_codes
+		WHERE code = $1
+	`, code).Scan(
+		&authCode.ClientID, &authCode.UserID, &authCode.RedirectURI,
+		&authCode.Scopes, &authCode.CodeChallenge, &authCode.CodeChallengeMethod, &authCode.ExpiresAt,
+	)
 
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -450,49 +444,35 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c *fiber.Ctx, req *TokenR
 		})
 	}
 
-	// Check if code was already used (replay attack prevention)
-	if usedAt != nil {
-		// Revoke all tokens for this authorization (security measure)
-		_, _ = h.db.Exec(ctx, `
-			UPDATE auth.mcp_oauth_tokens SET revoked_at = NOW()
-			WHERE client_id = $1 AND user_id = $2 AND revoked_at IS NULL
-		`, storedClientID, userID)
+	// Delete the code (one-time use)
+	_, _ = h.db.Exec(c.Context(), `DELETE FROM auth.mcp_oauth_codes WHERE code = $1`, code)
 
+	// Validate code hasn't expired
+	if time.Now().After(authCode.ExpiresAt) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_grant",
-			"error_description": "Authorization code already used",
+			"error_description": "Authorization code has expired",
 		})
 	}
 
-	// Mark code as used
-	_, _ = h.db.Exec(ctx, `UPDATE auth.mcp_oauth_codes SET used_at = NOW() WHERE code = $1`, req.Code)
-
-	// Check expiration
-	if time.Now().After(expiresAt) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_grant",
-			"error_description": "Authorization code expired",
-		})
-	}
-
-	// Validate client_id
-	if storedClientID != req.ClientID {
+	// Validate client ID matches
+	if authCode.ClientID != clientID {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_grant",
 			"error_description": "Client ID mismatch",
 		})
 	}
 
-	// Validate redirect_uri
-	if storedRedirectURI != req.RedirectURI {
+	// Validate redirect URI matches (if provided)
+	if redirectURI != "" && authCode.RedirectURI != redirectURI {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_grant",
 			"error_description": "Redirect URI mismatch",
 		})
 	}
 
-	// Verify PKCE code_verifier
-	if !verifyPKCE(req.CodeVerifier, codeChallenge, codeChallengeMethod) {
+	// Verify PKCE code verifier
+	if !h.verifyPKCE(codeVerifier, authCode.CodeChallenge, authCode.CodeChallengeMethod) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_grant",
 			"error_description": "Invalid code_verifier",
@@ -500,62 +480,96 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c *fiber.Ctx, req *TokenR
 	}
 
 	// Generate tokens
-	accessToken := generateRandomString(48)
-	refreshToken := generateRandomString(48)
+	accessToken, err := generateSecureToken("mcp_at_", 32)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "server_error",
+			"error_description": "Failed to generate access token",
+		})
+	}
 
-	// Hash tokens for storage
+	refreshToken, err := generateSecureToken("mcp_rt_", 32)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "server_error",
+			"error_description": "Failed to generate refresh token",
+		})
+	}
+
+	accessTokenExpiry := time.Now().Add(h.config.OAuth.TokenExpiry)
+	refreshTokenExpiry := time.Now().Add(h.config.OAuth.RefreshTokenExpiry)
+
+	// Store tokens
 	accessTokenHash := hashToken(accessToken)
 	refreshTokenHash := hashToken(refreshToken)
 
-	// Calculate expiry times
-	accessExpiry := time.Now().Add(h.config.OAuth.TokenExpiry)
-	refreshExpiry := time.Now().Add(h.config.OAuth.RefreshTokenExpiry)
-
-	// Store tokens
-	_, err = h.db.Exec(ctx, `
-		INSERT INTO auth.mcp_oauth_tokens
-		(client_id, user_id, access_token_hash, refresh_token_hash, scope, expires_at, refresh_expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, req.ClientID, userID, accessTokenHash, refreshTokenHash, storedScope, accessExpiry, refreshExpiry)
+	_, err = h.db.Exec(c.Context(), `
+		INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
+		VALUES ('access', $1, $2, $3, $4, $5)
+	`, accessTokenHash, clientID, authCode.UserID, authCode.Scopes, accessTokenExpiry)
 
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to store OAuth tokens")
+		log.Error().Err(err).Msg("Failed to store access token")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "server_error",
+			"error":             "server_error",
+			"error_description": "Failed to store access token",
 		})
 	}
 
-	return c.JSON(TokenResponse{
-		AccessToken:  accessToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    int(h.config.OAuth.TokenExpiry.Seconds()),
-		RefreshToken: refreshToken,
-		Scope:        storedScope,
+	_, err = h.db.Exec(c.Context(), `
+		INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
+		VALUES ('refresh', $1, $2, $3, $4, $5)
+	`, refreshTokenHash, clientID, authCode.UserID, authCode.Scopes, refreshTokenExpiry)
+
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to store refresh token")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":             "server_error",
+			"error_description": "Failed to store refresh token",
+		})
+	}
+
+	log.Info().
+		Str("client_id", clientID).
+		Strs("scopes", authCode.Scopes).
+		Msg("MCP OAuth tokens issued")
+
+	return c.JSON(fiber.Map{
+		"access_token":  accessToken,
+		"token_type":    "Bearer",
+		"expires_in":    int(h.config.OAuth.TokenExpiry.Seconds()),
+		"refresh_token": refreshToken,
+		"scope":         strings.Join(authCode.Scopes, " "),
 	})
 }
 
-func (h *MCPOAuthHandler) handleRefreshTokenGrant(c *fiber.Ctx, req *TokenRequest) error {
-	if req.RefreshToken == "" || req.ClientID == "" {
+// handleRefreshTokenGrant exchanges a refresh token for new tokens
+func (h *MCPOAuthHandler) handleRefreshTokenGrant(c *fiber.Ctx) error {
+	refreshToken := c.FormValue("refresh_token")
+	clientID := c.FormValue("client_id")
+
+	if refreshToken == "" || clientID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_request",
-			"error_description": "Missing required parameters",
+			"error_description": "refresh_token and client_id are required",
 		})
 	}
 
-	refreshTokenHash := hashToken(req.RefreshToken)
+	refreshTokenHash := hashToken(refreshToken)
 
 	// Look up refresh token
-	ctx := context.Background()
-	var tokenID uuid.UUID
-	var userID uuid.UUID
-	var storedClientID, scope string
-	var refreshExpiresAt time.Time
-	var revokedAt *time.Time
+	var token struct {
+		ID       string
+		ClientID string
+		UserID   *string
+		Scopes   []string
+	}
 
-	err := h.db.QueryRow(ctx, `
-		SELECT id, client_id, user_id, scope, refresh_expires_at, revoked_at
-		FROM auth.mcp_oauth_tokens WHERE refresh_token_hash = $1
-	`, refreshTokenHash).Scan(&tokenID, &storedClientID, &userID, &scope, &refreshExpiresAt, &revokedAt)
+	err := h.db.QueryRow(c.Context(), `
+		SELECT id, client_id, user_id, scopes
+		FROM auth.mcp_oauth_tokens
+		WHERE token_hash = $1 AND token_type = 'refresh' AND NOT is_revoked AND expires_at > NOW()
+	`, refreshTokenHash).Scan(&token.ID, &token.ClientID, &token.UserID, &token.Scopes)
 
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -564,249 +578,330 @@ func (h *MCPOAuthHandler) handleRefreshTokenGrant(c *fiber.Ctx, req *TokenReques
 		})
 	}
 
-	// Check if revoked
-	if revokedAt != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_grant",
-			"error_description": "Refresh token has been revoked",
-		})
-	}
-
-	// Check expiration
-	if time.Now().After(refreshExpiresAt) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "invalid_grant",
-			"error_description": "Refresh token expired",
-		})
-	}
-
-	// Validate client_id
-	if storedClientID != req.ClientID {
+	// Validate client ID matches
+	if token.ClientID != clientID {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_grant",
 			"error_description": "Client ID mismatch",
 		})
 	}
 
-	// Revoke old token
-	_, _ = h.db.Exec(ctx, `UPDATE auth.mcp_oauth_tokens SET revoked_at = NOW() WHERE id = $1`, tokenID)
+	// Revoke old refresh token (rotation)
+	_, _ = h.db.Exec(c.Context(), `
+		UPDATE auth.mcp_oauth_tokens
+		SET is_revoked = true, revoked_at = NOW(), revoked_reason = 'rotated'
+		WHERE id = $1
+	`, token.ID)
 
-	// Generate new tokens (token rotation)
-	newAccessToken := generateRandomString(48)
-	newRefreshToken := generateRandomString(48)
+	// Generate new tokens
+	newAccessToken, _ := generateSecureToken("mcp_at_", 32)
+	newRefreshToken, _ := generateSecureToken("mcp_rt_", 32)
 
+	accessTokenExpiry := time.Now().Add(h.config.OAuth.TokenExpiry)
+	refreshTokenExpiry := time.Now().Add(h.config.OAuth.RefreshTokenExpiry)
+
+	// Store new tokens
 	accessTokenHash := hashToken(newAccessToken)
 	newRefreshTokenHash := hashToken(newRefreshToken)
 
-	accessExpiry := time.Now().Add(h.config.OAuth.TokenExpiry)
-	newRefreshExpiry := time.Now().Add(h.config.OAuth.RefreshTokenExpiry)
+	_, _ = h.db.Exec(c.Context(), `
+		INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
+		VALUES ('access', $1, $2, $3, $4, $5)
+	`, accessTokenHash, clientID, token.UserID, token.Scopes, accessTokenExpiry)
 
-	// Store new tokens
-	_, err = h.db.Exec(ctx, `
-		INSERT INTO auth.mcp_oauth_tokens
-		(client_id, user_id, access_token_hash, refresh_token_hash, scope, expires_at, refresh_expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, req.ClientID, userID, accessTokenHash, newRefreshTokenHash, scope, accessExpiry, newRefreshExpiry)
+	_, _ = h.db.Exec(c.Context(), `
+		INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
+		VALUES ('refresh', $1, $2, $3, $4, $5)
+	`, newRefreshTokenHash, clientID, token.UserID, token.Scopes, refreshTokenExpiry)
 
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to store refreshed OAuth tokens")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "server_error",
-		})
-	}
-
-	return c.JSON(TokenResponse{
-		AccessToken:  newAccessToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    int(h.config.OAuth.TokenExpiry.Seconds()),
-		RefreshToken: newRefreshToken,
-		Scope:        scope,
+	return c.JSON(fiber.Map{
+		"access_token":  newAccessToken,
+		"token_type":    "Bearer",
+		"expires_in":    int(h.config.OAuth.TokenExpiry.Seconds()),
+		"refresh_token": newRefreshToken,
+		"scope":         strings.Join(token.Scopes, " "),
 	})
 }
 
-// handleRevoke handles POST /mcp/oauth/revoke
+// handleRevoke handles token revocation
 func (h *MCPOAuthHandler) handleRevoke(c *fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "oauth_disabled",
+			"error": "OAuth is not enabled",
 		})
 	}
 
 	token := c.FormValue("token")
-	tokenTypeHint := c.FormValue("token_type_hint")
-
 	if token == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_request",
-			"error_description": "token parameter is required",
+			"error_description": "token is required",
 		})
 	}
 
 	tokenHash := hashToken(token)
-	ctx := context.Background()
 
-	// Try to revoke as access token or refresh token
-	var result int64
-	if tokenTypeHint == "refresh_token" {
-		res, _ := h.db.Exec(ctx, `
-			UPDATE auth.mcp_oauth_tokens SET revoked_at = NOW()
-			WHERE refresh_token_hash = $1 AND revoked_at IS NULL
-		`, tokenHash)
-		result = res.RowsAffected()
+	// Revoke the token (and any related refresh tokens)
+	result, err := h.db.Exec(c.Context(), `
+		UPDATE auth.mcp_oauth_tokens
+		SET is_revoked = true, revoked_at = NOW(), revoked_reason = 'user_revoked'
+		WHERE token_hash = $1
+	`, tokenHash)
+
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to revoke token")
 	}
 
-	if result == 0 {
-		res, _ := h.db.Exec(ctx, `
-			UPDATE auth.mcp_oauth_tokens SET revoked_at = NOW()
-			WHERE access_token_hash = $1 AND revoked_at IS NULL
-		`, tokenHash)
-		result = res.RowsAffected()
+	// Per RFC 7009, always return 200 OK even if token wasn't found
+	rowsAffected := result.RowsAffected()
+	if rowsAffected > 0 {
+		log.Debug().Msg("MCP OAuth token revoked")
 	}
 
-	if result == 0 && tokenTypeHint != "refresh_token" {
-		// Try revoking by refresh token hash as fallback
-		_, _ = h.db.Exec(ctx, `
-			UPDATE auth.mcp_oauth_tokens SET revoked_at = NOW()
-			WHERE refresh_token_hash = $1 AND revoked_at IS NULL
-		`, tokenHash)
-	}
-
-	// RFC 7009: Always return 200 OK, even if token was not found
 	return c.SendStatus(fiber.StatusOK)
+}
+
+// ValidateAccessToken validates an MCP OAuth access token and returns the auth context
+func (h *MCPOAuthHandler) ValidateAccessToken(c *fiber.Ctx, token string) (clientID string, userID *string, scopes []string, err error) {
+	tokenHash := hashToken(token)
+
+	err = h.db.QueryRow(c.Context(), `
+		SELECT client_id, user_id, scopes
+		FROM auth.mcp_oauth_tokens
+		WHERE token_hash = $1 AND token_type = 'access' AND NOT is_revoked AND expires_at > NOW()
+	`, tokenHash).Scan(&clientID, &userID, &scopes)
+
+	return
 }
 
 // Helper functions
 
+func (h *MCPOAuthHandler) getIssuer() string {
+	if h.publicURL != "" {
+		return h.publicURL
+	}
+	return h.baseURL
+}
+
 func (h *MCPOAuthHandler) isRedirectURIAllowed(uri string) bool {
-	for _, pattern := range h.config.OAuth.AllowedRedirectURIs {
-		if matchRedirectURI(pattern, uri) {
+	allowedPatterns := h.config.OAuth.AllowedRedirectURIs
+	if len(allowedPatterns) == 0 {
+		// Apply defaults if not configured
+		allowedPatterns = config.DefaultMCPOAuthRedirectURIs()
+	}
+
+	for _, pattern := range allowedPatterns {
+		if h.matchURIPattern(uri, pattern) {
 			return true
 		}
 	}
 	return false
 }
 
-func matchRedirectURI(pattern, uri string) bool {
+func (h *MCPOAuthHandler) matchURIPattern(uri, pattern string) bool {
 	// Exact match
-	if pattern == uri {
+	if uri == pattern {
 		return true
 	}
 
-	// Wildcard matching for localhost ports
-	if strings.HasSuffix(pattern, ":*") {
-		prefix := strings.TrimSuffix(pattern, "*")
-		if strings.HasPrefix(uri, prefix) {
-			return true
+	// Scheme-only match (e.g., "vscode://")
+	if strings.HasSuffix(pattern, "://") {
+		return strings.HasPrefix(uri, pattern)
+	}
+
+	// Wildcard port match (e.g., "http://localhost:*")
+	if strings.Contains(pattern, ":*") {
+		prefix := strings.Split(pattern, ":*")[0]
+		if strings.HasPrefix(uri, prefix+":") {
+			// Check that everything after the port is a valid path
+			parsedURI, err := url.Parse(uri)
+			if err != nil {
+				return false
+			}
+			parsedPattern, err := url.Parse(strings.Replace(pattern, ":*", ":1234", 1))
+			if err != nil {
+				return false
+			}
+			return parsedURI.Hostname() == parsedPattern.Hostname()
 		}
 	}
 
-	// Wildcard matching for paths (e.g., cursor://anysphere.cursor-mcp/oauth/*/callback)
+	// Wildcard path match (e.g., "cursor://anysphere.cursor-mcp/oauth/*/callback")
 	if strings.Contains(pattern, "*") {
-		// Convert glob pattern to prefix/suffix matching
 		parts := strings.Split(pattern, "*")
 		if len(parts) == 2 {
-			if strings.HasPrefix(uri, parts[0]) && strings.HasSuffix(uri, parts[1]) {
-				return true
+			return strings.HasPrefix(uri, parts[0]) && strings.HasSuffix(uri, parts[1])
+		}
+	}
+
+	return false
+}
+
+func (h *MCPOAuthHandler) isURIInList(uri string, list []string) bool {
+	for _, u := range list {
+		if u == uri || h.matchURIPattern(uri, u) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *MCPOAuthHandler) contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+// extractUserFromRequest attempts to extract a user ID from the request
+// Checks: Authorization Bearer token, access_token cookie
+func (h *MCPOAuthHandler) extractUserFromRequest(c *fiber.Ctx) *string {
+	// Try Authorization header (Bearer token)
+	authHeader := c.Get("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// Skip MCP OAuth tokens (they start with "mcp_at_")
+		if !strings.HasPrefix(token, "mcp_at_") && h.authService != nil {
+			claims, err := h.authService.ValidateToken(token)
+			if err == nil {
+				// Check if token has been revoked
+				isRevoked, err := h.authService.IsTokenRevoked(c.Context(), claims.ID)
+				if err == nil && !isRevoked {
+					return &claims.UserID
+				}
 			}
 		}
 	}
 
-	return false
+	// Try access_token cookie
+	accessToken := c.Cookies("access_token")
+	if accessToken != "" && h.authService != nil {
+		claims, err := h.authService.ValidateToken(accessToken)
+		if err == nil {
+			isRevoked, err := h.authService.IsTokenRevoked(c.Context(), claims.ID)
+			if err == nil && !isRevoked {
+				return &claims.UserID
+			}
+		}
+	}
+
+	return nil
 }
 
-func generateRandomString(length int) string {
-	bytes := make([]byte, length)
-	_, _ = rand.Read(bytes)
-	return base64.RawURLEncoding.EncodeToString(bytes)[:length]
-}
-
-func hashToken(token string) string {
-	hash := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(hash[:])
-}
-
-func verifyPKCE(codeVerifier, codeChallenge, method string) bool {
+func (h *MCPOAuthHandler) verifyPKCE(verifier, challenge, method string) bool {
 	if method != "S256" {
 		return false
 	}
 
 	// S256: BASE64URL(SHA256(code_verifier)) == code_challenge
-	hash := sha256.Sum256([]byte(codeVerifier))
+	hash := sha256.Sum256([]byte(verifier))
 	computed := base64.RawURLEncoding.EncodeToString(hash[:])
 
-	return computed == codeChallenge
+	return computed == challenge
 }
 
+func (h *MCPOAuthHandler) redirectWithError(c *fiber.Ctx, redirectURI, errorCode, errorDesc, state string) error {
+	u, _ := url.Parse(redirectURI)
+	q := u.Query()
+	q.Set("error", errorCode)
+	q.Set("error_description", errorDesc)
+	if state != "" {
+		q.Set("state", state)
+	}
+	u.RawQuery = q.Encode()
+	return c.Redirect(u.String(), fiber.StatusFound)
+}
+
+// generateSecureToken generates a cryptographically secure random token
+func generateSecureToken(prefix string, length int) (string, error) {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return prefix + hex.EncodeToString(bytes), nil
+}
+
+// hashToken creates a SHA256 hash of a token for storage
+func hashToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
+}
+
+// matchRedirectURI checks if a URI matches a pattern (standalone version for testing)
+// Supports exact matches, wildcard ports (e.g., "http://localhost:*"),
+// and wildcard path segments (e.g., "cursor://host/oauth/*/callback")
+func matchRedirectURI(pattern, uri string) bool {
+	// Exact match
+	if uri == pattern {
+		return true
+	}
+
+	// Scheme-only match (e.g., "vscode://")
+	if strings.HasSuffix(pattern, "://") {
+		return strings.HasPrefix(uri, pattern)
+	}
+
+	// Wildcard port match (e.g., "http://localhost:*")
+	if strings.Contains(pattern, ":*") {
+		prefix := strings.Split(pattern, ":*")[0]
+		if strings.HasPrefix(uri, prefix+":") {
+			// Check that everything after the port is a valid path
+			parsedURI, err := url.Parse(uri)
+			if err != nil {
+				return false
+			}
+			parsedPattern, err := url.Parse(strings.Replace(pattern, ":*", ":1234", 1))
+			if err != nil {
+				return false
+			}
+			return parsedURI.Hostname() == parsedPattern.Hostname()
+		}
+	}
+
+	// Wildcard path match (e.g., "cursor://anysphere.cursor-mcp/oauth/*/callback")
+	if strings.Contains(pattern, "*") {
+		parts := strings.Split(pattern, "*")
+		if len(parts) == 2 {
+			return strings.HasPrefix(uri, parts[0]) && strings.HasSuffix(uri, parts[1])
+		}
+	}
+
+	return false
+}
+
+// verifyPKCE verifies a PKCE code verifier against a challenge (standalone version for testing)
+func verifyPKCE(verifier, challenge, method string) bool {
+	if method != "S256" {
+		return false
+	}
+
+	// S256: BASE64URL(SHA256(code_verifier)) == code_challenge
+	hash := sha256.Sum256([]byte(verifier))
+	computed := base64.RawURLEncoding.EncodeToString(hash[:])
+
+	return computed == challenge
+}
+
+// generateRandomString generates a random alphanumeric string of the specified length
+func generateRandomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return ""
+	}
+	for i := range bytes {
+		bytes[i] = charset[bytes[i]%byte(len(charset))]
+	}
+	return string(bytes)
+}
+
+// nullIfEmpty returns nil if the string is empty, otherwise a pointer to the string
 func nullIfEmpty(s string) *string {
 	if s == "" {
 		return nil
 	}
 	return &s
-}
-
-func (h *MCPOAuthHandler) renderConsentPage(clientName, clientID, redirectURI string, scopes []string, state, codeChallenge, codeChallengeMethod string) string {
-	scopeList := ""
-	for _, s := range scopes {
-		scopeList += fmt.Sprintf("<li>%s</li>", s)
-	}
-
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Authorize %s - Fluxbase</title>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px;
-            min-height: 100vh; display: flex; align-items: center; justify-content: center;
-        }
-        .container { max-width: 400px; width: 100%%; }
-        .card { background: #1e293b; border-radius: 12px; padding: 32px; }
-        h1 { margin: 0 0 8px; font-size: 24px; font-weight: 600; }
-        .subtitle { color: #94a3b8; margin: 0 0 24px; }
-        .client-name { color: #60a5fa; font-weight: 500; }
-        h2 { font-size: 14px; font-weight: 500; margin: 0 0 12px; color: #94a3b8; }
-        ul { margin: 0 0 24px; padding-left: 20px; }
-        li { margin: 8px 0; color: #e2e8f0; }
-        .buttons { display: flex; gap: 12px; }
-        button {
-            flex: 1; padding: 12px 20px; border: none; border-radius: 8px;
-            font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s;
-        }
-        .allow { background: #3b82f6; color: white; }
-        .allow:hover { background: #2563eb; }
-        .deny { background: #334155; color: #e2e8f0; }
-        .deny:hover { background: #475569; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="card">
-            <h1>Authorization Request</h1>
-            <p class="subtitle"><span class="client-name">%s</span> wants to access your Fluxbase data</p>
-
-            <h2>Requested permissions:</h2>
-            <ul>%s</ul>
-
-            <form method="POST" action="%s/oauth/authorize">
-                <input type="hidden" name="client_id" value="%s">
-                <input type="hidden" name="redirect_uri" value="%s">
-                <input type="hidden" name="scope" value="%s">
-                <input type="hidden" name="state" value="%s">
-                <input type="hidden" name="code_challenge" value="%s">
-                <input type="hidden" name="code_challenge_method" value="%s">
-
-                <div class="buttons">
-                    <button type="submit" name="action" value="deny" class="deny">Deny</button>
-                    <button type="submit" name="action" value="allow" class="allow">Allow</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</body>
-</html>`, clientName, clientName, scopeList, h.config.BasePath, clientID, redirectURI,
-		strings.Join(scopes, " "), state, codeChallenge, codeChallengeMethod)
 }

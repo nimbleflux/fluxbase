@@ -27,6 +27,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { PasswordInput } from '@/components/password-input'
 import { SelectDropdown } from '@/components/select-dropdown'
 import { roles } from '../data/data'
@@ -40,6 +41,7 @@ const formSchema = z.object({
     .min(8, 'Password must be at least 8 characters.')
     .optional()
     .or(z.literal('')),
+  skip_email: z.boolean(),
 })
 
 type UserInviteForm = z.infer<typeof formSchema>
@@ -64,12 +66,21 @@ export function UsersInviteDialog({
 
   const form = useForm<UserInviteForm>({
     resolver: zodResolver(formSchema),
-    defaultValues: { email: '', role: 'user', password: '' },
+    defaultValues: {
+      email: '',
+      role: 'dashboard_user',
+      password: '',
+      skip_email: false,
+    },
   })
 
   const inviteMutation = useMutation({
-    mutationFn: (data: { email: string; role: string; password?: string }) =>
-      userManagementApi.inviteUser(data, userType),
+    mutationFn: (data: {
+      email: string
+      role: string
+      password?: string
+      skip_email?: boolean
+    }) => userManagementApi.inviteUser(data, userType),
     onSuccess: (data) => {
       // Invalidate users query to refresh the list
       queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -109,6 +120,7 @@ export function UsersInviteDialog({
       email: values.email,
       role: values.role,
       ...(values.password && { password: values.password }),
+      ...(values.skip_email && { skip_email: values.skip_email }),
     }
     inviteMutation.mutate(payload)
   }
@@ -142,8 +154,8 @@ export function UsersInviteDialog({
           <Alert>
             <AlertCircle className='h-4 w-4' />
             <AlertDescription>
-              SMTP is not configured. Share this temporary password with the
-              user. They can use it to sign in and should change it immediately.
+              Share this temporary password with the user. They can use it to
+              sign in and should change it immediately.
             </AlertDescription>
           </Alert>
           <div className='space-y-2'>
@@ -253,6 +265,27 @@ export function UsersInviteDialog({
                     Must be at least 8 characters if provided.
                   </FormDescription>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='skip_email'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-3'>
+                  <div className='space-y-0.5'>
+                    <FormLabel>Skip invitation email</FormLabel>
+                    <FormDescription>
+                      Don't send an email. You'll need to share the password
+                      manually.
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
                 </FormItem>
               )}
             />

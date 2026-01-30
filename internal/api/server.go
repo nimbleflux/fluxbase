@@ -105,6 +105,7 @@ type Server struct {
 	serviceKeyHandler      *ServiceKeyHandler
 	schemaExportHandler    *SchemaExportHandler
 	mcpHandler             *mcp.Handler
+	mcpOAuthHandler        *MCPOAuthHandler
 	customMCPManager       *custom.Manager
 	customMCPHandler       *CustomMCPHandler
 	internalAIHandler      *InternalAIHandler
@@ -686,6 +687,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		serviceKeyHandler:      serviceKeyHandler,
 		schemaExportHandler:    schemaExportHandler,
 		mcpHandler:             mcp.NewHandler(&cfg.MCP, db),
+		mcpOAuthHandler:        NewMCPOAuthHandler(db.Pool(), &cfg.MCP, authService, cfg.BaseURL, cfg.GetPublicBaseURL()),
 		internalAIHandler:      internalAIHandler,
 		metrics:                observability.NewMetrics(),
 		startTime:              time.Now(),
@@ -972,6 +974,41 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 
 	log.Debug().Msg("Server initialization complete")
 	return server
+}
+
+// createMCPAuthMiddleware creates authentication middleware for MCP that supports
+// JWT, client key, service key, AND MCP OAuth tokens
+func (s *Server) createMCPAuthMiddleware() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		// Check for MCP OAuth token first (Bearer token starting with "mcp_at_")
+		authHeader := c.Get("Authorization")
+		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer mcp_at_") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+
+			// Validate MCP OAuth token
+			if s.mcpOAuthHandler != nil {
+				clientID, userID, scopes, err := s.mcpOAuthHandler.ValidateAccessToken(c, token)
+				if err == nil {
+					// Valid MCP OAuth token
+					c.Locals("auth_type", "mcp_oauth")
+					c.Locals("client_key_id", clientID)
+					c.Locals("client_key_scopes", scopes)
+					if userID != nil {
+						c.Locals("user_id", *userID)
+					}
+					return c.Next()
+				}
+			}
+		}
+
+		// Fall back to standard auth middleware
+		return middleware.RequireAuthOrServiceKey(
+			s.authHandler.authService,
+			s.clientKeyService,
+			s.db.Pool(),
+			s.dashboardAuthHandler.jwtManager,
+		)(c)
+	}
 }
 
 // setupMCPServer initializes the MCP server with tools and resources
@@ -1442,16 +1479,20 @@ func (s *Server) setupRoutes() {
 	s.setupStorageRoutes(storage)
 
 	// MCP routes - Model Context Protocol for AI assistants
-	// Health endpoint is public, other routes require authentication
+	// Requires authentication via client key, service key, or OAuth token
 	if s.config.MCP.Enabled && s.mcpHandler != nil {
-		// Public MCP routes (no auth required)
-		mcpPublic := s.app.Group(s.config.MCP.BasePath)
-		s.mcpHandler.RegisterPublicRoutes(mcpPublic)
+		// Register OAuth routes first (some are public, some need the MCP group)
+		if s.config.MCP.OAuth.Enabled && s.mcpOAuthHandler != nil {
+			// Create MCP group without auth for OAuth endpoints
+			mcpOAuthGroup := s.app.Group(s.config.MCP.BasePath)
+			s.mcpOAuthHandler.RegisterRoutes(s.app, mcpOAuthGroup)
+			log.Debug().Msg("MCP OAuth routes registered")
+		}
 
-		// Authenticated MCP routes
-		mcpGroup := s.app.Group(s.config.MCP.BasePath,
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		)
+		// Create auth middleware that also accepts MCP OAuth tokens
+		mcpAuthMiddleware := s.createMCPAuthMiddleware()
+
+		mcpGroup := s.app.Group(s.config.MCP.BasePath, mcpAuthMiddleware)
 		s.mcpHandler.RegisterRoutes(mcpGroup)
 		log.Debug().Str("base_path", s.config.MCP.BasePath).Msg("MCP routes registered")
 	}
@@ -1995,6 +2036,7 @@ func (s *Server) setupAdminRoutes(router fiber.Router) {
 	router.Get("/users", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.ListUsers)
 	router.Post("/users/invite", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.InviteUser)
 	router.Delete("/users/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.DeleteUser)
+	router.Patch("/users/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.UpdateUser)
 	router.Patch("/users/:id/role", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.UpdateUserRole)
 	router.Post("/users/:id/reset-password", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.ResetUserPassword)
 

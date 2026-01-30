@@ -45,12 +45,12 @@ export const providerColors = new Map<Provider, string>([
 export const roles = [
   {
     label: 'Admin',
-    value: 'admin',
+    value: 'dashboard_admin',
     icon: Shield,
   },
   {
     label: 'User',
-    value: 'user',
+    value: 'dashboard_user',
     icon: UserCheck,
   },
 ] as const

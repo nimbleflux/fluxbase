@@ -203,9 +203,10 @@ func (s *UserManagementService) GetEnrichedUserByID(ctx context.Context, userID 
 
 // InviteUserRequest represents a request to invite a new user
 type InviteUserRequest struct {
-	Email    string `json:"email"`
-	Role     string `json:"role"`
-	Password string `json:"password,omitempty"` // Optional: if provided, use this instead of generating
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	Password  string `json:"password,omitempty"`   // Optional: if provided, use this instead of generating
+	SkipEmail bool   `json:"skip_email,omitempty"` // Optional: if true, don't send invitation email
 }
 
 // InviteUserResponse represents the response after inviting a user
@@ -218,10 +219,10 @@ type InviteUserResponse struct {
 
 // InviteUser creates a new user and either sends them an invite email or returns a temp password
 func (s *UserManagementService) InviteUser(ctx context.Context, req InviteUserRequest, userType string) (*InviteUserResponse, error) {
-	// Validate role - for dashboard users, default to admin
+	// Validate role - for dashboard users, default to dashboard_admin
 	if req.Role == "" {
 		if userType == "dashboard" {
-			req.Role = "admin"
+			req.Role = "dashboard_admin"
 		} else {
 			req.Role = "user"
 		}
@@ -258,24 +259,36 @@ func (s *UserManagementService) InviteUser(ctx context.Context, req InviteUserRe
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Try to send email if email service is available
+	// Try to send invitation email if email service is available and not skipped
 	emailSent := false
 	message := ""
 
-	// Check if email service is configured (not NoOpService)
-	if s.emailService != nil {
-		// For now, we'll use password reset flow to allow user to set their password
-		// In the future, we could create a dedicated "welcome" email template
-		_ = fmt.Sprintf("%s/auth/password/reset?email=%s", s.baseURL, req.Email)
+	if req.SkipEmail {
+		message = "User created. Copy the temporary password below (it will not be shown again)"
+		return &InviteUserResponse{
+			User:              user,
+			TemporaryPassword: tempPassword,
+			EmailSent:         false,
+			Message:           message,
+		}, nil
+	}
 
-		// Try to send email (may fail silently if SMTP not configured)
-		// This is a simplified approach - you'd want a proper invite email template
-		message = fmt.Sprintf("User invited. Password reset link sent to %s", req.Email)
-		emailSent = true
+	if s.emailService != nil {
+		inviteLink := fmt.Sprintf("%s/sign-in", s.baseURL)
+		err := s.emailService.SendInvitationEmail(ctx, req.Email, "An administrator", inviteLink)
+		if err != nil {
+			// Log error but don't fail - user was created successfully
+			message = "User created. Failed to send invitation email - share the temporary password manually."
+		} else {
+			emailSent = true
+			message = fmt.Sprintf("Invitation email sent to %s", req.Email)
+		}
 	}
 
 	if !emailSent {
-		message = "User created. Copy the temporary password below (it will not be shown again)"
+		if message == "" {
+			message = "User created. Copy the temporary password below (it will not be shown again)"
+		}
 		return &InviteUserResponse{
 			User:              user,
 			TemporaryPassword: tempPassword,

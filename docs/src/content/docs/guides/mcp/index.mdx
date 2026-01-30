@@ -30,6 +30,7 @@ Add this to your `claude_desktop_config.json`:
 ```
 
 **Config file locations:**
+
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **Linux**: `~/.config/Claude/claude_desktop_config.json`
@@ -84,9 +85,55 @@ Any MCP-compatible client can connect using:
 - **Auth Header**: `X-Service-Key: your-key` or `X-Client-Key: your-key`
 - **Protocol**: JSON-RPC 2.0 over HTTP POST
 
+:::tip[Create a Client Key]
+Generate a client key with appropriate scopes:
+
+```bash
+fluxbase clientkeys create --name "My IDE" \
+  --scopes "read:tables,write:tables,execute:functions,read:storage"
+```
+:::
+
+## Overview
+
+The MCP server exposes Fluxbase functionality through a standardized JSON-RPC 2.0 protocol, allowing AI assistants to:
+
+- Query and modify database tables (with Row Level Security)
+- Upload, download, and manage storage files
+- Invoke edge functions and RPC procedures
+- Submit and monitor background jobs
+- Search vector embeddings for RAG applications
+
+## Configuration
+
+Enable the MCP server in your `fluxbase.yaml`:
+
+```yaml
+mcp:
+  enabled: true
+  base_path: /mcp
+  session_timeout: 3600s
+  max_message_size: 10485760 # 10MB
+  rate_limit_per_min: 100
+  allowed_tools: [] # Empty = all tools enabled
+  allowed_resources: [] # Empty = all resources enabled
+```
+
+### Configuration Options
+
+| Option               | Default    | Description                     |
+| -------------------- | ---------- | ------------------------------- |
+| `enabled`            | `false`    | Enable the MCP server endpoint  |
+| `base_path`          | `/mcp`     | URL path for MCP endpoints      |
+| `session_timeout`    | `3600s`    | Session timeout for connections |
+| `max_message_size`   | `10485760` | Maximum request size in bytes   |
+| `rate_limit_per_min` | `100`      | Requests per minute per client  |
+| `allowed_tools`      | `[]`       | Whitelist of allowed tools      |
+| `allowed_resources`  | `[]`       | Whitelist of allowed resources  |
+
 ## Authentication
 
-The MCP server requires authentication for all requests. Two authentication methods are available:
+The MCP server requires authentication for all requests. Supported methods:
 
 ### Service Keys (Admin Access)
 
@@ -129,63 +176,69 @@ curl -X POST http://localhost:8080/mcp \
 Use client keys when you need RLS enforcement, such as in multi-tenant applications or when the AI assistant should only access user-specific data.
 :::
 
-## Overview
+### OAuth 2.1 (Interactive Clients)
 
-The MCP server exposes Fluxbase functionality through a standardized JSON-RPC 2.0 protocol, allowing AI assistants to:
+MCP clients like Claude Desktop can authenticate using OAuth 2.1 with Dynamic Client Registration (DCR). This provides user-scoped access that respects Row Level Security.
 
-- Query and modify database tables (with Row Level Security)
-- Upload, download, and manage storage files
-- Invoke edge functions and RPC procedures
-- Submit and monitor background jobs
-- Search vector embeddings for RAG applications
+**How it works:**
 
-## Configuration
+1. The client discovers endpoints via `/.well-known/oauth-authorization-server`
+2. It registers itself via `POST /mcp/oauth/register` (no pre-configured credentials needed)
+3. The user is prompted to log in to Fluxbase
+4. After authentication, the client receives tokens tied to that user
 
-Enable the MCP server in your `fluxbase.yaml`:
+**Configuration:**
 
 ```yaml
 mcp:
   enabled: true
-  base_path: /mcp
-  session_timeout: 3600s
-  max_message_size: 10485760  # 10MB
-  rate_limit_per_min: 100
-  allowed_tools: []      # Empty = all tools enabled
-  allowed_resources: []  # Empty = all resources enabled
+  oauth:
+    enabled: true # Enable OAuth for MCP
+    dcr_enabled: true # Enable Dynamic Client Registration
+    token_expiry: 1h # Access token lifetime
+    refresh_token_expiry: 168h # Refresh token lifetime (7 days)
 ```
 
-### Configuration Options
+**Claude Desktop config (OAuth):**
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `enabled` | `false` | Enable the MCP server endpoint |
-| `base_path` | `/mcp` | URL path for MCP endpoints |
-| `session_timeout` | `3600s` | Session timeout for connections |
-| `max_message_size` | `10485760` | Maximum request size in bytes |
-| `rate_limit_per_min` | `100` | Requests per minute per client |
-| `allowed_tools` | `[]` | Whitelist of allowed tools |
-| `allowed_resources` | `[]` | Whitelist of allowed resources |
+```json
+{
+  "mcpServers": {
+    "fluxbase": {
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+Claude will automatically handle OAuth discovery and authentication.
 
 ## Available Scopes
 
-| Scope | Description |
-|-------|-------------|
-| `read:tables` | Query database tables |
-| `write:tables` | Insert, update, delete records |
-| `execute:functions` | Invoke edge functions |
-| `execute:rpc` | Execute RPC procedures |
-| `read:storage` | List and download files |
-| `write:storage` | Upload and delete files |
-| `execute:jobs` | Submit and monitor jobs |
-| `read:vectors` | Vector similarity search |
-| `read:schema` | Access database schema |
+| Scope               | Description                    |
+| ------------------- | ------------------------------ |
+| `read:tables`       | Query database tables          |
+| `write:tables`      | Insert, update, delete records |
+| `execute:functions` | Invoke edge functions          |
+| `execute:rpc`       | Execute RPC procedures         |
+| `read:storage`      | List and download files        |
+| `write:storage`     | Upload and delete files        |
+| `execute:jobs`      | Submit and monitor jobs        |
+| `read:vectors`      | Vector similarity search       |
+| `read:schema`       | Access database schema         |
 
 ## Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/mcp/health` | GET | Health check (no auth required) |
-| `/mcp` | POST | JSON-RPC requests |
+| Endpoint                                  | Method | Description                       |
+| ----------------------------------------- | ------ | --------------------------------- |
+| `/mcp/health`                             | GET    | Health check (no auth required)   |
+| `/mcp`                                    | POST   | JSON-RPC requests                 |
+| `/.well-known/oauth-authorization-server` | GET    | OAuth server metadata (discovery) |
+| `/.well-known/oauth-protected-resource`   | GET    | Protected resource metadata       |
+| `/mcp/oauth/register`                     | POST   | Dynamic Client Registration       |
+| `/mcp/oauth/authorize`                    | GET    | OAuth authorization endpoint      |
+| `/mcp/oauth/token`                        | POST   | Token exchange endpoint           |
+| `/mcp/oauth/revoke`                       | POST   | Token revocation                  |
 
 ## Protocol
 
@@ -209,7 +262,7 @@ The MCP server implements JSON-RPC 2.0 with the following methods:
     "arguments": {
       "table": "users",
       "select": "id,email,created_at",
-      "filter": {"is_active": "eq.true"},
+      "filter": { "is_active": "eq.true" },
       "limit": 10
     }
   },
@@ -237,7 +290,7 @@ The MCP server implements JSON-RPC 2.0 with the following methods:
 
 ## Security
 
-- All database operations respect Row Level Security (RLS) policies when using Client Keys
+- All database operations respect Row Level Security (RLS) policies when using Client Keys or OAuth
 - Service keys bypass RLS for administrative operations
 - Internal schemas (auth, storage, functions, jobs) are hidden from non-admins
 - SQL injection is prevented through parameterized queries and identifier validation
@@ -268,4 +321,5 @@ If your MCP client only supports stdio transport (older clients), use the mcp-re
 
 - [Available Tools](/guides/mcp/tools/) - Complete tool reference
 - [Available Resources](/guides/mcp/resources/) - Resource reference
+- [OAuth Authentication](/guides/mcp/oauth/) - OAuth 2.1 details
 - [Security Best Practices](/security/mcp-security/) - Security guidelines

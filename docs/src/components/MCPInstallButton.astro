@@ -72,12 +72,12 @@ const { hostname = "http://localhost:8080" } = Astro.props;
       </svg>
       <span>Claude CLI</span>
     </button>
-    <button id="copy-config-btn" class="mcp-button">
+    <button id="copy-config-btn" class="mcp-button mcp-button-fixed">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
       </svg>
-      Copy Config
+      <span>Copy Config</span>
     </button>
   </div>
 
@@ -203,16 +203,19 @@ const { hostname = "http://localhost:8080" } = Astro.props;
       const displayConfig = generateDisplayConfig();
       try {
         await navigator.clipboard.writeText(JSON.stringify(displayConfig, null, 2));
-        const originalText = copyBtn.innerHTML;
-        copyBtn.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-          Copied!
-        `;
-        setTimeout(() => {
-          copyBtn.innerHTML = originalText;
-        }, 2000);
+        const svg = copyBtn.querySelector('svg');
+        const span = copyBtn.querySelector('span');
+        if (svg && span) {
+          const originalSvg = svg.outerHTML;
+          const originalText = span.textContent;
+          svg.outerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+          span.textContent = 'Copied!';
+          setTimeout(() => {
+            const newSvg = copyBtn.querySelector('svg');
+            if (newSvg) newSvg.outerHTML = originalSvg;
+            span.textContent = originalText;
+          }, 2000);
+        }
       } catch (err) {
         console.error('Failed to copy:', err);
       }
@@ -363,11 +366,11 @@ const { hostname = "http://localhost:8080" } = Astro.props;
   }
 
   .mcp-button-fixed {
-    min-width: 120px;
+    min-width: 130px;
   }
 
   .mcp-button-fixed span {
-    min-width: 70px;
+    min-width: 80px;
     display: inline-block;
     text-align: left;
   }

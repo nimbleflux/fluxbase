@@ -40,9 +40,11 @@ func DefaultMCPOAuthRedirectURIs() []string {
 		"https://claude.com/api/mcp/auth_callback",
 		// Cursor
 		"cursor://anysphere.cursor-mcp/oauth/*/callback",
+		"cursor://",
 		// VS Code
 		"http://127.0.0.1:33418",
 		"https://vscode.dev/redirect",
+		"vscode://",
 		// OpenCode
 		"http://127.0.0.1:19876/mcp/oauth/callback",
 		// MCP Inspector (development)

@@ -553,6 +553,7 @@ export interface InviteUserRequest {
   email: string
   role: string
   password?: string // Optional: if provided, use this instead of auto-generating
+  skip_email?: boolean // Optional: if true, don't send invitation email
 }
 
 export interface InviteUserResponse {
