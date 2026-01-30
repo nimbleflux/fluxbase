@@ -365,7 +365,7 @@ Choose your deployment method:
 
 ## Support
 
-- **Documentation**: https://docs.fluxbase.io
+- **Documentation**: https://fluxbase.eu
 - **GitHub Issues**: https://github.com/your-org/fluxbase/issues
 - **Community**: Discord or Forum
 - **Enterprise Support**: Available for production deployments

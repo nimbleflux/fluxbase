@@ -36,4 +36,4 @@ For more information about Fluxbase, look into [the docs](https://fluxbase.eu/ge
 For issues, questions, and discussions:
 
 - GitHub Issues: [github.com/fluxbase-eu/fluxbase/issues](https://github.com/fluxbase-eu/fluxbase/issues)
-- Documentation: [docs.fluxbase.eu](https://docs.fluxbase.eu)
+- Documentation: [fluxbase.eu](https://fluxbase.eu)
