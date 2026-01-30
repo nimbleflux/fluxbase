@@ -272,7 +272,15 @@ function LoginPage() {
         description: 'You have successfully logged in.',
       })
 
-      // The useEffect will handle redirect based on return_to or redirect params
+      // Redirect to return_to URL (e.g., MCP OAuth flow) or dashboard
+      const urlParams = new URLSearchParams(window.location.search)
+      const returnTo = urlParams.get('return_to')
+      if (returnTo) {
+        // External URL (like MCP OAuth authorize) - use window.location
+        window.location.href = returnTo
+      } else {
+        navigate({ to: '/' })
+      }
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error && 'response' in error
