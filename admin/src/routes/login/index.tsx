@@ -60,10 +60,19 @@ function LoginPage() {
   useEffect(() => {
     const accessToken = localStorage.getItem('fluxbase_admin_access_token')
     if (accessToken && auth.user) {
-      // User is already logged in, redirect to dashboard
+      // User is already logged in, redirect to intended destination
       const params = new URLSearchParams(window.location.search)
+      // Check for return_to (MCP OAuth flow) or redirect (internal navigation)
+      const returnTo = params.get('return_to')
       const redirect = params.get('redirect') || '/'
-      navigate({ to: redirect })
+
+      if (returnTo) {
+        // External URL (e.g., MCP OAuth authorize) - use window.location
+        window.location.href = returnTo
+      } else {
+        // Internal navigation - use router
+        navigate({ to: redirect })
+      }
     }
   }, [auth.user, navigate])
 
@@ -263,15 +272,7 @@ function LoginPage() {
         description: 'You have successfully logged in.',
       })
 
-      // Redirect to return_to URL (e.g., MCP OAuth flow) or dashboard
-      const params = new URLSearchParams(window.location.search)
-      const returnTo = params.get('return_to')
-      if (returnTo) {
-        // Use window.location.href for external URLs (like MCP OAuth authorize)
-        window.location.href = returnTo
-      } else {
-        navigate({ to: '/' })
-      }
+      // The useEffect will handle redirect based on return_to or redirect params
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error && 'response' in error
