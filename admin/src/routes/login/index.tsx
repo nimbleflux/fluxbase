@@ -81,7 +81,9 @@ function LoginPage() {
       window.__FLUXBASE_CONFIG__?.publicBaseURL ||
       import.meta.env.VITE_API_URL ||
       ''
-    const redirectTo = '/'
+    // Read return_to from URL for MCP OAuth flow, default to '/'
+    const params = new URLSearchParams(window.location.search)
+    const redirectTo = params.get('return_to') || '/'
 
     if (provider.type === 'oauth') {
       try {

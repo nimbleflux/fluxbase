@@ -329,13 +329,10 @@ func (h *MCPOAuthHandler) handleAuthorize(c *fiber.Ctx) error {
 		// Build the authorization URL to return to after login
 		authURL := h.getIssuer() + h.config.BasePath + "/oauth/authorize?" + string(c.Request().URI().QueryString())
 
-		// For now, return an error asking user to authenticate first
-		// In a full implementation, redirect to login page with return_to parameter
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":             "login_required",
-			"error_description": "User authentication required. Please log in to Fluxbase first.",
-			"login_url":         h.getIssuer() + "/auth/login?return_to=" + url.QueryEscape(authURL),
-		})
+		// Redirect to the login page with return_to parameter
+		// After login, user will be redirected back to complete the OAuth flow
+		loginURL := h.getIssuer() + "/login?return_to=" + url.QueryEscape(authURL)
+		return c.Redirect(loginURL, fiber.StatusFound)
 	}
 
 	// Generate authorization code
