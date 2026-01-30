@@ -75,12 +75,15 @@ export function UsersInviteDialog({
   })
 
   const inviteMutation = useMutation({
-    mutationFn: (data: {
-      email: string
-      role: string
-      password?: string
-      skip_email?: boolean
-    }) => userManagementApi.inviteUser(data, userType),
+    mutationFn: (params: {
+      data: {
+        email: string
+        role: string
+        password?: string
+        skip_email?: boolean
+      }
+      userType: 'app' | 'dashboard'
+    }) => userManagementApi.inviteUser(params.data, params.userType),
     onSuccess: (data) => {
       // Invalidate users query to refresh the list
       queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -122,7 +125,7 @@ export function UsersInviteDialog({
       ...(values.password && { password: values.password }),
       ...(values.skip_email && { skip_email: values.skip_email }),
     }
-    inviteMutation.mutate(payload)
+    inviteMutation.mutate({ data: payload, userType })
   }
 
   const handleClose = () => {

@@ -25,11 +25,11 @@ export function UsersProvider({
   const [currentRow, setCurrentRow] = useState<User | null>(null)
 
   return (
-    <UsersContext
+    <UsersContext.Provider
       value={{ open, setOpen, currentRow, setCurrentRow, userType }}
     >
       {children}
-    </UsersContext>
+    </UsersContext.Provider>
   )
 }
 

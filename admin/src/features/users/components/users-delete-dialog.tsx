@@ -28,7 +28,8 @@ export function UsersDeleteDialog({
   const [value, setValue] = useState('')
 
   const deleteMutation = useMutation({
-    mutationFn: () => userManagementApi.deleteUser(currentRow.id, userType),
+    mutationFn: (params: { userId: string; userType: 'app' | 'dashboard' }) =>
+      userManagementApi.deleteUser(params.userId, params.userType),
     onSuccess: () => {
       toast.success('User deleted successfully')
       queryClient.invalidateQueries({ queryKey: ['users', userType] })
@@ -41,7 +42,7 @@ export function UsersDeleteDialog({
 
   const handleDelete = () => {
     if (value.trim() !== currentRow.email) return
-    deleteMutation.mutate()
+    deleteMutation.mutate({ userId: currentRow.id, userType })
   }
 
   return (
