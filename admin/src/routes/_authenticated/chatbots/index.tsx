@@ -60,11 +60,7 @@ import {
   DataTableColumnHeader,
 } from '@/components/data-table'
 
-export const Route = createFileRoute('/_authenticated/chatbots/')({
-  component: ChatbotsPage,
-})
-
-function ChatbotsPage() {
+const ChatbotsPage = () => {
   const [chatbots, setChatbots] = useState<AIChatbotSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [reloading, setReloading] = useState(false)
@@ -499,3 +495,7 @@ function ChatbotsPage() {
     </div>
   )
 }
+
+export const Route = createFileRoute('/_authenticated/chatbots/')({
+  component: ChatbotsPage,
+})

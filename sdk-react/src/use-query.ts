@@ -17,6 +17,18 @@ export interface UseFluxbaseQueryOptions<T> extends Omit<UseQueryOptions<T[], Er
  * Hook to execute a database query
  * @param buildQuery - Function that builds and returns the query
  * @param options - React Query options
+ *
+ * IMPORTANT: You must provide a stable `queryKey` in options for proper caching.
+ * Without a custom queryKey, each render may create a new cache entry.
+ *
+ * @example
+ * ```tsx
+ * // Always provide a queryKey for stable caching
+ * useFluxbaseQuery(
+ *   (client) => client.from('users').select('*'),
+ *   { queryKey: ['users', 'all'] }
+ * )
+ * ```
  */
 export function useFluxbaseQuery<T = any>(
   buildQuery: (client: ReturnType<typeof useFluxbaseClient>) => QueryBuilder<T>,
@@ -24,8 +36,16 @@ export function useFluxbaseQuery<T = any>(
 ) {
   const client = useFluxbaseClient()
 
-  // Build a stable query key
-  const queryKey = options?.queryKey || ['fluxbase', 'query', buildQuery.toString()]
+  // Require queryKey for stable caching - function.toString() is not reliable
+  // as it can vary between renders for inline functions
+  if (!options?.queryKey) {
+    console.warn(
+      '[useFluxbaseQuery] No queryKey provided. This may cause cache misses. ' +
+      'Please provide a stable queryKey in options.'
+    )
+  }
+
+  const queryKey = options?.queryKey || ['fluxbase', 'query', 'unstable']
 
   return useQuery({
     queryKey,
@@ -46,7 +66,23 @@ export function useFluxbaseQuery<T = any>(
 /**
  * Hook for table queries with a simpler API
  * @param table - Table name
- * @param buildQuery - Function to build the query
+ * @param buildQuery - Optional function to build the query (e.g., add filters)
+ * @param options - Query options including a stable queryKey
+ *
+ * NOTE: When using buildQuery with filters, provide a custom queryKey that includes
+ * the filter values to ensure proper caching.
+ *
+ * @example
+ * ```tsx
+ * // Simple query - queryKey is auto-generated from table name
+ * useTable('users')
+ *
+ * // With filters - provide queryKey including filter values
+ * useTable('users',
+ *   (q) => q.eq('status', 'active'),
+ *   { queryKey: ['users', 'active'] }
+ * )
+ * ```
  */
 export function useTable<T = any>(
   table: string,
@@ -55,6 +91,15 @@ export function useTable<T = any>(
 ) {
   const client = useFluxbaseClient()
 
+  // Generate a stable base queryKey from table name
+  // When buildQuery is provided without a custom queryKey, warn about potential cache issues
+  if (buildQuery && !options?.queryKey) {
+    console.warn(
+      `[useTable] Using buildQuery without a custom queryKey for table "${table}". ` +
+      'This may cause cache misses. Provide a queryKey that includes your filter values.'
+    )
+  }
+
   return useFluxbaseQuery(
     (client) => {
       const query = client.from<T>(table)
@@ -62,7 +107,8 @@ export function useTable<T = any>(
     },
     {
       ...options,
-      queryKey: options?.queryKey || ['fluxbase', 'table', table, buildQuery?.toString()],
+      // Use table name as base key, or custom key if provided
+      queryKey: options?.queryKey || ['fluxbase', 'table', table],
     }
   )
 }

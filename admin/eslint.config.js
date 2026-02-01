@@ -55,5 +55,12 @@ export default defineConfig(
       // Prevent duplicate imports from the same module
       'no-duplicate-imports': 'error',
     },
+  },
+  // Disable react-refresh/only-export-components for TanStack Router route files
+  {
+    files: ['src/routes/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
   }
 )

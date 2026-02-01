@@ -13,10 +13,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-export const Route = createFileRoute('/_authenticated/database-config/')({
-  component: DatabaseConfigPage,
-})
-
 interface DatabaseConfig {
   host: string
   port: number
@@ -27,7 +23,7 @@ interface DatabaseConfig {
   max_idle_seconds: number
 }
 
-function DatabaseConfigPage() {
+const DatabaseConfigPage = () => {
   const [dbConfig] = useState<DatabaseConfig>({
     host: 'postgres',
     port: 5432,
@@ -180,3 +176,7 @@ function DatabaseConfigPage() {
     </div>
   )
 }
+
+export const Route = createFileRoute('/_authenticated/database-config/')({
+  component: DatabaseConfigPage,
+})

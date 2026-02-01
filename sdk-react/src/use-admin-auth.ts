@@ -137,14 +137,22 @@ export function useAdminAuth(
 
   /**
    * Logout admin
+   *
+   * WARNING: Currently only clears local state. The server-side session/token
+   * remains valid until it expires. This should call a logout endpoint to
+   * invalidate the session on the server for proper security.
    */
   const logout = useCallback(async (): Promise<void> => {
     try {
       setIsLoading(true);
       setError(null);
-      // Clear user state
+
+      // TODO: Call server-side logout endpoint when available
+      // This is a security concern - the token remains valid on the server
+      // await client.admin.logout();
+
+      // Clear local user state
       setUser(null);
-      // Note: Add logout endpoint call here when available
     } catch (err) {
       setError(err as Error);
       throw err;

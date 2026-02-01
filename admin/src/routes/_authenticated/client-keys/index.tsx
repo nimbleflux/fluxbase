@@ -63,10 +63,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
-export const Route = createFileRoute('/_authenticated/client-keys/')({
-  component: ClientKeysPage,
-})
-
 interface ClientKeyWithPlaintext extends ClientKey {
   key: string // Only returned on creation
 }
@@ -214,7 +210,7 @@ const SCOPE_GROUPS = [
   },
 ]
 
-function ClientKeysPage() {
+const ClientKeysPage = () => {
   const queryClient = useQueryClient()
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showKeyDialog, setShowKeyDialog] = useState(false)
@@ -794,3 +790,7 @@ function ClientKeysPage() {
     </div>
   )
 }
+
+export const Route = createFileRoute('/_authenticated/client-keys/')({
+  component: ClientKeysPage,
+})

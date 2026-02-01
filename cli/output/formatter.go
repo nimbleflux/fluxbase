@@ -117,25 +117,16 @@ func (f *Formatter) PrintTable(data TableData) {
 
 	table := tablewriter.NewWriter(f.Writer)
 
+	// Set headers if not disabled and headers exist
 	if !f.NoHeaders && len(data.Headers) > 0 {
-		table.SetHeader(data.Headers)
+		table.Header(data.Headers)
 	}
 
-	// Configure table style
-	table.SetBorder(false)
-	table.SetAutoWrapText(false)
-	table.SetAutoFormatHeaders(true)
-	table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.SetCenterSeparator("")
-	table.SetColumnSeparator("")
-	table.SetRowSeparator("")
-	table.SetHeaderLine(false)
-	table.SetTablePadding("\t")
-	table.SetNoWhiteSpace(true)
+	// Add rows to table (ignore error as we're using simple string slices)
+	_ = table.Bulk(data.Rows)
 
-	table.AppendBulk(data.Rows)
-	table.Render()
+	// Render the table (ignore error as it writes to our Writer)
+	_ = table.Render()
 }
 
 // PrintSuccess prints a success message

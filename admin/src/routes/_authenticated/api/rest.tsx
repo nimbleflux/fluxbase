@@ -43,10 +43,6 @@ import { EndpointBrowser } from '@/features/api-explorer/components/endpoint-bro
 import type { OpenAPISpec, EndpointInfo } from '@/features/api-explorer/types'
 import { ImpersonationPopover } from '@/features/impersonation/components/impersonation-popover'
 
-export const Route = createFileRoute('/_authenticated/api/rest')({
-  component: RestAPIExplorer,
-})
-
 // Types
 interface RequestHistory {
   id: string
@@ -77,7 +73,7 @@ interface SavedRequest {
 const HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const
 type HttpMethod = (typeof HTTP_METHODS)[number]
 
-function RestAPIExplorer() {
+const RestAPIExplorer = () => {
   // State
   const [method, setMethod] = useState<HttpMethod>('GET')
   const [endpoint, setEndpoint] = useState('/api/v1/tables/')
@@ -1215,3 +1211,7 @@ print(data)`
     </div>
   )
 }
+
+export const Route = createFileRoute('/_authenticated/api/rest')({
+  component: RestAPIExplorer,
+})

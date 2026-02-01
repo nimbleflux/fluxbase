@@ -1503,7 +1503,13 @@ func (tc *TestContext) GetAuthToken(email, password string) string {
 // EnsureAuthSchema ensures auth schema and tables exist
 // Note: auth schema is already created by migrations, so we only ensure tables exist
 func (tc *TestContext) EnsureAuthSchema() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Verify database connection is alive before proceeding
+	// This prevents "conn closed" errors in CI environments
+	err := tc.DB.Health(ctx)
+	require.NoError(tc.T, err, "Database connection health check failed")
 
 	// Note: Don't create auth schema here - it's already created by migrations
 	// The RLS test user only has USAGE and CREATE on auth schema (for tables),
@@ -1541,7 +1547,12 @@ func (tc *TestContext) EnsureAuthSchema() {
 // Note: In most cases, migrations will have already created these tables. This function
 // only creates them if they don't exist (for isolated test environments without migrations).
 func (tc *TestContext) EnsureStorageSchema() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Verify database connection is alive before proceeding
+	err := tc.DB.Health(ctx)
+	require.NoError(tc.T, err, "Database connection health check failed")
 
 	queries := []string{
 		`CREATE SCHEMA IF NOT EXISTS storage`,
@@ -1576,7 +1587,12 @@ func (tc *TestContext) EnsureStorageSchema() {
 
 // EnsureFunctionsSchema ensures functions schema and tables exist
 func (tc *TestContext) EnsureFunctionsSchema() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Verify database connection is alive before proceeding
+	err := tc.DB.Health(ctx)
+	require.NoError(tc.T, err, "Database connection health check failed")
 
 	queries := []string{
 		`CREATE SCHEMA IF NOT EXISTS functions`,
@@ -1599,7 +1615,12 @@ func (tc *TestContext) EnsureFunctionsSchema() {
 
 // EnsureRLSTestTables ensures test tables for RLS testing exist with proper policies
 func (tc *TestContext) EnsureRLSTestTables() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Verify database connection is alive before proceeding
+	err := tc.DB.Health(ctx)
+	require.NoError(tc.T, err, "Database connection health check failed")
 
 	queries := []string{
 		// Ensure uuid-ossp extension is available for uuid_generate_v4()

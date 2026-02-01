@@ -102,9 +102,15 @@ jobs:
         working-directory: ./sdk
         run: npm ci
 
+      - name: Verify test file content (debug)
+        working-directory: ./sdk
+        run: |
+          echo "Checking constructor mock syntax in client.test.ts:"
+          grep -A2 "vi.mock.*fetch" src/client.test.ts | head -5
+
       - name: Run SDK tests with coverage
         working-directory: ./sdk
-        run: npx vitest --coverage --run
+        run: npm run test:ci
 
       - name: Upload SDK coverage to Codecov
         uses: codecov/codecov-action@v5

@@ -2,11 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Bot } from 'lucide-react'
 import { AIProvidersTab } from '@/components/ai-providers/ai-providers-tab'
 
-export const Route = createFileRoute('/_authenticated/ai-providers/')({
-  component: AIProvidersPage,
-})
-
-function AIProvidersPage() {
+const AIProvidersPage = () => {
   return (
     <div className='flex flex-1 flex-col gap-6 p-6'>
       <div>
@@ -23,3 +19,7 @@ function AIProvidersPage() {
     </div>
   )
 }
+
+export const Route = createFileRoute('/_authenticated/ai-providers/')({
+  component: AIProvidersPage,
+})

@@ -47,6 +47,9 @@ export interface UseRealtimeOptions {
 
 /**
  * Hook to subscribe to realtime changes for a channel
+ *
+ * NOTE: The callback and invalidateKey are stored in refs to prevent
+ * subscription recreation on every render when inline functions/arrays are used.
  */
 export function useRealtime(options: UseRealtimeOptions) {
   const client = useFluxbaseClient();
@@ -64,6 +67,17 @@ export function useRealtime(options: UseRealtimeOptions) {
     enabled = true,
   } = options;
 
+  // Store callback and invalidateKey in refs to avoid subscription recreation
+  // when inline functions/arrays are passed
+  const callbackRef = useRef(callback);
+  const invalidateKeyRef = useRef(invalidateKey);
+  const autoInvalidateRef = useRef(autoInvalidate);
+
+  // Keep refs up to date
+  callbackRef.current = callback;
+  invalidateKeyRef.current = invalidateKey;
+  autoInvalidateRef.current = autoInvalidate;
+
   useEffect(() => {
     if (!enabled) {
       return;
@@ -74,17 +88,17 @@ export function useRealtime(options: UseRealtimeOptions) {
     channelRef.current = channel;
 
     const handleChange = (payload: RealtimePostgresChangesPayload) => {
-      // Call user callback
-      if (callback) {
-        callback(payload);
+      // Call user callback (using ref for latest value)
+      if (callbackRef.current) {
+        callbackRef.current(payload);
       }
 
       // Auto-invalidate queries if enabled
-      if (autoInvalidate) {
+      if (autoInvalidateRef.current) {
         // Extract table name from channel (e.g., 'table:public.products' -> 'public.products')
         const tableName = channelName.replace(/^table:/, "");
 
-        const key = invalidateKey || ["fluxbase", "table", tableName];
+        const key = invalidateKeyRef.current || ["fluxbase", "table", tableName];
         queryClient.invalidateQueries({ queryKey: key });
       }
     };
@@ -95,16 +109,7 @@ export function useRealtime(options: UseRealtimeOptions) {
       channel.unsubscribe();
       channelRef.current = null;
     };
-  }, [
-    client,
-    channelName,
-    event,
-    callback,
-    autoInvalidate,
-    invalidateKey,
-    queryClient,
-    enabled,
-  ]);
+  }, [client, channelName, event, queryClient, enabled]);
 
   return {
     channel: channelRef.current,

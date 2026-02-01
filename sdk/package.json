@@ -27,6 +27,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest",
+    "test:ci": "rm -rf node_modules/.vitest && vitest --coverage --run --no-cache",
     "test:ui": "vitest --ui",
     "type-check": "tsc --noEmit",
     "lint": "eslint src",

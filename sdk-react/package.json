@@ -19,7 +19,10 @@
     "docs:watch": "typedoc --watch",
     "type-check": "tsc --noEmit",
     "format": "prettier --write src",
-    "format:check": "prettier --check src"
+    "format:check": "prettier --check src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "fluxbase",
@@ -43,10 +46,17 @@
   "devDependencies": {
     "@fluxbase/sdk": "file:../sdk",
     "@tanstack/react-query": "^5.90.20",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.2.0",
     "@types/react": "^19.2.10",
+    "@vitest/coverage-v8": "^2.1.8",
+    "jsdom": "^25.0.1",
     "prettier": "^3.8.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "tsup": "^8.5.1",
     "typedoc": "^0.28.16",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.8"
   }
 }

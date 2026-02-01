@@ -946,3 +946,417 @@ describe('StorageBucket - Resumable Download', () => {
     expect(attemptCount).toBe(3) // 2 failures + 1 success
   })
 })
+
+describe('StorageBucket - File Sharing', () => {
+  let fetch: MockFetch
+  let bucket: StorageBucket
+
+  beforeEach(() => {
+    fetch = new MockFetch()
+    bucket = new StorageBucket(fetch as unknown as FluxbaseFetch, 'my-bucket')
+  })
+
+  it('should share a file with a user', async () => {
+    const { data, error } = await bucket.share('documents/file.pdf', {
+      userId: 'user-123',
+      permission: 'read',
+    })
+
+    expect(error).toBeNull()
+    expect(fetch.lastUrl).toBe('/api/v1/storage/my-bucket/documents/file.pdf/share')
+    expect(fetch.lastMethod).toBe('POST')
+    expect(fetch.lastBody).toEqual({
+      user_id: 'user-123',
+      permission: 'read',
+    })
+  })
+
+  it('should share a file with write permission', async () => {
+    const { data, error } = await bucket.share('documents/file.pdf', {
+      userId: 'user-456',
+      permission: 'write',
+    })
+
+    expect(error).toBeNull()
+    expect(fetch.lastBody).toEqual({
+      user_id: 'user-456',
+      permission: 'write',
+    })
+  })
+
+  it('should revoke file access from a user', async () => {
+    const { data, error } = await bucket.revokeShare('documents/file.pdf', 'user-123')
+
+    expect(error).toBeNull()
+    expect(fetch.lastUrl).toBe('/api/v1/storage/my-bucket/documents/file.pdf/share/user-123')
+    expect(fetch.lastMethod).toBe('DELETE')
+  })
+
+  it('should list users a file is shared with', async () => {
+    fetch.mockResponse = {
+      shares: [
+        { user_id: 'user-123', permission: 'read' },
+        { user_id: 'user-456', permission: 'write' },
+      ],
+    }
+
+    const { data, error } = await bucket.listShares('documents/file.pdf')
+
+    expect(error).toBeNull()
+    expect(data).toEqual([
+      { user_id: 'user-123', permission: 'read' },
+      { user_id: 'user-456', permission: 'write' },
+    ])
+    expect(fetch.lastUrl).toBe('/api/v1/storage/my-bucket/documents/file.pdf/shares')
+  })
+
+  it('should return empty array when no shares exist', async () => {
+    fetch.mockResponse = { shares: [] }
+
+    const { data, error } = await bucket.listShares('private/file.pdf')
+
+    expect(error).toBeNull()
+    expect(data).toEqual([])
+  })
+})
+
+describe('StorageBucket - Upload Stream', () => {
+  let fetch: MockFetch
+  let bucket: StorageBucket
+  let originalFetch: typeof globalThis.fetch
+
+  beforeEach(() => {
+    fetch = new MockFetch()
+    bucket = new StorageBucket(fetch as unknown as FluxbaseFetch, 'my-bucket')
+    originalFetch = globalThis.fetch
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  it('should upload stream successfully', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ key: 'video.mp4' }),
+    })
+
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('video data'))
+        controller.close()
+      }
+    })
+
+    const { data, error } = await bucket.uploadStream('video.mp4', stream, 1024, {
+      contentType: 'video/mp4',
+    })
+
+    expect(error).toBeNull()
+    expect(data).toEqual({
+      id: 'video.mp4',
+      path: 'video.mp4',
+      fullPath: 'my-bucket/video.mp4',
+    })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'http://localhost:8080/api/v1/storage/my-bucket/stream/video.mp4',
+      expect.objectContaining({
+        method: 'POST',
+      })
+    )
+  })
+
+  it('should reject upload with invalid size', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.close()
+      }
+    })
+
+    const { data, error } = await bucket.uploadStream('video.mp4', stream, 0)
+
+    expect(data).toBeNull()
+    expect(error?.message).toBe('size must be a positive number')
+  })
+
+  it('should reject upload with negative size', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.close()
+      }
+    })
+
+    const { data, error } = await bucket.uploadStream('video.mp4', stream, -100)
+
+    expect(data).toBeNull()
+    expect(error?.message).toBe('size must be a positive number')
+  })
+
+  it('should handle upload stream error', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      statusText: 'Internal Server Error',
+      json: vi.fn().mockResolvedValue({ error: 'Upload failed' }),
+    })
+
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data'))
+        controller.close()
+      }
+    })
+
+    const { data, error } = await bucket.uploadStream('file.bin', stream, 100)
+
+    expect(data).toBeNull()
+    expect(error).toBeDefined()
+  })
+
+  it('should include metadata headers when provided', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ key: 'file.bin' }),
+    })
+
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data'))
+        controller.close()
+      }
+    })
+
+    await bucket.uploadStream('file.bin', stream, 100, {
+      contentType: 'application/octet-stream',
+      cacheControl: 'max-age=3600',
+      metadata: { custom: 'value' },
+    })
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-Storage-Content-Type': 'application/octet-stream',
+          'X-Storage-Cache-Control': 'max-age=3600',
+          'X-Storage-Metadata': '{"custom":"value"}',
+        }),
+      })
+    )
+  })
+
+  it('should support abort signal', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      throw new DOMException('Aborted', 'AbortError')
+    })
+
+    const stream = new ReadableStream({
+      start(ctrl) {
+        ctrl.close()
+      }
+    })
+
+    const { data, error } = await bucket.uploadStream('file.bin', stream, 100, {
+      signal: controller.signal,
+    })
+
+    expect(data).toBeNull()
+    expect(error).toBeDefined()
+  })
+})
+
+describe('StorageBucket - Resumable Upload', () => {
+  let fetch: MockFetch
+  let bucket: StorageBucket
+  let originalFetch: typeof globalThis.fetch
+
+  beforeEach(() => {
+    fetch = new MockFetch()
+    bucket = new StorageBucket(fetch as unknown as FluxbaseFetch, 'my-bucket')
+    originalFetch = globalThis.fetch
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  it('should abort when signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    const file = new Blob(['test content'])
+    const { data, error } = await bucket.uploadResumable('file.bin', file, {
+      signal: controller.signal,
+    })
+
+    expect(data).toBeNull()
+    expect(error?.message).toBe('Upload aborted')
+  })
+
+  it('should abort resumable upload session', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+    })
+
+    const { error } = await bucket.abortResumableUpload('session-123')
+
+    expect(error).toBeNull()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/chunked/session-123'),
+      expect.objectContaining({ method: 'DELETE' })
+    )
+  })
+
+  it('should get resumable upload status', async () => {
+    const sessionStatus = {
+      session: {
+        sessionId: 'session-123',
+        status: 'in_progress',
+        completedChunks: [0, 1],
+        totalChunks: 4,
+      }
+    }
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(sessionStatus),
+    })
+
+    const { data, error } = await bucket.getResumableUploadStatus('session-123')
+
+    expect(error).toBeNull()
+    expect(data).toEqual(sessionStatus.session)
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/chunked/session-123/status'),
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('should handle error when getting upload status', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      statusText: 'Not Found',
+      json: () => Promise.resolve({ error: 'Session not found' }),
+    })
+
+    const { data, error } = await bucket.getResumableUploadStatus('invalid-session')
+
+    expect(data).toBeNull()
+    expect(error).toBeDefined()
+  })
+})
+
+describe('FluxbaseStorage - Bucket Management', () => {
+  let fetch: MockFetch
+  let storage: FluxbaseStorage
+
+  beforeEach(() => {
+    fetch = new MockFetch()
+    storage = new FluxbaseStorage(fetch as unknown as FluxbaseFetch)
+  })
+
+  it('should create a storage bucket reference', () => {
+    const bucket = storage.from('my-bucket')
+    expect(bucket).toBeDefined()
+  })
+})
+
+describe('StorageBucket - Transform Options', () => {
+  let fetch: MockFetch
+  let bucket: StorageBucket
+
+  beforeEach(() => {
+    fetch = new MockFetch()
+    bucket = new StorageBucket(fetch as unknown as FluxbaseFetch, 'images')
+  })
+
+  it('should get transform URL with options', () => {
+    const url = bucket.getTransformUrl('photo.jpg', {
+      width: 200,
+      height: 200,
+      fit: 'cover',
+      format: 'webp',
+      quality: 80,
+    })
+
+    expect(url).toContain('http://localhost:8080/api/v1/storage/images/photo.jpg')
+    expect(url).toContain('w=200')
+    expect(url).toContain('h=200')
+    expect(url).toContain('fit=cover')
+    expect(url).toContain('fmt=webp')
+    expect(url).toContain('q=80')
+  })
+
+  it('should get transform URL with only width', () => {
+    const url = bucket.getTransformUrl('photo.jpg', {
+      width: 400,
+    })
+
+    expect(url).toContain('w=400')
+    expect(url).not.toContain('h=')
+  })
+
+  it('should create signed URL with transform options', async () => {
+    fetch.mockResponse = { signed_url: 'https://signed-url-with-transform' }
+
+    const { data, error } = await bucket.createSignedUrl('photo.jpg', {
+      expiresIn: 3600,
+      transform: {
+        width: 100,
+        height: 100,
+      }
+    })
+
+    expect(error).toBeNull()
+    expect(fetch.lastUrl).toContain('/sign')
+    expect(fetch.lastBody).toEqual(expect.objectContaining({
+      width: 100,
+      height: 100,
+      expires_in: 3600,
+    }))
+  })
+})
+
+describe('StorageBucket - Large File Upload', () => {
+  let fetch: MockFetch
+  let bucket: StorageBucket
+  let originalFetch: typeof globalThis.fetch
+
+  beforeEach(() => {
+    fetch = new MockFetch()
+    bucket = new StorageBucket(fetch as unknown as FluxbaseFetch, 'uploads')
+    originalFetch = globalThis.fetch
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  it('should upload large file using stream', async () => {
+    // Mock successful stream upload
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ key: 'big-file.dat' })
+    })
+
+    // Create a mock file with stream method
+    const mockFile = {
+      size: 1000,
+      type: 'application/octet-stream',
+      stream: () => new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('x'.repeat(1000)))
+          controller.close()
+        }
+      })
+    }
+
+    const { data, error } = await bucket.uploadLargeFile('big-file.dat', mockFile as any)
+
+    expect(error).toBeNull()
+    expect(data?.path).toBe('big-file.dat')
+    expect(data?.fullPath).toBe('uploads/big-file.dat')
+  })
+})

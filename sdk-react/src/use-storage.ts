@@ -305,7 +305,11 @@ export function useStorageSignedUrl(
       return data?.signedUrl || null;
     },
     enabled: !!path,
-    staleTime: expiresIn ? expiresIn * 1000 - 60000 : 1000 * 60 * 50, // Refresh 1 minute before expiry
+    // Refresh 1 minute before expiry, but ensure staleTime is never negative
+    // For very short expirations (<60s), use half the expiration time
+    staleTime: expiresIn
+      ? Math.max(expiresIn * 500, expiresIn * 1000 - 60000) // At least half the expiration time
+      : 1000 * 60 * 50, // 50 minutes default
   });
 }
 
@@ -373,7 +377,11 @@ export function useStorageSignedUrlWithOptions(
       return data?.signedUrl || null;
     },
     enabled: !!path,
-    staleTime: expiresIn ? expiresIn * 1000 - 60000 : 1000 * 60 * 50, // Refresh 1 minute before expiry
+    // Refresh 1 minute before expiry, but ensure staleTime is never negative
+    // For very short expirations (<60s), use half the expiration time
+    staleTime: expiresIn
+      ? Math.max(expiresIn * 500, expiresIn * 1000 - 60000) // At least half the expiration time
+      : 1000 * 60 * 50, // 50 minutes default
   });
 }
 

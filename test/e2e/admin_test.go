@@ -14,7 +14,7 @@ import (
 // setupAdminTest prepares the test context for admin API tests
 func setupAdminTest(t *testing.T) (*test.TestContext, string) {
 	tc := test.NewTestContext(t)
-	tc.EnsureAuthSchema()
+	// Note: EnsureAuthSchema() removed - migrations already create auth tables
 
 	// Use UUID-based unique email to ensure no conflicts across parallel test packages
 	// UUID guarantees uniqueness better than timestamps which can collide in CI
@@ -157,7 +157,7 @@ func TestAdminSetupRateLimit(t *testing.T) {
 	tc := test.NewTestContext(t)
 	defer tc.Close()
 
-	tc.EnsureAuthSchema()
+	// Note: EnsureAuthSchema() removed - migrations already create auth tables
 
 	// Make multiple setup attempts to trigger rate limit (max 5 per 15 minutes)
 	for i := 1; i <= 6; i++ {
@@ -197,7 +197,7 @@ func TestAdminLoginRateLimit(t *testing.T) {
 	tc := test.NewTestContext(t)
 	defer tc.Close()
 
-	tc.EnsureAuthSchema()
+	// Note: EnsureAuthSchema() removed - migrations already create auth tables
 
 	// Create an admin user first with unique email
 	timestamp := time.Now().UnixNano()

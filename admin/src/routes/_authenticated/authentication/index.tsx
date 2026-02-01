@@ -81,11 +81,6 @@ const authenticationSearchSchema = z.object({
   tab: z.string().optional().catch('providers'),
 })
 
-export const Route = createFileRoute('/_authenticated/authentication/')({
-  validateSearch: authenticationSearchSchema,
-  component: AuthenticationPage,
-})
-
 const route = getRouteApi('/_authenticated/authentication/')
 
 interface Session {
@@ -96,7 +91,7 @@ interface Session {
   user_email?: string
 }
 
-function AuthenticationPage() {
+const AuthenticationPage = () => {
   const search = route.useSearch()
   const navigate = route.useNavigate()
 
@@ -2795,3 +2790,8 @@ function ActiveSessionsTab() {
     </div>
   )
 }
+
+export const Route = createFileRoute('/_authenticated/authentication/')({
+  validateSearch: authenticationSearchSchema,
+  component: AuthenticationPage,
+})
