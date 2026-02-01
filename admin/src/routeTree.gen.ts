@@ -322,6 +322,7 @@ const AuthenticatedKnowledgeBasesIdSearchRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof AuthenticatedIndexRoute
   '/setup': typeof SetupRoute
   '/forgot-password': typeof authForgotPasswordRoute
   '/reset-password': typeof authResetPasswordRoute
@@ -332,42 +333,41 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/login/callback': typeof LoginCallbackRoute
   '/login/otp': typeof LoginOtpRoute
-  '/': typeof AuthenticatedIndexRoute
-  '/login': typeof LoginIndexRoute
+  '/login/': typeof LoginIndexRoute
   '/api/rest': typeof AuthenticatedApiRestRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
-  '/ai-providers': typeof AuthenticatedAiProvidersIndexRoute
-  '/authentication': typeof AuthenticatedAuthenticationIndexRoute
-  '/chatbots': typeof AuthenticatedChatbotsIndexRoute
-  '/client-keys': typeof AuthenticatedClientKeysIndexRoute
-  '/database-config': typeof AuthenticatedDatabaseConfigIndexRoute
-  '/email-settings': typeof AuthenticatedEmailSettingsIndexRoute
-  '/extensions': typeof AuthenticatedExtensionsIndexRoute
-  '/features': typeof AuthenticatedFeaturesIndexRoute
-  '/functions': typeof AuthenticatedFunctionsIndexRoute
-  '/jobs': typeof AuthenticatedJobsIndexRoute
-  '/knowledge-bases': typeof AuthenticatedKnowledgeBasesIndexRoute
-  '/logs': typeof AuthenticatedLogsIndexRoute
-  '/mcp-tools': typeof AuthenticatedMcpToolsIndexRoute
-  '/monitoring': typeof AuthenticatedMonitoringIndexRoute
-  '/policies': typeof AuthenticatedPoliciesIndexRoute
-  '/realtime': typeof AuthenticatedRealtimeIndexRoute
-  '/rpc': typeof AuthenticatedRpcIndexRoute
-  '/schema': typeof AuthenticatedSchemaIndexRoute
-  '/secrets': typeof AuthenticatedSecretsIndexRoute
-  '/security-settings': typeof AuthenticatedSecuritySettingsIndexRoute
-  '/service-keys': typeof AuthenticatedServiceKeysIndexRoute
-  '/settings': typeof AuthenticatedSettingsIndexRoute
-  '/sql-editor': typeof AuthenticatedSqlEditorIndexRoute
-  '/storage-config': typeof AuthenticatedStorageConfigIndexRoute
-  '/storage': typeof AuthenticatedStorageIndexRoute
-  '/tables': typeof AuthenticatedTablesIndexRoute
-  '/users': typeof AuthenticatedUsersIndexRoute
-  '/webhooks': typeof AuthenticatedWebhooksIndexRoute
+  '/ai-providers/': typeof AuthenticatedAiProvidersIndexRoute
+  '/authentication/': typeof AuthenticatedAuthenticationIndexRoute
+  '/chatbots/': typeof AuthenticatedChatbotsIndexRoute
+  '/client-keys/': typeof AuthenticatedClientKeysIndexRoute
+  '/database-config/': typeof AuthenticatedDatabaseConfigIndexRoute
+  '/email-settings/': typeof AuthenticatedEmailSettingsIndexRoute
+  '/extensions/': typeof AuthenticatedExtensionsIndexRoute
+  '/features/': typeof AuthenticatedFeaturesIndexRoute
+  '/functions/': typeof AuthenticatedFunctionsIndexRoute
+  '/jobs/': typeof AuthenticatedJobsIndexRoute
+  '/knowledge-bases/': typeof AuthenticatedKnowledgeBasesIndexRoute
+  '/logs/': typeof AuthenticatedLogsIndexRoute
+  '/mcp-tools/': typeof AuthenticatedMcpToolsIndexRoute
+  '/monitoring/': typeof AuthenticatedMonitoringIndexRoute
+  '/policies/': typeof AuthenticatedPoliciesIndexRoute
+  '/realtime/': typeof AuthenticatedRealtimeIndexRoute
+  '/rpc/': typeof AuthenticatedRpcIndexRoute
+  '/schema/': typeof AuthenticatedSchemaIndexRoute
+  '/secrets/': typeof AuthenticatedSecretsIndexRoute
+  '/security-settings/': typeof AuthenticatedSecuritySettingsIndexRoute
+  '/service-keys/': typeof AuthenticatedServiceKeysIndexRoute
+  '/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/sql-editor/': typeof AuthenticatedSqlEditorIndexRoute
+  '/storage-config/': typeof AuthenticatedStorageConfigIndexRoute
+  '/storage/': typeof AuthenticatedStorageIndexRoute
+  '/tables/': typeof AuthenticatedTablesIndexRoute
+  '/users/': typeof AuthenticatedUsersIndexRoute
+  '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/knowledge-bases/$id/search': typeof AuthenticatedKnowledgeBasesIdSearchRoute
   '/knowledge-bases/$id/settings': typeof AuthenticatedKnowledgeBasesIdSettingsRoute
-  '/knowledge-bases/$id': typeof AuthenticatedKnowledgeBasesIdIndexRoute
+  '/knowledge-bases/$id/': typeof AuthenticatedKnowledgeBasesIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
@@ -470,6 +470,7 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/'
     | '/setup'
     | '/forgot-password'
     | '/reset-password'
@@ -480,42 +481,41 @@ export interface FileRouteTypes {
     | '/503'
     | '/login/callback'
     | '/login/otp'
-    | '/'
-    | '/login'
+    | '/login/'
     | '/api/rest'
     | '/errors/$error'
     | '/settings/appearance'
-    | '/ai-providers'
-    | '/authentication'
-    | '/chatbots'
-    | '/client-keys'
-    | '/database-config'
-    | '/email-settings'
-    | '/extensions'
-    | '/features'
-    | '/functions'
-    | '/jobs'
-    | '/knowledge-bases'
-    | '/logs'
-    | '/mcp-tools'
-    | '/monitoring'
-    | '/policies'
-    | '/realtime'
-    | '/rpc'
-    | '/schema'
-    | '/secrets'
-    | '/security-settings'
-    | '/service-keys'
-    | '/settings'
-    | '/sql-editor'
-    | '/storage-config'
-    | '/storage'
-    | '/tables'
-    | '/users'
-    | '/webhooks'
+    | '/ai-providers/'
+    | '/authentication/'
+    | '/chatbots/'
+    | '/client-keys/'
+    | '/database-config/'
+    | '/email-settings/'
+    | '/extensions/'
+    | '/features/'
+    | '/functions/'
+    | '/jobs/'
+    | '/knowledge-bases/'
+    | '/logs/'
+    | '/mcp-tools/'
+    | '/monitoring/'
+    | '/policies/'
+    | '/realtime/'
+    | '/rpc/'
+    | '/schema/'
+    | '/secrets/'
+    | '/security-settings/'
+    | '/service-keys/'
+    | '/settings/'
+    | '/sql-editor/'
+    | '/storage-config/'
+    | '/storage/'
+    | '/tables/'
+    | '/users/'
+    | '/webhooks/'
     | '/knowledge-bases/$id/search'
     | '/knowledge-bases/$id/settings'
-    | '/knowledge-bases/$id'
+    | '/knowledge-bases/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/setup'
@@ -642,14 +642,14 @@ declare module '@tanstack/react-router' {
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
-      fullPath: ''
+      fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login/': {
       id: '/login/'
       path: '/login'
-      fullPath: '/login'
+      fullPath: '/login/'
       preLoaderRoute: typeof LoginIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
@@ -726,196 +726,196 @@ declare module '@tanstack/react-router' {
     '/_authenticated/webhooks/': {
       id: '/_authenticated/webhooks/'
       path: '/webhooks'
-      fullPath: '/webhooks'
+      fullPath: '/webhooks/'
       preLoaderRoute: typeof AuthenticatedWebhooksIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/users/': {
       id: '/_authenticated/users/'
       path: '/users'
-      fullPath: '/users'
+      fullPath: '/users/'
       preLoaderRoute: typeof AuthenticatedUsersIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/tables/': {
       id: '/_authenticated/tables/'
       path: '/tables'
-      fullPath: '/tables'
+      fullPath: '/tables/'
       preLoaderRoute: typeof AuthenticatedTablesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/storage/': {
       id: '/_authenticated/storage/'
       path: '/storage'
-      fullPath: '/storage'
+      fullPath: '/storage/'
       preLoaderRoute: typeof AuthenticatedStorageIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/storage-config/': {
       id: '/_authenticated/storage-config/'
       path: '/storage-config'
-      fullPath: '/storage-config'
+      fullPath: '/storage-config/'
       preLoaderRoute: typeof AuthenticatedStorageConfigIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/sql-editor/': {
       id: '/_authenticated/sql-editor/'
       path: '/sql-editor'
-      fullPath: '/sql-editor'
+      fullPath: '/sql-editor/'
       preLoaderRoute: typeof AuthenticatedSqlEditorIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
       path: '/settings'
-      fullPath: '/settings'
+      fullPath: '/settings/'
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/service-keys/': {
       id: '/_authenticated/service-keys/'
       path: '/service-keys'
-      fullPath: '/service-keys'
+      fullPath: '/service-keys/'
       preLoaderRoute: typeof AuthenticatedServiceKeysIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/security-settings/': {
       id: '/_authenticated/security-settings/'
       path: '/security-settings'
-      fullPath: '/security-settings'
+      fullPath: '/security-settings/'
       preLoaderRoute: typeof AuthenticatedSecuritySettingsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/secrets/': {
       id: '/_authenticated/secrets/'
       path: '/secrets'
-      fullPath: '/secrets'
+      fullPath: '/secrets/'
       preLoaderRoute: typeof AuthenticatedSecretsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/schema/': {
       id: '/_authenticated/schema/'
       path: '/schema'
-      fullPath: '/schema'
+      fullPath: '/schema/'
       preLoaderRoute: typeof AuthenticatedSchemaIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/rpc/': {
       id: '/_authenticated/rpc/'
       path: '/rpc'
-      fullPath: '/rpc'
+      fullPath: '/rpc/'
       preLoaderRoute: typeof AuthenticatedRpcIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/realtime/': {
       id: '/_authenticated/realtime/'
       path: '/realtime'
-      fullPath: '/realtime'
+      fullPath: '/realtime/'
       preLoaderRoute: typeof AuthenticatedRealtimeIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/policies/': {
       id: '/_authenticated/policies/'
       path: '/policies'
-      fullPath: '/policies'
+      fullPath: '/policies/'
       preLoaderRoute: typeof AuthenticatedPoliciesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/monitoring/': {
       id: '/_authenticated/monitoring/'
       path: '/monitoring'
-      fullPath: '/monitoring'
+      fullPath: '/monitoring/'
       preLoaderRoute: typeof AuthenticatedMonitoringIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/mcp-tools/': {
       id: '/_authenticated/mcp-tools/'
       path: '/mcp-tools'
-      fullPath: '/mcp-tools'
+      fullPath: '/mcp-tools/'
       preLoaderRoute: typeof AuthenticatedMcpToolsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/logs/': {
       id: '/_authenticated/logs/'
       path: '/logs'
-      fullPath: '/logs'
+      fullPath: '/logs/'
       preLoaderRoute: typeof AuthenticatedLogsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/knowledge-bases/': {
       id: '/_authenticated/knowledge-bases/'
       path: '/knowledge-bases'
-      fullPath: '/knowledge-bases'
+      fullPath: '/knowledge-bases/'
       preLoaderRoute: typeof AuthenticatedKnowledgeBasesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/jobs/': {
       id: '/_authenticated/jobs/'
       path: '/jobs'
-      fullPath: '/jobs'
+      fullPath: '/jobs/'
       preLoaderRoute: typeof AuthenticatedJobsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/functions/': {
       id: '/_authenticated/functions/'
       path: '/functions'
-      fullPath: '/functions'
+      fullPath: '/functions/'
       preLoaderRoute: typeof AuthenticatedFunctionsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/features/': {
       id: '/_authenticated/features/'
       path: '/features'
-      fullPath: '/features'
+      fullPath: '/features/'
       preLoaderRoute: typeof AuthenticatedFeaturesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/extensions/': {
       id: '/_authenticated/extensions/'
       path: '/extensions'
-      fullPath: '/extensions'
+      fullPath: '/extensions/'
       preLoaderRoute: typeof AuthenticatedExtensionsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/email-settings/': {
       id: '/_authenticated/email-settings/'
       path: '/email-settings'
-      fullPath: '/email-settings'
+      fullPath: '/email-settings/'
       preLoaderRoute: typeof AuthenticatedEmailSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/database-config/': {
       id: '/_authenticated/database-config/'
       path: '/database-config'
-      fullPath: '/database-config'
+      fullPath: '/database-config/'
       preLoaderRoute: typeof AuthenticatedDatabaseConfigIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/client-keys/': {
       id: '/_authenticated/client-keys/'
       path: '/client-keys'
-      fullPath: '/client-keys'
+      fullPath: '/client-keys/'
       preLoaderRoute: typeof AuthenticatedClientKeysIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/chatbots/': {
       id: '/_authenticated/chatbots/'
       path: '/chatbots'
-      fullPath: '/chatbots'
+      fullPath: '/chatbots/'
       preLoaderRoute: typeof AuthenticatedChatbotsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/authentication/': {
       id: '/_authenticated/authentication/'
       path: '/authentication'
-      fullPath: '/authentication'
+      fullPath: '/authentication/'
       preLoaderRoute: typeof AuthenticatedAuthenticationIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/ai-providers/': {
       id: '/_authenticated/ai-providers/'
       path: '/ai-providers'
-      fullPath: '/ai-providers'
+      fullPath: '/ai-providers/'
       preLoaderRoute: typeof AuthenticatedAiProvidersIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
@@ -943,7 +943,7 @@ declare module '@tanstack/react-router' {
     '/_authenticated/knowledge-bases/$id/': {
       id: '/_authenticated/knowledge-bases/$id/'
       path: '/knowledge-bases/$id'
-      fullPath: '/knowledge-bases/$id'
+      fullPath: '/knowledge-bases/$id/'
       preLoaderRoute: typeof AuthenticatedKnowledgeBasesIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
