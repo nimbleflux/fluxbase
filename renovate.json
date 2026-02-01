@@ -1,6 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":semanticCommits"],
+  "mode": "full",
+  "extends": [
+    "config:recommended",
+    ":semanticCommitTypeAll(chore)",
+    "group:allNonMajor"
+  ],
   "labels": ["dependencies"],
   "rangeStrategy": "bump",
   "packageRules": [

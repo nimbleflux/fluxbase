@@ -610,10 +610,11 @@ describe("RealtimeChannel - postgres_changes Filtering", () => {
       "test-token",
     );
     channel.subscribe();
-    // Wait longer to ensure any pending reconnection timers from previous tests have completed
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    // Capture the WebSocket reference for this test to avoid race conditions
+    // Capture the WebSocket reference immediately after subscribe() to avoid race conditions
+    // with reconnection timers from previous tests that may fire during async waits
     mockWs = lastMockWebSocket!;
+    // Wait for any pending reconnection timers from previous tests to complete
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   afterEach(async () => {

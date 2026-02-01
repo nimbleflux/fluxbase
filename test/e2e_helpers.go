@@ -503,7 +503,7 @@ func GetTestConfig() *config.Config {
 			MinConnections:  4,                // Keep warm connections for parallel tests
 			MaxConnLifetime: 5 * time.Minute,  // Shorter lifetime to recycle connections
 			MaxConnIdleTime: 30 * time.Second, // Close idle connections faster
-			HealthCheck:     1 * time.Minute,
+			HealthCheck:     15 * time.Second, // Must be < MaxConnIdleTime to catch stale connections
 		},
 		Auth: config.AuthConfig{
 			JWTSecret:        "test-secret-key-for-testing-only",
