@@ -6,14 +6,15 @@ import (
 	"time"
 
 	"github.com/fluxbase-eu/fluxbase/internal/config"
-	"github.com/mailgun/mailgun-go/v4"
+	"github.com/mailgun/mailgun-go/v5"
 	"github.com/rs/zerolog/log"
 )
 
 // MailgunService handles email sending via Mailgun
 type MailgunService struct {
 	config *config.EmailConfig
-	client *mailgun.MailgunImpl
+	client *mailgun.Client
+	domain string
 }
 
 // NewMailgunService creates a new Mailgun email service
@@ -25,11 +26,12 @@ func NewMailgunService(cfg *config.EmailConfig) (*MailgunService, error) {
 		return nil, fmt.Errorf("mailgun domain is required")
 	}
 
-	mg := mailgun.NewMailgun(cfg.MailgunDomain, cfg.MailgunAPIKey)
+	mg := mailgun.NewMailgun(cfg.MailgunAPIKey)
 
 	return &MailgunService{
 		config: cfg,
 		client: mg,
+		domain: cfg.MailgunDomain,
 	}, nil
 }
 
@@ -64,6 +66,7 @@ func (s *MailgunService) SendInvitationEmail(ctx context.Context, to, inviterNam
 // Send sends a generic email via Mailgun
 func (s *MailgunService) Send(ctx context.Context, to, subject, body string) error {
 	message := mailgun.NewMessage(
+		s.domain,
 		fmt.Sprintf("%s <%s>", s.config.FromName, s.config.FromAddress),
 		subject,
 		"", // Plain text body (optional)
@@ -82,7 +85,7 @@ func (s *MailgunService) Send(ctx context.Context, to, subject, body string) err
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	resp, id, err := s.client.Send(ctx, message)
+	resp, err := s.client.Send(ctx, message)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -95,8 +98,8 @@ func (s *MailgunService) Send(ctx context.Context, to, subject, body string) err
 	log.Info().
 		Str("to", to).
 		Str("subject", subject).
-		Str("message_id", id).
-		Str("response", resp).
+		Str("message_id", resp.ID).
+		Str("response", resp.Message).
 		Msg("Email sent successfully via Mailgun")
 
 	return nil
