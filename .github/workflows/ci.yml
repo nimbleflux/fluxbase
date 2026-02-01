@@ -107,7 +107,7 @@ jobs:
         run: npx vitest --coverage --run
 
       - name: Upload SDK coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           files: ./sdk/coverage/coverage-final.json
           flags: sdk
@@ -371,7 +371,7 @@ jobs:
           go test -v -race -parallel=1 -timeout=10m ./test/e2e/...
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           file: ./coverage.out
           flags: unittests
