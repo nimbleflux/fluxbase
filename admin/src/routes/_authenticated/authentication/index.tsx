@@ -2613,8 +2613,10 @@ function ActiveSessionsTab() {
     mutationFn: async (sessionId: string) => {
       await api.delete(`/api/v1/admin/auth/sessions/${sessionId}`)
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['sessions', page, pageSize],
+      })
       toast.success('Session revoked successfully')
     },
     onError: () => {
@@ -2626,8 +2628,10 @@ function ActiveSessionsTab() {
     mutationFn: async (userId: string) => {
       await api.delete(`/api/v1/admin/auth/sessions/user/${userId}`)
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['sessions', page, pageSize],
+      })
       toast.success('All user sessions revoked successfully')
     },
     onError: () => {
