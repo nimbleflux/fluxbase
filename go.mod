@@ -11,7 +11,7 @@ require (
 	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/evanw/esbuild v0.27.2
 	github.com/gofiber/contrib/websocket v1.3.4
-	github.com/gofiber/fiber/v2 v2.52.6
+	github.com/gofiber/fiber/v2 v2.52.9
 	github.com/gofiber/fiber/v3 v3.0.0
 	github.com/gofiber/storage/memory/v2 v2.1.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
