@@ -118,7 +118,7 @@ on:
         type: boolean
         default: false
       generate_ai_notes:
-        description: "Generate AI-assisted release notes with Claude"
+        description: "Generate AI-assisted release notes with AI"
         required: false
         type: boolean
         default: true
@@ -480,7 +480,7 @@ jobs:
 
           File changes summary: $CHANGED_FILES
 
-          Please write a concise, professional release summary (2-4 sentences) that:
+          Write a professional release summary that:
           1. Highlights the most important changes
           2. Is written for end users (not developers)
           3. Uses clear, non-technical language where possible
@@ -1143,7 +1143,13 @@ jobs:
 
   publish-helm-chart:
     name: Publish Helm Chart to GHCR
-    needs: [get-version, update-version-files, publish-postgres-manifests, update-postgres-version]
+    needs:
+      [
+        get-version,
+        update-version-files,
+        publish-postgres-manifests,
+        update-postgres-version,
+      ]
     runs-on: ubuntu-latest
     # Publish Helm chart for all releases (stable and RC) unless disabled in workflow_dispatch
     if: |
@@ -1324,7 +1330,13 @@ jobs:
 
   publish-postgres-manifests:
     name: Create Postgres Multi-arch Manifests
-    needs: [get-version, get-postgres-versions, publish-postgres-amd64, publish-postgres-arm64]
+    needs:
+      [
+        get-version,
+        get-postgres-versions,
+        publish-postgres-amd64,
+        publish-postgres-arm64,
+      ]
     if: github.event_name != 'workflow_dispatch' || inputs.publish_postgres
     runs-on: ubuntu-latest
     strategy:
@@ -1423,7 +1435,13 @@ jobs:
   # ==========================================================================
   smoke-test:
     name: Post-release Smoke Tests
-    needs: [get-version, publish-docker-manifest, publish-npm-sdk, publish-npm-sdk-react]
+    needs:
+      [
+        get-version,
+        publish-docker-manifest,
+        publish-npm-sdk,
+        publish-npm-sdk-react,
+      ]
     runs-on: ubuntu-latest
     if: |
       always() &&
