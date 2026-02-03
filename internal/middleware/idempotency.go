@@ -239,9 +239,9 @@ func (m *IdempotencyMiddleware) Middleware() fiber.Handler {
 		responseStatus := c.Response().StatusCode()
 		responseBody := c.Response().Body()
 		responseHeaders := make(map[string]string)
-		c.Response().Header.VisitAll(func(key, value []byte) {
+		for key, value := range c.Response().Header.All() {
 			responseHeaders[string(key)] = string(value)
-		})
+		}
 
 		// Update record with response
 		status := StatusCompleted

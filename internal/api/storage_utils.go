@@ -46,13 +46,13 @@ func detectContentType(filename string) string {
 func parseMetadata(c *fiber.Ctx) map[string]string {
 	metadata := make(map[string]string)
 
-	c.Request().PostArgs().VisitAll(func(key, value []byte) {
+	for key, value := range c.Request().PostArgs().All() {
 		keyStr := string(key)
 		if strings.HasPrefix(keyStr, "metadata_") {
 			metaKey := strings.TrimPrefix(keyStr, "metadata_")
 			metadata[metaKey] = string(value)
 		}
-	})
+	}
 
 	return metadata
 }

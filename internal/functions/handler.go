@@ -837,14 +837,14 @@ func (h *Handler) InvokeFunction(c *fiber.Ctx) error {
 	}
 
 	// Copy headers
-	c.Request().Header.VisitAll(func(key, value []byte) {
+	for key, value := range c.Request().Header.All() {
 		req.Headers[string(key)] = string(value)
-	})
+	}
 
 	// Copy query parameters
-	c.Request().URI().QueryArgs().VisitAll(func(key, value []byte) {
+	for key, value := range c.Request().URI().QueryArgs().All() {
 		req.Params[string(key)] = string(value)
-	})
+	}
 
 	// Get user context if authenticated
 	if userID := c.Locals("user_id"); userID != nil {
