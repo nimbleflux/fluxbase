@@ -477,8 +477,8 @@ jobs:
 
           Rules:
           - Focus ONLY on user-facing features and bug fixes
-          - Ignore: CI changes, dependency updates, refactoring, test changes, workflow changes
-          - Do NOT mention: GitHub Actions, CI/CD, pipelines, internal tooling, AI, Groq, Claude
+          - Ignore: CI changes, dependency updates, test changes, workflow changes
+          - Do NOT mention: GitHub Actions, CI/CD, pipelines, internal tooling, Groq, Claude
           - Do NOT use marketing language like "excited to announce" or "we are pleased"
           - Be factual and concise
           - If there are no significant user-facing changes, just say "Bug fixes and maintenance improvements."
