@@ -451,10 +451,17 @@ jobs:
 
       - name: Generate AI summary with Claude
         id: ai_summary
-        if: inputs.generate_ai_notes && env.ANTHROPIC_API_KEY != ''
+        if: inputs.generate_ai_notes
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          # Check if API key is set
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::warning::ANTHROPIC_API_KEY secret is not set, skipping AI summary"
+            echo "summary=This release includes bug fixes, improvements, and new features. See the changelog below for details." >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
           VERSION="${{ needs.get-version.outputs.version }}"
 
@@ -482,8 +489,8 @@ jobs:
           Format: Just the summary text, no headers or bullet points.
           PROMPT_EOF
 
-          # Call Claude API
-          SUMMARY=$(curl -s https://api.anthropic.com/v1/messages \
+          # Call Claude API and capture both response and HTTP status
+          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" https://api.anthropic.com/v1/messages \
             -H "Content-Type: application/json" \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
@@ -494,7 +501,31 @@ jobs:
                 \"role\": \"user\",
                 \"content\": $(cat /tmp/prompt.txt | jq -Rs .)
               }]
-            }" | jq -r '.content[0].text // "Release includes bug fixes and improvements."')
+            }")
+
+          # Extract HTTP status code (last line) and response body
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+
+          echo "API Response Status: $HTTP_STATUS"
+
+          # Check for successful response
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "::warning::Claude API returned status $HTTP_STATUS"
+            echo "Response: $RESPONSE_BODY"
+            echo "summary=This release includes bug fixes, improvements, and new features. See the changelog below for details." >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Extract the summary from the response
+          SUMMARY=$(echo "$RESPONSE_BODY" | jq -r '.content[0].text // empty')
+
+          if [ -z "$SUMMARY" ]; then
+            echo "::warning::Could not extract summary from API response"
+            echo "Response: $RESPONSE_BODY"
+            echo "summary=This release includes bug fixes, improvements, and new features. See the changelog below for details." >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
           echo "AI Summary: $SUMMARY"
 
@@ -503,11 +534,9 @@ jobs:
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Fallback summary if no AI
+      - name: Fallback summary if AI disabled
         id: fallback_summary
-        if: "!inputs.generate_ai_notes || env.ANTHROPIC_API_KEY == ''"
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        if: "!inputs.generate_ai_notes"
         run: |
           echo "summary=This release includes bug fixes, improvements, and new features. See the changelog below for details." >> $GITHUB_OUTPUT
 
