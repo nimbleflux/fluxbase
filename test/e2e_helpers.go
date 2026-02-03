@@ -1880,7 +1880,33 @@ func (tc *TestContext) WaitForEmail(timeout time.Duration, filter func(MailHogMe
 
 // CreateClientKey creates a test client key and returns the plaintext key for use in tests
 func (tc *TestContext) CreateClientKey(name string, scopes []string) string {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Verify database connection is alive before proceeding with retry logic
+	// This prevents "conn closed" errors in CI environments where connection
+	// pool may close idle connections during slow test setup
+	const maxRetries = 3
+	var healthErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		healthErr = tc.DB.Health(ctx)
+		if healthErr == nil {
+			// Connection is alive, proceed
+			break
+		}
+
+		if attempt < maxRetries {
+			// Log the failure and retry with exponential backoff
+			backoff := time.Duration(1<<uint(attempt-1)) * time.Second // 1s, 2s, 4s
+			log.Warn().
+				Err(healthErr).
+				Int("attempt", attempt).
+				Dur("backoff", backoff).
+				Msg("Database health check failed in CreateClientKey, retrying...")
+			time.Sleep(backoff)
+		}
+	}
+	require.NoError(tc.T, healthErr, "Database connection health check failed after %d attempts", maxRetries)
 
 	// Create client key service (nil settings cache for tests - allows all user keys)
 	clientKeyService := auth.NewClientKeyService(tc.DB.Pool(), nil)
@@ -1915,7 +1941,33 @@ func (tc *TestContext) CreateAPIKey(name string, scopes []string) string {
 // CreateServiceKey creates a test service key and returns the plaintext key for use in tests
 // Service keys have elevated privileges and bypass RLS
 func (tc *TestContext) CreateServiceKey(name string) string {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Verify database connection is alive before proceeding with retry logic
+	// This prevents "conn closed" errors in CI environments where connection
+	// pool may close idle connections during slow test setup
+	const maxRetries = 3
+	var healthErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		healthErr = tc.DB.Health(ctx)
+		if healthErr == nil {
+			// Connection is alive, proceed
+			break
+		}
+
+		if attempt < maxRetries {
+			// Log the failure and retry with exponential backoff
+			backoff := time.Duration(1<<uint(attempt-1)) * time.Second // 1s, 2s, 4s
+			log.Warn().
+				Err(healthErr).
+				Int("attempt", attempt).
+				Dur("backoff", backoff).
+				Msg("Database health check failed in CreateServiceKey, retrying...")
+			time.Sleep(backoff)
+		}
+	}
+	require.NoError(tc.T, healthErr, "Database connection health check failed after %d attempts", maxRetries)
 
 	// Generate random key bytes
 	keyBytes := make([]byte, 32)
