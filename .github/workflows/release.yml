@@ -364,17 +364,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get previous tag
+      - name: Get previous stable tag
         id: prev_tag
         run: |
-          # Get the tag before the current one
-          PREV_TAG=$(git tag -l 'v*' | sort -V | tail -n2 | head -n1)
+          # Get the last stable release tag (excluding release candidates)
+          # This ensures release notes show all changes since the last stable release
+          PREV_TAG=$(git tag -l 'v*' | grep -v '\-rc\.' | sort -V | tail -n1)
           if [ -z "$PREV_TAG" ]; then
-            # If no previous tag, use first commit
+            # If no previous stable tag, use first commit
             PREV_TAG=$(git rev-list --max-parents=0 HEAD)
           fi
           echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
-          echo "Previous tag: $PREV_TAG"
+          echo "Previous stable tag: $PREV_TAG"
 
       - name: Generate changelog from commits and PRs
         id: changelog
