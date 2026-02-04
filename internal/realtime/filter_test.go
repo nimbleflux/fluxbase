@@ -812,3 +812,296 @@ func TestGetNestedValue(t *testing.T) {
 		})
 	}
 }
+
+// Additional edge case tests
+
+func TestCompareNumeric_AdditionalTypes(t *testing.T) {
+	tests := []struct {
+		name        string
+		recordValue interface{}
+		filterValue string
+		want        int
+	}{
+		{
+			name:        "int32 equal",
+			recordValue: int32(100),
+			filterValue: "100",
+			want:        0,
+		},
+		{
+			name:        "int32 less than",
+			recordValue: int32(50),
+			filterValue: "100",
+			want:        -1,
+		},
+		{
+			name:        "int32 greater than",
+			recordValue: int32(150),
+			filterValue: "100",
+			want:        1,
+		},
+		{
+			name:        "float32 equal",
+			recordValue: float32(2.5),
+			filterValue: "2.5",
+			want:        0,
+		},
+		{
+			name:        "float32 less than",
+			recordValue: float32(1.5),
+			filterValue: "2.5",
+			want:        -1,
+		},
+		{
+			name:        "unsupported type returns 0",
+			recordValue: struct{}{},
+			filterValue: "100",
+			want:        0,
+		},
+		{
+			name:        "non-numeric filter string comparison - less",
+			recordValue: "abc",
+			filterValue: "xyz",
+			want:        -1,
+		},
+		{
+			name:        "non-numeric filter string comparison - greater",
+			recordValue: "xyz",
+			filterValue: "abc",
+			want:        1,
+		},
+		{
+			name:        "non-numeric filter string comparison - equal",
+			recordValue: "same",
+			filterValue: "same",
+			want:        0,
+		},
+		{
+			name:        "non-numeric string record with numeric filter",
+			recordValue: "not-a-number",
+			filterValue: "100",
+			want:        0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := compareNumeric(tt.recordValue, tt.filterValue)
+			if got != tt.want {
+				t.Errorf("compareNumeric(%v, %v) = %v, want %v",
+					tt.recordValue, tt.filterValue, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilter_Matches_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter *Filter
+		record map[string]interface{}
+		want   bool
+	}{
+		{
+			name: "unknown operator returns false",
+			filter: &Filter{
+				Column:   "status",
+				Operator: "unknown",
+				Value:    "test",
+			},
+			record: map[string]interface{}{"status": "test"},
+			want:   false,
+		},
+		{
+			name: "IS with invalid value returns false",
+			filter: &Filter{
+				Column:   "status",
+				Operator: "is",
+				Value:    "invalid",
+			},
+			record: map[string]interface{}{"status": "some_value"},
+			want:   false,
+		},
+		{
+			name: "IN with empty list returns false",
+			filter: &Filter{
+				Column:   "status",
+				Operator: "in",
+				Value:    "()",
+			},
+			record: map[string]interface{}{"status": "active"},
+			want:   false,
+		},
+		{
+			name: "IS true with string true",
+			filter: &Filter{
+				Column:   "active",
+				Operator: "is",
+				Value:    "true",
+			},
+			record: map[string]interface{}{"active": "true"},
+			want:   true,
+		},
+		{
+			name: "IS false with string false",
+			filter: &Filter{
+				Column:   "active",
+				Operator: "is",
+				Value:    "false",
+			},
+			record: map[string]interface{}{"active": "false"},
+			want:   true,
+		},
+		{
+			name: "equality with numeric value",
+			filter: &Filter{
+				Column:   "count",
+				Operator: "eq",
+				Value:    "42",
+			},
+			record: map[string]interface{}{"count": 42},
+			want:   true,
+		},
+		{
+			name: "IN with spaces around values",
+			filter: &Filter{
+				Column:   "status",
+				Operator: "in",
+				Value:    "(active, pending, completed)",
+			},
+			record: map[string]interface{}{"status": "pending"},
+			want:   true,
+		},
+		{
+			name: "LIKE exact match (no wildcards)",
+			filter: &Filter{
+				Column:   "name",
+				Operator: "like",
+				Value:    "exact",
+			},
+			record: map[string]interface{}{"name": "exact"},
+			want:   true,
+		},
+		{
+			name: "LIKE no match without wildcards",
+			filter: &Filter{
+				Column:   "name",
+				Operator: "like",
+				Value:    "exact",
+			},
+			record: map[string]interface{}{"name": "not_exact"},
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.filter.Matches(tt.record)
+			if got != tt.want {
+				t.Errorf("Filter.Matches() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilter_MatchesIs_CaseInsensitive(t *testing.T) {
+	tests := []struct {
+		name        string
+		filterValue string
+		recordValue interface{}
+		want        bool
+	}{
+		{
+			name:        "NULL uppercase",
+			filterValue: "NULL",
+			recordValue: nil,
+			want:        true,
+		},
+		{
+			name:        "Null mixed case",
+			filterValue: "Null",
+			recordValue: nil,
+			want:        true,
+		},
+		{
+			name:        "TRUE uppercase",
+			filterValue: "TRUE",
+			recordValue: true,
+			want:        true,
+		},
+		{
+			name:        "True mixed case",
+			filterValue: "True",
+			recordValue: true,
+			want:        true,
+		},
+		{
+			name:        "FALSE uppercase",
+			filterValue: "FALSE",
+			recordValue: false,
+			want:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter := &Filter{
+				Column:   "col",
+				Operator: "is",
+				Value:    tt.filterValue,
+			}
+			record := map[string]interface{}{"col": tt.recordValue}
+			got := filter.Matches(record)
+			if got != tt.want {
+				t.Errorf("Filter.Matches() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetNestedValue_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name       string
+		column     string
+		record     map[string]interface{}
+		wantExists bool
+	}{
+		{
+			name:   "empty path segment",
+			column: "->key",
+			record: map[string]interface{}{
+				"key": "value",
+			},
+			wantExists: false,
+		},
+		{
+			name:   "path starting with root key",
+			column: "data",
+			record: map[string]interface{}{
+				"data": "simple",
+			},
+			wantExists: true,
+		},
+		{
+			name:   "text extraction on nil value",
+			column: "data->>value",
+			record: map[string]interface{}{
+				"data": map[string]interface{}{
+					"value": nil,
+				},
+			},
+			wantExists: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter := &Filter{Column: tt.column}
+			_, gotExists := filter.getNestedValue(tt.record)
+
+			if gotExists != tt.wantExists {
+				t.Errorf("getNestedValue() exists = %v, want %v", gotExists, tt.wantExists)
+			}
+		})
+	}
+}

@@ -1923,3 +1923,394 @@ func TestBranchingConfig_MaxBranchesPerUser(t *testing.T) {
 		})
 	}
 }
+
+func TestConfig_Validate(t *testing.T) {
+	// Helper to create a valid Config for testing
+	validConfig := func() Config {
+		return Config{
+			EncryptionKey: "12345678901234567890123456789012", // 32 bytes for AES-256
+			BaseURL:       "https://example.com",
+			Server: ServerConfig{
+				Address:      ":8080",
+				ReadTimeout:  30 * time.Second,
+				WriteTimeout: 30 * time.Second,
+				IdleTimeout:  60 * time.Second,
+				BodyLimit:    1024 * 1024,
+			},
+			Database: DatabaseConfig{
+				Host:            "localhost",
+				Port:            5432,
+				User:            "postgres",
+				Password:        "password",
+				Database:        "fluxbase",
+				SSLMode:         "disable",
+				MaxConnections:  50,
+				MinConnections:  10,
+				MaxConnLifetime: time.Hour,
+				MaxConnIdleTime: 30 * time.Minute,
+				HealthCheck:     time.Minute,
+			},
+			Auth: AuthConfig{
+				JWTSecret:           "this-is-a-very-secure-secret-key-for-testing-purposes",
+				JWTExpiry:           15 * time.Minute,
+				RefreshExpiry:       7 * 24 * time.Hour,
+				MagicLinkExpiry:     15 * time.Minute,
+				PasswordResetExpiry: time.Hour,
+				PasswordMinLen:      8,
+				BcryptCost:          10,
+			},
+			Storage: StorageConfig{
+				Provider:      "local",
+				LocalPath:     "./storage",
+				MaxUploadSize: 1024 * 1024,
+			},
+			Security: SecurityConfig{
+				SetupToken: "secure-setup-token-for-testing",
+			},
+			API: APIConfig{
+				MaxPageSize:     1000,
+				MaxTotalResults: 10000,
+				DefaultPageSize: 100,
+			},
+			Scaling: ScalingConfig{
+				Backend: "local",
+			},
+			Logging: LoggingConfig{
+				ConsoleLevel:  "info",
+				ConsoleFormat: "console",
+				Backend:       "postgres",
+				BatchSize:     100,
+			},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		modify  func(*Config)
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "valid config",
+			modify:  func(c *Config) {},
+			wantErr: false,
+		},
+		{
+			name:    "missing encryption key",
+			modify:  func(c *Config) { c.EncryptionKey = "" },
+			wantErr: true,
+			errMsg:  "encryption_key is required",
+		},
+		{
+			name:    "encryption key too short",
+			modify:  func(c *Config) { c.EncryptionKey = "tooshort" },
+			wantErr: true,
+			errMsg:  "encryption_key must be exactly 32 bytes",
+		},
+		{
+			name:    "encryption key too long",
+			modify:  func(c *Config) { c.EncryptionKey = "123456789012345678901234567890123456" },
+			wantErr: true,
+			errMsg:  "encryption_key must be exactly 32 bytes",
+		},
+		{
+			name:    "invalid base URL scheme",
+			modify:  func(c *Config) { c.BaseURL = "ftp://example.com" },
+			wantErr: true,
+			errMsg:  "base_url must use http or https scheme",
+		},
+		{
+			name:    "invalid base URL",
+			modify:  func(c *Config) { c.BaseURL = "://invalid" },
+			wantErr: true,
+			errMsg:  "invalid base_url",
+		},
+		{
+			name:    "valid http base URL",
+			modify:  func(c *Config) { c.BaseURL = "http://localhost:8080" },
+			wantErr: false,
+		},
+		{
+			name:    "empty base URL is valid",
+			modify:  func(c *Config) { c.BaseURL = "" },
+			wantErr: false,
+		},
+		{
+			name:    "invalid public base URL scheme",
+			modify:  func(c *Config) { c.PublicBaseURL = "ftp://example.com" },
+			wantErr: true,
+			errMsg:  "public_base_url must use http or https scheme",
+		},
+		{
+			name:    "invalid public base URL",
+			modify:  func(c *Config) { c.PublicBaseURL = "://invalid" },
+			wantErr: true,
+			errMsg:  "invalid public_base_url",
+		},
+		{
+			name:    "valid public base URL",
+			modify:  func(c *Config) { c.PublicBaseURL = "https://public.example.com" },
+			wantErr: false,
+		},
+		{
+			name: "server config error propagates",
+			modify: func(c *Config) {
+				c.Server.Address = ""
+			},
+			wantErr: true,
+			errMsg:  "server configuration error",
+		},
+		{
+			name: "database config error propagates",
+			modify: func(c *Config) {
+				c.Database.Host = ""
+			},
+			wantErr: true,
+			errMsg:  "database configuration error",
+		},
+		{
+			name: "auth config error propagates",
+			modify: func(c *Config) {
+				c.Auth.JWTSecret = ""
+			},
+			wantErr: true,
+			errMsg:  "auth configuration error",
+		},
+		{
+			name: "storage config error propagates",
+			modify: func(c *Config) {
+				c.Storage.Provider = "invalid"
+			},
+			wantErr: true,
+			errMsg:  "storage configuration error",
+		},
+		{
+			name: "email config error propagates when enabled",
+			modify: func(c *Config) {
+				c.Email.Enabled = true
+				c.Email.Provider = "invalid"
+			},
+			wantErr: true,
+			errMsg:  "email configuration error",
+		},
+		{
+			name: "email config not validated when disabled",
+			modify: func(c *Config) {
+				c.Email.Enabled = false
+				c.Email.Provider = "invalid"
+			},
+			wantErr: false,
+		},
+		{
+			name: "functions config error propagates when enabled",
+			modify: func(c *Config) {
+				c.Functions.Enabled = true
+				c.Functions.FunctionsDir = ""
+			},
+			wantErr: true,
+			errMsg:  "functions configuration error",
+		},
+		{
+			name: "functions config not validated when disabled",
+			modify: func(c *Config) {
+				c.Functions.Enabled = false
+				c.Functions.FunctionsDir = ""
+			},
+			wantErr: false,
+		},
+		{
+			name: "jobs config error propagates when enabled",
+			modify: func(c *Config) {
+				c.Jobs.Enabled = true
+				c.Jobs.JobsDir = ""
+			},
+			wantErr: true,
+			errMsg:  "jobs configuration error",
+		},
+		{
+			name: "jobs config not validated when disabled",
+			modify: func(c *Config) {
+				c.Jobs.Enabled = false
+				c.Jobs.JobsDir = ""
+			},
+			wantErr: false,
+		},
+		{
+			name: "tracing config error propagates when enabled",
+			modify: func(c *Config) {
+				c.Tracing.Enabled = true
+				c.Tracing.Endpoint = ""
+			},
+			wantErr: true,
+			errMsg:  "tracing configuration error",
+		},
+		{
+			name: "tracing config not validated when disabled",
+			modify: func(c *Config) {
+				c.Tracing.Enabled = false
+				c.Tracing.Endpoint = ""
+			},
+			wantErr: false,
+		},
+		{
+			name: "metrics config error propagates when enabled",
+			modify: func(c *Config) {
+				c.Metrics.Enabled = true
+				c.Metrics.Port = 0
+			},
+			wantErr: true,
+			errMsg:  "metrics configuration error",
+		},
+		{
+			name: "metrics config not validated when disabled",
+			modify: func(c *Config) {
+				c.Metrics.Enabled = false
+				c.Metrics.Port = 0
+			},
+			wantErr: false,
+		},
+		{
+			name: "ai config error propagates when enabled",
+			modify: func(c *Config) {
+				c.AI.Enabled = true
+				c.AI.ChatbotsDir = ""
+			},
+			wantErr: true,
+			errMsg:  "ai configuration error",
+		},
+		{
+			name: "ai config not validated when disabled",
+			modify: func(c *Config) {
+				c.AI.Enabled = false
+				c.AI.ChatbotsDir = ""
+			},
+			wantErr: false,
+		},
+		{
+			name: "graphql config error propagates when enabled",
+			modify: func(c *Config) {
+				c.GraphQL.Enabled = true
+				c.GraphQL.MaxDepth = -1
+			},
+			wantErr: true,
+			errMsg:  "graphql configuration error",
+		},
+		{
+			name: "graphql config not validated when disabled",
+			modify: func(c *Config) {
+				c.GraphQL.Enabled = false
+				c.GraphQL.MaxDepth = -1
+			},
+			wantErr: false,
+		},
+		{
+			name: "mcp config error propagates when enabled",
+			modify: func(c *Config) {
+				c.MCP.Enabled = true
+				c.MCP.BasePath = ""
+			},
+			wantErr: true,
+			errMsg:  "mcp configuration error",
+		},
+		{
+			name: "mcp config not validated when disabled",
+			modify: func(c *Config) {
+				c.MCP.Enabled = false
+				c.MCP.BasePath = ""
+			},
+			wantErr: false,
+		},
+		{
+			name: "branching config error propagates when enabled",
+			modify: func(c *Config) {
+				c.Branching.Enabled = true
+				c.Branching.DatabasePrefix = ""
+			},
+			wantErr: true,
+			errMsg:  "branching configuration error",
+		},
+		{
+			name: "branching config not validated when disabled",
+			modify: func(c *Config) {
+				c.Branching.Enabled = false
+				c.Branching.DatabasePrefix = ""
+			},
+			wantErr: false,
+		},
+		{
+			name: "scaling config error propagates",
+			modify: func(c *Config) {
+				c.Scaling.Backend = "invalid"
+			},
+			wantErr: true,
+			errMsg:  "scaling configuration error",
+		},
+		{
+			name: "logging config error propagates",
+			modify: func(c *Config) {
+				c.Logging.ConsoleLevel = "invalid"
+			},
+			wantErr: true,
+			errMsg:  "logging configuration error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := validConfig()
+			tt.modify(&config)
+			err := config.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestConfig_GetPublicBaseURL(t *testing.T) {
+	tests := []struct {
+		name          string
+		baseURL       string
+		publicBaseURL string
+		expected      string
+	}{
+		{
+			name:          "returns public base URL when set",
+			baseURL:       "https://internal.example.com",
+			publicBaseURL: "https://public.example.com",
+			expected:      "https://public.example.com",
+		},
+		{
+			name:          "falls back to base URL when public not set",
+			baseURL:       "https://example.com",
+			publicBaseURL: "",
+			expected:      "https://example.com",
+		},
+		{
+			name:          "returns empty when both are empty",
+			baseURL:       "",
+			publicBaseURL: "",
+			expected:      "",
+		},
+		{
+			name:          "public URL takes precedence even if empty base URL",
+			baseURL:       "",
+			publicBaseURL: "https://public.example.com",
+			expected:      "https://public.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := Config{
+				BaseURL:       tt.baseURL,
+				PublicBaseURL: tt.publicBaseURL,
+			}
+			result := config.GetPublicBaseURL()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

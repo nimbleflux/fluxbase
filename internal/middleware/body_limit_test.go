@@ -495,3 +495,262 @@ func TestPatternMatching_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultBodyLimitPatterns(t *testing.T) {
+	patterns := DefaultBodyLimitPatterns()
+
+	// Verify we have patterns
+	assert.NotEmpty(t, patterns)
+
+	// Build a map for easier verification
+	patternMap := make(map[string]BodyLimitPattern)
+	for _, p := range patterns {
+		patternMap[p.Pattern] = p
+	}
+
+	// Verify specific patterns and their limits
+	tests := []struct {
+		pattern     string
+		wantLimit   int64
+		description string
+	}{
+		// Storage patterns - should use StorageUploadLimit
+		{"/api/v1/storage/*/multipart", MultipartUploadLimit, "multipart upload"},
+		{"/api/v1/storage/*/stream/**", StorageUploadLimit, "stream upload"},
+		{"/api/v1/storage/*/chunked/**", StorageUploadLimit, "chunked upload"},
+		{"/api/v1/storage/**", StorageUploadLimit, "storage"},
+
+		// Admin sync patterns - should use StorageUploadLimit
+		{"/api/v1/admin/functions/sync", StorageUploadLimit, "functions sync"},
+		{"/api/v1/admin/jobs/sync", StorageUploadLimit, "jobs sync"},
+		{"/api/v1/admin/ai/chatbots/sync", StorageUploadLimit, "chatbots sync"},
+		{"/api/v1/admin/rpc/sync", StorageUploadLimit, "RPC sync"},
+		{"/api/v1/admin/migrations/sync", StorageUploadLimit, "migrations sync"},
+
+		// Admin general - should use AdminLimit
+		{"/api/v1/admin/**", AdminLimit, "admin"},
+		{"/api/v1/ai/**", AdminLimit, "AI/vectors"},
+
+		// Auth - should use AuthBodyLimit
+		{"/api/v1/auth/**", AuthBodyLimit, "auth"},
+
+		// Webhooks - should use WebhookLimit
+		{"/api/v1/webhooks/**", WebhookLimit, "webhooks"},
+		{"/api/v1/functions/webhooks/**", WebhookLimit, "function webhooks"},
+
+		// Bulk operations - should use LargePayloadLimit
+		{"/api/v1/rest/*/bulk", LargePayloadLimit, "bulk operations"},
+		{"/api/v1/rpc/**", LargePayloadLimit, "RPC"},
+
+		// REST - should use RESTBodyLimit
+		{"/api/v1/rest/**", RESTBodyLimit, "REST"},
+
+		// GraphQL - should use LargePayloadLimit
+		{"/graphql", LargePayloadLimit, "GraphQL"},
+
+		// MCP - should use LargePayloadLimit
+		{"/mcp/**", LargePayloadLimit, "MCP"},
+
+		// Realtime - should use AuthBodyLimit
+		{"/api/v1/realtime/**", AuthBodyLimit, "realtime"},
+
+		// Default API
+		{"/api/**", RESTBodyLimit, "API"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.pattern, func(t *testing.T) {
+			p, exists := patternMap[tt.pattern]
+			assert.True(t, exists, "pattern %s should exist", tt.pattern)
+			if exists {
+				assert.Equal(t, tt.wantLimit, p.Limit, "limit mismatch for %s", tt.pattern)
+				assert.Equal(t, tt.description, p.Description, "description mismatch for %s", tt.pattern)
+			}
+		})
+	}
+}
+
+func TestBodyLimitsFromConfig_AllDefaults(t *testing.T) {
+	// All zero/negative values should use defaults
+	config := BodyLimitsFromConfig(0, 0, 0, 0, 0, 0, 0)
+
+	assert.Equal(t, DefaultBodyLimit, config.DefaultLimit)
+	assert.Equal(t, DefaultMaxJSONDepth, config.MaxJSONDepth)
+	assert.NotEmpty(t, config.Patterns)
+
+	// Verify patterns use default limits
+	limiter := NewPatternBodyLimiter(config)
+
+	// Storage should use default StorageUploadLimit
+	limit, desc := limiter.GetLimit("/api/v1/storage/bucket/file.txt")
+	assert.Equal(t, StorageUploadLimit, limit)
+	assert.Equal(t, "storage", desc)
+
+	// Auth should use default AuthBodyLimit
+	limit, desc = limiter.GetLimit("/api/v1/auth/login")
+	assert.Equal(t, AuthBodyLimit, limit)
+	assert.Equal(t, "auth", desc)
+
+	// REST should use default RESTBodyLimit
+	limit, desc = limiter.GetLimit("/api/v1/rest/users")
+	assert.Equal(t, RESTBodyLimit, limit)
+	assert.Equal(t, "REST", desc)
+
+	// Admin should use default AdminLimit
+	limit, desc = limiter.GetLimit("/api/v1/admin/settings")
+	assert.Equal(t, AdminLimit, limit)
+	assert.Equal(t, "admin", desc)
+
+	// Bulk should use default LargePayloadLimit
+	limit, desc = limiter.GetLimit("/api/v1/rest/users/bulk")
+	assert.Equal(t, LargePayloadLimit, limit)
+	assert.Equal(t, "bulk operations", desc)
+}
+
+func TestBodyLimitsFromConfig_NegativeValues(t *testing.T) {
+	// Negative values should also use defaults
+	config := BodyLimitsFromConfig(-1, -100, -50, -1000, -500, -200, -10)
+
+	assert.Equal(t, DefaultBodyLimit, config.DefaultLimit)
+	assert.Equal(t, DefaultMaxJSONDepth, config.MaxJSONDepth)
+}
+
+func TestBodyLimitsFromConfig_CustomValues(t *testing.T) {
+	customDefault := int64(2 * 1024 * 1024)    // 2MB
+	customREST := int64(5 * 1024 * 1024)       // 5MB
+	customAuth := int64(128 * 1024)            // 128KB
+	customStorage := int64(1024 * 1024 * 1024) // 1GB
+	customBulk := int64(50 * 1024 * 1024)      // 50MB
+	customAdmin := int64(20 * 1024 * 1024)     // 20MB
+	customJSONDepth := 128
+
+	config := BodyLimitsFromConfig(
+		customDefault,
+		customREST,
+		customAuth,
+		customStorage,
+		customBulk,
+		customAdmin,
+		customJSONDepth,
+	)
+
+	assert.Equal(t, customDefault, config.DefaultLimit)
+	assert.Equal(t, customJSONDepth, config.MaxJSONDepth)
+
+	// Create limiter to verify patterns use custom values
+	limiter := NewPatternBodyLimiter(config)
+
+	// Storage should use custom storage limit
+	limit, _ := limiter.GetLimit("/api/v1/storage/bucket/file.txt")
+	assert.Equal(t, customStorage, limit)
+
+	// Auth should use custom auth limit
+	limit, _ = limiter.GetLimit("/api/v1/auth/login")
+	assert.Equal(t, customAuth, limit)
+
+	// REST should use custom REST limit
+	limit, _ = limiter.GetLimit("/api/v1/rest/users")
+	assert.Equal(t, customREST, limit)
+
+	// Admin should use custom admin limit
+	limit, _ = limiter.GetLimit("/api/v1/admin/settings")
+	assert.Equal(t, customAdmin, limit)
+
+	// Bulk should use custom bulk limit
+	limit, _ = limiter.GetLimit("/api/v1/rest/users/bulk")
+	assert.Equal(t, customBulk, limit)
+
+	// RPC should use custom bulk limit
+	limit, _ = limiter.GetLimit("/api/v1/rpc/my-function")
+	assert.Equal(t, customBulk, limit)
+
+	// GraphQL should use custom bulk limit
+	limit, _ = limiter.GetLimit("/graphql")
+	assert.Equal(t, customBulk, limit)
+
+	// MCP should use custom bulk limit
+	limit, _ = limiter.GetLimit("/mcp/tools")
+	assert.Equal(t, customBulk, limit)
+
+	// Realtime should use custom auth limit
+	limit, _ = limiter.GetLimit("/api/v1/realtime/subscribe")
+	assert.Equal(t, customAuth, limit)
+
+	// Webhooks should use custom REST limit
+	limit, _ = limiter.GetLimit("/api/v1/webhooks/github")
+	assert.Equal(t, customREST, limit)
+
+	// AI should use custom admin limit
+	limit, _ = limiter.GetLimit("/api/v1/ai/vectors/search")
+	assert.Equal(t, customAdmin, limit)
+
+	// Admin sync endpoints should use custom storage limit
+	limit, _ = limiter.GetLimit("/api/v1/admin/functions/sync")
+	assert.Equal(t, customStorage, limit)
+}
+
+func TestBodyLimitsFromConfig_MixedDefaultsAndCustom(t *testing.T) {
+	// Mix of custom and default values
+	customREST := int64(10 * 1024 * 1024) // 10MB
+	customAuth := int64(32 * 1024)        // 32KB
+
+	config := BodyLimitsFromConfig(
+		0,          // Use default
+		customREST, // Custom
+		customAuth, // Custom
+		0,          // Use default
+		0,          // Use default
+		0,          // Use default
+		0,          // Use default
+	)
+
+	assert.Equal(t, DefaultBodyLimit, config.DefaultLimit, "default limit should use default")
+	assert.Equal(t, DefaultMaxJSONDepth, config.MaxJSONDepth, "JSON depth should use default")
+
+	limiter := NewPatternBodyLimiter(config)
+
+	// REST should use custom value
+	limit, _ := limiter.GetLimit("/api/v1/rest/users")
+	assert.Equal(t, customREST, limit)
+
+	// Auth should use custom value
+	limit, _ = limiter.GetLimit("/api/v1/auth/login")
+	assert.Equal(t, customAuth, limit)
+
+	// Storage should use default
+	limit, _ = limiter.GetLimit("/api/v1/storage/bucket/file.txt")
+	assert.Equal(t, StorageUploadLimit, limit)
+
+	// Bulk should use default
+	limit, _ = limiter.GetLimit("/api/v1/rest/users/bulk")
+	assert.Equal(t, LargePayloadLimit, limit)
+
+	// Admin should use default
+	limit, _ = limiter.GetLimit("/api/v1/admin/settings")
+	assert.Equal(t, AdminLimit, limit)
+}
+
+func TestBodyLimitsFromConfig_PatternCount(t *testing.T) {
+	config := BodyLimitsFromConfig(0, 0, 0, 0, 0, 0, 0)
+
+	// Should have the same number of patterns as DefaultBodyLimitPatterns
+	defaultPatterns := DefaultBodyLimitPatterns()
+	assert.Equal(t, len(defaultPatterns), len(config.Patterns), "pattern count should match default patterns")
+}
+
+func TestNewJSONDepthLimiter_DefaultDepth(t *testing.T) {
+	// Zero or negative depth should use default
+	limiter := NewJSONDepthLimiter(0)
+	assert.Equal(t, DefaultMaxJSONDepth, limiter.maxDepth)
+
+	limiter = NewJSONDepthLimiter(-5)
+	assert.Equal(t, DefaultMaxJSONDepth, limiter.maxDepth)
+}
+
+func TestNewJSONDepthLimiter_CustomDepth(t *testing.T) {
+	limiter := NewJSONDepthLimiter(10)
+	assert.Equal(t, 10, limiter.maxDepth)
+
+	limiter = NewJSONDepthLimiter(100)
+	assert.Equal(t, 100, limiter.maxDepth)
+}

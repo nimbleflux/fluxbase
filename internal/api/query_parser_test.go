@@ -1404,3 +1404,183 @@ func TestSTDWithinFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestParseVectorOrder(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name   string
+		order  string
+		want   OrderBy
+		wantOK bool
+	}{
+		{
+			name:  "vector L2 order ascending",
+			order: "embedding.vec_l2.[0.1,0.2,0.3].asc",
+			want: OrderBy{
+				Column:      "embedding",
+				Desc:        false,
+				VectorOp:    OpVectorL2,
+				VectorValue: "[0.1,0.2,0.3]",
+			},
+			wantOK: true,
+		},
+		{
+			name:  "vector cosine order ascending",
+			order: "embedding.vec_cos.[0.1,0.2,0.3].asc",
+			want: OrderBy{
+				Column:      "embedding",
+				Desc:        false,
+				VectorOp:    OpVectorCosine,
+				VectorValue: "[0.1,0.2,0.3]",
+			},
+			wantOK: true,
+		},
+		{
+			name:  "vector inner product order descending",
+			order: "embedding.vec_ip.[0.1,0.2,0.3].desc",
+			want: OrderBy{
+				Column:      "embedding",
+				Desc:        true,
+				VectorOp:    OpVectorIP,
+				VectorValue: "[0.1,0.2,0.3]",
+			},
+			wantOK: true,
+		},
+		{
+			name:  "vector order with default direction (ascending)",
+			order: "embedding.vec_l2.[1,2,3]",
+			want: OrderBy{
+				Column:      "embedding",
+				Desc:        false,
+				VectorOp:    OpVectorL2,
+				VectorValue: "[1,2,3]",
+			},
+			wantOK: true,
+		},
+		{
+			name:  "vector order with many dimensions",
+			order: "features.vec_cos.[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8].desc",
+			want: OrderBy{
+				Column:      "features",
+				Desc:        true,
+				VectorOp:    OpVectorCosine,
+				VectorValue: "[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8]",
+			},
+			wantOK: true,
+		},
+		{
+			name:   "not a vector order - regular column",
+			order:  "created_at.desc",
+			wantOK: false,
+		},
+		{
+			name:   "not a vector order - regular ascending",
+			order:  "name.asc",
+			wantOK: false,
+		},
+		{
+			name:   "invalid - no operator",
+			order:  "embedding.[0.1,0.2]",
+			wantOK: false,
+		},
+		{
+			name:   "invalid - missing brackets",
+			order:  "embedding.vec_l2.0.1,0.2,0.3.asc",
+			wantOK: false,
+		},
+		{
+			name:   "invalid - empty column",
+			order:  ".vec_l2.[0.1,0.2].asc",
+			wantOK: false,
+		},
+		{
+			name:   "invalid - operator at start",
+			order:  "vec_l2.[0.1,0.2].asc",
+			wantOK: false,
+		},
+		{
+			name:   "invalid column name - contains special chars",
+			order:  "embed-ding.vec_l2.[0.1,0.2].asc",
+			wantOK: false,
+		},
+		{
+			name:   "invalid - missing closing bracket",
+			order:  "embedding.vec_l2.[0.1,0.2.asc",
+			wantOK: false,
+		},
+		{
+			name:   "invalid - missing opening bracket",
+			order:  "embedding.vec_l2.0.1,0.2].asc",
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := parser.parseVectorOrder(tt.order)
+			assert.Equal(t, tt.wantOK, ok, "unexpected ok value")
+			if tt.wantOK {
+				assert.Equal(t, tt.want.Column, got.Column)
+				assert.Equal(t, tt.want.Desc, got.Desc)
+				assert.Equal(t, tt.want.VectorOp, got.VectorOp)
+				assert.Equal(t, tt.want.VectorValue, got.VectorValue)
+			}
+		})
+	}
+}
+
+func TestParseVectorOrderIntegration(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name         string
+		query        string
+		expectColumn string
+		expectVecOp  FilterOperator
+		expectVecVal string
+		expectDesc   bool
+	}{
+		{
+			name:         "vector L2 order via query parameter",
+			query:        "order=embedding.vec_l2.[0.5,0.5,0.5].asc",
+			expectColumn: "embedding",
+			expectVecOp:  OpVectorL2,
+			expectVecVal: "[0.5,0.5,0.5]",
+			expectDesc:   false,
+		},
+		{
+			name:         "vector cosine order descending",
+			query:        "order=features.vec_cos.[1,2,3].desc",
+			expectColumn: "features",
+			expectVecOp:  OpVectorCosine,
+			expectVecVal: "[1,2,3]",
+			expectDesc:   true,
+		},
+		{
+			name:         "vector inner product order",
+			query:        "order=document_embedding.vec_ip.[0.1,0.2,0.3,0.4]",
+			expectColumn: "document_embedding",
+			expectVecOp:  OpVectorIP,
+			expectVecVal: "[0.1,0.2,0.3,0.4]",
+			expectDesc:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			require.NoError(t, err)
+			require.Len(t, params.Order, 1)
+
+			order := params.Order[0]
+			assert.Equal(t, tt.expectColumn, order.Column)
+			assert.Equal(t, tt.expectVecOp, order.VectorOp)
+			assert.Equal(t, tt.expectVecVal, order.VectorValue)
+			assert.Equal(t, tt.expectDesc, order.Desc)
+		})
+	}
+}

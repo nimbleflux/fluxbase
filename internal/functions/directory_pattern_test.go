@@ -131,8 +131,8 @@ func TestDirectoryWithoutIndexTs(t *testing.T) {
 	require.False(t, exists, "Should return false for directory without index.ts")
 }
 
-// TestResolveFunctionPath tests the ResolveFunctionPath function
-func TestResolveFunctionPath(t *testing.T) {
+// TestResolveFunctionPath_BasicPatterns tests the ResolveFunctionPath function with basic patterns
+func TestResolveFunctionPath_BasicPatterns(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "test-resolve-")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)

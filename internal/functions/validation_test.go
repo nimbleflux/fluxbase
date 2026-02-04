@@ -223,3 +223,237 @@ func TestValidateFunctionPathTraversal(t *testing.T) {
 		t.Error("ValidateFunctionPath() should have rejected path traversal attempt")
 	}
 }
+
+func TestResolveFunctionPath(t *testing.T) {
+	// Create a temporary directory structure for testing
+	tmpDir, err := os.MkdirTemp("", "functions-resolve-test-")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	functionsDir := filepath.Join(tmpDir, "functions")
+	if err := os.MkdirAll(functionsDir, 0755); err != nil {
+		t.Fatalf("Failed to create functions dir: %v", err)
+	}
+
+	// Create a flat file function
+	flatFunc := filepath.Join(functionsDir, "flat-function.ts")
+	if err := os.WriteFile(flatFunc, []byte("// flat function"), 0644); err != nil {
+		t.Fatalf("Failed to create flat function: %v", err)
+	}
+
+	// Create a directory-based function
+	dirFuncDir := filepath.Join(functionsDir, "dir-function")
+	if err := os.MkdirAll(dirFuncDir, 0755); err != nil {
+		t.Fatalf("Failed to create dir function directory: %v", err)
+	}
+	dirFuncIndex := filepath.Join(dirFuncDir, "index.ts")
+	if err := os.WriteFile(dirFuncIndex, []byte("// directory function"), 0644); err != nil {
+		t.Fatalf("Failed to create dir function index: %v", err)
+	}
+
+	// Create a function with both patterns (flat file takes precedence)
+	bothFuncFlat := filepath.Join(functionsDir, "both-function.ts")
+	if err := os.WriteFile(bothFuncFlat, []byte("// flat takes precedence"), 0644); err != nil {
+		t.Fatalf("Failed to create both function flat: %v", err)
+	}
+	bothFuncDir := filepath.Join(functionsDir, "both-function")
+	if err := os.MkdirAll(bothFuncDir, 0755); err != nil {
+		t.Fatalf("Failed to create both function directory: %v", err)
+	}
+	bothFuncIndex := filepath.Join(bothFuncDir, "index.ts")
+	if err := os.WriteFile(bothFuncIndex, []byte("// directory version"), 0644); err != nil {
+		t.Fatalf("Failed to create both function index: %v", err)
+	}
+
+	tests := []struct {
+		name         string
+		functionName string
+		wantError    bool
+		wantContains string // Substring expected in result path
+	}{
+		{
+			name:         "flat file function",
+			functionName: "flat-function",
+			wantError:    false,
+			wantContains: "flat-function.ts",
+		},
+		{
+			name:         "directory-based function",
+			functionName: "dir-function",
+			wantError:    false,
+			wantContains: filepath.Join("dir-function", "index.ts"),
+		},
+		{
+			name:         "flat takes precedence over directory",
+			functionName: "both-function",
+			wantError:    false,
+			wantContains: "both-function.ts",
+		},
+		{
+			name:         "non-existent function",
+			functionName: "nonexistent",
+			wantError:    true,
+		},
+		{
+			name:         "invalid function name",
+			functionName: "../traversal",
+			wantError:    true,
+		},
+		{
+			name:         "empty function name",
+			functionName: "",
+			wantError:    true,
+		},
+		{
+			name:         "reserved name",
+			functionName: "index",
+			wantError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, err := ResolveFunctionPath(functionsDir, tt.functionName)
+
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("ResolveFunctionPath(%q) expected error, got path: %s", tt.functionName, path)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("ResolveFunctionPath(%q) unexpected error: %v", tt.functionName, err)
+				return
+			}
+
+			if path == "" {
+				t.Errorf("ResolveFunctionPath(%q) returned empty path", tt.functionName)
+				return
+			}
+
+			// Verify path contains expected substring
+			if tt.wantContains != "" && !filepath.HasPrefix(path, filepath.Join(functionsDir, "")) {
+				t.Errorf("ResolveFunctionPath(%q) path %s not within functions dir", tt.functionName, path)
+			}
+
+			// Verify file exists
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("ResolveFunctionPath(%q) returned non-existent path: %s", tt.functionName, path)
+			}
+		})
+	}
+}
+
+func TestResolveFunctionPath_PathTraversal(t *testing.T) {
+	// Create a temporary directory structure
+	tmpDir, err := os.MkdirTemp("", "functions-resolve-traversal-")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	functionsDir := filepath.Join(tmpDir, "functions")
+	if err := os.MkdirAll(functionsDir, 0755); err != nil {
+		t.Fatalf("Failed to create functions dir: %v", err)
+	}
+
+	// Create a file outside the functions directory
+	outsideFile := filepath.Join(tmpDir, "outside.ts")
+	if err := os.WriteFile(outsideFile, []byte("// should not be accessible"), 0644); err != nil {
+		t.Fatalf("Failed to create outside file: %v", err)
+	}
+
+	// Attempt path traversal attacks
+	traversalAttempts := []string{
+		"../outside",
+		"..\\outside",
+		"..",
+		".",
+		"valid/../../../etc",
+	}
+
+	for _, attempt := range traversalAttempts {
+		t.Run("traversal_"+attempt, func(t *testing.T) {
+			_, err := ResolveFunctionPath(functionsDir, attempt)
+			if err == nil {
+				t.Errorf("ResolveFunctionPath(%q) should have rejected path traversal", attempt)
+			}
+		})
+	}
+}
+
+func TestValidateFunctionName_AdditionalCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		funcName  string
+		wantError bool
+	}{
+		{
+			name:      "reserved name - underscore",
+			funcName:  "_",
+			wantError: true,
+		},
+		{
+			name:      "reserved name - hyphen",
+			funcName:  "-",
+			wantError: true,
+		},
+		{
+			name:      "valid with leading underscore",
+			funcName:  "_myfunction",
+			wantError: false,
+		},
+		{
+			name:      "valid with numbers only after first char",
+			funcName:  "f123",
+			wantError: false,
+		},
+		{
+			name:      "valid with all hyphens in middle",
+			funcName:  "a-b-c",
+			wantError: false,
+		},
+		{
+			name:      "valid exactly 64 characters",
+			funcName:  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // 64 chars
+			wantError: false,
+		},
+		{
+			name:      "invalid 65 characters",
+			funcName:  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // 65 chars
+			wantError: true,
+		},
+		{
+			name:      "invalid with unicode characters",
+			funcName:  "função",
+			wantError: true,
+		},
+		{
+			name:      "invalid with emoji",
+			funcName:  "func🚀",
+			wantError: true,
+		},
+		{
+			name:      "invalid with null byte",
+			funcName:  "func\x00tion",
+			wantError: true,
+		},
+		{
+			name:      "invalid with newline",
+			funcName:  "func\ntion",
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateFunctionName(tt.funcName)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateFunctionName(%q) error = %v, wantError %v", tt.funcName, err, tt.wantError)
+			}
+		})
+	}
+}

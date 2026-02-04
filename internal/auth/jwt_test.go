@@ -579,3 +579,185 @@ func TestValidateServiceRoleToken_ExpiredToken(t *testing.T) {
 	assert.ErrorIs(t, err, ErrExpiredToken)
 	assert.Nil(t, parsedClaims)
 }
+
+// =============================================================================
+// Anonymous Token Tests
+// =============================================================================
+
+func TestGenerateAnonymousAccessToken(t *testing.T) {
+	secret := "test-secret"
+	accessTTL := 15 * time.Minute
+	manager := NewJWTManager(secret, accessTTL, 7*24*time.Hour)
+
+	t.Run("generates valid anonymous access token", func(t *testing.T) {
+		userID := "anon-user-123"
+		tokenString, err := manager.GenerateAnonymousAccessToken(userID)
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, tokenString)
+
+		// Validate the token
+		claims, err := manager.ValidateToken(tokenString)
+		require.NoError(t, err)
+
+		assert.Equal(t, userID, claims.UserID)
+		assert.Equal(t, "anon", claims.Role)
+		assert.Equal(t, "access", claims.TokenType)
+		assert.True(t, claims.IsAnonymous)
+		assert.Empty(t, claims.Email)
+		assert.Empty(t, claims.SessionID)
+	})
+
+	t.Run("token has correct expiry", func(t *testing.T) {
+		userID := "anon-user-456"
+		tokenString, err := manager.GenerateAnonymousAccessToken(userID)
+		require.NoError(t, err)
+
+		expiry, err := manager.GetTokenExpiry(tokenString)
+		require.NoError(t, err)
+
+		// Expiry should be approximately accessTTL from now
+		expectedExpiry := time.Now().Add(accessTTL)
+		assert.WithinDuration(t, expectedExpiry, expiry, 5*time.Second)
+	})
+
+	t.Run("generates unique tokens for same user", func(t *testing.T) {
+		userID := "anon-user-789"
+		token1, err := manager.GenerateAnonymousAccessToken(userID)
+		require.NoError(t, err)
+
+		token2, err := manager.GenerateAnonymousAccessToken(userID)
+		require.NoError(t, err)
+
+		// Tokens should be different (different JTI)
+		assert.NotEqual(t, token1, token2)
+	})
+
+	t.Run("empty user ID is allowed", func(t *testing.T) {
+		tokenString, err := manager.GenerateAnonymousAccessToken("")
+		require.NoError(t, err)
+		assert.NotEmpty(t, tokenString)
+
+		claims, err := manager.ValidateToken(tokenString)
+		require.NoError(t, err)
+		assert.Empty(t, claims.UserID)
+		assert.True(t, claims.IsAnonymous)
+	})
+}
+
+func TestGenerateAnonymousRefreshToken(t *testing.T) {
+	secret := "test-secret"
+	refreshTTL := 7 * 24 * time.Hour
+	manager := NewJWTManager(secret, 15*time.Minute, refreshTTL)
+
+	t.Run("generates valid anonymous refresh token", func(t *testing.T) {
+		userID := "anon-user-123"
+		tokenString, err := manager.GenerateAnonymousRefreshToken(userID)
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, tokenString)
+
+		// Validate the token
+		claims, err := manager.ValidateToken(tokenString)
+		require.NoError(t, err)
+
+		assert.Equal(t, userID, claims.UserID)
+		assert.Equal(t, "anon", claims.Role)
+		assert.Equal(t, "refresh", claims.TokenType)
+		assert.True(t, claims.IsAnonymous)
+		assert.Empty(t, claims.Email)
+		assert.Empty(t, claims.SessionID)
+	})
+
+	t.Run("refresh token has longer expiry than access token", func(t *testing.T) {
+		userID := "anon-user-456"
+
+		accessToken, err := manager.GenerateAnonymousAccessToken(userID)
+		require.NoError(t, err)
+
+		refreshToken, err := manager.GenerateAnonymousRefreshToken(userID)
+		require.NoError(t, err)
+
+		accessExpiry, err := manager.GetTokenExpiry(accessToken)
+		require.NoError(t, err)
+
+		refreshExpiry, err := manager.GetTokenExpiry(refreshToken)
+		require.NoError(t, err)
+
+		assert.True(t, refreshExpiry.After(accessExpiry))
+	})
+
+	t.Run("generates unique tokens for same user", func(t *testing.T) {
+		userID := "anon-user-789"
+		token1, err := manager.GenerateAnonymousRefreshToken(userID)
+		require.NoError(t, err)
+
+		token2, err := manager.GenerateAnonymousRefreshToken(userID)
+		require.NoError(t, err)
+
+		// Tokens should be different (different JTI)
+		assert.NotEqual(t, token1, token2)
+	})
+}
+
+func TestAnonymousTokenValidation(t *testing.T) {
+	secret := "test-secret"
+	manager := NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour)
+
+	t.Run("anonymous access token passes ValidateAccessToken", func(t *testing.T) {
+		userID := "anon-user"
+		tokenString, err := manager.GenerateAnonymousAccessToken(userID)
+		require.NoError(t, err)
+
+		claims, err := manager.ValidateAccessToken(tokenString)
+		require.NoError(t, err)
+		assert.True(t, claims.IsAnonymous)
+	})
+
+	t.Run("anonymous refresh token passes ValidateRefreshToken", func(t *testing.T) {
+		userID := "anon-user"
+		tokenString, err := manager.GenerateAnonymousRefreshToken(userID)
+		require.NoError(t, err)
+
+		claims, err := manager.ValidateRefreshToken(tokenString)
+		require.NoError(t, err)
+		assert.True(t, claims.IsAnonymous)
+	})
+
+	t.Run("anonymous access token fails ValidateRefreshToken", func(t *testing.T) {
+		userID := "anon-user"
+		tokenString, err := manager.GenerateAnonymousAccessToken(userID)
+		require.NoError(t, err)
+
+		_, err = manager.ValidateRefreshToken(tokenString)
+		assert.Error(t, err)
+	})
+
+	t.Run("anonymous refresh token fails ValidateAccessToken", func(t *testing.T) {
+		userID := "anon-user"
+		tokenString, err := manager.GenerateAnonymousRefreshToken(userID)
+		require.NoError(t, err)
+
+		_, err = manager.ValidateAccessToken(tokenString)
+		assert.Error(t, err)
+	})
+
+	t.Run("wrong secret fails validation", func(t *testing.T) {
+		tokenString, err := manager.GenerateAnonymousAccessToken("user")
+		require.NoError(t, err)
+
+		wrongManager := NewJWTManager("wrong-secret", 15*time.Minute, 7*24*time.Hour)
+		_, err = wrongManager.ValidateToken(tokenString)
+		assert.Error(t, err)
+	})
+
+	t.Run("ExtractUserID works for anonymous tokens", func(t *testing.T) {
+		expectedUserID := "anon-user-extract"
+		tokenString, err := manager.GenerateAnonymousAccessToken(expectedUserID)
+		require.NoError(t, err)
+
+		userID, err := manager.ExtractUserID(tokenString)
+		require.NoError(t, err)
+		assert.Equal(t, expectedUserID, userID)
+	})
+}

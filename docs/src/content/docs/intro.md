@@ -218,7 +218,6 @@ graph TB
 
 - **GitHub**: [github.com/fluxbase-eu/fluxbase](https://github.com/fluxbase-eu/fluxbase)
 - **Discord**: [discord.gg/BXPRHkQzkA](https://discord.gg/BXPRHkQzkA)
-- **Twitter**: [@fluxbase](https://twitter.com/fluxbase)
 
 ## License
 

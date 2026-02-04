@@ -44,3 +44,4 @@ For issues, questions, and discussions:
 
 - GitHub Issues: [github.com/fluxbase-eu/fluxbase/issues](https://github.com/fluxbase-eu/fluxbase/issues)
 - Documentation: [fluxbase.eu](https://fluxbase.eu)
+- Discord: [discord.gg/BXPRHkQzkA](https://discord.gg/BXPRHkQzkA)

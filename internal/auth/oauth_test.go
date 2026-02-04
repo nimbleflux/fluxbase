@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -728,4 +729,170 @@ func BenchmarkOAuthManager_GetUserInfoURL(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		manager.GetUserInfoURL(ProviderGithub)
 	}
+}
+
+// =============================================================================
+// StateStore Context Methods Tests
+// =============================================================================
+
+func TestStateStore_SetWithMetadata(t *testing.T) {
+	store := NewStateStore()
+	ctx := context.Background()
+
+	t.Run("sets metadata with provided expiry", func(t *testing.T) {
+		expiry := time.Now().Add(30 * time.Minute)
+		metadata := StateMetadata{
+			Expiry:      expiry,
+			RedirectURI: "https://example.com/callback",
+		}
+
+		err := store.SetWithMetadata(ctx, "test-state-1", metadata)
+		require.NoError(t, err)
+
+		store.mu.RLock()
+		stored, exists := store.states["test-state-1"]
+		store.mu.RUnlock()
+
+		assert.True(t, exists)
+		assert.Equal(t, expiry, stored.Expiry)
+		assert.Equal(t, "https://example.com/callback", stored.RedirectURI)
+	})
+
+	t.Run("sets default expiry if zero", func(t *testing.T) {
+		metadata := StateMetadata{
+			RedirectURI: "https://example.com/default-expiry",
+		}
+
+		err := store.SetWithMetadata(ctx, "test-state-2", metadata)
+		require.NoError(t, err)
+
+		store.mu.RLock()
+		stored, exists := store.states["test-state-2"]
+		store.mu.RUnlock()
+
+		assert.True(t, exists)
+		// Should have a default expiry around 10 minutes from now
+		assert.True(t, stored.Expiry.After(time.Now()))
+		assert.True(t, stored.Expiry.Before(time.Now().Add(11*time.Minute)))
+	})
+
+	t.Run("overwrites existing state", func(t *testing.T) {
+		metadata1 := StateMetadata{
+			Expiry:      time.Now().Add(5 * time.Minute),
+			RedirectURI: "https://example.com/first",
+		}
+		metadata2 := StateMetadata{
+			Expiry:      time.Now().Add(20 * time.Minute),
+			RedirectURI: "https://example.com/second",
+		}
+
+		err := store.SetWithMetadata(ctx, "overwrite-state", metadata1)
+		require.NoError(t, err)
+
+		err = store.SetWithMetadata(ctx, "overwrite-state", metadata2)
+		require.NoError(t, err)
+
+		store.mu.RLock()
+		stored, exists := store.states["overwrite-state"]
+		store.mu.RUnlock()
+
+		assert.True(t, exists)
+		assert.Equal(t, "https://example.com/second", stored.RedirectURI)
+	})
+}
+
+func TestStateStore_ValidateWithContext(t *testing.T) {
+	store := NewStateStore()
+	ctx := context.Background()
+
+	t.Run("validates existing state", func(t *testing.T) {
+		store.Set("context-validate-state")
+
+		valid := store.ValidateWithContext(ctx, "context-validate-state")
+
+		assert.True(t, valid)
+	})
+
+	t.Run("returns false for non-existent state", func(t *testing.T) {
+		valid := store.ValidateWithContext(ctx, "non-existent")
+
+		assert.False(t, valid)
+	})
+
+	t.Run("removes state after validation", func(t *testing.T) {
+		store.Set("remove-after-validate")
+
+		store.ValidateWithContext(ctx, "remove-after-validate")
+
+		store.mu.RLock()
+		_, exists := store.states["remove-after-validate"]
+		store.mu.RUnlock()
+
+		assert.False(t, exists)
+	})
+}
+
+func TestStateStore_GetAndValidateWithContext(t *testing.T) {
+	store := NewStateStore()
+	ctx := context.Background()
+
+	t.Run("returns metadata for valid state", func(t *testing.T) {
+		store.Set("get-validate-state", "https://example.com/redirect")
+
+		metadata, valid := store.GetAndValidateWithContext(ctx, "get-validate-state")
+
+		assert.True(t, valid)
+		assert.NotNil(t, metadata)
+		assert.Equal(t, "https://example.com/redirect", metadata.RedirectURI)
+	})
+
+	t.Run("returns nil and false for non-existent state", func(t *testing.T) {
+		metadata, valid := store.GetAndValidateWithContext(ctx, "non-existent")
+
+		assert.False(t, valid)
+		assert.Nil(t, metadata)
+	})
+
+	t.Run("removes state after retrieval", func(t *testing.T) {
+		store.Set("remove-after-get")
+
+		store.GetAndValidateWithContext(ctx, "remove-after-get")
+
+		store.mu.RLock()
+		_, exists := store.states["remove-after-get"]
+		store.mu.RUnlock()
+
+		assert.False(t, exists)
+	})
+}
+
+func TestStateStore_CleanupWithContext(t *testing.T) {
+	store := NewStateStore()
+	ctx := context.Background()
+
+	t.Run("removes expired states", func(t *testing.T) {
+		store.mu.Lock()
+		store.states["expired-ctx"] = &StateMetadata{Expiry: time.Now().Add(-1 * time.Minute)}
+		store.states["valid-ctx"] = &StateMetadata{Expiry: time.Now().Add(5 * time.Minute)}
+		store.mu.Unlock()
+
+		err := store.CleanupWithContext(ctx)
+		require.NoError(t, err)
+
+		store.mu.RLock()
+		_, expiredExists := store.states["expired-ctx"]
+		_, validExists := store.states["valid-ctx"]
+		store.mu.RUnlock()
+
+		assert.False(t, expiredExists)
+		assert.True(t, validExists)
+	})
+
+	t.Run("returns no error on empty store", func(t *testing.T) {
+		emptyStore := NewStateStore()
+
+		err := emptyStore.CleanupWithContext(ctx)
+
+		require.NoError(t, err)
+	})
 }
