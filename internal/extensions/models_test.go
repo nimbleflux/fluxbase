@@ -284,3 +284,119 @@ func TestCategoryDisplayNames(t *testing.T) {
 		assert.Equal(t, "Foreign Data", CategoryDisplayNames["foreign_data"])
 	})
 }
+
+// =============================================================================
+// Edge Case Tests
+// =============================================================================
+
+func TestExtension_EdgeCases(t *testing.T) {
+	t.Run("extension with empty name", func(t *testing.T) {
+		ext := Extension{
+			ID:   "ext-empty",
+			Name: "",
+		}
+		assert.Empty(t, ext.Name)
+	})
+
+	t.Run("extension with special characters in description", func(t *testing.T) {
+		ext := Extension{
+			ID:          "ext-special",
+			Name:        "test_ext",
+			Description: "Supports UTF-8: 日本語 and symbols: @#$%",
+		}
+		assert.Contains(t, ext.Description, "日本語")
+		assert.Contains(t, ext.Description, "@#$%")
+	})
+
+	t.Run("category lookup for unknown category", func(t *testing.T) {
+		_, exists := CategoryDisplayNames["unknown_category"]
+		assert.False(t, exists)
+	})
+}
+
+func TestListExtensionsResponse_EdgeCases(t *testing.T) {
+	t.Run("empty response", func(t *testing.T) {
+		resp := ListExtensionsResponse{
+			Extensions: []Extension{},
+			Categories: []Category{},
+		}
+		assert.Empty(t, resp.Extensions)
+		assert.Empty(t, resp.Categories)
+	})
+
+	t.Run("response with nil slices", func(t *testing.T) {
+		resp := ListExtensionsResponse{}
+		assert.Nil(t, resp.Extensions)
+		assert.Nil(t, resp.Categories)
+	})
+}
+
+// =============================================================================
+// Benchmark Tests
+// =============================================================================
+
+func BenchmarkExtension_Creation(b *testing.B) {
+	now := time.Now()
+	enabledBy := "admin"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = Extension{
+			ID:               "ext-123",
+			Name:             "postgis",
+			DisplayName:      "PostGIS",
+			Description:      "Spatial database extender",
+			Category:         "geospatial",
+			IsEnabled:        true,
+			IsInstalled:      true,
+			InstalledVersion: "3.4.0",
+			EnabledAt:        &now,
+			EnabledBy:        &enabledBy,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+		}
+	}
+}
+
+func BenchmarkCategory_Creation(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = Category{
+			ID:    "geospatial",
+			Name:  "Geospatial",
+			Count: 5,
+		}
+	}
+}
+
+func BenchmarkCategoryDisplayNames_Lookup(b *testing.B) {
+	categories := []string{"core", "geospatial", "ai_ml", "monitoring", "utilities"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, cat := range categories {
+			_ = CategoryDisplayNames[cat]
+		}
+	}
+}
+
+func BenchmarkListExtensionsResponse_Creation(b *testing.B) {
+	extensions := []Extension{
+		{ID: "1", Name: "postgis"},
+		{ID: "2", Name: "pgcrypto"},
+		{ID: "3", Name: "uuid-ossp"},
+	}
+	categories := []Category{
+		{ID: "geo", Name: "Geospatial", Count: 1},
+		{ID: "crypto", Name: "Cryptography", Count: 1},
+		{ID: "core", Name: "Core", Count: 1},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = ListExtensionsResponse{
+			Extensions: extensions,
+			Categories: categories,
+		}
+	}
+}

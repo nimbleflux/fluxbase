@@ -411,3 +411,230 @@ func TestBranchHelpers(t *testing.T) {
 		require.True(t, len(name) <= 63, "PostgreSQL database name limit")
 	})
 }
+
+// =============================================================================
+// sanitizeIdentifier Tests
+// =============================================================================
+
+func TestSanitizeIdentifier(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple identifier",
+			input:    "my_database",
+			expected: `"my_database"`,
+		},
+		{
+			name:     "identifier with hyphen",
+			input:    "my-database",
+			expected: `"my-database"`,
+		},
+		{
+			name:     "identifier with spaces",
+			input:    "my database",
+			expected: `"my database"`,
+		},
+		{
+			name:     "identifier with double quotes",
+			input:    `my"database`,
+			expected: `"my""database"`,
+		},
+		{
+			name:     "identifier with multiple quotes",
+			input:    `"my"db"`,
+			expected: `"""my""db"""`,
+		},
+		{
+			name:     "empty identifier",
+			input:    "",
+			expected: `""`,
+		},
+		{
+			name:     "identifier with special characters",
+			input:    "db!@#$%",
+			expected: `"db!@#$%"`,
+		},
+		{
+			name:     "numeric identifier",
+			input:    "123database",
+			expected: `"123database"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sanitizeIdentifier(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// =============================================================================
+// Activity Constants Tests
+// =============================================================================
+
+func TestActivityConstants(t *testing.T) {
+	t.Run("activity actions are defined", func(t *testing.T) {
+		assert.NotEmpty(t, ActivityActionCreated)
+		assert.NotEmpty(t, ActivityActionDeleted)
+		assert.NotEmpty(t, ActivityActionReset)
+		assert.NotEmpty(t, ActivityActionMigrated)
+		assert.NotEmpty(t, ActivityActionSeeding)
+	})
+
+	t.Run("activity statuses are defined", func(t *testing.T) {
+		assert.NotEmpty(t, ActivityStatusStarted)
+		assert.NotEmpty(t, ActivityStatusSuccess)
+		assert.NotEmpty(t, ActivityStatusFailed)
+	})
+
+	t.Run("activity actions are distinct", func(t *testing.T) {
+		actions := []ActivityAction{
+			ActivityActionCreated,
+			ActivityActionDeleted,
+			ActivityActionReset,
+			ActivityActionMigrated,
+			ActivityActionSeeding,
+		}
+
+		seen := make(map[ActivityAction]bool)
+		for _, action := range actions {
+			assert.False(t, seen[action], "Duplicate action: %s", action)
+			seen[action] = true
+		}
+	})
+
+	t.Run("activity statuses are distinct", func(t *testing.T) {
+		statuses := []ActivityStatus{
+			ActivityStatusStarted,
+			ActivityStatusSuccess,
+			ActivityStatusFailed,
+		}
+
+		seen := make(map[ActivityStatus]bool)
+		for _, status := range statuses {
+			assert.False(t, seen[status], "Duplicate status: %s", status)
+			seen[status] = true
+		}
+	})
+}
+
+// =============================================================================
+// CreateBranchRequest Tests
+// =============================================================================
+
+func TestCreateBranchRequest_Struct(t *testing.T) {
+	t.Run("minimal request", func(t *testing.T) {
+		req := CreateBranchRequest{
+			Name: "my-branch",
+		}
+
+		assert.Equal(t, "my-branch", req.Name)
+		assert.Nil(t, req.ParentBranchID)
+		assert.Empty(t, req.DataCloneMode)
+		assert.Empty(t, req.Type)
+	})
+
+	t.Run("full request", func(t *testing.T) {
+		parentID := uuid.New()
+		prNumber := 123
+		prURL := "https://github.com/org/repo/pull/123"
+		repo := "org/repo"
+		seedsPath := "seeds/test"
+		expiresAt := time.Now().Add(24 * time.Hour)
+
+		req := CreateBranchRequest{
+			Name:           "pr-123",
+			ParentBranchID: &parentID,
+			DataCloneMode:  DataCloneModeSeedData,
+			Type:           BranchTypePreview,
+			GitHubPRNumber: &prNumber,
+			GitHubPRURL:    &prURL,
+			GitHubRepo:     &repo,
+			SeedsPath:      &seedsPath,
+			ExpiresAt:      &expiresAt,
+		}
+
+		assert.Equal(t, "pr-123", req.Name)
+		assert.Equal(t, parentID, *req.ParentBranchID)
+		assert.Equal(t, DataCloneModeSeedData, req.DataCloneMode)
+		assert.Equal(t, BranchTypePreview, req.Type)
+		assert.Equal(t, 123, *req.GitHubPRNumber)
+		assert.Equal(t, "seeds/test", *req.SeedsPath)
+	})
+}
+
+// =============================================================================
+// Branch Status Transitions Tests
+// =============================================================================
+
+func TestBranchStatusTransitions(t *testing.T) {
+	t.Run("creating status is initial", func(t *testing.T) {
+		branch := Branch{
+			ID:     uuid.New(),
+			Status: BranchStatusCreating,
+		}
+
+		assert.Equal(t, BranchStatusCreating, branch.Status)
+	})
+
+	t.Run("ready status after successful creation", func(t *testing.T) {
+		branch := Branch{
+			ID:     uuid.New(),
+			Status: BranchStatusReady,
+		}
+
+		assert.Equal(t, BranchStatusReady, branch.Status)
+	})
+
+	t.Run("error status with message", func(t *testing.T) {
+		errMsg := "Database creation failed"
+		branch := Branch{
+			ID:           uuid.New(),
+			Status:       BranchStatusError,
+			ErrorMessage: &errMsg,
+		}
+
+		assert.Equal(t, BranchStatusError, branch.Status)
+		assert.NotNil(t, branch.ErrorMessage)
+	})
+
+	t.Run("deleting status during deletion", func(t *testing.T) {
+		branch := Branch{
+			ID:     uuid.New(),
+			Status: BranchStatusDeleting,
+		}
+
+		assert.Equal(t, BranchStatusDeleting, branch.Status)
+	})
+
+	t.Run("migrating status during migration", func(t *testing.T) {
+		branch := Branch{
+			ID:     uuid.New(),
+			Status: BranchStatusMigrating,
+		}
+
+		assert.Equal(t, BranchStatusMigrating, branch.Status)
+	})
+}
+
+// =============================================================================
+// Benchmark Tests
+// =============================================================================
+
+func BenchmarkSanitizeIdentifier(b *testing.B) {
+	identifiers := []string{
+		"my_database",
+		"my-database",
+		`my"database`,
+		"branch_feature_123",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sanitizeIdentifier(identifiers[i%len(identifiers)])
+	}
+}

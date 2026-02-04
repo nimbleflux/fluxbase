@@ -236,3 +236,210 @@ func TestFilterBySchema(t *testing.T) {
 		}
 	})
 }
+
+// =============================================================================
+// TypeScriptExportRequest Tests
+// =============================================================================
+
+func TestTypeScriptExportRequest_Struct(t *testing.T) {
+	t.Run("default request", func(t *testing.T) {
+		req := TypeScriptExportRequest{}
+
+		if len(req.Schemas) != 0 {
+			t.Errorf("Expected empty schemas, got %v", req.Schemas)
+		}
+		if req.IncludeFunctions != false {
+			t.Errorf("Expected IncludeFunctions false, got %v", req.IncludeFunctions)
+		}
+		if req.IncludeViews != false {
+			t.Errorf("Expected IncludeViews false, got %v", req.IncludeViews)
+		}
+		if req.Format != "" {
+			t.Errorf("Expected empty format, got %v", req.Format)
+		}
+	})
+
+	t.Run("full request", func(t *testing.T) {
+		req := TypeScriptExportRequest{
+			Schemas:          []string{"public", "auth"},
+			IncludeFunctions: true,
+			IncludeViews:     true,
+			Format:           "full",
+		}
+
+		if len(req.Schemas) != 2 {
+			t.Errorf("Expected 2 schemas, got %d", len(req.Schemas))
+		}
+		if req.Schemas[0] != "public" {
+			t.Errorf("Expected first schema 'public', got %v", req.Schemas[0])
+		}
+		if req.Schemas[1] != "auth" {
+			t.Errorf("Expected second schema 'auth', got %v", req.Schemas[1])
+		}
+		if !req.IncludeFunctions {
+			t.Errorf("Expected IncludeFunctions true, got %v", req.IncludeFunctions)
+		}
+		if !req.IncludeViews {
+			t.Errorf("Expected IncludeViews true, got %v", req.IncludeViews)
+		}
+		if req.Format != "full" {
+			t.Errorf("Expected format 'full', got %v", req.Format)
+		}
+	})
+
+	t.Run("types format", func(t *testing.T) {
+		req := TypeScriptExportRequest{
+			Schemas: []string{"public"},
+			Format:  "types",
+		}
+
+		if req.Format != "types" {
+			t.Errorf("Expected format 'types', got %v", req.Format)
+		}
+	})
+}
+
+// =============================================================================
+// NewSchemaExportHandler Tests
+// =============================================================================
+
+func TestNewSchemaExportHandler(t *testing.T) {
+	t.Run("creates handler with nil dependencies", func(t *testing.T) {
+		handler := NewSchemaExportHandler(nil, nil)
+
+		if handler == nil {
+			t.Error("Expected non-nil handler")
+		}
+		if handler.schemaCache != nil {
+			t.Error("Expected nil schemaCache")
+		}
+		if handler.inspector != nil {
+			t.Error("Expected nil inspector")
+		}
+	})
+}
+
+// =============================================================================
+// getCurrentTimestamp Tests
+// =============================================================================
+
+func TestGetCurrentTimestamp(t *testing.T) {
+	t.Run("returns runtime value", func(t *testing.T) {
+		result := getCurrentTimestamp()
+		if result != "runtime" {
+			t.Errorf("Expected 'runtime', got %v", result)
+		}
+	})
+}
+
+// =============================================================================
+// pgTypeToTS Edge Cases Tests
+// =============================================================================
+
+func TestPgTypeToTS_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		pgType   string
+		expected string
+	}{
+		{"empty string", "", "unknown"},
+		{"whitespace", "  text  ", "string"},
+		{"uppercase", "TEXT", "string"},
+		{"mixed case", "TeXt", "string"},
+		{"with schema", "pg_catalog.int4", "unknown"},
+		{"very long type", "verylongtypename", "unknown"},
+		{"type with brackets", "numeric(10,2)", "number"},
+		{"nested array", "text[][]", "string[]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := pgTypeToTS(tt.pgType)
+			if result != tt.expected {
+				t.Errorf("pgTypeToTS(%q) = %q, want %q", tt.pgType, result, tt.expected)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// sanitizeIdentifier Edge Cases Tests
+// =============================================================================
+
+func TestSanitizeIdentifier_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"empty string", "", "''"},
+		{"starts with underscore", "_valid", "_valid"},
+		{"starts with dollar", "$valid", "$valid"},
+		{"uppercase letters", "ValidName", "ValidName"},
+		{"all uppercase", "UPPERCASE", "UPPERCASE"},
+		{"numbers only", "123", "'123'"},
+		{"unicode characters", "名前", "'名前'"},
+		{"special symbols", "@#$%", "'@#$%'"},
+		{"mixed valid invalid", "valid@invalid", "'valid@invalid'"},
+		{"multiple spaces", "has  multiple  spaces", "'has  multiple  spaces'"},
+		{"tabs and newlines", "has\ttab", "'has\ttab'"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sanitizeIdentifier(tt.input)
+			if result != tt.expected {
+				t.Errorf("sanitizeIdentifier(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Benchmark Tests
+// =============================================================================
+
+func BenchmarkPgTypeToTS(b *testing.B) {
+	types := []string{
+		"text",
+		"integer",
+		"boolean",
+		"jsonb",
+		"timestamp with time zone",
+		"numeric(10,2)",
+		"text[]",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		pgTypeToTS(types[i%len(types)])
+	}
+}
+
+func BenchmarkToPascalCase(b *testing.B) {
+	inputs := []string{
+		"users",
+		"user_profiles",
+		"my_table_name",
+		"public",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		toPascalCase(inputs[i%len(inputs)])
+	}
+}
+
+func BenchmarkSanitizeIdentifier(b *testing.B) {
+	inputs := []string{
+		"validName",
+		"valid_name",
+		"123invalid",
+		"with space",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sanitizeIdentifier(inputs[i%len(inputs)])
+	}
+}

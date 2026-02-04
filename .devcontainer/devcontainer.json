@@ -143,7 +143,8 @@
   "remoteUser": "vscode",
   "mounts": [
     "source=${localWorkspaceFolderBasename}-go-modules,target=/go/pkg,type=volume",
-    "source=${localWorkspaceFolderBasename}-vscode-extensions,target=/home/vscode/.vscode-server/extensions,type=volume"
+    "source=${localWorkspaceFolderBasename}-vscode-extensions,target=/home/vscode/.vscode-server/extensions,type=volume",
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
   ],
   "containerEnv": {
     "FLUXBASE_CORS_ALLOWED_ORIGINS": "http://localhost:4000,http://localhost:5050",

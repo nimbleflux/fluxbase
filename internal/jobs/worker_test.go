@@ -470,3 +470,283 @@ func TestWorker_Modes(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// normalizeSettingsKey Tests
+// =============================================================================
+
+func TestNormalizeSettingsKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple key",
+			input:    "api_key",
+			expected: "API_KEY",
+		},
+		{
+			name:     "dotted key",
+			input:    "ai.openai.api_key",
+			expected: "AI_OPENAI_API_KEY",
+		},
+		{
+			name:     "lowercase to uppercase",
+			input:    "mykey",
+			expected: "MYKEY",
+		},
+		{
+			name:     "already uppercase",
+			input:    "MY_KEY",
+			expected: "MY_KEY",
+		},
+		{
+			name:     "mixed case",
+			input:    "MyApiKey",
+			expected: "MYAPIKEY",
+		},
+		{
+			name:     "single dot",
+			input:    "prefix.key",
+			expected: "PREFIX_KEY",
+		},
+		{
+			name:     "multiple dots",
+			input:    "a.b.c.d",
+			expected: "A_B_C_D",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "only dots",
+			input:    "...",
+			expected: "___",
+		},
+		{
+			name:     "numbers in key",
+			input:    "api_v2_key",
+			expected: "API_V2_KEY",
+		},
+		{
+			name:     "trailing dot",
+			input:    "key.",
+			expected: "KEY_",
+		},
+		{
+			name:     "leading dot",
+			input:    ".key",
+			expected: "_KEY",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeSettingsKey(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// =============================================================================
+// jobToExecutionRequest Tests
+// =============================================================================
+
+func TestJobToExecutionRequest(t *testing.T) {
+	t.Run("basic job conversion", func(t *testing.T) {
+		jobID := uuid.New()
+		job := &Job{
+			ID:        jobID,
+			JobName:   "test-job",
+			Namespace: "default",
+		}
+
+		req := jobToExecutionRequest(job, "http://localhost:8080")
+
+		assert.Equal(t, jobID, req.ID)
+		assert.Equal(t, "test-job", req.Name)
+		assert.Equal(t, "default", req.Namespace)
+		assert.Equal(t, "http://localhost:8080", req.BaseURL)
+		assert.Equal(t, 0, req.RetryCount)
+		assert.Nil(t, req.Payload)
+	})
+
+	t.Run("job with retry count", func(t *testing.T) {
+		job := &Job{
+			ID:         uuid.New(),
+			JobName:    "retry-job",
+			Namespace:  "production",
+			RetryCount: 3,
+		}
+
+		req := jobToExecutionRequest(job, "https://api.example.com")
+
+		assert.Equal(t, 3, req.RetryCount)
+	})
+
+	t.Run("job with payload", func(t *testing.T) {
+		payload := `{"key": "value", "count": 42}`
+		job := &Job{
+			ID:        uuid.New(),
+			JobName:   "payload-job",
+			Namespace: "default",
+			Payload:   &payload,
+		}
+
+		req := jobToExecutionRequest(job, "http://localhost")
+
+		require.NotNil(t, req.Payload)
+		assert.Equal(t, "value", req.Payload["key"])
+		assert.Equal(t, float64(42), req.Payload["count"])
+	})
+
+	t.Run("job with invalid JSON payload", func(t *testing.T) {
+		invalidPayload := `{invalid json}`
+		job := &Job{
+			ID:        uuid.New(),
+			JobName:   "invalid-payload-job",
+			Namespace: "default",
+			Payload:   &invalidPayload,
+		}
+
+		req := jobToExecutionRequest(job, "http://localhost")
+
+		// Invalid JSON should result in nil payload
+		assert.Nil(t, req.Payload)
+	})
+
+	t.Run("job with user context", func(t *testing.T) {
+		userID := uuid.New()
+		userEmail := "user@example.com"
+		userRole := "admin"
+
+		job := &Job{
+			ID:        uuid.New(),
+			JobName:   "user-job",
+			Namespace: "default",
+			CreatedBy: &userID,
+			UserEmail: &userEmail,
+			UserRole:  &userRole,
+		}
+
+		req := jobToExecutionRequest(job, "http://localhost")
+
+		assert.Equal(t, userID.String(), req.UserID)
+		assert.Equal(t, "user@example.com", req.UserEmail)
+		assert.Equal(t, "admin", req.UserRole)
+	})
+
+	t.Run("job with partial user context", func(t *testing.T) {
+		userID := uuid.New()
+
+		job := &Job{
+			ID:        uuid.New(),
+			JobName:   "partial-user-job",
+			Namespace: "default",
+			CreatedBy: &userID,
+			// UserEmail and UserRole are nil
+		}
+
+		req := jobToExecutionRequest(job, "http://localhost")
+
+		assert.Equal(t, userID.String(), req.UserID)
+		assert.Empty(t, req.UserEmail)
+		assert.Empty(t, req.UserRole)
+	})
+
+	t.Run("job with no user context", func(t *testing.T) {
+		job := &Job{
+			ID:        uuid.New(),
+			JobName:   "anonymous-job",
+			Namespace: "default",
+		}
+
+		req := jobToExecutionRequest(job, "http://localhost")
+
+		assert.Empty(t, req.UserID)
+		assert.Empty(t, req.UserEmail)
+		assert.Empty(t, req.UserRole)
+	})
+
+	t.Run("job with complex payload", func(t *testing.T) {
+		payload := `{
+			"items": [1, 2, 3],
+			"nested": {"a": "b"},
+			"enabled": true
+		}`
+		job := &Job{
+			ID:        uuid.New(),
+			JobName:   "complex-payload-job",
+			Namespace: "default",
+			Payload:   &payload,
+		}
+
+		req := jobToExecutionRequest(job, "http://localhost")
+
+		require.NotNil(t, req.Payload)
+		items := req.Payload["items"].([]interface{})
+		assert.Len(t, items, 3)
+		nested := req.Payload["nested"].(map[string]interface{})
+		assert.Equal(t, "b", nested["a"])
+		assert.Equal(t, true, req.Payload["enabled"])
+	})
+
+	t.Run("different public URLs", func(t *testing.T) {
+		job := &Job{
+			ID:        uuid.New(),
+			JobName:   "url-test",
+			Namespace: "default",
+		}
+
+		testCases := []string{
+			"http://localhost",
+			"http://localhost:8080",
+			"https://api.example.com",
+			"https://api.example.com/v1",
+		}
+
+		for _, url := range testCases {
+			req := jobToExecutionRequest(job, url)
+			assert.Equal(t, url, req.BaseURL)
+		}
+	})
+}
+
+// =============================================================================
+// Benchmark Tests
+// =============================================================================
+
+func BenchmarkNormalizeSettingsKey(b *testing.B) {
+	keys := []string{
+		"api_key",
+		"ai.openai.api_key",
+		"simple",
+		"complex.nested.deep.key",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		normalizeSettingsKey(keys[i%len(keys)])
+	}
+}
+
+func BenchmarkJobToExecutionRequest(b *testing.B) {
+	payload := `{"key": "value", "count": 42}`
+	userID := uuid.New()
+	job := &Job{
+		ID:         uuid.New(),
+		JobName:    "benchmark-job",
+		Namespace:  "default",
+		Payload:    &payload,
+		RetryCount: 1,
+		CreatedBy:  &userID,
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		jobToExecutionRequest(job, "http://localhost")
+	}
+}

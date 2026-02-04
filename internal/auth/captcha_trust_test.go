@@ -368,3 +368,174 @@ func TestCaptchaTrustService_EvaluateUnknownUserSignals(t *testing.T) {
 		assert.Contains(t, signalNames, "new_device")
 	})
 }
+
+// =============================================================================
+// NewCaptchaTrustService Tests
+// =============================================================================
+
+func TestNewCaptchaTrustService(t *testing.T) {
+	t.Run("creates service with nil database", func(t *testing.T) {
+		captchaConfig := &config.CaptchaConfig{
+			Enabled:       true,
+			AdaptiveTrust: config.AdaptiveTrustConfig{Enabled: true},
+		}
+		svc := NewCaptchaTrustService(nil, captchaConfig, nil)
+
+		assert.NotNil(t, svc)
+		assert.Nil(t, svc.db)
+		assert.NotNil(t, svc.config)
+		assert.NotNil(t, svc.captchaConfig)
+	})
+
+	t.Run("creates service with all dependencies", func(t *testing.T) {
+		captchaConfig := &config.CaptchaConfig{
+			Enabled:       true,
+			AdaptiveTrust: config.AdaptiveTrustConfig{Enabled: true},
+		}
+		captchaService := &CaptchaService{}
+
+		svc := NewCaptchaTrustService(nil, captchaConfig, captchaService)
+
+		assert.NotNil(t, svc)
+		assert.NotNil(t, svc.captchaService)
+	})
+}
+
+// =============================================================================
+// TrustResult Additional Tests
+// =============================================================================
+
+func TestTrustResult_Defaults(t *testing.T) {
+	result := TrustResult{}
+
+	assert.Equal(t, 0, result.TotalScore)
+	assert.Nil(t, result.Signals)
+	assert.False(t, result.CaptchaRequired)
+	assert.Empty(t, result.Reason)
+}
+
+func TestTrustResult_HighTrustScore(t *testing.T) {
+	result := TrustResult{
+		TotalScore:      95,
+		CaptchaRequired: false,
+		Reason:          "trusted",
+		Signals: []TrustSignal{
+			{Name: "verified_email", Score: 20},
+			{Name: "account_age", Score: 25},
+			{Name: "known_device", Score: 30},
+			{Name: "successful_logins", Score: 20},
+		},
+	}
+
+	assert.True(t, result.TotalScore >= 90)
+	assert.False(t, result.CaptchaRequired)
+	assert.Len(t, result.Signals, 4)
+}
+
+func TestTrustResult_LowTrustScore(t *testing.T) {
+	result := TrustResult{
+		TotalScore:      15,
+		CaptchaRequired: true,
+		Reason:          "new_device",
+		Signals: []TrustSignal{
+			{Name: "new_ip", Score: -10},
+			{Name: "new_device", Score: -15},
+			{Name: "no_history", Score: -5},
+		},
+	}
+
+	assert.True(t, result.TotalScore < 50)
+	assert.True(t, result.CaptchaRequired)
+}
+
+// =============================================================================
+// CaptchaChallenge Additional Tests
+// =============================================================================
+
+func TestCaptchaChallenge_Defaults(t *testing.T) {
+	challenge := CaptchaChallenge{}
+
+	assert.Empty(t, challenge.ID)
+	assert.Empty(t, challenge.ChallengeID)
+	assert.Empty(t, challenge.Endpoint)
+	assert.Empty(t, challenge.Email)
+	assert.False(t, challenge.CaptchaRequired)
+	assert.False(t, challenge.CaptchaVerified)
+	assert.Nil(t, challenge.ConsumedAt)
+}
+
+func TestCaptchaChallenge_ExpiryCheck(t *testing.T) {
+	t.Run("challenge not expired", func(t *testing.T) {
+		challenge := CaptchaChallenge{
+			ExpiresAt: time.Now().Add(10 * time.Minute),
+		}
+
+		isExpired := time.Now().After(challenge.ExpiresAt)
+		assert.False(t, isExpired)
+	})
+
+	t.Run("challenge expired", func(t *testing.T) {
+		challenge := CaptchaChallenge{
+			ExpiresAt: time.Now().Add(-10 * time.Minute),
+		}
+
+		isExpired := time.Now().After(challenge.ExpiresAt)
+		assert.True(t, isExpired)
+	})
+}
+
+// =============================================================================
+// UserTrustSignal Additional Tests
+// =============================================================================
+
+func TestUserTrustSignal_Defaults(t *testing.T) {
+	signal := UserTrustSignal{}
+
+	assert.Empty(t, signal.ID)
+	assert.Empty(t, signal.IPAddress)
+	assert.Empty(t, signal.DeviceFingerprint)
+	assert.Equal(t, 0, signal.SuccessfulLogins)
+	assert.Equal(t, 0, signal.FailedAttempts)
+	assert.False(t, signal.IsTrusted)
+	assert.False(t, signal.IsBlocked)
+	assert.Nil(t, signal.LastCaptchaAt)
+}
+
+func TestUserTrustSignal_BlockedUser(t *testing.T) {
+	signal := UserTrustSignal{
+		ID:             "signal-blocked",
+		UserID:         uuid.New(),
+		FailedAttempts: 10,
+		IsTrusted:      false,
+		IsBlocked:      true,
+	}
+
+	assert.True(t, signal.IsBlocked)
+	assert.False(t, signal.IsTrusted)
+	assert.True(t, signal.FailedAttempts >= 10)
+}
+
+// =============================================================================
+// Benchmark Tests
+// =============================================================================
+
+func BenchmarkGenerateChallengeID(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		generateChallengeID()
+	}
+}
+
+func BenchmarkGenerateTrustToken(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		generateTrustToken()
+	}
+}
+
+func BenchmarkHashTrustToken(b *testing.B) {
+	token := "tt_benchmark_token_1234567890"
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		hashTrustToken(token)
+	}
+}

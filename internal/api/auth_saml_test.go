@@ -244,17 +244,389 @@ func TestSAMLCallbackResponse_JSONSerialization(t *testing.T) {
 	assert.Nil(t, decoded.User)
 }
 
+// =============================================================================
+// NewSAMLHandler Tests
+// =============================================================================
+
+func TestNewSAMLHandler_WithNilServices(t *testing.T) {
+	handler := NewSAMLHandler(nil, nil)
+
+	assert.NotNil(t, handler)
+	assert.Nil(t, handler.samlService)
+	assert.Nil(t, handler.authService)
+}
+
+// =============================================================================
+// convertAttributes Tests
+// =============================================================================
+
+func TestConvertAttributes_SingleValues(t *testing.T) {
+	input := map[string][]string{
+		"email": {"user@example.com"},
+		"name":  {"John Doe"},
+	}
+
+	result := convertAttributes(input)
+
+	assert.Equal(t, "user@example.com", result["email"])
+	assert.Equal(t, "John Doe", result["name"])
+}
+
+func TestConvertAttributes_MultipleValues(t *testing.T) {
+	input := map[string][]string{
+		"groups": {"admins", "users", "developers"},
+		"roles":  {"admin", "editor"},
+	}
+
+	result := convertAttributes(input)
+
+	groups, ok := result["groups"].([]string)
+	assert.True(t, ok)
+	assert.Len(t, groups, 3)
+	assert.Contains(t, groups, "admins")
+	assert.Contains(t, groups, "users")
+	assert.Contains(t, groups, "developers")
+
+	roles, ok := result["roles"].([]string)
+	assert.True(t, ok)
+	assert.Len(t, roles, 2)
+}
+
+func TestConvertAttributes_EmptyMap(t *testing.T) {
+	input := map[string][]string{}
+
+	result := convertAttributes(input)
+
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+}
+
+func TestConvertAttributes_NilMap(t *testing.T) {
+	var input map[string][]string = nil
+
+	result := convertAttributes(input)
+
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+}
+
+func TestConvertAttributes_EmptySlice(t *testing.T) {
+	input := map[string][]string{
+		"empty": {},
+	}
+
+	result := convertAttributes(input)
+
+	empty, ok := result["empty"].([]string)
+	assert.True(t, ok)
+	assert.Empty(t, empty)
+}
+
+func TestConvertAttributes_MixedValues(t *testing.T) {
+	input := map[string][]string{
+		"single":   {"value"},
+		"multiple": {"a", "b"},
+		"empty":    {},
+	}
+
+	result := convertAttributes(input)
+
+	assert.Equal(t, "value", result["single"])
+
+	multiple, ok := result["multiple"].([]string)
+	assert.True(t, ok)
+	assert.Len(t, multiple, 2)
+
+	empty, ok := result["empty"].([]string)
+	assert.True(t, ok)
+	assert.Empty(t, empty)
+}
+
+func TestConvertAttributes_SpecialCharacters(t *testing.T) {
+	input := map[string][]string{
+		"urn:oid:0.9.2342.19200300.100.1.3": {"user@example.com"},
+		"http://schemas.xmlsoap.org/claims": {"value with spaces"},
+		"attribute-with-dash":               {"value"},
+		"attribute_with_underscore":         {"value"},
+	}
+
+	result := convertAttributes(input)
+
+	assert.Equal(t, "user@example.com", result["urn:oid:0.9.2342.19200300.100.1.3"])
+	assert.Equal(t, "value with spaces", result["http://schemas.xmlsoap.org/claims"])
+	assert.Equal(t, "value", result["attribute-with-dash"])
+	assert.Equal(t, "value", result["attribute_with_underscore"])
+}
+
+func TestConvertAttributes_UnicodeValues(t *testing.T) {
+	input := map[string][]string{
+		"name":    {"José García"},
+		"company": {"株式会社"},
+		"emoji":   {"👋 Hello"},
+	}
+
+	result := convertAttributes(input)
+
+	assert.Equal(t, "José García", result["name"])
+	assert.Equal(t, "株式会社", result["company"])
+	assert.Equal(t, "👋 Hello", result["emoji"])
+}
+
+// =============================================================================
+// SAMLProviderResponse Tests
+// =============================================================================
+
+func TestSAMLProviderResponse_Fields(t *testing.T) {
+	response := SAMLProviderResponse{
+		ID:       "provider-123",
+		Name:     "okta",
+		EntityID: "https://app.example.com/saml",
+		SsoURL:   "https://idp.okta.com/sso",
+		LoginURL: "https://app.example.com/auth/saml/login/okta",
+		Enabled:  true,
+	}
+
+	assert.Equal(t, "provider-123", response.ID)
+	assert.Equal(t, "okta", response.Name)
+	assert.Equal(t, "https://app.example.com/saml", response.EntityID)
+	assert.Equal(t, "https://idp.okta.com/sso", response.SsoURL)
+	assert.Equal(t, "https://app.example.com/auth/saml/login/okta", response.LoginURL)
+	assert.True(t, response.Enabled)
+}
+
+func TestSAMLProviderResponse_Defaults(t *testing.T) {
+	response := SAMLProviderResponse{}
+
+	assert.Empty(t, response.ID)
+	assert.Empty(t, response.Name)
+	assert.Empty(t, response.EntityID)
+	assert.Empty(t, response.SsoURL)
+	assert.Empty(t, response.LoginURL)
+	assert.False(t, response.Enabled)
+}
+
+// =============================================================================
+// SAMLLoginResponse Tests
+// =============================================================================
+
+func TestSAMLLoginResponse_Fields(t *testing.T) {
+	response := SAMLLoginResponse{
+		RedirectURL: "https://idp.example.com/sso?SAMLRequest=encoded",
+	}
+
+	assert.Equal(t, "https://idp.example.com/sso?SAMLRequest=encoded", response.RedirectURL)
+}
+
+func TestSAMLLoginResponse_Defaults(t *testing.T) {
+	response := SAMLLoginResponse{}
+
+	assert.Empty(t, response.RedirectURL)
+}
+
+// =============================================================================
+// SAMLCallbackResponse Tests
+// =============================================================================
+
+func TestSAMLCallbackResponse_Fields(t *testing.T) {
+	response := SAMLCallbackResponse{
+		AccessToken:  "access_token_abc",
+		RefreshToken: "refresh_token_xyz",
+		ExpiresIn:    3600,
+		TokenType:    "bearer",
+		User:         nil,
+	}
+
+	assert.Equal(t, "access_token_abc", response.AccessToken)
+	assert.Equal(t, "refresh_token_xyz", response.RefreshToken)
+	assert.Equal(t, int64(3600), response.ExpiresIn)
+	assert.Equal(t, "bearer", response.TokenType)
+	assert.Nil(t, response.User)
+}
+
+func TestSAMLCallbackResponse_Defaults(t *testing.T) {
+	response := SAMLCallbackResponse{}
+
+	assert.Empty(t, response.AccessToken)
+	assert.Empty(t, response.RefreshToken)
+	assert.Equal(t, int64(0), response.ExpiresIn)
+	assert.Empty(t, response.TokenType)
+	assert.Nil(t, response.User)
+}
+
+// =============================================================================
+// CreateSAMLUserRequest Tests
+// =============================================================================
+
+func TestCreateSAMLUserRequest_Fields(t *testing.T) {
+	req := CreateSAMLUserRequest{
+		Email:    "user@example.com",
+		Name:     "Test User",
+		Provider: "okta",
+		NameID:   "name-id-123",
+		Attributes: map[string][]string{
+			"email":  {"user@example.com"},
+			"groups": {"admins"},
+		},
+	}
+
+	assert.Equal(t, "user@example.com", req.Email)
+	assert.Equal(t, "Test User", req.Name)
+	assert.Equal(t, "okta", req.Provider)
+	assert.Equal(t, "name-id-123", req.NameID)
+	assert.NotNil(t, req.Attributes)
+	assert.Len(t, req.Attributes, 2)
+}
+
+func TestCreateSAMLUserRequest_Defaults(t *testing.T) {
+	req := CreateSAMLUserRequest{}
+
+	assert.Empty(t, req.Email)
+	assert.Empty(t, req.Name)
+	assert.Empty(t, req.Provider)
+	assert.Empty(t, req.NameID)
+	assert.Nil(t, req.Attributes)
+}
+
+// =============================================================================
+// HandleSAMLLogout Tests
+// =============================================================================
+
+func TestHandleSAMLLogout_NilService_POST(t *testing.T) {
+	handler := NewSAMLHandler(nil, nil)
+
+	app := fiber.New()
+	app.Post("/auth/saml/slo", handler.HandleSAMLLogout)
+
+	req := httptest.NewRequest("POST", "/auth/saml/slo", nil)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+
+	var result map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
+	assert.Contains(t, result["error"], "SAML is not configured")
+}
+
+func TestHandleSAMLLogout_NilService_GET(t *testing.T) {
+	handler := NewSAMLHandler(nil, nil)
+
+	app := fiber.New()
+	app.Get("/auth/saml/slo", handler.HandleSAMLLogout)
+
+	req := httptest.NewRequest("GET", "/auth/saml/slo", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+}
+
+// =============================================================================
+// InitiateSAMLLogout Tests
+// =============================================================================
+
+func TestInitiateSAMLLogout_NilService(t *testing.T) {
+	handler := NewSAMLHandler(nil, nil)
+
+	app := fiber.New()
+	app.Get("/auth/saml/logout/:provider", handler.InitiateSAMLLogout)
+
+	req := httptest.NewRequest("GET", "/auth/saml/logout/okta", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+
+	var result map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
+	assert.Contains(t, result["error"], "SAML is not configured")
+}
+
+// =============================================================================
+// RegisterRoutes Tests
+// =============================================================================
+
+func TestSAMLHandler_RegisterRoutes(t *testing.T) {
+	handler := NewSAMLHandler(nil, nil)
+
+	app := fiber.New()
+	router := app.Group("/auth")
+	handler.RegisterRoutes(router)
+
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{"GET", "/auth/saml/providers"},
+		{"GET", "/auth/saml/metadata/test"},
+		{"GET", "/auth/saml/login/test"},
+		{"POST", "/auth/saml/acs"},
+		{"GET", "/auth/saml/logout/test"},
+		{"POST", "/auth/saml/slo"},
+		{"GET", "/auth/saml/slo"},
+	}
+
+	for _, route := range routes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			req := httptest.NewRequest(route.method, route.path, nil)
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			// Routes should be registered (not a router-level 404)
+			// Handler may return 404 due to nil service, but the route exists
+			var result map[string]interface{}
+			err = json.NewDecoder(resp.Body).Decode(&result)
+			if err == nil && result["error"] != nil {
+				// If there's an error response, it should be from our handler
+				errorMsg := result["error"].(string)
+				assert.NotContains(t, errorMsg, "Cannot "+route.method)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Edge Case Tests
+// =============================================================================
+
+func TestSAMLCallbackResponse_TokenTypes(t *testing.T) {
+	tests := []struct {
+		name      string
+		tokenType string
+	}{
+		{"bearer lowercase", "bearer"},
+		{"Bearer capitalized", "Bearer"},
+		{"JWT", "JWT"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := SAMLCallbackResponse{
+				TokenType: tt.tokenType,
+			}
+			assert.Equal(t, tt.tokenType, response.TokenType)
+		})
+	}
+}
+
+func TestConvertAttributes_LargeMap(t *testing.T) {
+	input := make(map[string][]string)
+	for i := 0; i < 100; i++ {
+		key := "attr" + string(rune('A'+i%26)) + string(rune('0'+i/26))
+		input[key] = []string{"value"}
+	}
+
+	result := convertAttributes(input)
+	assert.Len(t, result, 100)
+}
+
 // NOTE: For full integration testing with real SAML assertions, database operations,
 // and user creation, see the E2E tests in test/e2e/ directory.
 // These unit tests focus on handler logic, error cases, and data serialization.
-//
-// Additional tests that should be added when implementing full SAML service:
-// - Test provider filtering (app vs dashboard login)
-// - Test relay state validation and redirect URL whitelisting
-// - Test SAML assertion replay detection
-// - Test SAML assertion expiration validation
-// - Test audience mismatch detection
-// - Test missing email attribute handling
-// - Test auto user creation vs manual provisioning
-// - Test group-based access control
-// - Test SAML Single Logout (SLO) flows

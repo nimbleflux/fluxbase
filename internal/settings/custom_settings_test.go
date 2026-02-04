@@ -270,3 +270,223 @@ func TestCanEditSetting_AdditionalCases(t *testing.T) {
 		assert.True(t, result)
 	})
 }
+
+// =============================================================================
+// Secret Setting Struct Tests
+// =============================================================================
+
+func TestSecretSettingMetadata_Struct(t *testing.T) {
+	t.Run("creates metadata with all fields", func(t *testing.T) {
+		id := uuid.New()
+		userID := uuid.New()
+		createdBy := uuid.New()
+
+		metadata := SecretSettingMetadata{
+			ID:          id,
+			Key:         "secret.api.key",
+			Description: "API key for external service",
+			UserID:      &userID,
+			CreatedBy:   &createdBy,
+			UpdatedBy:   &createdBy,
+		}
+
+		assert.Equal(t, id, metadata.ID)
+		assert.Equal(t, "secret.api.key", metadata.Key)
+		assert.Equal(t, "API key for external service", metadata.Description)
+		assert.NotNil(t, metadata.UserID)
+		assert.Equal(t, userID, *metadata.UserID)
+		assert.Equal(t, &createdBy, metadata.CreatedBy)
+	})
+
+	t.Run("system secret has nil user ID", func(t *testing.T) {
+		metadata := SecretSettingMetadata{
+			ID:  uuid.New(),
+			Key: "system.encryption.key",
+		}
+
+		assert.Nil(t, metadata.UserID)
+	})
+}
+
+func TestCreateSecretSettingRequest_Struct(t *testing.T) {
+	t.Run("creates request with all fields", func(t *testing.T) {
+		req := CreateSecretSettingRequest{
+			Key:         "secret.db.password",
+			Value:       "my-secure-password",
+			Description: "Database password for production",
+		}
+
+		assert.Equal(t, "secret.db.password", req.Key)
+		assert.Equal(t, "my-secure-password", req.Value)
+		assert.Equal(t, "Database password for production", req.Description)
+	})
+
+	t.Run("minimal request", func(t *testing.T) {
+		req := CreateSecretSettingRequest{
+			Key:   "secret.token",
+			Value: "token-value",
+		}
+
+		assert.Equal(t, "secret.token", req.Key)
+		assert.Equal(t, "token-value", req.Value)
+		assert.Empty(t, req.Description)
+	})
+}
+
+func TestUpdateSecretSettingRequest_Struct(t *testing.T) {
+	t.Run("update with new value", func(t *testing.T) {
+		newValue := "updated-secret-value"
+		req := UpdateSecretSettingRequest{
+			Value: &newValue,
+		}
+
+		assert.NotNil(t, req.Value)
+		assert.Equal(t, "updated-secret-value", *req.Value)
+		assert.Nil(t, req.Description)
+	})
+
+	t.Run("update description only", func(t *testing.T) {
+		newDesc := "Updated description"
+		req := UpdateSecretSettingRequest{
+			Description: &newDesc,
+		}
+
+		assert.Nil(t, req.Value)
+		assert.NotNil(t, req.Description)
+		assert.Equal(t, "Updated description", *req.Description)
+	})
+
+	t.Run("update both value and description", func(t *testing.T) {
+		newValue := "new-value"
+		newDesc := "New description"
+		req := UpdateSecretSettingRequest{
+			Value:       &newValue,
+			Description: &newDesc,
+		}
+
+		assert.Equal(t, "new-value", *req.Value)
+		assert.Equal(t, "New description", *req.Description)
+	})
+}
+
+// =============================================================================
+// User Setting Struct Tests
+// =============================================================================
+
+func TestUserSetting_Struct(t *testing.T) {
+	t.Run("creates user setting with all fields", func(t *testing.T) {
+		id := uuid.New()
+		userID := uuid.New()
+
+		setting := UserSetting{
+			ID:          id,
+			Key:         "user.theme",
+			Value:       map[string]interface{}{"theme": "dark", "fontSize": 14},
+			Description: "User's UI preferences",
+			UserID:      userID,
+		}
+
+		assert.Equal(t, id, setting.ID)
+		assert.Equal(t, "user.theme", setting.Key)
+		assert.Equal(t, "dark", setting.Value["theme"])
+		assert.Equal(t, 14, setting.Value["fontSize"])
+		assert.Equal(t, "User's UI preferences", setting.Description)
+		assert.Equal(t, userID, setting.UserID)
+	})
+}
+
+func TestUserSettingWithSource_Struct(t *testing.T) {
+	t.Run("user source", func(t *testing.T) {
+		setting := UserSettingWithSource{
+			Key:    "notifications.enabled",
+			Value:  map[string]interface{}{"enabled": true},
+			Source: "user",
+		}
+
+		assert.Equal(t, "notifications.enabled", setting.Key)
+		assert.Equal(t, true, setting.Value["enabled"])
+		assert.Equal(t, "user", setting.Source)
+	})
+
+	t.Run("system source (fallback)", func(t *testing.T) {
+		setting := UserSettingWithSource{
+			Key:    "notifications.enabled",
+			Value:  map[string]interface{}{"enabled": false},
+			Source: "system",
+		}
+
+		assert.Equal(t, "system", setting.Source)
+	})
+}
+
+func TestCreateUserSettingRequest_Struct(t *testing.T) {
+	t.Run("creates request with all fields", func(t *testing.T) {
+		req := CreateUserSettingRequest{
+			Key:         "user.preferences.display",
+			Value:       map[string]interface{}{"compact": true, "showSidebar": false},
+			Description: "Display preferences",
+		}
+
+		assert.Equal(t, "user.preferences.display", req.Key)
+		assert.Equal(t, true, req.Value["compact"])
+		assert.Equal(t, false, req.Value["showSidebar"])
+		assert.Equal(t, "Display preferences", req.Description)
+	})
+}
+
+func TestUpdateUserSettingRequest_Struct(t *testing.T) {
+	t.Run("update value only", func(t *testing.T) {
+		req := UpdateUserSettingRequest{
+			Value: map[string]interface{}{"newKey": "newValue"},
+		}
+
+		assert.NotNil(t, req.Value)
+		assert.Nil(t, req.Description)
+	})
+
+	t.Run("update with description", func(t *testing.T) {
+		desc := "Updated description"
+		req := UpdateUserSettingRequest{
+			Value:       map[string]interface{}{"key": "value"},
+			Description: &desc,
+		}
+
+		assert.Equal(t, "Updated description", *req.Description)
+	})
+}
+
+// =============================================================================
+// Benchmark Tests
+// =============================================================================
+
+func BenchmarkCanEditSetting(b *testing.B) {
+	editableBy := []string{"dashboard_admin", "admin", "moderator", "editor"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		CanEditSetting(editableBy, "editor")
+	}
+}
+
+func BenchmarkCanEditSetting_AdminBypass(b *testing.B) {
+	editableBy := []string{"moderator", "editor"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		CanEditSetting(editableBy, "admin")
+	}
+}
+
+func BenchmarkValidateKey(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ValidateKey("custom.settings.my.key.name")
+	}
+}
+
+func BenchmarkValidateKey_Empty(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ValidateKey("")
+	}
+}

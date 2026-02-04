@@ -418,3 +418,269 @@ func TestBranch_DatabaseName(t *testing.T) {
 		assert.True(t, len(dbName) <= 63 || len(dbName) > 63, "Should handle long names")
 	})
 }
+
+// =============================================================================
+// GeneratePRSlug Tests
+// =============================================================================
+
+func TestGeneratePRSlug(t *testing.T) {
+	tests := []struct {
+		name     string
+		prNumber int
+		expected string
+	}{
+		{
+			name:     "single digit",
+			prNumber: 1,
+			expected: "pr-1",
+		},
+		{
+			name:     "double digit",
+			prNumber: 42,
+			expected: "pr-42",
+		},
+		{
+			name:     "triple digit",
+			prNumber: 123,
+			expected: "pr-123",
+		},
+		{
+			name:     "large number",
+			prNumber: 99999,
+			expected: "pr-99999",
+		},
+		{
+			name:     "zero",
+			prNumber: 0,
+			expected: "pr-0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GeneratePRSlug(tt.prNumber)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// =============================================================================
+// isAccessSufficient Tests
+// =============================================================================
+
+func TestIsAccessSufficient(t *testing.T) {
+	tests := []struct {
+		name     string
+		granted  BranchAccessLevel
+		required BranchAccessLevel
+		expected bool
+	}{
+		// Read access tests
+		{
+			name:     "read sufficient for read",
+			granted:  BranchAccessRead,
+			required: BranchAccessRead,
+			expected: true,
+		},
+		{
+			name:     "read not sufficient for write",
+			granted:  BranchAccessRead,
+			required: BranchAccessWrite,
+			expected: false,
+		},
+		{
+			name:     "read not sufficient for admin",
+			granted:  BranchAccessRead,
+			required: BranchAccessAdmin,
+			expected: false,
+		},
+		// Write access tests
+		{
+			name:     "write sufficient for read",
+			granted:  BranchAccessWrite,
+			required: BranchAccessRead,
+			expected: true,
+		},
+		{
+			name:     "write sufficient for write",
+			granted:  BranchAccessWrite,
+			required: BranchAccessWrite,
+			expected: true,
+		},
+		{
+			name:     "write not sufficient for admin",
+			granted:  BranchAccessWrite,
+			required: BranchAccessAdmin,
+			expected: false,
+		},
+		// Admin access tests
+		{
+			name:     "admin sufficient for read",
+			granted:  BranchAccessAdmin,
+			required: BranchAccessRead,
+			expected: true,
+		},
+		{
+			name:     "admin sufficient for write",
+			granted:  BranchAccessAdmin,
+			required: BranchAccessWrite,
+			expected: true,
+		},
+		{
+			name:     "admin sufficient for admin",
+			granted:  BranchAccessAdmin,
+			required: BranchAccessAdmin,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isAccessSufficient(tt.granted, tt.required)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// =============================================================================
+// ActivityLog Tests
+// =============================================================================
+
+func TestActivityLog_Struct(t *testing.T) {
+	t.Run("creates activity log", func(t *testing.T) {
+		branchID := uuid.New()
+		userID := uuid.New()
+		durationMs := 1500
+		errorMsg := "test error"
+
+		log := ActivityLog{
+			ID:           uuid.New(),
+			BranchID:     branchID,
+			Action:       ActivityActionCreated,
+			Status:       ActivityStatusSuccess,
+			Details:      map[string]interface{}{"key": "value"},
+			ErrorMessage: &errorMsg,
+			ExecutedBy:   &userID,
+			DurationMs:   &durationMs,
+			ExecutedAt:   time.Now(),
+		}
+
+		assert.NotEqual(t, uuid.Nil, log.ID)
+		assert.Equal(t, branchID, log.BranchID)
+		assert.Equal(t, ActivityActionCreated, log.Action)
+		assert.Equal(t, ActivityStatusSuccess, log.Status)
+		assert.NotNil(t, log.Details)
+		assert.Equal(t, "test error", *log.ErrorMessage)
+		assert.Equal(t, 1500, *log.DurationMs)
+	})
+}
+
+// =============================================================================
+// MigrationHistory Tests
+// =============================================================================
+
+func TestMigrationHistory_Struct(t *testing.T) {
+	t.Run("creates migration history", func(t *testing.T) {
+		branchID := uuid.New()
+
+		migrationName := "add_users_table"
+		mh := MigrationHistory{
+			ID:               uuid.New(),
+			BranchID:         branchID,
+			MigrationVersion: 42,
+			MigrationName:    &migrationName,
+			AppliedAt:        time.Now(),
+		}
+
+		assert.NotEqual(t, uuid.Nil, mh.ID)
+		assert.Equal(t, branchID, mh.BranchID)
+		assert.Equal(t, int64(42), mh.MigrationVersion)
+		assert.Equal(t, "add_users_table", *mh.MigrationName)
+	})
+}
+
+// =============================================================================
+// GitHubConfig Tests
+// =============================================================================
+
+func TestGitHubConfig_Struct(t *testing.T) {
+	t.Run("creates GitHub config", func(t *testing.T) {
+		webhookSecret := "secret123"
+
+		cfg := GitHubConfig{
+			ID:                   uuid.New(),
+			Repository:           "fluxbase-eu/fluxbase",
+			AutoCreateOnPR:       true,
+			AutoDeleteOnMerge:    true,
+			DefaultDataCloneMode: DataCloneModeSchemaOnly,
+			WebhookSecret:        &webhookSecret,
+			CreatedAt:            time.Now(),
+			UpdatedAt:            time.Now(),
+		}
+
+		assert.NotEqual(t, uuid.Nil, cfg.ID)
+		assert.Equal(t, "fluxbase-eu/fluxbase", cfg.Repository)
+		assert.True(t, cfg.AutoCreateOnPR)
+		assert.True(t, cfg.AutoDeleteOnMerge)
+		assert.Equal(t, DataCloneModeSchemaOnly, cfg.DefaultDataCloneMode)
+		assert.Equal(t, "secret123", *cfg.WebhookSecret)
+	})
+
+	t.Run("creates GitHub config without webhook secret", func(t *testing.T) {
+		cfg := GitHubConfig{
+			ID:                   uuid.New(),
+			Repository:           "org/repo",
+			AutoCreateOnPR:       false,
+			AutoDeleteOnMerge:    false,
+			DefaultDataCloneMode: DataCloneModeFullClone,
+		}
+
+		assert.Nil(t, cfg.WebhookSecret)
+	})
+}
+
+// =============================================================================
+// Benchmark Tests
+// =============================================================================
+
+func BenchmarkGenerateSlug(b *testing.B) {
+	names := []string{
+		"feature branch",
+		"My Feature Branch",
+		"feature-123",
+		"very_long_branch_name_with_underscores",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		GenerateSlug(names[i%len(names)])
+	}
+}
+
+func BenchmarkGenerateDatabaseName(b *testing.B) {
+	slugs := []string{
+		"feature",
+		"my-feature-branch",
+		"pr-123",
+		"development",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		GenerateDatabaseName("branch_", slugs[i%len(slugs)])
+	}
+}
+
+func BenchmarkValidateSlug(b *testing.B) {
+	slugs := []string{
+		"feature",
+		"my-feature-branch",
+		"pr-123",
+		"a",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = ValidateSlug(slugs[i%len(slugs)])
+	}
+}

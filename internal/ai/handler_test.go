@@ -1,10 +1,13 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/fluxbase-eu/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -550,4 +553,225 @@ func TestUpdateConversationTitleRequest_Struct(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "New Conversation Title", req.Title)
 	})
+}
+
+// =============================================================================
+// ValidateConfig Tests
+// =============================================================================
+
+func TestHandler_ValidateConfig(t *testing.T) {
+	t.Run("nil config - no panic", func(t *testing.T) {
+		handler := NewHandler(nil, nil, nil, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("empty provider type - no warning", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType: "",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("ollama with model configured", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType: "ollama",
+			OllamaModel:  "llama2",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("ollama without model - logs warning", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType: "ollama",
+			OllamaModel:  "",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("openai with api key configured", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType: "openai",
+			OpenAIAPIKey: "sk-test-key",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("openai without api key - logs warning", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType: "openai",
+			OpenAIAPIKey: "",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("azure fully configured", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType:        "azure",
+			AzureAPIKey:         "azure-key",
+			AzureEndpoint:       "https://example.openai.azure.com",
+			AzureDeploymentName: "gpt-4-deployment",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("azure missing api key - logs warning", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType:        "azure",
+			AzureAPIKey:         "",
+			AzureEndpoint:       "https://example.openai.azure.com",
+			AzureDeploymentName: "gpt-4-deployment",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("azure missing endpoint - logs warning", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType:        "azure",
+			AzureAPIKey:         "azure-key",
+			AzureEndpoint:       "",
+			AzureDeploymentName: "gpt-4-deployment",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("azure missing deployment name - logs warning", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType:        "azure",
+			AzureAPIKey:         "azure-key",
+			AzureEndpoint:       "https://example.openai.azure.com",
+			AzureDeploymentName: "",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("azure missing all fields - logs warning", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType:        "azure",
+			AzureAPIKey:         "",
+			AzureEndpoint:       "",
+			AzureDeploymentName: "",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+
+	t.Run("unknown provider type - no crash", func(t *testing.T) {
+		handler := NewHandler(nil, nil, &config.AIConfig{
+			ProviderType: "unknown",
+		}, nil)
+		assert.NotPanics(t, func() {
+			handler.ValidateConfig()
+		})
+	})
+}
+
+// =============================================================================
+// VectorManagerInterface Tests
+// =============================================================================
+
+// MockVectorManager implements VectorManagerInterface for testing
+type MockVectorManager struct {
+	refreshCalled bool
+	refreshError  error
+}
+
+func (m *MockVectorManager) RefreshFromDatabase(ctx context.Context) error {
+	m.refreshCalled = true
+	return m.refreshError
+}
+
+func TestVectorManagerInterface(t *testing.T) {
+	t.Run("mock implements interface", func(t *testing.T) {
+		var _ VectorManagerInterface = (*MockVectorManager)(nil)
+	})
+
+	t.Run("handler accepts vector manager", func(t *testing.T) {
+		mockVM := &MockVectorManager{}
+		handler := NewHandler(nil, nil, nil, mockVM)
+		assert.NotNil(t, handler)
+		assert.Equal(t, mockVM, handler.vectorManager)
+	})
+}
+
+// =============================================================================
+// Handler Field Tests
+// =============================================================================
+
+func TestHandler_Fields(t *testing.T) {
+	t.Run("all fields accessible", func(t *testing.T) {
+		handler := &Handler{
+			storage:       nil,
+			loader:        nil,
+			config:        nil,
+			vectorManager: nil,
+		}
+		assert.Nil(t, handler.storage)
+		assert.Nil(t, handler.loader)
+		assert.Nil(t, handler.config)
+		assert.Nil(t, handler.vectorManager)
+	})
+}
+
+// =============================================================================
+// Benchmark Tests
+// =============================================================================
+
+func BenchmarkNormalizeConfig(b *testing.B) {
+	input := map[string]any{
+		"api_key":   "sk-xxx",
+		"model":     "gpt-4",
+		"endpoint":  "https://api.openai.com",
+		"timeout":   30,
+		"enabled":   true,
+		"nil_value": nil,
+		"empty":     "",
+		"undefined": "undefined",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		normalizeConfig(input)
+	}
+}
+
+func BenchmarkNormalizeConfig_Empty(b *testing.B) {
+	input := map[string]any{}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		normalizeConfig(input)
+	}
+}
+
+func BenchmarkNormalizeConfig_Large(b *testing.B) {
+	input := make(map[string]any, 100)
+	for i := 0; i < 100; i++ {
+		input[fmt.Sprintf("key_%d", i)] = fmt.Sprintf("value_%d", i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		normalizeConfig(input)
+	}
 }

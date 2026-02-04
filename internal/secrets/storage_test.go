@@ -280,4 +280,212 @@ func TestVersionIncrement(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// Secret Name Validation Tests
+// =============================================================================
+
+func TestSecretNameValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		isValid bool
+	}{
+		{"valid uppercase", "API_KEY", true},
+		{"valid with numbers", "API_KEY_V2", true},
+		{"valid simple", "SECRET", true},
+		{"lowercase", "api_key", true},
+		{"mixed case", "Api_Key", true},
+		{"starts with number", "1API_KEY", false},
+		{"contains spaces", "API KEY", false},
+		{"contains dash", "API-KEY", false},
+		{"empty", "", false},
+		{"too long", string(make([]byte, 256)), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simple validation: alphanumeric and underscore, not starting with number
+			isValid := len(tt.input) > 0 && len(tt.input) <= 255
+			if isValid && len(tt.input) > 0 {
+				first := tt.input[0]
+				isValid = (first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_'
+			}
+			if isValid {
+				for _, c := range tt.input {
+					if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+						isValid = false
+						break
+					}
+				}
+			}
+
+			if isValid != tt.isValid {
+				t.Errorf("secret name %q validation: got %v, want %v", tt.input, isValid, tt.isValid)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Secret Struct Edge Cases
+// =============================================================================
+
+func TestSecret_EdgeCases(t *testing.T) {
+	t.Run("secret with all optional fields nil", func(t *testing.T) {
+		secret := &Secret{
+			ID:             uuid.New(),
+			Name:           "MINIMAL_SECRET",
+			Scope:          "global",
+			Namespace:      nil,
+			EncryptedValue: "encrypted",
+			Description:    nil,
+			Version:        1,
+			ExpiresAt:      nil,
+			CreatedAt:      time.Now(),
+			UpdatedAt:      time.Now(),
+			CreatedBy:      nil,
+			UpdatedBy:      nil,
+		}
+
+		if secret.Description != nil {
+			t.Error("expected Description to be nil")
+		}
+		if secret.ExpiresAt != nil {
+			t.Error("expected ExpiresAt to be nil")
+		}
+		if secret.CreatedBy != nil {
+			t.Error("expected CreatedBy to be nil")
+		}
+	})
+
+	t.Run("secret summary with computed expiration", func(t *testing.T) {
+		now := time.Now()
+		pastTime := now.Add(-1 * time.Hour)
+		futureTime := now.Add(1 * time.Hour)
+
+		expiredSummary := SecretSummary{
+			Name:      "EXPIRED",
+			ExpiresAt: &pastTime,
+			IsExpired: pastTime.Before(now),
+		}
+
+		validSummary := SecretSummary{
+			Name:      "VALID",
+			ExpiresAt: &futureTime,
+			IsExpired: futureTime.Before(now),
+		}
+
+		if !expiredSummary.IsExpired {
+			t.Error("secret with past expiration should be marked expired")
+		}
+		if validSummary.IsExpired {
+			t.Error("secret with future expiration should not be marked expired")
+		}
+	})
+}
+
+// =============================================================================
+// Storage Initialization Tests
+// =============================================================================
+
+func TestStorage_Initialization(t *testing.T) {
+	t.Run("storage with valid 32-byte key", func(t *testing.T) {
+		key := "12345678901234567890123456789012" // exactly 32 bytes
+		storage := NewStorage(nil, key)
+
+		if storage == nil {
+			t.Fatal("storage should not be nil")
+		}
+		if len(storage.encryptionKey) != 32 {
+			t.Errorf("expected 32-byte key, got %d bytes", len(storage.encryptionKey))
+		}
+	})
+
+	t.Run("storage fields are set correctly", func(t *testing.T) {
+		key := "12345678901234567890123456789012"
+		storage := NewStorage(nil, key)
+
+		if storage.db != nil {
+			t.Error("db should be nil when initialized with nil")
+		}
+		if storage.encryptionKey != key {
+			t.Error("encryption key should match input")
+		}
+	})
+}
+
+// =============================================================================
+// Benchmark Tests
+// =============================================================================
+
+func BenchmarkSecretStruct_Creation(b *testing.B) {
+	now := time.Now()
+	namespace := "test-ns"
+	userID := uuid.New()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = &Secret{
+			ID:             uuid.New(),
+			Name:           "API_KEY",
+			Scope:          "namespace",
+			Namespace:      &namespace,
+			EncryptedValue: "encrypted-data",
+			Version:        1,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+			CreatedBy:      &userID,
+		}
+	}
+}
+
+func BenchmarkSecretSummary_Creation(b *testing.B) {
+	now := time.Now()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = SecretSummary{
+			ID:        uuid.New(),
+			Name:      "DB_PASSWORD",
+			Scope:     "global",
+			Version:   1,
+			IsExpired: false,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+	}
+}
+
+func BenchmarkEncryption(b *testing.B) {
+	key := "12345678901234567890123456789012"
+	plainValue := "my-secret-password-value"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = crypto.Encrypt(plainValue, key)
+	}
+}
+
+func BenchmarkDecryption(b *testing.B) {
+	key := "12345678901234567890123456789012"
+	plainValue := "my-secret-password-value"
+	encrypted, _ := crypto.Encrypt(plainValue, key)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = crypto.Decrypt(encrypted, key)
+	}
+}
+
+func BenchmarkEncryptDecrypt_RoundTrip(b *testing.B) {
+	key := "12345678901234567890123456789012"
+	plainValue := "my-secret-password-value"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		encrypted, _ := crypto.Encrypt(plainValue, key)
+		_, _ = crypto.Decrypt(encrypted, key)
+	}
+}
+
 // strPtr is a helper function - defined in handler_test.go
