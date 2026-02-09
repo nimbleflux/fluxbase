@@ -25,6 +25,7 @@ type BranchType string
 const (
 	BranchTypeMain       BranchType = "main"       // The main/production branch
 	BranchTypePreview    BranchType = "preview"    // Preview branches (auto-created from PRs)
+	BranchTypeProduction BranchType = "production" // Production branches
 	BranchTypePersistent BranchType = "persistent" // Persistent branches (manually created, not auto-deleted)
 )
 
@@ -35,27 +36,30 @@ const (
 	DataCloneModeSchemaOnly DataCloneMode = "schema_only" // Clone schema only (tables, indexes, etc.)
 	DataCloneModeFullClone  DataCloneMode = "full_clone"  // Clone schema and all data
 	DataCloneModeSeedData   DataCloneMode = "seed_data"   // Clone schema and run seed data scripts
+	DataCloneModeFull       DataCloneMode = "full"        // Alias for full_clone
 )
 
 // Branch represents a database branch
 type Branch struct {
-	ID             uuid.UUID     `json:"id" db:"id"`
-	Name           string        `json:"name" db:"name"`
-	Slug           string        `json:"slug" db:"slug"`
-	DatabaseName   string        `json:"database_name" db:"database_name"`
-	Status         BranchStatus  `json:"status" db:"status"`
-	Type           BranchType    `json:"type" db:"type"`
-	ParentBranchID *uuid.UUID    `json:"parent_branch_id,omitempty" db:"parent_branch_id"`
-	DataCloneMode  DataCloneMode `json:"data_clone_mode" db:"data_clone_mode"`
-	GitHubPRNumber *int          `json:"github_pr_number,omitempty" db:"github_pr_number"`
-	GitHubPRURL    *string       `json:"github_pr_url,omitempty" db:"github_pr_url"`
-	GitHubRepo     *string       `json:"github_repo,omitempty" db:"github_repo"`
-	ErrorMessage   *string       `json:"error_message,omitempty" db:"error_message"`
-	SeedsPath      *string       `json:"seeds_path,omitempty" db:"seeds_path"`
-	CreatedBy      *uuid.UUID    `json:"created_by,omitempty" db:"created_by"`
-	CreatedAt      time.Time     `json:"created_at" db:"created_at"`
-	UpdatedAt      time.Time     `json:"updated_at" db:"updated_at"`
-	ExpiresAt      *time.Time    `json:"expires_at,omitempty" db:"expires_at"`
+	ID             uuid.UUID      `json:"id" db:"id"`
+	Name           string         `json:"name" db:"name"`
+	Slug           string         `json:"slug" db:"slug"`
+	DatabaseName   string         `json:"database_name" db:"database_name"`
+	Status         BranchStatus   `json:"status" db:"status"`
+	Type           BranchType     `json:"type" db:"type"`
+	ParentBranchID *uuid.UUID     `json:"parent_branch_id,omitempty" db:"parent_branch_id"`
+	DataCloneMode  DataCloneMode  `json:"data_clone_mode" db:"data_clone_mode"`
+	GitHubPRNumber *int           `json:"github_pr_number,omitempty" db:"github_pr_number"`
+	GitHubPRURL    *string        `json:"github_pr_url,omitempty" db:"github_pr_url"`
+	GitHubRepo     *string        `json:"github_repo,omitempty" db:"github_repo"`
+	ErrorMessage   *string        `json:"error_message,omitempty" db:"error_message"`
+	SeedsPath      *string        `json:"seeds_path,omitempty" db:"seeds_path"`
+	CreatedBy      *uuid.UUID     `json:"created_by,omitempty" db:"created_by"`
+	UpdatedBy      *uuid.UUID     `json:"updated_by,omitempty" db:"updated_by"`
+	CreatedAt      time.Time      `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at" db:"updated_at"`
+	ExpiresAt      *time.Time     `json:"expires_at,omitempty" db:"expires_at"`
+	Access         []BranchAccess `json:"access,omitempty" db:"-"` // Not stored in DB, loaded separately
 }
 
 // IsMain returns true if this is the main branch
@@ -66,6 +70,41 @@ func (b *Branch) IsMain() bool {
 // IsReady returns true if the branch is ready for use
 func (b *Branch) IsReady() bool {
 	return b.Status == BranchStatusReady
+}
+
+// IsExpired returns true if the branch has expired
+func (b *Branch) IsExpired() bool {
+	if b.ExpiresAt == nil {
+		return false
+	}
+	return b.ExpiresAt.Before(time.Now())
+}
+
+// HasAccess returns true if the specified user has access to this branch
+func (b *Branch) HasAccess(userID uuid.UUID) bool {
+	if b.Access == nil {
+		return false
+	}
+	for _, access := range b.Access {
+		if access.UserID == userID {
+			return true
+		}
+	}
+	return false
+}
+
+// GetAccessLevel returns the access level for the specified user, or nil if no access
+func (b *Branch) GetAccessLevel(userID uuid.UUID) *BranchAccessLevel {
+	if b.Access == nil {
+		return nil
+	}
+	for _, access := range b.Access {
+		if access.UserID == userID {
+			level := access.AccessLevel
+			return &level
+		}
+	}
+	return nil
 }
 
 // MigrationHistory tracks which migrations have been applied to a branch
@@ -160,17 +199,32 @@ type CreateBranchRequest struct {
 
 // UpdateBranchRequest is the request to update an existing branch
 type UpdateBranchRequest struct {
-	Name      *string     `json:"name,omitempty"`
-	Type      *BranchType `json:"type,omitempty"`
-	ExpiresAt *time.Time  `json:"expires_at,omitempty"`
+	Name      *string       `json:"name,omitempty"`
+	Type      *BranchType   `json:"type,omitempty"`
+	Status    *BranchStatus `json:"status,omitempty"`
+	ExpiresAt *time.Time    `json:"expires_at,omitempty"`
 }
 
 // ListBranchesFilter filters for listing branches
 type ListBranchesFilter struct {
-	Status     *BranchStatus `json:"status,omitempty"`
-	Type       *BranchType   `json:"type,omitempty"`
-	CreatedBy  *uuid.UUID    `json:"created_by,omitempty"`
-	GitHubRepo *string       `json:"github_repo,omitempty"`
-	Limit      int           `json:"limit,omitempty"`
-	Offset     int           `json:"offset,omitempty"`
+	Status        *BranchStatus `json:"status,omitempty"`
+	Type          *BranchType   `json:"type,omitempty"`
+	CreatedBy     *uuid.UUID    `json:"created_by,omitempty"`
+	GitHubRepo    *string       `json:"github_repo,omitempty"`
+	ExpiresBefore *time.Time    `json:"expires_before,omitempty"`
+	ExpiresAfter  *time.Time    `json:"expires_after,omitempty"`
+	Search        string        `json:"search,omitempty"`
+	Limit         int           `json:"limit,omitempty"`
+	Offset        int           `json:"offset,omitempty"`
+}
+
+// GrantAccessRequest is the request to grant access to a branch
+type GrantAccessRequest struct {
+	UserID      uuid.UUID         `json:"user_id" validate:"required"`
+	AccessLevel BranchAccessLevel `json:"access_level" validate:"required"`
+}
+
+// UpdateAccessRequest is the request to update access to a branch
+type UpdateAccessRequest struct {
+	AccessLevel *BranchAccessLevel `json:"access_level,omitempty"`
 }

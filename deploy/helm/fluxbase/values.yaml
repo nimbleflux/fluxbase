@@ -1344,6 +1344,8 @@ httpRoute:
   ## e.g:
   ## parentRefs:
   ##   - name: my-gateway
+  ##     group: gateway.networking.k8s.io
+  ##     kind: Gateway
   ##     namespace: gateway-system
   ##     sectionName: https
   ##

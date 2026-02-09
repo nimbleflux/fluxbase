@@ -362,6 +362,68 @@ func TestAuthContext_GetMetadataStringSlice(t *testing.T) {
 }
 
 // =============================================================================
+// AuthContext.GetMetadataString Tests
+// =============================================================================
+
+func TestAuthContext_GetMetadataString(t *testing.T) {
+	t.Run("nil metadata returns empty string", func(t *testing.T) {
+		ctx := &AuthContext{
+			Metadata: nil,
+		}
+		result := ctx.GetMetadataString("key")
+		assert.Equal(t, "", result)
+	})
+
+	t.Run("empty metadata returns empty string", func(t *testing.T) {
+		ctx := &AuthContext{
+			Metadata: map[string]any{},
+		}
+		result := ctx.GetMetadataString("key")
+		assert.Equal(t, "", result)
+	})
+
+	t.Run("returns string value", func(t *testing.T) {
+		ctx := &AuthContext{
+			Metadata: map[string]any{
+				"key": "value",
+			},
+		}
+		result := ctx.GetMetadataString("key")
+		assert.Equal(t, "value", result)
+	})
+
+	t.Run("returns empty string for non-existent key", func(t *testing.T) {
+		ctx := &AuthContext{
+			Metadata: map[string]any{
+				"other": "value",
+			},
+		}
+		result := ctx.GetMetadataString("key")
+		assert.Equal(t, "", result)
+	})
+
+	t.Run("returns empty string for wrong type", func(t *testing.T) {
+		ctx := &AuthContext{
+			Metadata: map[string]any{
+				"key": 123, // int, not string
+			},
+		}
+		result := ctx.GetMetadataString("key")
+		assert.Equal(t, "", result)
+	})
+
+	t.Run("returns empty string for slice value", func(t *testing.T) {
+		ctx := &AuthContext{
+			Metadata: map[string]any{
+				"key": []string{"value1", "value2"},
+			},
+		}
+		result := ctx.GetMetadataString("key")
+		assert.Equal(t, "", result)
+	})
+}
+
+// =============================================================================
 // AuthContext.HasNamespaceAccess Tests
 // =============================================================================
 

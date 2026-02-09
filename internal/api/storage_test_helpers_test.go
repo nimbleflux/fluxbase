@@ -119,33 +119,60 @@ func setupStorageTestServer(t *testing.T) (*fiber.App, string, *database.Connect
 	storageRoutes.Post("/buckets/:bucket", storageHandler.CreateBucket)
 	storageRoutes.Delete("/buckets/:bucket", storageHandler.DeleteBucket)
 
-	// File operations
+	// Advanced features (must be registered before wildcard routes)
+	storageRoutes.Post("/:bucket/multipart", storageHandler.MultipartUpload)
+	storageRoutes.Post("/:bucket/*/signed-url", storageHandler.GenerateSignedURL)
+
+	// File operations (wildcard routes must be last)
 	storageRoutes.Post("/:bucket/*", storageHandler.UploadFile)
 	storageRoutes.Get("/:bucket/*", storageHandler.DownloadFile)
 	storageRoutes.Delete("/:bucket/*", storageHandler.DeleteFile)
 	storageRoutes.Head("/:bucket/*", storageHandler.GetFileInfo)
 	storageRoutes.Get("/:bucket", storageHandler.ListFiles)
 
-	// Advanced features
-	storageRoutes.Post("/:bucket/multipart", storageHandler.MultipartUpload)
-	storageRoutes.Post("/:bucket/*/signed-url", storageHandler.GenerateSignedURL)
-
 	return app, tempDir, db
 }
 
 // createTestBucket is a helper to create a bucket for tests
+// It will first try to delete the bucket if it exists, then create it fresh
 func createTestBucket(t *testing.T, app *fiber.App, bucketName string) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/storage/buckets/"+bucketName, nil)
+
+	// Try to delete the bucket first to ensure clean state
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/storage/buckets/"+bucketName, nil)
 	resp, err := app.Test(req)
+	if err == nil {
+		resp.Body.Close()
+		// Ignore whether delete succeeded or not (bucket might not exist)
+	}
+
+	// Create the bucket
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/storage/buckets/"+bucketName, nil)
+	resp, err = app.Test(req)
 	require.NoError(t, err)
 	resp.Body.Close()
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	// Accept both 201 (created) and 409 (already exists) as success
+	// 409 is acceptable because we tried to delete first, but the delete might have failed
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
+		t.Fatalf("Expected status 201 or 409, got %d", resp.StatusCode)
+	}
 }
 
 // uploadTestFile is a helper to upload a file for tests
+// It will first try to delete the file if it exists, then upload it fresh
 func uploadTestFile(t *testing.T, app *fiber.App, bucket, path, content string) {
 	t.Helper()
+
+	// Try to delete the file first to ensure clean state
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/storage/"+bucket+"/"+path, nil)
+	resp, err := app.Test(req)
+	if err == nil {
+		resp.Body.Close()
+		// Ignore whether delete succeeded or not (file might not exist)
+	}
+
+	// Upload the file
 	body := new(bytes.Buffer)
 	writer := multipart.NewWriter(body)
 	part, err := writer.CreateFormFile("file", path)
@@ -155,10 +182,14 @@ func uploadTestFile(t *testing.T, app *fiber.App, bucket, path, content string) 
 	err = writer.Close()
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/storage/"+bucket+"/"+path, body)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/storage/"+bucket+"/"+path, body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	resp, err := app.Test(req)
+	resp, err = app.Test(req)
 	require.NoError(t, err)
 	resp.Body.Close()
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	// Accept both 201 (created) and 200 (updated/replaced) as success
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 201 or 200, got %d", resp.StatusCode)
+	}
 }

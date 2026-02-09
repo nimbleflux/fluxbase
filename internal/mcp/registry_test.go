@@ -248,6 +248,51 @@ func TestToolRegistry_Register_Overwrite(t *testing.T) {
 	assert.Equal(t, "Replacement", result.Description())
 }
 
+func TestToolRegistry_Unregister(t *testing.T) {
+	t.Run("removes registered tool", func(t *testing.T) {
+		registry := NewToolRegistry()
+		tool := &mockToolHandler{name: "test-tool"}
+		registry.Register(tool)
+
+		// Verify tool exists
+		assert.NotNil(t, registry.GetTool("test-tool"))
+
+		// Unregister the tool
+		registry.Unregister("test-tool")
+
+		// Verify tool is removed
+		assert.Nil(t, registry.GetTool("test-tool"))
+	})
+
+	t.Run("handles unregistering non-existent tool gracefully", func(t *testing.T) {
+		registry := NewToolRegistry()
+
+		// Should not panic when unregistering a tool that doesn't exist
+		assert.NotPanics(t, func() {
+			registry.Unregister("nonexistent-tool")
+		})
+	})
+
+	t.Run("only removes the specified tool", func(t *testing.T) {
+		registry := NewToolRegistry()
+		tool1 := &mockToolHandler{name: "tool-1"}
+		tool2 := &mockToolHandler{name: "tool-2"}
+		tool3 := &mockToolHandler{name: "tool-3"}
+
+		registry.Register(tool1)
+		registry.Register(tool2)
+		registry.Register(tool3)
+
+		// Unregister only tool-2
+		registry.Unregister("tool-2")
+
+		// Verify tool-1 and tool-3 still exist
+		assert.NotNil(t, registry.GetTool("tool-1"))
+		assert.Nil(t, registry.GetTool("tool-2"))
+		assert.NotNil(t, registry.GetTool("tool-3"))
+	})
+}
+
 // =============================================================================
 // ResourceRegistry Tests
 // =============================================================================
@@ -308,6 +353,51 @@ func TestResourceRegistry_GetProvider(t *testing.T) {
 		registry := NewResourceRegistry()
 		result := registry.GetProvider("nonexistent")
 		assert.Nil(t, result)
+	})
+}
+
+func TestResourceRegistry_Unregister(t *testing.T) {
+	t.Run("removes registered provider", func(t *testing.T) {
+		registry := NewResourceRegistry()
+		provider := &mockResourceProvider{uri: "fluxbase://test-resource"}
+		registry.Register(provider)
+
+		// Verify provider exists
+		assert.NotNil(t, registry.GetProvider("fluxbase://test-resource"))
+
+		// Unregister the provider
+		registry.Unregister("fluxbase://test-resource")
+
+		// Verify provider is removed
+		assert.Nil(t, registry.GetProvider("fluxbase://test-resource"))
+	})
+
+	t.Run("handles unregistering non-existent provider gracefully", func(t *testing.T) {
+		registry := NewResourceRegistry()
+
+		// Should not panic when unregistering a provider that doesn't exist
+		assert.NotPanics(t, func() {
+			registry.Unregister("fluxbase://nonexistent")
+		})
+	})
+
+	t.Run("only removes the specified provider", func(t *testing.T) {
+		registry := NewResourceRegistry()
+		provider1 := &mockResourceProvider{uri: "fluxbase://resource-1"}
+		provider2 := &mockResourceProvider{uri: "fluxbase://resource-2"}
+		provider3 := &mockResourceProvider{uri: "fluxbase://resource-3"}
+
+		registry.Register(provider1)
+		registry.Register(provider2)
+		registry.Register(provider3)
+
+		// Unregister only resource-2
+		registry.Unregister("fluxbase://resource-2")
+
+		// Verify resource-1 and resource-3 still exist
+		assert.NotNil(t, registry.GetProvider("fluxbase://resource-1"))
+		assert.Nil(t, registry.GetProvider("fluxbase://resource-2"))
+		assert.NotNil(t, registry.GetProvider("fluxbase://resource-3"))
 	})
 }
 

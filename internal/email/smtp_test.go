@@ -489,3 +489,328 @@ func TestEmailConfig_IsConfigured(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// SanitizeHeaderValue Tests (Header Injection Prevention)
+// =============================================================================
+
+func TestSanitizeHeaderValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "normal string",
+			input: "test@example.com",
+			want:  "test@example.com",
+		},
+		{
+			name:  "string with CR",
+			input: "test\r@example.com",
+			want:  "test@example.com",
+		},
+		{
+			name:  "string with LF",
+			input: "test\n@example.com",
+			want:  "test@example.com",
+		},
+		{
+			name:  "string with CRLF",
+			input: "test\r\n@example.com",
+			want:  "test@example.com",
+		},
+		{
+			name:  "string with multiple CRLF",
+			input: "test\r\n\r\n@example.com",
+			want:  "test@example.com",
+		},
+		{
+			name:  "header injection attempt",
+			input: "test@example.com\r\nBcc: victim@example.com",
+			want:  "test@example.comBcc: victim@example.com",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "only CRLF",
+			input: "\r\n",
+			want:  "",
+		},
+		{
+			name:  "string with spaces and special chars",
+			input: "Test User <test@example.com>",
+			want:  "Test User <test@example.com>",
+		},
+		{
+			name:  "unicode characters",
+			input: "用户@example.com",
+			want:  "用户@example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sanitizeHeaderValue(tt.input)
+			assert.Equal(t, tt.want, result)
+		})
+	}
+}
+
+// =============================================================================
+// buildMessage with Header Sanitization Tests
+// =============================================================================
+
+func TestSMTPService_buildMessage_Sanitization(t *testing.T) {
+	t.Run("sanitizes from name with CRLF", func(t *testing.T) {
+		// Create a service with malicious input
+		maliciousCfg := &config.EmailConfig{
+			FromAddress:    "noreply@example.com",
+			FromName:       "Test Service\r\nBcc: victim@example.com",
+			ReplyToAddress: "support@example.com",
+		}
+		maliciousService := NewSMTPService(maliciousCfg)
+
+		message := maliciousService.buildMessage("user@example.com", "Subject", "Body")
+		messageStr := string(message)
+
+		// The Bcc header should NOT appear as a separate header
+		// The CRLF should be sanitized from the name value
+		assert.NotContains(t, messageStr, "\r\nBcc:")
+		// But "Test Service" should still be there
+		assert.Contains(t, messageStr, "Test Service")
+	})
+
+	t.Run("sanitizes reply-to with CRLF injection", func(t *testing.T) {
+		maliciousCfg := &config.EmailConfig{
+			FromAddress:    "noreply@example.com",
+			FromName:       "Test Service",
+			ReplyToAddress: "support@example.com\r\nCc: victim@example.com",
+		}
+		maliciousService := NewSMTPService(maliciousCfg)
+
+		message := maliciousService.buildMessage("user@example.com", "Subject", "Body")
+		messageStr := string(message)
+
+		// The Cc header should NOT appear
+		assert.NotContains(t, messageStr, "\r\nCc:")
+		// But support@example.com should still be there
+		assert.Contains(t, messageStr, "support@example.com")
+	})
+}
+
+// =============================================================================
+// Send Method Error Handling Tests
+// =============================================================================
+
+func TestSMTPService_Send_ErrorCases(t *testing.T) {
+	t.Run("returns error when service is disabled", func(t *testing.T) {
+		cfg := &config.EmailConfig{
+			Enabled: false,
+		}
+		service := NewSMTPService(cfg)
+
+		err := service.Send(context.Background(), "user@example.com", "Subject", "Body")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "disabled")
+	})
+
+	t.Run("handles context cancellation", func(t *testing.T) {
+		cfg := &config.EmailConfig{
+			Enabled:     true,
+			SMTPHost:    "nonexistent.smtp.server",
+			SMTPPort:    587,
+			FromAddress: "from@example.com",
+		}
+		service := NewSMTPService(cfg)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		err := service.Send(ctx, "user@example.com", "Subject", "Body")
+
+		assert.Error(t, err)
+	})
+}
+
+// =============================================================================
+// IsConfigured Tests
+// =============================================================================
+
+func TestSMTPService_IsConfigured(t *testing.T) {
+	tests := []struct {
+		name       string
+		cfg        *config.EmailConfig
+		configured bool
+	}{
+		{
+			name: "fully configured",
+			cfg: &config.EmailConfig{
+				Enabled:     true,
+				FromAddress: "noreply@example.com",
+				SMTPHost:    "smtp.example.com",
+				SMTPPort:    587,
+			},
+			configured: true,
+		},
+		{
+			name: "disabled",
+			cfg: &config.EmailConfig{
+				Enabled:     false,
+				FromAddress: "noreply@example.com",
+				SMTPHost:    "smtp.example.com",
+				SMTPPort:    587,
+			},
+			configured: false,
+		},
+		{
+			name: "missing host",
+			cfg: &config.EmailConfig{
+				Enabled:     true,
+				FromAddress: "noreply@example.com",
+				SMTPPort:    587,
+			},
+			configured: false,
+		},
+		{
+			name: "missing port",
+			cfg: &config.EmailConfig{
+				Enabled:     true,
+				FromAddress: "noreply@example.com",
+				SMTPHost:    "smtp.example.com",
+			},
+			configured: false,
+		},
+		{
+			name: "missing from address",
+			cfg: &config.EmailConfig{
+				Enabled:  true,
+				SMTPHost: "smtp.example.com",
+				SMTPPort: 587,
+			},
+			configured: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := NewSMTPService(tt.cfg)
+			result := service.IsConfigured()
+			assert.Equal(t, tt.configured, result)
+		})
+	}
+}
+
+// =============================================================================
+// Email Template Rendering Tests
+// =============================================================================
+
+func TestSMTPService_RenderPasswordResetTemplate(t *testing.T) {
+	cfg := &config.EmailConfig{}
+	service := NewSMTPService(cfg)
+
+	link := "https://example.com/reset?token=reset123"
+	token := "reset123"
+
+	result := service.renderPasswordResetTemplate(link, token)
+
+	assert.Contains(t, result, link)
+	assert.Contains(t, result, "Reset Your Password")
+	assert.Contains(t, result, "<!DOCTYPE html>")
+	assert.Contains(t, result, "Reset Password")
+}
+
+// =============================================================================
+// Message Building Edge Cases
+// =============================================================================
+
+func TestSMTPService_buildMessage_EdgeCases(t *testing.T) {
+	t.Run("handles empty reply-to", func(t *testing.T) {
+		cfg := &config.EmailConfig{
+			FromAddress: "noreply@example.com",
+			FromName:    "Test Service",
+		}
+		service := NewSMTPService(cfg)
+
+		message := service.buildMessage("user@example.com", "Subject", "Body")
+		messageStr := string(message)
+
+		assert.NotContains(t, messageStr, "Reply-To:")
+	})
+
+	t.Run("handles special characters in subject", func(t *testing.T) {
+		cfg := &config.EmailConfig{
+			FromAddress: "noreply@example.com",
+		}
+		service := NewSMTPService(cfg)
+
+		subject := "Test with special chars: <>&\"'"
+		message := service.buildMessage("user@example.com", subject, "Body")
+		messageStr := string(message)
+
+		assert.Contains(t, messageStr, "Subject:")
+		assert.Contains(t, messageStr, "special chars")
+	})
+
+	t.Run("handles unicode in body", func(t *testing.T) {
+		cfg := &config.EmailConfig{
+			FromAddress: "noreply@example.com",
+		}
+		service := NewSMTPService(cfg)
+
+		body := "<p>Hello 世界 🌍</p>"
+		message := service.buildMessage("user@example.com", "Subject", body)
+		messageStr := string(message)
+
+		assert.Contains(t, messageStr, body)
+		assert.Contains(t, messageStr, "charset=UTF-8")
+	})
+}
+
+// =============================================================================
+// Template Tests
+// =============================================================================
+
+func TestDefaultTemplates_Complete(t *testing.T) {
+	t.Run("password reset template contains all elements", func(t *testing.T) {
+		assert.Contains(t, defaultPasswordResetTemplate, "<!DOCTYPE html>")
+		assert.Contains(t, defaultPasswordResetTemplate, "{{.Link}}")
+		assert.Contains(t, defaultPasswordResetTemplate, "Reset Your Password")
+		assert.Contains(t, defaultPasswordResetTemplate, "Security Reminder")
+	})
+
+	t.Run("invitation template contains all elements", func(t *testing.T) {
+		assert.Contains(t, defaultInvitationTemplate, "<!DOCTYPE html>")
+		assert.Contains(t, defaultInvitationTemplate, "{{.InviteLink}}")
+		assert.Contains(t, defaultInvitationTemplate, "You've Been Invited!")
+		assert.Contains(t, defaultInvitationTemplate, "{{.InviterName}}")
+	})
+}
+
+// =============================================================================
+// SendInvitationEmail Test
+// =============================================================================
+
+func TestSMTPService_SendInvitationEmail(t *testing.T) {
+	cfg := &config.EmailConfig{
+		FromAddress: "noreply@example.com",
+		FromName:    "Test Service",
+	}
+	service := NewSMTPService(cfg)
+
+	t.Run("renders invitation template", func(t *testing.T) {
+		// We can't actually send the email without a server, but we can check the template rendering
+		link := "https://example.com/invite?code=abc123"
+		inviter := "John Doe"
+
+		// This would fail at send time, but we can check it builds the message
+		err := service.SendInvitationEmail(context.Background(), "user@example.com", inviter, link)
+
+		// Will fail because no SMTP server, but that's expected
+		assert.Error(t, err)
+	})
+}

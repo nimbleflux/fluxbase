@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type MemoryStore struct {
 	mu         sync.RWMutex
 	gcInterval time.Duration
 	stopCh     chan struct{}
+	stopped    int32 // Atomic flag to prevent double-close (0=running, 1=stopped)
 }
 
 type entry struct {
@@ -91,6 +93,10 @@ func (s *MemoryStore) Reset(ctx context.Context, key string) error {
 
 // Close stops the garbage collection goroutine.
 func (s *MemoryStore) Close() error {
+	// Check if already stopped (prevent double-close)
+	if !atomic.CompareAndSwapInt32(&s.stopped, 0, 1) {
+		return nil
+	}
 	close(s.stopCh)
 	return nil
 }

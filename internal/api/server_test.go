@@ -6,7 +6,12 @@ import (
 	"io"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/fluxbase-eu/fluxbase/internal/database"
+	"github.com/fluxbase-eu/fluxbase/internal/pubsub"
+	"github.com/fluxbase-eu/fluxbase/internal/ratelimit"
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -373,6 +378,83 @@ func TestSchemaQueryParsing(t *testing.T) {
 }
 
 // =============================================================================
+// Server Getter Methods Tests
+// =============================================================================
+
+func TestServer_App(t *testing.T) {
+	t.Run("returns the fiber app from server", func(t *testing.T) {
+		app := fiber.New()
+		s := &Server{app: app}
+		assert.Equal(t, app, s.App())
+	})
+}
+
+func TestServer_GetStorageService(t *testing.T) {
+	t.Run("returns nil when storage handler is nil", func(t *testing.T) {
+		s := &Server{storageHandler: nil}
+		assert.Nil(t, s.GetStorageService())
+	})
+
+	t.Run("returns nil when storage handler has nil service", func(t *testing.T) {
+		s := &Server{storageHandler: &StorageHandler{storage: nil}}
+		assert.Nil(t, s.GetStorageService())
+	})
+}
+
+func TestServer_GetWebhookTriggerService(t *testing.T) {
+	t.Run("returns nil when webhook trigger service is nil", func(t *testing.T) {
+		s := &Server{webhookTriggerService: nil}
+		assert.Nil(t, s.GetWebhookTriggerService())
+	})
+}
+
+func TestServer_GetAuthService(t *testing.T) {
+	t.Run("returns nil when auth handler is nil", func(t *testing.T) {
+		s := &Server{authHandler: nil}
+		assert.Nil(t, s.GetAuthService())
+	})
+
+	t.Run("returns nil when auth handler has nil service", func(t *testing.T) {
+		s := &Server{authHandler: &AuthHandler{authService: nil}}
+		assert.Nil(t, s.GetAuthService())
+	})
+}
+
+func TestServer_GetLoggingService(t *testing.T) {
+	t.Run("returns nil when logging service is nil", func(t *testing.T) {
+		s := &Server{loggingService: nil}
+		assert.Nil(t, s.GetLoggingService())
+	})
+}
+
+func TestServer_LoadFunctionsFromFilesystem(t *testing.T) {
+	t.Run("returns error when functions handler is nil", func(t *testing.T) {
+		s := &Server{functionsHandler: nil}
+		err := s.LoadFunctionsFromFilesystem(nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "functions handler not initialized")
+	})
+}
+
+func TestServer_LoadJobsFromFilesystem(t *testing.T) {
+	t.Run("returns error when jobs handler is nil", func(t *testing.T) {
+		s := &Server{jobsHandler: nil}
+		err := s.LoadJobsFromFilesystem(nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "jobs handler not initialized")
+	})
+}
+
+func TestServer_LoadAIChatbotsFromFilesystem(t *testing.T) {
+	t.Run("returns error when ai handler is nil", func(t *testing.T) {
+		s := &Server{aiHandler: nil}
+		err := s.LoadAIChatbotsFromFilesystem(nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "AI handler not initialized")
+	})
+}
+
+// =============================================================================
 // Benchmarks
 // =============================================================================
 
@@ -410,4 +492,69 @@ func BenchmarkCustomErrorHandler(b *testing.B) {
 			_ = resp.Body.Close()
 		}
 	}
+}
+
+// =============================================================================
+// Test Server with Dependency Injection
+// =============================================================================
+
+// TestServerConfig holds configuration for test servers with injected dependencies.
+// This enables test-specific rate limiters and pub/sub instances for better isolation.
+type TestServerConfig struct {
+	DB          *database.Connection
+	RateLimiter ratelimit.Store
+	PubSub      pubsub.PubSub
+	Config      *config.Config
+}
+
+// NewTestServer creates a server with injected dependencies for testing.
+// This allows each test to have its own rate limiter and pub/sub instances
+// instead of relying on global singletons.
+//
+// Usage:
+//
+//	cfg := test.GetTestConfig()
+//	db := test.SetupTestDB(t)
+//	rateLimiter, pubSub := api.NewInMemoryDependencies()
+//
+//	srv := api.NewTestServer(api.TestServerConfig{
+//	    DB:          db,
+//	    RateLimiter: rateLimiter,
+//	    PubSub:      pubSub,
+//	    Config:      cfg,
+//	})
+//	defer srv.Shutdown(context.Background())
+func NewTestServer(cfg TestServerConfig) *Server {
+	// Set global singletons for this server instance
+	// Note: This is a temporary measure until full dependency injection is implemented
+	// See Phase 5 of the test isolation plan
+	if cfg.RateLimiter != nil {
+		ratelimit.SetGlobalStore(cfg.RateLimiter)
+	}
+	if cfg.PubSub != nil {
+		pubsub.SetGlobalPubSub(cfg.PubSub)
+	}
+
+	// Create server using existing NewServer
+	// Config is required - caller must provide it
+	srv := NewServer(cfg.Config, cfg.DB, "test")
+
+	return srv
+}
+
+// NewInMemoryDependencies creates test-specific in-memory dependencies.
+// Each test gets its own isolated rate limiter and pub/sub.
+// This is useful for tests that need complete isolation from global state.
+//
+// Returns:
+//   - ratelimit.Store: In-memory rate limiter with 10-minute TTL
+//   - pubsub.PubSub: Local in-memory pub/sub implementation
+func NewInMemoryDependencies() (ratelimit.Store, pubsub.PubSub) {
+	// Create fresh in-memory rate limiter for this test
+	rateLimiter := ratelimit.NewMemoryStore(10 * time.Minute)
+
+	// Create fresh local pub/sub for this test
+	ps := pubsub.NewLocalPubSub()
+
+	return rateLimiter, ps
 }

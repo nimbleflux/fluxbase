@@ -497,7 +497,6 @@ func BenchmarkDefaultToNullClauseBuilding(b *testing.B) {
 			if isConflictTarget {
 				continue
 			}
-
 			columnProvided := false
 			for _, providedCol := range providedColumns {
 				if providedCol == tableCol {
@@ -505,7 +504,6 @@ func BenchmarkDefaultToNullClauseBuilding(b *testing.B) {
 					break
 				}
 			}
-
 			if columnProvided {
 				updateClauses = append(updateClauses, tableCol+" = EXCLUDED."+tableCol)
 			} else {
@@ -516,8 +514,204 @@ func BenchmarkDefaultToNullClauseBuilding(b *testing.B) {
 }
 
 // =============================================================================
-// Prefer Header Response Format Tests
+// Additional Tests for Coverage Boost (Developer 3 Assignment)
 // =============================================================================
+
+// TestColumnExistsInBatch tests the columnExists method used in batch operations
+func TestColumnExistsInBatch(t *testing.T) {
+	handler := &RESTHandler{}
+
+	table := database.TableInfo{
+		Schema: "public",
+		Name:   "items",
+		Columns: []database.ColumnInfo{
+			{Name: "id", DataType: "uuid"},
+			{Name: "name", DataType: "text"},
+			{Name: "description", DataType: "text"},
+		},
+	}
+
+	t.Run("existing column", func(t *testing.T) {
+		assert.True(t, handler.columnExists(table, "id"))
+		assert.True(t, handler.columnExists(table, "name"))
+		assert.True(t, handler.columnExists(table, "description"))
+	})
+
+	t.Run("non-existing column", func(t *testing.T) {
+		assert.False(t, handler.columnExists(table, "unknown"))
+		assert.False(t, handler.columnExists(table, "email"))
+		assert.False(t, handler.columnExists(table, ""))
+	})
+}
+
+// TestConflictTargetBuilding tests various conflict target scenarios
+func TestConflictTargetBuilding(t *testing.T) {
+	handler := &RESTHandler{}
+
+	t.Run("single column conflict target", func(t *testing.T) {
+		table := database.TableInfo{
+			Name:       "users",
+			PrimaryKey: []string{"id"},
+		}
+		target := handler.getConflictTarget(table)
+		assert.Equal(t, `"id"`, target)
+
+		unquoted := handler.getConflictTargetUnquoted(table)
+		assert.Equal(t, []string{"id"}, unquoted)
+	})
+
+	t.Run("two column conflict target", func(t *testing.T) {
+		table := database.TableInfo{
+			Name:       "user_roles",
+			PrimaryKey: []string{"user_id", "role_id"},
+		}
+		target := handler.getConflictTarget(table)
+		assert.Contains(t, target, `"user_id"`)
+		assert.Contains(t, target, `"role_id"`)
+
+		unquoted := handler.getConflictTargetUnquoted(table)
+		assert.Equal(t, []string{"user_id", "role_id"}, unquoted)
+	})
+
+	t.Run("three column conflict target", func(t *testing.T) {
+		table := database.TableInfo{
+			Name:       "permissions",
+			PrimaryKey: []string{"org_id", "user_id", "resource_id"},
+		}
+		target := handler.getConflictTarget(table)
+		assert.Contains(t, target, `"org_id"`)
+		assert.Contains(t, target, `"user_id"`)
+		assert.Contains(t, target, `"resource_id"`)
+
+		unquoted := handler.getConflictTargetUnquoted(table)
+		assert.Equal(t, []string{"org_id", "user_id", "resource_id"}, unquoted)
+	})
+
+	t.Run("no primary key", func(t *testing.T) {
+		table := database.TableInfo{
+			Name:       "logs",
+			PrimaryKey: []string{},
+		}
+		target := handler.getConflictTarget(table)
+		assert.Empty(t, target)
+
+		unquoted := handler.getConflictTargetUnquoted(table)
+		assert.Empty(t, unquoted)
+	})
+
+	t.Run("nil primary key", func(t *testing.T) {
+		table := database.TableInfo{
+			Name:       "data",
+			PrimaryKey: nil,
+		}
+		target := handler.getConflictTarget(table)
+		assert.Empty(t, target)
+
+		unquoted := handler.getConflictTargetUnquoted(table)
+		assert.Nil(t, unquoted)
+	})
+}
+
+// TestIsInConflictTargetExtended tests conflict target membership checking
+func TestIsInConflictTargetExtended(t *testing.T) {
+	handler := &RESTHandler{}
+
+	t.Run("single column conflict target", func(t *testing.T) {
+		conflictTarget := []string{"id"}
+		assert.True(t, handler.isInConflictTarget("id", conflictTarget))
+		assert.False(t, handler.isInConflictTarget("name", conflictTarget))
+		assert.False(t, handler.isInConflictTarget("", conflictTarget))
+	})
+
+	t.Run("multi column conflict target", func(t *testing.T) {
+		conflictTarget := []string{"tenant_id", "user_id", "role_id"}
+		assert.True(t, handler.isInConflictTarget("tenant_id", conflictTarget))
+		assert.True(t, handler.isInConflictTarget("user_id", conflictTarget))
+		assert.True(t, handler.isInConflictTarget("role_id", conflictTarget))
+		assert.False(t, handler.isInConflictTarget("id", conflictTarget))
+		assert.False(t, handler.isInConflictTarget("name", conflictTarget))
+	})
+
+	t.Run("empty conflict target", func(t *testing.T) {
+		conflictTarget := []string{}
+		assert.False(t, handler.isInConflictTarget("id", conflictTarget))
+		assert.False(t, handler.isInConflictTarget("name", conflictTarget))
+	})
+
+	t.Run("nil conflict target", func(t *testing.T) {
+		assert.False(t, handler.isInConflictTarget("id", nil))
+		assert.False(t, handler.isInConflictTarget("name", nil))
+	})
+
+	t.Run("case sensitivity", func(t *testing.T) {
+		conflictTarget := []string{"id", "tenant_id"}
+		assert.True(t, handler.isInConflictTarget("id", conflictTarget))
+		assert.False(t, handler.isInConflictTarget("ID", conflictTarget))
+		assert.False(t, handler.isInConflictTarget("Id", conflictTarget))
+		assert.False(t, handler.isInConflictTarget("TENANT_ID", conflictTarget))
+	})
+}
+
+// TestOnConflictParameterParsing tests on_conflict parameter handling
+func TestOnConflictParameterParsing(t *testing.T) {
+	tests := []struct {
+		name            string
+		onConflict      string
+		expectedColumns []string
+		expectError     bool
+		errorContains   string
+	}{
+		{
+			name:            "single column",
+			onConflict:      "sku",
+			expectedColumns: []string{"sku"},
+			expectError:     false,
+		},
+		{
+			name:            "two columns",
+			onConflict:      "warehouse_id, product_id",
+			expectedColumns: []string{"warehouse_id", "product_id"},
+			expectError:     false,
+		},
+		{
+			name:            "three columns",
+			onConflict:      "org_id, user_id, resource_id",
+			expectedColumns: []string{"org_id", "user_id", "resource_id"},
+			expectError:     false,
+		},
+		{
+			name:            "with spaces",
+			onConflict:      "tenant_id, user_id, role_id",
+			expectedColumns: []string{"tenant_id", "user_id", "role_id"},
+			expectError:     false,
+		},
+		{
+			name:            "empty string",
+			onConflict:      "",
+			expectedColumns: []string{},
+			expectError:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test parsing logic
+			if tt.onConflict == "" {
+				return // Empty case is valid
+			}
+
+			conflictCols := strings.Split(tt.onConflict, ",")
+			parsedCols := make([]string, 0, len(conflictCols))
+
+			for _, col := range conflictCols {
+				col = strings.TrimSpace(col)
+				parsedCols = append(parsedCols, col)
+			}
+
+			assert.Equal(t, tt.expectedColumns, parsedCols)
+		})
+	}
+}
 
 func TestPreferHeaderResponseFormat(t *testing.T) {
 	// Test that Prefer header values are correctly detected

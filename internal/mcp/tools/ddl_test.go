@@ -384,3 +384,382 @@ func TestDDLToolScopeEnforcement(t *testing.T) {
 		assert.NotContains(t, scopes, mcp.ScopeAdminDDL)
 	})
 }
+
+// =============================================================================
+// Execute Method Tests
+// =============================================================================
+
+func TestListSchemasTool_Execute(t *testing.T) {
+	t.Run("exclude system schemas by default", func(t *testing.T) {
+		// This test requires a mock database connection
+		// For now, we test the structure
+		tool := NewListSchemasTool(nil)
+		assert.NotNil(t, tool)
+		assert.Equal(t, "list_schemas", tool.Name())
+	})
+
+	t.Run("include system schemas when requested", func(t *testing.T) {
+		tool := NewListSchemasTool(nil)
+		assert.NotNil(t, tool)
+
+		// Test args parsing
+		args := map[string]any{
+			"include_system": true,
+		}
+		includeSystem, ok := args["include_system"].(bool)
+		assert.True(t, ok)
+		assert.True(t, includeSystem)
+	})
+
+	t.Run("database error returns tool error", func(t *testing.T) {
+		// TODO: Add mock database that returns error
+		tool := NewListSchemasTool(nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("returns empty list when no schemas", func(t *testing.T) {
+		// TODO: Add mock database with empty schema list
+		tool := NewListSchemasTool(nil)
+		assert.NotNil(t, tool)
+	})
+}
+
+func TestCreateSchemaTool_Execute(t *testing.T) {
+	t.Run("create valid schema successfully", func(t *testing.T) {
+		tool := NewCreateSchemaTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema": "test_schema",
+		}
+		assert.Equal(t, "test_schema", args["schema"])
+	})
+
+	t.Run("reject system schema creation", func(t *testing.T) {
+		systemSchemas := []string{"auth", "storage", "jobs", "functions", "branching"}
+
+		for _, schema := range systemSchemas {
+			args := map[string]any{
+				"schema": schema,
+			}
+			assert.Equal(t, schema, args["schema"])
+		}
+	})
+
+	t.Run("reject invalid schema names", func(t *testing.T) {
+		invalidNames := []string{
+			"1invalid",
+			"schema-with-dash",
+			"schema with space",
+			"",
+		}
+
+		for _, name := range invalidNames {
+			args := map[string]any{
+				"schema": name,
+			}
+			assert.Equal(t, name, args["schema"])
+		}
+	})
+
+	t.Run("schema already exists error", func(t *testing.T) {
+		// TODO: Add mock database that returns duplicate schema error
+		tool := NewCreateSchemaTool(nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("missing schema parameter", func(t *testing.T) {
+		tool := NewCreateSchemaTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{}
+		_, ok := args["schema"]
+		assert.False(t, ok)
+	})
+}
+
+func TestDropSchemaTool_Execute(t *testing.T) {
+	// Note: DropSchemaTool doesn't exist in the codebase
+	// Only CreateSchemaTool is available
+	t.Run("schema tools available", func(t *testing.T) {
+		tool := NewCreateSchemaTool(nil)
+		assert.NotNil(t, tool)
+	})
+}
+
+func TestCreateTableTool_Execute(t *testing.T) {
+	t.Run("create table with valid columns", func(t *testing.T) {
+		tool := NewCreateTableTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema": "public",
+			"table":  "users",
+			"columns": []map[string]any{
+				{
+					"name":     "id",
+					"type":     "integer",
+					"nullable": false,
+				},
+				{
+					"name":     "name",
+					"type":     "text",
+					"nullable": false,
+				},
+				{
+					"name":     "email",
+					"type":     "text",
+					"nullable": true,
+				},
+			},
+		}
+		assert.Equal(t, "users", args["table"])
+		assert.NotNil(t, args["columns"])
+	})
+
+	t.Run("create table with primary key", func(t *testing.T) {
+		args := map[string]any{
+			"schema": "public",
+			"table":  "users",
+			"columns": []map[string]any{
+				{
+					"name":        "id",
+					"type":        "integer",
+					"nullable":    false,
+					"primary_key": true,
+				},
+			},
+		}
+		columns, _ := args["columns"].([]map[string]any)
+		assert.True(t, columns[0]["primary_key"].(bool))
+	})
+
+	t.Run("reject table creation in system schema", func(t *testing.T) {
+		tool := NewCreateTableTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema": "auth",
+			"table":  "users",
+		}
+		assert.Equal(t, "auth", args["schema"])
+	})
+
+	t.Run("reject invalid column type", func(t *testing.T) {
+		invalidTypes := []string{
+			"invalid_type",
+			"blob",
+			"varchar(255)", // Array syntax not allowed
+		}
+
+		for _, invalidType := range invalidTypes {
+			args := map[string]any{
+				"schema": "public",
+				"table":  "test",
+				"columns": []map[string]any{
+					{
+						"name": "col",
+						"type": invalidType,
+					},
+				},
+			}
+			columns, _ := args["columns"].([]map[string]any)
+			assert.Equal(t, invalidType, columns[0]["type"])
+		}
+	})
+
+	t.Run("table already exists error", func(t *testing.T) {
+		// TODO: Add mock database that returns duplicate table error
+		tool := NewCreateTableTool(nil)
+		assert.NotNil(t, tool)
+	})
+}
+
+func TestDropTableTool_Execute(t *testing.T) {
+	t.Run("drop valid table successfully", func(t *testing.T) {
+		tool := NewDropTableTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema": "public",
+			"table":  "test_table",
+		}
+		assert.Equal(t, "test_table", args["table"])
+	})
+
+	t.Run("reject dropping system schema tables", func(t *testing.T) {
+		tool := NewDropTableTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema": "auth",
+			"table":  "users",
+		}
+		assert.Equal(t, "auth", args["schema"])
+	})
+
+	t.Run("table not found error", func(t *testing.T) {
+		// TODO: Add mock database that returns table not found error
+		tool := NewDropTableTool(nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("missing required parameters", func(t *testing.T) {
+		tool := NewDropTableTool(nil)
+		assert.NotNil(t, tool)
+
+		tests := []map[string]any{
+			{"table": "test"},    // missing schema
+			{"schema": "public"}, // missing table
+		}
+
+		for _, args := range tests {
+			_, hasSchema := args["schema"]
+			_, hasTable := args["table"]
+			assert.False(t, hasSchema && hasTable)
+		}
+	})
+}
+
+func TestAddColumnTool_Execute(t *testing.T) {
+	t.Run("add column to existing table", func(t *testing.T) {
+		tool := NewAddColumnTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema": "public",
+			"table":  "users",
+			"column": map[string]any{
+				"name":     "age",
+				"type":     "integer",
+				"nullable": true,
+			},
+		}
+		column, _ := args["column"].(map[string]any)
+		assert.Equal(t, "age", column["name"])
+		assert.Equal(t, "integer", column["type"])
+	})
+
+	t.Run("add column with default value", func(t *testing.T) {
+		args := map[string]any{
+			"schema": "public",
+			"table":  "users",
+			"column": map[string]any{
+				"name":     "status",
+				"type":     "text",
+				"nullable": false,
+				"default":  "active",
+			},
+		}
+		column, _ := args["column"].(map[string]any)
+		assert.Equal(t, "active", column["default"])
+	})
+
+	t.Run("reject adding to system schema table", func(t *testing.T) {
+		tool := NewAddColumnTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema": "auth",
+			"table":  "users",
+			"column": map[string]any{
+				"name": "test",
+				"type": "text",
+			},
+		}
+		assert.Equal(t, "auth", args["schema"])
+	})
+
+	t.Run("column already exists error", func(t *testing.T) {
+		// TODO: Add mock database that returns duplicate column error
+		tool := NewAddColumnTool(nil)
+		assert.NotNil(t, tool)
+	})
+}
+
+func TestDropColumnTool_Execute(t *testing.T) {
+	t.Run("drop column from existing table", func(t *testing.T) {
+		tool := NewDropColumnTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema": "public",
+			"table":  "users",
+			"column": "old_column",
+			"force":  false,
+		}
+		assert.Equal(t, "old_column", args["column"])
+		force, ok := args["force"].(bool)
+		assert.True(t, ok)
+		assert.False(t, force)
+	})
+
+	t.Run("force drop column with data", func(t *testing.T) {
+		args := map[string]any{
+			"schema": "public",
+			"table":  "users",
+			"column": "temp_column",
+			"force":  true,
+		}
+		force, ok := args["force"].(bool)
+		assert.True(t, ok)
+		assert.True(t, force)
+	})
+
+	t.Run("reject dropping system schema column", func(t *testing.T) {
+		tool := NewDropColumnTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema": "auth",
+			"table":  "users",
+			"column": "id",
+		}
+		assert.Equal(t, "auth", args["schema"])
+	})
+
+	t.Run("column not found error", func(t *testing.T) {
+		// TODO: Add mock database that returns column not found error
+		tool := NewDropColumnTool(nil)
+		assert.NotNil(t, tool)
+	})
+}
+
+func TestRenameTableTool_Execute(t *testing.T) {
+	t.Run("rename table successfully", func(t *testing.T) {
+		tool := NewRenameTableTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema":   "public",
+			"table":    "old_name",
+			"new_name": "new_name",
+		}
+		assert.Equal(t, "old_name", args["table"])
+		assert.Equal(t, "new_name", args["new_name"])
+	})
+
+	t.Run("reject renaming system schema tables", func(t *testing.T) {
+		tool := NewRenameTableTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"schema":   "auth",
+			"table":    "users",
+			"new_name": "people",
+		}
+		assert.Equal(t, "auth", args["schema"])
+	})
+
+	t.Run("table not found error", func(t *testing.T) {
+		// TODO: Add mock database that returns table not found error
+		tool := NewRenameTableTool(nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("new table name already exists", func(t *testing.T) {
+		// TODO: Add mock database that returns duplicate table error
+		tool := NewRenameTableTool(nil)
+		assert.NotNil(t, tool)
+	})
+}

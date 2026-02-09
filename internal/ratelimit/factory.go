@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/fluxbase-eu/fluxbase/internal/config"
@@ -50,11 +51,17 @@ func NewStore(cfg *config.ScalingConfig, pool *pgxpool.Pool) (Store, error) {
 
 // GlobalStore is a package-level store that can be used across the application.
 // It is set during server initialization.
-var GlobalStore Store
+var (
+	GlobalStore   Store
+	globalStoreMu sync.RWMutex
+)
 
 // SetGlobalStore sets the global rate limit store.
 // This should be called once during server initialization.
 func SetGlobalStore(store Store) {
+	globalStoreMu.Lock()
+	defer globalStoreMu.Unlock()
+
 	if GlobalStore != nil {
 		log.Warn().Msg("Replacing existing global rate limit store")
 		_ = GlobalStore.Close()
@@ -65,9 +72,22 @@ func SetGlobalStore(store Store) {
 // GetGlobalStore returns the global rate limit store.
 // If no store has been set, it returns a memory store as fallback.
 func GetGlobalStore() Store {
+	globalStoreMu.RLock()
+	defer globalStoreMu.RUnlock()
+
 	if GlobalStore == nil {
-		log.Warn().Msg("Global rate limit store not set, using fallback memory store")
-		GlobalStore = NewMemoryStore(10 * time.Minute)
+		// Double-check after acquiring write lock to prevent race
+		globalStoreMu.RUnlock()
+		globalStoreMu.Lock()
+
+		if GlobalStore == nil {
+			log.Warn().Msg("Global rate limit store not set, using fallback memory store")
+			GlobalStore = NewMemoryStore(10 * time.Minute)
+		}
+
+		globalStoreMu.Unlock()
+		globalStoreMu.RLock()
 	}
+
 	return GlobalStore
 }

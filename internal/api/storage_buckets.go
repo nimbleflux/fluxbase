@@ -29,6 +29,13 @@ func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
 	// Try to parse body, but allow empty body (use defaults)
 	_ = c.Bind().Body(&req)
 
+	// Check if database connection is available
+	if h.db == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "database connection not initialized",
+		})
+	}
+
 	// Start database transaction
 	ctx := c.RequestCtx()
 	tx, err := h.db.Pool().Begin(ctx)
@@ -130,6 +137,13 @@ func (h *StorageHandler) UpdateBucketSettings(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "invalid request body",
+		})
+	}
+
+	// Check if database connection is available
+	if h.db == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "database connection not initialized",
 		})
 	}
 
@@ -240,6 +254,13 @@ func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
 		})
 	}
 
+	// Check if storage service is available
+	if h.storage == nil || h.storage.Provider == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "storage service not initialized",
+		})
+	}
+
 	// Delete the bucket
 	if err := h.storage.Provider.DeleteBucket(c.RequestCtx(), bucket); err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -275,6 +296,13 @@ func (h *StorageHandler) ListBuckets(c fiber.Ctx) error {
 	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to list buckets",
+		})
+	}
+
+	// Check if database connection is available
+	if h.db == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "database connection not initialized",
 		})
 	}
 

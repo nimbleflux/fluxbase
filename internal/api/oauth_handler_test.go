@@ -20,6 +20,7 @@ func TestNewOAuthHandler(t *testing.T) {
 	t.Run("creates handler with valid encryption key", func(t *testing.T) {
 		validKey := "12345678901234567890123456789012" // 32 bytes
 		handler := NewOAuthHandler(nil, nil, nil, "https://example.com", validKey, nil)
+		defer handler.Stop()
 
 		assert.NotNil(t, handler)
 		assert.Equal(t, "https://example.com", handler.baseURL)
@@ -31,6 +32,7 @@ func TestNewOAuthHandler(t *testing.T) {
 	t.Run("creates handler with empty encryption key", func(t *testing.T) {
 		// Should warn but still create handler
 		handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+		defer handler.Stop()
 
 		assert.NotNil(t, handler)
 		assert.Empty(t, handler.encryptionKey)
@@ -40,6 +42,7 @@ func TestNewOAuthHandler(t *testing.T) {
 		// Key must be exactly 32 bytes for AES-256
 		invalidKey := "short-key"
 		handler := NewOAuthHandler(nil, nil, nil, "https://example.com", invalidKey, nil)
+		defer handler.Stop()
 
 		assert.NotNil(t, handler)
 		assert.Empty(t, handler.encryptionKey, "invalid key should be cleared")
@@ -47,6 +50,7 @@ func TestNewOAuthHandler(t *testing.T) {
 
 	t.Run("creates handler with nil dependencies", func(t *testing.T) {
 		handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+		defer handler.Stop()
 		assert.NotNil(t, handler)
 	})
 }
@@ -57,6 +61,7 @@ func TestNewOAuthHandler(t *testing.T) {
 
 func TestExtractEmail(t *testing.T) {
 	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
 
 	tests := []struct {
 		name         string
@@ -139,6 +144,7 @@ func TestExtractEmail(t *testing.T) {
 
 func TestExtractProviderUserID(t *testing.T) {
 	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
 
 	tests := []struct {
 		name         string
@@ -225,6 +231,7 @@ func TestExtractProviderUserID(t *testing.T) {
 
 func TestGetStandardEndpoint(t *testing.T) {
 	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
 
 	t.Run("Google provider", func(t *testing.T) {
 		endpoint := handler.getStandardEndpoint("google")
@@ -273,6 +280,7 @@ func TestGetStandardEndpoint(t *testing.T) {
 func TestOAuthHandler_Callback_Validation(t *testing.T) {
 	app := fiber.New()
 	handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+	defer handler.Stop()
 
 	app.Get("/api/v1/auth/oauth/:provider/callback", handler.Callback)
 
@@ -332,6 +340,7 @@ func TestOAuthHandler_Callback_Validation(t *testing.T) {
 func TestOAuthHandler_Logout_Validation(t *testing.T) {
 	app := fiber.New()
 	handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+	defer handler.Stop()
 
 	app.Post("/api/v1/auth/oauth/:provider/logout", handler.Logout)
 
@@ -372,6 +381,7 @@ func TestOAuthHandler_Logout_Validation(t *testing.T) {
 func TestOAuthHandler_LogoutCallback_Validation(t *testing.T) {
 	app := fiber.New()
 	handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+	defer handler.Stop()
 
 	app.Get("/api/v1/auth/oauth/:provider/logout/callback", handler.LogoutCallback)
 
@@ -398,6 +408,7 @@ func TestOAuthHandler_LogoutCallback_Validation(t *testing.T) {
 
 func TestOAuthHandler_GetAndValidateState(t *testing.T) {
 	handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+	defer handler.Stop()
 
 	t.Run("valid state returns metadata", func(t *testing.T) {
 		// First, set a state
@@ -484,6 +495,7 @@ func TestOAuth2ConfigConstruction(t *testing.T) {
 
 func TestOAuthHandler_StateStoreIntegration(t *testing.T) {
 	handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+	defer handler.Stop()
 
 	t.Run("multiple states can be stored", func(t *testing.T) {
 		states := make([]string, 5)
@@ -531,6 +543,7 @@ func TestOAuthHandler_StateStoreIntegration(t *testing.T) {
 func TestOAuthHandler_ErrorDescriptionExtraction(t *testing.T) {
 	app := fiber.New()
 	handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+	defer handler.Stop()
 
 	app.Get("/api/v1/auth/oauth/:provider/callback", handler.Callback)
 
@@ -583,6 +596,7 @@ func TestOAuthHandler_ErrorDescriptionExtraction(t *testing.T) {
 
 func BenchmarkExtractEmail(b *testing.B) {
 	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
 	userInfo := map[string]interface{}{
 		"email": "user@example.com",
 		"name":  "Test User",
@@ -596,6 +610,7 @@ func BenchmarkExtractEmail(b *testing.B) {
 
 func BenchmarkExtractProviderUserID(b *testing.B) {
 	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
 	userInfo := map[string]interface{}{
 		"email": "user@example.com",
 		"id":    float64(12345678),
@@ -608,6 +623,7 @@ func BenchmarkExtractProviderUserID(b *testing.B) {
 
 func BenchmarkGetStandardEndpoint(b *testing.B) {
 	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
 
 	for i := 0; i < b.N; i++ {
 		_ = handler.getStandardEndpoint("google")
@@ -616,10 +632,404 @@ func BenchmarkGetStandardEndpoint(b *testing.B) {
 
 func BenchmarkGenerateAndValidateState(b *testing.B) {
 	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
 
 	for i := 0; i < b.N; i++ {
 		state, _ := auth.GenerateState()
 		handler.stateStore.Set(state, "/callback")
 		_, _ = handler.GetAndValidateState(state)
+	}
+}
+
+// =============================================================================
+// Additional OAuth Handler Tests for Improved Coverage
+// =============================================================================
+
+func TestNewOAuthHandler_Stop(t *testing.T) {
+	t.Run("stop prevents double-close", func(t *testing.T) {
+		handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+		defer handler.Stop()
+
+		// First stop should work
+		handler.Stop()
+
+		// Second stop should not panic
+		handler.Stop()
+
+		// Channel should be closed
+		select {
+		case <-handler.stopCleanup:
+			// Channel is closed as expected
+		default:
+			t.Error("stopCleanup channel should be closed after Stop()")
+		}
+	})
+
+	t.Run("stop with nil stopCleanup", func(t *testing.T) {
+		handler := &OAuthHandler{
+			stopCleanup: nil,
+		}
+
+		// Should not panic
+		handler.Stop()
+	})
+}
+
+func TestExtractEmail_EdgeCases(t *testing.T) {
+	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
+
+	tests := []struct {
+		name         string
+		providerName string
+		userInfo     map[string]interface{}
+		expected     string
+	}{
+		{
+			name:         "email with whitespace",
+			providerName: "google",
+			userInfo: map[string]interface{}{
+				"email": "  user@example.com  ",
+			},
+			expected: "  user@example.com  ", // No trimming in current implementation
+		},
+		{
+			name:         "email as boolean",
+			providerName: "google",
+			userInfo: map[string]interface{}{
+				"email": true,
+			},
+			expected: "",
+		},
+		{
+			name:         "email as float",
+			providerName: "google",
+			userInfo: map[string]interface{}{
+				"email": 123.45,
+			},
+			expected: "",
+		},
+		{
+			name:         "email as map",
+			providerName: "google",
+			userInfo: map[string]interface{}{
+				"email": map[string]string{"value": "test@example.com"},
+			},
+			expected: "",
+		},
+		{
+			name:         "email as slice",
+			providerName: "google",
+			userInfo: map[string]interface{}{
+				"email": []string{"test@example.com"},
+			},
+			expected: "",
+		},
+		{
+			name:         "GitHub login with numbers",
+			providerName: "github",
+			userInfo: map[string]interface{}{
+				"login": "user123",
+			},
+			expected: "user123@users.noreply.github.com",
+		},
+		{
+			name:         "GitHub login with hyphens",
+			providerName: "github",
+			userInfo: map[string]interface{}{
+				"login": "user-name",
+			},
+			expected: "user-name@users.noreply.github.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handler.extractEmail(tt.providerName, tt.userInfo)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractProviderUserID_EdgeCases(t *testing.T) {
+	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
+
+	tests := []struct {
+		name         string
+		providerName string
+		userInfo     map[string]interface{}
+		expected     string
+	}{
+		{
+			name:         "id as int",
+			providerName: "github",
+			userInfo: map[string]interface{}{
+				"id": int(12345),
+			},
+			expected: "", // int type doesn't match float64 or string
+		},
+		{
+			name:         "id as bool",
+			providerName: "google",
+			userInfo: map[string]interface{}{
+				"id": true,
+			},
+			expected: "",
+		},
+		{
+			name:         "id as map",
+			providerName: "google",
+			userInfo: map[string]interface{}{
+				"id": map[string]string{"value": "123"},
+			},
+			expected: "",
+		},
+		{
+			name:         "id as float with decimal",
+			providerName: "github",
+			userInfo: map[string]interface{}{
+				"id": float64(12345.67),
+			},
+			expected: "12346", // Truncated
+		},
+		{
+			name:         "sub takes precedence when id is missing",
+			providerName: "google",
+			userInfo: map[string]interface{}{
+				"sub": "subject-123",
+			},
+			expected: "subject-123",
+		},
+		{
+			name:         "both id and sub present",
+			providerName: "google",
+			userInfo: map[string]interface{}{
+				"id":  "id-123",
+				"sub": "sub-456",
+			},
+			expected: "id-123", // id takes precedence
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handler.extractProviderUserID(tt.providerName, tt.userInfo)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetStandardEndpoint_AllProviders(t *testing.T) {
+	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
+
+	providers := []string{
+		"google", "github", "gitlab", "bitbucket", "microsoft",
+		"facebook", "twitter", "linkedin", "discord", "spotify",
+	}
+
+	for _, provider := range providers {
+		t.Run(provider, func(t *testing.T) {
+			endpoint := handler.getStandardEndpoint(provider)
+
+			// All known providers should have non-empty endpoints
+			if provider == "google" || provider == "github" || provider == "microsoft" {
+				assert.NotEmpty(t, endpoint.AuthURL, "Provider %s should have AuthURL", provider)
+				assert.NotEmpty(t, endpoint.TokenURL, "Provider %s should have TokenURL", provider)
+			}
+		})
+	}
+
+	t.Run("unknown provider", func(t *testing.T) {
+		endpoint := handler.getStandardEndpoint("unknown-provider-xyz")
+		assert.Empty(t, endpoint.AuthURL)
+		assert.Empty(t, endpoint.TokenURL)
+	})
+}
+
+func TestOAuthHandler_Callback_MultipleErrorScenarios(t *testing.T) {
+	app := fiber.New()
+	handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+	defer handler.Stop()
+
+	app.Get("/api/v1/auth/oauth/:provider/callback", handler.Callback)
+
+	tests := []struct {
+		name            string
+		queryParams     string
+		expectedStatus  int
+		expectedMessage string
+	}{
+		{
+			name:            "temporarily_unavailable",
+			queryParams:     "error=temporarily_unavailable",
+			expectedStatus:  400,
+			expectedMessage: "temporarily_unavailable",
+		},
+		{
+			name:            "unauthorized_client",
+			queryParams:     "error=unauthorized_client",
+			expectedStatus:  400,
+			expectedMessage: "unauthorized_client",
+		},
+		{
+			name:            "access_denied with custom description",
+			queryParams:     "error=access_denied&error_description=Scope+not+granted",
+			expectedStatus:  400,
+			expectedMessage: "Scope not granted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/v1/auth/oauth/google/callback?"+tt.queryParams, nil)
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer func() { _ = resp.Body.Close() }()
+
+			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
+
+			body, _ := io.ReadAll(resp.Body)
+			assert.Contains(t, string(body), tt.expectedMessage)
+		})
+	}
+}
+
+func TestOAuthHandler_StateStoreIntegration_Concurrent(t *testing.T) {
+	handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+	defer handler.Stop()
+
+	t.Run("concurrent state operations", func(t *testing.T) {
+		numStates := 100
+		states := make([]string, numStates)
+
+		// Create states concurrently
+		done := make(chan bool, numStates)
+		for i := 0; i < numStates; i++ {
+			go func(idx int) {
+				state, err := auth.GenerateState()
+				require.NoError(t, err)
+				states[idx] = state
+				handler.stateStore.Set(state, "/callback")
+				done <- true
+			}(i)
+		}
+
+		// Wait for all state creations
+		for i := 0; i < numStates; i++ {
+			<-done
+		}
+
+		// Validate all states
+		for _, state := range states {
+			metadata, valid := handler.GetAndValidateState(state)
+			assert.True(t, valid)
+			assert.NotNil(t, metadata)
+		}
+	})
+}
+
+func TestOAuth2Config_EndpointVariations(t *testing.T) {
+	t.Run("custom endpoint", func(t *testing.T) {
+		config := &oauth2.Config{
+			ClientID:     "test-id",
+			ClientSecret: "test-secret",
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  "https://custom.example.com/oauth/authorize",
+				TokenURL: "https://custom.example.com/oauth/token",
+			},
+		}
+
+		assert.Equal(t, "https://custom.example.com/oauth/authorize", config.Endpoint.AuthURL)
+		assert.Equal(t, "https://custom.example.com/oauth/token", config.Endpoint.TokenURL)
+	})
+
+	t.Run("empty endpoint", func(t *testing.T) {
+		config := &oauth2.Config{
+			ClientID:     "test-id",
+			ClientSecret: "test-secret",
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  "",
+				TokenURL: "",
+			},
+		}
+
+		assert.Empty(t, config.Endpoint.AuthURL)
+		assert.Empty(t, config.Endpoint.TokenURL)
+	})
+
+	t.Run("scopes variations", func(t *testing.T) {
+		scopes := []string{
+			"openid", "email", "profile",
+			"https://www.googleapis.com/auth/userinfo.email",
+			"https://www.googleapis.com/auth/userinfo.profile",
+		}
+
+		config := &oauth2.Config{
+			ClientID:     "test-id",
+			ClientSecret: "test-secret",
+			Scopes:       scopes,
+		}
+
+		assert.Len(t, config.Scopes, 5)
+	})
+}
+
+func TestOAuthHandler_HandlerProperties(t *testing.T) {
+	validKey := "12345678901234567890123456789012"
+
+	handler := NewOAuthHandler(nil, nil, nil, "https://example.com", validKey, nil)
+	defer handler.Stop()
+
+	assert.Equal(t, "https://example.com", handler.baseURL)
+	assert.Equal(t, validKey, handler.encryptionKey)
+	assert.NotNil(t, handler.stateStore)
+	assert.NotNil(t, handler.logoutService)
+	assert.NotNil(t, handler.stopCleanup)
+	assert.Equal(t, int32(0), handler.stopped)
+}
+
+// =============================================================================
+// Additional Benchmarks
+// =============================================================================
+
+func BenchmarkExtractEmailVariousFormats(b *testing.B) {
+	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
+	userInfos := []map[string]interface{}{
+		{"email": "user@example.com"},
+		{"email": "", "login": "octocat"},
+		{"login": "user123"},
+		{},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = handler.extractEmail("github", userInfos[i%len(userInfos)])
+	}
+}
+
+func BenchmarkExtractUserIDVariousFormats(b *testing.B) {
+	handler := NewOAuthHandler(nil, nil, nil, "", "", nil)
+	defer handler.Stop()
+	userInfos := []map[string]interface{}{
+		{"id": "12345"},
+		{"id": float64(12345678)},
+		{"sub": "subject-123"},
+		{},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = handler.extractProviderUserID("google", userInfos[i%len(userInfos)])
+	}
+}
+
+func BenchmarkOAuthHandlerStop(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		handler := NewOAuthHandler(nil, nil, nil, "https://example.com", "", nil)
+		handler.Stop()
 	}
 }

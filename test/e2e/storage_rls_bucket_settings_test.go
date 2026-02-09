@@ -13,8 +13,10 @@ import (
 
 // TestStorageRLS_BucketVisibilityToggle verifies public/private toggle
 func TestStorageRLS_BucketVisibilityToggle(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
+	// NewRLSTestContext will automatically reset RLS state before the test
 	tc := test.NewRLSTestContext(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Clean up storage for this test
 	tc.CleanupStorageFiles()

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fluxbase-eu/fluxbase/internal/database"
@@ -126,6 +127,8 @@ type TriggerService struct {
 	readyChan       chan struct{}        // Signals when the LISTEN subscription is established or failed
 	readyOnce       sync.Once            // Ensures readyChan is only closed once
 	listenerFailed  bool                 // True if listener failed to start
+	wg              sync.WaitGroup       // Tracks active goroutines for graceful shutdown
+	stopped         int32                // Atomic flag to prevent double-close (0=running, 1=stopped)
 }
 
 // NewTriggerService creates a new webhook trigger service
@@ -201,17 +204,21 @@ func (s *TriggerService) Start(ctx context.Context) error {
 
 	// Start worker pool
 	for i := 0; i < s.workers; i++ {
+		s.wg.Add(1)
 		go s.worker(ctx, i)
 	}
 
 	// Start listening for new webhook events
+	s.wg.Add(1)
 	go s.listen(ctx)
 
 	// Start backlog processor (processes events that need retry)
+	s.wg.Add(1)
 	go s.processBacklog(ctx)
 
 	// Start cleanup goroutine (removes old processed events)
 	s.cleanupTicker = time.NewTicker(1 * time.Hour)
+	s.wg.Add(1)
 	go s.cleanup(ctx)
 
 	return nil
@@ -219,6 +226,12 @@ func (s *TriggerService) Start(ctx context.Context) error {
 
 // Stop gracefully stops the trigger service
 func (s *TriggerService) Stop() {
+	// Check if already stopped (prevent double-close)
+	if !atomic.CompareAndSwapInt32(&s.stopped, 0, 1) {
+		log.Debug().Msg("Webhook trigger service already stopped")
+		return
+	}
+
 	log.Info().Msg("Stopping webhook trigger service")
 
 	// Cancel the context to interrupt all goroutines
@@ -233,10 +246,34 @@ func (s *TriggerService) Stop() {
 	if s.cleanupTicker != nil {
 		s.cleanupTicker.Stop()
 	}
+
+	// Wait for workers to finish processing (with timeout to prevent hanging)
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.Debug().Msg("All webhook workers stopped")
+	case <-time.After(5 * time.Second):
+		log.Warn().Msg("Timeout waiting for webhook workers to stop")
+	}
+}
+
+// EnablePrivateIPs allows private IP addresses (like 127.0.0.1) for webhook tests.
+// This is needed because httptest.NewServer() uses localhost which is blocked by default.
+func (s *TriggerService) EnablePrivateIPs() {
+	if s.webhookSvc != nil {
+		s.webhookSvc.AllowPrivateIPs = true
+	}
 }
 
 // listen listens for PostgreSQL notifications about new webhook events
 func (s *TriggerService) listen(ctx context.Context) {
+	defer s.wg.Done()
+
 	// Retry logic to handle race conditions during startup
 	maxRetries := 5
 	retryDelay := 200 * time.Millisecond
@@ -353,6 +390,7 @@ func (s *TriggerService) listen(ctx context.Context) {
 
 // worker processes webhook events from the queue
 func (s *TriggerService) worker(ctx context.Context, workerID int) {
+	defer s.wg.Done()
 	log.Debug().Int("worker_id", workerID).Msg("Webhook worker started")
 
 	for {
@@ -613,6 +651,7 @@ func (s *TriggerService) markEventSuccess(ctx context.Context, eventID uuid.UUID
 
 // processBacklog periodically processes events that are ready for retry
 func (s *TriggerService) processBacklog(ctx context.Context) {
+	defer s.wg.Done()
 	s.backlogTicker = time.NewTicker(s.backlogInterval)
 	defer s.backlogTicker.Stop()
 
@@ -679,6 +718,7 @@ func (s *TriggerService) checkForRetries(ctx context.Context) {
 
 // cleanup removes old processed webhook events to prevent table bloat
 func (s *TriggerService) cleanup(ctx context.Context) {
+	defer s.wg.Done()
 	for {
 		select {
 		case <-ctx.Done():

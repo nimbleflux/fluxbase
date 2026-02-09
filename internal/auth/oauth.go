@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -384,6 +385,7 @@ type DBStateStore struct {
 	db          DBPool
 	config      DBStateStoreConfig
 	stopCleanup chan struct{}
+	stopped     int32 // Atomic flag to prevent double-close (0=running, 1=stopped)
 }
 
 // NewDBStateStore creates a new database-backed state store
@@ -409,6 +411,10 @@ func NewDBStateStore(db DBPool, config DBStateStoreConfig) *DBStateStore {
 
 // Stop stops the cleanup goroutine
 func (s *DBStateStore) Stop() {
+	// Check if already stopped (prevent double-close)
+	if !atomic.CompareAndSwapInt32(&s.stopped, 0, 1) {
+		return
+	}
 	close(s.stopCleanup)
 }
 

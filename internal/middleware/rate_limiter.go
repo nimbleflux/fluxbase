@@ -170,63 +170,88 @@ func NewRateLimiter(config RateLimiterConfig) fiber.Handler {
 
 // AuthLoginLimiter limits login attempts per IP
 func AuthLoginLimiter() fiber.Handler {
+	return AuthLoginLimiterWithConfig(10, 15*time.Minute)
+}
+
+// AuthLoginLimiterWithConfig creates an auth login rate limiter with custom limits
+func AuthLoginLimiterWithConfig(max int, expiration time.Duration) fiber.Handler {
 	return NewRateLimiter(RateLimiterConfig{
 		Name:       "auth_login",
-		Max:        10,
-		Expiration: 15 * time.Minute,
+		Max:        max,
+		Expiration: expiration,
 		KeyFunc: func(c fiber.Ctx) string {
 			return "login:" + c.IP()
 		},
-		Message: "Too many login attempts. Please try again in 15 minutes.",
+		Message: fmt.Sprintf("Too many login attempts. Please try again in %d minutes.", int(expiration.Minutes())),
 	})
 }
 
 // AuthSignupLimiter limits signup attempts per IP
 func AuthSignupLimiter() fiber.Handler {
+	return AuthSignupLimiterWithConfig(10, 15*time.Minute)
+}
+
+// AuthSignupLimiterWithConfig creates an auth signup rate limiter with custom limits
+func AuthSignupLimiterWithConfig(max int, expiration time.Duration) fiber.Handler {
 	return NewRateLimiter(RateLimiterConfig{
 		Name:       "auth_signup",
-		Max:        10,
-		Expiration: 15 * time.Minute,
+		Max:        max,
+		Expiration: expiration,
 		KeyFunc: func(c fiber.Ctx) string {
 			return "signup:" + c.IP()
 		},
-		Message: "Too many signup attempts. Please try again in 15 minutes.",
+		Message: fmt.Sprintf("Too many signup attempts. Please try again in %d minutes.", int(expiration.Minutes())),
 	})
 }
 
 // AuthPasswordResetLimiter limits password reset requests per IP
 func AuthPasswordResetLimiter() fiber.Handler {
+	return AuthPasswordResetLimiterWithConfig(5, 15*time.Minute)
+}
+
+// AuthPasswordResetLimiterWithConfig creates an auth password reset rate limiter with custom limits
+func AuthPasswordResetLimiterWithConfig(max int, expiration time.Duration) fiber.Handler {
 	return NewRateLimiter(RateLimiterConfig{
 		Name:       "auth_password_reset",
-		Max:        5,
-		Expiration: 15 * time.Minute,
+		Max:        max,
+		Expiration: expiration,
 		KeyFunc: func(c fiber.Ctx) string {
 			return "password_reset:" + c.IP()
 		},
-		Message: "Too many password reset requests. Please try again in 15 minutes.",
+		Message: fmt.Sprintf("Too many password reset requests. Please try again in %d minutes.", int(expiration.Minutes())),
 	})
 }
 
 // Auth2FALimiter limits 2FA verification attempts per IP
 // Strict rate limiting to prevent brute-force attacks on 6-digit TOTP codes
 func Auth2FALimiter() fiber.Handler {
+	return Auth2FALimiterWithConfig(5, 5*time.Minute)
+}
+
+// Auth2FALimiterWithConfig creates an auth 2FA rate limiter with custom limits
+func Auth2FALimiterWithConfig(max int, expiration time.Duration) fiber.Handler {
 	return NewRateLimiter(RateLimiterConfig{
 		Name:       "auth_2fa",
-		Max:        5,
-		Expiration: 5 * time.Minute,
+		Max:        max,
+		Expiration: expiration,
 		KeyFunc: func(c fiber.Ctx) string {
 			return "2fa:" + c.IP()
 		},
-		Message: "Too many 2FA verification attempts. Please try again in 5 minutes.",
+		Message: fmt.Sprintf("Too many 2FA verification attempts. Please try again in %d minutes.", int(expiration.Minutes())),
 	})
 }
 
 // AuthRefreshLimiter limits token refresh attempts per token
 func AuthRefreshLimiter() fiber.Handler {
+	return AuthRefreshLimiterWithConfig(10, 1*time.Minute)
+}
+
+// AuthRefreshLimiterWithConfig creates an auth token refresh rate limiter with custom limits
+func AuthRefreshLimiterWithConfig(max int, expiration time.Duration) fiber.Handler {
 	return NewRateLimiter(RateLimiterConfig{
 		Name:       "auth_refresh",
-		Max:        10,
-		Expiration: 1 * time.Minute,
+		Max:        max,
+		Expiration: expiration,
 		KeyFunc: func(c fiber.Ctx) string {
 			// Try to get token from request body
 			var req struct {
@@ -238,20 +263,25 @@ func AuthRefreshLimiter() fiber.Handler {
 			// Fallback to IP if no token found
 			return "refresh:" + c.IP()
 		},
-		Message: "Too many token refresh attempts. Please wait 1 minute.",
+		Message: fmt.Sprintf("Too many token refresh attempts. Please wait %d minute(s).", int(expiration.Minutes())),
 	})
 }
 
 // AuthMagicLinkLimiter limits magic link requests per IP
 func AuthMagicLinkLimiter() fiber.Handler {
+	return AuthMagicLinkLimiterWithConfig(5, 15*time.Minute)
+}
+
+// AuthMagicLinkLimiterWithConfig creates an auth magic link rate limiter with custom limits
+func AuthMagicLinkLimiterWithConfig(max int, expiration time.Duration) fiber.Handler {
 	return NewRateLimiter(RateLimiterConfig{
 		Name:       "auth_magic_link",
-		Max:        5,
-		Expiration: 15 * time.Minute,
+		Max:        max,
+		Expiration: expiration,
 		KeyFunc: func(c fiber.Ctx) string {
 			return "magiclink:" + c.IP()
 		},
-		Message: "Too many magic link requests. Please try again in 15 minutes.",
+		Message: fmt.Sprintf("Too many magic link requests. Please try again in %d minutes.", int(expiration.Minutes())),
 	})
 }
 
@@ -424,26 +454,36 @@ func PerUserOrIPLimiter(anonMax, userMax, clientKeyMax int, duration time.Durati
 // AdminSetupLimiter limits admin setup attempts per IP
 // Very strict since this is a one-time operation
 func AdminSetupLimiter() fiber.Handler {
+	return AdminSetupLimiterWithConfig(5, 15*time.Minute)
+}
+
+// AdminSetupLimiterWithConfig creates an admin setup rate limiter with custom limits
+func AdminSetupLimiterWithConfig(max int, expiration time.Duration) fiber.Handler {
 	return NewRateLimiter(RateLimiterConfig{
-		Max:        5,
-		Expiration: 15 * time.Minute,
+		Max:        max,
+		Expiration: expiration,
 		KeyFunc: func(c fiber.Ctx) string {
 			return "admin_setup:" + c.IP()
 		},
-		Message: "Too many admin setup attempts. Please try again in 15 minutes.",
+		Message: fmt.Sprintf("Too many admin setup attempts. Please try again in %d minutes.", int(expiration.Minutes())),
 	})
 }
 
 // AdminLoginLimiter limits admin login attempts per IP
 // Max is set to 4 to trigger rate limiting before account lockout (which happens at 5 failed attempts)
 func AdminLoginLimiter() fiber.Handler {
+	return AdminLoginLimiterWithConfig(4, 1*time.Minute)
+}
+
+// AdminLoginLimiterWithConfig creates an admin login rate limiter with custom limits
+func AdminLoginLimiterWithConfig(max int, expiration time.Duration) fiber.Handler {
 	return NewRateLimiter(RateLimiterConfig{
-		Max:        4,
-		Expiration: 1 * time.Minute,
+		Max:        max,
+		Expiration: expiration,
 		KeyFunc: func(c fiber.Ctx) string {
 			return "admin_login:" + c.IP()
 		},
-		Message: "Too many admin login attempts. Please try again in 1 minute.",
+		Message: fmt.Sprintf("Too many admin login attempts. Please try again in %d minutes.", int(expiration.Minutes())),
 	})
 }
 

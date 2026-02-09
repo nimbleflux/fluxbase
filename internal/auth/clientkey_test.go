@@ -2,6 +2,10 @@ package auth
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,7 +17,119 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// getEnv retrieves an environment variable or returns the default value
+func getEnv(key, defaultVal string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return defaultVal
+}
+
+// parseInt converts a string to int, returning the default value on error
+func parseInt(s string) int {
+	val, err := strconv.Atoi(s)
+	if err != nil {
+		return 5432
+	}
+	return val
+}
+
+func TestMain(m *testing.M) {
+	// Get database config from environment variables (for CI/CD compatibility)
+	// Falls back to docker-compose defaults for local development
+	cfg := &config.DatabaseConfig{
+		Host:            getEnv("FLUXBASE_DATABASE_HOST", "postgres"),
+		Port:            parseInt(getEnv("FLUXBASE_DATABASE_PORT", "5432")),
+		User:            getEnv("FLUXBASE_DATABASE_USER", "postgres"),
+		Password:        getEnv("FLUXBASE_DATABASE_PASSWORD", "postgres"),
+		AdminUser:       getEnv("FLUXBASE_DATABASE_ADMIN_USER", "postgres"),
+		AdminPassword:   getEnv("FLUXBASE_DATABASE_ADMIN_PASSWORD", "postgres"),
+		Database:        getEnv("FLUXBASE_DATABASE_DATABASE", "fluxbase_test"),
+		SSLMode:         getEnv("FLUXBASE_DATABASE_SSLMODE", "disable"),
+		MaxConnections:  10,
+		MinConnections:  2,
+		MaxConnLifetime: 1 * time.Hour,
+		MaxConnIdleTime: 30 * time.Minute,
+		HealthCheck:     1 * time.Minute,
+	}
+
+	var err error
+	sharedTestDB, err = database.NewConnection(*cfg)
+	if err != nil {
+		panic(err)
+	}
+
+	// Run migrations to ensure tables exist (unless skipped)
+	// In CI, migrations are already applied, so skip to avoid conflicts
+	if skipMigrations := getEnv("SKIP_MIGRATIONS", ""); skipMigrations != "" {
+		// Migrations already applied by CI, skip
+	} else {
+		err = sharedTestDB.Migrate()
+		if err != nil {
+			sharedTestDB.Close()
+			panic(err)
+		}
+	}
+
+	// Run tests
+	code := m.Run()
+
+	// Clean up test data before closing
+	ctx := context.Background()
+	sharedTestDB.Exec(ctx, "DELETE FROM auth.client_keys WHERE name LIKE 'test-%'")
+	sharedTestDB.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE '%@example.com'")
+
+	// Close shared connection
+	sharedTestDB.Close()
+
+	os.Exit(code)
+}
+
+var (
+	sharedTestDB     *database.Connection
+	sharedTestDBMu   sync.Mutex
+	sharedTestDBOnce sync.Once
+)
+
+// getSharedTestDB returns a shared database connection for all tests in the package
+// This reduces connection pool exhaustion and improves test performance
+func getSharedTestDB(t *testing.T) *pgxpool.Pool {
+	sharedTestDBMu.Lock()
+	defer sharedTestDBMu.Unlock()
+
+	if sharedTestDB == nil {
+		cfg := &config.DatabaseConfig{
+			Host:            getEnv("FLUXBASE_DATABASE_HOST", "postgres"),
+			Port:            parseInt(getEnv("FLUXBASE_DATABASE_PORT", "5432")),
+			User:            getEnv("FLUXBASE_DATABASE_USER", "postgres"),
+			Password:        getEnv("FLUXBASE_DATABASE_PASSWORD", "postgres"),
+			AdminUser:       getEnv("FLUXBASE_DATABASE_ADMIN_USER", "postgres"),
+			AdminPassword:   getEnv("FLUXBASE_DATABASE_ADMIN_PASSWORD", "postgres"),
+			Database:        getEnv("FLUXBASE_DATABASE_DATABASE", "fluxbase_test"),
+			SSLMode:         getEnv("FLUXBASE_DATABASE_SSLMODE", "disable"),
+			MaxConnections:  10,
+			MinConnections:  2,
+			MaxConnLifetime: 1 * time.Hour,
+			MaxConnIdleTime: 30 * time.Minute,
+			HealthCheck:     1 * time.Minute,
+		}
+
+		var err error
+		sharedTestDB, err = database.NewConnection(*cfg)
+		require.NoError(t, err, "Failed to connect to test database")
+
+		// Run migrations to ensure tables exist (unless skipped)
+		if skipMigrations := getEnv("SKIP_MIGRATIONS", ""); skipMigrations == "" {
+			err = sharedTestDB.Migrate()
+			require.NoError(t, err, "Failed to run migrations")
+		}
+	}
+
+	return sharedTestDB.Pool()
+}
+
 // setupClientKeyTestDB creates a test database connection for client key tests
+// DEPRECATED: Use getSharedTestDB instead for better connection pooling
 func setupClientKeyTestDB(t *testing.T) *pgxpool.Pool {
 	cfg := &config.DatabaseConfig{
 		Host:            "postgres",
@@ -34,9 +150,11 @@ func setupClientKeyTestDB(t *testing.T) *pgxpool.Pool {
 	db, err := database.NewConnection(*cfg)
 	require.NoError(t, err, "Failed to connect to test database")
 
-	// Run migrations to ensure tables exist
-	err = db.Migrate()
-	require.NoError(t, err, "Failed to run migrations")
+	// Run migrations to ensure tables exist (unless skipped)
+	if getEnv("SKIP_MIGRATIONS", "") == "" {
+		err = db.Migrate()
+		require.NoError(t, err, "Failed to run migrations")
+	}
 
 	return db.Pool()
 }
@@ -88,9 +206,8 @@ func TestGenerateClientKey(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupClientKeyTestDB(t)
-	defer db.Close()
-	cleanupClientKeys(t, db)
+	db := getSharedTestDB(t)
+	// Note: Don't close db as it's shared across all tests in the package
 
 	service := NewClientKeyService(db, nil)
 	ctx := context.Background()
@@ -125,7 +242,9 @@ func TestGenerateClientKey(t *testing.T) {
 	t.Run("Generate client key with custom values", func(t *testing.T) {
 		description := "Test client key with custom settings"
 		// Create a test user to associate with the client key
-		userID := createTestUser(t, db, "clientkey-test@example.com")
+		// Use unique email to avoid conflicts when tests run sequentially
+		email := fmt.Sprintf("clientkey-test-%s@example.com", uuid.New().String()[:8])
+		userID := createTestUser(t, db, email)
 		scopes := []string{"read:tables", "read:storage"}
 		rateLimit := 200
 		expiresAt := time.Now().Add(30 * 24 * time.Hour)
@@ -163,9 +282,8 @@ func TestValidateClientKey(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupClientKeyTestDB(t)
-	defer db.Close()
-	cleanupClientKeys(t, db)
+	db := getSharedTestDB(t)
+	// Note: Don't close db as it's shared across all tests in the package
 
 	service := NewClientKeyService(db, nil)
 	ctx := context.Background()
@@ -243,9 +361,8 @@ func TestListClientKeys(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupClientKeyTestDB(t)
-	defer db.Close()
-	cleanupClientKeys(t, db)
+	db := getSharedTestDB(t)
+	// Note: Don't close db as it's shared across all tests in the package
 
 	service := NewClientKeyService(db, nil)
 	ctx := context.Background()
@@ -253,9 +370,9 @@ func TestListClientKeys(t *testing.T) {
 	// Default scopes used in tests
 	defaultScopes := []string{"read:tables", "write:tables"}
 
-	// Create test users
-	userID1 := createTestUser(t, db, "list-test1@example.com")
-	userID2 := createTestUser(t, db, "list-test2@example.com")
+	// Create test users with unique emails to avoid conflicts when tests run sequentially
+	userID1 := createTestUser(t, db, fmt.Sprintf("list-test-%s@example.com", uuid.New().String()[:8]))
+	userID2 := createTestUser(t, db, fmt.Sprintf("list-test-%s@example.com", uuid.New().String()[:8]))
 
 	// Create test client keys
 	_, err := service.GenerateClientKey(ctx, "test-list-1", nil, &userID1, defaultScopes, 0, nil)
@@ -299,9 +416,8 @@ func TestRevokeClientKey(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupClientKeyTestDB(t)
-	defer db.Close()
-	cleanupClientKeys(t, db)
+	db := getSharedTestDB(t)
+	// Note: Don't close db as it's shared across all tests in the package
 
 	service := NewClientKeyService(db, nil)
 	ctx := context.Background()
@@ -342,9 +458,8 @@ func TestDeleteClientKey(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupClientKeyTestDB(t)
-	defer db.Close()
-	cleanupClientKeys(t, db)
+	db := getSharedTestDB(t)
+	// Note: Don't close db as it's shared across all tests in the package
 
 	service := NewClientKeyService(db, nil)
 	ctx := context.Background()
@@ -378,9 +493,8 @@ func TestUpdateClientKey(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupClientKeyTestDB(t)
-	defer db.Close()
-	cleanupClientKeys(t, db)
+	db := getSharedTestDB(t)
+	// Note: Don't close db as it's shared across all tests in the package
 
 	service := NewClientKeyService(db, nil)
 	ctx := context.Background()
@@ -456,7 +570,7 @@ func TestClientKeyServiceNewClientKeyService(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 
-	db := setupClientKeyTestDB(t)
+	db := getSharedTestDB(t)
 	defer db.Close()
 
 	service := NewClientKeyService(db, nil)

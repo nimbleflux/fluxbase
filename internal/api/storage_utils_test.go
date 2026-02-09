@@ -3,7 +3,9 @@ package api
 import (
 	"testing"
 
+	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
+	"github.com/valyala/fasthttp"
 )
 
 func TestDetectContentType_Utils(t *testing.T) {
@@ -90,12 +92,70 @@ func TestDetectContentType_AllKnownTypes(t *testing.T) {
 }
 
 func TestGetUserID_Utils(t *testing.T) {
-	// Note: This function depends on Fiber context which requires more complex mocking.
-	// These are placeholder tests - actual testing would require HTTP test framework.
+	app := fiber.New()
 
-	t.Run("returns anonymous when no context available", func(t *testing.T) {
-		// The function returns "anonymous" when c.Locals("user_id") returns nil
-		// This behavior is verified through integration tests
-		assert.True(t, true, "Placeholder - requires Fiber context mocking")
-	})
+	tests := []struct {
+		name     string
+		setupCtx func(fiber.Ctx)
+		expected string
+	}{
+		{
+			name: "returns user_id when present as string",
+			setupCtx: func(c fiber.Ctx) {
+				c.Locals("user_id", "user-123")
+			},
+			expected: "user-123",
+		},
+		{
+			name: "returns anonymous when user_id is nil",
+			setupCtx: func(c fiber.Ctx) {
+				// Don't set user_id
+			},
+			expected: "anonymous",
+		},
+		{
+			name: "returns anonymous when user_id is not a string",
+			setupCtx: func(c fiber.Ctx) {
+				c.Locals("user_id", 12345) // int instead of string
+			},
+			expected: "anonymous",
+		},
+		{
+			name: "returns user_id for empty string",
+			setupCtx: func(c fiber.Ctx) {
+				c.Locals("user_id", "")
+			},
+			expected: "",
+		},
+		{
+			name: "returns uuid as user_id",
+			setupCtx: func(c fiber.Ctx) {
+				c.Locals("user_id", "550e8400-e29b-41d4-a716-446655440000")
+			},
+			expected: "550e8400-e29b-41d4-a716-446655440000",
+		},
+		{
+			name: "returns email as user_id",
+			setupCtx: func(c fiber.Ctx) {
+				c.Locals("user_id", "test@example.com")
+			},
+			expected: "test@example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a new context for each test
+			c := app.AcquireCtx(&fasthttp.RequestCtx{})
+			defer app.ReleaseCtx(c)
+
+			// Setup the context
+			tt.setupCtx(c)
+
+			// Call the function
+			result := getUserID(c)
+
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

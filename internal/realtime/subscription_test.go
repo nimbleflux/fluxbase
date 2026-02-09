@@ -5,13 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func newTestSubscriptionManager() *SubscriptionManager {
-	mockDB := testutil.NewMockSubscriptionDB()
+	mockDB := newMockSubscriptionDB()
 	mockDB.EnableTable("public", "users")
 	mockDB.EnableTable("public", "posts")
 	mockDB.EnableTable("public", "comments")
@@ -366,7 +365,7 @@ func TestRLSCacheConfig_NegativeValuesUseDefaults(t *testing.T) {
 }
 
 func TestSubscriptionManager_WithCustomRLSCache(t *testing.T) {
-	mockDB := testutil.NewMockSubscriptionDB()
+	mockDB := newMockSubscriptionDB()
 	mockDB.EnableTable("public", "users")
 
 	config := RLSCacheConfig{
@@ -382,7 +381,7 @@ func TestSubscriptionManager_WithCustomRLSCache(t *testing.T) {
 }
 
 func TestSubscriptionManager_DefaultRLSCache(t *testing.T) {
-	mockDB := testutil.NewMockSubscriptionDB()
+	mockDB := newMockSubscriptionDB()
 	sm := NewSubscriptionManager(mockDB)
 
 	// Verify cache was created with default config
@@ -1016,7 +1015,7 @@ func TestRLSCacheConfig_Struct(t *testing.T) {
 // =============================================================================
 
 func TestSubscriptionManager_TableNotEnabled(t *testing.T) {
-	mockDB := testutil.NewMockSubscriptionDB()
+	mockDB := newMockSubscriptionDB()
 	// Only enable "users" table, not "posts"
 	mockDB.EnableTable("public", "users")
 	sm := NewSubscriptionManager(mockDB)

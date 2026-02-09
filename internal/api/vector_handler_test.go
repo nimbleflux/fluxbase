@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/fluxbase-eu/fluxbase/internal/config"
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -752,4 +753,85 @@ func TestMatchCountLimits(t *testing.T) {
 
 		assert.Equal(t, 1000, finalCount)
 	})
+}
+
+// =============================================================================
+// inferProviderType Tests
+// =============================================================================
+
+func TestInferProviderType(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      *config.AIConfig
+		expected string
+	}{
+		{
+			name: "explicit embedding provider takes precedence",
+			cfg: &config.AIConfig{
+				EmbeddingProvider: "custom-embed",
+				ProviderType:      "azure",
+				OpenAIAPIKey:      "sk-key",
+			},
+			expected: "custom-embed",
+		},
+		{
+			name: "explicit provider type",
+			cfg: &config.AIConfig{
+				ProviderType: "azure",
+				OpenAIAPIKey: "sk-key",
+			},
+			expected: "azure",
+		},
+		{
+			name: "openai API key infers openai",
+			cfg: &config.AIConfig{
+				OpenAIAPIKey: "sk-test-key",
+			},
+			expected: "openai",
+		},
+		{
+			name: "azure API key and endpoint infers azure",
+			cfg: &config.AIConfig{
+				AzureAPIKey:   "azure-key",
+				AzureEndpoint: "https://openai.azure.com",
+			},
+			expected: "azure",
+		},
+		{
+			name: "ollama endpoint infers ollama",
+			cfg: &config.AIConfig{
+				OllamaEndpoint: "http://localhost:11434",
+			},
+			expected: "ollama",
+		},
+		{
+			name: "azure API key without endpoint returns empty",
+			cfg: &config.AIConfig{
+				AzureAPIKey: "azure-key",
+			},
+			expected: "",
+		},
+		{
+			name: "no configuration returns empty",
+			cfg:  &config.AIConfig{
+				// All empty
+			},
+			expected: "",
+		},
+		{
+			name: "openai key takes precedence over ollama endpoint",
+			cfg: &config.AIConfig{
+				OpenAIAPIKey:   "sk-key",
+				OllamaEndpoint: "http://localhost:11434",
+			},
+			expected: "openai", // OpenAI has higher priority in the check order
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := inferProviderType(tt.cfg)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

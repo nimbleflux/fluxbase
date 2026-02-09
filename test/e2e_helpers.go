@@ -1,4 +1,9 @@
+//go:build integration && !no_e2e
+
 // Package test provides testing utilities and helpers for Fluxbase e2e tests.
+//
+// The build tag excludes this file when the 'no_e2e' build tag is set (used by
+// database and branching packages to avoid import cycles).
 //
 // # Test Contexts
 //
@@ -56,12 +61,14 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -76,6 +83,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/joho/godotenv"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
@@ -160,11 +168,12 @@ func E2ETestEmailWithSuffix(suffix string) string {
 //
 // Always close the context with defer tc.Close() to ensure proper cleanup.
 type TestContext struct {
-	DB     *database.Connection
-	Server *api.Server
-	App    *fiber.App
-	Config *config.Config
-	T      *testing.T
+	DB       *database.Connection
+	Server   *api.Server
+	App      *fiber.App
+	Config   *config.Config
+	T        *testing.T
+	isShared bool // True if this is the shared test context (don't close DB)
 }
 
 // NewTestContext creates a test context using the fluxbase_app database user.
@@ -192,8 +201,14 @@ type TestContext struct {
 //	        Send().
 //	        AssertStatus(fiber.StatusOK)
 //	}
-func NewTestContext(t *testing.T) *TestContext {
-	cfg := GetTestConfig()
+//
+// newTestContextInternal creates a test context WITHOUT checking shared context.
+// This is used internally by InitSharedTestContext to avoid deadlock.
+// It should NOT be called directly - use NewTestContext() or InitSharedTestContext() instead.
+func newTestContextInternal(t *testing.T, cfg *config.Config) *TestContext {
+	// Initialize logger level based on debug configuration
+	// This must be done before any logging to ensure proper output level
+	initTestLogger(cfg)
 
 	// Log the database user being used for debugging
 	log.Info().
@@ -244,6 +259,22 @@ func NewTestContext(t *testing.T) *TestContext {
 	}
 }
 
+func NewTestContext(t *testing.T) *TestContext {
+	// Use shared context to avoid creating multiple connection pools
+	// If shared context is not initialized, fall back to creating a new one
+	if IsSharedTestContextInitialized() {
+		tc := GetSharedTestContext(t)
+		// Reset global state at the beginning of each test (except the first)
+		// This is done in GetSharedTestContext after the first call
+		return tc
+	}
+
+	// Fallback: Create a new context if shared context is not initialized
+	// This maintains backward compatibility with code that doesn't use TestMain
+	cfg := GetTestConfig()
+	return newTestContextInternal(t, cfg)
+}
+
 // NewRLSTestContext creates a test context using the fluxbase_rls_test database user.
 //
 // Database User: fluxbase_rls_test
@@ -285,82 +316,484 @@ func NewTestContext(t *testing.T) *TestContext {
 //	    require.Len(t, tasks, 0, "User 2 should not see User 1's private tasks")
 //	}
 func NewRLSTestContext(t *testing.T) *TestContext {
+	// Always use shared RLS context to avoid creating multiple connection pools
+	// GetSharedRLSTestContext internally uses sync.Once for thread-safe initialization
+	// This eliminates the race condition that occurred with the check-then-fallback pattern
+	tc := GetSharedRLSTestContext(t)
+
+	// Reset RLS-specific state at the beginning of each test
+	ResetRLSTestState(tc)
+
+	return tc
+}
+
+var (
+	// sharedTestContext protects the shared test context during concurrent access
+	sharedTestContext          *TestContext
+	sharedTestContextMu        sync.RWMutex
+	sharedTestContextCallCount int // Track number of calls to reset state appropriately
+)
+
+var (
+	// sharedRLSTestContext protects the shared RLS test context during concurrent access
+	// RLS tests use fluxbase_rls_test user (without BYPASSRLS privilege) to test RLS policies
+	sharedRLSTestContext          *TestContext
+	sharedRLSTestContextOnce      sync.Once
+	sharedRLSTestContextCallCount int   // Track number of calls to reset state appropriately
+	sharedRLSTestContextInitErr   error // Store initialization error to propagate to callers
+)
+
+// InitSharedTestContext initializes the shared test context.
+// This should be called from TestMain before running tests.
+//
+// IMPORTANT: Tests should NOT call Close() on the shared context.
+// The context will be cleaned up by TestMain during package teardown.
+//
+// Example:
+//
+//	func TestMain(m *testing.M) {
+//	    test.InitSharedTestContext()
+//	    code := m.Run()
+//	    test.CleanupSharedTestContext()
+//	    os.Exit(code)
+//	}
+func InitSharedTestContext() {
+	sharedTestContextMu.Lock()
+	defer sharedTestContextMu.Unlock()
+
+	if sharedTestContext != nil {
+		return // Already initialized
+	}
+
+	// Create a minimal test.T for initialization
+	t := &testing.T{}
+
+	// Create context directly using internal function to avoid deadlock
+	// (NewTestContext would call IsSharedTestContextInitialized which would deadlock)
 	cfg := GetTestConfig()
+	sharedTestContext = newTestContextInternal(t, cfg)
+	sharedTestContext.isShared = true // Mark as shared context
+}
 
-	// Override database user to use RLS test user (without BYPASSRLS privilege)
-	cfg.Database.User = "fluxbase_rls_test"
-	cfg.Database.AdminUser = "fluxbase_rls_test"
-	cfg.Database.Password = "fluxbase_rls_test_password"
+// CleanupSharedTestContext closes and cleans up the shared test context.
+// This should be called from TestMain after running all tests.
+//
+// Example:
+//
+//	func TestMain(m *testing.M) {
+//	    test.InitSharedTestContext()
+//	    code := m.Run()
+//	    test.CleanupSharedTestContext()
+//	    os.Exit(code)
+//	}
+func CleanupSharedTestContext() {
+	sharedTestContextMu.Lock()
+	defer sharedTestContextMu.Unlock()
 
-	// Log the database user being used for debugging
-	log.Info().
-		Str("db_user", cfg.Database.User).
-		Str("db_admin_user", cfg.Database.AdminUser).
-		Str("db_host", cfg.Database.Host).
-		Str("db_database", cfg.Database.Database).
-		Msg("RLS test database configuration (user without BYPASSRLS)")
+	if sharedTestContext != nil {
+		sharedTestContext.Close()
+		sharedTestContext = nil
+	}
+}
 
-	// Connect to test database with retry logic to handle CI race conditions
-	// where the database container may be running but not yet accepting connections
-	db, err := connectTestDatabaseWithRetry(cfg.Database, defaultDBRetryAttempts)
-	require.NoError(t, err, "Failed to connect to test database with RLS user after retries")
+// GetSharedTestContext returns the shared test context for the package.
+// This reuses a single database connection across all tests in the package.
+//
+// IMPORTANT: Tests should NOT call Close() on the returned context.
+//
+// Example:
+//
+//	func TestSomething(t *testing.T) {
+//	    tc := test.GetSharedTestContext(t)
+//	    // NO defer tc.Close() - shared connection
+//	    // ... test code ...
+//	}
+func GetSharedTestContext(t *testing.T) *TestContext {
+	sharedTestContextMu.Lock()
+	defer sharedTestContextMu.Unlock()
 
-	// Don't run migrations as RLS user - migrations should already be applied
-	// by setup using fluxbase_app user
+	if sharedTestContext == nil {
+		panic("shared test context not initialized. Call InitSharedTestContext first.")
+	}
 
-	// Reset global rate limit store to ensure test isolation
-	// This prevents stale data from previous tests affecting rate limiting
+	// Reset global state on each call after the first to prevent cross-test interference
+	// This handles rate limiting, pub/sub, and other global singletons
+	if sharedTestContextCallCount > 0 {
+		ResetGlobalTestState()
+	}
+	sharedTestContextCallCount++
+
+	// Update the T field with the current test for proper error reporting
+	sharedTestContext.T = t
+	return sharedTestContext
+}
+
+// IsSharedTestContextInitialized returns true if the shared test context has been initialized.
+func IsSharedTestContextInitialized() bool {
+	sharedTestContextMu.RLock()
+	defer sharedTestContextMu.RUnlock()
+	return sharedTestContext != nil
+}
+
+// GetSharedTestContextUnsafe returns the shared test context without requiring testing.T.
+// This is unsafe because it bypasses the test reset logic and should only be used
+// from TestMain or other initialization code, not from individual tests.
+func GetSharedTestContextUnsafe() *TestContext {
+	sharedTestContextMu.RLock()
+	defer sharedTestContextMu.RUnlock()
+	return sharedTestContext
+}
+
+// ResetGlobalTestState resets global singleton state between tests.
+//
+// This prevents rate limiting and other cross-test interference while keeping
+// the shared database connection intact. This is useful for integration tests
+// that share a single connection across multiple tests.
+func ResetGlobalTestState() {
+	// Reset global rate limit store to prevent rate limit accumulation
 	if ratelimit.GlobalStore != nil {
+		log.Debug().Msg("ResetGlobalTestState: Closing global rate limit store")
 		_ = ratelimit.GlobalStore.Close()
 		ratelimit.GlobalStore = nil
+	} else {
+		log.Debug().Msg("ResetGlobalTestState: Global rate limit store is nil")
 	}
 
-	// Reset global pub/sub to ensure test isolation
-	// This prevents connection leaks from previous tests
+	// Reset global pub/sub reference but DON'T close it
+	// The server manages the pubsub lifecycle and will close it on shutdown
+	// Closing it here causes double-close issues with listener pools
 	if pubsub.GlobalPubSub != nil {
-		_ = pubsub.GlobalPubSub.Close()
+		log.Debug().Msg("ResetGlobalTestState: Clearing global pub/sub reference (server manages lifecycle)")
 		pubsub.GlobalPubSub = nil
+	} else {
+		log.Debug().Msg("ResetGlobalTestState: Global pub/sub is nil")
+	}
+}
+
+// InitSharedRLSTestContext initializes the shared RLS test context.
+// This should be called from TestMain before running RLS tests.
+//
+// IMPORTANT: Tests should NOT call Close() on the shared context.
+// The context will be cleaned up by TestMain during package teardown.
+//
+// The RLS test context uses fluxbase_rls_test user (without BYPASSRLS privilege)
+// to properly test Row-Level Security policies.
+//
+// Example:
+//
+//	func TestMain(m *testing.M) {
+//	    test.InitSharedRLSTestContext(&testing.T{})
+//	    code := m.Run()
+//	    test.CleanupSharedRLSTestContext()
+//	    os.Exit(code)
+//	}
+func InitSharedRLSTestContext(t *testing.T) {
+	sharedRLSTestContextOnce.Do(func() {
+		defer func() {
+			// Catch any panic during initialization and store as error
+			if r := recover(); r != nil {
+				sharedRLSTestContextInitErr = fmt.Errorf("panic during RLS context initialization: %v", r)
+				log.Error().Interface("panic", r).Msg("Shared RLS test context initialization failed")
+			}
+		}()
+
+		cfg := GetTestConfig()
+
+		// Override database user to use RLS test user (without BYPASSRLS privilege)
+		// NOTE: Do NOT override AdminUser - migrations need postgres superuser
+		cfg.Database.User = "fluxbase_rls_test"
+		cfg.Database.Password = "fluxbase_rls_test_password"
+
+		// Log the database user being used for debugging
+		log.Info().
+			Str("db_user", cfg.Database.User).
+			Str("db_admin_user", cfg.Database.AdminUser).
+			Msg("Initializing shared RLS test context (user without BYPASSRLS)")
+
+		// Create context directly using internal function
+		sharedRLSTestContext = newTestContextInternal(t, cfg)
+		sharedRLSTestContext.isShared = true // Mark as shared context
+	})
+}
+
+// CleanupSharedRLSTestContext closes and cleans up the shared RLS test context.
+// This should be called from TestMain after running all RLS tests.
+//
+// Example:
+//
+//	func TestMain(m *testing.M) {
+//	    test.InitSharedRLSTestContext(&testing.T{})
+//	    code := m.Run()
+//	    test.CleanupSharedRLSTestContext()
+//	    os.Exit(code)
+//	}
+func CleanupSharedRLSTestContext() {
+	if sharedRLSTestContext != nil {
+		sharedRLSTestContext.Close()
+		sharedRLSTestContext = nil
+	}
+}
+
+// GetSharedRLSTestContext returns the shared RLS test context.
+// This reuses a single database connection across all RLS tests.
+//
+// IMPORTANT: Tests should NOT call Close() on the returned context.
+//
+// Example:
+//
+//	func TestRLS(t *testing.T) {
+//	    tc := test.GetSharedRLSTestContext(t)
+//	    // NO defer tc.Close() - shared connection
+//	    test.ResetRLSTestState(tc) // Reset RLS-specific state
+//	    // ... test code ...
+//	}
+func GetSharedRLSTestContext(t *testing.T) *TestContext {
+	if sharedRLSTestContext == nil {
+		InitSharedRLSTestContext(t)
 	}
 
-	// Create server (REST API will see all migrated tables)
-	server := api.NewServer(cfg, db, "test")
-
-	return &TestContext{
-		DB:     db,
-		Server: server,
-		App:    server.App(),
-		Config: cfg,
-		T:      t,
+	// Check if initialization failed
+	if sharedRLSTestContextInitErr != nil {
+		t.Fatalf("Shared RLS test context initialization failed: %v", sharedRLSTestContextInitErr)
 	}
+
+	// Reset global state on each call after the first to prevent cross-test interference
+	if sharedRLSTestContextCallCount > 0 {
+		ResetGlobalTestState()
+	}
+	sharedRLSTestContextCallCount++
+
+	// Update the T field with the current test for proper error reporting
+	sharedRLSTestContext.T = t
+	return sharedRLSTestContext
+}
+
+// IsSharedRLSTestContextInitialized returns true if the shared RLS test context has been initialized.
+func IsSharedRLSTestContextInitialized() bool {
+	return sharedRLSTestContext != nil
+}
+
+// ResetRLSTestState resets RLS-specific state between tests.
+// This cleans up test data from previous RLS tests to prevent cross-test interference.
+//
+// IMPORTANT: This should be called at the start of each RLS test that uses the shared context.
+//
+// Example:
+//
+//	func TestStorageRLS_Something(t *testing.T) {
+//	    tc := test.GetSharedRLSTestContext(t)
+//	    test.ResetRLSTestState(tc)
+//	    // ... test code ...
+//	}
+func ResetRLSTestState(tc *TestContext) {
+	// Clean up test data from previous RLS test
+	tc.ExecuteSQLAsSuperuser(`
+		-- Delete test users
+		DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com';
+
+		-- Delete ALL storage objects (safe since this is a test database)
+		DELETE FROM storage.objects;
+
+		-- Delete ALL buckets (safe since this is a test database)
+		DELETE FROM storage.buckets;
+
+		-- Reset any RLS-specific settings
+		DELETE FROM app.settings WHERE category = 'rls_test';
+	`)
 }
 
 // Close cleans up test context resources
 func (tc *TestContext) Close() {
+	// For shared test context, only reset global state
+	// Don't shut down server, close pubsub, or close database
+	// These are managed by the shared context lifecycle in CleanupSharedTestContext()
+	if tc.isShared {
+		ResetGlobalTestState()
+		return
+	}
+
+	// For non-shared contexts: check if shared context exists
+	// If shared context exists, don't reset globals as they're managed by the shared context
+	sharedExists := IsSharedTestContextInitialized()
+
 	// Shutdown the server first to stop all background goroutines
+	// The server now owns its rate limiter and pub/sub (not globals), so we can use Shutdown()
 	if tc.Server != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = tc.Server.Shutdown(ctx)
 	}
 
-	// Reset global rate limit store after test to prevent stale data
-	// from affecting subsequent tests
-	if ratelimit.GlobalStore != nil {
-		_ = ratelimit.GlobalStore.Close()
-		ratelimit.GlobalStore = nil
+	// Only reset global state if no shared context exists
+	// This prevents clearing globals that the shared context relies on
+	if !sharedExists {
+		ResetGlobalTestState()
+
+		// Close global pub/sub after test to prevent connection leaks
+		// The PostgreSQL pub/sub holds a connection for LISTEN/NOTIFY
+		if pubsub.GlobalPubSub != nil {
+			_ = pubsub.GlobalPubSub.Close()
+			pubsub.GlobalPubSub = nil
+		}
+
+		// Then close the database connection
+		if tc.DB != nil {
+			tc.DB.Close()
+		}
+	}
+}
+
+// TestContextTx wraps a TestContext with a transaction for direct database queries.
+//
+// IMPORTANT: This provides transaction isolation ONLY for direct database queries
+// made through txCtx.DB.Exec(), txCtx.DB.Query(), etc. HTTP requests made through
+// the server (txCtx.NewRequest(), etc.) do NOT use this transaction because the
+// server has its own connection pool.
+//
+// For HTTP API testing with transaction isolation, the server would need to use
+// a connection that's bound to the test's transaction, which requires additional
+// architecture changes.
+//
+// Use TestContextTx for:
+//   - Direct database queries that need transaction isolation
+//   - Testing database logic without affecting other tests
+//   - Performance benchmarks (rollback is faster than truncate)
+//
+// Do NOT use TestContextTx for:
+//   - HTTP API testing (use regular TestContext instead)
+//   - Any test that makes requests through the server
+type TestContextTx struct {
+	*TestContext
+	tx     pgx.Tx
+	ctx    context.Context
+	closed bool
+}
+
+// BeginTestTx creates a new test context with a transaction.
+// The transaction is automatically rolled back when the test completes.
+//
+// Usage:
+//
+//	func TestUserCreation(t *testing.T) {
+//	    txCtx := test.BeginTestTx(t)
+//	    defer txCtx.Close()
+//
+//	    resp := txCtx.NewRequest("POST", "/api/v1/auth/users").
+//	        WithBody(map[string]string{"email": "test@example.com"}).
+//	        Send()
+//
+//	    assert.Equal(t, 201, resp.Status())
+//	    // Transaction automatically rolled back - no cleanup needed!
+//	}
+func BeginTestTx(t *testing.T) *TestContextTx {
+	t.Helper()
+
+	// Get or create shared test context
+	tc := GetSharedTestContext(t)
+
+	// Begin transaction
+	ctx := context.Background()
+	tx, err := tc.DB.BeginTx(ctx)
+	require.NoError(t, err, "Failed to begin test transaction")
+
+	return &TestContextTx{
+		TestContext: tc,
+		tx:          tx,
+		ctx:         ctx,
+		closed:      false,
+	}
+}
+
+// Rollback rolls back the test transaction.
+// This is called automatically by Close(), but can be called explicitly if needed.
+func (tct *TestContextTx) Rollback() {
+	if tct.closed {
+		return
 	}
 
-	// Close global pub/sub after test to prevent connection leaks
-	// The PostgreSQL pub/sub holds a connection for LISTEN/NOTIFY
-	if pubsub.GlobalPubSub != nil {
-		_ = pubsub.GlobalPubSub.Close()
-		pubsub.GlobalPubSub = nil
+	tct.closed = true
+	_ = tct.tx.Rollback(tct.ctx)
+}
+
+// Commit commits the test transaction.
+// This is rarely used in tests - most tests should rely on automatic rollback.
+// Use this only when testing transaction commit behavior itself.
+func (tct *TestContextTx) Commit() error {
+	if tct.closed {
+		return errors.New("transaction already closed")
 	}
 
-	// Then close the database connection
-	if tc.DB != nil {
-		tc.DB.Close()
+	tct.closed = true
+	return tct.tx.Commit(tct.ctx)
+}
+
+// Tx returns the underlying pgx.Tx for direct database operations.
+// Use this when you need to execute queries directly within the transaction.
+func (tct *TestContextTx) Tx() pgx.Tx {
+	return tct.tx
+}
+
+// Close implements automatic cleanup - rolls back the transaction if not already committed/rolled back.
+// This should be called via defer at the start of each test:
+//
+//	defer txCtx.Close()
+func (tct *TestContextTx) Close() {
+	tct.Rollback()
+}
+
+// =============================================================================
+// Test Context with Custom Dependencies
+// =============================================================================
+
+// TestContextOptions holds optional test context configuration for dependency injection.
+// This allows tests to provide their own rate limiter and pub/sub instances
+// instead of using the global singletons.
+type TestContextOptions struct {
+	RateLimiter ratelimit.Store
+	PubSub      pubsub.PubSub
+}
+
+// NewTestContextWithOptions creates a test context with custom dependencies.
+// Use this when you need test-specific rate limiter or pub/sub instances.
+//
+// Usage:
+//
+//	rateLimiter, pubSub := test.NewInMemoryDependencies()
+//	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+//	    RateLimiter: rateLimiter,
+//	    PubSub:      pubSub,
+//	})
+//	defer tc.Close()
+func NewTestContextWithOptions(t *testing.T, opts TestContextOptions) *TestContext {
+	t.Helper()
+
+	cfg := GetTestConfig()
+
+	// Set dependencies before creating server
+	if opts.RateLimiter != nil {
+		ratelimit.SetGlobalStore(opts.RateLimiter)
 	}
+	if opts.PubSub != nil {
+		pubsub.SetGlobalPubSub(opts.PubSub)
+	}
+
+	return newTestContextInternal(t, cfg)
+}
+
+// NewInMemoryDependencies creates test-specific in-memory dependencies.
+// Each test gets its own isolated rate limiter and pub/sub.
+//
+// Returns:
+//   - ratelimit.Store: In-memory rate limiter with 10-minute TTL
+//   - pubsub.PubSub: Local in-memory pub/sub implementation
+func NewInMemoryDependencies() (ratelimit.Store, pubsub.PubSub) {
+	// Create fresh in-memory rate limiter for this test
+	rateLimiter := ratelimit.NewMemoryStore(10 * time.Minute)
+
+	// Create fresh local pub/sub for this test
+	ps := pubsub.NewLocalPubSub()
+
+	return rateLimiter, ps
 }
 
 // CleanDatabase truncates all tables in the test database
@@ -499,11 +932,11 @@ func GetTestConfig() *config.Config {
 			AdminPassword:   dbAdminPassword, // Admin password (configurable via env)
 			Database:        dbDatabase,
 			SSLMode:         "disable",
-			MaxConnections:  20,               // Support parallel test execution (4-8 tests concurrent)
-			MinConnections:  4,                // Keep warm connections for parallel tests
-			MaxConnLifetime: 5 * time.Minute,  // Shorter lifetime to recycle connections
-			MaxConnIdleTime: 2 * time.Minute,  // Increased from 30s to 2min for CI stability
-			HealthCheck:     30 * time.Second, // Increased from 15s to 30s (must be < MaxConnIdleTime)
+			MaxConnections:  4,                // Reduced to allow more parallel tests (PostgreSQL has 100 max connections)
+			MinConnections:  1,                // Keep 1 warm connection for efficiency
+			MaxConnLifetime: 10 * time.Minute, // Longer lifetime to reduce connection churn
+			MaxConnIdleTime: 3 * time.Minute,  // Keep idle connections longer
+			HealthCheck:     30 * time.Second, // Must be < MaxConnIdleTime
 		},
 		Auth: config.AuthConfig{
 			JWTSecret:        "test-secret-key-for-testing-only",
@@ -516,14 +949,24 @@ func GetTestConfig() *config.Config {
 			TOTPIssuer:       "Fluxbase", // Default TOTP issuer for 2FA
 		},
 		Security: config.SecurityConfig{
-			SetupToken:            "test-setup-token-for-e2e-testing",
-			EnableGlobalRateLimit: false,
-			AdminSetupRateLimit:   10,
-			AdminSetupRateWindow:  15 * time.Minute,
-			AdminLoginRateLimit:   10,
-			AdminLoginRateWindow:  15 * time.Minute,
-			AuthLoginRateLimit:    10,
-			AuthLoginRateWindow:   15 * time.Minute,
+			SetupToken:                  "test-setup-token-for-e2e-testing",
+			EnableGlobalRateLimit:       false,
+			AdminSetupRateLimit:         5, // Low enough to test rate limiting (max 5 attempts)
+			AdminSetupRateWindow:        15 * time.Minute,
+			AdminLoginRateLimit:         10000, // Increased for parallel test execution
+			AdminLoginRateWindow:        1 * time.Minute,
+			AuthLoginRateLimit:          10000, // Very high for integration tests
+			AuthLoginRateWindow:         15 * time.Minute,
+			AuthSignupRateLimit:         10000, // Very high for integration tests
+			AuthSignupRateWindow:        15 * time.Minute,
+			AuthPasswordResetRateLimit:  10000, // Very high for integration tests
+			AuthPasswordResetRateWindow: 15 * time.Minute,
+			Auth2FARateLimit:            10000, // Very high for integration tests
+			Auth2FARateWindow:           5 * time.Minute,
+			AuthRefreshRateLimit:        10000, // Very high for integration tests
+			AuthRefreshRateWindow:       1 * time.Minute,
+			AuthMagicLinkRateLimit:      10000, // Very high for integration tests
+			AuthMagicLinkRateWindow:     15 * time.Minute,
 		},
 		Realtime: config.RealtimeConfig{
 			Enabled:        false, // Disabled for most tests
@@ -583,10 +1026,49 @@ func GetTestConfig() *config.Config {
 			Introspection: true,
 		},
 		Scaling: config.ScalingConfig{
-			DisableRealtime: true, // Disable realtime listener for tests to avoid connection issues
+			DisableScheduler: true, // Disable functions/RPC schedulers for tests to avoid connection issues
+			DisableRealtime:  true, // Disable realtime listener for tests to avoid connection issues
 		},
 		EncryptionKey: "test-encryption-key-32-bytes!!!!", // Exactly 32 bytes for AES-256
-		Debug:         true,
+		Debug:         getTestDebugMode(),
+	}
+}
+
+// getTestDebugMode returns the debug mode for tests based on environment variable.
+// FLUXBASE_LOG_LEVEL=debug enables debug mode, anything else sets info mode.
+// Default is info mode for cleaner test output.
+func getTestDebugMode() bool {
+	logLevel := os.Getenv("FLUXBASE_LOG_LEVEL")
+	return logLevel == "debug" || logLevel == "DEBUG"
+}
+
+// NewTestContextWithDebug creates a test context with debug mode enabled.
+// This is useful for tests that need debug features like private IP webhook URLs.
+func NewTestContextWithDebug(t *testing.T) *TestContext {
+	cfg := GetTestConfig()
+	cfg.Debug = true // Force debug mode on
+	return newTestContextInternal(t, cfg)
+}
+
+// EnablePrivateIPsForWebhooks enables private IP addresses (like 127.0.0.1) for webhook tests.
+// This is needed because httptest.NewServer() uses localhost which is blocked by default.
+func (tc *TestContext) EnablePrivateIPsForWebhooks() {
+	if tc.Server != nil {
+		triggerSvc := tc.Server.GetWebhookTriggerService()
+		if triggerSvc != nil {
+			triggerSvc.EnablePrivateIPs()
+		}
+	}
+}
+
+// initTestLogger initializes the global zerolog logger with appropriate level.
+// This should be called early in test setup to ensure proper log output.
+func initTestLogger(cfg *config.Config) {
+	// Set global log level based on debug configuration
+	if cfg.Debug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	} else {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 }
 
@@ -1699,8 +2181,11 @@ func (tc *TestContext) EnsureRLSTestTables() {
 		// Ensure uuid-ossp extension is available for uuid_generate_v4()
 		`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`,
 
+		// Drop existing tasks table to ensure clean schema (fixes RLS test failures)
+		`DROP TABLE IF EXISTS public.tasks CASCADE`,
+
 		// Create tasks table for RLS testing
-		`CREATE TABLE IF NOT EXISTS public.tasks (
+		`CREATE TABLE public.tasks (
 			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 			user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
 			title TEXT NOT NULL,
@@ -1741,6 +2226,11 @@ func (tc *TestContext) EnsureRLSTestTables() {
 		`CREATE POLICY tasks_delete_own ON public.tasks
 			FOR DELETE
 			USING (user_id = auth.current_user_id())`,
+
+		// Grant permissions on tasks table to authenticated role
+		// The authenticated role is used by logged-in users in e2e tests
+		`GRANT USAGE ON SCHEMA public TO authenticated`,
+		`GRANT ALL ON TABLE public.tasks TO authenticated`,
 	}
 
 	// Create a temporary connection as postgres superuser to create tables and policies

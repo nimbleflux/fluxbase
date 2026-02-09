@@ -2,6 +2,7 @@ package settings
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -489,4 +490,504 @@ func BenchmarkValidateKey_Empty(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		ValidateKey("")
 	}
+}
+
+// =============================================================================
+// Additional Value Type Validation Tests
+// =============================================================================
+
+func TestCreateCustomSettingRequest_ValueTypeValidation(t *testing.T) {
+	validValueTypes := []string{"string", "number", "boolean", "json"}
+
+	t.Run("all valid value types are accepted", func(t *testing.T) {
+		for _, valueType := range validValueTypes {
+			req := CreateCustomSettingRequest{
+				Key:       "custom.test." + valueType,
+				Value:     map[string]interface{}{"test": "data"},
+				ValueType: valueType,
+			}
+
+			// Just validate the key - value type validation happens in CreateSetting
+			err := ValidateKey(req.Key)
+			assert.NoError(t, err, "value type %s should be valid", valueType)
+		}
+	})
+
+	t.Run("value types are consistent", func(t *testing.T) {
+		// Verify our test list matches what's documented
+		expectedTypes := map[string]bool{
+			"string":  true,
+			"number":  true,
+			"boolean": true,
+			"json":    true,
+		}
+
+		for _, vt := range validValueTypes {
+			assert.True(t, expectedTypes[vt], "value type %s should be in expected list", vt)
+		}
+	})
+}
+
+// =============================================================================
+// Permission Edge Cases
+// =============================================================================
+
+func TestCanEditSetting_EdgeCases(t *testing.T) {
+	t.Run("empty editable_by with non-admin role", func(t *testing.T) {
+		result := CanEditSetting([]string{}, "authenticated")
+		assert.False(t, result, "regular user should not edit when editable_by is empty")
+	})
+
+	t.Run("nil editable_by slice behaves like empty", func(t *testing.T) {
+		result := CanEditSetting(nil, "authenticated")
+		assert.False(t, result, "regular user should not edit with nil editable_by")
+	})
+
+	t.Run("case-sensitive role matching", func(t *testing.T) {
+		editableBy := []string{"Admin", "Moderator"}
+		result := CanEditSetting(editableBy, "admin")
+		// "admin" is a special role that bypasses the check, so it returns true
+		// Use a non-special role to test case-sensitivity
+		result = CanEditSetting(editableBy, "moderator") // lowercase, but list has "Moderator"
+		assert.False(t, result, "role matching is case-sensitive")
+	})
+
+	t.Run("exact role match required", func(t *testing.T) {
+		editableBy := []string{"moderator"}
+		result := CanEditSetting(editableBy, "senior_moderator")
+		assert.False(t, result, "exact role match is required")
+	})
+
+	t.Run("no wildcard support - only exact matches", func(t *testing.T) {
+		specialRoles := []string{"*", "all", "any"}
+		for _, role := range specialRoles {
+			result := CanEditSetting([]string{role}, "authenticated")
+			// The implementation doesn't support wildcards
+			// Only dashboard_admin, admin, and service_role bypass the check
+			assert.False(t, result, "special role '%s' should NOT match regular user", role)
+		}
+	})
+}
+
+// =============================================================================
+// Key Validation Edge Cases
+// =============================================================================
+
+func TestValidateKey_EdgeCases(t *testing.T) {
+	edgeCases := []struct {
+		name    string
+		key     string
+		wantErr bool
+	}{
+		{"single character", "a", false},
+		{"numeric key", "123", false},
+		{"key with dots", "a.b.c.d.e", false},
+		{"key with leading dot", ".starts-with-dot", false},
+		{"key with trailing dot", "ends-with-dot.", false},
+		{"key with consecutive dots", "a..b", false},
+		{"unicode characters", "custom.设置.名称", false},
+		{"very long key", string(make([]byte, 1000)), false}, // Just tests it doesn't panic
+		{"key with special chars", "custom@test#key", false},
+		{"key with spaces", "custom test key", false},
+	}
+
+	for _, tc := range edgeCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateKey(tc.key)
+			if tc.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Setting Metadata Tests
+// =============================================================================
+
+func TestCustomSetting_MetadataHandling(t *testing.T) {
+	t.Run("nil metadata is handled", func(t *testing.T) {
+		setting := CustomSetting{
+			ID:       uuid.New(),
+			Key:      "custom.test",
+			Value:    map[string]interface{}{},
+			Metadata: nil,
+		}
+
+		assert.Nil(t, setting.Metadata)
+	})
+
+	t.Run("empty metadata map", func(t *testing.T) {
+		setting := CustomSetting{
+			ID:       uuid.New(),
+			Key:      "custom.test",
+			Value:    map[string]interface{}{},
+			Metadata: map[string]interface{}{},
+		}
+
+		assert.NotNil(t, setting.Metadata)
+		assert.Empty(t, setting.Metadata)
+	})
+
+	t.Run("metadata with various types", func(t *testing.T) {
+		metadata := map[string]interface{}{
+			"string":  "value",
+			"number":  42,
+			"boolean": true,
+			"null":    nil,
+			"array":   []string{"a", "b"},
+			"object":  map[string]interface{}{"nested": "data"},
+		}
+
+		setting := CustomSetting{
+			ID:       uuid.New(),
+			Key:      "custom.test",
+			Value:    map[string]interface{}{},
+			Metadata: metadata,
+		}
+
+		assert.Equal(t, "value", setting.Metadata["string"])
+		assert.Equal(t, 42, setting.Metadata["number"])
+		assert.True(t, setting.Metadata["boolean"].(bool))
+		assert.Nil(t, setting.Metadata["null"])
+	})
+}
+
+// =============================================================================
+// EditableBy Handling Tests
+// =============================================================================
+
+func TestCustomSetting_EditableByHandling(t *testing.T) {
+	t.Run("nil editable_by is handled", func(t *testing.T) {
+		setting := CustomSetting{
+			ID:         uuid.New(),
+			Key:        "custom.test",
+			Value:      map[string]interface{}{},
+			EditableBy: nil,
+		}
+
+		assert.Nil(t, setting.EditableBy)
+		// nil editable_by means only admins can edit
+		assert.True(t, CanEditSetting(setting.EditableBy, "dashboard_admin"))
+		assert.False(t, CanEditSetting(setting.EditableBy, "authenticated"))
+	})
+
+	t.Run("empty editable_by array", func(t *testing.T) {
+		setting := CustomSetting{
+			ID:         uuid.New(),
+			Key:        "custom.test",
+			Value:      map[string]interface{}{},
+			EditableBy: []string{},
+		}
+
+		assert.Empty(t, setting.EditableBy)
+		assert.True(t, CanEditSetting(setting.EditableBy, "dashboard_admin"))
+		assert.False(t, CanEditSetting(setting.EditableBy, "authenticated"))
+	})
+
+	t.Run("editable_by with duplicates", func(t *testing.T) {
+		editableBy := []string{"admin", "moderator", "admin", "moderator"}
+		setting := CustomSetting{
+			ID:         uuid.New(),
+			Key:        "custom.test",
+			Value:      map[string]interface{}{},
+			EditableBy: editableBy,
+		}
+
+		assert.True(t, CanEditSetting(setting.EditableBy, "admin"))
+		// CanEditSetting should handle duplicates gracefully
+	})
+}
+
+// =============================================================================
+// Description Handling Tests
+// =============================================================================
+
+func TestCustomSetting_DescriptionHandling(t *testing.T) {
+	t.Run("empty description", func(t *testing.T) {
+		setting := CustomSetting{
+			ID:          uuid.New(),
+			Key:         "custom.test",
+			Value:       map[string]interface{}{},
+			Description: "",
+		}
+
+		assert.Equal(t, "", setting.Description)
+	})
+
+	t.Run("description with special characters", func(t *testing.T) {
+		specialDesc := "Description with\nnewlines\ttabs\"quotes'apostrophes"
+		setting := CustomSetting{
+			ID:          uuid.New(),
+			Key:         "custom.test",
+			Value:       map[string]interface{}{},
+			Description: specialDesc,
+		}
+
+		assert.Equal(t, specialDesc, setting.Description)
+	})
+
+	t.Run("description with unicode", func(t *testing.T) {
+		unicodeDesc := "描述 Description 🌍 世界"
+		setting := CustomSetting{
+			ID:          uuid.New(),
+			Key:         "custom.test",
+			Value:       map[string]interface{}{},
+			Description: unicodeDesc,
+		}
+
+		assert.Equal(t, unicodeDesc, setting.Description)
+	})
+
+	t.Run("very long description", func(t *testing.T) {
+		longDesc := string(make([]byte, 10000))
+		for i := range longDesc {
+			longDesc = longDesc[:i] + "a" + longDesc[i+1:]
+		}
+
+		setting := CustomSetting{
+			ID:          uuid.New(),
+			Key:         "custom.test",
+			Value:       map[string]interface{}{},
+			Description: longDesc,
+		}
+
+		assert.Len(t, setting.Description, 10000)
+	})
+}
+
+// =============================================================================
+// Value Handling Tests
+// =============================================================================
+
+func TestCustomSetting_ValueHandling(t *testing.T) {
+	t.Run("nil value map", func(t *testing.T) {
+		setting := CustomSetting{
+			ID:    uuid.New(),
+			Key:   "custom.test",
+			Value: nil,
+		}
+
+		assert.Nil(t, setting.Value)
+	})
+
+	t.Run("empty value map", func(t *testing.T) {
+		setting := CustomSetting{
+			ID:    uuid.New(),
+			Key:   "custom.test",
+			Value: map[string]interface{}{},
+		}
+
+		assert.NotNil(t, setting.Value)
+		assert.Empty(t, setting.Value)
+	})
+
+	t.Run("value with nested structures", func(t *testing.T) {
+		value := map[string]interface{}{
+			"level1": map[string]interface{}{
+				"level2": map[string]interface{}{
+					"level3": "deep value",
+				},
+			},
+			"array": []interface{}{1, 2, 3},
+			"mixed": []interface{}{
+				"string",
+				42,
+				true,
+				map[string]interface{}{"nested": "object"},
+			},
+		}
+
+		setting := CustomSetting{
+			ID:    uuid.New(),
+			Key:   "custom.test",
+			Value: value,
+		}
+
+		assert.NotNil(t, setting.Value)
+		assert.Equal(t, "deep value", setting.Value["level1"].(map[string]interface{})["level2"].(map[string]interface{})["level3"])
+	})
+}
+
+// =============================================================================
+// Timestamp Handling Tests
+// =============================================================================
+
+func TestCustomSetting_Timestamps(t *testing.T) {
+	t.Run("created_at and updated_at are set", func(t *testing.T) {
+		now := time.Now()
+		setting := CustomSetting{
+			ID:        uuid.New(),
+			Key:       "custom.test",
+			Value:     map[string]interface{}{},
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+
+		assert.False(t, setting.CreatedAt.IsZero())
+		assert.False(t, setting.UpdatedAt.IsZero())
+	})
+
+	t.Run("updated_at can be after created_at", func(t *testing.T) {
+		created := time.Now().Add(-24 * time.Hour)
+		updated := time.Now()
+
+		setting := CustomSetting{
+			ID:        uuid.New(),
+			Key:       "custom.test",
+			Value:     map[string]interface{}{},
+			CreatedAt: created,
+			UpdatedAt: updated,
+		}
+
+		assert.True(t, setting.UpdatedAt.After(setting.CreatedAt))
+	})
+}
+
+// =============================================================================
+// User ID Tracking Tests
+// =============================================================================
+
+func TestCustomSetting_UserTracking(t *testing.T) {
+	t.Run("created_by and updated_by tracking", func(t *testing.T) {
+		createdBy := uuid.New()
+		updatedBy := uuid.New()
+
+		setting := CustomSetting{
+			ID:        uuid.New(),
+			Key:       "custom.test",
+			Value:     map[string]interface{}{},
+			CreatedBy: &createdBy,
+			UpdatedBy: &updatedBy,
+		}
+
+		assert.Equal(t, createdBy, *setting.CreatedBy)
+		assert.Equal(t, updatedBy, *setting.UpdatedBy)
+	})
+
+	t.Run("nil created_by and updated_by", func(t *testing.T) {
+		setting := CustomSetting{
+			ID:        uuid.New(),
+			Key:       "custom.test",
+			Value:     map[string]interface{}{},
+			CreatedBy: nil,
+			UpdatedBy: nil,
+		}
+
+		assert.Nil(t, setting.CreatedBy)
+		assert.Nil(t, setting.UpdatedBy)
+	})
+}
+
+// =============================================================================
+// Secret Setting Tests
+// =============================================================================
+
+func TestSecretSetting_IsSecret(t *testing.T) {
+	// Note: The current implementation doesn't have an IsSecret field on CustomSetting
+	// This test documents the expected behavior when using separate tables/types
+	t.Run("secret settings use separate type", func(t *testing.T) {
+		metadata := SecretSettingMetadata{
+			ID:          uuid.New(),
+			Key:         "secret.test",
+			Description: "Secret setting",
+		}
+
+		assert.Equal(t, "secret.test", metadata.Key)
+		assert.Equal(t, "Secret setting", metadata.Description)
+		// Value is never exposed in metadata
+	})
+}
+
+func TestCreateSecretSettingRequest_Validation(t *testing.T) {
+	t.Run("valid secret request", func(t *testing.T) {
+		req := CreateSecretSettingRequest{
+			Key:         "secret.api.key",
+			Value:       "my-secret-value",
+			Description: "API key secret",
+		}
+
+		assert.Equal(t, "secret.api.key", req.Key)
+		assert.Equal(t, "my-secret-value", req.Value)
+		assert.Equal(t, "API key secret", req.Description)
+	})
+
+	t.Run("secret with empty value", func(t *testing.T) {
+		req := CreateSecretSettingRequest{
+			Key:   "secret.empty",
+			Value: "",
+		}
+
+		assert.Equal(t, "", req.Value)
+	})
+
+	t.Run("secret with special characters in value", func(t *testing.T) {
+		specialValue := "key\nwith\nnewlines\tand\ttabs\"quotes'"
+		req := CreateSecretSettingRequest{
+			Key:   "secret.special",
+			Value: specialValue,
+		}
+
+		assert.Equal(t, specialValue, req.Value)
+	})
+}
+
+// =============================================================================
+// Update Request Tests
+// =============================================================================
+
+func TestUpdateRequests_PartialUpdates(t *testing.T) {
+	t.Run("UpdateCustomSettingRequest with only value", func(t *testing.T) {
+		req := UpdateCustomSettingRequest{
+			Value: map[string]interface{}{"updated": true},
+		}
+
+		assert.NotNil(t, req.Value)
+		assert.Nil(t, req.Description)
+		assert.Nil(t, req.EditableBy)
+		assert.Nil(t, req.Metadata)
+	})
+
+	t.Run("UpdateCustomSettingRequest with only description", func(t *testing.T) {
+		desc := "New description"
+		req := UpdateCustomSettingRequest{
+			Description: &desc,
+		}
+
+		assert.Nil(t, req.Value)
+		assert.NotNil(t, req.Description)
+		assert.Nil(t, req.EditableBy)
+		assert.Nil(t, req.Metadata)
+	})
+
+	t.Run("UpdateSecretSettingRequest with only description", func(t *testing.T) {
+		desc := "Updated description"
+		req := UpdateSecretSettingRequest{
+			Description: &desc,
+		}
+
+		assert.Nil(t, req.Value)
+		assert.NotNil(t, req.Description)
+	})
+
+	t.Run("UpdateSecretSettingRequest with only value", func(t *testing.T) {
+		val := "new-secret-value"
+		req := UpdateSecretSettingRequest{
+			Value: &val,
+		}
+
+		assert.NotNil(t, req.Value)
+		assert.Nil(t, req.Description)
+	})
+
+	t.Run("UpdateUserSettingRequest partial", func(t *testing.T) {
+		req := UpdateUserSettingRequest{
+			Value: map[string]interface{}{"partial": "update"},
+		}
+
+		assert.NotNil(t, req.Value)
+		assert.Nil(t, req.Description)
+	})
 }

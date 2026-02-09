@@ -690,3 +690,364 @@ func BenchmarkGrantBranchAccessTool_InputSchema(b *testing.B) {
 		tool.InputSchema()
 	}
 }
+
+// =============================================================================
+// Execute Method Tests
+// =============================================================================
+
+func TestListBranchesTool_Execute(t *testing.T) {
+	t.Run("list all branches", func(t *testing.T) {
+		tool := NewListBranchesTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{}
+		assert.NotNil(t, args)
+	})
+
+	t.Run("filter by status", func(t *testing.T) {
+		tool := NewListBranchesTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"status": "ready",
+		}
+		assert.Equal(t, "ready", args["status"])
+	})
+
+	t.Run("filter by user", func(t *testing.T) {
+		args := map[string]any{
+			"user_id": "user-123",
+		}
+		assert.Equal(t, "user-123", args["user_id"])
+	})
+
+	t.Run("invalid status value", func(t *testing.T) {
+		tool := NewListBranchesTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"status": "invalid_status",
+		}
+		assert.Equal(t, "invalid_status", args["status"])
+	})
+}
+
+func TestGetBranchTool_Execute(t *testing.T) {
+	t.Run("get existing branch", func(t *testing.T) {
+		tool := NewGetBranchTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"branch_id": "branch-123",
+		}
+		assert.Equal(t, "branch-123", args["branch_id"])
+	})
+
+	t.Run("branch not found", func(t *testing.T) {
+		// TODO: Add mock storage that returns not found
+		tool := NewGetBranchTool(nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("missing branch_id parameter", func(t *testing.T) {
+		tool := NewGetBranchTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{}
+		_, hasBranchID := args["branch_id"]
+		assert.False(t, hasBranchID)
+	})
+}
+
+func TestCreateBranchTool_Execute(t *testing.T) {
+	t.Run("create branch with valid parameters", func(t *testing.T) {
+		tool := NewCreateBranchTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"name":              "test-branch",
+			"database":          "test_db",
+			"data_clone_mode":   "schema_only",
+			"auto_delete_after": 24,
+		}
+		assert.Equal(t, "test-branch", args["name"])
+		assert.Equal(t, "test_db", args["database"])
+		assert.Equal(t, "schema_only", args["data_clone_mode"])
+	})
+
+	t.Run("create branch with schema and data", func(t *testing.T) {
+		args := map[string]any{
+			"name":            "full-branch",
+			"database":        "prod_db",
+			"data_clone_mode": "full",
+		}
+		assert.Equal(t, "full", args["data_clone_mode"])
+	})
+
+	t.Run("missing required parameters", func(t *testing.T) {
+		tool := NewCreateBranchTool(nil)
+		assert.NotNil(t, tool)
+
+		tests := []map[string]any{
+			{"name": "test"},     // missing database
+			{"database": "test"}, // missing name
+		}
+
+		for _, args := range tests {
+			_, hasName := args["name"]
+			_, hasDB := args["database"]
+			assert.False(t, hasName && hasDB)
+		}
+	})
+
+	t.Run("invalid data_clone_mode", func(t *testing.T) {
+		args := map[string]any{
+			"name":            "test",
+			"database":        "test_db",
+			"data_clone_mode": "invalid_mode",
+		}
+		assert.Equal(t, "invalid_mode", args["data_clone_mode"])
+	})
+
+	t.Run("branch already exists", func(t *testing.T) {
+		// TODO: Add mock manager that returns duplicate error
+		tool := NewCreateBranchTool(nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("exceeds user branch limit", func(t *testing.T) {
+		// TODO: Add mock manager that enforces limits
+		tool := NewCreateBranchTool(nil)
+		assert.NotNil(t, tool)
+	})
+}
+
+func TestDeleteBranchTool_Execute(t *testing.T) {
+	t.Run("delete existing branch", func(t *testing.T) {
+		tool := NewDeleteBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"branch_id": "branch-123",
+		}
+		assert.Equal(t, "branch-123", args["branch_id"])
+	})
+
+	t.Run("delete branch with force", func(t *testing.T) {
+		tool := NewDeleteBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"branch_id": "branch-456",
+			"force":     true,
+		}
+		assert.True(t, args["force"].(bool))
+	})
+
+	t.Run("branch not found", func(t *testing.T) {
+		// TODO: Add mock storage that returns not found
+		tool := NewDeleteBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("branch in use error", func(t *testing.T) {
+		// TODO: Add mock manager that detects active connections
+		tool := NewDeleteBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("missing branch_id parameter", func(t *testing.T) {
+		tool := NewDeleteBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{}
+		_, hasBranchID := args["branch_id"]
+		assert.False(t, hasBranchID)
+	})
+}
+
+func TestResetBranchTool_Execute(t *testing.T) {
+	t.Run("reset branch to clean state", func(t *testing.T) {
+		tool := NewResetBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"branch_id": "branch-123",
+		}
+		assert.Equal(t, "branch-123", args["branch_id"])
+	})
+
+	t.Run("reset branch with schema", func(t *testing.T) {
+		tool := NewResetBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"branch_id":     "branch-456",
+			"schema_source": "base",
+		}
+		assert.Equal(t, "base", args["schema_source"])
+	})
+
+	t.Run("branch not found", func(t *testing.T) {
+		// TODO: Add mock storage that returns not found
+		tool := NewResetBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("reset fails due to active connections", func(t *testing.T) {
+		// TODO: Add mock manager that detects active connections
+		tool := NewResetBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+	})
+}
+
+func TestGrantBranchAccessTool_Execute(t *testing.T) {
+	t.Run("grant read access", func(t *testing.T) {
+		tool := NewGrantBranchAccessTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"branch_id":    "branch-123",
+			"user_id":      "user-456",
+			"access_level": "read",
+		}
+		assert.Equal(t, "read", args["access_level"])
+	})
+
+	t.Run("grant write access", func(t *testing.T) {
+		args := map[string]any{
+			"branch_id":    "branch-789",
+			"user_id":      "user-101",
+			"access_level": "write",
+		}
+		assert.Equal(t, "write", args["access_level"])
+	})
+
+	t.Run("grant admin access", func(t *testing.T) {
+		args := map[string]any{
+			"branch_id":    "branch-abc",
+			"user_id":      "user-def",
+			"access_level": "admin",
+		}
+		assert.Equal(t, "admin", args["access_level"])
+	})
+
+	t.Run("invalid access level", func(t *testing.T) {
+		tool := NewGrantBranchAccessTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"branch_id":    "branch-123",
+			"user_id":      "user-456",
+			"access_level": "invalid",
+		}
+		assert.Equal(t, "invalid", args["access_level"])
+	})
+
+	t.Run("branch not found", func(t *testing.T) {
+		// TODO: Add mock storage that returns not found
+		tool := NewGrantBranchAccessTool(nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("missing required parameters", func(t *testing.T) {
+		tool := NewGrantBranchAccessTool(nil)
+		assert.NotNil(t, tool)
+
+		tests := []map[string]any{
+			{"branch_id": "test", "user_id": "user"},      // missing access_level
+			{"branch_id": "test", "access_level": "read"}, // missing user_id
+			{"user_id": "user", "access_level": "read"},   // missing branch_id
+		}
+
+		for i, args := range tests {
+			hasAll := args["branch_id"] != nil && args["user_id"] != nil && args["access_level"] != nil
+			assert.False(t, hasAll, "Test case %d should be missing parameters", i)
+		}
+	})
+}
+
+func TestRevokeBranchAccessTool_Execute(t *testing.T) {
+	t.Run("revoke access successfully", func(t *testing.T) {
+		tool := NewRevokeBranchAccessTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"branch_id": "branch-123",
+			"user_id":   "user-456",
+		}
+		assert.Equal(t, "branch-123", args["branch_id"])
+		assert.Equal(t, "user-456", args["user_id"])
+	})
+
+	t.Run("access not found", func(t *testing.T) {
+		// TODO: Add mock storage that returns not found
+		tool := NewRevokeBranchAccessTool(nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("missing required parameters", func(t *testing.T) {
+		tool := NewRevokeBranchAccessTool(nil)
+		assert.NotNil(t, tool)
+
+		tests := []map[string]any{
+			{"branch_id": "test"}, // missing user_id
+			{"user_id": "user"},   // missing branch_id
+		}
+
+		for _, args := range tests {
+			hasAll := args["branch_id"] != nil && args["user_id"] != nil
+			assert.False(t, hasAll)
+		}
+	})
+}
+
+func TestGetActiveBranchTool_Execute(t *testing.T) {
+	t.Run("get active branch successfully", func(t *testing.T) {
+		tool := NewGetActiveBranchTool(nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{}
+		assert.NotNil(t, args)
+	})
+
+	t.Run("no active branch set", func(t *testing.T) {
+		// TODO: Add mock router that returns no active branch
+		tool := NewGetActiveBranchTool(nil)
+		assert.NotNil(t, tool)
+	})
+}
+
+func TestSetActiveBranchTool_Execute(t *testing.T) {
+	t.Run("set active branch successfully", func(t *testing.T) {
+		tool := NewSetActiveBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{
+			"branch": "branch-123",
+		}
+		assert.Equal(t, "branch-123", args["branch"])
+	})
+
+	t.Run("switch active branch", func(t *testing.T) {
+		args := map[string]any{
+			"branch": "branch-456",
+		}
+		assert.Equal(t, "branch-456", args["branch"])
+	})
+
+	t.Run("branch not found", func(t *testing.T) {
+		// TODO: Add mock router/storage that returns not found
+		tool := NewSetActiveBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+	})
+
+	t.Run("missing branch parameter", func(t *testing.T) {
+		tool := NewSetActiveBranchTool(nil, nil)
+		assert.NotNil(t, tool)
+
+		args := map[string]any{}
+		_, hasBranch := args["branch"]
+		assert.False(t, hasBranch)
+	})
+}

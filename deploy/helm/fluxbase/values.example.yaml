@@ -18,6 +18,8 @@ httpRoute:
   enabled: true
   parentRefs:
     - name: public-gateway
+      group: gateway.networking.k8s.io
+      kind: Gateway
       namespace: nginx-gateway
       sectionName: https-yourdomain-com
   hostname: flux.yourdomain.com

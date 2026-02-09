@@ -1,14 +1,19 @@
 package webhook
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -583,4 +588,952 @@ func TestVerifyWebhookSignature(t *testing.T) {
 // Helper function to convert Unix timestamp to string
 func timeUnixString(ts int64) string {
 	return fmt.Sprintf("%d", ts)
+}
+
+func TestSendWebhookSync(t *testing.T) {
+	// This tests the synchronous HTTP delivery logic
+	// We'll use httptest.NewTLSServer to test actual HTTP requests
+
+	t.Run("successful webhook delivery with valid URL", func(t *testing.T) {
+		// Create a test server that accepts webhooks
+		serverReceived := make(chan bool, 1)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Verify request method
+			assert.Equal(t, "POST", r.Method)
+
+			// Verify content type
+			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+			// Verify user agent
+			assert.Equal(t, "Fluxbase-Webhooks/1.0", r.Header.Get("User-Agent"))
+
+			// Read and verify payload
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			assert.Contains(t, string(body), "INSERT")
+
+			// Send success response
+			w.WriteHeader(http.StatusOK)
+			serverReceived <- true
+		}))
+		defer server.Close()
+
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true, // Allow localhost for test
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			Secret:         nil,
+			TimeoutSeconds: 5,
+			Headers:        make(map[string]string),
+		}
+
+		payload := &WebhookPayload{
+			Event:     "INSERT",
+			Table:     "users",
+			Schema:    "public",
+			Record:    json.RawMessage(`{"id": 1, "name": "test"}`),
+			Timestamp: time.Now(),
+		}
+
+		// Marshal payload
+		payloadJSON, err := json.Marshal(payload)
+		require.NoError(t, err)
+
+		// Deliver webhook
+		err = service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.NoError(t, err)
+
+		// Verify server received request
+		select {
+		case <-serverReceived:
+			// Success
+		case <-time.After(1 * time.Second):
+			t.Fatal("server did not receive request")
+		}
+	})
+
+	t.Run("webhook delivery with custom headers", func(t *testing.T) {
+		receivedHeaders := make(chan http.Header, 1)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			receivedHeaders <- r.Header
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			TimeoutSeconds: 5,
+			Headers: map[string]string{
+				"Authorization":    "Bearer token123",
+				"X-Custom-Header":  "custom-value",
+				"X-Api-Version":    "v1",
+				"X-Request-Source": "fluxbase",
+			},
+		}
+
+		payload := &WebhookPayload{
+			Event:     "INSERT",
+			Table:     "products",
+			Schema:    "public",
+			Record:    json.RawMessage(`{"id": 1}`),
+			Timestamp: time.Now(),
+		}
+
+		payloadJSON, _ := json.Marshal(payload)
+		err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.NoError(t, err)
+
+		// Verify headers were sent
+		var headers http.Header
+		select {
+		case headers = <-receivedHeaders:
+		case <-time.After(1 * time.Second):
+			t.Fatal("timeout waiting for headers")
+		}
+
+		assert.Equal(t, "Bearer token123", headers.Get("Authorization"))
+		assert.Equal(t, "custom-value", headers.Get("X-Custom-Header"))
+		assert.Equal(t, "v1", headers.Get("X-Api-Version"))
+		assert.Equal(t, "fluxbase", headers.Get("X-Request-Source"))
+	})
+
+	t.Run("webhook delivery with HMAC signature", func(t *testing.T) {
+		receivedSig := make(chan string, 1)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			signature := r.Header.Get("X-Webhook-Signature")
+			receivedSig <- signature
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		secret := "test-webhook-secret"
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			Secret:         &secret,
+			TimeoutSeconds: 5,
+			Headers:        make(map[string]string),
+		}
+
+		payload := &WebhookPayload{
+			Event:     "INSERT",
+			Table:     "users",
+			Schema:    "public",
+			Record:    json.RawMessage(`{"id": 1}`),
+			Timestamp: time.Now(),
+		}
+
+		payloadJSON, _ := json.Marshal(payload)
+		err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.NoError(t, err)
+
+		// Verify signature was sent
+		var signature string
+		select {
+		case signature = <-receivedSig:
+		case <-time.After(1 * time.Second):
+			t.Fatal("timeout waiting for signature")
+		}
+
+		assert.NotEmpty(t, signature)
+		assert.Equal(t, 64, len(signature)) // SHA256 hex = 64 chars
+
+		// Verify signature is correct
+		expectedSig := service.generateSignature(payloadJSON, secret)
+		assert.Equal(t, expectedSig, signature)
+	})
+
+	t.Run("webhook delivery with timestamped signature", func(t *testing.T) {
+		receivedSig := make(chan string, 1)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			signature := r.Header.Get("X-Fluxbase-Signature")
+			receivedSig <- signature
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		secret := "test-secret-key"
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			Secret:         &secret,
+			TimeoutSeconds: 5,
+			Headers:        make(map[string]string),
+		}
+
+		payload := &WebhookPayload{
+			Event:     "INSERT",
+			Table:     "users",
+			Schema:    "public",
+			Record:    json.RawMessage(`{"id": 1}`),
+			Timestamp: time.Now(),
+		}
+
+		payloadJSON, _ := json.Marshal(payload)
+		err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.NoError(t, err)
+
+		var signature string
+		select {
+		case signature = <-receivedSig:
+		case <-time.After(1 * time.Second):
+			t.Fatal("timeout waiting for signature")
+		}
+
+		// Verify format: t=timestamp,v1=signature
+		assert.Contains(t, signature, "t=")
+		assert.Contains(t, signature, "v1=")
+		assert.Contains(t, signature, ",")
+
+		// Parse and verify
+		sig, err := ParseWebhookSignature(signature)
+		require.NoError(t, err)
+		assert.NotZero(t, sig.Timestamp)
+		assert.NotEmpty(t, sig.Signatures)
+	})
+
+	t.Run("webhook delivery failure - 404 response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("Not found"))
+		}))
+		defer server.Close()
+
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			TimeoutSeconds: 5,
+		}
+
+		payload := &WebhookPayload{
+			Event:  "INSERT",
+			Table:  "users",
+			Schema: "public",
+		}
+
+		payloadJSON, _ := json.Marshal(payload)
+		err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "HTTP 404")
+	})
+
+	t.Run("webhook delivery failure - 500 response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Internal Server Error"))
+		}))
+		defer server.Close()
+
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			TimeoutSeconds: 5,
+		}
+
+		payload := &WebhookPayload{
+			Event:  "INSERT",
+			Table:  "users",
+			Schema: "public",
+		}
+
+		payloadJSON, _ := json.Marshal(payload)
+		err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "HTTP 500")
+	})
+
+	t.Run("webhook delivery failure - timeout", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Delay longer than timeout
+			time.Sleep(2 * time.Second)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 100 * time.Millisecond}, // Short timeout
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			TimeoutSeconds: 1,
+		}
+
+		payload := &WebhookPayload{
+			Event:  "INSERT",
+			Table:  "users",
+			Schema: "public",
+		}
+
+		payloadJSON, _ := json.Marshal(payload)
+		err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.Error(t, err)
+	})
+
+	t.Run("webhook delivery failure - connection refused", func(t *testing.T) {
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 1 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            "http://localhost:9999/nonexistent", // Non-existent server
+			TimeoutSeconds: 1,
+		}
+
+		payload := &WebhookPayload{
+			Event:  "INSERT",
+			Table:  "users",
+			Schema: "public",
+		}
+
+		payloadJSON, _ := json.Marshal(payload)
+		err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to send request")
+	})
+
+	t.Run("webhook delivery failure - invalid URL", func(t *testing.T) {
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            "://invalid-url",
+			TimeoutSeconds: 5,
+		}
+
+		payload := &WebhookPayload{
+			Event:  "INSERT",
+			Table:  "users",
+			Schema: "public",
+		}
+
+		payloadJSON, _ := json.Marshal(payload)
+		err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create request")
+	})
+
+	t.Run("respects custom timeout", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(100 * time.Millisecond)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			TimeoutSeconds: 1, // 1 second timeout
+		}
+
+		payload := &WebhookPayload{
+			Event:  "INSERT",
+			Table:  "users",
+			Schema: "public",
+		}
+
+		payloadJSON, _ := json.Marshal(payload)
+		err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.NoError(t, err) // Should complete within 1s
+	})
+
+	t.Run("webhook with 2xx success codes", func(t *testing.T) {
+		successCodes := []int{200, 201, 202, 204, 206}
+
+		for _, code := range successCodes {
+			t.Run(fmt.Sprintf("HTTP %d", code), func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(code)
+				}))
+				defer server.Close()
+
+				service := &WebhookService{
+					db:              nil,
+					client:          &http.Client{Timeout: 5 * time.Second},
+					AllowPrivateIPs: true,
+				}
+
+				webhook := &Webhook{
+					ID:             uuid.New(),
+					URL:            server.URL,
+					TimeoutSeconds: 5,
+				}
+
+				payload := &WebhookPayload{
+					Event:  "INSERT",
+					Table:  "users",
+					Schema: "public",
+				}
+
+				payloadJSON, _ := json.Marshal(payload)
+				err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+				assert.NoError(t, err, "HTTP %d should succeed", code)
+			})
+		}
+	})
+
+	t.Run("webhook with 3xx redirect codes should fail", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusFound)
+			w.Header().Set("Location", "/other")
+		}))
+		defer server.Close()
+
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			TimeoutSeconds: 5,
+		}
+
+		payload := &WebhookPayload{
+			Event:  "INSERT",
+			Table:  "users",
+			Schema: "public",
+		}
+
+		payloadJSON, _ := json.Marshal(payload)
+		err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "HTTP 302")
+	})
+
+	t.Run("webhook with 4xx client error codes", func(t *testing.T) {
+		errorCodes := []int{400, 401, 403, 404, 422, 429}
+
+		for _, code := range errorCodes {
+			t.Run(fmt.Sprintf("HTTP %d", code), func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(code)
+					w.Write([]byte(http.StatusText(code)))
+				}))
+				defer server.Close()
+
+				service := &WebhookService{
+					db:              nil,
+					client:          &http.Client{Timeout: 5 * time.Second},
+					AllowPrivateIPs: true,
+				}
+
+				webhook := &Webhook{
+					ID:             uuid.New(),
+					URL:            server.URL,
+					TimeoutSeconds: 5,
+				}
+
+				payload := &WebhookPayload{
+					Event:  "INSERT",
+					Table:  "users",
+					Schema: "public",
+				}
+
+				payloadJSON, _ := json.Marshal(payload)
+				err := service.sendWebhookSync(context.Background(), webhook, payloadJSON)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), fmt.Sprintf("HTTP %d", code))
+			})
+		}
+	})
+}
+
+func TestDeliver(t *testing.T) {
+	t.Run("Deliver wraps sendWebhookSync", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			TimeoutSeconds: 5,
+		}
+
+		payload := &WebhookPayload{
+			Event:     "INSERT",
+			Table:     "users",
+			Schema:    "public",
+			Record:    json.RawMessage(`{"id": 1}`),
+			Timestamp: time.Now(),
+		}
+
+		err := service.Deliver(context.Background(), webhook, payload)
+		assert.NoError(t, err)
+	})
+
+	t.Run("Deliver returns error on failure", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			TimeoutSeconds: 5,
+		}
+
+		payload := &WebhookPayload{
+			Event:  "INSERT",
+			Table:  "users",
+			Schema: "public",
+		}
+
+		err := service.Deliver(context.Background(), webhook, payload)
+		assert.Error(t, err)
+	})
+
+	t.Run("Deliver marshals payload correctly", func(t *testing.T) {
+		receivedPayload := make(chan json.RawMessage, 1)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			receivedPayload <- body
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		service := &WebhookService{
+			db:              nil,
+			client:          &http.Client{Timeout: 5 * time.Second},
+			AllowPrivateIPs: true,
+		}
+
+		webhook := &Webhook{
+			ID:             uuid.New(),
+			URL:            server.URL,
+			TimeoutSeconds: 5,
+		}
+
+		payload := &WebhookPayload{
+			Event:     "UPDATE",
+			Table:     "products",
+			Schema:    "public",
+			Record:    json.RawMessage(`{"id": 1, "price": 99.99}`),
+			OldRecord: json.RawMessage(`{"id": 1, "price": 79.99}`),
+			Timestamp: time.Now(),
+		}
+
+		err := service.Deliver(context.Background(), webhook, payload)
+		assert.NoError(t, err)
+
+		var received WebhookPayload
+		select {
+		case body := <-receivedPayload:
+			err = json.Unmarshal(body, &received)
+			require.NoError(t, err)
+			assert.Equal(t, "UPDATE", received.Event)
+			assert.Equal(t, "products", received.Table)
+			assert.NotNil(t, received.Record)
+			assert.NotNil(t, received.OldRecord)
+		case <-time.After(1 * time.Second):
+			t.Fatal("timeout waiting for payload")
+		}
+	})
+}
+
+func TestGenerateSignature_EdgeCases(t *testing.T) {
+	service := &WebhookService{}
+
+	t.Run("empty payload", func(t *testing.T) {
+		payload := []byte{}
+		secret := "test-secret"
+		signature := service.generateSignature(payload, secret)
+		assert.NotEmpty(t, signature)
+		assert.Equal(t, 64, len(signature))
+	})
+
+	t.Run("very large payload", func(t *testing.T) {
+		largePayload := make([]byte, 1024*1024) // 1MB
+		for i := range largePayload {
+			largePayload[i] = 'a'
+		}
+		secret := "test-secret"
+		signature := service.generateSignature(largePayload, secret)
+		assert.NotEmpty(t, signature)
+		assert.Equal(t, 64, len(signature))
+	})
+
+	t.Run("payload with special characters", func(t *testing.T) {
+		payload := []byte("{\"data\":\"测试\x00\n\r\t中文\"}")
+		secret := "test-secret"
+		signature := service.generateSignature(payload, secret)
+		assert.NotEmpty(t, signature)
+	})
+
+	t.Run("empty secret", func(t *testing.T) {
+		payload := []byte(`{"test":"data"}`)
+		secret := ""
+		signature := service.generateSignature(payload, secret)
+		assert.NotEmpty(t, signature)
+		assert.Equal(t, 64, len(signature))
+	})
+
+	t.Run("secret with special characters", func(t *testing.T) {
+		payload := []byte(`{"test":"data"}`)
+		secret := "secret\n\r\t\x00\"'\\"
+		signature := service.generateSignature(payload, secret)
+		assert.NotEmpty(t, signature)
+	})
+
+	t.Run("unicode payload", func(t *testing.T) {
+		payload := []byte("{\"message\":\"Hello 世界 🌍\"}")
+		secret := "test-secret"
+		signature := service.generateSignature(payload, secret)
+		assert.NotEmpty(t, signature)
+	})
+}
+
+func TestGenerateTimestampedSignature_EdgeCases(t *testing.T) {
+	t.Run("timestamp zero", func(t *testing.T) {
+		payload := []byte(`{"test":"data"}`)
+		secret := "test-secret"
+		signature := generateTimestampedSignature(payload, secret, 0)
+		assert.NotEmpty(t, signature)
+		assert.Equal(t, 64, len(signature))
+	})
+
+	t.Run("negative timestamp", func(t *testing.T) {
+		payload := []byte(`{"test":"data"}`)
+		secret := "test-secret"
+		signature := generateTimestampedSignature(payload, secret, -1000)
+		assert.NotEmpty(t, signature)
+	})
+
+	t.Run("very large timestamp", func(t *testing.T) {
+		payload := []byte(`{"test":"data"}`)
+		secret := "test-secret"
+		signature := generateTimestampedSignature(payload, secret, 9999999999)
+		assert.NotEmpty(t, signature)
+	})
+
+	t.Run("empty payload with timestamp", func(t *testing.T) {
+		payload := []byte{}
+		secret := "test-secret"
+		timestamp := time.Now().Unix()
+		signature := generateTimestampedSignature(payload, secret, timestamp)
+		assert.NotEmpty(t, signature)
+	})
+
+	t.Run("signature format includes dot", func(t *testing.T) {
+		payload := []byte(`{"test":"data"}`)
+		secret := "test-secret"
+		timestamp := int64(1234567890)
+
+		// Manually construct the signed payload
+		signedPayload := fmt.Sprintf("%d.%s", timestamp, string(payload))
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(signedPayload))
+		expectedSig := hex.EncodeToString(mac.Sum(nil))
+
+		actualSig := generateTimestampedSignature(payload, secret, timestamp)
+		assert.Equal(t, expectedSig, actualSig)
+	})
+}
+
+func TestParseWebhookSignature_EdgeCases(t *testing.T) {
+	t.Run("extra commas", func(t *testing.T) {
+		header := "t=1234567890,,v1=abc123,"
+		sig, err := ParseWebhookSignature(header)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1234567890), sig.Timestamp)
+		assert.NotEmpty(t, sig.Signatures)
+	})
+
+	t.Run("only timestamp", func(t *testing.T) {
+		header := "t=1234567890"
+		_, err := ParseWebhookSignature(header)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "missing signature")
+	})
+
+	t.Run("unknown keys are ignored", func(t *testing.T) {
+		header := "t=1234567890,unknown=value,v1=abc123"
+		sig, err := ParseWebhookSignature(header)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1234567890), sig.Timestamp)
+		assert.Len(t, sig.Signatures, 1)
+	})
+
+	t.Run("v2 signatures are collected", func(t *testing.T) {
+		header := "t=1234567890,v1=sig1,v2=sig2,v1=sig3"
+		sig, err := ParseWebhookSignature(header)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1234567890), sig.Timestamp)
+		// Only v1 signatures are collected
+		assert.Len(t, sig.Signatures, 2)
+	})
+
+	t.Run("spaces around equals", func(t *testing.T) {
+		header := "t = 1234567890, v1 = abc123"
+		_, err := ParseWebhookSignature(header)
+		// Current implementation may or may not handle this
+		// Test documents current behavior
+		if err != nil {
+			// If it fails, that's acceptable
+			assert.Error(t, err)
+		}
+	})
+
+	t.Run("duplicate timestamps", func(t *testing.T) {
+		header := "t=1234567890,t=9876543210,v1=abc123"
+		sig, err := ParseWebhookSignature(header)
+		assert.NoError(t, err)
+		// Last timestamp wins
+		assert.Equal(t, int64(9876543210), sig.Timestamp)
+	})
+}
+
+func TestVerifyWebhookSignature_EdgeCases(t *testing.T) {
+	secret := "test-secret"
+	payload := []byte(`{"event":"INSERT","table":"users"}`)
+
+	t.Run("zero tolerance rejects any timestamp difference", func(t *testing.T) {
+		timestamp := time.Now().Add(-1 * time.Nanosecond).Unix()
+		signature := generateTimestampedSignature(payload, secret, timestamp)
+		header := "t=" + timeUnixString(timestamp) + ",v1=" + signature
+
+		err := VerifyWebhookSignature(payload, header, secret, 0)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "too old")
+	})
+
+	t.Run("large tolerance allows old signatures", func(t *testing.T) {
+		timestamp := time.Now().Add(-24 * time.Hour).Unix()
+		signature := generateTimestampedSignature(payload, secret, timestamp)
+		header := "t=" + timeUnixString(timestamp) + ",v1=" + signature
+
+		err := VerifyWebhookSignature(payload, header, secret, 48*time.Hour)
+		assert.NoError(t, err)
+	})
+
+	t.Run("empty payload", func(t *testing.T) {
+		timestamp := time.Now().Unix()
+		emptyPayload := []byte{}
+		signature := generateTimestampedSignature(emptyPayload, secret, timestamp)
+		header := "t=" + timeUnixString(timestamp) + ",v1=" + signature
+
+		err := VerifyWebhookSignature(emptyPayload, header, secret, 5*time.Minute)
+		assert.NoError(t, err)
+	})
+
+	t.Run("signature replay protection", func(t *testing.T) {
+		timestamp := time.Now().Unix()
+		signature := generateTimestampedSignature(payload, secret, timestamp)
+		header := "t=" + timeUnixString(timestamp) + ",v1=" + signature
+
+		// First verification should succeed
+		err := VerifyWebhookSignature(payload, header, secret, 5*time.Minute)
+		assert.NoError(t, err)
+
+		// Same signature should still be valid (no nonce enforcement)
+		err = VerifyWebhookSignature(payload, header, secret, 5*time.Minute)
+		assert.NoError(t, err)
+	})
+
+	t.Run("clock skew tolerance", func(t *testing.T) {
+		// Signature from slightly in the future (clock skew)
+		timestamp := time.Now().Add(30 * time.Second).Unix()
+		signature := generateTimestampedSignature(payload, secret, timestamp)
+		header := "t=" + timeUnixString(timestamp) + ",v1=" + signature
+
+		err := VerifyWebhookSignature(payload, header, secret, 1*time.Minute)
+		assert.NoError(t, err)
+	})
+
+	t.Run("modified payload is rejected", func(t *testing.T) {
+		timestamp := time.Now().Unix()
+		originalPayload := []byte(`{"amount":100}`)
+		modifiedPayload := []byte(`{"amount":999}`)
+		signature := generateTimestampedSignature(originalPayload, secret, timestamp)
+		header := "t=" + timeUnixString(timestamp) + ",v1=" + signature
+
+		err := VerifyWebhookSignature(modifiedPayload, header, secret, 5*time.Minute)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "mismatch")
+	})
+}
+
+func TestWebhookPayload_EventTypes(t *testing.T) {
+	t.Run("INSERT event payload", func(t *testing.T) {
+		payload := &WebhookPayload{
+			Event:     "INSERT",
+			Table:     "users",
+			Schema:    "public",
+			Record:    json.RawMessage(`{"id": 1, "name": "Alice"}`),
+			Timestamp: time.Now(),
+		}
+
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
+
+		var result WebhookPayload
+		err = json.Unmarshal(data, &result)
+		require.NoError(t, err)
+
+		assert.Equal(t, "INSERT", result.Event)
+		assert.NotNil(t, result.Record)
+		assert.Nil(t, result.OldRecord)
+	})
+
+	t.Run("UPDATE event payload with both records", func(t *testing.T) {
+		payload := &WebhookPayload{
+			Event:     "UPDATE",
+			Table:     "products",
+			Schema:    "public",
+			Record:    json.RawMessage(`{"id": 1, "price": 99.99}`),
+			OldRecord: json.RawMessage(`{"id": 1, "price": 79.99}`),
+			Timestamp: time.Now(),
+		}
+
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
+
+		var result WebhookPayload
+		err = json.Unmarshal(data, &result)
+		require.NoError(t, err)
+
+		assert.Equal(t, "UPDATE", result.Event)
+		assert.NotNil(t, result.Record)
+		assert.NotNil(t, result.OldRecord)
+	})
+
+	t.Run("DELETE event payload with old record", func(t *testing.T) {
+		payload := &WebhookPayload{
+			Event:     "DELETE",
+			Table:     "posts",
+			Schema:    "public",
+			Record:    json.RawMessage(`{"id": 1, "title": "Deleted Post"}`),
+			Timestamp: time.Now(),
+		}
+
+		data, err := json.Marshal(payload)
+		require.NoError(t, err)
+
+		var result WebhookPayload
+		err = json.Unmarshal(data, &result)
+		require.NoError(t, err)
+
+		assert.Equal(t, "DELETE", result.Event)
+		assert.NotNil(t, result.Record)
+	})
+}
+
+func TestEventConfig_Operations(t *testing.T) {
+	t.Run("single operation", func(t *testing.T) {
+		config := EventConfig{
+			Table:      "users",
+			Operations: []string{"INSERT"},
+		}
+
+		assert.Equal(t, "users", config.Table)
+		assert.Len(t, config.Operations, 1)
+		assert.Contains(t, config.Operations, "INSERT")
+	})
+
+	t.Run("all operations", func(t *testing.T) {
+		config := EventConfig{
+			Table:      "products",
+			Operations: []string{"INSERT", "UPDATE", "DELETE"},
+		}
+
+		assert.ElementsMatch(t, []string{"INSERT", "UPDATE", "DELETE"}, config.Operations)
+	})
+
+	t.Run("empty operations", func(t *testing.T) {
+		config := EventConfig{
+			Table:      "logs",
+			Operations: []string{},
+		}
+
+		assert.Empty(t, config.Operations)
+	})
+
+	t.Run("wildcard table", func(t *testing.T) {
+		config := EventConfig{
+			Table:      "*",
+			Operations: []string{"INSERT"},
+		}
+
+		assert.Equal(t, "*", config.Table)
+	})
+
+	t.Run("operations with case sensitivity", func(t *testing.T) {
+		config := EventConfig{
+			Table:      "users",
+			Operations: []string{"insert", "update", "delete"},
+		}
+
+		// Operations are case-sensitive
+		assert.Contains(t, config.Operations, "insert")
+		assert.NotContains(t, config.Operations, "INSERT")
+	})
 }

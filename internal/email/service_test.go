@@ -295,3 +295,212 @@ func BenchmarkNoOpService_Send(b *testing.B) {
 		_ = service.Send(ctx, "test@example.com", "Subject", "Body")
 	}
 }
+
+// =============================================================================
+// TestEmailService Tests
+// =============================================================================
+
+func TestTestEmailService(t *testing.T) {
+	t.Run("NewTestEmailService creates service", func(t *testing.T) {
+		service := NewTestEmailService()
+
+		assert.NotNil(t, service)
+		assert.True(t, service.IsConfigured())
+	})
+
+	t.Run("SendMagicLink succeeds", func(t *testing.T) {
+		service := NewTestEmailService()
+
+		err := service.SendMagicLink(context.Background(), "user@example.com", "token", "https://example.com")
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("SendVerificationEmail succeeds", func(t *testing.T) {
+		service := NewTestEmailService()
+
+		err := service.SendVerificationEmail(context.Background(), "user@example.com", "token", "https://example.com")
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("SendPasswordReset succeeds", func(t *testing.T) {
+		service := NewTestEmailService()
+
+		err := service.SendPasswordReset(context.Background(), "user@example.com", "token", "https://example.com")
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("SendInvitationEmail succeeds", func(t *testing.T) {
+		service := NewTestEmailService()
+
+		err := service.SendInvitationEmail(context.Background(), "user@example.com", "Inviter Name", "https://example.com")
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("Send succeeds", func(t *testing.T) {
+		service := NewTestEmailService()
+
+		err := service.Send(context.Background(), "user@example.com", "Subject", "Body")
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("IsConfigured returns true", func(t *testing.T) {
+		service := NewTestEmailService()
+
+		assert.True(t, service.IsConfigured())
+	})
+}
+
+// =============================================================================
+// Additional NewService Edge Cases
+// =============================================================================
+
+func TestNewService_EdgeCases(t *testing.T) {
+	t.Run("nil config returns NoOpService", func(t *testing.T) {
+		service, err := NewService(nil)
+
+		require.NoError(t, err)
+		assert.False(t, service.IsConfigured())
+
+		// Should be NoOpService
+		err = service.Send(context.Background(), "test@example.com", "Subject", "Body")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "disabled")
+	})
+}
+
+// =============================================================================
+// Service Interface Compliance Tests
+// =============================================================================
+
+func TestAllServicesImplementInterface(t *testing.T) {
+	t.Run("NoOpService implements Service", func(t *testing.T) {
+		var _ Service = &NoOpService{}
+	})
+
+	t.Run("TestEmailService implements Service", func(t *testing.T) {
+		var _ Service = &TestEmailService{}
+	})
+}
+
+// =============================================================================
+// Context Handling Tests
+// =============================================================================
+
+func TestNoOpService_ContextHandling(t *testing.T) {
+	service := NewNoOpService("test")
+
+	t.Run("handles nil context", func(t *testing.T) {
+		// Should not panic
+		err := service.SendMagicLink(nil, "user@example.com", "token", "link")
+		assert.Error(t, err)
+	})
+
+	t.Run("handles cancelled context", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		err := service.Send(ctx, "user@example.com", "Subject", "Body")
+		assert.Error(t, err)
+	})
+}
+
+func TestTestEmailService_ContextHandling(t *testing.T) {
+	service := NewTestEmailService()
+
+	t.Run("handles nil context gracefully", func(t *testing.T) {
+		// Should not panic
+		err := service.Send(nil, "user@example.com", "Subject", "Body")
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles cancelled context", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		err := service.Send(ctx, "user@example.com", "Subject", "Body")
+		assert.NoError(t, err)
+	})
+}
+
+// =============================================================================
+// Error Message Tests
+// =============================================================================
+
+func TestNoOpService_ErrorMessages(t *testing.T) {
+	service := NewNoOpService("email service not available")
+
+	t.Run("SendMagicLink error includes reason", func(t *testing.T) {
+		err := service.SendMagicLink(context.Background(), "user@example.com", "token", "link")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "email service not available")
+	})
+
+	t.Run("SendVerificationEmail error includes reason", func(t *testing.T) {
+		err := service.SendVerificationEmail(context.Background(), "user@example.com", "token", "link")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "email service not available")
+	})
+
+	t.Run("SendPasswordReset error includes reason", func(t *testing.T) {
+		err := service.SendPasswordReset(context.Background(), "user@example.com", "token", "link")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "email service not available")
+	})
+
+	t.Run("SendInvitationEmail error includes reason", func(t *testing.T) {
+		err := service.SendInvitationEmail(context.Background(), "user@example.com", "Inviter", "link")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "email service not available")
+	})
+}
+
+// =============================================================================
+// Empty/Whitespace Input Tests
+// =============================================================================
+
+func TestNoOpService_EmptyInputs(t *testing.T) {
+	service := NewNoOpService("test")
+
+	t.Run("handles empty email address", func(t *testing.T) {
+		err := service.Send(context.Background(), "", "Subject", "Body")
+		assert.Error(t, err)
+	})
+
+	t.Run("handles empty subject", func(t *testing.T) {
+		err := service.Send(context.Background(), "user@example.com", "", "Body")
+		assert.Error(t, err)
+	})
+
+	t.Run("handles empty body", func(t *testing.T) {
+		err := service.Send(context.Background(), "user@example.com", "Subject", "")
+		assert.Error(t, err)
+	})
+}
+
+func TestTestEmailService_EmptyInputs(t *testing.T) {
+	service := NewTestEmailService()
+
+	t.Run("handles empty email address", func(t *testing.T) {
+		err := service.Send(context.Background(), "", "Subject", "Body")
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles empty subject", func(t *testing.T) {
+		err := service.Send(context.Background(), "user@example.com", "", "Body")
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles empty body", func(t *testing.T) {
+		err := service.Send(context.Background(), "user@example.com", "Subject", "")
+		assert.NoError(t, err)
+	})
+}

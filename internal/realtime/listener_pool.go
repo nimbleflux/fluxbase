@@ -57,6 +57,7 @@ type ListenerPool struct {
 	notificationsProcessed uint64
 	connectionFailures     uint64
 	reconnections          uint64
+	stopped                int32 // Atomic flag to prevent double-close
 }
 
 // NewListenerPool creates a new listener pool with the given configuration.
@@ -133,6 +134,12 @@ func (lp *ListenerPool) Start() error {
 
 // Stop gracefully shuts down the listener pool.
 func (lp *ListenerPool) Stop() {
+	// Check if already stopped (prevent double-close)
+	if !atomic.CompareAndSwapInt32(&lp.stopped, 0, 1) {
+		log.Debug().Msg("Listener pool already stopped")
+		return
+	}
+
 	log.Info().Msg("Stopping listener pool...")
 
 	// Signal all goroutines to stop

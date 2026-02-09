@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -591,4 +592,495 @@ func expiresInHour() time.Time {
 
 func expiredHourAgo() time.Time {
 	return time.Now().Add(-time.Hour)
+}
+
+// =============================================================================
+// Additional User Repository Edge Case Tests
+// =============================================================================
+
+func TestMockUserRepository_Create_WithMetadata(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	req := CreateUserRequest{
+		Email: "test@example.com",
+		UserMetadata: map[string]interface{}{
+			"name":  "Test User",
+			"theme": "dark",
+		},
+		AppMetadata: map[string]interface{}{
+			"role":      "user",
+			"plan":      "free",
+			"createdBy": "admin",
+		},
+	}
+
+	user, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+	assert.NotNil(t, user.UserMetadata)
+	assert.NotNil(t, user.AppMetadata)
+}
+
+func TestMockUserRepository_Create_DefaultRole(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	req := CreateUserRequest{
+		Email: "test@example.com",
+		// No role specified
+	}
+
+	user, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+	assert.Equal(t, "authenticated", user.Role, "Default role should be 'authenticated'")
+}
+
+func TestMockUserRepository_Create_CustomRole(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	req := CreateUserRequest{
+		Email: "admin@example.com",
+		Role:  "admin",
+	}
+
+	user, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+	assert.Equal(t, "admin", user.Role)
+}
+
+func TestMockUserRepository_Create_EmptyPasswordHash(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	req := CreateUserRequest{Email: "nopass@example.com"}
+
+	user, err := repo.Create(ctx, req, "")
+	require.NoError(t, err)
+	assert.Empty(t, user.PasswordHash)
+}
+
+func TestMockUserRepository_Update_MetadataOnly(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user
+	req := CreateUserRequest{Email: "test@example.com"}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+
+	// Update only metadata
+	newMetadata := map[string]interface{}{
+		"updated": true,
+		"count":   42,
+	}
+	updateReq := UpdateUserRequest{
+		UserMetadata: newMetadata,
+	}
+
+	updated, err := repo.Update(ctx, created.ID, updateReq)
+	require.NoError(t, err)
+	assert.Equal(t, newMetadata, updated.UserMetadata)
+}
+
+func TestMockUserRepository_Update_PartialUpdate(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user
+	req := CreateUserRequest{
+		Email: "test@example.com",
+		UserMetadata: map[string]interface{}{
+			"name": "Old Name",
+		},
+	}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+
+	// Update only email
+	newEmail := "newemail@example.com"
+	updateReq := UpdateUserRequest{
+		Email: &newEmail,
+	}
+
+	updated, err := repo.Update(ctx, created.ID, updateReq)
+	require.NoError(t, err)
+	assert.Equal(t, newEmail, updated.Email)
+	assert.NotNil(t, updated.UserMetadata, "Other fields should remain")
+}
+
+func TestMockUserRepository_Update_NoChanges(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user
+	req := CreateUserRequest{Email: "test@example.com"}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+
+	// Update with empty request (no changes)
+	updateReq := UpdateUserRequest{}
+
+	updated, err := repo.Update(ctx, created.ID, updateReq)
+	require.NoError(t, err)
+	assert.Equal(t, created.Email, updated.Email)
+}
+
+func TestMockUserRepository_UpdateEmail(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user
+	req := CreateUserRequest{Email: "old@example.com"}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+
+	// Update email
+	newEmail := "new@example.com"
+	err = repo.UpdateEmail(ctx, created.ID, newEmail)
+	require.NoError(t, err)
+
+	// Verify email updated
+	retrieved, err := repo.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	assert.Equal(t, newEmail, retrieved.Email)
+
+	// Old email should not work
+	_, err = repo.GetByEmail(ctx, "old@example.com")
+	assert.ErrorIs(t, err, ErrUserNotFound)
+}
+
+func TestMockUserRepository_UpdateEmail_NotFound(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	err := repo.UpdateEmail(ctx, "nonexistent-id", "new@example.com")
+	assert.ErrorIs(t, err, ErrUserNotFound)
+}
+
+func TestMockUserRepository_UpdatePassword_EmptyHash(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user with password
+	req := CreateUserRequest{Email: "test@example.com"}
+	created, err := repo.Create(ctx, req, "old-hash")
+	require.NoError(t, err)
+
+	// Update to empty password hash
+	err = repo.UpdatePassword(ctx, created.ID, "")
+	require.NoError(t, err)
+
+	// Verify password cleared
+	retrieved, err := repo.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	assert.Empty(t, retrieved.PasswordHash)
+}
+
+func TestMockUserRepository_VerifyEmail_AlreadyVerified(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user
+	req := CreateUserRequest{Email: "test@example.com"}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+
+	// Verify email first time
+	err = repo.VerifyEmail(ctx, created.ID)
+	require.NoError(t, err)
+
+	// Verify again (should be idempotent)
+	err = repo.VerifyEmail(ctx, created.ID)
+	require.NoError(t, err)
+
+	retrieved, err := repo.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	assert.True(t, retrieved.EmailVerified)
+}
+
+func TestMockUserRepository_IncrementFailedLoginAttempts_LockThreshold(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user
+	req := CreateUserRequest{Email: "test@example.com"}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+
+	// Increment 5 times (lock threshold)
+	for i := 0; i < 5; i++ {
+		err = repo.IncrementFailedLoginAttempts(ctx, created.ID)
+		require.NoError(t, err)
+	}
+
+	// Check count and locked status
+	retrieved, err := repo.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 5, retrieved.FailedLoginAttempts)
+	assert.True(t, retrieved.IsLocked, "User should be locked after 5 failed attempts")
+}
+
+func TestMockUserRepository_ResetFailedLoginAttempts_UnlocksAccount(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user and lock it
+	req := CreateUserRequest{Email: "test@example.com"}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+
+	// Increment enough to lock
+	for i := 0; i < 5; i++ {
+		_ = repo.IncrementFailedLoginAttempts(ctx, created.ID)
+	}
+
+	// Verify locked
+	retrieved, _ := repo.GetByID(ctx, created.ID)
+	assert.True(t, retrieved.IsLocked)
+
+	// Reset should unlock
+	err = repo.ResetFailedLoginAttempts(ctx, created.ID)
+	require.NoError(t, err)
+
+	// Verify unlocked
+	retrieved, err = repo.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	assert.False(t, retrieved.IsLocked)
+	assert.Equal(t, 0, retrieved.FailedLoginAttempts)
+}
+
+func TestMockUserRepository_LockUser(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user
+	req := CreateUserRequest{Email: "test@example.com"}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+
+	// Lock user
+	lockDuration := 1 * time.Hour
+	err = repo.LockUser(ctx, created.ID, lockDuration)
+	require.NoError(t, err)
+
+	// Verify locked
+	retrieved, err := repo.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	assert.True(t, retrieved.IsLocked)
+	assert.NotNil(t, retrieved.LockedUntil)
+	assert.True(t, retrieved.LockedUntil.After(time.Now()))
+}
+
+func TestMockUserRepository_LockUser_NotFound(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	err := repo.LockUser(ctx, "nonexistent-id", 1*time.Hour)
+	assert.ErrorIs(t, err, ErrUserNotFound)
+}
+
+func TestMockUserRepository_UnlockUser_NotLocked(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user
+	req := CreateUserRequest{Email: "test@example.com"}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+
+	// Unlock already unlocked user (should be idempotent)
+	err = repo.UnlockUser(ctx, created.ID)
+	require.NoError(t, err)
+
+	retrieved, err := repo.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	assert.False(t, retrieved.IsLocked)
+}
+
+func TestMockUserRepository_Delete_EmailAlsoRemoved(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user
+	req := CreateUserRequest{Email: "test@example.com"}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+
+	// Delete user
+	err = repo.Delete(ctx, created.ID)
+	require.NoError(t, err)
+
+	// Verify email mapping also removed
+	_, err = repo.GetByEmail(ctx, "test@example.com")
+	assert.ErrorIs(t, err, ErrUserNotFound)
+}
+
+func TestMockUserRepository_List_Pagination(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create 25 users
+	for i := 0; i < 25; i++ {
+		email := fmt.Sprintf("user%d@example.com", i)
+		req := CreateUserRequest{Email: email}
+		_, _ = repo.Create(ctx, req, "hash")
+	}
+
+	// First page
+	users, err := repo.List(ctx, 10, 0)
+	require.NoError(t, err)
+	assert.Len(t, users, 10)
+
+	// Second page
+	users, err = repo.List(ctx, 10, 10)
+	require.NoError(t, err)
+	assert.Len(t, users, 10)
+
+	// Third page (partial)
+	users, err = repo.List(ctx, 10, 20)
+	require.NoError(t, err)
+	assert.Len(t, users, 5)
+
+	// Empty page
+	users, err = repo.List(ctx, 10, 30)
+	require.NoError(t, err)
+	assert.Len(t, users, 0)
+}
+
+func TestMockUserRepository_List_LargeLimit(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create 5 users
+	for i := 0; i < 5; i++ {
+		email := fmt.Sprintf("user%d@example.com", i)
+		req := CreateUserRequest{Email: email}
+		_, _ = repo.Create(ctx, req, "hash")
+	}
+
+	// Request more than available
+	users, err := repo.List(ctx, 100, 0)
+	require.NoError(t, err)
+	assert.Len(t, users, 5)
+}
+
+func TestMockUserRepository_Count_Empty(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	count, err := repo.Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
+func TestMockUserRepository_UpdateRole(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	// Create user with default role
+	req := CreateUserRequest{Email: "user@example.com"}
+	created, err := repo.Create(ctx, req, "hash")
+	require.NoError(t, err)
+	assert.Equal(t, "authenticated", created.Role)
+
+	// Update to admin
+	newRole := "admin"
+	err = repo.UpdateRole(ctx, created.ID, newRole)
+	require.NoError(t, err)
+
+	// Verify role updated
+	retrieved, err := repo.GetByID(ctx, created.ID)
+	require.NoError(t, err)
+	assert.Equal(t, newRole, retrieved.Role)
+}
+
+func TestMockUserRepository_UpdateRole_NotFound(t *testing.T) {
+	repo := NewMockUserRepository()
+	ctx := context.Background()
+
+	err := repo.UpdateRole(ctx, "nonexistent-id", "admin")
+	assert.ErrorIs(t, err, ErrUserNotFound)
+}
+
+func TestQuoteIdentifier(t *testing.T) {
+	tests := []struct {
+		name       string
+		identifier string
+		expected   string
+	}{
+		{
+			name:       "simple identifier",
+			identifier: "users",
+			expected:   `"users"`,
+		},
+		{
+			name:       "identifier with space",
+			identifier: "user table",
+			expected:   `"user table"`,
+		},
+		{
+			name:       "identifier with quote",
+			identifier: `user"table`,
+			expected:   `"user""table"`,
+		},
+		{
+			name:       "identifier with multiple quotes",
+			identifier: `user""table`,
+			expected:   `"user""""table"`,
+		},
+		{
+			name:       "empty identifier",
+			identifier: "",
+			expected:   `""`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := quoteIdentifier(tt.identifier)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestQuoteTableName(t *testing.T) {
+	tests := []struct {
+		name     string
+		schema   string
+		table    string
+		expected string
+	}{
+		{
+			name:     "simple names",
+			schema:   "public",
+			table:    "users",
+			expected: `"public"."users"`,
+		},
+		{
+			name:     "schema with space",
+			schema:   "my schema",
+			table:    "users",
+			expected: `"my schema"."users"`,
+		},
+		{
+			name:     "table with quote",
+			schema:   "public",
+			table:    `user"table`,
+			expected: `"public"."user""table"`,
+		},
+		{
+			name:     "both with special chars",
+			schema:   `my"schema`,
+			table:    `user"table`,
+			expected: `"my""schema"."user""table"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := quoteTableName(tt.schema, tt.table)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

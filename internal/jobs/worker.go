@@ -45,12 +45,23 @@ func NewWorker(cfg *config.JobsConfig, storage *Storage, jwtSecret, publicURL st
 	workerID := uuid.New()
 	hostname, _ := os.Hostname()
 
+	// Provide defaults for nil config
+	var maxDuration time.Duration
+	var maxConcurrent int
+	if cfg != nil {
+		maxDuration = cfg.DefaultMaxDuration
+		maxConcurrent = cfg.MaxConcurrentPerWorker
+	}
+	if maxConcurrent == 0 {
+		maxConcurrent = 5 // Default concurrency
+	}
+
 	// Create runtime with SDK credentials
 	jobRuntime := runtime.NewRuntime(
 		runtime.RuntimeTypeJob,
 		jwtSecret,
 		publicURL,
-		runtime.WithTimeout(cfg.DefaultMaxDuration),
+		runtime.WithTimeout(maxDuration),
 		runtime.WithMemoryLimit(128), // Default memory limit
 	)
 
@@ -61,7 +72,7 @@ func NewWorker(cfg *config.JobsConfig, storage *Storage, jwtSecret, publicURL st
 		Storage:          storage,
 		Runtime:          jobRuntime,
 		SecretsStorage:   secretsStorage,
-		MaxConcurrent:    cfg.MaxConcurrentPerWorker,
+		MaxConcurrent:    maxConcurrent,
 		publicURL:        publicURL,
 		shutdownChan:     make(chan struct{}),
 		shutdownComplete: make(chan struct{}),

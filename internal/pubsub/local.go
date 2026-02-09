@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"sync"
 )
 
@@ -79,6 +80,10 @@ func (l *LocalPubSub) Publish(ctx context.Context, channel string, payload []byt
 
 // Subscribe returns a channel that receives messages published to the given channel.
 func (l *LocalPubSub) Subscribe(ctx context.Context, channel string) (<-chan Message, error) {
+	if ctx == nil {
+		return nil, errors.New("context cannot be nil")
+	}
+
 	sub := &localSubscriber{
 		ch: make(chan Message, 100),
 	}

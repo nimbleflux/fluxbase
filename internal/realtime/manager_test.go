@@ -3,12 +3,66 @@ package realtime
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/fluxbase-eu/fluxbase/internal/pubsub"
 	"github.com/stretchr/testify/assert"
 )
+
+// mockPubSub implements pubsub.PubSub for testing
+type mockPubSub struct {
+	mu            sync.RWMutex
+	subscriptions map[string][]chan pubsub.Message
+	published     []pubsubMessage
+}
+
+type pubsubMessage struct {
+	Channel string
+	Payload []byte
+}
+
+func newMockPubSub() *mockPubSub {
+	return &mockPubSub{
+		subscriptions: make(map[string][]chan pubsub.Message),
+	}
+}
+
+func (m *mockPubSub) Publish(ctx context.Context, channel string, payload []byte) error {
+	m.mu.Lock()
+	m.published = append(m.published, pubsubMessage{Channel: channel, Payload: payload})
+	subs := m.subscriptions[channel]
+	m.mu.Unlock()
+
+	for _, ch := range subs {
+		select {
+		case ch <- pubsub.Message{Channel: channel, Payload: payload}:
+		default:
+		}
+	}
+	return nil
+}
+
+func (m *mockPubSub) Subscribe(ctx context.Context, channel string) (<-chan pubsub.Message, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ch := make(chan pubsub.Message, 100)
+	m.subscriptions[channel] = append(m.subscriptions[channel], ch)
+	return ch, nil
+}
+
+func (m *mockPubSub) Close() error {
+	return nil
+}
+
+func (m *mockPubSub) getPublishedMessages() []pubsubMessage {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return append([]pubsubMessage{}, m.published...)
+}
 
 func TestNewManager(t *testing.T) {
 	ctx := context.Background()
@@ -492,4 +546,509 @@ func TestManagerConfig_SlowClientFields(t *testing.T) {
 	assert.Equal(t, 100, config.MaxConnections)
 	assert.Equal(t, 150, config.SlowClientThreshold)
 	assert.Equal(t, 45*time.Second, config.SlowClientTimeout)
+}
+
+// =============================================================================
+// PubSub Tests (Global Broadcasting)
+// =============================================================================
+
+func TestManager_SetPubSub(t *testing.T) {
+	t.Run("sets pubsub backend", func(t *testing.T) {
+		manager := NewManager(context.Background())
+		mockPubSub := newMockPubSub()
+
+		manager.SetPubSub(mockPubSub)
+
+		assert.NotNil(t, manager.ps)
+		assert.Equal(t, mockPubSub, manager.ps)
+	})
+
+	t.Run("starts global broadcast handler when pubsub is set", func(t *testing.T) {
+		manager := NewManager(context.Background())
+		mockPubSub := newMockPubSub()
+
+		// Setting pubsub starts the goroutine
+		manager.SetPubSub(mockPubSub)
+
+		// Verify the manager has the pubsub reference
+		assert.Equal(t, mockPubSub, manager.ps)
+	})
+
+	t.Run("allows nil pubsub", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		// Should not panic
+		manager.SetPubSub(nil)
+
+		assert.Nil(t, manager.ps)
+	})
+}
+
+func TestManager_BroadcastGlobal(t *testing.T) {
+	t.Run("broadcasts locally when no pubsub configured", func(t *testing.T) {
+		ctx := context.Background()
+		manager := NewManager(ctx)
+
+		// Add a connection with subscription
+		conn, _ := manager.AddConnection("conn1", nil, nil, "anon", nil)
+		conn.Subscribe("test-channel")
+
+		// Broadcast should work without pubsub
+		message := ServerMessage{
+			Type:    MessageTypeBroadcast,
+			Channel: "test-channel",
+			Payload: map[string]interface{}{"test": "data"},
+		}
+
+		err := manager.BroadcastGlobal("test-channel", message)
+		assert.NoError(t, err)
+
+		// Verify the message was broadcast locally
+		count := manager.BroadcastToChannel("test-channel", message)
+		assert.Equal(t, 1, count)
+	})
+
+	t.Run("publishes to pubsub when configured", func(t *testing.T) {
+		ctx := context.Background()
+		manager := NewManager(ctx)
+		mockPubSub := newMockPubSub()
+
+		manager.SetPubSub(mockPubSub)
+
+		message := ServerMessage{
+			Type:    MessageTypeBroadcast,
+			Channel: "test-channel",
+			Payload: map[string]interface{}{"test": "data"},
+		}
+
+		err := manager.BroadcastGlobal("test-channel", message)
+		assert.NoError(t, err)
+
+		// Verify message was published to pubsub
+		published := mockPubSub.getPublishedMessages()
+		assert.Len(t, published, 1)
+		assert.Equal(t, pubsub.BroadcastChannel, published[0].Channel)
+	})
+}
+
+func TestManager_handleGlobalBroadcasts(t *testing.T) {
+	t.Run("subscribes to broadcast channel", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		manager := NewManager(ctx)
+		mockPubSub := newMockPubSub()
+
+		// Subscribe first (simulating what SetPubSub does)
+		ch, err := mockPubSub.Subscribe(ctx, pubsub.BroadcastChannel)
+		assert.NoError(t, err)
+
+		manager.ps = mockPubSub
+
+		// Start the handler (normally done by SetPubSub)
+		go manager.handleGlobalBroadcasts()
+
+		// Publish a message
+		broadcast := GlobalBroadcast{
+			Channel: "test-channel",
+			Message: ServerMessage{
+				Type:    MessageTypeBroadcast,
+				Channel: "test-channel",
+				Payload: map[string]interface{}{"test": "data"},
+			},
+		}
+		payload, _ := json.Marshal(broadcast)
+		mockPubSub.Publish(ctx, pubsub.BroadcastChannel, payload)
+
+		// Message should be received
+		select {
+		case <-ch:
+			// Success - message was published
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("Did not receive published message")
+		}
+	})
+}
+
+func TestManager_handleGlobalMessage(t *testing.T) {
+	t.Run("delivers message to subscribed connections", func(t *testing.T) {
+		ctx := context.Background()
+		manager := NewManager(ctx)
+
+		// Add connection with subscription
+		conn, _ := manager.AddConnection("conn1", nil, nil, "anon", nil)
+		conn.Subscribe("test-channel")
+
+		// Simulate a global broadcast message
+		broadcast := GlobalBroadcast{
+			Channel: "test-channel",
+			Message: ServerMessage{
+				Type:    MessageTypeBroadcast,
+				Channel: "test-channel",
+				Payload: map[string]interface{}{"test": "data"},
+			},
+		}
+		payload, _ := json.Marshal(broadcast)
+		msg := pubsub.Message{
+			Channel: pubsub.BroadcastChannel,
+			Payload: payload,
+		}
+
+		// Handle the message
+		manager.handleGlobalMessage(msg)
+
+		// Give time for async processing
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	t.Run("does not deliver to unsubscribed connections", func(t *testing.T) {
+		ctx := context.Background()
+		manager := NewManager(ctx)
+
+		// Add connection WITHOUT subscription
+		_, _ = manager.AddConnection("conn1", nil, nil, "anon", nil)
+
+		// Simulate a global broadcast message
+		broadcast := GlobalBroadcast{
+			Channel: "test-channel",
+			Message: ServerMessage{
+				Type:    MessageTypeBroadcast,
+				Channel: "test-channel",
+				Payload: map[string]interface{}{"test": "data"},
+			},
+		}
+		payload, _ := json.Marshal(broadcast)
+		msg := pubsub.Message{
+			Channel: pubsub.BroadcastChannel,
+			Payload: payload,
+		}
+
+		// Handle the message - should not panic
+		manager.handleGlobalMessage(msg)
+
+		// Give time for async processing
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	t.Run("handles invalid messages gracefully", func(t *testing.T) {
+		ctx := context.Background()
+		manager := NewManager(ctx)
+
+		// Invalid JSON
+		msg := pubsub.Message{
+			Channel: pubsub.BroadcastChannel,
+			Payload: []byte("invalid json"),
+		}
+
+		// Should not panic
+		manager.handleGlobalMessage(msg)
+	})
+}
+
+// =============================================================================
+// Metrics Tests
+// =============================================================================
+
+func TestManager_SetMetrics(t *testing.T) {
+	t.Run("sets metrics instance", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		// Initially nil
+		assert.Nil(t, manager.metrics)
+
+		// Note: We can't create a real Metrics instance without complex setup
+		// Just verify the method exists and doesn't panic
+		manager.SetMetrics(nil)
+
+		assert.Nil(t, manager.metrics)
+	})
+}
+
+func TestManager_updateMetrics(t *testing.T) {
+	t.Run("does not panic when metrics is nil", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		// Should not panic
+		manager.updateMetrics()
+	})
+
+	t.Run("counts active connections", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		manager.AddConnection("conn1", nil, nil, "anon", nil)
+		manager.AddConnection("conn2", nil, nil, "anon", nil)
+
+		// Should not panic
+		manager.updateMetrics()
+	})
+
+	t.Run("counts unique channels", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		conn1, _ := manager.AddConnection("conn1", nil, nil, "anon", nil)
+		conn1.Subscribe("channel1")
+		conn1.Subscribe("channel2")
+
+		conn2, _ := manager.AddConnection("conn2", nil, nil, "anon", nil)
+		conn2.Subscribe("channel1") // Same channel
+		conn2.Subscribe("channel3") // Different channel
+
+		// Should not panic
+		manager.updateMetrics()
+	})
+}
+
+// =============================================================================
+// Connection Info Tests
+// =============================================================================
+
+func TestManager_GetDetailedStats(t *testing.T) {
+	t.Run("returns empty stats when no connections", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		stats := manager.GetDetailedStats()
+
+		assert.NotNil(t, stats)
+		assert.Equal(t, 0, stats["total_connections"])
+	})
+
+	t.Run("returns connection details", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		userID := "user123"
+		manager.AddConnection("conn1", nil, &userID, "authenticated", nil)
+
+		stats := manager.GetDetailedStats()
+
+		assert.NotNil(t, stats)
+		assert.Equal(t, 1, stats["total_connections"])
+
+		connections, ok := stats["connections"].([]ConnectionInfo)
+		assert.True(t, ok)
+		assert.Len(t, connections, 1)
+		assert.Equal(t, "conn1", connections[0].ID)
+		assert.NotNil(t, connections[0].UserID)
+		assert.Equal(t, "user123", *connections[0].UserID)
+	})
+
+	t.Run("includes connected timestamp", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		manager.AddConnection("conn1", nil, nil, "anon", nil)
+
+		stats := manager.GetDetailedStats()
+		connections := stats["connections"].([]ConnectionInfo)
+
+		assert.NotEmpty(t, connections[0].ConnectedAt)
+	})
+}
+
+func TestManager_GetConnectionsForStats(t *testing.T) {
+	t.Run("returns empty list when no connections", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		connections := manager.GetConnectionsForStats()
+
+		assert.NotNil(t, connections)
+		assert.Len(t, connections, 0)
+	})
+
+	t.Run("returns all connections", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		userID := "user123"
+		manager.AddConnection("conn1", nil, &userID, "authenticated", nil)
+		manager.AddConnection("conn2", nil, nil, "anon", nil)
+
+		connections := manager.GetConnectionsForStats()
+
+		assert.Len(t, connections, 2)
+
+		// Connections may be returned in any order since they're stored in a map
+		// Create a map of connection IDs for order-independent comparison
+		connIDs := make(map[string]bool)
+		for _, conn := range connections {
+			connIDs[conn.ID] = true
+		}
+
+		assert.True(t, connIDs["conn1"], "conn1 should be present")
+		assert.True(t, connIDs["conn2"], "conn2 should be present")
+	})
+}
+
+// =============================================================================
+// Admin Broadcast Tests
+// =============================================================================
+
+func TestManager_BroadcastConnectionEvent(t *testing.T) {
+	t.Run("broadcasts connection event", func(t *testing.T) {
+		ctx := context.Background()
+		manager := NewManager(ctx)
+		mockPubSub := newMockPubSub()
+
+		manager.SetPubSub(mockPubSub)
+
+		conn, _ := manager.AddConnection("conn1", nil, nil, "anon", nil)
+
+		event := NewConnectionEvent(ConnectionEventConnected, conn, nil, nil)
+
+		// Broadcast the event
+		manager.BroadcastConnectionEvent(event)
+
+		// Verify pubsub message was sent
+		published := mockPubSub.getPublishedMessages()
+		assert.NotEmpty(t, published)
+	})
+
+	t.Run("works without pubsub configured", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		conn, _ := manager.AddConnection("conn1", nil, nil, "anon", nil)
+
+		event := NewConnectionEvent(ConnectionEventConnected, conn, nil, nil)
+
+		// Should not panic
+		manager.BroadcastConnectionEvent(event)
+	})
+}
+
+// =============================================================================
+// SetMaxConnections Tests
+// =============================================================================
+
+func TestManager_SetMaxConnections(t *testing.T) {
+	t.Run("updates maximum connections", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		manager.SetMaxConnections(50)
+
+		assert.Equal(t, 50, manager.maxConnections)
+	})
+
+	t.Run("enforces new limit for future connections", func(t *testing.T) {
+		manager := NewManager(context.Background())
+		manager.SetMaxConnections(2)
+
+		// Add 2 connections
+		manager.AddConnection("conn1", nil, nil, "anon", nil)
+		manager.AddConnection("conn2", nil, nil, "anon", nil)
+
+		// Third should fail
+		_, err := manager.AddConnection("conn3", nil, nil, "anon", nil)
+		assert.Equal(t, ErrMaxConnectionsReached, err)
+	})
+
+	t.Run("allows zero for unlimited", func(t *testing.T) {
+		manager := NewManager(context.Background())
+		manager.SetMaxConnections(0)
+
+		// Should allow many connections
+		for i := 0; i < 100; i++ {
+			_, err := manager.AddConnection("conn"+string(rune(i)), nil, nil, "anon", nil)
+			assert.NoError(t, err)
+		}
+	})
+}
+
+// =============================================================================
+// Slow Client Detection Tests
+// =============================================================================
+
+func TestManager_checkAndDisconnectSlowClients(t *testing.T) {
+	t.Run("does not disconnect normal clients", func(t *testing.T) {
+		ctx := context.Background()
+		manager := NewManagerWithConfig(ctx, ManagerConfig{
+			SlowClientThreshold: 10,
+			SlowClientTimeout:   1 * time.Second,
+		})
+
+		_, _ = manager.AddConnection("conn1", nil, nil, "anon", nil)
+
+		// Run check - should not disconnect
+		manager.checkAndDisconnectSlowClients()
+
+		assert.Equal(t, 1, manager.GetConnectionCount())
+	})
+
+	t.Run("marks clients as slow when queue exceeds threshold", func(t *testing.T) {
+		ctx := context.Background()
+		manager := NewManagerWithConfig(ctx, ManagerConfig{
+			ClientMessageQueueSize: 20,
+			SlowClientThreshold:    10,
+			SlowClientTimeout:      1 * time.Second,
+		})
+
+		conn, _ := manager.AddConnection("conn1", nil, nil, "anon", nil)
+
+		// Fill the queue beyond threshold
+		stats := conn.GetQueueStats()
+		for i := 0; i < stats.QueueCapacity; i++ {
+			conn.SendMessage(map[string]interface{}{"fill": "queue"})
+		}
+
+		// Run check - should mark as slow but not disconnect yet
+		manager.checkAndDisconnectSlowClients()
+
+		assert.Equal(t, 1, manager.GetConnectionCount())
+		assert.Contains(t, manager.slowClientFirstSeen, "conn1")
+	})
+}
+
+func TestManager_disconnectSlowClient(t *testing.T) {
+	t.Run("removes connection and increments counter", func(t *testing.T) {
+		ctx := context.Background()
+		manager := NewManager(ctx)
+
+		// Create a sync connection for testing
+		conn := NewConnectionSync("conn1", nil, nil, "anon", nil)
+		manager.connections["conn1"] = conn
+
+		before := manager.GetSlowClientsDisconnected()
+
+		manager.disconnectSlowClient("conn1")
+
+		assert.Equal(t, 0, manager.GetConnectionCount())
+		assert.Equal(t, before+uint64(1), manager.GetSlowClientsDisconnected())
+	})
+
+	t.Run("handles non-existent connection gracefully", func(t *testing.T) {
+		manager := NewManager(context.Background())
+
+		// Should not panic
+		manager.disconnectSlowClient("non-existent")
+	})
+}
+
+// =============================================================================
+// SplitHostPort Tests
+// =============================================================================
+
+func TestSplitHostPort(t *testing.T) {
+	t.Run("splits valid host:port", func(t *testing.T) {
+		host, port, err := splitHostPort("192.168.1.1:8080")
+
+		assert.NoError(t, err)
+		assert.Equal(t, "192.168.1.1", host)
+		assert.Equal(t, "8080", port)
+	})
+
+	t.Run("handles IPv6 addresses", func(t *testing.T) {
+		host, port, err := splitHostPort("[::1]:8080")
+
+		assert.NoError(t, err)
+		assert.Equal(t, "::1", host)
+		assert.Equal(t, "8080", port)
+	})
+
+	t.Run("returns error for invalid format", func(t *testing.T) {
+		_, _, err := splitHostPort("invalid")
+
+		assert.Error(t, err)
+	})
+
+	t.Run("returns error for missing port", func(t *testing.T) {
+		_, _, err := splitHostPort("192.168.1.1")
+
+		assert.Error(t, err)
+	})
 }

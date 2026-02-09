@@ -130,6 +130,10 @@ type Server struct {
 
 	// Idempotency middleware for cleanup on shutdown
 	idempotencyMiddleware *middleware.IdempotencyMiddleware
+
+	// Server-owned dependencies (instead of global singletons)
+	rateLimiter ratelimit.Store
+	pubSub      pubsub.PubSub
 }
 
 // NewServer creates a new HTTP server
@@ -174,8 +178,8 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	rateLimitStore, err := ratelimit.NewStore(&cfg.Scaling, db.Pool())
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to initialize rate limit store, falling back to memory")
+		rateLimitStore = nil
 	} else {
-		ratelimit.SetGlobalStore(rateLimitStore)
 		log.Info().Str("backend", cfg.Scaling.Backend).Msg("Rate limit store initialized")
 	}
 
@@ -183,8 +187,8 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	ps, err := pubsub.NewPubSub(&cfg.Scaling, db.Pool())
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to initialize pub/sub, cross-instance broadcasting disabled")
+		ps = nil
 	} else {
-		pubsub.SetGlobalPubSub(ps)
 		log.Info().Str("backend", cfg.Scaling.Backend).Msg("Pub/sub initialized for cross-instance broadcasting")
 	}
 
@@ -688,6 +692,9 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		internalAIHandler:      internalAIHandler,
 		metrics:                observability.NewMetrics(),
 		startTime:              time.Now(),
+		// Server-owned dependencies
+		rateLimiter: rateLimitStore,
+		pubSub:      ps,
 	}
 
 	// Initialize MCP Server if enabled
@@ -968,6 +975,15 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	// Setup routes
 	log.Debug().Msg("Setting up routes")
 	server.setupRoutes()
+
+	// Set globals for backward compatibility with handlers using GetGlobalStore()
+	// The server owns these dependencies and will close them on shutdown
+	if server.rateLimiter != nil {
+		ratelimit.SetGlobalStore(server.rateLimiter)
+	}
+	if server.pubSub != nil {
+		pubsub.SetGlobalPubSub(server.pubSub)
+	}
 
 	log.Debug().Msg("Server initialization complete")
 	return server
@@ -1858,15 +1874,15 @@ func (s *Server) setupRESTRoutes(router fiber.Router) {
 
 // setupAuthRoutes sets up authentication routes
 func (s *Server) setupAuthRoutes(router fiber.Router) {
-	// Import rate limiters from middleware package
+	// Import rate limiters from middleware package using config values
 	rateLimiters := map[string]fiber.Handler{
-		"signup":         middleware.AuthSignupLimiter(),
-		"login":          middleware.AuthLoginLimiter(),
-		"refresh":        middleware.AuthRefreshLimiter(),
-		"magiclink":      middleware.AuthMagicLinkLimiter(),
-		"password_reset": middleware.AuthPasswordResetLimiter(),
-		"otp":            middleware.AuthMagicLinkLimiter(), // Use same rate limit as magic link
-		"2fa":            middleware.Auth2FALimiter(),       // Strict rate limit for 2FA verification
+		"signup":         middleware.AuthSignupLimiterWithConfig(s.config.Security.AuthSignupRateLimit, s.config.Security.AuthSignupRateWindow),
+		"login":          middleware.AuthLoginLimiterWithConfig(s.config.Security.AuthLoginRateLimit, s.config.Security.AuthLoginRateWindow),
+		"refresh":        middleware.AuthRefreshLimiterWithConfig(s.config.Security.AuthRefreshRateLimit, s.config.Security.AuthRefreshRateWindow),
+		"magiclink":      middleware.AuthMagicLinkLimiterWithConfig(s.config.Security.AuthMagicLinkRateLimit, s.config.Security.AuthMagicLinkRateWindow),
+		"password_reset": middleware.AuthPasswordResetLimiterWithConfig(s.config.Security.AuthPasswordResetRateLimit, s.config.Security.AuthPasswordResetRateWindow),
+		"otp":            middleware.AuthMagicLinkLimiterWithConfig(s.config.Security.AuthMagicLinkRateLimit, s.config.Security.AuthMagicLinkRateWindow), // Use same rate limit as magic link
+		"2fa":            middleware.Auth2FALimiterWithConfig(s.config.Security.Auth2FARateLimit, s.config.Security.Auth2FARateWindow),                   // Strict rate limit for 2FA verification
 	}
 
 	// Use the auth handler's RegisterRoutes method with rate limiters
@@ -1937,8 +1953,14 @@ func (s *Server) setupStorageRoutes(router fiber.Router) {
 func (s *Server) setupDashboardAuthRoutes(router fiber.Router) {
 	// Public dashboard auth routes (no authentication required)
 	router.Get("/setup/status", s.adminAuthHandler.GetSetupStatus)
-	router.Post("/setup", middleware.AdminSetupLimiter(), s.adminAuthHandler.InitialSetup)
-	router.Post("/login", middleware.AdminLoginLimiter(), s.adminAuthHandler.AdminLogin)
+	router.Post("/setup", middleware.AdminSetupLimiterWithConfig(
+		s.config.Security.AdminSetupRateLimit,
+		s.config.Security.AdminSetupRateWindow,
+	), s.adminAuthHandler.InitialSetup)
+	router.Post("/login", middleware.AdminLoginLimiterWithConfig(
+		s.config.Security.AdminLoginRateLimit,
+		s.config.Security.AdminLoginRateWindow,
+	), s.adminAuthHandler.AdminLogin)
 	router.Post("/refresh", s.adminAuthHandler.AdminRefreshToken)
 
 	// Protected dashboard auth routes
@@ -2559,22 +2581,20 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.schemaCache.Close()
 	}
 
-	// Close global pub/sub (releases PostgreSQL LISTEN connection)
-	if pubsub.GlobalPubSub != nil {
-		log.Info().Msg("Closing global pub/sub")
-		if err := pubsub.GlobalPubSub.Close(); err != nil {
-			log.Warn().Err(err).Msg("Failed to close global pub/sub")
+	// Close server-owned pub/sub (releases PostgreSQL LISTEN connection)
+	if s.pubSub != nil {
+		log.Info().Msg("Closing pub/sub")
+		if err := s.pubSub.Close(); err != nil {
+			log.Warn().Err(err).Msg("Failed to close pub/sub")
 		}
-		pubsub.GlobalPubSub = nil
 	}
 
-	// Close global rate limit store
-	if ratelimit.GlobalStore != nil {
-		log.Info().Msg("Closing global rate limit store")
-		if err := ratelimit.GlobalStore.Close(); err != nil {
-			log.Warn().Err(err).Msg("Failed to close global rate limit store")
+	// Close server-owned rate limit store
+	if s.rateLimiter != nil {
+		log.Info().Msg("Closing rate limit store")
+		if err := s.rateLimiter.Close(); err != nil {
+			log.Warn().Err(err).Msg("Failed to close rate limit store")
 		}
-		ratelimit.GlobalStore = nil
 	}
 
 	log.Info().Msg("Shutting down HTTP server")
@@ -2610,6 +2630,12 @@ func (s *Server) GetAuthService() *auth.Service {
 // GetLoggingService returns the central logging service
 func (s *Server) GetLoggingService() *logging.Service {
 	return s.loggingService
+}
+
+// SchemaCache returns the REST API schema cache
+// This is exposed for testing purposes to refresh the cache after creating tables
+func (s *Server) SchemaCache() *database.SchemaCache {
+	return s.schemaCache
 }
 
 // LoadFunctionsFromFilesystem loads edge functions from the filesystem

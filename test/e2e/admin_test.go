@@ -12,9 +12,14 @@ import (
 )
 
 // setupAdminTest prepares the test context for admin API tests
+// Uses isolated rate limiter to avoid rate limit exhaustion from other tests
 func setupAdminTest(t *testing.T) (*test.TestContext, string) {
-	tc := test.NewTestContext(t)
-	// Note: EnsureAuthSchema() removed - migrations already create auth tables
+	// Use isolated rate limiter to avoid rate limit state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 
 	// Use UUID-based unique email to ensure no conflicts across parallel test packages
 	// UUID guarantees uniqueness better than timestamps which can collide in CI
@@ -154,10 +159,19 @@ func TestAdminRequestIDTracking(t *testing.T) {
 
 // TestAdminSetupRateLimit tests that admin setup endpoint is rate limited
 func TestAdminSetupRateLimit(t *testing.T) {
-	tc := test.NewTestContext(t)
+	// Use isolated rate limiter to avoid state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 	defer tc.Close()
 
-	// Note: EnsureAuthSchema() removed - migrations already create auth tables
+	// CRITICAL: Reset admin setup status so test can run properly
+	// Otherwise, the "setup already complete" check returns 403 before rate limiter
+	tc.ExecuteSQLAsSuperuser(`
+		DELETE FROM app.settings WHERE category = 'system' AND key = 'admin_setup';
+	`)
 
 	// Make multiple setup attempts to trigger rate limit (max 5 per 15 minutes)
 	for i := 1; i <= 6; i++ {
@@ -169,15 +183,14 @@ func TestAdminSetupRateLimit(t *testing.T) {
 				"setup_token": tc.Config.Security.SetupToken,
 			}).Send()
 
-		// First 5 attempts should either succeed or fail with setup already complete or validation error
+		// First 5 attempts should either succeed or fail with setup already complete
 		if i <= 5 {
-			// Accept either 201 (success), 403 (already setup), 409 (conflict), or 400 (validation error)
+			// First attempt: 201 (success)
+			// Attempts 2-5: 403 (setup already complete from first attempt)
 			status := resp.Status()
 			require.Contains(t, []int{
 				fiber.StatusCreated,
-				fiber.StatusForbidden, // Setup already complete
-				fiber.StatusConflict,
-				fiber.StatusBadRequest,
+				fiber.StatusForbidden, // Setup already complete (attempts 2-5)
 			}, status, "First 5 attempts should not be rate limited")
 			t.Logf("Attempt %d: Status %d", i, status)
 		} else {
@@ -194,10 +207,19 @@ func TestAdminSetupRateLimit(t *testing.T) {
 
 // TestAdminLoginRateLimit tests that admin login endpoint is rate limited
 func TestAdminLoginRateLimit(t *testing.T) {
-	tc := test.NewTestContext(t)
+	// Use isolated rate limiter to avoid state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 	defer tc.Close()
 
-	// Note: EnsureAuthSchema() removed - migrations already create auth tables
+	// Skip this test if rate limit is set too high (e.g., for parallel test execution)
+	cfg := test.GetTestConfig()
+	if cfg.Security.AdminLoginRateLimit > 10 {
+		t.Skipf("Skipping rate limit test: AdminLoginRateLimit is set to %d (too high for this test)", cfg.Security.AdminLoginRateLimit)
+	}
 
 	// Create an admin user first with unique email
 	timestamp := time.Now().UnixNano()
@@ -207,6 +229,7 @@ func TestAdminLoginRateLimit(t *testing.T) {
 
 	// Make multiple login attempts with wrong password to trigger rate limit
 	// (max 4 per minute - lower than account lockout threshold of 5)
+	// Rate limit should trigger on attempt 5, before account lockout at 5
 	rateLimitHit := false
 	for i := 1; i <= 6; i++ {
 		resp := tc.NewRequest("POST", "/api/v1/admin/login").
@@ -218,7 +241,7 @@ func TestAdminLoginRateLimit(t *testing.T) {
 		status := resp.Status()
 
 		if status == fiber.StatusTooManyRequests {
-			// Rate limit was triggered
+			// Rate limit was triggered (expected on attempt 5)
 			rateLimitHit = true
 			var result map[string]interface{}
 			resp.JSON(&result)
@@ -227,9 +250,12 @@ func TestAdminLoginRateLimit(t *testing.T) {
 			break
 		}
 
-		// Any other status is acceptable before rate limit (401 for wrong password)
+		// Before rate limit: expect 401 (wrong password)
+		// After account lockout (5 attempts): expect 403
+		require.Contains(t, []int{401, 403}, status,
+			"Before/at rate limit, should get 401 (wrong password) or 403 (account locked)")
 		t.Logf("Attempt %d: Status %d", i, status)
 	}
 
-	require.True(t, rateLimitHit, "Rate limit should have been triggered within 6 attempts")
+	require.True(t, rateLimitHit, "Rate limit should have been triggered on attempt 5")
 }

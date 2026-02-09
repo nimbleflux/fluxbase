@@ -2,9 +2,11 @@ package e2e
 
 import (
 	"bytes"
+	"fmt"
 	"mime/multipart"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/fluxbase-eu/fluxbase/test"
 	"github.com/gofiber/fiber/v3"
@@ -13,7 +15,12 @@ import (
 
 // TestStorageRLS_AdminAccess verifies dashboard admins can access everything
 func TestStorageRLS_AdminAccess(t *testing.T) {
-	tc := test.NewTestContext(t) // Use regular context for dashboard admin testing
+	// Use isolated rate limiter to avoid state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 	defer tc.Close()
 
 	// Clean up storage for this test
@@ -28,7 +35,7 @@ func TestStorageRLS_AdminAccess(t *testing.T) {
 	userID, userToken := tc.CreateTestUser(userEmail, "password123")
 
 	// Admin creates a private bucket
-	bucketName := "user-private"
+	bucketName := fmt.Sprintf("user-private-%d", time.Now().UnixNano())
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
 		WithAuth(adminToken).
 		Send().

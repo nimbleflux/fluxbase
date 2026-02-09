@@ -272,9 +272,9 @@ jobs:
 
       - name: Run database migrations
         env:
-          # Run migrations as fluxbase_app user (same user tests will use)
-          # This ensures consistent ownership and permissions
-          DATABASE_URL: "postgres://fluxbase_app:fluxbase_app_password@localhost:5432/fluxbase_test?sslmode=disable"
+          # Run migrations as postgres user (superuser for DDL operations)
+          # Tests will run as fluxbase_app, but migrations need elevated privileges
+          DATABASE_URL: "postgres://postgres:postgres@localhost:5432/fluxbase_test?sslmode=disable"
           PGPASSWORD: postgres
         run: |
           go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
@@ -345,18 +345,22 @@ jobs:
           echo '<!DOCTYPE html><html><head><title>Placeholder</title></head><body></body></html>' > internal/adminui/dist/index.html
 
       - name: Run unit tests with coverage
-        timeout-minutes: 5
+        timeout-minutes: 20
         env:
           FLUXBASE_DATABASE_HOST: localhost
           FLUXBASE_DATABASE_PORT: 5432
-          FLUXBASE_DATABASE_USER: postgres
-          FLUXBASE_DATABASE_PASSWORD: postgres
+          FLUXBASE_DATABASE_USER: fluxbase_app
+          FLUXBASE_DATABASE_PASSWORD: fluxbase_app_password
+          FLUXBASE_DATABASE_ADMIN_USER: postgres
+          FLUXBASE_DATABASE_ADMIN_PASSWORD: postgres
           FLUXBASE_DATABASE_DATABASE: fluxbase_test
+          SKIP_MIGRATIONS: "true"
         run: |
           # Run unit tests with -short flag to skip integration tests
           # Integration tests require database setup and can be slow
           # Note: We run go test directly here for coverage, not through test-runner.sh
-          go test -v -short -race -timeout=3m -coverprofile=coverage-unit.out -covermode=atomic $(go list ./... | grep -v '/test/e2e' | grep -v '/test$')
+          # Skip migrations since they were already applied in the previous step
+          go test -v -short -race -timeout=10m -coverprofile=coverage-unit.out -covermode=atomic $(go list ./... | grep -v '/test/e2e' | grep -v '/test$')
 
       - name: Run e2e tests with coverage
         timeout-minutes: 15
@@ -377,7 +381,7 @@ jobs:
           # Run e2e tests with fluxbase_app user for proper RLS testing
           # Use -parallel=1 within each package to run test functions sequentially (avoid DB connection exhaustion)
           # Run with coverage to include in combined coverage report
-          go test -v -race -parallel=1 -timeout=10m -coverprofile=coverage-e2e.out -covermode=atomic ./test/e2e/...
+          go test -tags=integration -v -race -parallel=1 -timeout=10m -coverprofile=coverage-e2e.out -covermode=atomic ./test/e2e/...
 
       - name: Merge coverage reports
         run: |

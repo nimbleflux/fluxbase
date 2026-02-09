@@ -6,7 +6,7 @@ profile: coverage.out
 threshold:
   file: 0       # Individual files (initially lenient, will increase over time)
   package: 0    # Packages (initially lenient, will increase over time)
-  total: 10     # Overall project target (realistic starting point)
+  total: 25     # Overall project target (realistic starting point)
 
 # Override rules for specific patterns (evaluated in order, from most to least specific)
 override:

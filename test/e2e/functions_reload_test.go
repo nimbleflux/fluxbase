@@ -27,7 +27,9 @@ func setupFunctionsTest(t *testing.T) (*test.TestContext, string, string) {
 		os.Unsetenv("FLUXBASE_FUNCTIONS_FUNCTIONS_DIR")
 	})
 
-	tc := test.NewTestContext(t)
+	// Create a new test context (not shared) with the updated config
+	// The functions tests need a fresh server with the correct functions directory
+	tc := test.NewTestContextWithDebug(t)
 	tc.EnsureAuthSchema()
 
 	// Create admin user for authentication

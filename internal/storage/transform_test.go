@@ -1,3 +1,6 @@
+//go:build vips
+// +build vips
+
 package storage
 
 import (

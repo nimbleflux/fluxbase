@@ -2,9 +2,11 @@ package e2e
 
 import (
 	"bytes"
+	"fmt"
 	"mime/multipart"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/fluxbase-eu/fluxbase/test"
 	"github.com/gofiber/fiber/v3"
@@ -13,8 +15,10 @@ import (
 
 // TestStorageRLS_FileSharing verifies share/revoke functionality
 func TestStorageRLS_FileSharing(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
+	// NewRLSTestContext will automatically reset RLS state before the test
 	tc := test.NewRLSTestContext(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Clean up storage for this test
 	tc.CleanupStorageFiles()
@@ -29,7 +33,7 @@ func TestStorageRLS_FileSharing(t *testing.T) {
 	// Create service key and bucket
 	serviceKey := tc.CreateServiceKey("test-bucket-creation")
 
-	bucketName := "shared-bucket"
+	bucketName := fmt.Sprintf("shared-bucket-%d", time.Now().UnixNano())
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
 		WithServiceKey(serviceKey).
 		Send().

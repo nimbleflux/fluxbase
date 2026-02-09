@@ -11,8 +11,14 @@ import (
 )
 
 // setupSQLEditorTest prepares the test context for SQL editor tests
+// Uses isolated rate limiter to avoid rate limit exhaustion from other tests
 func setupSQLEditorTest(t *testing.T) (*test.TestContext, string) {
-	tc := test.NewTestContext(t)
+	// Use isolated rate limiter to avoid state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 	tc.EnsureAuthSchema()
 
 	// Create dashboard admin user

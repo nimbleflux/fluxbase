@@ -150,7 +150,13 @@ func (h *StorageHandler) acquireTransformSlot(timeout time.Duration) bool {
 // releaseTransformSlot releases a transform slot
 func (h *StorageHandler) releaseTransformSlot() {
 	if h.transformSem != nil {
-		<-h.transformSem
+		select {
+		case <-h.transformSem:
+			// Successfully released
+		default:
+			// No slot to release (already released or never acquired)
+			// This prevents blocking if release is called without acquire
+		}
 	}
 }
 

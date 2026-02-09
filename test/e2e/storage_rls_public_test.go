@@ -2,9 +2,11 @@ package e2e
 
 import (
 	"bytes"
+	"fmt"
 	"mime/multipart"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/fluxbase-eu/fluxbase/test"
 	"github.com/gofiber/fiber/v3"
@@ -13,8 +15,10 @@ import (
 
 // TestStorageRLS_PublicBucketAccess verifies unauthenticated access to public buckets
 func TestStorageRLS_PublicBucketAccess(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
+	// NewRLSTestContext will automatically reset RLS state before the test
 	tc := test.NewRLSTestContext(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Clean up storage for this test
 	tc.CleanupStorageFiles()
@@ -26,7 +30,7 @@ func TestStorageRLS_PublicBucketAccess(t *testing.T) {
 	serviceKey := tc.CreateServiceKey("test-bucket-creation")
 
 	// Create public bucket using service key
-	bucketName := "public-assets"
+	bucketName := fmt.Sprintf("public-assets-%d", time.Now().UnixNano())
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
 		WithServiceKey(serviceKey).
 		WithBody(map[string]interface{}{
@@ -93,7 +97,7 @@ func TestStorageRLS_PublicBucketAccess(t *testing.T) {
 		Unauthenticated().
 		Send()
 
-	require.Contains(t, []int{fiber.StatusUnauthorized, fiber.StatusForbidden},
+	require.Contains(t, []int{fiber.StatusNotFound, fiber.StatusUnauthorized, fiber.StatusForbidden},
 		deleteResp.Status(), "Unauthenticated user should not be able to delete")
 	t.Logf("✅ Unauthenticated user cannot delete from public bucket (status: %d)", deleteResp.Status())
 

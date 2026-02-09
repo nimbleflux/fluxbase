@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"bytes"
+	"fmt"
 	"mime/multipart"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/fluxbase-eu/fluxbase/test"
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,8 +27,10 @@ func TestStorageRLS_StorageProviders(t *testing.T) {
 
 	for _, provider := range providers {
 		t.Run(provider, func(t *testing.T) {
+			// Use shared RLS context to avoid creating multiple connection pools
+			// NewRLSTestContext will automatically reset RLS state between sub-tests
 			tc := test.NewRLSTestContext(t)
-			defer tc.Close()
+			// NO defer tc.Close() - shared context is managed by TestMain
 
 			// Configure storage provider
 			tc.Config.Storage.Provider = provider
@@ -50,7 +54,8 @@ func TestStorageRLS_StorageProviders(t *testing.T) {
 			// Create service key and bucket
 			serviceKey := tc.CreateServiceKey("test-bucket-creation")
 
-			bucketName := "test-bucket"
+			// Use unique bucket name to avoid conflicts between provider tests
+			bucketName := fmt.Sprintf("test-bucket-%s", uuid.New().String()[:8])
 			tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
 				WithServiceKey(serviceKey).
 				Send().

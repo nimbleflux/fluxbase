@@ -33,6 +33,9 @@ func setupWebhookTriggerTest(t *testing.T) *test.TestContext {
 	// Enable signup for tests
 	tc.Config.Auth.SignupEnabled = true
 
+	// Enable private IPs for webhook tests (needed for httptest.NewServer)
+	tc.EnablePrivateIPsForWebhooks()
+
 	// Wait for webhook trigger service to establish LISTEN subscription
 	// This ensures the service is ready to receive PostgreSQL notifications
 	ready := tc.WaitForWebhookServiceReady(5 * time.Second)

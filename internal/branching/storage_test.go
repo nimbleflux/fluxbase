@@ -684,3 +684,508 @@ func BenchmarkValidateSlug(b *testing.B) {
 		_ = ValidateSlug(slugs[i%len(slugs)])
 	}
 }
+
+// =============================================================================
+// Additional GenerateSlug Tests (comprehensive coverage)
+// =============================================================================
+
+func TestGenerateSlug_Comprehensive(t *testing.T) {
+	newTests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple lowercase",
+			input:    "my branch",
+			expected: "my-branch",
+		},
+		{
+			name:     "uppercase to lowercase",
+			input:    "MyBranch",
+			expected: "mybranch",
+		},
+		{
+			name:     "spaces to hyphens",
+			input:    "hello world branch",
+			expected: "hello-world-branch",
+		},
+		{
+			name:     "underscores to hyphens",
+			input:    "my_test_branch",
+			expected: "my-test-branch",
+		},
+		{
+			name:     "mixed spaces and underscores",
+			input:    "my test_branch",
+			expected: "my-test-branch",
+		},
+		{
+			name:     "removes special characters",
+			input:    "branch@#$%^&*()!",
+			expected: "branch",
+		},
+		{
+			name:     "removes dots",
+			input:    "branch.name",
+			expected: "branchname",
+		},
+		{
+			name:     "consecutive hyphens collapsed",
+			input:    "my--test___branch",
+			expected: "my-test-branch",
+		},
+		{
+			name:     "trims leading hyphens",
+			input:    "-test-branch",
+			expected: "test-branch",
+		},
+		{
+			name:     "trims trailing hyphens",
+			input:    "test-branch-",
+			expected: "test-branch",
+		},
+		{
+			name:     "trims both leading and trailing",
+			input:    "-test-branch-",
+			expected: "test-branch",
+		},
+		{
+			name:     "empty string defaults to branch",
+			input:    "",
+			expected: "branch",
+		},
+		{
+			name:     "only special characters",
+			input:    "@#$%",
+			expected: "branch",
+		},
+		{
+			name:     "numbers are preserved",
+			input:    "branch-123",
+			expected: "branch-123",
+		},
+	}
+
+	for _, tt := range newTests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateSlug(tt.input)
+			assert.Equal(t, tt.expected, result)
+
+			// Verify the slug is valid
+			err := ValidateSlug(result)
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// =============================================================================
+// Additional ValidateSlug Tests
+// =============================================================================
+
+func TestValidateSlug_Comprehensive(t *testing.T) {
+	newTests := []struct {
+		name        string
+		slug        string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "valid simple slug",
+			slug:        "my-branch",
+			expectError: false,
+		},
+		{
+			name:        "valid slug with numbers",
+			slug:        "branch-123",
+			expectError: false,
+		},
+		{
+			name:        "valid single character",
+			slug:        "a",
+			expectError: false,
+		},
+		{
+			name:        "valid single number",
+			slug:        "1",
+			expectError: false,
+		},
+		{
+			name:        "valid multiple hyphens",
+			slug:        "my-test-branch",
+			expectError: false,
+		},
+		{
+			name:        "valid consecutive hyphens",
+			slug:        "test--branch",
+			expectError: false,
+		},
+		{
+			name:        "empty slug",
+			slug:        "",
+			expectError: true,
+			errorMsg:    "slug cannot be empty",
+		},
+		{
+			name:        "slug too long",
+			slug:        "this-slug-is-exactly-fifty-one-characters-long-xxxxxxxxxxxxxx",
+			expectError: true,
+			errorMsg:    "slug cannot be longer than 50 characters",
+		},
+		{
+			name:        "reserved main slug",
+			slug:        "main",
+			expectError: true,
+			errorMsg:    "slug 'main' is reserved",
+		},
+		{
+			name:        "uppercase letters",
+			slug:        "MyBranch",
+			expectError: true,
+			errorMsg:    "must contain only lowercase letters",
+		},
+		{
+			name:        "special characters",
+			slug:        "branch@name",
+			expectError: true,
+			errorMsg:    "must contain only lowercase letters",
+		},
+		{
+			name:        "spaces",
+			slug:        "my branch",
+			expectError: true,
+			errorMsg:    "must contain only lowercase letters",
+		},
+		{
+			name:        "underscores",
+			slug:        "my_branch",
+			expectError: true,
+			errorMsg:    "must contain only lowercase letters",
+		},
+		{
+			name:        "dots",
+			slug:        "my.branch",
+			expectError: true,
+			errorMsg:    "must contain only lowercase letters",
+		},
+		{
+			name:        "starts with hyphen",
+			slug:        "-my-branch",
+			expectError: true,
+			errorMsg:    "must contain only lowercase letters",
+		},
+		{
+			name:        "ends with hyphen",
+			slug:        "my-branch-",
+			expectError: true,
+			errorMsg:    "must contain only lowercase letters",
+		},
+		{
+			name:        "exactly 50 characters",
+			slug:        "this-is-exactly-fifty-cha-xxxxxxxxxxxxxxxxxxxxxxx",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range newTests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSlug(tt.slug)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Branch Method Tests
+// =============================================================================
+
+func TestBranch_Methods(t *testing.T) {
+	t.Run("IsMain returns true for main type", func(t *testing.T) {
+		branch := &Branch{Type: BranchTypeMain}
+		assert.True(t, branch.IsMain())
+	})
+
+	t.Run("IsMain returns false for preview type", func(t *testing.T) {
+		branch := &Branch{Type: BranchTypePreview}
+		assert.False(t, branch.IsMain())
+	})
+
+	t.Run("IsMain returns false for persistent type", func(t *testing.T) {
+		branch := &Branch{Type: BranchTypePersistent}
+		assert.False(t, branch.IsMain())
+	})
+
+	t.Run("IsReady returns true for ready status", func(t *testing.T) {
+		branch := &Branch{Status: BranchStatusReady}
+		assert.True(t, branch.IsReady())
+	})
+
+	t.Run("IsReady returns false for creating status", func(t *testing.T) {
+		branch := &Branch{Status: BranchStatusCreating}
+		assert.False(t, branch.IsReady())
+	})
+
+	t.Run("IsReady returns false for error status", func(t *testing.T) {
+		branch := &Branch{Status: BranchStatusError}
+		assert.False(t, branch.IsReady())
+	})
+}
+
+// =============================================================================
+// Additional GenerateDatabaseName Tests
+// =============================================================================
+
+func TestGenerateDatabaseName_Comprehensive(t *testing.T) {
+	newTests := []struct {
+		name     string
+		prefix   string
+		slug     string
+		expected string
+	}{
+		{
+			name:     "simple prefix and slug",
+			prefix:   "branch_",
+			slug:     "my-branch",
+			expected: "branch_my_branch",
+		},
+		{
+			name:     "underscore prefix",
+			prefix:   "test_",
+			slug:     "feature-branch",
+			expected: "test_feature_branch",
+		},
+		{
+			name:     "empty prefix",
+			prefix:   "",
+			slug:     "my-branch",
+			expected: "my_branch",
+		},
+		{
+			name:     "empty slug",
+			prefix:   "branch_",
+			slug:     "",
+			expected: "branch_",
+		},
+		{
+			name:     "slug with numbers",
+			prefix:   "branch_",
+			slug:     "pr-123",
+			expected: "branch_pr_123",
+		},
+		{
+			name:     "hyphens to underscores",
+			prefix:   "dev_",
+			slug:     "user-auth",
+			expected: "dev_user_auth",
+		},
+		{
+			name:     "consecutive hyphens",
+			prefix:   "branch_",
+			slug:     "my--test",
+			expected: "branch_my__test",
+		},
+	}
+
+	for _, tt := range newTests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateDatabaseName(tt.prefix, tt.slug)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGenerateDatabaseName_PostgreSQL(t *testing.T) {
+	t.Run("starts with number gets underscore prefix", func(t *testing.T) {
+		result := GenerateDatabaseName("", "123-branch")
+		assert.Equal(t, "_123_branch", result)
+	})
+
+	t.Run("starts with letter keeps as is", func(t *testing.T) {
+		result := GenerateDatabaseName("", "branch-123")
+		assert.Equal(t, "branch_123", result)
+	})
+
+	t.Run("long name is truncated to 63 chars", func(t *testing.T) {
+		prefix := "very_long_prefix_that_takes_up_space_"
+		slug := "and-also-a-very-long-slug-name-that-exceeds-the-limit"
+		result := GenerateDatabaseName(prefix, slug)
+
+		// PostgreSQL max identifier length is 63
+		assert.LessOrEqual(t, len(result), 63)
+	})
+}
+
+// =============================================================================
+// Data Clone Mode Tests
+// =============================================================================
+
+func TestDataCloneMode_AllValues(t *testing.T) {
+	modes := []DataCloneMode{
+		DataCloneModeSchemaOnly,
+		DataCloneModeFullClone,
+		DataCloneModeSeedData,
+	}
+
+	for _, mode := range modes {
+		t.Run(string(mode), func(t *testing.T) {
+			assert.NotEmpty(t, string(mode))
+		})
+	}
+}
+
+// =============================================================================
+// Branch Status Tests
+// =============================================================================
+
+func TestBranchStatus_AllValues(t *testing.T) {
+	statuses := []BranchStatus{
+		BranchStatusCreating,
+		BranchStatusReady,
+		BranchStatusMigrating,
+		BranchStatusError,
+		BranchStatusDeleting,
+		BranchStatusDeleted,
+	}
+
+	for _, status := range statuses {
+		t.Run(string(status), func(t *testing.T) {
+			assert.NotEmpty(t, string(status))
+		})
+	}
+}
+
+// =============================================================================
+// Activity Action Tests
+// =============================================================================
+
+func TestActivityAction_AllValues(t *testing.T) {
+	actions := []ActivityAction{
+		ActivityActionCreated,
+		ActivityActionCloned,
+		ActivityActionMigrated,
+		ActivityActionReset,
+		ActivityActionDeleted,
+		ActivityActionStatusChanged,
+		ActivityActionAccessGranted,
+		ActivityActionAccessRevoked,
+		ActivityActionSeeding,
+	}
+
+	for _, action := range actions {
+		t.Run(string(action), func(t *testing.T) {
+			assert.NotEmpty(t, string(action))
+		})
+	}
+}
+
+// =============================================================================
+// Activity Status Tests
+// =============================================================================
+
+func TestActivityStatus_AllValues(t *testing.T) {
+	statuses := []ActivityStatus{
+		ActivityStatusStarted,
+		ActivityStatusSuccess,
+		ActivityStatusFailed,
+	}
+
+	for _, status := range statuses {
+		t.Run(string(status), func(t *testing.T) {
+			assert.NotEmpty(t, string(status))
+		})
+	}
+}
+
+// =============================================================================
+// Branch Access Level Tests
+// =============================================================================
+
+func TestBranchAccessLevel_AllValues(t *testing.T) {
+	levels := []BranchAccessLevel{
+		BranchAccessRead,
+		BranchAccessWrite,
+		BranchAccessAdmin,
+	}
+
+	for _, level := range levels {
+		t.Run(string(level), func(t *testing.T) {
+			assert.NotEmpty(t, string(level))
+		})
+	}
+}
+
+// =============================================================================
+// Storage Helper Tests
+// =============================================================================
+
+func TestStorage_HelperMethods(t *testing.T) {
+	storage := &Storage{}
+
+	t.Run("SetPool sets the pool", func(t *testing.T) {
+		storage.SetPool(nil)
+		assert.Nil(t, storage.GetPool())
+	})
+
+	t.Run("GetPool returns nil initially", func(t *testing.T) {
+		newStorage := &Storage{}
+		assert.Nil(t, newStorage.GetPool())
+	})
+}
+
+// =============================================================================
+// Real-world slug generation tests
+// =============================================================================
+
+func TestGenerateSlug_RealWorld(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "GitHub PR format",
+			input:    "fix-user-authentication",
+			expected: "fix-user-authentication",
+		},
+		{
+			name:     "feature branch with slash",
+			input:    "feature/add-oauth-support",
+			expected: "featureadd-oauth-support",
+		},
+		{
+			name:     "bugfix branch with slash",
+			input:    "bugfix/memory-leak",
+			expected: "bugfixmemory-leak",
+		},
+		{
+			name:     "hotfix branch with slash",
+			input:    "hotfix/security-patch",
+			expected: "hotfixsecurity-patch",
+		},
+		{
+			name:     "camel case feature",
+			input:    "AddPaymentGateway",
+			expected: "addpaymentgateway",
+		},
+		{
+			name:     "mixed separator types",
+			input:    "feat_user_authentication flow",
+			expected: "feat-user-authentication-flow",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateSlug(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

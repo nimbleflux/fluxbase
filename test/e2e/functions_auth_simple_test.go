@@ -13,7 +13,12 @@ import (
 // TestFunctionAuthenticationOnly tests ONLY the authentication logic without function execution
 // This test verifies that the auth middleware correctly accepts/rejects different auth types
 func TestFunctionAuthenticationOnly(t *testing.T) {
-	tc := test.NewTestContext(t)
+	// Use isolated rate limiter to avoid state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 	defer tc.Close()
 	tc.EnsureAuthSchema()
 
@@ -97,7 +102,12 @@ func TestFunctionAuthenticationOnly(t *testing.T) {
 
 // TestFunctionUnauthenticatedFlag tests that allow_unauthenticated flag works
 func TestFunctionUnauthenticatedFlag(t *testing.T) {
-	tc := test.NewTestContext(t)
+	// Use isolated rate limiter to avoid state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 	defer tc.Close()
 	tc.EnsureAuthSchema()
 

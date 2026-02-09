@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -384,6 +385,11 @@ func TestMultipartUpload_ResponseStructure(t *testing.T) {
 		resp, err := app.Test(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusCreated {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Logf("Response body: %s", string(bodyBytes))
+		}
 
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 

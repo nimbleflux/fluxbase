@@ -247,12 +247,22 @@ type SecurityConfig struct {
 	SetupToken string `mapstructure:"setup_token"` // Required token for admin setup. If empty, admin dashboard is disabled.
 
 	// Rate limiting for specific endpoints
-	AdminSetupRateLimit  int           `mapstructure:"admin_setup_rate_limit"`  // Max attempts for admin setup
-	AdminSetupRateWindow time.Duration `mapstructure:"admin_setup_rate_window"` // Time window for admin setup rate limit
-	AuthLoginRateLimit   int           `mapstructure:"auth_login_rate_limit"`   // Max attempts for auth login
-	AuthLoginRateWindow  time.Duration `mapstructure:"auth_login_rate_window"`  // Time window for auth login rate limit
-	AdminLoginRateLimit  int           `mapstructure:"admin_login_rate_limit"`  // Max attempts for admin login
-	AdminLoginRateWindow time.Duration `mapstructure:"admin_login_rate_window"` // Time window for admin login rate limit
+	AdminSetupRateLimit         int           `mapstructure:"admin_setup_rate_limit"`          // Max attempts for admin setup
+	AdminSetupRateWindow        time.Duration `mapstructure:"admin_setup_rate_window"`         // Time window for admin setup rate limit
+	AdminLoginRateLimit         int           `mapstructure:"admin_login_rate_limit"`          // Max attempts for admin login
+	AdminLoginRateWindow        time.Duration `mapstructure:"admin_login_rate_window"`         // Time window for admin login rate limit
+	AuthLoginRateLimit          int           `mapstructure:"auth_login_rate_limit"`           // Max attempts for auth login
+	AuthLoginRateWindow         time.Duration `mapstructure:"auth_login_rate_window"`          // Time window for auth login rate limit
+	AuthSignupRateLimit         int           `mapstructure:"auth_signup_rate_limit"`          // Max attempts for auth signup
+	AuthSignupRateWindow        time.Duration `mapstructure:"auth_signup_rate_window"`         // Time window for auth signup rate limit
+	AuthPasswordResetRateLimit  int           `mapstructure:"auth_password_reset_rate_limit"`  // Max attempts for password reset
+	AuthPasswordResetRateWindow time.Duration `mapstructure:"auth_password_reset_rate_window"` // Time window for password reset rate limit
+	Auth2FARateLimit            int           `mapstructure:"auth_2fa_rate_limit"`             // Max attempts for 2FA verification
+	Auth2FARateWindow           time.Duration `mapstructure:"auth_2fa_rate_window"`            // Time window for 2FA rate limit
+	AuthRefreshRateLimit        int           `mapstructure:"auth_refresh_rate_limit"`         // Max attempts for token refresh
+	AuthRefreshRateWindow       time.Duration `mapstructure:"auth_refresh_rate_window"`        // Time window for token refresh rate limit
+	AuthMagicLinkRateLimit      int           `mapstructure:"auth_magic_link_rate_limit"`      // Max attempts for magic link
+	AuthMagicLinkRateWindow     time.Duration `mapstructure:"auth_magic_link_rate_window"`     // Time window for magic link rate limit
 
 	// CAPTCHA configuration for bot protection
 	Captcha CaptchaConfig `mapstructure:"captcha"`

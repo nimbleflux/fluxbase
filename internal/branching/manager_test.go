@@ -113,6 +113,262 @@ func TestGenerateDatabaseName(t *testing.T) {
 }
 
 // =============================================================================
+// Additional Edge Case Tests for Coverage Boost
+// =============================================================================
+
+func TestGenerateSlug_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty string defaults to 'branch'",
+			input:    "",
+			expected: "branch",
+		},
+		{
+			name:     "consecutive hyphens are collapsed",
+			input:    "my---branch",
+			expected: "my-branch",
+		},
+		{
+			name:     "consecutive spaces become single hyphen",
+			input:    "my    branch",
+			expected: "my-branch",
+		},
+		{
+			name:     "mixed spaces and hyphens",
+			input:    "my - branch - name",
+			expected: "my-branch-name",
+		},
+		{
+			name:     "leading and trailing hyphens removed",
+			input:    "-my-branch-",
+			expected: "my-branch",
+		},
+		{
+			name:     "leading and trailing spaces removed",
+			input:    "  my branch  ",
+			expected: "my-branch",
+		},
+		{
+			name:     "only special characters defaults to branch",
+			input:    "!!!",
+			expected: "branch",
+		},
+		{
+			name:     "only hyphens defaults to branch",
+			input:    "---",
+			expected: "branch",
+		},
+		{
+			name:     "long name truncated to 50 chars then trimmed",
+			input:    "a-very-long-branch-name-that-exceeds-fifty-characters-limit",
+			expected: "a-very-long-branch-name-that-exceeds-fifty-charact",
+		},
+		{
+			name:     "mixed case and special chars",
+			input:    "MyBranch_123!@#",
+			expected: "mybranch-123",
+		},
+		{
+			name:     "unicode characters are removed",
+			input:    "branch测试name",
+			expected: "branchname",
+		},
+		{
+			name:     "dots are removed (not converted)",
+			input:    "feature.v1.2",
+			expected: "featurev12",
+		},
+		{
+			name:     "at signs removed",
+			input:    "user@branch",
+			expected: "userbranch",
+		},
+		{
+			name:     "single character",
+			input:    "a",
+			expected: "a",
+		},
+		{
+			name:     "single number",
+			input:    "123",
+			expected: "123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateSlug(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestValidateSlug_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		slug        string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "empty slug",
+			slug:        "",
+			expectError: true,
+			errorMsg:    "cannot be empty",
+		},
+		{
+			name:        "slug longer than 50 characters",
+			slug:        "this-is-a-very-long-branch-name-that-exceeds-the-maximum",
+			expectError: true,
+			errorMsg:    "longer than 50",
+		},
+		{
+			name:        "exactly 50 characters - rejected due to limit",
+			slug:        "this-is-a-branch-name-with-exactly-fifty-characters-1",
+			expectError: true,
+			errorMsg:    "longer than 50",
+		},
+		{
+			name:        "reserved 'main' slug",
+			slug:        "main",
+			expectError: true,
+			errorMsg:    "reserved",
+		},
+		{
+			name:        "starts with hyphen",
+			slug:        "-invalid",
+			expectError: true,
+		},
+		{
+			name:        "ends with hyphen",
+			slug:        "invalid-",
+			expectError: true,
+		},
+		{
+			name:        "single character is valid",
+			slug:        "a",
+			expectError: false,
+		},
+		{
+			name:        "contains uppercase",
+			slug:        "MyBranch",
+			expectError: true,
+		},
+		{
+			name:        "contains underscore",
+			slug:        "my_branch",
+			expectError: true,
+		},
+		{
+			name:        "contains dot",
+			slug:        "my.branch",
+			expectError: true,
+		},
+		{
+			name:        "consecutive hyphens are valid",
+			slug:        "my--branch",
+			expectError: false,
+		},
+		{
+			name:        "number-only slug is valid",
+			slug:        "12345",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSlug(tt.slug)
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestGenerateDatabaseName_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		prefix   string
+		slug     string
+		expected string
+	}{
+		{
+			name:     "starts with digit gets underscore prefix (only if prefix+slug starts with digit)",
+			prefix:   "branch_",
+			slug:     "123-branch",
+			expected: "branch_123_branch",
+		},
+		{
+			name:     "starts with digit without prefix",
+			prefix:   "",
+			slug:     "123-branch",
+			expected: "_123_branch",
+		},
+		{
+			name:     "long name truncated to 63 characters",
+			prefix:   "fluxbase_branch_",
+			slug:     "this-is-a-very-long-branch-name-that-would-exceed-postgres-max-identifier-length-limit",
+			expected: "fluxbase_branch_this_is_a_very_long_branch_name_that_would_exce",
+		},
+		{
+			name:     "empty prefix and slug",
+			prefix:   "",
+			slug:     "",
+			expected: "",
+		},
+		{
+			name:     "only prefix",
+			prefix:   "branch_",
+			slug:     "",
+			expected: "branch_",
+		},
+		{
+			name:     "single digit slug with prefix",
+			prefix:   "branch_",
+			slug:     "1",
+			expected: "branch_1",
+		},
+		{
+			name:     "single digit slug without prefix",
+			prefix:   "",
+			slug:     "1",
+			expected: "_1",
+		},
+		{
+			name:     "hyphens converted to underscores",
+			prefix:   "test_",
+			slug:     "my-branch-name",
+			expected: "test_my_branch_name",
+		},
+		{
+			name:     "consecutive hyphens become consecutive underscores",
+			prefix:   "test_",
+			slug:     "my--branch",
+			expected: "test_my__branch",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateDatabaseName(tt.prefix, tt.slug)
+			assert.Equal(t, tt.expected, result)
+			// Also verify length constraint
+			assert.LessOrEqual(t, len(result), 63, "Database name must not exceed 63 characters")
+		})
+	}
+}
+
+// =============================================================================
 // BranchingConfig Tests
 // =============================================================================
 

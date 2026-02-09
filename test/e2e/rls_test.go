@@ -49,8 +49,9 @@ func setupRLSTest(t *testing.T) *test.TestContext {
 
 // TestRLSUserCanAccessOwnData tests that users can access their own data
 func TestRLSUserCanAccessOwnData(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users with unique emails
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -111,8 +112,9 @@ func TestRLSUserCanAccessOwnData(t *testing.T) {
 
 // TestRLSUserCannotAccessOtherUserData tests that users cannot access other users' data
 func TestRLSUserCannotAccessOtherUserData(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users with unique emails
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -150,8 +152,9 @@ func TestRLSUserCannotAccessOtherUserData(t *testing.T) {
 
 // TestRLSPublicDataAccess tests that public data is accessible to all authenticated users
 func TestRLSPublicDataAccess(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users with unique emails
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -198,8 +201,9 @@ func TestRLSPublicDataAccess(t *testing.T) {
 
 // TestRLSUpdateOwnData tests that users can update their own data
 func TestRLSUpdateOwnData(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create user with unique email
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -241,8 +245,9 @@ func TestRLSUpdateOwnData(t *testing.T) {
 
 // TestRLSCannotUpdateOtherUserData tests that users cannot update other users' data
 func TestRLSCannotUpdateOtherUserData(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users with unique emails
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -278,8 +283,9 @@ func TestRLSCannotUpdateOtherUserData(t *testing.T) {
 
 // TestRLSDeleteOwnData tests that users can delete their own data
 func TestRLSDeleteOwnData(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create user with unique email
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -315,8 +321,9 @@ func TestRLSDeleteOwnData(t *testing.T) {
 
 // TestRLSCannotDeleteOtherUserData tests that users cannot delete other users' data
 func TestRLSCannotDeleteOtherUserData(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users with unique emails
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -348,8 +355,9 @@ func TestRLSCannotDeleteOtherUserData(t *testing.T) {
 // Note: The REST API now requires authentication. Anonymous access is no longer allowed.
 // This test verifies that unauthenticated requests are properly rejected.
 func TestRLSAnonymousUserAccess(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Anonymous user queries tasks (no auth token) - should be rejected with 401
 	resp := tc.NewRequest("GET", "/api/v1/tables/tasks").
@@ -369,8 +377,9 @@ func TestRLSAnonymousUserAccess(t *testing.T) {
 
 // TestRLSBatchOperations tests that RLS works with batch operations
 func TestRLSBatchOperations(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create user with unique email
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -413,8 +422,9 @@ func TestRLSBatchOperations(t *testing.T) {
 // TestRLSSecurityInputValidation tests that RLS implementation validates and sanitizes inputs
 // This ensures protection against SQL injection and invalid UUIDs
 func TestRLSSecurityInputValidation(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create a user to get a valid token
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -445,8 +455,9 @@ func TestRLSSecurityInputValidation(t *testing.T) {
 
 // TestRLSUUIDValidation tests that invalid UUIDs are rejected by RLS context setting
 func TestRLSUUIDValidation(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create a valid user to test with
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -465,8 +476,9 @@ func TestRLSUUIDValidation(t *testing.T) {
 
 // TestRLSRoleValidation tests that only valid roles are accepted
 func TestRLSRoleValidation(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create users with different roles
 	// Use CreateTestUserDirect to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -500,8 +512,9 @@ func TestRLSRoleValidation(t *testing.T) {
 func TestRLSAuthUsersSelectRestriction(t *testing.T) {
 	t.Skip("RLS is disabled on auth.users - auth infrastructure tables don't use RLS because signup/signin happen before user context is established. Access control is enforced at the application level instead.")
 
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users directly in database as superuser (bypassing RLS for setup)
 	user1ID := "11111111-1111-1111-1111-111111111111"
@@ -548,8 +561,9 @@ func TestRLSAuthUsersSelectRestriction(t *testing.T) {
 func TestRLSAuthSessionsGranularPolicies(t *testing.T) {
 	t.Skip("RLS is disabled on auth.sessions - auth infrastructure tables don't use RLS because signup/signin happen before user context is established. Access control is enforced at the application level instead.")
 
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users and sessions directly in database as superuser (bypassing RLS for setup)
 	user1ID := "33333333-3333-3333-3333-333333333333"
@@ -602,8 +616,9 @@ func TestRLSAuthSessionsGranularPolicies(t *testing.T) {
 // TestRLSTokenTablesServiceRoleOnly tests that token tables are only accessible by service role
 // This verifies RLS on: magic_links, password_reset_tokens, token_blacklist
 func TestRLSTokenTablesServiceRoleOnly(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create a user directly in database as superuser
 	userID := "55555555-5555-5555-5555-555555555555"
@@ -655,8 +670,9 @@ func TestRLSTokenTablesServiceRoleOnly(t *testing.T) {
 
 // TestRLSWebhookTablesAdminOnly tests that webhook tables require admin privileges
 func TestRLSWebhookTablesAdminOnly(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create a regular user directly in database as superuser
 	userID := "66666666-6666-6666-6666-666666666666"
@@ -702,8 +718,9 @@ func TestRLSWebhookTablesAdminOnly(t *testing.T) {
 
 // TestRLSDashboardAdminTablesProtected tests that dashboard admin tables are properly protected
 func TestRLSDashboardAdminTablesProtected(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create a regular app user (not dashboard admin) directly in database as superuser
 	userID := "77777777-7777-7777-7777-777777777777"
@@ -749,8 +766,9 @@ func TestRLSDashboardAdminTablesProtected(t *testing.T) {
 
 // TestRLSImpersonationSessionsAdminOnly tests that impersonation sessions are admin-only
 func TestRLSImpersonationSessionsAdminOnly(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create a regular user and admin user directly in database as superuser
 	userID := "88888888-8888-8888-8888-888888888888"
@@ -790,8 +808,9 @@ func TestRLSImpersonationSessionsAdminOnly(t *testing.T) {
 
 // TestRLSAPIKeyUsageRestriction tests that users can only see usage for their own client keys
 func TestRLSAPIKeyUsageRestriction(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users directly in database as superuser
 	user1ID := "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
@@ -855,8 +874,9 @@ func TestRLSAPIKeyUsageRestriction(t *testing.T) {
 func TestRLSForceRowLevelSecurity(t *testing.T) {
 	t.Skip("FORCE RLS is not used - RLS is disabled on auth infrastructure tables (users, sessions) because auth operations happen before user context is established. Other tables use regular RLS with SET LOCAL ROLE for access control.")
 
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// This test verifies that FORCE ROW LEVEL SECURITY is enabled
 	// We check a few critical tables to ensure they have FORCE RLS
@@ -893,8 +913,9 @@ func TestRLSForceRowLevelSecurity(t *testing.T) {
 
 // TestRLSPerformanceIndexes tests that performance indexes for RLS policies exist
 func TestRLSPerformanceIndexes(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Check that key indexes exist for RLS policy performance
 	expectedIndexes := []struct {
@@ -930,8 +951,9 @@ func TestRLSPerformanceIndexes(t *testing.T) {
 
 // TestRLSRoleMapping tests that application roles are correctly mapped to database roles
 func TestRLSRoleMapping(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	tests := []struct {
 		name           string
@@ -1004,8 +1026,9 @@ func TestRLSRoleMapping(t *testing.T) {
 // TestRLSRequestJWTClaimsContainsOriginalRole verifies that request.jwt.claims
 // contains the original application role (not the mapped database role)
 func TestRLSRequestJWTClaimsContainsOriginalRole(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create admin user (admin app role maps to authenticated DB role)
 	// Use CreateTestUserDirectWithRole to bypass auth API (RLS test user can't SET ROLE service_role)
@@ -1099,8 +1122,9 @@ func TestRLSRequestJWTClaimsContainsOriginalRole(t *testing.T) {
 // TestRLSHybridApproachDefenseInDepth tests that the hybrid approach
 // (SET ROLE + request.jwt.claims) provides defense-in-depth security
 func TestRLSHybridApproachDefenseInDepth(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create admin and regular user with unique emails
 	// Use CreateTestUserDirectWithRole to bypass auth API (RLS test user can't SET ROLE service_role)

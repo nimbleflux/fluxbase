@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -339,4 +340,368 @@ func TestMockSessionRepository_ConcurrentAccess(t *testing.T) {
 	count, err := repo.Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 100, count)
+}
+
+// =============================================================================
+// Additional Session Repository Tests for Edge Cases
+// =============================================================================
+
+func TestMockSessionRepository_Create_NoRefreshToken(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create session without refresh token
+	session, err := repo.Create(ctx, "user-123", "access-token", "", time.Now().Add(time.Hour))
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, session.ID)
+	assert.Equal(t, "user-123", session.UserID)
+	assert.Equal(t, "access-token", session.AccessToken)
+	assert.Empty(t, session.RefreshToken)
+}
+
+func TestMockSessionRepository_Create_ExpiredSession(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create already expired session
+	expiredTime := time.Now().Add(-1 * time.Hour)
+	session, err := repo.Create(ctx, "user-123", "access-token", "refresh-token", expiredTime)
+
+	require.NoError(t, err)
+	assert.NotNil(t, session)
+
+	// Try to retrieve expired session
+	retrieved, err := repo.GetByAccessToken(ctx, "access-token")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrSessionExpired)
+	assert.Nil(t, retrieved)
+}
+
+func TestMockSessionRepository_GetByAccessToken_ExpiredSession(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create expired session
+	_, err := repo.Create(ctx, "user-123", "expired-access", "expired-refresh", time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+
+	// Try to get expired session
+	session, err := repo.GetByAccessToken(ctx, "expired-access")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrSessionExpired)
+	assert.Nil(t, session)
+}
+
+func TestMockSessionRepository_GetByRefreshToken_ExpiredSession(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create expired session
+	_, err := repo.Create(ctx, "user-123", "expired-access", "expired-refresh", time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+
+	// Try to get expired session by refresh token
+	session, err := repo.GetByRefreshToken(ctx, "expired-refresh")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrSessionExpired)
+	assert.Nil(t, session)
+}
+
+func TestMockSessionRepository_GetByUserID_ExcludesExpired(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create mix of valid and expired sessions
+	_, err := repo.Create(ctx, "user-123", "valid-1", "refresh-1", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, "user-123", "expired-1", "refresh-expired-1", time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, "user-123", "valid-2", "refresh-2", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, "user-123", "expired-2", "refresh-expired-2", time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+
+	// Get sessions for user - should exclude expired
+	sessions, err := repo.GetByUserID(ctx, "user-123")
+	require.NoError(t, err)
+	assert.Len(t, sessions, 2, "Should only return non-expired sessions")
+}
+
+func TestMockSessionRepository_UpdateAccessToken(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create session
+	session, err := repo.Create(ctx, "user-123", "old-access", "old-refresh", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	// Update only access token
+	err = repo.UpdateAccessToken(ctx, session.ID, "new-access")
+	require.NoError(t, err)
+
+	// Verify old access token doesn't work
+	_, err = repo.GetByAccessToken(ctx, "old-access")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+
+	// Verify new access token works
+	retrieved, err := repo.GetByAccessToken(ctx, "new-access")
+	require.NoError(t, err)
+	assert.Equal(t, session.ID, retrieved.ID)
+}
+
+func TestMockSessionRepository_UpdateAccessToken_NotFound(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	err := repo.UpdateAccessToken(ctx, "nonexistent-id", "new-access")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestMockSessionRepository_DeleteByAccessToken_NotFound(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	err := repo.DeleteByAccessToken(ctx, "nonexistent-token")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestMockSessionRepository_CountByUserID(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create sessions for multiple users
+	_, _ = repo.Create(ctx, "user-1", "access-1", "refresh-1", time.Now().Add(time.Hour))
+	_, _ = repo.Create(ctx, "user-1", "access-2", "refresh-2", time.Now().Add(time.Hour))
+	_, _ = repo.Create(ctx, "user-2", "access-3", "refresh-3", time.Now().Add(time.Hour))
+
+	// Count for user-1
+	count, err := repo.CountByUserID(ctx, "user-1")
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+
+	// Count for user-2
+	count, err = repo.CountByUserID(ctx, "user-2")
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Count for non-existent user
+	count, err = repo.CountByUserID(ctx, "user-999")
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
+func TestMockSessionRepository_CountByUserID_ExcludesExpired(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create mix of valid and expired sessions
+	_, _ = repo.Create(ctx, "user-123", "valid-1", "refresh-1", time.Now().Add(time.Hour))
+	_, _ = repo.Create(ctx, "user-123", "expired-1", "refresh-expired", time.Now().Add(-time.Hour))
+	_, _ = repo.Create(ctx, "user-123", "valid-2", "refresh-2", time.Now().Add(time.Hour))
+
+	// Count should only include valid sessions
+	count, err := repo.CountByUserID(ctx, "user-123")
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+}
+
+func TestMockSessionRepository_DeleteExpired_NoExpiredSessions(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create only valid sessions
+	_, _ = repo.Create(ctx, "user-1", "access-1", "refresh-1", time.Now().Add(time.Hour))
+	_, _ = repo.Create(ctx, "user-2", "access-2", "refresh-2", time.Now().Add(time.Hour))
+
+	// Delete expired
+	count, err := repo.DeleteExpired(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count, "No sessions should be deleted")
+}
+
+func TestMockSessionRepository_DeleteExpired_AllExpired(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create only expired sessions
+	_, _ = repo.Create(ctx, "user-1", "access-1", "refresh-1", time.Now().Add(-time.Hour))
+	_, _ = repo.Create(ctx, "user-2", "access-2", "refresh-2", time.Now().Add(-2*time.Hour))
+
+	// Delete expired
+	count, err := repo.DeleteExpired(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), count)
+}
+
+func TestMockSessionRepository_UpdateTokens_NoRefreshToken(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create session without refresh token
+	session, err := repo.Create(ctx, "user-123", "access-token", "", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	// Update tokens with new refresh token
+	newExpiry := time.Now().Add(2 * time.Hour)
+	err = repo.UpdateTokens(ctx, session.ID, "new-access", "new-refresh", newExpiry)
+	require.NoError(t, err)
+
+	// Verify new tokens work
+	retrieved, err := repo.GetByAccessToken(ctx, "new-access")
+	require.NoError(t, err)
+	assert.Equal(t, session.ID, retrieved.ID)
+}
+
+func TestMockSessionRepository_UpdateTokens_ClearRefreshToken(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create session with refresh token
+	session, err := repo.Create(ctx, "user-123", "access-token", "refresh-token", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	// Update to clear refresh token
+	newExpiry := time.Now().Add(2 * time.Hour)
+	err = repo.UpdateTokens(ctx, session.ID, "new-access", "", newExpiry)
+	require.NoError(t, err)
+
+	// Verify session was updated
+	retrieved, err := repo.GetByAccessToken(ctx, "new-access")
+	require.NoError(t, err)
+	assert.Equal(t, session.ID, retrieved.ID)
+}
+
+func TestMockSessionRepository_ListAll_NoExpiredFilter(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create mix of valid and expired sessions
+	_, _ = repo.Create(ctx, "user-1", "access-1", "refresh-1", time.Now().Add(time.Hour))
+	_, _ = repo.Create(ctx, "user-2", "access-2", "refresh-2", time.Now().Add(-time.Hour))
+
+	// List all sessions including expired
+	sessions, err := repo.ListAll(ctx, true)
+	require.NoError(t, err)
+	assert.Len(t, sessions, 2)
+
+	// List only active sessions
+	sessions, err = repo.ListAll(ctx, false)
+	require.NoError(t, err)
+	assert.Len(t, sessions, 1)
+}
+
+func TestMockSessionRepository_ListAllPaginated(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create multiple sessions
+	for i := 0; i < 10; i++ {
+		userID := fmt.Sprintf("user-%d", i%3)
+		accessToken := fmt.Sprintf("access-%d", i)
+		refreshToken := fmt.Sprintf("refresh-%d", i)
+		_, _ = repo.Create(ctx, userID, accessToken, refreshToken, time.Now().Add(time.Hour))
+	}
+
+	// Get first page
+	sessions, total, err := repo.ListAllPaginated(ctx, false, 5, 0)
+	require.NoError(t, err)
+	assert.Len(t, sessions, 5)
+	assert.Equal(t, 10, total)
+
+	// Get second page
+	sessions, total, err = repo.ListAllPaginated(ctx, false, 5, 5)
+	require.NoError(t, err)
+	assert.Len(t, sessions, 5)
+	assert.Equal(t, 10, total)
+
+	// Get empty page (beyond data)
+	sessions, total, err = repo.ListAllPaginated(ctx, false, 5, 20)
+	require.NoError(t, err)
+	assert.Len(t, sessions, 0)
+	assert.Equal(t, 10, total)
+}
+
+func TestMockSessionRepository_ListAllPaginated_WithExpired(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create mix of valid and expired sessions
+	_, _ = repo.Create(ctx, "user-1", "valid-1", "refresh-1", time.Now().Add(time.Hour))
+	_, _ = repo.Create(ctx, "user-2", "expired-1", "refresh-expired-1", time.Now().Add(-time.Hour))
+	_, _ = repo.Create(ctx, "user-3", "valid-2", "refresh-2", time.Now().Add(time.Hour))
+
+	// List only valid sessions
+	sessions, total, err := repo.ListAllPaginated(ctx, false, 10, 0)
+	require.NoError(t, err)
+	assert.Len(t, sessions, 2, "Should only return valid sessions")
+	assert.Equal(t, 2, total)
+
+	// List all sessions including expired
+	sessions, total, err = repo.ListAllPaginated(ctx, true, 10, 0)
+	require.NoError(t, err)
+	assert.Len(t, sessions, 3, "Should return all sessions")
+	assert.Equal(t, 3, total)
+}
+
+func TestMockSessionRepository_UpdateTokens_RotateRefreshToken(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create session
+	session, err := repo.Create(ctx, "user-123", "old-access", "old-refresh", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	// Simulate token rotation (generate new tokens)
+	newExpiry := time.Now().Add(2 * time.Hour)
+	err = repo.UpdateTokens(ctx, session.ID, "new-access", "new-refresh", newExpiry)
+	require.NoError(t, err)
+
+	// Verify old tokens are invalidated
+	_, err = repo.GetByAccessToken(ctx, "old-access")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+
+	_, err = repo.GetByRefreshToken(ctx, "old-refresh")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+
+	// Verify new tokens work
+	retrieved, err := repo.GetByAccessToken(ctx, "new-access")
+	require.NoError(t, err)
+	assert.Equal(t, session.ID, retrieved.ID)
+
+	retrieved, err = repo.GetByRefreshToken(ctx, "new-refresh")
+	require.NoError(t, err)
+	assert.Equal(t, session.ID, retrieved.ID)
+}
+
+func TestMockSessionRepository_MultipleUsers(t *testing.T) {
+	repo := NewMockSessionRepository()
+	ctx := context.Background()
+
+	// Create sessions for multiple users
+	userIDs := []string{"user-1", "user-2", "user-3"}
+	for _, userID := range userIDs {
+		for i := 0; i < 3; i++ {
+			accessToken := fmt.Sprintf("%s-access-%d", userID, i)
+			refreshToken := fmt.Sprintf("%s-refresh-%d", userID, i)
+			_, err := repo.Create(ctx, userID, accessToken, refreshToken, time.Now().Add(time.Hour))
+			require.NoError(t, err)
+		}
+	}
+
+	// Verify each user has exactly 3 sessions
+	for _, userID := range userIDs {
+		sessions, err := repo.GetByUserID(ctx, userID)
+		require.NoError(t, err)
+		assert.Len(t, sessions, 3)
+
+		count, err := repo.CountByUserID(ctx, userID)
+		require.NoError(t, err)
+		assert.Equal(t, 3, count)
+	}
+
+	// Total count should be 9
+	count, err := repo.Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 9, count)
 }

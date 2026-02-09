@@ -149,7 +149,7 @@ func NewConnection(cfg config.DatabaseConfig) (*Connection, error) {
 				OID:   vectorOID,
 				Codec: pgtype.TextCodec{}, // Vectors are text-encoded as '[0.1,0.2,...]'
 			})
-			log.Debug().Uint32("oid", vectorOID).Msg("Registered pgvector type")
+			// log.Debug().Uint32("oid", vectorOID).Msg("Registered pgvector type")
 		}
 		// If pgvector is not installed, the query will fail silently and we skip registration
 
@@ -185,6 +185,12 @@ func NewConnection(cfg config.DatabaseConfig) (*Connection, error) {
 		Msg("Database connection established")
 
 	return conn, nil
+}
+
+// NewConnectionWithPool creates a new Connection wrapper around an existing pgxpool.Pool.
+// This is useful for tests where you have a pre-configured pool.
+func NewConnectionWithPool(pool *pgxpool.Pool) *Connection {
+	return &Connection{pool: pool}
 }
 
 // Close closes the database connection pool
@@ -595,7 +601,7 @@ func (c *Connection) applyMigrations(m *migrate.Migrate, source string) error {
 	// If database is in dirty state, force the version to clean it
 	if dirty {
 		log.Warn().Str("source", source).Uint("version", version).Msg("Database is in dirty state, forcing version to clean")
-		if err := m.Force(int(version)); err != nil {
+		if err := m.Force(int(version)); err != nil { // #nosec G104 - Migration versions are small (<100K)
 			return fmt.Errorf("failed to force migration version: %w", err)
 		}
 	}

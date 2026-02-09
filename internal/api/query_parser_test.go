@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/fluxbase-eu/fluxbase/internal/config"
@@ -1581,6 +1582,1102 @@ func TestParseVectorOrderIntegration(t *testing.T) {
 			assert.Equal(t, tt.expectVecOp, order.VectorOp)
 			assert.Equal(t, tt.expectVecVal, order.VectorValue)
 			assert.Equal(t, tt.expectDesc, order.Desc)
+		})
+	}
+}
+
+// =============================================================================
+// Additional Tests for Coverage Boost (Priority 1.1)
+// =============================================================================
+
+// TestFilterToSQL_EdgeCases tests additional filter scenarios
+func TestFilterToSQL_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		filter      Filter
+		expectedSQL string
+		expectValue interface{}
+		expectError bool
+	}{
+		{
+			name: "OpLike with escape characters",
+			filter: Filter{
+				Column:   "name",
+				Operator: OpLike,
+				Value:    "test\\_value",
+			},
+			expectedSQL: `"name" LIKE $1`,
+			expectValue: "test\\_value",
+			expectError: false,
+		},
+		{
+			name: "OpILike case insensitive",
+			filter: Filter{
+				Column:   "email",
+				Operator: OpILike,
+				Value:    "*@GMAIL.COM",
+			},
+			expectedSQL: `"email" ILIKE $1`,
+			expectValue: "*@GMAIL.COM",
+			expectError: false,
+		},
+		{
+			name: "OpLike with empty pattern",
+			filter: Filter{
+				Column:   "name",
+				Operator: OpLike,
+				Value:    "",
+			},
+			expectedSQL: `"name" LIKE $1`,
+			expectValue: "",
+			expectError: false,
+		},
+		{
+			name: "OpIn with single value",
+			filter: Filter{
+				Column:   "status",
+				Operator: OpIn,
+				Value:    []string{"active"},
+			},
+			expectedSQL: `"status" = ANY($1)`,
+			expectValue: []string{"active"},
+			expectError: false,
+		},
+		{
+			name: "OpIn with multiple values",
+			filter: Filter{
+				Column:   "id",
+				Operator: OpIn,
+				Value:    []string{"1", "2", "3"},
+			},
+			expectedSQL: `"id" = ANY($1)`,
+			expectValue: []string{"1", "2", "3"},
+			expectError: false,
+		},
+		{
+			name: "OpNotIn with values - handled as equality",
+			filter: Filter{
+				Column:   "status",
+				Operator: OpNotIn,
+				Value:    []string{"deleted", "archived"},
+			},
+			expectedSQL: `"status" = $1`,
+			expectValue: []string{"deleted", "archived"},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			argCounter := 1
+			sql, value := filterToSQL(tt.filter, &argCounter)
+
+			if tt.expectError {
+				assert.Empty(t, sql)
+			} else {
+				assert.NotEmpty(t, sql)
+			}
+
+			if tt.expectedSQL != "" {
+				assert.Equal(t, tt.expectedSQL, sql)
+			}
+			if tt.expectValue != nil {
+				assert.Equal(t, tt.expectValue, value)
+			}
+		})
+	}
+}
+
+// TestParseFilter_EdgeCases tests filter parsing edge cases
+func TestParseFilter_EdgeCases(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name        string
+		query       string
+		expectError bool
+	}{
+		{
+			name:        "malformed operator - missing value",
+			query:       "name.eq=",
+			expectError: false, // Empty value is valid
+		},
+		{
+			name:        "multiple filters on same column",
+			query:       "age.gt=18&age.lt=65",
+			expectError: false,
+		},
+		{
+			name:        "special characters in value",
+			query:       "description.like=*test*",
+			expectError: false,
+		},
+		{
+			name:        "unicode characters in value",
+			query:       "name.eq=测试",
+			expectError: false,
+		},
+		{
+			name:        "filter with dots in column name",
+			query:       "user_profile.age.gt=18",
+			expectError: false,
+		},
+		{
+			name:        "multiple AND filters",
+			query:       "status.eq=active&deleted_at.is=null&verified.eq=true",
+			expectError: false,
+		},
+		{
+			name:        "OR group with parentheses",
+			query:       "or=(status.eq.active,status.eq.pending)",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, params.Filters)
+			}
+		})
+	}
+}
+
+// TestParseOrder_EdgeCases tests order parsing edge cases
+func TestParseOrder_EdgeCases(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name        string
+		query       string
+		expectError bool
+	}{
+		{
+			name:        "order with multiple columns",
+			query:       "order=name.asc,age.desc",
+			expectError: false,
+		},
+		{
+			name:        "order with nulls first",
+			query:       "order=priority.desc.nullsfirst",
+			expectError: false,
+		},
+		{
+			name:        "order with nulls last",
+			query:       "order=name.asc.nullslast",
+			expectError: false,
+		},
+		{
+			name:        "order with default nulls handling",
+			query:       "order=created_at.desc",
+			expectError: false,
+		},
+		{
+			name:        "order with qualified column",
+			query:       "order=user.profile.name.asc",
+			expectError: false,
+		},
+		{
+			name:        "empty order value",
+			query:       "order=",
+			expectError: false, // Parser is lenient - empty values are ignored
+		},
+		{
+			name:        "invalid order direction",
+			query:       "order=name.invalid",
+			expectError: false, // Parser is lenient - doesn't validate direction
+		},
+		{
+			name:        "missing column",
+			query:       "order=.asc",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, params.Order)
+			}
+		})
+	}
+}
+
+// TestParseAggregation_EdgeCases tests aggregation parsing edge cases
+func TestParseAggregation_EdgeCases(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name        string
+		query       string
+		expectError bool
+	}{
+		{
+			name:        "single aggregation",
+			query:       "select=count(*)",
+			expectError: false,
+		},
+		{
+			name:        "multiple aggregations",
+			query:       "select=count(*),sum(price),avg(rating)",
+			expectError: false,
+		},
+		{
+			name:        "aggregation with column",
+			query:       "select=sum(price)",
+			expectError: false,
+		},
+		{
+			name:        "aggregation with qualified column",
+			query:       "select=avg(order_items.total)",
+			expectError: false,
+		},
+		{
+			name:        "empty select",
+			query:       "select=",
+			expectError: false, // Empty select is valid (means select all)
+		},
+		{
+			name:        "invalid aggregation function - ignored",
+			query:       "select=invalid_func(column)",
+			expectError: false, // Parser is lenient - unknown functions are ignored
+		},
+		{
+			name:        "count with asterisk",
+			query:       "select=count(*)",
+			expectError: false,
+		},
+		{
+			name:        "max and min aggregations",
+			query:       "select=max(price),min(price)",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// Aggregations are parsed from select, check if params has any aggregations or select fields
+				// Note: invalid functions may be ignored (empty Select and Aggregations)
+				if tt.query != "select=" && !strings.Contains(tt.query, "invalid") {
+					// For non-empty valid selects, either Select or Aggregations should be populated
+					hasSelections := len(params.Select) > 0 || len(params.Aggregations) > 0
+					assert.True(t, hasSelections, "Expected either Select or Aggregations to be populated")
+				}
+			}
+		})
+	}
+}
+
+// TestParseSelect_EdgeCases tests select parsing edge cases
+func TestParseSelect_EdgeCases(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name        string
+		query       string
+		expectError bool
+	}{
+		{
+			name:        "single column select",
+			query:       "select=name",
+			expectError: false,
+		},
+		{
+			name:        "multiple column select",
+			query:       "select=id,name,email",
+			expectError: false,
+		},
+		{
+			name:        "select with qualified column",
+			query:       "select=user.profile.name",
+			expectError: false,
+		},
+		{
+			name:        "select with wildcard",
+			query:       "select=*",
+			expectError: false,
+		},
+		{
+			name:        "empty select",
+			query:       "select=",
+			expectError: false, // Empty select is valid (means select all)
+		},
+		{
+			name:        "select with special characters",
+			query:       "select=user_name,first_name,last_name",
+			expectError: false,
+		},
+		{
+			name:        "select with column aliases",
+			query:       "select=name,description",
+			expectError: false,
+		},
+		{
+			name:        "duplicate columns",
+			query:       "select=id,name,id",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, params.Select)
+			}
+		})
+	}
+}
+
+// TestParseLogicalFilter_EdgeCases tests logical filter combinations
+func TestParseLogicalFilter_EdgeCases(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name        string
+		query       string
+		expectError bool
+	}{
+		{
+			name:        "simple OR group",
+			query:       "or=(status.eq.active,status.eq.pending)",
+			expectError: false,
+		},
+		{
+			name:        "nested OR groups",
+			query:       "or=(status.eq.active,status.eq.pending,type.eq.vip)",
+			expectError: false,
+		},
+		{
+			name:        "multiple OR groups",
+			query:       "or=(status.eq.active,status.eq.pending)&or=(type.eq.premium,type.eq.vip)",
+			expectError: false,
+		},
+		{
+			name:        "empty OR group",
+			query:       "or=()",
+			expectError: false, // Empty OR group is treated as no filter
+		},
+		{
+			name:        "malformed logical group",
+			query:       "or=(invalid",
+			expectError: true,
+		},
+		{
+			name:        "OR with single value",
+			query:       "or=(status.eq.active)",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, params.Filters)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Additional Tests for Coverage Boost (Developer 3 Assignment)
+// =============================================================================
+
+// TestParseFilterOperators tests all filter operators
+func TestParseFilterOperators(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name          string
+		query         string
+		expectedOp    FilterOperator
+		expectedValue interface{}
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:          "eq operator",
+			query:         "status.eq=active",
+			expectedOp:    OpEqual,
+			expectedValue: "active",
+			expectError:   false,
+		},
+		{
+			name:          "neq operator",
+			query:         "status.neq=deleted",
+			expectedOp:    OpNotEqual,
+			expectedValue: "deleted",
+			expectError:   false,
+		},
+		{
+			name:          "gt operator",
+			query:         "age.gt=18",
+			expectedOp:    OpGreaterThan,
+			expectedValue: "18",
+			expectError:   false,
+		},
+		{
+			name:          "gte operator",
+			query:         "rating.gte=4.5",
+			expectedOp:    OpGreaterOrEqual,
+			expectedValue: "4.5",
+			expectError:   false,
+		},
+		{
+			name:          "lt operator",
+			query:         "price.lt=100",
+			expectedOp:    OpLessThan,
+			expectedValue: "100",
+			expectError:   false,
+		},
+		{
+			name:          "lte operator",
+			query:         "quantity.lte=50",
+			expectedOp:    OpLessOrEqual,
+			expectedValue: "50",
+			expectError:   false,
+		},
+		{
+			name:          "like operator",
+			query:         "name.like=*John*",
+			expectedOp:    OpLike,
+			expectedValue: "*John*",
+			expectError:   false,
+		},
+		{
+			name:          "ilike operator",
+			query:         "email.ilike=*@gmail.com",
+			expectedOp:    OpILike,
+			expectedValue: "*@gmail.com",
+			expectError:   false,
+		},
+		{
+			name:          "is operator with null",
+			query:         "deleted_at.is=null",
+			expectedOp:    OpIs,
+			expectedValue: nil,
+			expectError:   false,
+		},
+		{
+			name:          "is operator with true",
+			query:         "verified.is=true",
+			expectedOp:    OpIs,
+			expectedValue: true,
+			expectError:   false,
+		},
+		{
+			name:          "is operator with false",
+			query:         "active.is=false",
+			expectedOp:    OpIs,
+			expectedValue: false,
+			expectError:   false,
+		},
+		{
+			name:          "in operator single value",
+			query:         "status.in=active",
+			expectedOp:    OpIn,
+			expectedValue: []string{"active"},
+			expectError:   false,
+		},
+		{
+			name:          "in operator multiple values",
+			query:         "status.in=active,pending,completed",
+			expectedOp:    OpIn,
+			expectedValue: []string{"active", "pending", "completed"},
+			expectError:   false,
+		},
+		{
+			name:          "contains operator jsonb",
+			query:         "metadata.cs={\"role\":\"admin\"}",
+			expectedOp:    OpContains,
+			expectedValue: `{"role":"admin"}`,
+			expectError:   false,
+		},
+		{
+			name:          "cd operator (contained)",
+			query:         "tags.cd=red",
+			expectedOp:    OpContained,
+			expectedValue: "red",
+			expectError:   false,
+		},
+		{
+			name:          "sl operator (strictly left)",
+			query:         "range.sl=10",
+			expectedOp:    OpStrictlyLeft,
+			expectedValue: "10",
+			expectError:   false,
+		},
+		{
+			name:          "sr operator (strictly right)",
+			query:         "range.sr=20",
+			expectedOp:    OpStrictlyRight,
+			expectedValue: "20",
+			expectError:   false,
+		},
+		{
+			name:          "nxr operator (not extend right)",
+			query:         "period.nxr=30",
+			expectedOp:    OpNotExtendRight,
+			expectedValue: "30",
+			expectError:   false,
+		},
+		{
+			name:          "nxl operator (not extend left)",
+			query:         "period.nxl=40",
+			expectedOp:    OpNotExtendLeft,
+			expectedValue: "40",
+			expectError:   false,
+		},
+		{
+			name:          "adj operator (adjacent)",
+			query:         "value.adj=5",
+			expectedOp:    OpAdjacent,
+			expectedValue: "5",
+			expectError:   false,
+		},
+		// Note: text search operators use short form (ts, phs, wsb) not long form
+		{
+			name:          "text search operator (short form)",
+			query:         "content.ts=search+term",
+			expectedOp:    "ts",
+			expectedValue: "search term",
+			expectError:   false,
+		},
+		{
+			name:          "phrase search operator (short form)",
+			query:         "description.phs=exact phrase",
+			expectedOp:    "phs",
+			expectedValue: "exact phrase",
+			expectError:   false,
+		},
+		{
+			name:          "web search operator (short form)",
+			query:         "text.wsb=search query",
+			expectedOp:    "wsb",
+			expectedValue: "search query",
+			expectError:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, params.Filters, 1)
+
+			assert.Equal(t, tt.expectedOp, params.Filters[0].Operator)
+			assert.Equal(t, tt.expectedValue, params.Filters[0].Value)
+		})
+	}
+}
+
+// TestParseOrder_MoreCases tests additional order parsing scenarios
+func TestParseOrder_MoreCases(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name          string
+		query         string
+		expectColumns []string
+		expectDesc    []bool
+		expectNulls   []string
+		expectError   bool
+	}{
+		{
+			name:          "multiple order columns",
+			query:         "order=name.asc,age.desc",
+			expectColumns: []string{"name", "age"},
+			expectDesc:    []bool{false, true},
+			expectNulls:   []string{"", ""},
+			expectError:   false,
+		},
+		{
+			name:          "order with nulls first",
+			query:         "order=priority.desc.nullsfirst",
+			expectColumns: []string{"priority"},
+			expectDesc:    []bool{true},
+			expectNulls:   []string{"first"},
+			expectError:   false,
+		},
+		{
+			name:          "order with nulls last",
+			query:         "order=created_at.asc.nullslast",
+			expectColumns: []string{"created_at"},
+			expectDesc:    []bool{false},
+			expectNulls:   []string{"last"},
+			expectError:   false,
+		},
+		{
+			name:          "multiple order with nulls",
+			query:         "order=name.asc.nullslast,age.desc.nullsfirst",
+			expectColumns: []string{"name", "age"},
+			expectDesc:    []bool{false, true},
+			expectNulls:   []string{"last", "first"},
+			expectError:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Len(t, params.Order, len(tt.expectColumns))
+
+				for i, col := range tt.expectColumns {
+					assert.Equal(t, col, params.Order[i].Column)
+					if tt.expectDesc != nil {
+						assert.Equal(t, tt.expectDesc[i], params.Order[i].Desc)
+					}
+					if tt.expectNulls != nil {
+						assert.Equal(t, tt.expectNulls[i], params.Order[i].Nulls)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestParsePagination_MoreCases tests additional pagination scenarios
+func TestParsePagination_MoreCases(t *testing.T) {
+	tests := []struct {
+		name           string
+		config         *config.Config
+		query          string
+		expectedLimit  *int
+		expectedOffset *int
+		expectError    bool
+	}{
+		{
+			name:           "both limit and offset",
+			config:         testConfig(),
+			query:          "limit=100&offset=50",
+			expectedLimit:  intPtr(100),
+			expectedOffset: intPtr(50),
+			expectError:    false,
+		},
+		{
+			name:           "only limit",
+			config:         testConfig(),
+			query:          "limit=50",
+			expectedLimit:  intPtr(50),
+			expectedOffset: nil,
+			expectError:    false,
+		},
+		{
+			name:           "only offset",
+			config:         testConfig(),
+			query:          "offset=100",
+			expectedLimit:  nil,
+			expectedOffset: intPtr(100),
+			expectError:    false,
+		},
+		{
+			name:           "zero limit",
+			config:         testConfig(),
+			query:          "limit=0",
+			expectedLimit:  intPtr(0),
+			expectedOffset: nil,
+			expectError:    false,
+		},
+		{
+			name:           "zero offset",
+			config:         testConfig(),
+			query:          "offset=0",
+			expectedLimit:  nil,
+			expectedOffset: intPtr(0),
+			expectError:    false,
+		},
+		{
+			name:           "negative limit",
+			config:         testConfig(),
+			query:          "limit=-10",
+			expectedLimit:  intPtr(-10),
+			expectedOffset: nil,
+			expectError:    false,
+		},
+		{
+			name:           "negative offset",
+			config:         testConfig(),
+			query:          "offset=-5",
+			expectedLimit:  nil,
+			expectedOffset: intPtr(-5),
+			expectError:    false,
+		},
+		{
+			name:           "invalid limit - not a number",
+			config:         testConfig(),
+			query:          "limit=abc",
+			expectedLimit:  nil,
+			expectedOffset: nil,
+			expectError:    true,
+		},
+		{
+			name:           "invalid offset - not a number",
+			config:         testConfig(),
+			query:          "offset=xyz",
+			expectedLimit:  nil,
+			expectedOffset: nil,
+			expectError:    true,
+		},
+		{
+			name: "large limit with max_page_size",
+			config: &config.Config{
+				API: config.APIConfig{
+					MaxPageSize: 1000,
+				},
+			},
+			query:          "limit=10000",
+			expectedLimit:  intPtr(1000), // Capped to MaxPageSize
+			expectedOffset: nil,
+			expectError:    false,
+		},
+		{
+			name:           "empty query params",
+			config:         testConfig(),
+			query:          "",
+			expectedLimit:  nil,
+			expectedOffset: nil,
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewQueryParser(tt.config)
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedLimit, params.Limit)
+				assert.Equal(t, tt.expectedOffset, params.Offset)
+			}
+		})
+	}
+}
+
+// TestParseSelect_MoreCases tests additional select scenarios
+func TestParseSelect_MoreCases(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name         string
+		query        string
+		expectedCols []string
+		expectedAggs int
+		expectError  bool
+	}{
+		{
+			name:         "single column",
+			query:        "select=id",
+			expectedCols: []string{"id"},
+			expectedAggs: 0,
+			expectError:  false,
+		},
+		{
+			name:         "multiple columns with spaces",
+			query:        "select=id, name, email",
+			expectedCols: []string{"id", "name", "email"},
+			expectedAggs: 0,
+			expectError:  false,
+		},
+		{
+			name:         "qualified columns",
+			query:        "select=user.id,user.profile.name",
+			expectedCols: []string{"user.id", "user.profile.name"},
+			expectedAggs: 0,
+			expectError:  false,
+		},
+		{
+			name:         "columns with underscores",
+			query:        "select=user_id,first_name,last_name",
+			expectedCols: []string{"user_id", "first_name", "last_name"},
+			expectedAggs: 0,
+			expectError:  false,
+		},
+		{
+			name:         "mixed columns and aggregations",
+			query:        "select=category,count(*),sum(price)",
+			expectedCols: []string{"category"},
+			expectedAggs: 2,
+			expectError:  false,
+		},
+		{
+			name:         "only aggregations",
+			query:        "select=count(*),avg(rating),min(price),max(price)",
+			expectedCols: []string{},
+			expectedAggs: 4,
+			expectError:  false,
+		},
+		{
+			name:         "duplicate columns",
+			query:        "select=id,name,id",
+			expectedCols: []string{"id", "name", "id"},
+			expectedAggs: 0,
+			expectError:  false,
+		},
+		{
+			name:         "column with numbers",
+			query:        "select=col1,col2,col3",
+			expectedCols: []string{"col1", "col2", "col3"},
+			expectedAggs: 0,
+			expectError:  false,
+		},
+		{
+			name:         "empty select",
+			query:        "select=",
+			expectedCols: []string{},
+			expectedAggs: 0,
+			expectError:  false,
+		},
+		{
+			name:         "wildcard",
+			query:        "select=*",
+			expectedCols: []string{"*"},
+			expectedAggs: 0,
+			expectError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedCols, params.Select)
+				assert.Equal(t, tt.expectedAggs, len(params.Aggregations))
+			}
+		})
+	}
+}
+
+// TestParseGroupBy_MoreCases tests additional group by scenarios
+func TestParseGroupBy_MoreCases(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name            string
+		query           string
+		expectedColumns []string
+		expectError     bool
+	}{
+		{
+			name:            "single column",
+			query:           "group_by=category",
+			expectedColumns: []string{"category"},
+			expectError:     false,
+		},
+		{
+			name:            "multiple columns",
+			query:           "group_by=category,status,region",
+			expectedColumns: []string{"category", "status", "region"},
+			expectError:     false,
+		},
+		{
+			name:            "columns with spaces",
+			query:           "group_by=category, status, region",
+			expectedColumns: []string{"category", "status", "region"},
+			expectError:     false,
+		},
+		{
+			name:            "columns with underscores",
+			query:           "group_by=user_id,created_date",
+			expectedColumns: []string{"user_id", "created_date"},
+			expectError:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedColumns, params.GroupBy)
+			}
+		})
+	}
+}
+
+// TestParseBuiltinRangeOperators tests range operators for built-in types
+func TestParseBuiltinRangeOperators(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	tests := []struct {
+		name        string
+		query       string
+		expectedOp  FilterOperator
+		expectedVal interface{}
+	}{
+		{
+			name:        "strictly left",
+			query:       "range.sl=[1,10]",
+			expectedOp:  OpStrictlyLeft,
+			expectedVal: "[1,10]",
+		},
+		{
+			name:        "strictly right",
+			query:       "range.sr=[20,30]",
+			expectedOp:  OpStrictlyRight,
+			expectedVal: "[20,30]",
+		},
+		{
+			name:        "not extend right",
+			query:       "period.nxr=[1,10]",
+			expectedOp:  OpNotExtendRight,
+			expectedVal: "[1,10]",
+		},
+		{
+			name:        "not extend left",
+			query:       "period.nxl=[20,30]",
+			expectedOp:  OpNotExtendLeft,
+			expectedVal: "[20,30]",
+		},
+		{
+			name:        "adjacent",
+			query:       "value.adj=10",
+			expectedOp:  OpAdjacent,
+			expectedVal: "10",
+		},
+		{
+			name:        "overlaps",
+			query:       "range.ov=[1,10]",
+			expectedOp:  OpOverlaps,
+			expectedVal: "[1,10]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			params, err := parser.Parse(values)
+			require.NoError(t, err)
+			require.Len(t, params.Filters, 1)
+
+			assert.Equal(t, tt.expectedOp, params.Filters[0].Operator)
+			assert.Equal(t, tt.expectedVal, params.Filters[0].Value)
+		})
+	}
+}
+
+// TestParseWithBypassMaxTotalResults tests admin bypass behavior
+func TestParseWithBypassMaxTotalResults(t *testing.T) {
+	config := &config.Config{
+		API: config.APIConfig{
+			MaxPageSize:     100,
+			MaxTotalResults: 1000,
+			DefaultPageSize: 50,
+		},
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		bypass        bool
+		expectedLimit *int
+		description   string
+	}{
+		{
+			name:          "normal request respects max_total_results",
+			query:         "offset=950&limit=100",
+			bypass:        false,
+			expectedLimit: intPtr(50), // Capped due to max_total_results
+			description:   "Offset 950 + limit 100 exceeds max_total_results 1000",
+		},
+		{
+			name:          "bypass ignores max_total_results",
+			query:         "offset=950&limit=100",
+			bypass:        true,
+			expectedLimit: intPtr(100), // Not capped
+			description:   "Admin bypass allows exceeding max_total_results",
+		},
+		{
+			name:          "bypass still respects max_page_size",
+			query:         "limit=10000",
+			bypass:        true,
+			expectedLimit: intPtr(100), // Still capped to max_page_size
+			description:   "max_page_size is always enforced",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewQueryParser(config)
+			values, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			opts := ParseOptions{BypassMaxTotalResults: tt.bypass}
+			params, err := parser.ParseWithOptions(values, opts)
+			require.NoError(t, err, tt.description)
+
+			require.NotNil(t, params.Limit)
+			assert.Equal(t, *tt.expectedLimit, *params.Limit, tt.description)
 		})
 	}
 }

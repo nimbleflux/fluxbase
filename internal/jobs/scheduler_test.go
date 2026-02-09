@@ -422,3 +422,172 @@ func TestScheduler_UnscheduleJob(t *testing.T) {
 		scheduler.UnscheduleJob("default", "non-existent")
 	})
 }
+
+// =============================================================================
+// Scheduler Additional Coverage Tests
+// =============================================================================
+
+func TestScheduler_AdditionalCoverage(t *testing.T) {
+	t.Run("scheduler context is not nil", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+		assert.NotNil(t, scheduler.ctx)
+	})
+
+	t.Run("scheduler cancel function is not nil", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+		assert.NotNil(t, scheduler.cancel)
+	})
+
+	t.Run("scheduler storage is initialized", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+		assert.NotNil(t, scheduler.storage)
+	})
+
+	t.Run("scheduler max concurrent defaults to 20", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+		assert.Equal(t, 20, scheduler.maxConcurrent)
+	})
+
+	t.Run("scheduler active count starts at 0", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+		assert.Equal(t, 0, scheduler.activeCount)
+	})
+
+	t.Run("scheduler mutex is initialized", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+		assert.NotNil(t, scheduler.jobsMu)
+	})
+
+	t.Run("unschedule job with empty namespace", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+
+		// Should not panic
+		scheduler.UnscheduleJob("", "job-name")
+	})
+
+	t.Run("unschedule job with empty job name", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+
+		// Should not panic
+		scheduler.UnscheduleJob("default", "")
+	})
+
+	t.Run("check is scheduled with empty inputs", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+
+		// Should return false, not panic
+		result := scheduler.IsScheduled("", "")
+		assert.False(t, result)
+	})
+
+	t.Run("get scheduled jobs from empty scheduler", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+
+		jobs := scheduler.GetScheduledJobs()
+		assert.NotNil(t, jobs)
+		assert.Empty(t, jobs)
+	})
+
+	t.Run("multiple stop calls are safe", func(t *testing.T) {
+		scheduler := NewScheduler(nil)
+
+		// Multiple stops should not panic
+		scheduler.Stop()
+		scheduler.Stop()
+		scheduler.Stop()
+	})
+
+	t.Run("validate cron with empty string", func(t *testing.T) {
+		err := ValidateCronSchedule("")
+		assert.Error(t, err)
+	})
+
+	t.Run("validate cron with whitespace", func(t *testing.T) {
+		err := ValidateCronSchedule("   ")
+		assert.Error(t, err)
+	})
+
+	t.Run("validate cron with tab separator", func(t *testing.T) {
+		err := ValidateCronSchedule("0\t0\t*\t*\t*")
+		assert.NoError(t, err)
+	})
+}
+
+// =============================================================================
+// ScheduleConfig Additional Tests
+// =============================================================================
+
+func TestScheduleConfig_Additional(t *testing.T) {
+	t.Run("empty params map", func(t *testing.T) {
+		config := ScheduleConfig{
+			CronExpression: "*/5 * * * *",
+			Params:         map[string]interface{}{},
+		}
+
+		assert.NotNil(t, config.Params)
+		assert.Empty(t, config.Params)
+	})
+
+	t.Run("params with complex types", func(t *testing.T) {
+		config := ScheduleConfig{
+			CronExpression: "0 * * * *",
+			Params: map[string]interface{}{
+				"string": "value",
+				"number": 42,
+				"float":  3.14,
+				"bool":   true,
+				"null":   nil,
+				"array":  []interface{}{1, 2, 3},
+				"nested": map[string]interface{}{"key": "value"},
+			},
+		}
+
+		assert.Equal(t, "value", config.Params["string"])
+		assert.Equal(t, 42, config.Params["number"])
+		assert.Equal(t, 3.14, config.Params["float"])
+		assert.Equal(t, true, config.Params["bool"])
+		assert.Nil(t, config.Params["null"])
+		assert.Len(t, config.Params["array"], 3)
+	})
+}
+
+// =============================================================================
+// CronIntervalError Additional Tests
+// =============================================================================
+
+func TestCronIntervalError_Additional(t *testing.T) {
+	t.Run("error with zero interval", func(t *testing.T) {
+		err := &CronIntervalError{
+			Expression: "* * * * * *",
+			Interval:   0,
+			MinAllowed: time.Minute,
+		}
+
+		msg := err.Error()
+		assert.Contains(t, msg, "runs too frequently")
+	})
+
+	t.Run("error with negative interval", func(t *testing.T) {
+		err := &CronIntervalError{
+			Expression: "invalid",
+			Interval:   -time.Second,
+			MinAllowed: time.Minute,
+		}
+
+		msg := err.Error()
+		assert.NotEmpty(t, msg)
+	})
+
+	t.Run("error type assertion", func(t *testing.T) {
+		var err error = &CronIntervalError{
+			Expression: "*/30 * * * * *",
+			Interval:   30 * time.Second,
+			MinAllowed: time.Minute,
+		}
+
+		// Should be able to type assert back to CronIntervalError
+		intervalErr, ok := err.(*CronIntervalError)
+		assert.True(t, ok)
+		assert.Equal(t, "*/30 * * * * *", intervalErr.Expression)
+	})
+}

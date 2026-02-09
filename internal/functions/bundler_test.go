@@ -840,3 +840,161 @@ func TestBuildDataFilePattern(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateModulePath(t *testing.T) {
+	tests := []struct {
+		name        string
+		path        string
+		expectError bool
+		errContains string
+	}{
+		{
+			name:        "valid relative path",
+			path:        "utils/helper",
+			expectError: false,
+		},
+		{
+			name:        "valid nested path",
+			path:        "modules/utils/helper",
+			expectError: false,
+		},
+		{
+			name:        "path traversal with double dot",
+			path:        "../etc/passwd",
+			expectError: true,
+			errContains: "path traversal",
+		},
+		{
+			name:        "path traversal in middle",
+			path:        "utils/../etc/passwd",
+			expectError: true,
+			errContains: "path traversal",
+		},
+		{
+			name:        "encoded path traversal attempt",
+			path:        "..%2Fetc/passwd",
+			expectError: true,
+			errContains: "path traversal",
+		},
+		{
+			name:        "absolute path rejected",
+			path:        "/etc/passwd",
+			expectError: true,
+			errContains: "absolute paths",
+		},
+		{
+			name:        "Windows absolute path rejected",
+			path:        "C:\\Windows\\System32",
+			expectError: false, // On Linux, Windows paths aren't recognized as absolute by filepath.IsAbs
+		},
+		{
+			name:        "null byte injection rejected",
+			path:        "utils\x00passwd",
+			expectError: true,
+			errContains: "null byte",
+		},
+		{
+			name:        "mixed path traversal attempts",
+			path:        "./../../etc/passwd",
+			expectError: true,
+			errContains: "path traversal",
+		},
+		{
+			name:        "traversal with valid prefix",
+			path:        "utils/../../../etc/passwd",
+			expectError: true,
+			errContains: "path traversal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateModulePath(tt.path)
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestSanitizeAndValidatePath(t *testing.T) {
+	baseDir := "/tmp/functions-test"
+
+	tests := []struct {
+		name         string
+		baseDir      string
+		relativePath string
+		expectError  bool
+		errContains  string
+	}{
+		{
+			name:         "valid path within base",
+			baseDir:      baseDir,
+			relativePath: "utils/helper.ts",
+			expectError:  false,
+		},
+		{
+			name:         "nested valid path",
+			baseDir:      baseDir,
+			relativePath: "modules/auth/middleware.ts",
+			expectError:  false,
+		},
+		{
+			name:         "path with dot segments but stays within",
+			baseDir:      baseDir,
+			relativePath: "utils/./helper.ts",
+			expectError:  false,
+		},
+		{
+			name:         "escapes base directory - caught by validateModulePath",
+			baseDir:      baseDir,
+			relativePath: "../etc/passwd",
+			expectError:  true,
+			errContains:  "path traversal",
+		},
+		{
+			name:         "complex escape path - caught by validateModulePath",
+			baseDir:      baseDir,
+			relativePath: "utils/../../../etc/passwd",
+			expectError:  true,
+			errContains:  "path traversal",
+		},
+		{
+			name:         "null byte injection",
+			baseDir:      baseDir,
+			relativePath: "utils\x00passwd",
+			expectError:  true,
+			errContains:  "null byte",
+		},
+		{
+			name:         "absolute path rejected",
+			baseDir:      baseDir,
+			relativePath: "/etc/passwd",
+			expectError:  true,
+			errContains:  "absolute paths",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := sanitizeAndValidatePath(tt.baseDir, tt.relativePath)
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Empty(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.NotEmpty(t, result)
+				// Verify result starts with base directory
+				assert.Contains(t, result, tt.baseDir)
+			}
+		})
+	}
+}

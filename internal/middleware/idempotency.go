@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -88,6 +89,7 @@ type IdempotencyMiddleware struct {
 	methodSet   map[string]bool
 	excludeSet  map[string]bool
 	stopCleanup chan struct{}
+	stopped     int32 // Atomic flag to prevent double-close (0=running, 1=stopped)
 }
 
 // NewIdempotencyMiddleware creates a new idempotency middleware
@@ -135,6 +137,11 @@ func NewIdempotencyMiddleware(config IdempotencyConfig) *IdempotencyMiddleware {
 
 // Stop stops the cleanup goroutine
 func (m *IdempotencyMiddleware) Stop() {
+	// Check if already stopped (prevent double-close)
+	if !atomic.CompareAndSwapInt32(&m.stopped, 0, 1) {
+		log.Debug().Msg("Idempotency middleware already stopped")
+		return
+	}
 	close(m.stopCleanup)
 }
 

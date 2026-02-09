@@ -142,6 +142,9 @@ type PasswordResetRepositoryInterface interface {
 	// SECURITY: The incoming token is hashed before lookup
 	GetByToken(ctx context.Context, token string) (*PasswordResetToken, error)
 
+	// GetLatestByUserID retrieves the most recent password reset token for a user
+	GetLatestByUserID(ctx context.Context, userID string) (*PasswordResetToken, error)
+
 	// Validate checks if a password reset token is valid and not expired
 	Validate(ctx context.Context, token string) (*PasswordResetToken, error)
 

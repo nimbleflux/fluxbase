@@ -26,7 +26,7 @@ func TestNewRouter(t *testing.T) {
 		assert.Empty(t, router.pools)
 	})
 
-	t.Run("initializes with default branch from config", func(t *testing.T) {
+	t.Run("initializes with empty active branch (API-set only)", func(t *testing.T) {
 		cfg := config.BranchingConfig{
 			Enabled:       true,
 			DefaultBranch: "development",
@@ -34,8 +34,12 @@ func TestNewRouter(t *testing.T) {
 
 		router := NewRouter(nil, cfg, nil, "postgresql://localhost/fluxbase")
 
+		// activeBranch should be empty initially (only set via API)
 		activeBranch := router.activeBranch.Load()
-		assert.Equal(t, "development", activeBranch)
+		assert.Equal(t, "", activeBranch)
+
+		// Config default branch is stored separately
+		assert.Equal(t, "development", router.config.DefaultBranch)
 	})
 
 	t.Run("initializes with empty default branch", func(t *testing.T) {
@@ -126,8 +130,13 @@ func TestRouter_ActiveBranch(t *testing.T) {
 
 		router := NewRouter(nil, cfg, nil, "postgresql://localhost/fluxbase")
 
+		// GetActiveBranch returns empty when no branch set via API
 		active := router.GetActiveBranch()
-		assert.Equal(t, "staging", active)
+		assert.Equal(t, "", active)
+
+		// GetDefaultBranch returns config default when no API-set branch
+		defaultBranch := router.GetDefaultBranch()
+		assert.Equal(t, "staging", defaultBranch)
 	})
 
 	t.Run("set active branch", func(t *testing.T) {

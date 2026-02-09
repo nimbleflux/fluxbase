@@ -35,8 +35,9 @@ func NewRouter(storage *Storage, cfg config.BranchingConfig, mainPool *pgxpool.P
 		pools:       make(map[string]*pgxpool.Pool),
 		poolConfigs: make(map[string]*pgxpool.Config),
 	}
-	// Initialize active branch from config (empty string means "main")
-	r.activeBranch.Store(cfg.DefaultBranch)
+	// Initialize active branch to empty (not set via API yet)
+	// Config default branch is used separately in GetDefaultBranch()
+	r.activeBranch.Store("")
 	return r
 }
 

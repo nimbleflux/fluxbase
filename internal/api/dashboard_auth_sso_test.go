@@ -138,10 +138,13 @@ func TestDashboardPasswordLoginDisabled(t *testing.T) {
 
 	t.Run("LoginBlockedWhenPasswordLoginDisabled", func(t *testing.T) {
 		// Disable password login in settings
-		_, err := db.Exec(ctx, `
+		// Note: Using DELETE + INSERT instead of ON CONFLICT because the table
+		// may not have a unique constraint on (key, category)
+		_, err := db.Exec(ctx, `DELETE FROM app.settings WHERE key = 'disable_dashboard_password_login'`)
+		require.NoError(t, err)
+		_, err = db.Exec(ctx, `
 			INSERT INTO app.settings (key, category, value, description)
 			VALUES ('disable_dashboard_password_login', 'auth', 'true', 'Disable password login for dashboard')
-			ON CONFLICT (key, category) DO UPDATE SET value = 'true'
 		`)
 		require.NoError(t, err)
 
@@ -166,10 +169,11 @@ func TestDashboardPasswordLoginDisabled(t *testing.T) {
 
 	t.Run("EnvironmentVariableOverridesDisabledLogin", func(t *testing.T) {
 		// Ensure password login is disabled in DB
-		_, err := db.Exec(ctx, `
+		_, err := db.Exec(ctx, `DELETE FROM app.settings WHERE key = 'disable_dashboard_password_login'`)
+		require.NoError(t, err)
+		_, err = db.Exec(ctx, `
 			INSERT INTO app.settings (key, category, value, description)
 			VALUES ('disable_dashboard_password_login', 'auth', 'true', 'Disable password login for dashboard')
-			ON CONFLICT (key, category) DO UPDATE SET value = 'true'
 		`)
 		require.NoError(t, err)
 
@@ -225,10 +229,11 @@ func TestGetSSOProvidersEndpoint(t *testing.T) {
 
 	t.Run("ReturnsPasswordLoginDisabledTrue", func(t *testing.T) {
 		// Enable password login disabled
-		_, err := db.Exec(ctx, `
+		_, err := db.Exec(ctx, `DELETE FROM app.settings WHERE key = 'disable_dashboard_password_login'`)
+		require.NoError(t, err)
+		_, err = db.Exec(ctx, `
 			INSERT INTO app.settings (key, category, value, description)
 			VALUES ('disable_dashboard_password_login', 'auth', 'true', 'Disable password login for dashboard')
-			ON CONFLICT (key, category) DO UPDATE SET value = 'true'
 		`)
 		require.NoError(t, err)
 

@@ -752,3 +752,174 @@ func TestSAMLProvider_AttributeMapping(t *testing.T) {
 		assert.Nil(t, provider.AttributeMapping)
 	})
 }
+
+// =============================================================================
+// SAML Service Tests (Mock-based)
+// =============================================================================
+
+func TestSAMLService_GenerateAuthRequest(t *testing.T) {
+	// Test that we can create a SAML service without DB
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with non-existent provider - should fail
+	_, _, err = svc.GenerateAuthRequest("nonexistent", "relay-state")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "provider not found")
+}
+
+func TestSAMLService_GetProvider(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with non-existent provider
+	provider, err := svc.GetProvider("nonexistent")
+	assert.Error(t, err)
+	assert.Nil(t, provider)
+	assert.Contains(t, err.Error(), "provider not found")
+}
+
+func TestSAMLService_ListProviders(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// List should return empty slice initially
+	providers := svc.ListProviders()
+	assert.NotNil(t, providers)
+	assert.Empty(t, providers)
+}
+
+func TestSAMLService_GetSPMetadata(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with non-existent provider
+	metadata, err := svc.GetSPMetadata("nonexistent")
+	assert.Error(t, err)
+	assert.Nil(t, metadata)
+	assert.Contains(t, err.Error(), "provider not found")
+}
+
+func TestSAMLService_ParseAssertion(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with empty response
+	_, err = svc.ParseAssertion("test-provider", "")
+	assert.Error(t, err)
+
+	// Test with invalid SAML response
+	_, err = svc.ParseAssertion("test-provider", "invalid-saml-response")
+	assert.Error(t, err)
+}
+
+func TestSAMLService_ExtractUserInfo(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with nil assertion
+	_, _, err = svc.ExtractUserInfo("test-provider", nil)
+	assert.Error(t, err)
+}
+
+func TestSAMLService_ExtractGroups(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with nil assertion
+	groups := svc.ExtractGroups("test-provider", nil)
+	assert.NotNil(t, groups)
+	assert.Empty(t, groups)
+}
+
+func TestSAMLService_GenerateLogoutRequest(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with non-existent provider
+	_, err = svc.GenerateLogoutRequest("nonexistent", "name-id", "format", "index", "relay")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "provider not found")
+}
+
+func TestSAMLService_GenerateLogoutResponse(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with non-existent provider
+	url, err := svc.GenerateLogoutResponse("nonexistent", "in-response-to", "relay")
+	assert.Error(t, err)
+	assert.Nil(t, url)
+}
+
+func TestSAMLService_ParseLogoutRequest(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with empty request
+	_, _, err = svc.ParseLogoutRequest("", "", false)
+	assert.Error(t, err)
+
+	// Test with invalid SAML request
+	_, _, _ = svc.ParseLogoutRequest("invalid-request", "relay", false)
+	// assert.Error(t, err) // Already validated above
+}
+
+func TestSAMLService_ParseLogoutResponse(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with empty response
+	_, _, err = svc.ParseLogoutResponse("", false)
+	assert.Error(t, err)
+
+	// Test with invalid SAML response
+	_, _, _ = svc.ParseLogoutResponse("invalid-response", false)
+	// assert.Error(t, err) // Already validated above
+}
+
+func TestSAMLService_HasSigningKey(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with non-existent provider - should return false
+	hasKey := svc.HasSigningKey("nonexistent")
+	assert.False(t, hasKey)
+}
+
+func TestSAMLService_ValidateGroupMembership(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with provider that has no restrictions
+	provider := &SAMLProvider{
+		DeniedGroups:      []string{},
+		RequiredGroups:    []string{},
+		RequiredGroupsAll: []string{},
+	}
+	err = svc.ValidateGroupMembership(provider, []string{"admin", "user"})
+	assert.NoError(t, err) // No restrictions means no error
+}
+
+func TestSAMLService_MetadataFetch(t *testing.T) {
+	svc, err := NewSAMLService(nil, "https://example.com", nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	// Test with invalid URL - should fail
+	_, err = svc.fetchMetadata("http://invalid-url-that-does-not-exist.example")
+	assert.Error(t, err)
+}

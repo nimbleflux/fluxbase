@@ -12,7 +12,12 @@ import (
 
 // TestFunctionAnonKeyRequired tests that functions require at minimum an anon key by default
 func TestFunctionAnonKeyRequired(t *testing.T) {
-	tc := test.NewTestContext(t)
+	// Use isolated rate limiter to avoid state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 	defer tc.Close()
 	tc.EnsureAuthSchema()
 
@@ -133,7 +138,12 @@ func TestFunctionAnonKeyRequired(t *testing.T) {
 
 // TestFunctionAllowUnauthenticated tests that functions with allow_unauthenticated=true work without auth
 func TestFunctionAllowUnauthenticated(t *testing.T) {
-	tc := test.NewTestContext(t)
+	// Use isolated rate limiter to avoid state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 	defer tc.Close()
 	tc.EnsureAuthSchema()
 
@@ -193,7 +203,12 @@ func TestFunctionAllowUnauthenticated(t *testing.T) {
 
 // TestFunctionCodeCommentAllowUnauthenticated tests the @allow-unauthenticated code comment
 func TestFunctionCodeCommentAllowUnauthenticated(t *testing.T) {
-	tc := test.NewTestContext(t)
+	// Use isolated rate limiter to avoid state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 	defer tc.Close()
 	tc.EnsureAuthSchema()
 
@@ -243,7 +258,12 @@ export default async function handler(req) {
 
 // TestFunctionAuthenticationTypes tests different authentication types work correctly
 func TestFunctionAuthenticationTypes(t *testing.T) {
-	tc := test.NewTestContext(t)
+	// Use isolated rate limiter to avoid state pollution from other tests
+	rateLimiter, pubSub := test.NewInMemoryDependencies()
+	tc := test.NewTestContextWithOptions(t, test.TestContextOptions{
+		RateLimiter: rateLimiter,
+		PubSub:      pubSub,
+	})
 	defer tc.Close()
 	tc.EnsureAuthSchema()
 

@@ -349,3 +349,123 @@ func TestValidateToolCall_SuggestionWithRequiredTool(t *testing.T) {
 	assert.False(t, result.Valid)
 	assert.Contains(t, result.Suggestions[0], "vector_search")
 }
+
+func TestGetForbiddenTools(t *testing.T) {
+	t.Run("returns empty when no rules", func(t *testing.T) {
+		validator := NewIntentValidator(nil, nil, "")
+
+		forbidden := validator.GetForbiddenTools("Any message")
+		assert.Empty(t, forbidden)
+	})
+
+	t.Run("returns empty when no forbidden tools configured", func(t *testing.T) {
+		rules := []IntentRule{
+			{
+				Keywords:      []string{"restaurant"},
+				RequiredTable: "my_place_visits",
+			},
+		}
+		validator := NewIntentValidator(rules, nil, "")
+
+		forbidden := validator.GetForbiddenTools("Show me restaurants")
+		assert.Empty(t, forbidden)
+	})
+
+	t.Run("returns forbidden tool when keyword matches", func(t *testing.T) {
+		rules := []IntentRule{
+			{
+				Keywords:      []string{"restaurant", "cafe"},
+				RequiredTable: "my_place_visits",
+				ForbiddenTool: "http_request",
+			},
+		}
+		validator := NewIntentValidator(rules, nil, "")
+
+		forbidden := validator.GetForbiddenTools("Show me restaurants nearby")
+		assert.Equal(t, []string{"http_request"}, forbidden)
+	})
+
+	t.Run("case insensitive keyword matching", func(t *testing.T) {
+		rules := []IntentRule{
+			{
+				Keywords:      []string{"RESTAURANT"},
+				RequiredTable: "my_place_visits",
+				ForbiddenTool: "http_request",
+			},
+		}
+		validator := NewIntentValidator(rules, nil, "")
+
+		forbidden := validator.GetForbiddenTools("show me restaurants")
+		assert.Equal(t, []string{"http_request"}, forbidden)
+	})
+
+	t.Run("multiple forbidden tools from different rules", func(t *testing.T) {
+		rules := []IntentRule{
+			{
+				Keywords:      []string{"restaurant"},
+				ForbiddenTool: "http_request",
+			},
+			{
+				Keywords:      []string{"trip"},
+				ForbiddenTool: "vector_search",
+			},
+		}
+		validator := NewIntentValidator(rules, nil, "")
+
+		forbidden := validator.GetForbiddenTools("I want restaurants and trips")
+		assert.ElementsMatch(t, []string{"http_request", "vector_search"}, forbidden)
+	})
+
+	t.Run("no match when keywords not present", func(t *testing.T) {
+		rules := []IntentRule{
+			{
+				Keywords:      []string{"restaurant"},
+				ForbiddenTool: "http_request",
+			},
+		}
+		validator := NewIntentValidator(rules, nil, "")
+
+		forbidden := validator.GetForbiddenTools("Show me hotels")
+		assert.Empty(t, forbidden)
+	})
+
+	t.Run("skips rules with empty forbidden tool", func(t *testing.T) {
+		rules := []IntentRule{
+			{
+				Keywords:      []string{"restaurant"},
+				RequiredTable: "my_place_visits",
+				// ForbiddenTool not set
+			},
+		}
+		validator := NewIntentValidator(rules, nil, "")
+
+		forbidden := validator.GetForbiddenTools("Show me restaurants")
+		assert.Empty(t, forbidden)
+	})
+
+	t.Run("partial keyword match", func(t *testing.T) {
+		rules := []IntentRule{
+			{
+				Keywords:      []string{"rest"},
+				ForbiddenTool: "http_request",
+			},
+		}
+		validator := NewIntentValidator(rules, nil, "")
+
+		forbidden := validator.GetForbiddenTools("restaurant list")
+		assert.Equal(t, []string{"http_request"}, forbidden)
+	})
+
+	t.Run("duplicate forbidden tools not added", func(t *testing.T) {
+		rules := []IntentRule{
+			{
+				Keywords:      []string{"restaurant", "cafe"},
+				ForbiddenTool: "http_request",
+			},
+		}
+		validator := NewIntentValidator(rules, nil, "")
+
+		forbidden := validator.GetForbiddenTools("restaurant and cafe")
+		assert.Equal(t, []string{"http_request"}, forbidden)
+	})
+}

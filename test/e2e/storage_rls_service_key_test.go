@@ -2,9 +2,11 @@ package e2e
 
 import (
 	"bytes"
+	"fmt"
 	"mime/multipart"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/fluxbase-eu/fluxbase/test"
 	"github.com/gofiber/fiber/v3"
@@ -13,8 +15,10 @@ import (
 
 // TestStorageRLS_ServiceKeyBypass verifies service keys bypass RLS
 func TestStorageRLS_ServiceKeyBypass(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
+	// NewRLSTestContext will automatically reset RLS state before the test
 	tc := test.NewRLSTestContext(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Clean up storage for this test
 	tc.CleanupStorageFiles()
@@ -27,8 +31,8 @@ func TestStorageRLS_ServiceKeyBypass(t *testing.T) {
 	userEmail := "user-" + test.RandomEmail()
 	_, userToken := tc.CreateTestUser(userEmail, "password123")
 
-	// Create private bucket using service key
-	bucketName := "private-bucket"
+	// Create private bucket using service key (use unique name to avoid conflicts in parallel tests)
+	bucketName := fmt.Sprintf("private-bucket-%d", time.Now().UnixNano())
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
 		WithServiceKey(serviceKey).
 		Send().

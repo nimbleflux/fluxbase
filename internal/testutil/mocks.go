@@ -524,3 +524,512 @@ func (m *MockSAMLService) MarkAssertionUsed(assertionID string) {
 	defer m.mu.Unlock()
 	m.UsedAssertions[assertionID] = true
 }
+
+// =============================================================================
+// Mock OAuth Provider
+// =============================================================================
+
+// MockOAuthProvider implements OAuth provider functionality for testing
+type MockOAuthProvider struct {
+	// Callbacks for custom behavior
+	AuthURLFunc  func(state string) string
+	ExchangeFunc func(token string) (*OAuthToken, error)
+	GetUserFunc  func(token *OAuthToken) (*OAuthUser, error)
+
+	// State tracking
+	StateToken   string // Expected state for validation
+	UserInfo     *OAuthUser
+	TokenInfo    *OAuthToken
+	ShouldError  bool
+	ErrorMessage string
+}
+
+// OAuthToken represents an OAuth token for testing
+type OAuthToken struct {
+	AccessToken  string
+	RefreshToken string
+	Expiry       time.Time
+	TokenType    string
+}
+
+// OAuthUser represents an OAuth user for testing
+type OAuthUser struct {
+	ID       string
+	Email    string
+	Name     string
+	Picture  string
+	Provider string
+}
+
+// NewMockOAuthProvider creates a new mock OAuth provider
+func NewMockOAuthProvider() *MockOAuthProvider {
+	return &MockOAuthProvider{
+		UserInfo: &OAuthUser{
+			ID:       "test-oauth-id",
+			Email:    "oauth@example.com",
+			Name:     "OAuth Test User",
+			Provider: "test",
+		},
+		TokenInfo: &OAuthToken{
+			AccessToken:  "test-access-token",
+			RefreshToken: "test-refresh-token",
+			Expiry:       time.Now().Add(time.Hour),
+			TokenType:    "Bearer",
+		},
+	}
+}
+
+// AuthURL generates an authorization URL for testing
+func (m *MockOAuthProvider) AuthURL(state string) string {
+	if m.AuthURLFunc != nil {
+		return m.AuthURLFunc(state)
+	}
+	return "https://oauth.example.com/authorize?state=" + state
+}
+
+// Exchange exchanges an authorization code for a token
+func (m *MockOAuthProvider) Exchange(code string) (*OAuthToken, error) {
+	if m.ExchangeFunc != nil {
+		return m.ExchangeFunc(code)
+	}
+	if m.ShouldError {
+		return nil, errors.New(m.ErrorMessage)
+	}
+	return m.TokenInfo, nil
+}
+
+// GetUser gets user information from the OAuth provider
+func (m *MockOAuthProvider) GetUser(token *OAuthToken) (*OAuthUser, error) {
+	if m.GetUserFunc != nil {
+		return m.GetUserFunc(token)
+	}
+	if m.ShouldError {
+		return nil, errors.New(m.ErrorMessage)
+	}
+	return m.UserInfo, nil
+}
+
+// =============================================================================
+// Mock TOTP Validator
+// =============================================================================
+
+// MockTOTPValidator implements TOTP validation for testing
+type MockTOTPValidator struct {
+	mu sync.RWMutex
+
+	// Callbacks for custom behavior
+	ValidateFunc func(secret, code string) bool
+	GenerateFunc func() (secret string, qrCode []byte, err error)
+
+	// State tracking
+	ValidCodes   map[string][]string // secret -> valid codes
+	Secret       string
+	ShouldError  bool
+	ErrorMessage string
+	CodeIsValid  bool // Override for validation result
+}
+
+// NewMockTOTPValidator creates a new mock TOTP validator
+func NewMockTOTPValidator() *MockTOTPValidator {
+	return &MockTOTPValidator{
+		ValidCodes:  make(map[string][]string),
+		CodeIsValid: true,
+	}
+}
+
+// Generate generates a new TOTP secret for testing
+func (m *MockTOTPValidator) Generate() (string, []byte, error) {
+	if m.GenerateFunc != nil {
+		return m.GenerateFunc()
+	}
+	if m.ShouldError {
+		return "", nil, errors.New(m.ErrorMessage)
+	}
+	//nolint:gosec // Test mock data, not real credentials
+	secret := "JBSWY3DPEHPK3PXP"
+	qrCode := []byte("mock-qr-code-data")
+	return secret, qrCode, nil
+}
+
+// Validate validates a TOTP code for testing
+func (m *MockTOTPValidator) Validate(secret, code string) bool {
+	if m.ValidateFunc != nil {
+		return m.ValidateFunc(secret, code)
+	}
+	if m.ShouldError {
+		return false
+	}
+	return m.CodeIsValid
+}
+
+// AddValidCode adds a valid code for a secret (for testing)
+func (m *MockTOTPValidator) AddValidCode(secret, code string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ValidCodes[secret] == nil {
+		m.ValidCodes[secret] = []string{}
+	}
+	m.ValidCodes[secret] = append(m.ValidCodes[secret], code)
+}
+
+// =============================================================================
+// Mock Rate Limiter
+// =============================================================================
+
+// MockRateLimiter implements rate limiting for testing
+type MockRateLimiter struct {
+	mu sync.RWMutex
+
+	// Callbacks for custom behavior
+	CheckFunc  func(key string) (bool, time.Duration, error)
+	RecordFunc func(key string) error
+	ResetFunc  func(key string) error
+
+	// State tracking
+	Attempts     map[string]int
+	Locked       map[string]bool
+	Limit        int
+	Window       time.Duration
+	ShouldError  bool
+	ErrorMessage string
+}
+
+// NewMockRateLimiter creates a new mock rate limiter
+func NewMockRateLimiter(limit int, window time.Duration) *MockRateLimiter {
+	return &MockRateLimiter{
+		Attempts: make(map[string]int),
+		Locked:   make(map[string]bool),
+		Limit:    limit,
+		Window:   window,
+	}
+}
+
+// Check checks if a key is rate limited
+func (m *MockRateLimiter) Check(key string) (bool, time.Duration, error) {
+	if m.CheckFunc != nil {
+		return m.CheckFunc(key)
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.ShouldError {
+		return false, 0, errors.New(m.ErrorMessage)
+	}
+
+	if m.Locked[key] {
+		return false, m.Window, nil
+	}
+
+	if m.Attempts[key] >= m.Limit {
+		m.Locked[key] = true
+		return false, m.Window, nil
+	}
+
+	return true, 0, nil
+}
+
+// Record records an attempt for a key
+func (m *MockRateLimiter) Record(key string) error {
+	if m.RecordFunc != nil {
+		return m.RecordFunc(key)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.Attempts[key]++
+	return nil
+}
+
+// Reset resets rate limiting for a key
+func (m *MockRateLimiter) Reset(key string) error {
+	if m.ResetFunc != nil {
+		return m.ResetFunc(key)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.Attempts, key)
+	delete(m.Locked, key)
+	return nil
+}
+
+// =============================================================================
+// Mock Vector Database
+// =============================================================================
+
+// MockVectorDatabase implements vector database operations for testing
+type MockVectorDatabase struct {
+	mu sync.RWMutex
+
+	// Callbacks for custom behavior
+	InsertFunc func(vectors []Vector) error
+	SearchFunc func(query Vector, limit int, filters map[string]string) ([]VectorSearchResult, error)
+	DeleteFunc func(ids []string) error
+
+	// State tracking
+	Vectors      map[string]Vector // id -> vector
+	ShouldError  bool
+	ErrorMessage string
+}
+
+// Vector represents a vector with metadata
+type Vector struct {
+	ID       string
+	Values   []float32
+	Metadata map[string]interface{}
+}
+
+// VectorSearchResult represents a vector search result
+type VectorSearchResult struct {
+	Vector     Vector
+	Similarity float32
+}
+
+// NewMockVectorDatabase creates a new mock vector database
+func NewMockVectorDatabase() *MockVectorDatabase {
+	return &MockVectorDatabase{
+		Vectors: make(map[string]Vector),
+	}
+}
+
+// Insert inserts vectors into the mock database
+func (m *MockVectorDatabase) Insert(vectors []Vector) error {
+	if m.InsertFunc != nil {
+		return m.InsertFunc(vectors)
+	}
+	if m.ShouldError {
+		return errors.New(m.ErrorMessage)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, v := range vectors {
+		m.Vectors[v.ID] = v
+	}
+	return nil
+}
+
+// Search searches for similar vectors
+func (m *MockVectorDatabase) Search(query Vector, limit int, filters map[string]string) ([]VectorSearchResult, error) {
+	if m.SearchFunc != nil {
+		return m.SearchFunc(query, limit, filters)
+	}
+	if m.ShouldError {
+		return nil, errors.New(m.ErrorMessage)
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var results []VectorSearchResult
+	for _, v := range m.Vectors {
+		// Simple cosine similarity (mock implementation)
+		similarity := float32(0.9)
+		results = append(results, VectorSearchResult{
+			Vector:     v,
+			Similarity: similarity,
+		})
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results, nil
+}
+
+// Delete deletes vectors by IDs
+func (m *MockVectorDatabase) Delete(ids []string) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ids)
+	}
+	if m.ShouldError {
+		return errors.New(m.ErrorMessage)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, id := range ids {
+		delete(m.Vectors, id)
+	}
+	return nil
+}
+
+// =============================================================================
+// Mock AI Providers
+// =============================================================================
+
+// MockOpenAIClient implements OpenAI client for testing
+type MockOpenAIClient struct {
+	// Callbacks for custom behavior
+	ChatCompletionFunc func(ctx context.Context, messages []interface{}, opts map[string]interface{}) (string, error)
+	EmbeddingFunc      func(ctx context.Context, texts []string) ([][]float32, error)
+
+	// State tracking
+	Response     string
+	Embeddings   [][]float32
+	ShouldError  bool
+	ErrorMessage string
+}
+
+// NewMockOpenAIClient creates a new mock OpenAI client
+func NewMockOpenAIClient() *MockOpenAIClient {
+	return &MockOpenAIClient{
+		Response: "Mock AI response",
+		Embeddings: [][]float32{
+			{0.1, 0.2, 0.3, 0.4, 0.5},
+		},
+	}
+}
+
+// ChatCompletion performs a chat completion
+func (m *MockOpenAIClient) ChatCompletion(ctx context.Context, messages []interface{}, opts map[string]interface{}) (string, error) {
+	if m.ChatCompletionFunc != nil {
+		return m.ChatCompletionFunc(ctx, messages, opts)
+	}
+	if m.ShouldError {
+		return "", errors.New(m.ErrorMessage)
+	}
+	return m.Response, nil
+}
+
+// Embedding generates embeddings for texts
+func (m *MockOpenAIClient) Embedding(ctx context.Context, texts []string) ([][]float32, error) {
+	if m.EmbeddingFunc != nil {
+		return m.EmbeddingFunc(ctx, texts)
+	}
+	if m.ShouldError {
+		return nil, errors.New(m.ErrorMessage)
+	}
+	result := make([][]float32, len(texts))
+	for i := range result {
+		result[i] = m.Embeddings[0]
+	}
+	return result, nil
+}
+
+// MockAzureClient is similar to MockOpenAIClient for Azure OpenAI
+type MockAzureClient struct {
+	*MockOpenAIClient
+}
+
+// NewMockAzureClient creates a new mock Azure client
+func NewMockAzureClient() *MockAzureClient {
+	return &MockAzureClient{
+		MockOpenAIClient: NewMockOpenAIClient(),
+	}
+}
+
+// MockOllamaClient is similar to MockOpenAIClient for Ollama
+type MockOllamaClient struct {
+	*MockOpenAIClient
+}
+
+// NewMockOllamaClient creates a new mock Ollama client
+func NewMockOllamaClient() *MockOllamaClient {
+	return &MockOllamaClient{
+		MockOpenAIClient: NewMockOpenAIClient(),
+	}
+}
+
+// =============================================================================
+// Mock Runtime
+// =============================================================================
+
+// MockRuntime implements Deno runtime for testing
+type MockRuntime struct {
+	// Callbacks for custom behavior
+	ExecuteFunc func(code string, env map[string]string) (string, error)
+	BundleFunc  func(entryPoint string) (string, []byte, error)
+
+	// State tracking
+	Output       string
+	BundledCode  string
+	SourceMap    []byte
+	ShouldError  bool
+	ErrorMessage string
+}
+
+// NewMockRuntime creates a new mock runtime
+func NewMockRuntime() *MockRuntime {
+	return &MockRuntime{
+		Output:      `{"status":"success","data":"mock output"}`,
+		BundledCode: "bundled-code",
+		SourceMap:   []byte("mock-source-map"),
+	}
+}
+
+// Execute executes Deno code
+func (m *MockRuntime) Execute(code string, env map[string]string) (string, error) {
+	if m.ExecuteFunc != nil {
+		return m.ExecuteFunc(code, env)
+	}
+	if m.ShouldError {
+		return "", errors.New(m.ErrorMessage)
+	}
+	return m.Output, nil
+}
+
+// Bundle bundles Deno code
+func (m *MockRuntime) Bundle(entryPoint string) (string, []byte, error) {
+	if m.BundleFunc != nil {
+		return m.BundleFunc(entryPoint)
+	}
+	if m.ShouldError {
+		return "", nil, errors.New(m.ErrorMessage)
+	}
+	return m.BundledCode, m.SourceMap, nil
+}
+
+// =============================================================================
+// Mock OCR Provider
+// =============================================================================
+
+// MockOCRProvider implements OCR for testing
+type MockOCRProvider struct {
+	// Callbacks for custom behavior
+	ExtractPDFFunc   func(ctx context.Context, data []byte, languages []string) (string, error)
+	ExtractImageFunc func(ctx context.Context, data []byte, languages []string) (string, error)
+	IsAvailableFunc  func() bool
+
+	// State tracking
+	Text         string
+	IsAvailable  bool
+	ShouldError  bool
+	ErrorMessage string
+}
+
+// NewMockOCRProvider creates a new mock OCR provider
+func NewMockOCRProvider() *MockOCRProvider {
+	return &MockOCRProvider{
+		Text:        "Extracted text from document",
+		IsAvailable: true,
+	}
+}
+
+// ExtractPDF extracts text from a PDF
+func (m *MockOCRProvider) ExtractPDF(ctx context.Context, data []byte, languages []string) (string, error) {
+	if m.ExtractPDFFunc != nil {
+		return m.ExtractPDFFunc(ctx, data, languages)
+	}
+	if m.ShouldError {
+		return "", errors.New(m.ErrorMessage)
+	}
+	return m.Text, nil
+}
+
+// ExtractImage extracts text from an image
+func (m *MockOCRProvider) ExtractImage(ctx context.Context, data []byte, languages []string) (string, error) {
+	if m.ExtractImageFunc != nil {
+		return m.ExtractImageFunc(ctx, data, languages)
+	}
+	if m.ShouldError {
+		return "", errors.New(m.ErrorMessage)
+	}
+	return m.Text, nil
+}
+
+// Available returns whether the OCR provider is available
+func (m *MockOCRProvider) Available() bool {
+	if m.IsAvailableFunc != nil {
+		return m.IsAvailableFunc()
+	}
+	return m.IsAvailable
+}

@@ -2,9 +2,11 @@ package e2e
 
 import (
 	"bytes"
+	"fmt"
 	"mime/multipart"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/fluxbase-eu/fluxbase/test"
 	"github.com/gofiber/fiber/v3"
@@ -13,8 +15,10 @@ import (
 
 // TestStorageRLS_FileOwnership verifies owner-based access control
 func TestStorageRLS_FileOwnership(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
+	// NewRLSTestContext will automatically reset RLS state before the test
 	tc := test.NewRLSTestContext(t) // RLS policies will be enforced
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Clean up storage for this test
 	tc.CleanupStorageFiles()
@@ -32,7 +36,7 @@ func TestStorageRLS_FileOwnership(t *testing.T) {
 	// Create private bucket using service key
 	serviceKey := tc.CreateServiceKey("test-bucket-creation")
 
-	bucketName := "private-bucket"
+	bucketName := fmt.Sprintf("private-bucket-%d", time.Now().UnixNano())
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
 		WithServiceKey(serviceKey).
 		Send().

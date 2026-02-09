@@ -153,8 +153,9 @@ func TestGraphQL_Query_Anonymous_UsesAnonRole(t *testing.T) {
 // TestGraphQL_Mutation_Insert tests GraphQL insert mutation using tasks table (which has RLS policies)
 func TestGraphQL_Mutation_Insert(t *testing.T) {
 	// Use RLS test context which has tasks table with proper INSERT policies
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupGraphQLRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create a test user
 	userID, token := tc.CreateTestUserDirect(test.E2ETestEmail(), "password123")
@@ -164,8 +165,8 @@ func TestGraphQL_Mutation_Insert(t *testing.T) {
 		WithAuth(token).
 		WithBody(graphQLRequest{
 			Query: `
-				mutation InsertTask($userId: UUID!, $title: String!, $description: String) {
-					insertTasks(data: {userId: $userId, title: $title, description: $description}) {
+				mutation InsertTask($userId: UUID!, $title: String!) {
+					insertTasks(data: {userId: $userId, title: $title}) {
 						id
 						title
 						userId
@@ -173,9 +174,8 @@ func TestGraphQL_Mutation_Insert(t *testing.T) {
 				}
 			`,
 			Variables: map[string]interface{}{
-				"userId":      userID,
-				"title":       "GraphQL Task",
-				"description": "Created via GraphQL mutation",
+				"userId": userID,
+				"title":  "GraphQL Task",
 			},
 		}).
 		Send().
@@ -293,8 +293,9 @@ func TestGraphQL_QueryWithVariables(t *testing.T) {
 
 // TestGraphQL_RLS_UserCanOnlySeeOwnData tests that RLS restricts GraphQL queries to own data
 func TestGraphQL_RLS_UserCanOnlySeeOwnData(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupGraphQLRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users
 	user1ID, token1 := tc.CreateTestUserDirect(test.E2ETestEmail(), "password123")
@@ -315,10 +316,8 @@ func TestGraphQL_RLS_UserCanOnlySeeOwnData(t *testing.T) {
 			`,
 			Variables: map[string]interface{}{
 				"data": map[string]interface{}{
-					"userId":      user1ID,
-					"title":       "User 1 Task",
-					"description": "This belongs to user 1",
-					"completed":   false,
+					"userId": user1ID,
+					"title":  "User 1 Task",
 				},
 			},
 		}).
@@ -344,10 +343,8 @@ func TestGraphQL_RLS_UserCanOnlySeeOwnData(t *testing.T) {
 			`,
 			Variables: map[string]interface{}{
 				"data": map[string]interface{}{
-					"userId":      user2ID,
-					"title":       "User 2 Task",
-					"description": "This belongs to user 2",
-					"completed":   false,
+					"userId": user2ID,
+					"title":  "User 2 Task",
 				},
 			},
 		}).
@@ -385,8 +382,9 @@ func TestGraphQL_RLS_UserCanOnlySeeOwnData(t *testing.T) {
 
 // TestGraphQL_RLS_MutationEnforcement tests that RLS restricts GraphQL mutations
 func TestGraphQL_RLS_MutationEnforcement(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupGraphQLRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users
 	user1ID, _ := tc.CreateTestUserDirect(test.E2ETestEmail(), "password123")
@@ -439,8 +437,9 @@ func TestGraphQL_RLS_MutationEnforcement(t *testing.T) {
 
 // TestGraphQL_RLS_PublicData tests that public data is accessible via GraphQL
 func TestGraphQL_RLS_PublicData(t *testing.T) {
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupGraphQLRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users
 	user1ID, token1 := tc.CreateTestUserDirect(test.E2ETestEmail(), "password123")
@@ -531,8 +530,9 @@ func TestGraphQL_RLS_PublicData(t *testing.T) {
 // TestGraphQL_RLS_ServiceRoleBypassesRLS tests that service role can see all data via GraphQL
 func TestGraphQL_RLS_ServiceRoleBypassesRLS(t *testing.T) {
 
+	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupGraphQLRLSTest(t)
-	defer tc.Close()
+	// NO defer tc.Close() - shared context is managed by TestMain
 
 	// Create two users with tasks
 	user1ID, _ := tc.CreateTestUserDirect(test.E2ETestEmail(), "password123")

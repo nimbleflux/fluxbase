@@ -1,12 +1,14 @@
 package rpc
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/fluxbase-eu/fluxbase/internal/auth"
 	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -361,6 +363,32 @@ func TestFormatVectorLiteralInterface(t *testing.T) {
 		assert.Contains(t, result, "'[")
 		assert.Contains(t, result, "]'::vector")
 	})
+
+	t.Run("formats float32 elements", func(t *testing.T) {
+		result := formatVectorLiteralInterface([]interface{}{float32(0.1), float32(0.2)})
+		assert.Equal(t, "'[0.1,0.2]'::vector", result)
+	})
+
+	t.Run("formats int32 elements", func(t *testing.T) {
+		result := formatVectorLiteralInterface([]interface{}{int32(1), int32(2)})
+		assert.Equal(t, "'[1,2]'::vector", result)
+	})
+
+	t.Run("handles unknown types with default formatting", func(t *testing.T) {
+		// This tests the default case in the switch statement
+		// Using uint which would fall into the default case
+		result := formatVectorLiteralInterface([]interface{}{uint(1), uint(2)})
+		assert.Contains(t, result, "'[")
+		assert.Contains(t, result, "]'::vector")
+		assert.Contains(t, result, "1")
+		assert.Contains(t, result, "2")
+	})
+
+	t.Run("handles mixed types with float32", func(t *testing.T) {
+		result := formatVectorLiteralInterface([]interface{}{float32(1.5), int64(2), float64(3.5)})
+		assert.Contains(t, result, "'[")
+		assert.Contains(t, result, "]'::vector")
+	})
 }
 
 // =============================================================================
@@ -690,4 +718,253 @@ func BenchmarkConvertValue_JSON(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = convertValue(data)
 	}
+}
+
+// =============================================================================
+// failExecutionWithContext Tests
+// =============================================================================
+
+func TestExecutor_failExecutionWithContext(t *testing.T) {
+	t.Run("marks execution as failed", func(t *testing.T) {
+		executor := NewExecutor(nil, nil, nil, nil)
+
+		exec := &Execution{
+			ID:            "exec-123",
+			ProcedureName: "test_proc",
+			Status:        StatusRunning,
+		}
+
+		execCtx := &ExecuteContext{
+			Procedure:            &Procedure{},
+			DisableExecutionLogs: true, // Skip storage updates
+			IsAsync:              false,
+		}
+
+		start := time.Now()
+		result, err := executor.failExecutionWithContext(context.Background(), exec, execCtx, start, "test error")
+
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Equal(t, "exec-123", result.ExecutionID)
+		assert.Equal(t, StatusFailed, result.Status)
+		assert.NotNil(t, result.Error)
+		assert.Equal(t, "test error", *result.Error)
+	})
+
+	t.Run("skips storage updates when logs are disabled", func(t *testing.T) {
+		storage := &Storage{}
+		executor := NewExecutor(nil, storage, nil, nil)
+
+		exec := &Execution{
+			ID:            "exec-123",
+			ProcedureName: "test_proc",
+			Status:        StatusRunning,
+		}
+
+		execCtx := &ExecuteContext{
+			Procedure:            &Procedure{},
+			DisableExecutionLogs: true,
+			IsAsync:              false,
+		}
+
+		start := time.Now()
+		_, err := executor.failExecutionWithContext(context.Background(), exec, execCtx, start, "test error")
+
+		assert.NoError(t, err)
+		assert.Equal(t, StatusFailed, exec.Status)
+	})
+
+	t.Run("sets duration and completion time", func(t *testing.T) {
+		executor := NewExecutor(nil, nil, nil, nil)
+
+		exec := &Execution{
+			ID:            "exec-123",
+			ProcedureName: "test_proc",
+			Status:        StatusRunning,
+		}
+
+		execCtx := &ExecuteContext{
+			Procedure:            &Procedure{},
+			DisableExecutionLogs: true,
+			IsAsync:              false,
+		}
+
+		start := time.Now()
+		time.Sleep(10 * time.Millisecond) // Ensure some duration
+		result, err := executor.failExecutionWithContext(context.Background(), exec, execCtx, start, "test error")
+
+		assert.NoError(t, err)
+		assert.NotNil(t, result.DurationMs)
+		assert.Greater(t, *result.DurationMs, 0)
+		assert.NotNil(t, exec.CompletedAt)
+	})
+}
+
+// =============================================================================
+// appendLog Tests
+// =============================================================================
+
+func TestExecutor_appendLog(t *testing.T) {
+	t.Run("logs execution info", func(t *testing.T) {
+		executor := NewExecutor(nil, nil, nil, nil)
+
+		// Should not panic
+		executor.appendLog(context.Background(), "exec-123", 1, "info", "test message")
+	})
+
+	t.Run("logs execution errors", func(t *testing.T) {
+		executor := NewExecutor(nil, nil, nil, nil)
+
+		// Should not panic
+		executor.appendLog(context.Background(), "exec-123", 99, "error", "test error")
+	})
+}
+
+// =============================================================================
+// Edge Cases Tests
+// =============================================================================
+
+func TestExecutor_EdgeCases(t *testing.T) {
+	t.Run("handles nil config", func(t *testing.T) {
+		executor := NewExecutor(nil, nil, nil, nil)
+
+		assert.Nil(t, executor.config)
+	})
+
+	t.Run("handles nil storage", func(t *testing.T) {
+		executor := NewExecutor(nil, nil, nil, nil)
+
+		assert.Nil(t, executor.storage)
+	})
+
+	t.Run("handles nil metrics", func(t *testing.T) {
+		executor := NewExecutor(nil, nil, nil, nil)
+
+		assert.Nil(t, executor.metrics)
+	})
+
+	t.Run("handles empty procedure name", func(t *testing.T) {
+		executor := NewExecutor(nil, nil, nil, nil)
+
+		proc := &Procedure{
+			ID:        uuid.New().String(),
+			Name:      "",
+			Namespace: "public",
+			SQLQuery:  "SELECT 1",
+		}
+
+		execCtx := &ExecuteContext{
+			Procedure: proc,
+			Params:    map[string]interface{}{},
+		}
+
+		_, err := executor.buildSQL("SELECT 1", execCtx.Params, execCtx)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles procedure with no allowed tables", func(t *testing.T) {
+		validator := NewValidator()
+		result := validator.ValidateSQL("SELECT 1", []string{}, []string{})
+
+		// SELECT 1 should be valid (no tables accessed)
+		assert.True(t, result.Valid)
+	})
+}
+
+// =============================================================================
+// ExecuteContext Field Tests
+// =============================================================================
+
+func TestExecuteContext_Fields(t *testing.T) {
+	t.Run("creates empty context", func(t *testing.T) {
+		execCtx := &ExecuteContext{}
+
+		assert.Nil(t, execCtx.Procedure)
+		assert.Nil(t, execCtx.Params)
+		assert.Empty(t, execCtx.UserID)
+		assert.Empty(t, execCtx.UserRole)
+		assert.Empty(t, execCtx.UserEmail)
+		assert.Nil(t, execCtx.Claims)
+		assert.False(t, execCtx.IsAsync)
+		assert.Empty(t, execCtx.ExecutionID)
+		assert.False(t, execCtx.DisableExecutionLogs)
+	})
+
+	t.Run("creates context with all fields", func(t *testing.T) {
+		claims := &auth.TokenClaims{
+			UserID: "user-123",
+			Role:   "authenticated",
+		}
+
+		proc := &Procedure{
+			ID:        uuid.New().String(),
+			Name:      "test_proc",
+			Namespace: "public",
+		}
+
+		execCtx := &ExecuteContext{
+			Procedure:            proc,
+			Params:               map[string]interface{}{"key": "value"},
+			UserID:               "user-123",
+			UserRole:             "authenticated",
+			UserEmail:            "test@example.com",
+			Claims:               claims,
+			IsAsync:              true,
+			ExecutionID:          "exec-456",
+			DisableExecutionLogs: true,
+		}
+
+		assert.Equal(t, proc, execCtx.Procedure)
+		assert.NotEmpty(t, execCtx.Params)
+		assert.Equal(t, "user-123", execCtx.UserID)
+		assert.Equal(t, "authenticated", execCtx.UserRole)
+		assert.Equal(t, "test@example.com", execCtx.UserEmail)
+		assert.Equal(t, claims, execCtx.Claims)
+		assert.True(t, execCtx.IsAsync)
+		assert.Equal(t, "exec-456", execCtx.ExecutionID)
+		assert.True(t, execCtx.DisableExecutionLogs)
+	})
+}
+
+// =============================================================================
+// ExecuteResult Field Tests
+// =============================================================================
+
+func TestExecuteResult_Fields(t *testing.T) {
+	t.Run("creates result with minimal fields", func(t *testing.T) {
+		result := &ExecuteResult{
+			ExecutionID: "exec-123",
+			Status:      StatusCompleted,
+		}
+
+		assert.Equal(t, "exec-123", result.ExecutionID)
+		assert.Equal(t, StatusCompleted, result.Status)
+		assert.Nil(t, result.Result)
+		assert.Nil(t, result.RowsReturned)
+		assert.Nil(t, result.DurationMs)
+		assert.Nil(t, result.Error)
+	})
+
+	t.Run("creates result with all fields", func(t *testing.T) {
+		rowCount := 10
+		duration := 50
+		errorMsg := "test error"
+
+		result := &ExecuteResult{
+			ExecutionID:  "exec-123",
+			Status:       StatusFailed,
+			Result:       json.RawMessage(`[{"id": 1}]`),
+			RowsReturned: &rowCount,
+			DurationMs:   &duration,
+			Error:        &errorMsg,
+		}
+
+		assert.Equal(t, "exec-123", result.ExecutionID)
+		assert.Equal(t, StatusFailed, result.Status)
+		assert.NotNil(t, result.Result)
+		assert.Equal(t, 10, *result.RowsReturned)
+		assert.Equal(t, 50, *result.DurationMs)
+		assert.Equal(t, "test error", *result.Error)
+	})
 }

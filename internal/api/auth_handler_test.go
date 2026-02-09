@@ -701,3 +701,963 @@ func BenchmarkSetAuthCookies(b *testing.B) {
 		_, _ = app.Test(req)
 	}
 }
+
+// =============================================================================
+// Handler Tests with 0% Coverage
+// =============================================================================
+
+func TestSignOut_NoToken(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/signout", handler.SignOut)
+
+	req := httptest.NewRequest("POST", "/auth/signout", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	// Should return 400 when no token is provided
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestRefreshToken_NoToken(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/token/refresh", handler.RefreshToken)
+
+	// Test with no body and no cookies
+	req := httptest.NewRequest("POST", "/auth/token/refresh", strings.NewReader(""))
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	// Should return 400 when no refresh token is provided
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+}
+
+func TestSendMagicLink_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/magiclink", handler.SendMagicLink)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing email",
+			body:       `{}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/magiclink", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+// VerifyMagicLink requires auth service - skipped for unit testing
+
+func TestRequestPasswordReset_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/password/reset", handler.RequestPasswordReset)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing email",
+			body:       `{}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/password/reset", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestResetPassword_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/password/reset/confirm", handler.ResetPassword)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing token",
+			body:       `{"password": "newpass123"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing password",
+			body:       `{"token": "test-token"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "short password",
+			body:       `{"token": "test", "password": "short"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/password/reset/confirm", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestVerifyPasswordResetToken_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Get("/auth/password/reset/verify", handler.VerifyPasswordResetToken)
+
+	tests := []struct {
+		name       string
+		url        string
+		wantStatus int
+	}{
+		{
+			name:       "missing token",
+			url:        "/auth/password/reset/verify",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "empty token",
+			url:        "/auth/password/reset/verify?token=",
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", tt.url, nil)
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestVerifyEmail_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/verify", handler.VerifyEmail)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing token",
+			body:       `{}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/verify", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestResendVerificationEmail_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/resend-verification", handler.ResendVerificationEmail)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing email",
+			body:       `{}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/resend-verification", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestStartImpersonation_NoAuth(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/impersonation/start", handler.StartImpersonation)
+
+	body := `{"user_id": "user-123", "reason": "Testing"}`
+	req := httptest.NewRequest("POST", "/auth/impersonation/start", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	// Should fail without auth/admin privileges
+	assert.NotEqual(t, fiber.StatusOK, resp.StatusCode)
+}
+
+func TestStopImpersonation_NoAuth(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/impersonation/stop", handler.StopImpersonation)
+
+	req := httptest.NewRequest("POST", "/auth/impersonation/stop", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	// Should fail without auth
+	assert.NotEqual(t, fiber.StatusOK, resp.StatusCode)
+}
+
+func TestGetActiveImpersonation_NoAuth(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Get("/auth/impersonation/active", handler.GetActiveImpersonation)
+
+	req := httptest.NewRequest("GET", "/auth/impersonation/active", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	// Should fail without auth
+	assert.NotEqual(t, fiber.StatusOK, resp.StatusCode)
+}
+
+func TestListImpersonationSessions_NoAuth(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Get("/auth/impersonation/sessions", handler.ListImpersonationSessions)
+
+	req := httptest.NewRequest("GET", "/auth/impersonation/sessions", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	// Should fail without auth
+	assert.NotEqual(t, fiber.StatusOK, resp.StatusCode)
+}
+
+func TestGetCSRFToken_Handler(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Get("/auth/csrf-token", handler.GetCSRFToken)
+
+	req := httptest.NewRequest("GET", "/auth/csrf-token", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	// Should return a token even without auth
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.NotEmpty(t, body)
+}
+
+// TestSignUp_Validation removed - SignUp handler calls IsSignupEnabled() before any validation,
+// which requires a non-nil authService. Cannot test validation without mocking the full service.
+
+// TestSignIn_Validation removed - SignIn handler calls isPasswordLoginDisabled() before any validation,
+// which requires a non-nil authService. Cannot test validation without mocking the full service.
+
+func TestUpdateUser_AuthHandlerValidation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Patch("/auth/user", handler.UpdateUser)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body - returns 401 (auth checked before body parsing)",
+			body:       "",
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "invalid email format - returns 401 (auth checked before body parsing)",
+			body:       `{"email": "invalid-email"}`,
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "valid empty update - returns 401 (no auth middleware)",
+			body:       `{}`,
+			wantStatus: fiber.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("PATCH", "/auth/user", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+// RegisterRoutes testing skipped - requires valid app state
+
+// =============================================================================
+// Additional Handler Tests for Improved Coverage
+// =============================================================================
+
+func TestStartAnonImpersonation_NoAuth(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/impersonate/anon", handler.StartAnonImpersonation)
+
+	body := `{"reason": "Testing anonymous impersonation"}`
+	req := httptest.NewRequest("POST", "/auth/impersonate/anon", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	// Should fail without auth
+	assert.NotEqual(t, fiber.StatusOK, resp.StatusCode)
+}
+
+func TestStartAnonImpersonation_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/impersonate/anon", handler.StartAnonImpersonation)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "missing reason",
+			body:       `{}`,
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "empty reason",
+			body:       `{"reason": ""}`,
+			wantStatus: fiber.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/impersonate/anon", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestStartServiceImpersonation_NoAuth(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/impersonate/service", handler.StartServiceImpersonation)
+
+	body := `{"reason": "Testing service role impersonation"}`
+	req := httptest.NewRequest("POST", "/auth/impersonate/service", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	// Should fail without auth
+	assert.NotEqual(t, fiber.StatusOK, resp.StatusCode)
+}
+
+func TestStartServiceImpersonation_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/impersonate/service", handler.StartServiceImpersonation)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "missing reason",
+			body:       `{}`,
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "empty reason",
+			body:       `{"reason": ""}`,
+			wantStatus: fiber.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/impersonate/service", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestGetCaptchaConfig_NilService(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Get("/auth/captcha/config", handler.GetCaptchaConfig)
+
+	req := httptest.NewRequest("GET", "/auth/captcha/config", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(body), `"enabled":false`)
+}
+
+func TestCheckCaptcha_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/captcha/check", handler.CheckCaptcha)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "invalid endpoint",
+			body:       `{"endpoint": "invalid"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing endpoint",
+			body:       `{}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "valid endpoint - returns disabled",
+			body:       `{"endpoint": "signup"}`,
+			wantStatus: fiber.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/captcha/check", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestVerifyMagicLink_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/magiclink/verify", handler.VerifyMagicLink)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing token",
+			body:       `{}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "empty token",
+			body:       `{"token": ""}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/magiclink/verify", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestVerifyTOTP_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/2fa/verify", handler.VerifyTOTP)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing user_id",
+			body:       `{"code": "123456"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing code",
+			body:       `{"user_id": "user-123"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "empty code",
+			body:       `{"user_id": "user-123", "code": ""}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/2fa/verify", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestSendOTP_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/otp/signin", handler.SendOTP)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing both email and phone",
+			body:       `{}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/otp/signin", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestVerifyOTP_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/otp/verify", handler.VerifyOTP)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing token",
+			body:       `{"email": "test@example.com"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing both email and phone",
+			body:       `{"token": "123456"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/otp/verify", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestResendOTP_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/otp/resend", handler.ResendOTP)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing both email and phone",
+			body:       `{}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/otp/resend", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestGetUserIdentities_NoAuth(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Get("/auth/user/identities", handler.GetUserIdentities)
+
+	req := httptest.NewRequest("GET", "/auth/user/identities", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestLinkIdentity_NoAuth(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/user/identities", handler.LinkIdentity)
+
+	body := `{"provider": "google"}`
+	req := httptest.NewRequest("POST", "/auth/user/identities", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestLinkIdentity_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/user/identities", handler.LinkIdentity)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "missing provider",
+			body:       `{}`,
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "empty provider",
+			body:       `{"provider": ""}`,
+			wantStatus: fiber.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/user/identities", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestUnlinkIdentity_NoAuth(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Delete("/auth/user/identities/identity-123", handler.UnlinkIdentity)
+
+	req := httptest.NewRequest("DELETE", "/auth/user/identities/identity-123", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestReauthenticate_NoAuth(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/reauthenticate", handler.Reauthenticate)
+
+	req := httptest.NewRequest("POST", "/auth/reauthenticate", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestSignInWithIDToken_Validation(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Post("/auth/signin/idtoken", handler.SignInWithIDToken)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "empty body",
+			body:       "",
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing provider",
+			body:       `{"token": "id-token-123"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "missing token",
+			body:       `{"provider": "google"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "empty provider",
+			body:       `{"provider": "", "token": "id-token"}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "empty token",
+			body:       `{"provider": "google", "token": ""}`,
+			wantStatus: fiber.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/auth/signin/idtoken", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}
+
+// =============================================================================
+// Impersonation Session Query Parameter Tests
+// =============================================================================
+
+func TestListImpersonationSessions_QueryParameters(t *testing.T) {
+	handler := NewAuthHandler(nil, nil, nil, "")
+
+	app := fiber.New()
+	app.Get("/auth/impersonation/sessions", handler.ListImpersonationSessions)
+
+	tests := []struct {
+		name       string
+		url        string
+		wantStatus int
+	}{
+		{
+			name:       "no parameters",
+			url:        "/auth/impersonation/sessions",
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "with limit",
+			url:        "/auth/impersonation/sessions?limit=10",
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "with offset",
+			url:        "/auth/impersonation/sessions?offset=5",
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "with limit and offset",
+			url:        "/auth/impersonation/sessions?limit=10&offset=5",
+			wantStatus: fiber.StatusUnauthorized,
+		},
+		{
+			name:       "with invalid limit",
+			url:        "/auth/impersonation/sessions?limit=invalid",
+			wantStatus: fiber.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", tt.url, nil)
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, resp.StatusCode)
+		})
+	}
+}

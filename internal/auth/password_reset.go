@@ -269,8 +269,8 @@ type PasswordResetEmailSender interface {
 
 // PasswordResetService provides password reset functionality
 type PasswordResetService struct {
-	repo        *PasswordResetRepository
-	userRepo    *UserRepository
+	repo        PasswordResetRepositoryInterface
+	userRepo    UserRepositoryInterface
 	emailSender PasswordResetEmailSender
 	tokenExpiry time.Duration
 	baseURL     string
@@ -278,8 +278,8 @@ type PasswordResetService struct {
 
 // NewPasswordResetService creates a new password reset service
 func NewPasswordResetService(
-	repo *PasswordResetRepository,
-	userRepo *UserRepository,
+	repo PasswordResetRepositoryInterface,
+	userRepo UserRepositoryInterface,
 	emailSender PasswordResetEmailSender,
 	tokenExpiry time.Duration,
 	baseURL string,

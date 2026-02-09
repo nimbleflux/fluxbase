@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/fluxbase-eu/fluxbase/internal/auth"
@@ -29,6 +30,7 @@ type OAuthHandler struct {
 	encryptionKey   string                       // SECURITY: Used for AES-256-GCM encryption of OAuth tokens at rest
 	configProviders []config.OAuthProviderConfig // OAuth providers from config file
 	stopCleanup     chan struct{}                // Signal to stop cleanup goroutines
+	stopped         int32                        // Atomic flag to prevent double-close (0=running, 1=stopped)
 }
 
 // NewOAuthHandler creates a new OAuth handler
@@ -100,6 +102,10 @@ func NewOAuthHandler(db *pgxpool.Pool, authSvc *auth.Service, jwtManager *auth.J
 
 // Stop stops the cleanup goroutines
 func (h *OAuthHandler) Stop() {
+	// Check if already stopped (prevent double-close)
+	if !atomic.CompareAndSwapInt32(&h.stopped, 0, 1) {
+		return
+	}
 	if h.stopCleanup != nil {
 		close(h.stopCleanup)
 	}

@@ -95,3 +95,35 @@ func (s *NoOpService) Send(ctx context.Context, to, subject, body string) error 
 func (s *NoOpService) IsConfigured() bool {
 	return false
 }
+
+// TestEmailService is a no-op email service for testing that succeeds for all operations
+type TestEmailService struct{}
+
+// NewTestEmailService creates a new TestEmailService for testing
+func NewTestEmailService() *TestEmailService {
+	return &TestEmailService{}
+}
+
+func (s *TestEmailService) SendMagicLink(ctx context.Context, to, token, link string) error {
+	return nil
+}
+
+func (s *TestEmailService) SendVerificationEmail(ctx context.Context, to, token, link string) error {
+	return nil
+}
+
+func (s *TestEmailService) SendPasswordReset(ctx context.Context, to, token, link string) error {
+	return nil
+}
+
+func (s *TestEmailService) SendInvitationEmail(ctx context.Context, to, inviterName, inviteLink string) error {
+	return nil
+}
+
+func (s *TestEmailService) Send(ctx context.Context, to, subject, body string) error {
+	return nil
+}
+
+func (s *TestEmailService) IsConfigured() bool {
+	return true
+}

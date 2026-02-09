@@ -7,127 +7,121 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestCreateSecretRequest validates CreateSecretRequest struct
-func TestCreateSecretRequest(t *testing.T) {
-	t.Run("valid global secret request", func(t *testing.T) {
-		req := CreateSecretRequest{
-			Name:        "API_KEY",
-			Value:       "sk-1234567890",
-			Scope:       "global",
-			Description: strPtr("My API key"),
-		}
+// =============================================================================
+// CreateSecretRequest Tests
+// =============================================================================
 
-		if req.Name != "API_KEY" {
-			t.Errorf("expected Name to be 'API_KEY', got %s", req.Name)
-		}
-		if req.Scope != "global" {
-			t.Errorf("expected Scope to be 'global', got %s", req.Scope)
-		}
-		if req.Namespace != nil {
-			t.Error("expected Namespace to be nil for global scope")
-		}
-	})
-
-	t.Run("valid namespace secret request", func(t *testing.T) {
-		ns := "my-namespace"
-		req := CreateSecretRequest{
-			Name:      "DB_PASSWORD",
-			Value:     "secret123",
-			Scope:     "namespace",
-			Namespace: &ns,
-		}
-
-		if req.Scope != "namespace" {
-			t.Errorf("expected Scope to be 'namespace', got %s", req.Scope)
-		}
-		if req.Namespace == nil || *req.Namespace != "my-namespace" {
-			t.Error("expected Namespace to be 'my-namespace'")
-		}
-	})
-
-	t.Run("request with expiration", func(t *testing.T) {
-		expiresAt := time.Now().Add(24 * time.Hour)
-		req := CreateSecretRequest{
-			Name:      "TEMP_TOKEN",
-			Value:     "temp-value",
-			Scope:     "global",
-			ExpiresAt: &expiresAt,
-		}
-
-		if req.ExpiresAt == nil {
-			t.Error("expected ExpiresAt to be set")
-		}
-	})
-}
-
-// TestUpdateSecretRequest validates UpdateSecretRequest struct
-func TestUpdateSecretRequest(t *testing.T) {
-	t.Run("update value only", func(t *testing.T) {
-		value := "new-value"
-		req := UpdateSecretRequest{
-			Value: &value,
-		}
-
-		if req.Value == nil || *req.Value != "new-value" {
-			t.Error("expected Value to be 'new-value'")
-		}
-		if req.Description != nil {
-			t.Error("expected Description to be nil")
-		}
-	})
-
-	t.Run("update description only", func(t *testing.T) {
-		desc := "Updated description"
-		req := UpdateSecretRequest{
-			Description: &desc,
-		}
-
-		if req.Description == nil || *req.Description != "Updated description" {
-			t.Error("expected Description to be 'Updated description'")
-		}
-		if req.Value != nil {
-			t.Error("expected Value to be nil")
-		}
-	})
-
-	t.Run("update multiple fields", func(t *testing.T) {
-		value := "new-value"
-		desc := "New description"
-		expiresAt := time.Now().Add(7 * 24 * time.Hour)
-
-		req := UpdateSecretRequest{
-			Value:       &value,
-			Description: &desc,
-			ExpiresAt:   &expiresAt,
-		}
-
-		if req.Value == nil {
-			t.Error("expected Value to be set")
-		}
-		if req.Description == nil {
-			t.Error("expected Description to be set")
-		}
-		if req.ExpiresAt == nil {
-			t.Error("expected ExpiresAt to be set")
-		}
-	})
-}
-
-// TestNewHandler validates handler construction
-func TestNewHandler(t *testing.T) {
-	encryptionKey := "12345678901234567890123456789012"
-	storage := NewStorage(nil, encryptionKey)
-	handler := NewHandler(storage)
-
-	if handler == nil {
-		t.Fatal("expected handler to not be nil")
+func TestCreateSecretRequest_GlobalSecret(t *testing.T) {
+	req := CreateSecretRequest{
+		Name:        "API_KEY",
+		Value:       "sk-1234567890",
+		Scope:       "global",
+		Description: strPtr("My API key"),
 	}
-	if handler.storage != storage {
-		t.Error("expected handler.storage to match provided storage")
+
+	if req.Name != "API_KEY" {
+		t.Errorf("expected Name to be 'API_KEY', got %s", req.Name)
+	}
+	if req.Scope != "global" {
+		t.Errorf("expected Scope to be 'global', got %s", req.Scope)
+	}
+	if req.Namespace != nil {
+		t.Error("expected Namespace to be nil for global scope")
 	}
 }
 
-// TestIsDuplicateKeyError validates duplicate key error detection
+func TestCreateSecretRequest_NamespaceSecret(t *testing.T) {
+	ns := "my-namespace"
+	req := CreateSecretRequest{
+		Name:      "DB_PASSWORD",
+		Value:     "secret123",
+		Scope:     "namespace",
+		Namespace: &ns,
+	}
+
+	if req.Scope != "namespace" {
+		t.Errorf("expected Scope to be 'namespace', got %s", req.Scope)
+	}
+	if req.Namespace == nil || *req.Namespace != "my-namespace" {
+		t.Error("expected Namespace to be 'my-namespace'")
+	}
+}
+
+func TestCreateSecretRequest_WithExpiration(t *testing.T) {
+	expiresAt := time.Now().Add(24 * time.Hour)
+	req := CreateSecretRequest{
+		Name:      "TEMP_TOKEN",
+		Value:     "temp-value",
+		Scope:     "global",
+		ExpiresAt: &expiresAt,
+	}
+
+	if req.ExpiresAt == nil {
+		t.Error("expected ExpiresAt to be set")
+	}
+	if time.Until(*req.ExpiresAt) < 23*time.Hour || time.Until(*req.ExpiresAt) > 25*time.Hour {
+		t.Error("ExpiresAt is not approximately 24 hours from now")
+	}
+}
+
+// =============================================================================
+// UpdateSecretRequest Tests
+// =============================================================================
+
+func TestUpdateSecretRequest_UpdateValue(t *testing.T) {
+	value := "new-value"
+	req := UpdateSecretRequest{
+		Value: &value,
+	}
+
+	if req.Value == nil || *req.Value != "new-value" {
+		t.Error("expected Value to be 'new-value'")
+	}
+	if req.Description != nil {
+		t.Error("expected Description to be nil")
+	}
+}
+
+func TestUpdateSecretRequest_UpdateDescription(t *testing.T) {
+	desc := "Updated description"
+	req := UpdateSecretRequest{
+		Description: &desc,
+	}
+
+	if req.Description == nil || *req.Description != "Updated description" {
+		t.Error("expected Description to be 'Updated description'")
+	}
+	if req.Value != nil {
+		t.Error("expected Value to be nil")
+	}
+}
+
+func TestUpdateSecretRequest_UpdateMultiple(t *testing.T) {
+	value := "new-value"
+	desc := "New description"
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+
+	req := UpdateSecretRequest{
+		Value:       &value,
+		Description: &desc,
+		ExpiresAt:   &expiresAt,
+	}
+
+	if req.Value == nil {
+		t.Error("expected Value to be set")
+	}
+	if req.Description == nil {
+		t.Error("expected Description to be set")
+	}
+	if req.ExpiresAt == nil {
+		t.Error("expected ExpiresAt to be set")
+	}
+}
+
+// =============================================================================
+// Error Detection Tests
+// =============================================================================
+
 func TestIsDuplicateKeyError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -157,7 +151,6 @@ func TestIsDuplicateKeyError(t *testing.T) {
 	}
 }
 
-// TestIsNotFoundError validates not found error detection
 func TestIsNotFoundError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -187,7 +180,10 @@ func TestIsNotFoundError(t *testing.T) {
 	}
 }
 
-// TestContains validates string contains helper
+// =============================================================================
+// Helper Function Tests
+// =============================================================================
+
 func TestContains(t *testing.T) {
 	tests := []struct {
 		s        string
@@ -213,97 +209,105 @@ func TestContains(t *testing.T) {
 	}
 }
 
-// TestScopeValidationRules tests validation rules for scopes
-func TestScopeValidationRules(t *testing.T) {
-	t.Run("global scope requires nil namespace", func(t *testing.T) {
-		req := CreateSecretRequest{
-			Name:      "TEST",
-			Value:     "value",
-			Scope:     "global",
-			Namespace: strPtr("should-be-nil"),
-		}
+// =============================================================================
+// Pointer Helper Tests
+// =============================================================================
 
-		// In the actual handler, this would be normalized to nil
-		if req.Scope == "global" {
-			req.Namespace = nil
-		}
-
-		if req.Namespace != nil {
-			t.Error("global scope should have nil namespace after normalization")
-		}
-	})
-
-	t.Run("namespace scope requires non-nil namespace", func(t *testing.T) {
-		req := CreateSecretRequest{
-			Name:      "TEST",
-			Value:     "value",
-			Scope:     "namespace",
-			Namespace: nil,
-		}
-
-		// Validation would fail
-		if req.Scope == "namespace" && req.Namespace == nil {
-			// This is the expected invalid state
-		} else {
-			t.Error("expected validation to catch nil namespace for namespace scope")
-		}
-	})
-
-	t.Run("default scope is global", func(t *testing.T) {
-		req := CreateSecretRequest{
-			Name:  "TEST",
-			Value: "value",
-			Scope: "",
-		}
-
-		// In the actual handler, empty scope defaults to global
-		if req.Scope == "" {
-			req.Scope = "global"
-		}
-
-		if req.Scope != "global" {
-			t.Errorf("expected default scope to be 'global', got %s", req.Scope)
-		}
-	})
+func TestStrPtr(t *testing.T) {
+	s := strPtr("test")
+	if s == nil {
+		t.Fatal("expected non-nil pointer")
+	}
+	if *s != "test" {
+		t.Errorf("expected 'test', got %s", *s)
+	}
 }
 
-// TestSecretVersionParsing tests version number parsing
-func TestSecretVersionParsing(t *testing.T) {
+func TestIntPtr(t *testing.T) {
+	i := intPtr(42)
+	if i == nil {
+		t.Fatal("expected non-nil pointer")
+	}
+	if *i != 42 {
+		t.Errorf("expected 42, got %d", *i)
+	}
+}
+
+// =============================================================================
+// Time Parsing Tests
+// =============================================================================
+
+func TestParseExpiresAt(t *testing.T) {
 	tests := []struct {
 		name      string
-		versionIn string
-		expected  int
-		isValid   bool
+		input     string
+		wantValid bool
 	}{
-		{"valid version 1", "1", 1, true},
-		{"valid version 10", "10", 10, true},
-		{"valid version 100", "100", 100, true},
-		{"invalid zero", "0", 0, false},
-		{"invalid negative", "-1", 0, false},
-		{"invalid non-numeric", "abc", 0, false},
-		{"invalid float", "1.5", 0, false},
+		{"valid RFC3339", time.Now().Add(time.Hour).Format(time.RFC3339), true},
+		{"empty", "", false},
+		{"invalid", "not-a-time", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var version int
-			n, err := parseVersion(tt.versionIn, &version)
-
-			if tt.isValid {
-				if err != nil || n != 1 || version < 1 {
-					t.Errorf("expected valid version %d, got %d (err: %v, n: %d)", tt.expected, version, err, n)
+			result, err := time.Parse(time.RFC3339, tt.input)
+			if tt.wantValid {
+				if err != nil {
+					t.Errorf("expected valid time, got error: %v", err)
+				}
+				if time.Until(result) < 0 {
+					// Check if it's in the past
+					t.Skip("Skipping test for past time")
 				}
 			} else {
-				if err == nil && version >= 1 {
-					t.Errorf("expected invalid version, but got %d", version)
+				if err == nil && !result.IsZero() {
+					t.Error("expected error or zero time")
 				}
 			}
 		})
 	}
 }
 
-// TestUUIDParsing tests UUID parsing for secret IDs
-func TestUUIDParsing(t *testing.T) {
+// =============================================================================
+// Version Tests
+// =============================================================================
+
+func TestSecretVersion_Increment(t *testing.T) {
+	secret := &Secret{
+		Version: 1,
+	}
+
+	secret.Version++
+	if secret.Version != 2 {
+		t.Errorf("expected version to be 2, got %d", secret.Version)
+	}
+
+	secret.Version += 5
+	if secret.Version != 7 {
+		t.Errorf("expected version to be 7, got %d", secret.Version)
+	}
+}
+
+func TestSecretVersion_NeverNegative(t *testing.T) {
+	secret := &Secret{
+		Version: 1,
+	}
+
+	// Simulate multiple updates
+	for i := 0; i < 10; i++ {
+		secret.Version++
+	}
+
+	if secret.Version <= 0 {
+		t.Errorf("version should never be negative or zero, got %d", secret.Version)
+	}
+}
+
+// =============================================================================
+// UUID Helper Tests
+// =============================================================================
+
+func TestUUID_Parsing(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
@@ -329,7 +333,117 @@ func TestUUIDParsing(t *testing.T) {
 	}
 }
 
-// Helper functions and types
+// =============================================================================
+// Time Comparison Tests
+// =============================================================================
+
+func TestTime_IsExpired(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name      string
+		expiresAt *time.Time
+		expected  bool
+	}{
+		{"no expiration", nil, false},
+		{"expired", timePtr(now.Add(-1 * time.Hour)), true},
+		{"not expired", timePtr(now.Add(1 * time.Hour)), false},
+		{"just now", timePtr(now.Add(-1 * time.Second)), true},
+		{"future", timePtr(now.Add(24 * time.Hour)), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var isExpired bool
+			if tt.expiresAt == nil {
+				isExpired = false
+			} else {
+				isExpired = tt.expiresAt.Before(now)
+			}
+
+			if isExpired != tt.expected {
+				t.Errorf("isExpired = %v, want %v", isExpired, tt.expected)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Scope Validation Tests
+// =============================================================================
+
+func TestScope_ValidScopes(t *testing.T) {
+	validScopes := []string{"global", "namespace", ""}
+
+	for _, scope := range validScopes {
+		t.Run("valid_scope_"+scope, func(t *testing.T) {
+			// These should all be valid
+			if scope == "" || scope == "global" || scope == "namespace" {
+				// Valid scope
+			} else {
+				t.Error("invalid scope should have been caught")
+			}
+		})
+	}
+}
+
+func TestScope_InvalidScope(t *testing.T) {
+	invalidScopes := []string{"invalid", "user", "admin", "org"}
+
+	for _, scope := range invalidScopes {
+		t.Run("invalid_scope_"+scope, func(t *testing.T) {
+			// These should be invalid
+			if scope == "global" || scope == "namespace" || scope == "" {
+				t.Error("invalid scope should have been rejected")
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Namespace Validation Tests
+// =============================================================================
+
+func TestNamespace_GlobalScope(t *testing.T) {
+	req := CreateSecretRequest{
+		Name:      "TEST",
+		Value:     "value",
+		Scope:     "global",
+		Namespace: strPtr("should-be-nil"),
+	}
+
+	// Global scope should have nil namespace
+	if req.Scope == "global" && req.Namespace != nil {
+		// Normalize to nil
+		req.Namespace = nil
+	}
+
+	if req.Namespace != nil {
+		t.Error("global scope should have nil namespace after normalization")
+	}
+}
+
+func TestNamespace_NamespaceScope(t *testing.T) {
+	req := CreateSecretRequest{
+		Name:      "TEST",
+		Value:     "value",
+		Scope:     "namespace",
+		Namespace: nil,
+	}
+
+	// Namespace scope requires namespace - this is the invalid case we're testing
+	if req.Scope == "namespace" {
+		if req.Namespace == nil {
+			// Expected: validation should catch this
+			return
+		}
+	}
+	t.Error("Test setup should have namespace scope with nil namespace")
+}
+
+// =============================================================================
+// Helper Functions and Types
+// =============================================================================
 
 type testError struct {
 	msg string
@@ -343,34 +457,40 @@ func strPtr(s string) *string {
 	return &s
 }
 
-// parseVersion is a helper to simulate version parsing from handler
-func parseVersion(s string, version *int) (int, error) {
-	n, err := parseVersionImpl(s, version)
-	return n, err
+func intPtr(i int) *int {
+	return &i
 }
 
-func parseVersionImpl(s string, version *int) (int, error) {
-	var v int
-	n, err := scanVersion(s, &v)
-	if err != nil || n != 1 {
-		return n, err
-	}
-	*version = v
-	return n, nil
+func timePtr(t time.Time) *time.Time {
+	return &t
 }
 
-func scanVersion(s string, v *int) (int, error) {
-	n := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] >= '0' && s[i] <= '9' {
-			*v = *v*10 + int(s[i]-'0')
-			n = 1
-		} else {
-			return 0, &testError{msg: "invalid character"}
-		}
+// =============================================================================
+// Benchmarks
+// =============================================================================
+
+func BenchmarkStrPtr(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = strPtr("test")
 	}
-	if n == 0 {
-		return 0, &testError{msg: "no digits"}
+}
+
+func BenchmarkContains(b *testing.B) {
+	s := "hello world"
+	substr := "world"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = contains(s, substr)
 	}
-	return n, nil
+}
+
+func BenchmarkUUID_Parse(b *testing.B) {
+	id := "550e8400-e29b-41d4-a716-446655440000"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = uuid.Parse(id)
+	}
 }

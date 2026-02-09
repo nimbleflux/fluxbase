@@ -43,6 +43,8 @@ spec:
       backendRefs:
         - name: {{ include "fluxbase.fullname" $ }}-ws
           port: {{ $.Values.service.ports.http }}
+          group: ""
+          kind: Service
     {{- end }}
     {{- end }}
     - matches:
@@ -61,4 +63,6 @@ spec:
       backendRefs:
         - name: {{ include "fluxbase.fullname" . }}
           port: {{ .Values.service.ports.http }}
+          group: ""
+          kind: Service
 {{- end }}

@@ -95,7 +95,9 @@ func (s *SMTPService) sendWithTLS(addr string, auth smtp.Auth, to string, messag
 
 	// Start TLS
 	tlsConfig := &tls.Config{
-		ServerName: s.config.SMTPHost,
+		ServerName:         s.config.SMTPHost,
+		MinVersion:         tls.VersionTLS12, // Require TLS 1.2+
+		InsecureSkipVerify: false,            // Always verify certificates
 	}
 	if err := client.StartTLS(tlsConfig); err != nil {
 		return fmt.Errorf("failed to start TLS: %w", err)
@@ -250,6 +252,7 @@ const defaultVerificationTemplate = `
 </html>
 `
 
+//nolint:gosec // Email template HTML, not hardcoded credentials
 const defaultPasswordResetTemplate = `
 <!DOCTYPE html>
 <html>
