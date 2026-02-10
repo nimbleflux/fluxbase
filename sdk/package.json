@@ -60,7 +60,7 @@
     "cross-fetch": "^4.1.0"
   },
   "peerDependencies": {
-    "esbuild": ">=0.27.2"
+    "esbuild": ">=0.27.3"
   },
   "peerDependenciesMeta": {
     "esbuild": {
@@ -68,14 +68,14 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^24.10.10",
+    "@types/node": "^24.10.12",
     "@vitest/coverage-v8": "^4.0.18",
     "docusaurus-plugin-typedoc": "^1.4.2",
-    "esbuild": "^0.27.2",
+    "esbuild": "^0.27.3",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
     "typedoc": "^0.28.16",
-    "typedoc-plugin-markdown": "^4.9.0",
+    "typedoc-plugin-markdown": "^4.10.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },
