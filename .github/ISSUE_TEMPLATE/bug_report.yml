@@ -107,4 +107,4 @@ body:
       placeholder: |
         - OS: Ubuntu 22.04
         - PostgreSQL: 16.1
-        - Go: 1.25.0
+        - Go: 1.25.7
