@@ -595,9 +595,9 @@ func TestDefaultSettingValues(t *testing.T) {
 		assert.Equal(t, "us-east-1", defaultValue)
 	})
 
-	t.Run("global rate limit defaults to false", func(t *testing.T) {
+	t.Run("global rate limit defaults to true", func(t *testing.T) {
 		defaultValue := settingDefaults["app.security.enable_global_rate_limit"]["value"]
-		assert.Equal(t, false, defaultValue)
+		assert.Equal(t, true, defaultValue)
 	})
 }
 

@@ -340,6 +340,12 @@ func DynamicGlobalAPILimiter(settingsCache *auth.SettingsCache) fiber.Handler {
 	rateLimiter := GlobalAPILimiter()
 
 	return func(c fiber.Ctx) error {
+		// Only apply rate limiting to API endpoints
+		// Skip for static files, health checks, admin UI, favicon, etc.
+		if !strings.HasPrefix(c.Path(), "/api/") {
+			return c.Next()
+		}
+
 		// First check if role is already set by auth middleware
 		role := c.Locals("user_role")
 		if role == "admin" || role == "dashboard_admin" {

@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	"github.com/fluxbase-eu/fluxbase/internal/auth"
 	"github.com/gofiber/fiber/v3"
@@ -230,7 +232,7 @@ var settingDefaults = map[string]map[string]interface{}{
 	"app.jobs.enabled":                      {"value": true},
 	"app.email.enabled":                     {"value": true},
 	"app.email.provider":                    {"value": ""},
-	"app.security.enable_global_rate_limit": {"value": false},
+	"app.security.enable_global_rate_limit": {"value": true},
 	// Email provider settings (for UI configuration)
 	"app.email.from_address":     {"value": ""},
 	"app.email.from_name":        {"value": ""},
@@ -263,11 +265,68 @@ func (h *SystemSettingsHandler) isValidSettingKey(key string) bool {
 }
 
 // getDefaultSetting returns a default setting for a known key
+// It reads the actual current value from the config system (including environment variables)
 func (h *SystemSettingsHandler) getDefaultSetting(key string) *auth.SystemSetting {
 	defaultValue, exists := settingDefaults[key]
 	if !exists {
 		return nil
 	}
+
+	// Try to read the actual current value from settings cache (includes env vars)
+	// This ensures we return the real configured value, not just a hardcoded default
+	if h.settingsCache != nil {
+		ctx := context.Background()
+
+		// Determine the type and read the actual value
+		// Most settings are booleans, check for that first
+		if val, ok := defaultValue["value"].(bool); ok {
+			actualValue := h.settingsCache.GetBool(ctx, key, val)
+			return &auth.SystemSetting{
+				Key:   key,
+				Value: map[string]interface{}{"value": actualValue},
+			}
+		}
+
+		// Handle string values
+		if val, ok := defaultValue["value"].(string); ok {
+			actualValue := h.settingsCache.GetString(ctx, key, val)
+			return &auth.SystemSetting{
+				Key:   key,
+				Value: map[string]interface{}{"value": actualValue},
+			}
+		}
+
+		// Handle int values
+		if val, ok := defaultValue["value"].(int); ok {
+			actualValue := h.settingsCache.GetInt(ctx, key, val)
+			return &auth.SystemSetting{
+				Key:   key,
+				Value: map[string]interface{}{"value": actualValue},
+			}
+		}
+
+		// Handle float values - convert to string, get as string, parse back
+		if val, ok := defaultValue["value"].(float64); ok {
+			strVal := fmt.Sprintf("%v", val)
+			actualStrValue := h.settingsCache.GetString(ctx, key, strVal)
+			if actualStrValue != "" {
+				// Try to parse the actual value
+				if actualVal, err := strconv.ParseFloat(actualStrValue, 64); err == nil {
+					return &auth.SystemSetting{
+						Key:   key,
+						Value: map[string]interface{}{"value": actualVal},
+					}
+				}
+			}
+			// If parsing fails or env var not set, use default
+			return &auth.SystemSetting{
+				Key:   key,
+				Value: defaultValue,
+			}
+		}
+	}
+
+	// Fallback to hardcoded default if settings cache is not available
 	return &auth.SystemSetting{
 		Key:   key,
 		Value: defaultValue,
