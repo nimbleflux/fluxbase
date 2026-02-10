@@ -213,6 +213,7 @@ func (s *TriggerService) Start(ctx context.Context) error {
 	go s.listen(ctx)
 
 	// Start backlog processor (processes events that need retry)
+	s.backlogTicker = time.NewTicker(s.backlogInterval)
 	s.wg.Add(1)
 	go s.processBacklog(ctx)
 
@@ -652,8 +653,6 @@ func (s *TriggerService) markEventSuccess(ctx context.Context, eventID uuid.UUID
 // processBacklog periodically processes events that are ready for retry
 func (s *TriggerService) processBacklog(ctx context.Context) {
 	defer s.wg.Done()
-	s.backlogTicker = time.NewTicker(s.backlogInterval)
-	defer s.backlogTicker.Stop()
 
 	// Run immediately on startup to check for any pending retries
 	s.checkForRetries(ctx)

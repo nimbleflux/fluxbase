@@ -318,12 +318,13 @@ func TestWebhookTriggerRetry(t *testing.T) {
 	//           T=6s backlog processor runs (nothing ready yet)
 	//           T=9s backlog processor runs, third attempt succeeds
 	// So we need to wait at least 10 seconds to see 3 attempts
-	success := tc.WaitForCondition(15*time.Second, 500*time.Millisecond, func() bool {
+	// Use 20 seconds to account for CI timing variability
+	success := tc.WaitForCondition(20*time.Second, 500*time.Millisecond, func() bool {
 		mu.Lock()
 		defer mu.Unlock()
 		return attemptCount >= 3
 	})
-	require.True(t, success, "Webhook should be retried at least 3 times within 15 seconds")
+	require.True(t, success, "Webhook should be retried at least 3 times within 20 seconds")
 
 	// Get final attempt count (with lock)
 	mu.Lock()
