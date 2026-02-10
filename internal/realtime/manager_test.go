@@ -980,9 +980,10 @@ func TestManager_checkAndDisconnectSlowClients(t *testing.T) {
 
 		conn, _ := manager.AddConnection("conn1", nil, nil, "anon", nil)
 
-		// Fill the queue beyond threshold
+		// Fill the queue beyond threshold - keep sending until queue is actually full
+		// to overcome the writer loop draining it concurrently
 		stats := conn.GetQueueStats()
-		for i := 0; i < stats.QueueCapacity; i++ {
+		for conn.GetQueueStats().QueueLength < stats.QueueCapacity {
 			conn.SendMessage(map[string]interface{}{"fill": "queue"})
 		}
 
