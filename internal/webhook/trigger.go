@@ -240,13 +240,17 @@ func (s *TriggerService) Stop() {
 		s.cancel()
 	}
 
-	close(s.stopChan)
+	// IMPORTANT: Stop tickers BEFORE closing stopChan
+	// This prevents data race where goroutines read ticker.C
+	// while Stop() accesses the ticker field
 	if s.backlogTicker != nil {
 		s.backlogTicker.Stop()
 	}
 	if s.cleanupTicker != nil {
 		s.cleanupTicker.Stop()
 	}
+
+	close(s.stopChan)
 
 	// Wait for workers to finish processing (with timeout to prevent hanging)
 	done := make(chan struct{})
