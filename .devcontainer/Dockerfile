@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.25-bookworm
+FROM golang:1.26-bookworm
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive

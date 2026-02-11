@@ -639,7 +639,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.0"
+          node-version: "24.13.1"
 
       - name: Update version in files
         run: |
@@ -724,7 +724,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.0"
+          node-version: "24.13.1"
 
       - name: Build SDKs (required by Admin UI and Go embed)
         run: |
@@ -750,7 +750,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.7"
+          go-version: "1.26.0"
 
       - name: Install native dependencies
         run: |
@@ -835,7 +835,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.7"
+          go-version: "1.26.0"
 
       - name: Build CLI binary
         env:
@@ -984,7 +984,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.0"
+          node-version: "24.13.1"
           cache: "npm"
           cache-dependency-path: |
             sdk/package-lock.json
@@ -1055,7 +1055,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.0"
+          node-version: "24.13.1"
           registry-url: "https://registry.npmjs.org"
 
       - name: Build and Publish SDK
@@ -1089,7 +1089,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.0"
+          node-version: "24.13.1"
           registry-url: "https://registry.npmjs.org"
 
       - name: Build core SDK first
@@ -1133,7 +1133,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.7"
+          go-version: "1.26.0"
 
       - name: Publish Go module
         run: |
@@ -1455,7 +1455,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.0"
+          node-version: "24.13.1"
 
       - name: Test Docker image availability
         if: needs.publish-docker-manifest.result == 'success'
