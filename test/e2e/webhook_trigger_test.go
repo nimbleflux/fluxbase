@@ -312,26 +312,28 @@ func TestWebhookTriggerRetry(t *testing.T) {
 		Send().
 		AssertStatus(fiber.StatusCreated)
 
-	// Wait for retries
+	// Wait for retries using database state (more reliable than HTTP server counter)
 	// Timeline: T=0 first attempt fails, next_retry_at = T+2s (attempt 1 * 2s backoff)
 	//           T=3s backlog processor runs, second attempt fails, next_retry_at = T+3+4s = T+7s (attempt 2 * 2s backoff)
 	//           T=6s backlog processor runs (nothing ready yet)
 	//           T=9s backlog processor runs, third attempt succeeds
-	// So we need to wait at least 10 seconds to see 3 attempts
-	// Use 20 seconds to account for CI timing variability
-	success := tc.WaitForCondition(20*time.Second, 500*time.Millisecond, func() bool {
-		mu.Lock()
-		defer mu.Unlock()
-		return attemptCount >= 3
+	// Use 25 seconds to account for CI timing variability
+	var dbAttempts int
+	success := tc.WaitForCondition(25*time.Second, 500*time.Millisecond, func() bool {
+		results := tc.QuerySQL("SELECT attempts FROM auth.webhook_events WHERE webhook_id = $1 ORDER BY created_at DESC LIMIT 1", webhookID)
+		if len(results) == 0 {
+			return false
+		}
+		// Handle both int64 (PostgreSQL) and int types
+		switch v := results[0]["attempts"].(type) {
+		case int64:
+			dbAttempts = int(v)
+		case int:
+			dbAttempts = v
+		}
+		return dbAttempts >= 3
 	})
-	require.True(t, success, "Webhook should be retried at least 3 times within 20 seconds")
-
-	// Get final attempt count (with lock)
-	mu.Lock()
-	finalAttemptCount := attemptCount
-	mu.Unlock()
-
-	require.GreaterOrEqual(t, finalAttemptCount, 3, "Webhook should have been retried at least 3 times")
+	require.True(t, success, "Webhook should be retried at least 3 times within 25 seconds (db attempts: %d)", dbAttempts)
 
 	// Verify the event was eventually marked as processed
 	// Wait a bit for the database update to complete (processing is async)
