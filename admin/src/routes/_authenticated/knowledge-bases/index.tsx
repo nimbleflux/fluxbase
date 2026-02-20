@@ -648,7 +648,7 @@ function KnowledgeBasesPage() {
                         {kb.visibility === 'shared' && (
                           <Users className='h-3 w-3' />
                         )}
-                        {kb.visibility}
+                        {kb.visibility || 'private'}
                       </Badge>
                     </CardHeader>
                     <CardContent>
