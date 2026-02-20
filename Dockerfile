@@ -13,7 +13,7 @@ FROM denoland/deno:bin-2.6.4 AS deno-bin
 # ------------------------------------------------------------------------------
 # Stage 1: Build SDKs and Admin UI
 # ------------------------------------------------------------------------------
-FROM node:25.6.0-bookworm AS admin-builder
+FROM node:25.6.1-bookworm AS admin-builder
 
 WORKDIR /build
 
