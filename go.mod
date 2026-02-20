@@ -1,16 +1,17 @@
 module github.com/fluxbase-eu/fluxbase
 
-go 1.25.7
+go 1.26.0
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.43.0
 	github.com/aws/aws-sdk-go-v2 v1.41.1
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.9
 	github.com/aws/aws-sdk-go-v2/service/ses v1.34.18
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/crewjam/saml v0.5.1
 	github.com/davidbyttow/govips/v2 v2.16.0
 	github.com/elastic/go-elasticsearch/v8 v8.19.3
+	github.com/elastic/go-elasticsearch/v9 v9.3.1
 	github.com/evanw/esbuild v0.27.3
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gofiber/contrib/v3/websocket v1.0.0
@@ -24,7 +25,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/kapmahc/epub v0.1.1
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
-	github.com/mailgun/mailgun-go/v5 v5.13.0
+	github.com/mailgun/mailgun-go/v5 v5.13.2
 	github.com/minio/minio-go/v7 v7.0.98
 	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db
 	github.com/olekukonko/tablewriter v1.1.3
@@ -32,7 +33,7 @@ require (
 	github.com/pganalyze/pg_query_go/v6 v6.2.2
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/redis/go-redis/v9 v9.17.3
+	github.com/redis/go-redis/v9 v9.18.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.34.0
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
@@ -53,7 +54,7 @@ require (
 	golang.org/x/oauth2 v0.35.0
 	golang.org/x/term v0.40.0
 	golang.org/x/time v0.14.0
-	google.golang.org/grpc v1.78.0
+	google.golang.org/grpc v1.79.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -154,6 +155,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.40.0 // indirect
 	go.opentelemetry.io/otel/metric v1.40.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/image v0.25.0 // indirect
