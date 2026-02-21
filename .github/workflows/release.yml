@@ -578,6 +578,8 @@ jobs:
       - name: Create GitHub Release with changelog (if not exists)
         env:
           GH_TOKEN: ${{ github.token }}
+          AI_SUMMARY: ${{ needs.generate-changelog.outputs.ai_summary }}
+          CHANGELOG: ${{ needs.generate-changelog.outputs.changelog }}
         run: |
           PRERELEASE_FLAG=""
           if [ "${{ needs.get-version.outputs.is_prerelease }}" = "true" ]; then
@@ -593,32 +595,32 @@ jobs:
           else
             echo "Creating release $TAG..."
 
-            # Build release notes
+            # Build release notes using environment variables to avoid shell injection issues
             {
-              echo '${{ needs.generate-changelog.outputs.ai_summary }}'
+              printf '%s\n' "$AI_SUMMARY"
               echo ''
-              echo '${{ needs.generate-changelog.outputs.changelog }}'
+              printf '%s\n' "$CHANGELOG"
               echo ''
               echo '## Installation'
               echo ''
               echo '**Docker:**'
               echo '```bash'
-              echo "docker pull ghcr.io/fluxbase-eu/fluxbase:${{ needs.get-version.outputs.version }}"
+              echo "docker pull ghcr.io/fluxbase-eu/fluxbase:${VERSION}"
               echo '```'
               echo ''
               echo '**NPM SDK:**'
               echo '```bash'
-              echo "npm install @fluxbase/sdk@${{ needs.get-version.outputs.version }}"
+              echo "npm install @fluxbase/sdk@${VERSION}"
               echo '```'
               echo ''
               echo '**Helm:**'
               echo '```bash'
-              echo "helm install fluxbase oci://ghcr.io/fluxbase-eu/charts/fluxbase --version ${{ needs.get-version.outputs.version }}"
+              echo "helm install fluxbase oci://ghcr.io/fluxbase-eu/charts/fluxbase --version ${VERSION}"
               echo '```'
               echo ''
               echo '**CLI:**'
               echo '```bash'
-              echo "curl -fsSL https://fluxbase.dev/install-cli.sh | bash -s -- ${{ needs.get-version.outputs.tag_name }}"
+              echo "curl -fsSL https://fluxbase.dev/install-cli.sh | bash -s -- ${TAG}"
               echo '```'
               echo ''
               echo '---'
