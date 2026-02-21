@@ -716,7 +716,7 @@ jobs:
   publish-binaries:
     name: Publish Binaries
     needs: [get-version, create-release]
-    if: github.event_name != 'workflow_dispatch' || inputs.publish_binaries
+    if: always() && (github.event_name != 'workflow_dispatch' || inputs.publish_binaries) && needs.create-release.result == 'success'
     strategy:
       matrix:
         include:
@@ -824,7 +824,7 @@ jobs:
   publish-cli-cross-platform:
     name: Publish CLI (Cross-Platform)
     needs: [get-version, create-release]
-    if: github.event_name != 'workflow_dispatch' || inputs.publish_binaries
+    if: always() && (github.event_name != 'workflow_dispatch' || inputs.publish_binaries) && needs.create-release.result == 'success'
     strategy:
       matrix:
         include:
