@@ -10,18 +10,36 @@
   "rangeStrategy": "bump",
   "regexManagers": [
     {
-      "description": "Update GO_VERSION in CI workflow",
+      "description": "Update go-version in GitHub Actions workflows",
       "fileMatch": ["^\\.github/workflows/[^/]+\\.ya?ml$"],
-      "matchStrings": ["GO_VERSION:\\s*\"(?<currentValue>[^\"]+)\""],
+      "matchStrings": ["go-version:\\s*['\"]?(?<currentValue>[0-9.]+)['\"]?"],
       "depNameTemplate": "go",
       "datasourceTemplate": "golang-version"
+    },
+    {
+      "description": "Update GO_VERSION env var in CI workflows",
+      "fileMatch": ["^\\.github/workflows/[^/]+\\.ya?ml$"],
+      "matchStrings": ["GO_VERSION:\\s*['\"]?(?<currentValue>[0-9.]+)['\"]?"],
+      "depNameTemplate": "go",
+      "datasourceTemplate": "golang-version"
+    },
+    {
+      "description": "Update golang Docker image version in Dockerfiles",
+      "fileMatch": [
+        "Dockerfile",
+        "Dockerfile\\..+",
+        "^\\.devcontainer/Dockerfile"
+      ],
+      "matchStrings": ["FROM\\s+golang:(?<currentValue>[0-9.]+)(?:-[a-z]+)?"],
+      "depNameTemplate": "golang",
+      "datasourceTemplate": "docker"
     }
   ],
   "packageRules": [
     {
       "description": "Pin Go to 1.25.x until golangci-lint supports 1.26",
-      "matchPackageNames": ["go"],
-      "matchDatasources": ["golang-version", "gomod"],
+      "matchPackageNames": ["go", "golang"],
+      "matchDatasources": ["golang-version", "gomod", "docker"],
       "allowedVersions": "1.25.x",
       "groupName": "go"
     },
