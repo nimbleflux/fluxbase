@@ -44,6 +44,7 @@ type ExportTableRequest struct {
 	SampleRowCount     int      `json:"sample_row_count"`
 	IncludeForeignKeys bool     `json:"include_foreign_keys"`
 	IncludeIndexes     bool     `json:"include_indexes"`
+	OwnerID            *string  `json:"owner_id,omitempty"` // Document owner (for RLS)
 }
 
 // ExportTableResult contains the export results
@@ -91,6 +92,7 @@ func (e *TableExporter) ExportTable(ctx context.Context, req ExportTableRequest)
 		SourceType:      "database_table",
 		MimeType:        "text/markdown",
 		Tags:            []string{"schema", "database", req.Schema, req.Table},
+		OwnerID:         req.OwnerID,
 	}
 
 	// Create metadata

@@ -208,14 +208,14 @@ func (s *KnowledgeBaseStorage) CreateDocument(ctx context.Context, doc *Document
 	query := `
 		INSERT INTO ai.documents (
 			id, knowledge_base_id, title, source_url, source_type,
-			mime_type, content, content_hash, status, metadata, tags, created_by
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			mime_type, content, content_hash, status, metadata, tags, created_by, owner_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING created_at, updated_at
 	`
 
 	return s.db.QueryRow(ctx, query,
 		doc.ID, doc.KnowledgeBaseID, doc.Title, doc.SourceURL, doc.SourceType,
-		doc.MimeType, doc.Content, doc.ContentHash, doc.Status, metadataJSON, doc.Tags, doc.CreatedBy,
+		doc.MimeType, doc.Content, doc.ContentHash, doc.Status, metadataJSON, doc.Tags, doc.CreatedBy, doc.OwnerID,
 	).Scan(&doc.CreatedAt, &doc.UpdatedAt)
 }
 
