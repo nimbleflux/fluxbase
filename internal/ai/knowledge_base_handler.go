@@ -141,6 +141,19 @@ func (h *KnowledgeBaseHandler) CreateKnowledgeBase(c fiber.Ctx) error {
 		})
 	}
 
+	// Set created_by to current user if available, or use system user for service role
+	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+		kb.CreatedBy = &uid
+	} else if role := c.Locals("rls_role"); role == "service_role" {
+		systemUserID := SystemUserID
+		kb.CreatedBy = &systemUserID
+	}
+	if kb.CreatedBy != nil {
+		if err := h.storage.UpdateKnowledgeBase(ctx, kb); err != nil {
+			log.Warn().Err(err).Msg("Failed to set KB created_by")
+		}
+	}
+
 	return c.Status(fiber.StatusCreated).JSON(kb)
 }
 
@@ -1269,7 +1282,7 @@ func (h *KnowledgeBaseHandler) ExportTableToKnowledgeBase(c fiber.Ctx) error {
 	req.KnowledgeBaseID = kbID
 
 	// Determine owner_id for the document
-	// Priority: 1) authenticated user, 2) KB's owner_id, 3) KB's created_by
+	// Priority: 1) authenticated user, 2) KB's owner_id, 3) KB's created_by, 4) system user for service role
 	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
 		req.OwnerID = &uid
 	} else if kb, err := h.storage.GetKnowledgeBase(ctx, kbID); err == nil && kb != nil {
@@ -1278,6 +1291,12 @@ func (h *KnowledgeBaseHandler) ExportTableToKnowledgeBase(c fiber.Ctx) error {
 		} else if kb.CreatedBy != nil {
 			req.OwnerID = kb.CreatedBy
 		}
+	}
+
+	// If we still don't have an owner_id, use system user for service role operations
+	if req.OwnerID == nil && c.Locals("rls_role") == "service_role" {
+		systemUserID := SystemUserID
+		req.OwnerID = &systemUserID
 	}
 
 	// Set defaults
