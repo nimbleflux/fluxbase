@@ -427,7 +427,7 @@ function KnowledgeGraphPage() {
                   const entity = (node.data as { entity: Entity })?.entity
                   if (entity) setSelectedEntity(entity)
                 }}
-                className='[&_.react-flow\_\_attribution]:hidden dark:[&_.react-flow\_\_controls]:bg-zinc-800 dark:[&_.react-flow\_\_controls]:border-zinc-700 dark:[&_.react-flow\_\_controls-button]:bg-zinc-800 dark:[&_.react-flow\_\_controls-button]:border-zinc-700 dark:[&_.react-flow\_\_controls-button:hover]:bg-zinc-700 dark:[&_.react-flow\_\_controls-button_svg]:fill-zinc-300 dark:[&_.react-flow\_\_minimap]:bg-zinc-800 dark:[&_.react-flow\_\_minimap]:border-zinc-700'
+                className='react-flow-dark'
               >
                 <Controls />
                 <MiniMap
@@ -437,10 +437,9 @@ function KnowledgeGraphPage() {
                       ? ENTITY_COLORS[entity.entity_type]
                       : '#9ca3af'
                   }}
-                  className='dark:bg-zinc-800'
                   maskColor='rgba(100,100,100,0.1)'
                 />
-                <Background color='#aaa' gap={16} />
+                <Background color='#888' gap={16} />
               </ReactFlow>
             ) : (
               <div className='flex h-full flex-col items-center justify-center gap-4'>

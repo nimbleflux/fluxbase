@@ -452,6 +452,10 @@ func (h *ChatHandler) handleMessage(ctx context.Context, chatCtx *ChatContext, m
 	var consecutiveFailures int
 	const maxConsecutiveFailures = 2
 
+	// Track whether think tool has been called (for enforcing ReAct pattern)
+	hasUsedThink := false
+	thinkRequired := chatbot.ReasoningMode == "react" || chatbot.ReasoningMode == "strict"
+
 	for iteration := 0; iteration < maxIterations; iteration++ {
 		// Determine forbidden tools based on user message and intent rules
 		var forbiddenTools []string
@@ -470,6 +474,16 @@ func (h *ChatHandler) handleMessage(ctx context.Context, chatCtx *ChatContext, m
 		isToolForbidden := func(toolName string) bool {
 			for _, ft := range forbiddenTools {
 				if ft == toolName {
+					return true
+				}
+			}
+			return false
+		}
+
+		// Helper to check if think tool is available
+		hasThinkTool := func(tools []Tool) bool {
+			for _, t := range tools {
+				if t.Function.Name == "think" {
 					return true
 				}
 			}
@@ -497,9 +511,31 @@ func (h *ChatHandler) handleMessage(ctx context.Context, chatCtx *ChatContext, m
 			tools = append(tools, ExecuteSQLTool)
 		}
 
+		// Enforce ReAct pattern: require think tool before other tools
+		// If reasoning mode is react/strict and think hasn't been used yet,
+		// only allow the think tool on the first iteration
+		if thinkRequired && !hasUsedThink && iteration == 0 && hasThinkTool(tools) {
+			// Filter to only include think tool
+			var thinkOnlyTools []Tool
+			for _, t := range tools {
+				if t.Function.Name == "think" {
+					thinkOnlyTools = append(thinkOnlyTools, t)
+					break
+				}
+			}
+			if len(thinkOnlyTools) > 0 {
+				tools = thinkOnlyTools
+				log.Debug().
+					Str("chatbot", chatbot.Name).
+					Msg("ReAct mode: restricting to think tool only on first iteration")
+			}
+		}
+
 		log.Debug().
 			Str("chatbot", chatbot.Name).
 			Int("total_tools", len(tools)).
+			Bool("think_required", thinkRequired).
+			Bool("has_used_think", hasUsedThink).
 			Msg("Tools available for chatbot")
 
 		// Create chat request
@@ -587,6 +623,11 @@ func (h *ChatHandler) handleMessage(ctx context.Context, chatCtx *ChatContext, m
 		// Execute each tool call and add results
 		for _, tc := range pendingToolCalls {
 			toolName := tc.Function.Name
+
+			// Track if think tool was used (for ReAct pattern)
+			if toolName == "think" {
+				hasUsedThink = true
+			}
 
 			// Validate tool call against intent rules (requiredTool/forbiddenTool)
 			if len(chatbot.IntentRules) > 0 {

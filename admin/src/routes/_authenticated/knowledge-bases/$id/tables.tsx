@@ -102,7 +102,7 @@ function KnowledgeBaseTablesPage() {
     try {
       const [kb, tableData, syncs] = await Promise.all([
         knowledgeBasesApi.get(id),
-        knowledgeBasesApi.listTables(schemaFilter === 'all' ? undefined : schemaFilter),
+        knowledgeBasesApi.listTables(id, schemaFilter === 'all' ? undefined : schemaFilter),
         knowledgeBasesApi.listTableExportSyncs(id),
       ])
       setKnowledgeBase(kb)
@@ -317,6 +317,8 @@ function KnowledgeBaseTablesPage() {
                   <TableBody>
                     {tables.map((table) => {
                       const sync = getSyncForTable(table.schema, table.name)
+                      // Use last_export from table data (if exported) or last_sync_at from sync config
+                      const lastExportTime = table.last_export || sync?.last_sync_at
                       return (
                         <TableRow key={`${table.schema}.${table.name}`}>
                           <TableCell className="font-medium">
@@ -332,9 +334,9 @@ function KnowledgeBaseTablesPage() {
                             <Badge variant="secondary">{table.foreign_keys}</Badge>
                           </TableCell>
                           <TableCell>
-                            {sync?.last_sync_at ? (
+                            {lastExportTime ? (
                               <span className="text-sm">
-                                {new Date(sync.last_sync_at).toLocaleString()}
+                                {new Date(lastExportTime).toLocaleString()}
                               </span>
                             ) : (
                               <span className="text-muted-foreground text-sm">-</span>

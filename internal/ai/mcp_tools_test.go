@@ -98,6 +98,7 @@ func TestAllMCPTools(t *testing.T) {
 
 	// Check that all expected tools are present
 	expectedTools := []string{
+		"think", // Reasoning tool (always available)
 		"query_table", "insert_record", "update_record", "delete_record", "execute_sql",
 		"invoke_function", "invoke_rpc", "submit_job", "get_job_status",
 		"list_objects", "upload_object", "download_object", "delete_object",
@@ -118,7 +119,10 @@ func TestMCPToolInfoMap(t *testing.T) {
 			assert.Equal(t, tool, info.Name)
 			assert.NotEmpty(t, info.Description)
 			assert.NotEmpty(t, info.Category)
-			assert.NotEmpty(t, info.Scopes)
+			// Note: "think" tool has empty scopes (always available)
+			if tool != "think" {
+				assert.NotEmpty(t, info.Scopes, "tool %s should have scopes", tool)
+			}
 		}
 	})
 

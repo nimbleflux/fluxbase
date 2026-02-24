@@ -2886,6 +2886,7 @@ export interface TableSummary {
   name: string
   columns: number
   foreign_keys: number
+  last_export?: string // ISO timestamp of last export, if exported
 }
 
 export interface ExportTableOptions {
@@ -3429,8 +3430,12 @@ export const knowledgeBasesApi = {
   // ============================================================================
 
   // List all exportable tables
-  listTables: async (schema?: string): Promise<TableSummary[]> => {
-    const params = schema ? { schema } : {}
+  listTables: async (
+    kbId: string,
+    schema?: string
+  ): Promise<TableSummary[]> => {
+    const params: Record<string, string> = { knowledge_base_id: kbId }
+    if (schema) params.schema = schema
     const response = await api.get<{
       tables: TableSummary[]
       count: number

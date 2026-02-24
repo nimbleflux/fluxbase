@@ -1,11 +1,13 @@
 package ai
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fluxbase-eu/fluxbase/internal/database"
 	"github.com/fluxbase-eu/fluxbase/internal/storage"
@@ -553,6 +555,14 @@ func (h *KnowledgeBaseHandler) DeleteDocument(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Document ID is required",
 		})
+	}
+
+	// First, clean up orphaned entities (those only referenced by this document)
+	// This is important for table exports where entities are 1:1 with documents
+	if h.knowledgeGraph != nil {
+		if err := h.knowledgeGraph.DeleteOrphanedEntitiesByDocument(ctx, docID); err != nil {
+			log.Warn().Err(err).Str("doc_id", docID).Msg("Failed to delete orphaned entities (continuing)")
+		}
 	}
 
 	err := h.storage.DeleteDocument(ctx, docID)
@@ -1326,10 +1336,11 @@ func (h *KnowledgeBaseHandler) ExportTableToKnowledgeBase(c fiber.Ctx) error {
 }
 
 // ListExportableTables lists all tables that can be exported to knowledge bases
-// GET /api/v1/admin/ai/tables
+// GET /api/v1/admin/ai/tables?schema=public&knowledge_base_id=xxx
 func (h *KnowledgeBaseHandler) ListExportableTables(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 	schema := c.Query("schema", "public")
+	kbID := c.Query("knowledge_base_id", "")
 
 	if h.tableExporter == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -1351,16 +1362,58 @@ func (h *KnowledgeBaseHandler) ListExportableTables(c fiber.Ctx) error {
 		Name        string `json:"name"`
 		Columns     int    `json:"columns"`
 		ForeignKeys int    `json:"foreign_keys"`
+		// Optional: last export time if knowledge_base_id is provided
+		LastExport *string `json:"last_export,omitempty"`
 	}
 
 	summaries := make([]TableSummary, len(tables))
+
+	// If KB ID is provided, fetch all exported table documents at once
+	var exportedTableDocs map[string]*Document // key: "schema.table"
+	if kbID != "" {
+		// Get all documents with source=database_export
+		docs, err := h.storage.ListDocuments(ctx, kbID)
+		if err == nil {
+			exportedTableDocs = make(map[string]*Document)
+			for i := range docs {
+				// Parse metadata to check if this is a table export
+				var metadata map[string]interface{}
+				if docs[i].Metadata != nil {
+					if err := json.Unmarshal(docs[i].Metadata, &metadata); err == nil {
+						// Check if this is a table export document
+						if source, ok := metadata["source"].(string); ok && source == "database_export" {
+							if schema, ok := metadata["schema"].(string); ok && schema != "" {
+								if table, ok := metadata["table"].(string); ok && table != "" {
+									key := schema + "." + table
+									exportedTableDocs[key] = &docs[i]
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	for i, t := range tables {
-		summaries[i] = TableSummary{
+		summary := TableSummary{
 			Schema:      t.Schema,
 			Name:        t.Name,
 			Columns:     len(t.Columns),
 			ForeignKeys: len(t.ForeignKeys),
 		}
+
+		// If we have export info for this table, add the last export time
+		if exportedTableDocs != nil {
+			key := t.Schema + "." + t.Name
+			if doc := exportedTableDocs[key]; doc != nil {
+				// Format the updated_at time as ISO string
+				lastExport := doc.UpdatedAt.Format(time.RFC3339)
+				summary.LastExport = &lastExport
+			}
+		}
+
+		summaries[i] = summary
 	}
 
 	return c.JSON(fiber.Map{
@@ -1741,6 +1794,45 @@ func (h *KnowledgeBaseHandler) GetKnowledgeGraph(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to get knowledge graph",
 		})
+	}
+
+	// Get document counts for each entity (for display in the graph)
+	entityDocCounts := make(map[string]int)
+	if len(entities) > 0 {
+		// Query all document-entity counts in one go
+		entityIDs := make([]string, len(entities))
+		for i, e := range entities {
+			entityIDs[i] = e.ID
+		}
+
+		query := `
+			SELECT entity_id, COUNT(*) as doc_count
+			FROM ai.document_entities
+			WHERE entity_id = ANY($1)
+			GROUP BY entity_id
+		`
+		rows, err := h.storage.db.Query(ctx, query, entityIDs)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var entityID string
+				var count int
+				if err := rows.Scan(&entityID, &count); err == nil {
+					entityDocCounts[entityID] = count
+				}
+			}
+		}
+	}
+
+	// Add document count to each entity
+	for i := range entities {
+		if count, ok := entityDocCounts[entities[i].ID]; ok {
+			// Add document_count to metadata for display
+			if entities[i].Metadata == nil {
+				entities[i].Metadata = make(map[string]interface{})
+			}
+			entities[i].Metadata["document_count"] = count
+		}
 	}
 
 	// Get relationships for each entity

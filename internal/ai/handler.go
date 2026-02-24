@@ -18,10 +18,11 @@ type VectorManagerInterface interface {
 
 // Handler handles AI-related HTTP endpoints
 type Handler struct {
-	storage       *Storage
-	loader        *Loader
-	config        *config.AIConfig
-	vectorManager VectorManagerInterface
+	storage              *Storage
+	loader               *Loader
+	config               *config.AIConfig
+	vectorManager        VectorManagerInterface
+	knowledgeBaseStorage *KnowledgeBaseStorage // Optional: for syncing KB links
 }
 
 // NewHandler creates a new AI handler
@@ -37,6 +38,11 @@ func NewHandler(storage *Storage, loader *Loader, cfg *config.AIConfig, vectorMa
 	h.ValidateConfig()
 
 	return h
+}
+
+// SetKnowledgeBaseStorage sets the knowledge base storage for syncing KB links
+func (h *Handler) SetKnowledgeBaseStorage(kbStorage *KnowledgeBaseStorage) {
+	h.knowledgeBaseStorage = kbStorage
 }
 
 // ValidateConfig checks AI configuration and logs any issues at startup
@@ -255,6 +261,22 @@ func (h *Handler) syncFromFilesystem(c fiber.Ctx, namespace string) error {
 			createdCount++
 			createdNames = append(createdNames, fsChatbot.Name)
 		}
+
+		// Sync knowledge base links for this chatbot (if KB storage is available)
+		if h.knowledgeBaseStorage != nil && len(fsChatbot.KnowledgeBases) > 0 {
+			maxChunks := 5
+			if fsChatbot.RAGMaxChunks > 0 {
+				maxChunks = fsChatbot.RAGMaxChunks
+			}
+			similarityThreshold := 0.7
+			if fsChatbot.RAGSimilarityThreshold > 0 {
+				similarityThreshold = fsChatbot.RAGSimilarityThreshold
+			}
+
+			if err := h.knowledgeBaseStorage.SyncChatbotKnowledgeBaseLinks(ctx, fsChatbot.ID, fsChatbot.KnowledgeBases, maxChunks, similarityThreshold); err != nil {
+				log.Warn().Err(err).Str("chatbot", fsChatbot.Name).Msg("Failed to sync knowledge base links")
+			}
+		}
 	}
 
 	// Delete chatbots in this namespace that are no longer in the filesystem
@@ -414,6 +436,22 @@ func (h *Handler) syncFromPayload(c fiber.Ctx, namespace string, chatbots []stru
 				continue
 			}
 			created = append(created, spec.Name)
+		}
+
+		// Sync knowledge base links for this chatbot (if KB storage is available)
+		if h.knowledgeBaseStorage != nil && len(chatbot.KnowledgeBases) > 0 {
+			maxChunks := 5
+			if chatbot.RAGMaxChunks > 0 {
+				maxChunks = chatbot.RAGMaxChunks
+			}
+			similarityThreshold := 0.7
+			if chatbot.RAGSimilarityThreshold > 0 {
+				similarityThreshold = chatbot.RAGSimilarityThreshold
+			}
+
+			if err := h.knowledgeBaseStorage.SyncChatbotKnowledgeBaseLinks(ctx, chatbot.ID, chatbot.KnowledgeBases, maxChunks, similarityThreshold); err != nil {
+				log.Warn().Err(err).Str("chatbot", chatbot.Name).Msg("Failed to sync knowledge base links")
+			}
 		}
 	}
 

@@ -28,6 +28,7 @@ func NewKnowledgeGraph(storage *KnowledgeBaseStorage) *KnowledgeGraph {
 // ============================================================================
 
 // AddEntity adds an entity to the knowledge graph
+// Returns the actual entity ID from the database (may differ from input ID on conflict)
 func (kg *KnowledgeGraph) AddEntity(ctx context.Context, entity *Entity) error {
 	if entity.ID == "" {
 		entity.ID = uuid.New().String()
@@ -46,14 +47,14 @@ func (kg *KnowledgeGraph) AddEntity(ctx context.Context, entity *Entity) error {
 			aliases = EXCLUDED.aliases,
 			metadata = EXCLUDED.metadata,
 			updated_at = NOW()
-		RETURNING created_at, updated_at
+		RETURNING id, created_at, updated_at
 	`
 
-	_, err := kg.storage.db.Exec(ctx, query,
+	err := kg.storage.db.QueryRow(ctx, query,
 		entity.ID, entity.KnowledgeBaseID, entity.EntityType, entity.Name,
 		entity.CanonicalName, entity.Aliases, entity.Metadata,
 		entity.CreatedAt, entity.UpdatedAt,
-	)
+	).Scan(&entity.ID, &entity.CreatedAt, &entity.UpdatedAt)
 
 	return err
 }
@@ -311,7 +312,7 @@ func (kg *KnowledgeGraph) AddDocumentEntities(ctx context.Context, docEntities [
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (document_id, entity_id)
 		DO UPDATE SET
-			mention_count = EXCLUDED.notice_count,
+			mention_count = EXCLUDED.mention_count,
 			salience = EXCLUDED.salience,
 			context = EXCLUDED.context
 	`
@@ -453,6 +454,39 @@ func (kg *KnowledgeGraph) BatchAddEntities(ctx context.Context, entities []Entit
 		if _, err := br.Exec(); err != nil {
 			return fmt.Errorf("failed to insert entity: %w", err)
 		}
+	}
+
+	return nil
+}
+
+// DeleteOrphanedEntitiesByDocument deletes entities that are only referenced by a specific document
+// This is useful for cleaning up table export entities when the document is deleted.
+// It only deletes entities that have exactly one document reference (the deleted one).
+func (kg *KnowledgeGraph) DeleteOrphanedEntitiesByDocument(ctx context.Context, documentID string) error {
+	// Delete entities that are only referenced by this document
+	// The CASCADE will automatically clean up relationships and document_entities
+	query := `
+		DELETE FROM ai.entities
+		WHERE id IN (
+			SELECT e.id
+			FROM ai.entities e
+			JOIN ai.document_entities de ON e.id = de.entity_id
+			WHERE de.document_id = $1
+			GROUP BY e.id
+			HAVING COUNT(DISTINCT de.document_id) = 1
+		)
+	`
+	result, err := kg.storage.db.Exec(ctx, query, documentID)
+	if err != nil {
+		return fmt.Errorf("failed to delete orphaned entities: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected > 0 {
+		log.Info().
+			Str("document_id", documentID).
+			Int64("deleted_entities", rowsAffected).
+			Msg("Deleted orphaned entities for document")
 	}
 
 	return nil

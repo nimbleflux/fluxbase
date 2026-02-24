@@ -85,3 +85,43 @@
     height: 0;
   }
 }
+
+/* ReactFlow Dark Mode Styles */
+.react-flow-dark .react-flow__attribution {
+  display: none;
+}
+
+.dark .react-flow__controls {
+  background-color: rgb(39 39 42);
+  border-color: rgb(63 63 70);
+}
+
+.dark .react-flow__controls-button {
+  background-color: rgb(39 39 42);
+  border-color: rgb(63 63 70);
+}
+
+.dark .react-flow__controls-button:hover {
+  background-color: rgb(63 63 70);
+}
+
+.dark .react-flow__controls-button svg {
+  fill: rgb(212 212 216);
+}
+
+.dark .react-flow__minimap {
+  background-color: rgb(39 39 42);
+  border-color: rgb(63 63 70);
+}
+
+.dark .react-flow__edge-path {
+  stroke: rgb(156 163 175);
+}
+
+.dark .react-flow__edge-text {
+  fill: rgb(156 163 175);
+}
+
+.dark .react-flow__edge-textbg {
+  fill: rgb(24 24 27);
+}

@@ -616,6 +616,10 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		knowledgeBaseHandler.SetSyncService(tableExportSyncService)
 		log.Info().Msg("Table export sync service initialized")
 
+		// Set knowledge base storage on AI handler for syncing KB links during chatbot sync
+		aiHandler.SetKnowledgeBaseStorage(kbStorage)
+		log.Info().Msg("AI handler configured with knowledge base storage")
+
 		log.Info().
 			Bool("processing_enabled", docProcessor != nil).
 			Bool("ocr_enabled", ocrService != nil && ocrService.IsEnabled()).
@@ -1143,6 +1147,9 @@ func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageServic
 
 	// Register MCP Tools
 	toolRegistry := mcpServer.ToolRegistry()
+
+	// Reasoning tool (always available, no scopes required)
+	toolRegistry.Register(mcptools.NewThinkTool())
 
 	// Database tools
 	queryTableTool := mcptools.NewQueryTableTool(s.db, schemaCache)

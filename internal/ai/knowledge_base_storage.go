@@ -414,6 +414,80 @@ func (s *KnowledgeBaseStorage) UpdateDocumentMetadata(ctx context.Context, id st
 	return &doc, nil
 }
 
+// FindDocumentByMetadata finds a document by knowledge base ID and metadata fields
+// This is used for idempotent operations like table exports where we want to find
+// an existing document for a specific schema.table combination.
+func (s *KnowledgeBaseStorage) FindDocumentByMetadata(ctx context.Context, knowledgeBaseID string, metadata map[string]string) (*Document, error) {
+	if len(metadata) == 0 {
+		return nil, fmt.Errorf("at least one metadata field is required")
+	}
+
+	// Build WHERE conditions for each metadata field
+	argIndex := 1
+	var whereConditions []string
+	var args []interface{}
+
+	for key, value := range metadata {
+		// Escape key to prevent SQL injection
+		escapedKey := strings.ReplaceAll(key, "'", "''")
+		whereConditions = append(whereConditions, fmt.Sprintf("metadata->>'%s' = $%d", escapedKey, argIndex))
+		args = append(args, value)
+		argIndex++
+	}
+
+	// Add knowledge base ID filter
+	whereConditions = append(whereConditions, fmt.Sprintf("knowledge_base_id = $%d", argIndex))
+	args = append(args, knowledgeBaseID)
+
+	query := fmt.Sprintf(`
+		SELECT id, knowledge_base_id, title, source_url, source_type,
+			mime_type, content, content_hash, status, error_message,
+			chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
+		FROM ai.documents
+		WHERE %s
+		LIMIT 1
+	`, strings.Join(whereConditions, " AND "))
+
+	var doc Document
+	err := s.db.QueryRow(ctx, query, args...).Scan(
+		&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
+		&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
+		&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil // Not found
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to find document by metadata: %w", err)
+	}
+
+	return &doc, nil
+}
+
+// UpdateDocumentContent updates a document's content, title, and metadata
+// This is used for idempotent operations like re-exporting tables.
+func (s *KnowledgeBaseStorage) UpdateDocumentContent(ctx context.Context, id string, content string, title string, metadataJSON []byte) error {
+	// Calculate new content hash
+	contentHash := hashContent(content)
+
+	query := `
+		UPDATE ai.documents SET
+			content = $2,
+			content_hash = $3,
+			title = $4,
+			metadata = COALESCE($5, metadata),
+			status = 'pending',
+			updated_at = NOW()
+		WHERE id = $1
+	`
+	_, err := s.db.Exec(ctx, query, id, content, contentHash, title, metadataJSON)
+	if err != nil {
+		return fmt.Errorf("failed to update document content: %w", err)
+	}
+
+	return nil
+}
+
 // ============================================================================
 // Chunk Operations
 // ============================================================================
@@ -2092,6 +2166,67 @@ func (s *KnowledgeBaseStorage) LinkChatbotKnowledgeBaseSimple(ctx context.Contex
 	}
 
 	return link, nil
+}
+
+// SyncChatbotKnowledgeBaseLinks syncs knowledge base links for a chatbot based on KB names
+// This is called when a chatbot is synced from the filesystem to ensure the links match the config
+// It will create links for KBs in the config that don't have links, and remove links that aren't in the config
+func (s *KnowledgeBaseStorage) SyncChatbotKnowledgeBaseLinks(ctx context.Context, chatbotID string, kbNames []string, maxChunks int, similarityThreshold float64) error {
+	// Get knowledge bases by name
+	knowledgeBases, err := s.ListKnowledgeBases(ctx, "", false)
+	if err != nil {
+		return fmt.Errorf("failed to list knowledge bases: %w", err)
+	}
+
+	// Build a map of KB name to ID
+	kbNameToID := make(map[string]string)
+	for _, kb := range knowledgeBases {
+		kbNameToID[kb.Name] = kb.ID
+	}
+
+	// Get existing links for this chatbot
+	existingLinks, err := s.GetChatbotKnowledgeBases(ctx, chatbotID)
+	if err != nil {
+		return fmt.Errorf("failed to get existing links: %w", err)
+	}
+
+	// Build a set of expected KB IDs
+	expectedKbIDs := make(map[string]bool)
+	for _, kbName := range kbNames {
+		if kbID, exists := kbNameToID[kbName]; exists {
+			expectedKbIDs[kbID] = true
+		} else {
+			log.Warn().Str("kb_name", kbName).Str("chatbot_id", chatbotID).Msg("Knowledge base not found for linking")
+		}
+	}
+
+	// Create or update links for KBs in the config
+	for kbID := range expectedKbIDs {
+		link := &ChatbotKnowledgeBase{
+			ChatbotID:           chatbotID,
+			KnowledgeBaseID:     kbID,
+			AccessLevel:         "full",
+			Enabled:             true,
+			Priority:            1,
+			MaxChunks:           &maxChunks,
+			SimilarityThreshold: &similarityThreshold,
+		}
+
+		if err := s.LinkChatbotKnowledgeBase(ctx, link); err != nil {
+			log.Warn().Err(err).Str("chatbot_id", chatbotID).Str("kb_id", kbID).Msg("Failed to link knowledge base")
+		}
+	}
+
+	// Remove links that aren't in the config
+	for _, existingLink := range existingLinks {
+		if !expectedKbIDs[existingLink.KnowledgeBaseID] {
+			if err := s.UnlinkChatbotKnowledgeBase(ctx, chatbotID, existingLink.KnowledgeBaseID); err != nil {
+				log.Warn().Err(err).Str("chatbot_id", chatbotID).Str("kb_id", existingLink.KnowledgeBaseID).Msg("Failed to unlink knowledge base")
+			}
+		}
+	}
+
+	return nil
 }
 
 // ============================================================================

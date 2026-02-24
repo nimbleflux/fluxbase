@@ -73,15 +73,16 @@ func (p *openAIProvider) Close() error {
 
 // openAIRequest represents the OpenAI API request format
 type openAIRequest struct {
-	Model             string               `json:"model"`
-	Messages          []openAIMessage      `json:"messages"`
-	Tools             []openAITool         `json:"tools,omitempty"`
-	MaxTokens         int                  `json:"max_tokens,omitempty"`
-	Temperature       float64              `json:"temperature,omitempty"`
-	Stream            bool                 `json:"stream,omitempty"`
-	StreamOptions     *openAIStreamOptions `json:"stream_options,omitempty"`
-	ToolChoice        interface{}          `json:"tool_choice,omitempty"`
-	ParallelToolCalls *bool                `json:"parallel_tool_calls,omitempty"`
+	Model               string               `json:"model"`
+	Messages            []openAIMessage      `json:"messages"`
+	Tools               []openAITool         `json:"tools,omitempty"`
+	MaxTokens           int                  `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int                  `json:"max_completion_tokens,omitempty"`
+	Temperature         float64              `json:"temperature,omitempty"`
+	Stream              bool                 `json:"stream,omitempty"`
+	StreamOptions       *openAIStreamOptions `json:"stream_options,omitempty"`
+	ToolChoice          interface{}          `json:"tool_choice,omitempty"`
+	ParallelToolCalls   *bool                `json:"parallel_tool_calls,omitempty"`
 }
 
 // openAIStreamOptions configures streaming behavior
@@ -316,15 +317,75 @@ func (p *openAIProvider) buildRequest(req *ChatRequest) openAIRequest {
 		parallelToolCalls = &t
 	}
 
-	return openAIRequest{
+	// Build request with appropriate token parameter based on model
+	openAIReq := openAIRequest{
 		Model:             model,
 		Messages:          messages,
 		Tools:             tools,
-		MaxTokens:         req.MaxTokens,
-		Temperature:       req.Temperature,
 		ToolChoice:        req.ToolChoice,
 		ParallelToolCalls: parallelToolCalls,
 	}
+
+	// Use max_completion_tokens by default (newer models)
+	// Only use max_tokens for older models that don't support max_completion_tokens
+	if supportsMaxTokens(model) {
+		openAIReq.MaxTokens = req.MaxTokens
+	} else {
+		openAIReq.MaxCompletionTokens = req.MaxTokens
+	}
+
+	// Only set temperature for models that support it
+	// Some newer models (o1, o3, etc.) only support the default value of 1
+	if supportsTemperature(model) {
+		openAIReq.Temperature = req.Temperature
+	}
+
+	return openAIReq
+}
+
+// supportsMaxTokens returns true if the model supports the legacy max_tokens parameter
+// Most newer models require max_completion_tokens instead
+func supportsMaxTokens(model string) bool {
+	model = strings.ToLower(model)
+
+	// Older models that still support max_tokens
+	// GPT-3.5 models
+	if strings.HasPrefix(model, "gpt-3.5") {
+		return true
+	}
+
+	// Original GPT-4 (not turbo, not 4o)
+	if model == "gpt-4" || strings.HasPrefix(model, "gpt-4-0314") || strings.HasPrefix(model, "gpt-4-0613") {
+		return true
+	}
+
+	// GPT-4-32k variants
+	if strings.HasPrefix(model, "gpt-4-32k") {
+		return true
+	}
+
+	// All other models (o1, o3, gpt-4o, gpt-4-turbo, gpt-4.1, gpt-4.5, gpt-5, etc.)
+	// require max_completion_tokens
+	return false
+}
+
+// supportsTemperature returns true if the model supports custom temperature values
+// Some reasoning models (o1, o3) only support the default temperature of 1
+func supportsTemperature(model string) bool {
+	model = strings.ToLower(model)
+
+	// O-series reasoning models don't support custom temperature
+	if strings.HasPrefix(model, "o1") || strings.HasPrefix(model, "o3") {
+		return false
+	}
+
+	// GPT-5 models don't support custom temperature
+	if strings.HasPrefix(model, "gpt-5") {
+		return false
+	}
+
+	// All other models support temperature
+	return true
 }
 
 // setHeaders sets the required headers for OpenAI API requests

@@ -556,14 +556,27 @@ func (p *DocumentProcessor) extractAndStoreEntities(ctx context.Context, doc *Do
 	}
 
 	// Store entities (deduplicated by canonical name via constraint)
+	// Create a mapping from original entity IDs to actual database IDs
+	// This is needed because AddEntity may return a different ID on conflict
+	entityIDMapping := make(map[string]string) // original ID -> actual ID
 	for _, entity := range result.Entities {
+		originalID := entity.ID // Store the original ID before AddEntity potentially changes it
 		if err := p.knowledgeGraph.AddEntity(ctx, &entity); err != nil {
 			log.Warn().Err(err).Str("entity", entity.Name).Msg("Failed to add entity")
+		} else {
+			entityIDMapping[originalID] = entity.ID // Map original ID to actual database ID
 		}
 	}
 
 	// Store relationships
 	for _, rel := range result.Relationships {
+		// Update relationship entity IDs using the mapping
+		if actualID, ok := entityIDMapping[rel.SourceEntityID]; ok {
+			rel.SourceEntityID = actualID
+		}
+		if actualID, ok := entityIDMapping[rel.TargetEntityID]; ok {
+			rel.TargetEntityID = actualID
+		}
 		if err := p.knowledgeGraph.AddRelationship(ctx, &rel); err != nil {
 			log.Warn().Err(err).Str("source", rel.SourceEntityID).Str("target", rel.TargetEntityID).Msg("Failed to add relationship")
 		}
@@ -571,14 +584,28 @@ func (p *DocumentProcessor) extractAndStoreEntities(ctx context.Context, doc *Do
 
 	// Store document-entity links
 	if len(result.DocumentEntities) > 0 {
-		if err := p.knowledgeGraph.AddDocumentEntities(ctx, result.DocumentEntities); err != nil {
-			return fmt.Errorf("failed to add document entities: %w", err)
+		// Update document-entity links to use the actual entity IDs from the database
+		filteredDocEntities := make([]DocumentEntity, 0, len(result.DocumentEntities))
+		for _, de := range result.DocumentEntities {
+			// Update the entity ID to the actual database ID
+			if actualID, ok := entityIDMapping[de.EntityID]; ok {
+				de.EntityID = actualID
+				filteredDocEntities = append(filteredDocEntities, de)
+			}
+			// If no mapping exists, the entity failed to add, so skip this link
+		}
+
+		// Only add document-entity links if there are any left after filtering
+		if len(filteredDocEntities) > 0 {
+			if err := p.knowledgeGraph.AddDocumentEntities(ctx, filteredDocEntities); err != nil {
+				return fmt.Errorf("failed to add document entities: %w", err)
+			}
 		}
 	}
 
 	log.Info().
 		Str("doc_id", doc.ID).
-		Int("entities", len(result.Entities)).
+		Int("entities", len(entityIDMapping)).
 		Int("relationships", len(result.Relationships)).
 		Msg("Entity extraction complete")
 

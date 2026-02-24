@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 
 	"github.com/fluxbase-eu/fluxbase/internal/database"
 )
@@ -88,19 +89,7 @@ func (e *TableExporter) ExportTable(ctx context.Context, req ExportTableRequest)
 	// Generate document content from schema
 	docContent := e.generateTableDocument(tableInfo, req)
 
-	// Create document
-	doc := &Document{
-		ID:              uuid.New().String(),
-		KnowledgeBaseID: req.KnowledgeBaseID,
-		Title:           fmt.Sprintf("%s.%s", req.Schema, req.Table),
-		Content:         docContent,
-		SourceType:      "database_table",
-		MimeType:        "text/markdown",
-		Tags:            []string{"schema", "database", req.Schema, req.Table},
-		OwnerID:         req.OwnerID,
-	}
-
-	// Create metadata
+	// Create metadata for lookup and storage
 	exportedColumnCount := len(tableInfo.Columns)
 	if len(req.Columns) > 0 {
 		exportedColumnCount = len(req.Columns)
@@ -119,12 +108,69 @@ func (e *TableExporter) ExportTable(ctx context.Context, req ExportTableRequest)
 	if len(req.Columns) > 0 {
 		metadataMap["columns"] = req.Columns
 	}
-	if metadataJSON, err := metadataToJSON(metadataMap); err == nil {
-		doc.Metadata = metadataJSON
+	metadataJSON, err := metadataToJSON(metadataMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	if err := e.storage.CreateDocument(ctx, doc); err != nil {
-		return nil, fmt.Errorf("failed to create document: %w", err)
+	// Check if a document for this table already exists (idempotent export)
+	// We use metadata fields to identify existing table exports
+	metadataLookup := map[string]string{
+		"source": "database_export",
+		"schema": req.Schema,
+		"table":  req.Table,
+	}
+	existingDoc, err := e.storage.FindDocumentByMetadata(ctx, req.KnowledgeBaseID, metadataLookup)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check for existing document: %w", err)
+	}
+
+	var doc *Document
+	docTitle := fmt.Sprintf("%s.%s", req.Schema, req.Table)
+
+	if existingDoc != nil {
+		// Update existing document instead of creating a duplicate
+		log.Info().
+			Str("table", fmt.Sprintf("%s.%s", req.Schema, req.Table)).
+			Str("document_id", existingDoc.ID).
+			Msg("Updating existing table export document")
+
+		if err := e.storage.UpdateDocumentContent(ctx, existingDoc.ID, docContent, docTitle, metadataJSON); err != nil {
+			return nil, fmt.Errorf("failed to update document: %w", err)
+		}
+
+		// Delete existing chunks for this document so they can be recreated
+		if err := e.storage.DeleteChunksByDocument(ctx, existingDoc.ID); err != nil {
+			log.Warn().Err(err).Str("document_id", existingDoc.ID).Msg("Failed to delete existing chunks")
+		}
+
+		// Delete old document-entity links so they can be recreated
+		// The entities themselves will be updated via ON CONFLICT when recreated
+		if _, err := e.storage.db.Exec(ctx, "DELETE FROM ai.document_entities WHERE document_id = $1", existingDoc.ID); err != nil {
+			log.Warn().Err(err).Str("document_id", existingDoc.ID).Msg("Failed to delete old document-entity links")
+		}
+
+		doc = existingDoc
+		doc.Content = docContent
+		doc.Metadata = metadataJSON
+		doc.Title = docTitle
+	} else {
+		// Create new document
+		doc = &Document{
+			ID:              uuid.New().String(),
+			KnowledgeBaseID: req.KnowledgeBaseID,
+			Title:           docTitle,
+			Content:         docContent,
+			SourceType:      "database_table",
+			MimeType:        "text/markdown",
+			Tags:            []string{"schema", "database", req.Schema, req.Table},
+			Metadata:        metadataJSON,
+			OwnerID:         req.OwnerID,
+		}
+
+		if err := e.storage.CreateDocument(ctx, doc); err != nil {
+			return nil, fmt.Errorf("failed to create document: %w", err)
+		}
 	}
 
 	// Process document (chunks + embeddings) - only if processor is available
@@ -145,6 +191,50 @@ func (e *TableExporter) ExportTable(ctx context.Context, req ExportTableRequest)
 
 	// Create table entity (only if knowledge graph is available)
 	if e.knowledgeGraph != nil {
+		// Build column summaries for metadata
+		columns := make([]map[string]interface{}, 0, len(tableInfo.Columns))
+		for _, col := range tableInfo.Columns {
+			colSummary := map[string]interface{}{
+				"name":        col.Name,
+				"type":        col.DataType,
+				"nullable":    col.IsNullable,
+				"primary_key": col.IsPrimaryKey,
+				"foreign_key": col.IsForeignKey,
+				"unique":      col.IsUnique,
+			}
+			if col.DefaultValue != nil {
+				colSummary["default"] = *col.DefaultValue
+			}
+			if col.Description != "" {
+				colSummary["description"] = col.Description
+			}
+			columns = append(columns, colSummary)
+		}
+
+		// Build foreign key summaries
+		foreignKeys := make([]map[string]interface{}, 0, len(tableInfo.ForeignKeys))
+		for _, fk := range tableInfo.ForeignKeys {
+			foreignKeys = append(foreignKeys, map[string]interface{}{
+				"name":              fk.Name,
+				"column":            fk.ColumnName,
+				"referenced_table":  fk.ReferencedTable,
+				"referenced_column": fk.ReferencedColumn,
+				"on_delete":         fk.OnDelete,
+				"on_update":         fk.OnUpdate,
+			})
+		}
+
+		// Build index summaries
+		indexes := make([]map[string]interface{}, 0, len(tableInfo.Indexes))
+		for _, idx := range tableInfo.Indexes {
+			indexes = append(indexes, map[string]interface{}{
+				"name":    idx.Name,
+				"columns": idx.Columns,
+				"unique":  idx.IsUnique,
+				"primary": idx.IsPrimary,
+			})
+		}
+
 		tableEntity := &Entity{
 			ID:              uuid.New().String(),
 			KnowledgeBaseID: req.KnowledgeBaseID,
@@ -159,6 +249,10 @@ func (e *TableExporter) ExportTable(ctx context.Context, req ExportTableRequest)
 				"total_column_count": len(tableInfo.Columns),
 				"primary_key":        tableInfo.PrimaryKey,
 				"table_type":         tableInfo.Type,
+				"rls_enabled":        tableInfo.RLSEnabled,
+				"columns":            columns,
+				"foreign_keys":       foreignKeys,
+				"indexes":            indexes,
 			},
 		}
 

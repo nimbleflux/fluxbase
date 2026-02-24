@@ -433,6 +433,44 @@ func (s *SchemaBuilder) BuildSystemPromptWithAuth(ctx context.Context, chatbot *
 		}
 	}
 
+	// Add hybrid search guidance if knowledge bases are linked
+	if len(chatbot.KnowledgeBases) > 0 {
+		sb.WriteString("\n## Search Strategy Guidelines\n\n")
+		sb.WriteString("You have TWO ways to find information. Choose wisely based on the question type:\n\n")
+
+		sb.WriteString("### Use SQL (query_table, execute_sql) when:\n")
+		sb.WriteString("- The question involves **dates, times, or date ranges** (e.g., 'last week', 'yesterday', 'in January')\n")
+		sb.WriteString("- You need to **count, sum, or aggregate** data\n")
+		sb.WriteString("- **Filtering by specific field values** (e.g., 'restaurants in Berlin', 'status is active')\n")
+		sb.WriteString("- **Ordering or sorting** results\n")
+		sb.WriteString("- Looking for **specific records** the user created or owns\n")
+		sb.WriteString("- Example: \"What restaurants did I visit last week?\" → Use query_table with date filter\n\n")
+
+		sb.WriteString("### Use KB Search (search_vectors) when:\n")
+		sb.WriteString("- The question is **conceptual or descriptive** (e.g., 'what is', 'tell me about', 'explain')\n")
+		sb.WriteString("- Looking for **information about a topic** from documents\n")
+		sb.WriteString("- The answer requires **context from knowledge base documents**\n")
+		sb.WriteString("- Example: \"Tell me about Italian cuisine\" → Use search_vectors for relevant documents\n\n")
+
+		sb.WriteString("### Use Both (hybrid) when:\n")
+		sb.WriteString("- You need **structured data AND contextual understanding**\n")
+		sb.WriteString("- The question combines specific criteria with conceptual elements\n")
+		sb.WriteString("- Example: \"What Italian restaurants did I visit?\" → Use search_vectors for 'Italian', then query_table for visits\n\n")
+
+		sb.WriteString("**Important**: Start with the 'think' tool to plan your approach before executing queries.\n")
+	}
+
+	// Add investigation strategy for thorough exploration
+	sb.WriteString("\n## Investigation Strategy\n\n")
+	sb.WriteString("Be thorough in your investigation. Follow these principles:\n\n")
+	sb.WriteString("1. **Plan first**: Use the 'think' tool to analyze the question and plan your approach\n")
+	sb.WriteString("2. **Start broad, then narrow**: If unsure about data, start with a broad query to understand what exists\n")
+	sb.WriteString("3. **Verify results**: After getting results, consider if they fully answer the question\n")
+	sb.WriteString("4. **Follow-up queries**: Don't stop at the first query if results are incomplete or unexpected\n")
+	sb.WriteString("5. **Multiple tools**: Combine different tools when needed (e.g., KB search for context + SQL for data)\n")
+	sb.WriteString("6. **Iterate**: If a query returns no results, try broader filters or alternative approaches\n\n")
+	sb.WriteString("**Remember**: It's better to take multiple steps and provide a complete answer than to give an incomplete response.\n")
+
 	// Add required columns hints if configured
 	if len(chatbot.RequiredColumns) > 0 {
 		sb.WriteString("\n## Required Columns\n\n")

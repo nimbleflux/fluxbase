@@ -80,6 +80,19 @@ type Chatbot struct {
 	MCPTools     []string `json:"mcp_tools,omitempty"`      // Allowed MCP tools (e.g., query_table, insert_record)
 	UseMCPSchema bool     `json:"use_mcp_schema,omitempty"` // If true, fetch schema from MCP resources
 
+	// RAG/Knowledge Base settings
+	KnowledgeBases         []string `json:"knowledge_bases,omitempty"`
+	RAGMaxChunks           int      `json:"rag_max_chunks"`
+	RAGSimilarityThreshold float64  `json:"rag_similarity_threshold"`
+	RAGTable               string   `json:"rag_table,omitempty"`          // User table for vector search
+	RAGColumn              string   `json:"rag_column,omitempty"`         // Vector column in RAG table
+	RAGContentColumn       string   `json:"rag_content_column,omitempty"` // Text content column in RAG table
+
+	// Agent behavior settings
+	ReasoningMode     string `json:"reasoning_mode,omitempty"`      // "none" (default), "react", "strict" - controls think tool usage
+	MaxToolIterations int    `json:"max_tool_iterations,omitempty"` // Max tool calling iterations (default: 5)
+	ShowReasoning     bool   `json:"show_reasoning,omitempty"`      // If true, expose agent reasoning to users
+
 	Version   int       `json:"version"`
 	Source    string    `json:"source"` // "filesystem" or "api"
 	CreatedBy *string   `json:"created_by,omitempty"`
@@ -141,6 +154,11 @@ type ChatbotConfig struct {
 	MCPTools     []string // Allowed MCP tools (e.g., query_table, insert_record)
 	UseMCPSchema bool     // If true, fetch schema from MCP resources
 
+	// Agent behavior settings
+	ReasoningMode     string // "none" (default), "react", "strict" - controls think tool usage
+	MaxToolIterations int    // Max tool calling iterations (default: 5)
+	ShowReasoning     bool   // If true, expose agent reasoning to users
+
 	// Metadata
 	Version int
 }
@@ -166,6 +184,9 @@ func DefaultChatbotConfig() ChatbotConfig {
 		RAGMaxChunks:           5,
 		RAGSimilarityThreshold: 0.7,
 		ResponseLanguage:       "auto",
+		ReasoningMode:          "react", // Default: require think tool before other tools (ReAct pattern)
+		MaxToolIterations:      5,
+		ShowReasoning:          false,
 		Version:                1,
 	}
 }
@@ -270,6 +291,16 @@ var (
 
 	// @fluxbase:use-mcp-schema (or @fluxbase:use-mcp-schema true)
 	useMCPSchemaPattern = regexp.MustCompile(`@fluxbase:use-mcp-schema(?:\s+(true|false))?`)
+
+	// Agent behavior annotations
+	// @fluxbase:reasoning-mode react|strict|none
+	reasoningModePattern = regexp.MustCompile(`@fluxbase:reasoning-mode\s+(react|strict|none)`)
+
+	// @fluxbase:max-iterations 10
+	maxToolIterationsPattern = regexp.MustCompile(`@fluxbase:max-iterations\s+(\d+)`)
+
+	// @fluxbase:show-reasoning true
+	showReasoningPattern = regexp.MustCompile(`@fluxbase:show-reasoning\s+(true|false)`)
 )
 
 // ParseChatbotConfig parses chatbot configuration from TypeScript source code
@@ -475,6 +506,23 @@ func ParseChatbotConfig(code string) ChatbotConfig {
 		}
 	}
 
+	// Parse reasoning mode
+	if matches := reasoningModePattern.FindStringSubmatch(code); len(matches) > 1 {
+		config.ReasoningMode = matches[1]
+	}
+
+	// Parse max tool iterations
+	if matches := maxToolIterationsPattern.FindStringSubmatch(code); len(matches) > 1 {
+		if v, err := strconv.Atoi(matches[1]); err == nil && v > 0 {
+			config.MaxToolIterations = v
+		}
+	}
+
+	// Parse show reasoning flag
+	if matches := showReasoningPattern.FindStringSubmatch(code); len(matches) > 1 {
+		config.ShowReasoning = matches[1] == "true"
+	}
+
 	return config
 }
 
@@ -599,6 +647,19 @@ func (c *Chatbot) ApplyConfig(config ChatbotConfig) {
 	c.RequiredSettings = config.RequiredSettings
 	c.MCPTools = config.MCPTools
 	c.UseMCPSchema = config.UseMCPSchema
+
+	// RAG/Knowledge Base settings
+	c.KnowledgeBases = config.KnowledgeBases
+	c.RAGMaxChunks = config.RAGMaxChunks
+	c.RAGSimilarityThreshold = config.RAGSimilarityThreshold
+	c.RAGTable = config.RAGTable
+	c.RAGColumn = config.RAGColumn
+	c.RAGContentColumn = config.RAGContentColumn
+
+	// Agent behavior settings
+	c.ReasoningMode = config.ReasoningMode
+	c.MaxToolIterations = config.MaxToolIterations
+	c.ShowReasoning = config.ShowReasoning
 
 	// Only override version if explicitly set in annotation
 	if config.Version > 0 {
