@@ -4,7 +4,7 @@
 # This Dockerfile generates TypeDoc API documentation from the SDK source files
 # and builds the complete documentation site.
 
-FROM node:25.6.1-alpine AS base
+FROM node:25.7.0-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
