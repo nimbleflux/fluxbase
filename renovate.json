@@ -37,10 +37,10 @@
   ],
   "packageRules": [
     {
-      "description": "Pin Go to 1.25.x until golangci-lint supports 1.26",
+      "description": "Pin Go to 1.26.x",
       "matchPackageNames": ["go", "golang"],
       "matchDatasources": ["golang-version", "gomod", "docker"],
-      "allowedVersions": "1.25.x",
+      "allowedVersions": "1.26.x",
       "groupName": "go"
     },
     {

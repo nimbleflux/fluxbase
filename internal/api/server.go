@@ -2730,6 +2730,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.rpcScheduler.Stop()
 	}
 
+	// Stop RPC executor (cancels async executions)
+	if s.rpcHandler != nil {
+		s.rpcHandler.GetExecutor().Stop()
+	}
+
 	// Stop webhook trigger service
 	if s.webhookTriggerService != nil {
 		s.webhookTriggerService.Stop()

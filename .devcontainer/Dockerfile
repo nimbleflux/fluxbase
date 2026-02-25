@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.25.7-bookworm
+FROM golang:1.26.0-bookworm
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -108,7 +108,7 @@ USER root
 # Install Go tools
 RUN go install -v golang.org/x/tools/gopls@latest \
     && go install -v github.com/go-delve/delve/cmd/dlv@latest \
-    && go install -v github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.7.1 \
+    && go install -v github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.10.0 \
     && go install -v github.com/air-verse/air@latest \
     && go install -v -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
     && go install -v github.com/swaggo/swag/cmd/swag@latest \

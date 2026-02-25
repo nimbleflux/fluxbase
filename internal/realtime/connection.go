@@ -57,18 +57,26 @@ type Connection struct {
 	queueHighWater  atomic.Int32 // Highest queue length seen
 }
 
-// NewConnection creates a new WebSocket connection with async message queue
-func NewConnection(id string, conn *websocket.Conn, userID *string, role string, claims map[string]interface{}) *Connection {
-	return NewConnectionWithQueueSize(id, conn, userID, role, claims, DefaultMessageQueueSize)
+// NewConnection creates a new WebSocket connection with async message queue.
+// If parentCtx is nil, context.Background() is used.
+func NewConnection(id string, conn *websocket.Conn, userID *string, role string, claims map[string]interface{}, parentCtx context.Context) *Connection {
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	return NewConnectionWithQueueSize(id, conn, userID, role, claims, DefaultMessageQueueSize, parentCtx)
 }
 
-// NewConnectionWithQueueSize creates a new WebSocket connection with custom queue size
-func NewConnectionWithQueueSize(id string, conn *websocket.Conn, userID *string, role string, claims map[string]interface{}, queueSize int) *Connection {
+// NewConnectionWithQueueSize creates a new WebSocket connection with custom queue size.
+// If parentCtx is nil, context.Background() is used.
+func NewConnectionWithQueueSize(id string, conn *websocket.Conn, userID *string, role string, claims map[string]interface{}, queueSize int, parentCtx context.Context) *Connection {
 	if queueSize <= 0 {
 		queueSize = DefaultMessageQueueSize
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parentCtx)
 
 	c := &Connection{
 		ID:            id,
@@ -277,6 +285,12 @@ func (c *Connection) SendMessage(msg interface{}) error {
 // IsSlowClient returns true if this connection has been marked as a slow client
 func (c *Connection) IsSlowClient() bool {
 	return c.slowClientCount.Load() >= MaxSlowClientWarnings
+}
+
+// Context returns the connection's context for cancellation signaling.
+// This allows external goroutines to detect when the connection is being shut down.
+func (c *Connection) Context() context.Context {
+	return c.ctx
 }
 
 // Close closes the WebSocket connection and stops the writer goroutine

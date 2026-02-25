@@ -25,16 +25,28 @@ type Executor struct {
 	validator *Validator
 	metrics   *observability.Metrics
 	config    *config.RPCConfig
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 // NewExecutor creates a new RPC executor
 func NewExecutor(db *database.Connection, storage *Storage, metrics *observability.Metrics, cfg *config.RPCConfig) *Executor {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Executor{
 		db:        db,
 		storage:   storage,
 		validator: NewValidator(),
 		metrics:   metrics,
 		config:    cfg,
+		ctx:       ctx,
+		cancel:    cancel,
+	}
+}
+
+// Stop cancels all async executions and prevents new ones
+func (e *Executor) Stop() {
+	if e.cancel != nil {
+		e.cancel()
 	}
 }
 
@@ -270,11 +282,8 @@ func (e *Executor) ExecuteAsync(ctx context.Context, execCtx *ExecuteContext) (*
 
 	// Start async execution in goroutine
 	go func() {
-		// Create new context for background execution
-		bgCtx := context.Background()
-
-		// Execute - will update the existing record instead of creating a new one
-		_, _ = e.Execute(bgCtx, execCtx)
+		// Use executor's context so async executions are cancelled on shutdown
+		_, _ = e.Execute(e.ctx, execCtx)
 	}()
 
 	return &ExecuteResult{

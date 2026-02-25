@@ -51,16 +51,16 @@ echo ""
 
 # ============================================================================
 # Go Linting (golangci-lint)
-# Uses the same configuration as CI pipeline (golangci-lint v2.7.1)
-# Install with: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.7.1
+# Uses the same configuration as CI pipeline (golangci-lint v2.10.0)
+# Install with: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.10.0
 # ============================================================================
 echo -e "${YELLOW}[2/5] Running golangci-lint...${NC}"
 
 if [ -n "$STAGED_GO_FILES" ]; then
     if ! command -v golangci-lint &> /dev/null; then
         echo -e "${RED}✗ golangci-lint is not installed${NC}"
-        echo -e "${YELLOW}  Install v2.7.1 with:${NC}"
-        echo -e "${YELLOW}  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.7.1${NC}"
+        echo -e "${YELLOW}  Install v2.10.0 with:${NC}"
+        echo -e "${YELLOW}  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.10.0${NC}"
         CHECKS_FAILED=1
     else
         echo "  Running: golangci-lint run ./..."

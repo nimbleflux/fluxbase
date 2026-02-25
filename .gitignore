@@ -122,4 +122,4 @@ values.tmp.yml
 .mcp.json
 
 .lycheecache
-.claude/
+.claude/settings.local.json

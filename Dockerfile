@@ -43,7 +43,7 @@ RUN npm run build
 # ------------------------------------------------------------------------------
 # Stage 2: Build Go Binary (glibc, CGO-enabled)
 # ------------------------------------------------------------------------------
-FROM golang:1.25.7-bookworm AS go-builder
+FROM golang:1.26.0-bookworm AS go-builder
 
 # Install build dependencies for CGO-based libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \

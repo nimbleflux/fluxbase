@@ -647,7 +647,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.1"
+          node-version: "24.14.0"
 
       - name: Update version in files
         run: |
@@ -734,7 +734,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.1"
+          node-version: "24.14.0"
 
       - name: Build SDKs (required by Admin UI and Go embed)
         run: |
@@ -994,7 +994,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.1"
+          node-version: "24.14.0"
           cache: "npm"
           cache-dependency-path: |
             sdk/package-lock.json
@@ -1065,7 +1065,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.1"
+          node-version: "24.14.0"
           registry-url: "https://registry.npmjs.org"
 
       - name: Build and Publish SDK
@@ -1099,7 +1099,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.1"
+          node-version: "24.14.0"
           registry-url: "https://registry.npmjs.org"
 
       - name: Build core SDK first
@@ -1465,7 +1465,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.13.1"
+          node-version: "24.14.0"
 
       - name: Test Docker image availability
         if: needs.publish-docker-manifest.result == 'success'

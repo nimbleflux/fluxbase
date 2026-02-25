@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/contrib/v3/websocket"
@@ -14,6 +15,12 @@ import (
 
 // MessageType represents the type of WebSocket message
 type MessageType string
+
+// pingInterval is how often the server sends WebSocket pings to check connection health.
+const pingInterval = 15 * time.Second
+
+// pongTimeout is how long to wait for a pong response before considering the connection dead.
+const pongTimeout = 60 * time.Second
 
 const (
 	MessageTypeSubscribe        MessageType = "subscribe"
@@ -194,12 +201,24 @@ func (h *RealtimeHandler) handleConnection(c *websocket.Conn) {
 		if h.subManager != nil {
 			h.subManager.RemoveConnectionSubscriptions(connectionID)
 		}
+		// Close the connection to cancel its context and clean up goroutines
+		// This must be called BEFORE RemoveConnection to ensure the context
+		// watcher goroutine can exit (it's blocked on <-connection.Context().Done())
+		_ = connection.Close()
+		// Remove from manager tracking
 		h.manager.RemoveConnection(connectionID)
 	}()
 
 	// Channel for incoming messages - read in background goroutine
 	msgChan := make(chan ClientMessage, 10)
 	errChan := make(chan error, 1)
+
+	// Goroutine to close connection when context is cancelled
+	go func() {
+		<-connection.Context().Done()
+		// Close the WebSocket to unblock any pending reads
+		_ = c.Close()
+	}()
 
 	go func() {
 		for {
@@ -209,6 +228,50 @@ func (h *RealtimeHandler) handleConnection(c *websocket.Conn) {
 				return
 			}
 			msgChan <- msg
+		}
+	}()
+
+	// Set up ping/pong for connection health monitoring
+	// Track last pong time using atomic int64 (Unix timestamp)
+	var lastPongNano atomic.Int64
+	lastPongNano.Store(time.Now().UnixNano())
+
+	// Set pong handler to update last pong time
+	c.SetPongHandler(func(appData string) error {
+		lastPongNano.Store(time.Now().UnixNano())
+		return nil
+	})
+
+	// Start ping goroutine to detect dead connections
+	pingTicker := time.NewTicker(pingInterval)
+	defer pingTicker.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-pingTicker.C:
+				// Send ping message
+				if err := c.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+					// Write failed, connection is likely dead
+					return
+				}
+
+				// Check if we haven't received a pong in too long
+				lastPong := time.Unix(0, lastPongNano.Load())
+				if time.Since(lastPong) > pongTimeout {
+					log.Warn().
+						Str("connection_id", connectionID).
+						Dur("since_pong", time.Since(lastPong)).
+						Msg("Connection unresponsive to pings, closing")
+					// Connection is dead, trigger close
+					_ = c.Close()
+					return
+				}
+
+			case <-connection.Context().Done():
+				// Connection is being closed
+				return
+			}
 		}
 	}()
 

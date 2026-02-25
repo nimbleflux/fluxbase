@@ -301,9 +301,9 @@ func (m *Manager) AddConnectionWithIP(id string, conn *websocket.Conn, userID *s
 	// Create and track the connection with configured queue size
 	var connection *Connection
 	if m.clientMessageQueueSize > 0 {
-		connection = NewConnectionWithQueueSize(id, conn, userID, role, claims, m.clientMessageQueueSize)
+		connection = NewConnectionWithQueueSize(id, conn, userID, role, claims, m.clientMessageQueueSize, m.ctx)
 	} else {
-		connection = NewConnection(id, conn, userID, role, claims)
+		connection = NewConnection(id, conn, userID, role, claims, m.ctx)
 	}
 	m.connections[id] = connection
 
