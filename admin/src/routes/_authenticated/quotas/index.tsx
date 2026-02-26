@@ -1,19 +1,17 @@
 import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { createFileRoute } from '@tanstack/react-router'
+import api from '@/lib/api'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -22,8 +20,17 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 interface UserQuota {
   user_id: string
@@ -77,26 +84,27 @@ function UserQuotasPage() {
   const { data: users, isLoading } = useQuery({
     queryKey: ['users-with-quotas'],
     queryFn: async () => {
-      const res = await fetch('/api/v1/admin/users-with-quotas')
-      if (!res.ok) throw new Error('Failed to fetch users')
-      const usersData = await res.json()
-      return usersData
+      const response = await api.get<UserWithQuota[]>(
+        '/api/v1/admin/users-with-quotas'
+      )
+      return response.data
     },
   })
 
   const updateQuotaMutation = useMutation({
-    mutationFn: async ({ userId, quota }: { userId: string; quota: typeof editedQuota }) => {
-      const res = await fetch(`/api/v1/admin/users/${userId}/quota`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          max_documents: quota.maxDocuments,
-          max_chunks: quota.maxChunks,
-          max_storage_bytes: quota.maxStorageMB * 1024 * 1024, // Convert MB to bytes
-        }),
+    mutationFn: async ({
+      userId,
+      quota,
+    }: {
+      userId: string
+      quota: typeof editedQuota
+    }) => {
+      const response = await api.put(`/api/v1/admin/users/${userId}/quota`, {
+        max_documents: quota.maxDocuments,
+        max_chunks: quota.maxChunks,
+        max_storage_bytes: quota.maxStorageMB * 1024 * 1024, // Convert MB to bytes
       })
-      if (!res.ok) throw new Error('Failed to update quota')
-      return res.json()
+      return response.data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users-with-quotas'] })
@@ -131,24 +139,25 @@ function UserQuotasPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className='space-y-6'>
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">User Quotas</h1>
-        <p className="text-muted-foreground">
-          Manage resource quotas for users. Limits apply across all knowledge bases.
+        <h1 className='text-3xl font-bold tracking-tight'>User Quotas</h1>
+        <p className='text-muted-foreground'>
+          Manage resource quotas for users. Limits apply across all knowledge
+          bases.
         </p>
       </div>
 
       <Alert>
         <AlertDescription>
-          <strong>System Defaults:</strong> 10,000 documents, 500,000 chunks, 10 GB storage per user.
-          Customize limits per user below.
+          <strong>System Defaults:</strong> 10,000 documents, 500,000 chunks, 10
+          GB storage per user. Customize limits per user below.
         </AlertDescription>
       </Alert>
 
       {isLoading ? (
-        <div className="flex justify-center py-8">
-          <div className="text-muted-foreground">Loading users...</div>
+        <div className='flex justify-center py-8'>
+          <div className='text-muted-foreground'>Loading users...</div>
         </div>
       ) : (
         <Card>
@@ -181,63 +190,94 @@ function UserQuotasPage() {
                     used_storage_bytes: 0,
                   }
 
-                  const docsPercent = calculatePercentage(quota.used_documents, quota.max_documents)
-                  const chunksPercent = calculatePercentage(quota.used_chunks, quota.max_chunks)
-                  const storagePercent = calculatePercentage(quota.used_storage_bytes, quota.max_storage_bytes)
+                  const docsPercent = calculatePercentage(
+                    quota.used_documents,
+                    quota.max_documents
+                  )
+                  const chunksPercent = calculatePercentage(
+                    quota.used_chunks,
+                    quota.max_chunks
+                  )
+                  const storagePercent = calculatePercentage(
+                    quota.used_storage_bytes,
+                    quota.max_storage_bytes
+                  )
 
                   return (
                     <TableRow key={user.id}>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{user.full_name || user.email}</div>
-                          <div className="text-sm text-muted-foreground">{user.email}</div>
+                          <div className='font-medium'>
+                            {user.full_name || user.email}
+                          </div>
+                          <div className='text-muted-foreground text-sm'>
+                            {user.email}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-sm">
+                        <div className='space-y-1'>
+                          <div className='flex items-center gap-2 text-sm'>
                             <span>{quota.used_documents.toLocaleString()}</span>
-                            <span className="text-muted-foreground">/ {quota.max_documents.toLocaleString()}</span>
+                            <span className='text-muted-foreground'>
+                              / {quota.max_documents.toLocaleString()}
+                            </span>
                           </div>
-                          <Progress value={docsPercent} className="h-2" />
-                          <div className="text-xs text-muted-foreground">
+                          <Progress value={docsPercent} className='h-2' />
+                          <div className='text-muted-foreground text-xs'>
                             {docsPercent.toFixed(1)}%
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-sm">
+                        <div className='space-y-1'>
+                          <div className='flex items-center gap-2 text-sm'>
                             <span>{quota.used_chunks.toLocaleString()}</span>
-                            <span className="text-muted-foreground">/ {quota.max_chunks.toLocaleString()}</span>
+                            <span className='text-muted-foreground'>
+                              / {quota.max_chunks.toLocaleString()}
+                            </span>
                           </div>
-                          <Progress value={chunksPercent} className="h-2" />
-                          <div className="text-xs text-muted-foreground">
+                          <Progress value={chunksPercent} className='h-2' />
+                          <div className='text-muted-foreground text-xs'>
                             {chunksPercent.toFixed(1)}%
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-sm">
+                        <div className='space-y-1'>
+                          <div className='flex items-center gap-2 text-sm'>
                             <span>{formatBytes(quota.used_storage_bytes)}</span>
-                            <span className="text-muted-foreground">/ {formatBytes(quota.max_storage_bytes)}</span>
+                            <span className='text-muted-foreground'>
+                              / {formatBytes(quota.max_storage_bytes)}
+                            </span>
                           </div>
-                          <Progress value={storagePercent} className="h-2" />
-                          <div className="text-xs text-muted-foreground">
+                          <Progress value={storagePercent} className='h-2' />
+                          <div className='text-muted-foreground text-xs'>
                             {storagePercent.toFixed(1)}%
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={storagePercent >= 90 ? 'destructive' : storagePercent >= 75 ? 'secondary' : 'default'}>
-                          {storagePercent >= 90 ? 'Near Limit' : storagePercent >= 75 ? 'Warning' : 'OK'}
+                        <Badge
+                          variant={
+                            storagePercent >= 90
+                              ? 'destructive'
+                              : storagePercent >= 75
+                                ? 'secondary'
+                                : 'default'
+                          }
+                        >
+                          {storagePercent >= 90
+                            ? 'Near Limit'
+                            : storagePercent >= 75
+                              ? 'Warning'
+                              : 'OK'}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Button
-                          variant="outline"
-                          size="sm"
+                          variant='outline'
+                          size='sm'
                           onClick={() => handleEditQuota(user)}
                         >
                           Edit Quota
@@ -253,7 +293,10 @@ function UserQuotasPage() {
       )}
 
       {/* Edit Quota Dialog */}
-      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+      <Dialog
+        open={!!editingUser}
+        onOpenChange={(open) => !open && setEditingUser(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit User Quota</DialogTitle>
@@ -262,58 +305,77 @@ function UserQuotasPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="quota-max-documents">Max Documents</Label>
+          <div className='space-y-4 py-4'>
+            <div className='space-y-2'>
+              <Label htmlFor='quota-max-documents'>Max Documents</Label>
               <Input
-                id="quota-max-documents"
-                type="number"
+                id='quota-max-documents'
+                type='number'
                 min={1}
                 max={1000000}
                 value={editedQuota.maxDocuments}
-                onChange={(e) => setEditedQuota({ ...editedQuota, maxDocuments: parseInt(e.target.value) || 0 })}
+                onChange={(e) =>
+                  setEditedQuota({
+                    ...editedQuota,
+                    maxDocuments: parseInt(e.target.value) || 0,
+                  })
+                }
               />
-              <p className="text-xs text-muted-foreground">
+              <p className='text-muted-foreground text-xs'>
                 System default: 10,000 documents
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="quota-max-chunks">Max Chunks</Label>
+            <div className='space-y-2'>
+              <Label htmlFor='quota-max-chunks'>Max Chunks</Label>
               <Input
-                id="quota-max-chunks"
-                type="number"
+                id='quota-max-chunks'
+                type='number'
                 min={1}
                 max={10000000}
                 value={editedQuota.maxChunks}
-                onChange={(e) => setEditedQuota({ ...editedQuota, maxChunks: parseInt(e.target.value) || 0 })}
+                onChange={(e) =>
+                  setEditedQuota({
+                    ...editedQuota,
+                    maxChunks: parseInt(e.target.value) || 0,
+                  })
+                }
               />
-              <p className="text-xs text-muted-foreground">
+              <p className='text-muted-foreground text-xs'>
                 System default: 500,000 chunks
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="quota-max-storage">Max Storage (MB)</Label>
+            <div className='space-y-2'>
+              <Label htmlFor='quota-max-storage'>Max Storage (MB)</Label>
               <Input
-                id="quota-max-storage"
-                type="number"
+                id='quota-max-storage'
+                type='number'
                 min={1}
                 max={1024000} // 1TB max
                 value={editedQuota.maxStorageMB}
-                onChange={(e) => setEditedQuota({ ...editedQuota, maxStorageMB: parseInt(e.target.value) || 0 })}
+                onChange={(e) =>
+                  setEditedQuota({
+                    ...editedQuota,
+                    maxStorageMB: parseInt(e.target.value) || 0,
+                  })
+                }
               />
-              <p className="text-xs text-muted-foreground">
-                System default: 10,240 MB ({formatBytes(editedQuota.maxStorageMB * 1024 * 1024)})
+              <p className='text-muted-foreground text-xs'>
+                System default: 10,240 MB (
+                {formatBytes(editedQuota.maxStorageMB * 1024 * 1024)})
               </p>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingUser(null)}>
+            <Button variant='outline' onClick={() => setEditingUser(null)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveQuota} disabled={updateQuotaMutation.isPending}>
+            <Button
+              onClick={handleSaveQuota}
+              disabled={updateQuotaMutation.isPending}
+            >
               {updateQuotaMutation.isPending ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
