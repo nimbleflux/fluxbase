@@ -182,21 +182,21 @@ func FormatErrorForLLM(err error, query string, toolName string) string {
 	suggestion := analyzer.AnalyzeError(err, query, toolName)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("ERROR in %s: %s\n\n", toolName, err.Error()))
+	fmt.Fprintf(&sb, "ERROR in %s: %s\n\n", toolName, err.Error())
 
 	if suggestion.Message != "" {
-		sb.WriteString(fmt.Sprintf("Issue: %s\n\n", suggestion.Message))
+		fmt.Fprintf(&sb, "Issue: %s\n\n", suggestion.Message)
 	}
 
 	if len(suggestion.Suggestions) > 0 {
 		sb.WriteString("RECOVERY SUGGESTIONS:\n")
 		for i, s := range suggestion.Suggestions {
-			sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, s))
+			fmt.Fprintf(&sb, "%d. %s\n", i+1, s)
 		}
 	}
 
 	if suggestion.AlternativeTool != "" {
-		sb.WriteString(fmt.Sprintf("\nALTERNATIVE: Consider using the '%s' tool instead.\n", suggestion.AlternativeTool))
+		fmt.Fprintf(&sb, "\nALTERNATIVE: Consider using the '%s' tool instead.\n", suggestion.AlternativeTool)
 	}
 
 	return sb.String()

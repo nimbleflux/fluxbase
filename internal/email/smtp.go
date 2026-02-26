@@ -166,12 +166,12 @@ func (s *SMTPService) buildMessage(to, subject, body string) []byte {
 	safeSubject := sanitizeHeaderValue(subject)
 	safeReplyTo := sanitizeHeaderValue(s.config.ReplyToAddress)
 
-	buf.WriteString(fmt.Sprintf("From: %s <%s>\r\n", safeFromName, safeFromAddress))
-	buf.WriteString(fmt.Sprintf("To: %s\r\n", safeTo))
+	fmt.Fprintf(&buf, "From: %s <%s>\r\n", safeFromName, safeFromAddress)
+	fmt.Fprintf(&buf, "To: %s\r\n", safeTo)
 	if safeReplyTo != "" {
-		buf.WriteString(fmt.Sprintf("Reply-To: %s\r\n", safeReplyTo))
+		fmt.Fprintf(&buf, "Reply-To: %s\r\n", safeReplyTo)
 	}
-	buf.WriteString(fmt.Sprintf("Subject: %s\r\n", safeSubject))
+	fmt.Fprintf(&buf, "Subject: %s\r\n", safeSubject)
 	buf.WriteString("MIME-Version: 1.0\r\n")
 	buf.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
 	buf.WriteString("\r\n")

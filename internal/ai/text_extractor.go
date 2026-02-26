@@ -235,7 +235,7 @@ func (e *TextExtractor) ExtractFromXLSX(data []byte) (string, error) {
 	sheets := f.GetSheetList()
 
 	for _, sheet := range sheets {
-		text.WriteString(fmt.Sprintf("=== Sheet: %s ===\n", sheet))
+		fmt.Fprintf(&text, "=== Sheet: %s ===\n", sheet)
 
 		rows, err := f.GetRows(sheet)
 		if err != nil {

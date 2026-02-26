@@ -307,7 +307,7 @@ const allUsers = await adminClient.from("users").select("*");
 
 ## REST API
 
-For direct HTTP access without the SDK, see the [API Reference](/api/sdk/classes/FluxbaseAuth).
+For direct HTTP access without the SDK, see the [API Reference](/api/sdk/classes/fluxbaseauth/).
 
 ## Reference
 

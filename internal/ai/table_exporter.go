@@ -318,18 +318,18 @@ func (e *TableExporter) generateTableDocument(table *database.TableInfo, req Exp
 	var sb strings.Builder
 
 	// Title
-	sb.WriteString(fmt.Sprintf("# Table: %s.%s\n\n", table.Schema, table.Name))
+	fmt.Fprintf(&sb, "# Table: %s.%s\n\n", table.Schema, table.Name)
 
 	// Description
 	sb.WriteString("## Description\n\n")
-	sb.WriteString(fmt.Sprintf("Database **%s** in schema `%s`.\n\n", table.Type, table.Schema))
+	fmt.Fprintf(&sb, "Database **%s** in schema `%s`.\n\n", table.Type, table.Schema)
 	if table.RLSEnabled {
 		sb.WriteString("**Note:** Row Level Security (RLS) is enabled on this table.\n\n")
 	}
 
 	// Primary key
 	if len(table.PrimaryKey) > 0 {
-		sb.WriteString(fmt.Sprintf("**Primary Key:** `%s`\n\n", strings.Join(table.PrimaryKey, "`, `")))
+		fmt.Fprintf(&sb, "**Primary Key:** `%s`\n\n", strings.Join(table.PrimaryKey, "`, `"))
 	}
 
 	// Filter columns if specific ones are requested
@@ -346,7 +346,7 @@ func (e *TableExporter) generateTableDocument(table *database.TableInfo, req Exp
 			}
 		}
 		columns = filtered
-		sb.WriteString(fmt.Sprintf("*Exporting %d of %d columns.*\n\n", len(columns), len(table.Columns)))
+		fmt.Fprintf(&sb, "*Exporting %d of %d columns.*\n\n", len(columns), len(table.Columns))
 	}
 
 	// Columns
@@ -377,15 +377,15 @@ func (e *TableExporter) generateTableDocument(table *database.TableInfo, req Exp
 			suffix += " 🦄"
 		}
 
-		sb.WriteString(fmt.Sprintf("| %s%s | %s | %s | %s | %s%s |\n",
-			prefix, col.Name, col.DataType, nullable, defaultVal, col.Description, suffix))
+		fmt.Fprintf(&sb, "| %s%s | %s | %s | %s | %s%s |\n",
+			prefix, col.Name, col.DataType, nullable, defaultVal, col.Description, suffix)
 	}
 	sb.WriteString("\n")
 
 	// JSONB Column Schemas
 	for _, col := range columns {
 		if col.JSONBSchema != nil && (col.DataType == "jsonb" || col.DataType == "json") {
-			sb.WriteString(fmt.Sprintf("## JSONB Column: `%s`\n\n", col.Name))
+			fmt.Fprintf(&sb, "## JSONB Column: `%s`\n\n", col.Name)
 			sb.WriteString("This JSONB column has the following structure:\n\n")
 			sb.WriteString("| Field | Type | Required | Description |\n")
 			sb.WriteString("|-------|------|----------|-------------|\n")
@@ -398,8 +398,8 @@ func (e *TableExporter) generateTableDocument(table *database.TableInfo, req Exp
 						break
 					}
 				}
-				sb.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n",
-					name, prop.Type, required, prop.Description))
+				fmt.Fprintf(&sb, "| %s | %s | %s | %s |\n",
+					name, prop.Type, required, prop.Description)
 			}
 			sb.WriteString("\n")
 
@@ -413,12 +413,12 @@ func (e *TableExporter) generateTableDocument(table *database.TableInfo, req Exp
 				break
 			}
 			if exampleField != "" {
-				sb.WriteString(fmt.Sprintf("-- Filter by %s\n", exampleField))
-				sb.WriteString(fmt.Sprintf("SELECT * FROM %s.%s WHERE %s->>'%s' = 'value';\n",
-					table.Schema, table.Name, col.Name, exampleField))
+				fmt.Fprintf(&sb, "-- Filter by %s\n", exampleField)
+				fmt.Fprintf(&sb, "SELECT * FROM %s.%s WHERE %s->>'%s' = 'value';\n",
+					table.Schema, table.Name, col.Name, exampleField)
 				sb.WriteString("-- Use JSON path for nested fields\n")
-				sb.WriteString(fmt.Sprintf("SELECT * FROM %s.%s WHERE %s->'nested'->>'field' = 'value';\n",
-					table.Schema, table.Name, col.Name))
+				fmt.Fprintf(&sb, "SELECT * FROM %s.%s WHERE %s->'nested'->>'field' = 'value';\n",
+					table.Schema, table.Name, col.Name)
 			}
 			sb.WriteString("```\n\n")
 		}
@@ -428,9 +428,9 @@ func (e *TableExporter) generateTableDocument(table *database.TableInfo, req Exp
 	if req.IncludeForeignKeys && len(table.ForeignKeys) > 0 {
 		sb.WriteString("## Foreign Keys\n\n")
 		for _, fk := range table.ForeignKeys {
-			sb.WriteString(fmt.Sprintf("- `%s` → `%s.%s` (`%s`)", fk.ColumnName, fk.ReferencedTable, fk.ReferencedColumn, fk.ReferencedTable))
+			fmt.Fprintf(&sb, "- `%s` → `%s.%s` (`%s`)", fk.ColumnName, fk.ReferencedTable, fk.ReferencedColumn, fk.ReferencedTable)
 			if fk.OnDelete != "" {
-				sb.WriteString(fmt.Sprintf(" ON DELETE %s", fk.OnDelete))
+				fmt.Fprintf(&sb, " ON DELETE %s", fk.OnDelete)
 			}
 			sb.WriteString("\n")
 		}
@@ -445,8 +445,8 @@ func (e *TableExporter) generateTableDocument(table *database.TableInfo, req Exp
 			if idx.IsUnique {
 				prefix = "UNIQUE "
 			}
-			sb.WriteString(fmt.Sprintf("- %s`%s` on (`%s`)\n",
-				prefix, idx.Name, strings.Join(idx.Columns, "`, `")))
+			fmt.Fprintf(&sb, "- %s`%s` on (`%s`)\n",
+				prefix, idx.Name, strings.Join(idx.Columns, "`, `"))
 		}
 		sb.WriteString("\n")
 	}

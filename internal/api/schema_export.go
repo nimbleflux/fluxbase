@@ -193,7 +193,7 @@ func (h *SchemaExportHandler) generateSchemaTypes(schema string, tables []databa
 	var sb strings.Builder
 
 	schemaNamespace := toPascalCase(schema)
-	sb.WriteString(fmt.Sprintf("// ==================== %s Schema (%ss) ====================\n\n", schemaNamespace, objectType))
+	fmt.Fprintf(&sb, "// ==================== %s Schema (%ss) ====================\n\n", schemaNamespace, objectType)
 
 	for _, table := range tables {
 		sb.WriteString(h.generateTableTypes(table))
@@ -218,8 +218,8 @@ func (h *SchemaExportHandler) generateTableTypes(table database.TableInfo) strin
 	}
 
 	// Row type (what you get from SELECT)
-	sb.WriteString(fmt.Sprintf("/** %s.%s row type */\n", table.Schema, table.Name))
-	sb.WriteString(fmt.Sprintf("export interface %sRow {\n", fullTypeName))
+	fmt.Fprintf(&sb, "/** %s.%s row type */\n", table.Schema, table.Name)
+	fmt.Fprintf(&sb, "export interface %sRow {\n", fullTypeName)
 	for _, col := range table.Columns {
 		tsType := pgTypeToTS(col.DataType)
 		nullable := ""
@@ -232,13 +232,13 @@ func (h *SchemaExportHandler) generateTableTypes(table database.TableInfo) strin
 		} else if col.IsForeignKey {
 			comment = " // Foreign key"
 		}
-		sb.WriteString(fmt.Sprintf("  %s: %s%s;%s\n", col.Name, tsType, nullable, comment))
+		fmt.Fprintf(&sb, "  %s: %s%s;%s\n", col.Name, tsType, nullable, comment)
 	}
 	sb.WriteString("}\n\n")
 
 	// Insert type (what you send for INSERT)
-	sb.WriteString(fmt.Sprintf("/** %s.%s insert type */\n", table.Schema, table.Name))
-	sb.WriteString(fmt.Sprintf("export interface %sInsert {\n", fullTypeName))
+	fmt.Fprintf(&sb, "/** %s.%s insert type */\n", table.Schema, table.Name)
+	fmt.Fprintf(&sb, "export interface %sInsert {\n", fullTypeName)
 	for _, col := range table.Columns {
 		tsType := pgTypeToTS(col.DataType)
 		optional := ""
@@ -253,20 +253,20 @@ func (h *SchemaExportHandler) generateTableTypes(table database.TableInfo) strin
 			nullable = " | null"
 		}
 
-		sb.WriteString(fmt.Sprintf("  %s%s: %s%s;\n", col.Name, optional, tsType, nullable))
+		fmt.Fprintf(&sb, "  %s%s: %s%s;\n", col.Name, optional, tsType, nullable)
 	}
 	sb.WriteString("}\n\n")
 
 	// Update type (what you send for UPDATE - all optional)
-	sb.WriteString(fmt.Sprintf("/** %s.%s update type */\n", table.Schema, table.Name))
-	sb.WriteString(fmt.Sprintf("export interface %sUpdate {\n", fullTypeName))
+	fmt.Fprintf(&sb, "/** %s.%s update type */\n", table.Schema, table.Name)
+	fmt.Fprintf(&sb, "export interface %sUpdate {\n", fullTypeName)
 	for _, col := range table.Columns {
 		tsType := pgTypeToTS(col.DataType)
 		nullable := ""
 		if col.IsNullable {
 			nullable = " | null"
 		}
-		sb.WriteString(fmt.Sprintf("  %s?: %s%s;\n", col.Name, tsType, nullable))
+		fmt.Fprintf(&sb, "  %s?: %s%s;\n", col.Name, tsType, nullable)
 	}
 	sb.WriteString("}\n\n")
 
@@ -293,7 +293,7 @@ func (h *SchemaExportHandler) generateFunctionTypes(functions []database.Functio
 		schemaFuncs := funcsBySchema[schema]
 		schemaNamespace := toPascalCase(schema)
 
-		sb.WriteString(fmt.Sprintf("// %s schema functions\n", schema))
+		fmt.Fprintf(&sb, "// %s schema functions\n", schema)
 
 		for _, fn := range schemaFuncs {
 			funcName := toPascalCase(fn.Name)
@@ -304,8 +304,8 @@ func (h *SchemaExportHandler) generateFunctionTypes(functions []database.Functio
 
 			// Generate args type if function has parameters
 			if len(fn.Parameters) > 0 {
-				sb.WriteString(fmt.Sprintf("/** Arguments for %s.%s */\n", fn.Schema, fn.Name))
-				sb.WriteString(fmt.Sprintf("export interface %sArgs {\n", fullFuncName))
+				fmt.Fprintf(&sb, "/** Arguments for %s.%s */\n", fn.Schema, fn.Name)
+				fmt.Fprintf(&sb, "export interface %sArgs {\n", fullFuncName)
 				for _, param := range fn.Parameters {
 					if param.Mode == "OUT" {
 						continue // Skip output parameters
@@ -319,7 +319,7 @@ func (h *SchemaExportHandler) generateFunctionTypes(functions []database.Functio
 					if paramName == "" {
 						paramName = fmt.Sprintf("arg%d", param.Position)
 					}
-					sb.WriteString(fmt.Sprintf("  %s%s: %s;\n", paramName, optional, tsType))
+					fmt.Fprintf(&sb, "  %s%s: %s;\n", paramName, optional, tsType)
 				}
 				sb.WriteString("}\n\n")
 			}
@@ -329,8 +329,8 @@ func (h *SchemaExportHandler) generateFunctionTypes(functions []database.Functio
 			if fn.IsSetOf {
 				returnType += "[]"
 			}
-			sb.WriteString(fmt.Sprintf("/** Return type for %s.%s */\n", fn.Schema, fn.Name))
-			sb.WriteString(fmt.Sprintf("export type %sReturn = %s;\n\n", fullFuncName, returnType))
+			fmt.Fprintf(&sb, "/** Return type for %s.%s */\n", fn.Schema, fn.Name)
+			fmt.Fprintf(&sb, "export type %sReturn = %s;\n\n", fullFuncName, returnType)
 		}
 	}
 
@@ -353,7 +353,7 @@ func (h *SchemaExportHandler) generateDatabaseNamespace(tablesBySchema map[strin
 		tables := tablesBySchema[schema]
 		schemaNamespace := toPascalCase(schema)
 
-		sb.WriteString(fmt.Sprintf("  export namespace %s {\n", schemaNamespace))
+		fmt.Fprintf(&sb, "  export namespace %s {\n", schemaNamespace)
 		sb.WriteString("    export interface Tables {\n")
 
 		for _, table := range tables {
@@ -362,10 +362,10 @@ func (h *SchemaExportHandler) generateDatabaseNamespace(tablesBySchema map[strin
 			if schema != "public" {
 				fullTypeName = schemaNamespace + typeName
 			}
-			sb.WriteString(fmt.Sprintf("      %s: {\n", table.Name))
-			sb.WriteString(fmt.Sprintf("        Row: %sRow;\n", fullTypeName))
-			sb.WriteString(fmt.Sprintf("        Insert: %sInsert;\n", fullTypeName))
-			sb.WriteString(fmt.Sprintf("        Update: %sUpdate;\n", fullTypeName))
+			fmt.Fprintf(&sb, "      %s: {\n", table.Name)
+			fmt.Fprintf(&sb, "        Row: %sRow;\n", fullTypeName)
+			fmt.Fprintf(&sb, "        Insert: %sInsert;\n", fullTypeName)
+			fmt.Fprintf(&sb, "        Update: %sUpdate;\n", fullTypeName)
 			sb.WriteString("      };\n")
 		}
 

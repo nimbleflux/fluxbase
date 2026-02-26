@@ -632,7 +632,7 @@ func inlineSharedModules(mainCode string, sharedModules map[string]string) strin
 		cleanPath := strings.TrimPrefix(modulePath, "_shared/")
 
 		// Write the module content with a comment header
-		result.WriteString(fmt.Sprintf("// Inlined from _shared/%s\n", cleanPath))
+		fmt.Fprintf(&result, "// Inlined from _shared/%s\n", cleanPath)
 
 		// Remove ALL imports from this shared module
 		lines := strings.Split(content, "\n")
@@ -920,7 +920,7 @@ func inlineAllImports(mainCode string, sharedModules map[string]string, denoJSON
 	// First, inline all external modules (like @fluxbase/sdk)
 	// Wrap them in IIFEs to avoid scope conflicts and syntax errors
 	for moduleName, content := range externalModules {
-		result.WriteString(fmt.Sprintf("// Inlined from %s\n", moduleName))
+		fmt.Fprintf(&result, "// Inlined from %s\n", moduleName)
 
 		// Extract export names from the module to create proper variable bindings
 		exportNames := extractExportNames(content)
@@ -969,7 +969,7 @@ func inlineAllImports(mainCode string, sharedModules map[string]string, denoJSON
 	// Second, inline all shared modules
 	for modulePath, content := range sharedModules {
 		cleanPath := strings.TrimPrefix(modulePath, "_shared/")
-		result.WriteString(fmt.Sprintf("// Inlined from _shared/%s\n", cleanPath))
+		fmt.Fprintf(&result, "// Inlined from _shared/%s\n", cleanPath)
 
 		// Remove ALL import statements from shared modules since all dependencies are being inlined
 		lines := strings.Split(content, "\n")

@@ -139,14 +139,14 @@ func (r *RAGService) formatContext(chunks []RetrievalResult) string {
 	sb.WriteString("The following information was retrieved from the knowledge base and may be relevant to the user's question:\n\n")
 
 	for i, chunk := range chunks {
-		sb.WriteString(fmt.Sprintf("### Source %d", i+1))
+		fmt.Fprintf(&sb, "### Source %d", i+1)
 		if chunk.DocumentTitle != "" {
-			sb.WriteString(fmt.Sprintf(": %s", chunk.DocumentTitle))
+			fmt.Fprintf(&sb, ": %s", chunk.DocumentTitle)
 		}
 		if chunk.KnowledgeBaseName != "" {
-			sb.WriteString(fmt.Sprintf(" (from %s)", chunk.KnowledgeBaseName))
+			fmt.Fprintf(&sb, " (from %s)", chunk.KnowledgeBaseName)
 		}
-		sb.WriteString(fmt.Sprintf(" [similarity: %.2f]\n\n", chunk.Similarity))
+		fmt.Fprintf(&sb, " [similarity: %.2f]\n\n", chunk.Similarity)
 		sb.WriteString(chunk.Content)
 		sb.WriteString("\n\n---\n\n")
 	}

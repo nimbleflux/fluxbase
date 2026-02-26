@@ -329,7 +329,7 @@ func (r *DenoRuntime) Execute(
 			if r.maxOutputSize > 0 && totalOutputSize+lineLen > r.maxOutputSize {
 				if !outputTruncated {
 					outputTruncated = true
-					stdoutBuilder.WriteString(fmt.Sprintf("\n[OUTPUT TRUNCATED: exceeded %d bytes limit]\n", r.maxOutputSize))
+					fmt.Fprintf(&stdoutBuilder, "\n[OUTPUT TRUNCATED: exceeded %d bytes limit]\n", r.maxOutputSize)
 					log.Warn().
 						Str("id", req.ID.String()).
 						Int("max_output_size", r.maxOutputSize).

@@ -338,7 +338,7 @@ AWS_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/fluxbase.git
+git clone https://github.com/fluxbase-eu/fluxbase.git
 cd fluxbase
 
 # Build the image
@@ -362,7 +362,7 @@ docker buildx create --use
 # Build for multiple platforms
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t ghcr.io/your-org/fluxbase:latest \
+  -t ghcr.io/fluxbase-eu/fluxbase:latest \
   --push \
   .
 ```

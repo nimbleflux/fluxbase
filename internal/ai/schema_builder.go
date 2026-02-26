@@ -86,9 +86,9 @@ func (s *SchemaBuilder) BuildSchemaDescription(ctx context.Context, allowedSchem
 	sb.WriteString("## Available Database Tables\n\n")
 
 	for _, table := range tables {
-		sb.WriteString(fmt.Sprintf("### %s.%s\n", table.Schema, table.Name))
+		fmt.Fprintf(&sb, "### %s.%s\n", table.Schema, table.Name)
 		if table.Description != "" {
-			sb.WriteString(fmt.Sprintf("%s\n\n", table.Description))
+			fmt.Fprintf(&sb, "%s\n\n", table.Description)
 		}
 
 		sb.WriteString("| Column | Type | Nullable | Notes |\n")
@@ -112,8 +112,8 @@ func (s *SchemaBuilder) BuildSchemaDescription(ctx context.Context, allowedSchem
 			}
 
 			notesStr := strings.Join(notes, ", ")
-			sb.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n",
-				col.Name, col.DataType, nullable, notesStr))
+			fmt.Fprintf(&sb, "| %s | %s | %s | %s |\n",
+				col.Name, col.DataType, nullable, notesStr)
 		}
 
 		sb.WriteString("\n")
@@ -383,7 +383,7 @@ func (s *SchemaBuilder) BuildSystemPromptWithAuth(ctx context.Context, chatbot *
 
 	// Add default table hint if configured
 	if chatbot.DefaultTable != "" {
-		sb.WriteString(fmt.Sprintf("\n**Default/Primary table**: %s - Use this table first unless the question specifically requires a different table.\n", chatbot.DefaultTable))
+		fmt.Fprintf(&sb, "\n**Default/Primary table**: %s - Use this table first unless the question specifically requires a different table.\n", chatbot.DefaultTable)
 	}
 
 	// Add intent rules hints if configured
@@ -406,12 +406,12 @@ func (s *SchemaBuilder) BuildSystemPromptWithAuth(ctx context.Context, chatbot *
 			sb.WriteString("Use the correct table based on what the user is asking about:\n")
 			for _, rule := range chatbot.IntentRules {
 				if rule.RequiredTable != "" {
-					sb.WriteString(fmt.Sprintf("- For questions about %s → use **%s**\n",
-						strings.Join(rule.Keywords, ", "), rule.RequiredTable))
+					fmt.Fprintf(&sb, "- For questions about %s → use **%s**\n",
+						strings.Join(rule.Keywords, ", "), rule.RequiredTable)
 				}
 				if rule.ForbiddenTable != "" {
-					sb.WriteString(fmt.Sprintf("- Do NOT use '%s' for queries about %s\n",
-						rule.ForbiddenTable, strings.Join(rule.Keywords, ", ")))
+					fmt.Fprintf(&sb, "- Do NOT use '%s' for queries about %s\n",
+						rule.ForbiddenTable, strings.Join(rule.Keywords, ", "))
 				}
 			}
 		}
@@ -422,12 +422,12 @@ func (s *SchemaBuilder) BuildSystemPromptWithAuth(ctx context.Context, chatbot *
 			sb.WriteString("Use the correct tool based on what the user is asking about:\n")
 			for _, rule := range chatbot.IntentRules {
 				if rule.RequiredTool != "" {
-					sb.WriteString(fmt.Sprintf("- For questions about %s → use the **%s** tool\n",
-						strings.Join(rule.Keywords, ", "), rule.RequiredTool))
+					fmt.Fprintf(&sb, "- For questions about %s → use the **%s** tool\n",
+						strings.Join(rule.Keywords, ", "), rule.RequiredTool)
 				}
 				if rule.ForbiddenTool != "" {
-					sb.WriteString(fmt.Sprintf("- Do NOT use the '%s' tool for queries about %s\n",
-						rule.ForbiddenTool, strings.Join(rule.Keywords, ", ")))
+					fmt.Fprintf(&sb, "- Do NOT use the '%s' tool for queries about %s\n",
+						rule.ForbiddenTool, strings.Join(rule.Keywords, ", "))
 				}
 			}
 		}
@@ -476,14 +476,14 @@ func (s *SchemaBuilder) BuildSystemPromptWithAuth(ctx context.Context, chatbot *
 		sb.WriteString("\n## Required Columns\n\n")
 		sb.WriteString("When querying these tables, always include these columns:\n")
 		for table, cols := range chatbot.RequiredColumns {
-			sb.WriteString(fmt.Sprintf("- **%s**: %s\n", table, strings.Join(cols, ", ")))
+			fmt.Fprintf(&sb, "- **%s**: %s\n", table, strings.Join(cols, ", "))
 		}
 	}
 
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("Allowed operations: %s\n", strings.Join(chatbot.AllowedOperations, ", ")))
-	sb.WriteString(fmt.Sprintf("Current user ID: %s\n", userID))
-	sb.WriteString(fmt.Sprintf("Current date and time: %s\n", time.Now().UTC().Format("Monday, January 2, 2006 at 3:04 PM MST")))
+	fmt.Fprintf(&sb, "Allowed operations: %s\n", strings.Join(chatbot.AllowedOperations, ", "))
+	fmt.Fprintf(&sb, "Current user ID: %s\n", userID)
+	fmt.Fprintf(&sb, "Current date and time: %s\n", time.Now().UTC().Format("Monday, January 2, 2006 at 3:04 PM MST"))
 
 	// Add response language instruction
 	sb.WriteString("\n## Response Language\n\n")
@@ -491,8 +491,8 @@ func (s *SchemaBuilder) BuildSystemPromptWithAuth(ctx context.Context, chatbot *
 		sb.WriteString("IMPORTANT: Always respond in the same language as the user's message. ")
 		sb.WriteString("Detect the language of each user message and reply in that exact language.\n")
 	} else {
-		sb.WriteString(fmt.Sprintf("IMPORTANT: Always respond in %s, regardless of the language the user writes in.\n",
-			chatbot.ResponseLanguage))
+		fmt.Fprintf(&sb, "IMPORTANT: Always respond in %s, regardless of the language the user writes in.\n",
+			chatbot.ResponseLanguage)
 	}
 
 	return sb.String(), nil
@@ -507,7 +507,7 @@ func (s *SchemaBuilder) GetCompactSchemaDescription(ctx context.Context, allowed
 
 	var sb strings.Builder
 	for _, table := range tables {
-		sb.WriteString(fmt.Sprintf("%s.%s: ", table.Schema, table.Name))
+		fmt.Fprintf(&sb, "%s.%s: ", table.Schema, table.Name)
 		cols := make([]string, len(table.Columns))
 		for i, col := range table.Columns {
 			colDesc := col.Name + " (" + col.DataType
@@ -677,9 +677,9 @@ func (s *SchemaBuilder) BuildSchemaDescriptionFromMCP(ctx context.Context, allow
 	sb.WriteString("## Available Database Tables\n\n")
 
 	for _, table := range tables {
-		sb.WriteString(fmt.Sprintf("### %s.%s\n", table.Schema, table.Name))
+		fmt.Fprintf(&sb, "### %s.%s\n", table.Schema, table.Name)
 		if table.Description != "" {
-			sb.WriteString(fmt.Sprintf("%s\n\n", table.Description))
+			fmt.Fprintf(&sb, "%s\n\n", table.Description)
 		}
 
 		sb.WriteString("| Column | Type | Nullable | Notes |\n")
@@ -703,8 +703,8 @@ func (s *SchemaBuilder) BuildSchemaDescriptionFromMCP(ctx context.Context, allow
 			}
 
 			notesStr := strings.Join(notes, ", ")
-			sb.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n",
-				col.Name, col.DataType, nullable, notesStr))
+			fmt.Fprintf(&sb, "| %s | %s | %s | %s |\n",
+				col.Name, col.DataType, nullable, notesStr)
 		}
 
 		sb.WriteString("\n")

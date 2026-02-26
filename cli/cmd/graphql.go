@@ -305,11 +305,11 @@ func formatGraphQLErrors(errs []graphqlError) error {
 	sb.WriteString("GraphQL errors:\n")
 
 	for i, e := range errs {
-		sb.WriteString(fmt.Sprintf("  %d. %s", i+1, e.Message))
+		fmt.Fprintf(&sb, "  %d. %s", i+1, e.Message)
 
 		if len(e.Locations) > 0 {
 			loc := e.Locations[0]
-			sb.WriteString(fmt.Sprintf(" (line %d, column %d)", loc.Line, loc.Column))
+			fmt.Fprintf(&sb, " (line %d, column %d)", loc.Line, loc.Column)
 		}
 
 		if len(e.Path) > 0 {
@@ -317,7 +317,7 @@ func formatGraphQLErrors(errs []graphqlError) error {
 			for j, p := range e.Path {
 				pathParts[j] = fmt.Sprintf("%v", p)
 			}
-			sb.WriteString(fmt.Sprintf(" at path: %s", strings.Join(pathParts, ".")))
+			fmt.Fprintf(&sb, " at path: %s", strings.Join(pathParts, "."))
 		}
 
 		sb.WriteString("\n")

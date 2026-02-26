@@ -269,7 +269,7 @@ helm install fluxbase ./fluxbase \
 
 ### Full values.yaml Reference
 
-See [values.yaml](https://github.com/your-org/fluxbase/blob/main/deploy/helm/fluxbase/values.yaml) for all available options.
+See [values.yaml](https://github.com/fluxbase-eu/fluxbase/blob/main/deploy/helm/fluxbase/values.yaml) for all available options.
 
 **Key sections**:
 

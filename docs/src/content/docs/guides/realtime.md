@@ -607,7 +607,7 @@ When authenticated, users receive realtime updates only for their own posts.
 
 ## Raw WebSocket Protocol
 
-For non-JavaScript environments, see the [Realtime SDK Documentation](/api/sdk/classes/FluxbaseRealtime) for WebSocket protocol details.
+For non-JavaScript environments, see the [Realtime SDK Documentation](/api/sdk/classes/fluxbaserealtime/) for WebSocket protocol details.
 
 ## Troubleshooting
 

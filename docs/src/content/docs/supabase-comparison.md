@@ -198,7 +198,7 @@ See [Deployment: Scaling](/deployment/scaling#horizontal-scaling) for full confi
 
 - [Documentation](/)
 - [GitHub](https://github.com/fluxbase-eu/fluxbase)
-- [API Reference](/api/sdk/classes/FluxbaseClient)
+- [API Reference](/api/sdk/classes/fluxbaseclient/)
 
 **Supabase:**
 

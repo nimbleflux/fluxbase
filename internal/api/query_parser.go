@@ -1254,7 +1254,7 @@ func parseJSONBPath(column string) string {
 			// No more operators - this is the last key
 			key := remaining
 			if isFirst {
-				result.WriteString(fmt.Sprintf(`"%s"`, key))
+				fmt.Fprintf(&result, `"%s"`, key)
 			} else {
 				result.WriteString(formatJSONKey(key))
 			}
@@ -1265,7 +1265,7 @@ func parseJSONBPath(column string) string {
 		part := remaining[:opIdx]
 		if isFirst {
 			// First part is the column name - quote it as identifier
-			result.WriteString(fmt.Sprintf(`"%s"`, part))
+			fmt.Fprintf(&result, `"%s"`, part)
 			isFirst = false
 		} else {
 			// Subsequent parts are JSON keys
