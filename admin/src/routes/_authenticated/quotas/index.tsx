@@ -215,46 +215,46 @@ function UserQuotasPage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className='min-w-[160px]'>
-                        <div className='space-y-1'>
-                          <div className='flex items-center gap-2 text-sm'>
-                            <span>{quota.used_documents.toLocaleString()}</span>
-                            <span className='text-muted-foreground'>
-                              / {quota.max_documents.toLocaleString()}
+                      <TableCell className='min-w-[180px]'>
+                        <div className='space-y-1.5'>
+                          <div className='flex items-center justify-between text-sm'>
+                            <span>
+                              {quota.used_documents.toLocaleString()} /{' '}
+                              {quota.max_documents.toLocaleString()}
+                            </span>
+                            <span className='text-muted-foreground text-xs'>
+                              {docsPercent.toFixed(1)}%
                             </span>
                           </div>
-                          <Progress value={docsPercent} className='h-2' />
-                          <div className='text-muted-foreground text-xs'>
-                            {docsPercent.toFixed(1)}%
-                          </div>
+                          <Progress value={docsPercent} className='h-1.5' />
                         </div>
                       </TableCell>
-                      <TableCell className='min-w-[160px]'>
-                        <div className='space-y-1'>
-                          <div className='flex items-center gap-2 text-sm'>
-                            <span>{quota.used_chunks.toLocaleString()}</span>
-                            <span className='text-muted-foreground'>
-                              / {quota.max_chunks.toLocaleString()}
+                      <TableCell className='min-w-[180px]'>
+                        <div className='space-y-1.5'>
+                          <div className='flex items-center justify-between text-sm'>
+                            <span>
+                              {quota.used_chunks.toLocaleString()} /{' '}
+                              {quota.max_chunks.toLocaleString()}
+                            </span>
+                            <span className='text-muted-foreground text-xs'>
+                              {chunksPercent.toFixed(1)}%
                             </span>
                           </div>
-                          <Progress value={chunksPercent} className='h-2' />
-                          <div className='text-muted-foreground text-xs'>
-                            {chunksPercent.toFixed(1)}%
-                          </div>
+                          <Progress value={chunksPercent} className='h-1.5' />
                         </div>
                       </TableCell>
-                      <TableCell className='min-w-[160px]'>
-                        <div className='space-y-1'>
-                          <div className='flex items-center gap-2 text-sm'>
-                            <span>{formatBytes(quota.used_storage_bytes)}</span>
-                            <span className='text-muted-foreground'>
-                              / {formatBytes(quota.max_storage_bytes)}
+                      <TableCell className='min-w-[180px]'>
+                        <div className='space-y-1.5'>
+                          <div className='flex items-center justify-between text-sm'>
+                            <span>
+                              {formatBytes(quota.used_storage_bytes)} /{' '}
+                              {formatBytes(quota.max_storage_bytes)}
+                            </span>
+                            <span className='text-muted-foreground text-xs'>
+                              {storagePercent.toFixed(1)}%
                             </span>
                           </div>
-                          <Progress value={storagePercent} className='h-2' />
-                          <div className='text-muted-foreground text-xs'>
-                            {storagePercent.toFixed(1)}%
-                          </div>
+                          <Progress value={storagePercent} className='h-1.5' />
                         </div>
                       </TableCell>
                       <TableCell>
