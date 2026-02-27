@@ -199,6 +199,13 @@ jobs:
               BASE_MONTH="$MONTH"
               BASE_ITERATION="$ITERATION"
               MODE="promote_rc"
+
+              # Check if stable version already exists
+              if git rev-parse "v${BASE_YEAR}.${BASE_MONTH}.${BASE_ITERATION}" >/dev/null 2>&1; then
+                echo "Stable version v${BASE_YEAR}.${BASE_MONTH}.${BASE_ITERATION} already exists, incrementing iteration"
+                BASE_ITERATION="$((BASE_ITERATION + 1))"
+                MODE="new"
+              fi
             else
               # stable → rc OR stable → stable: Start new release (increment iteration)
               # Use numeric comparison (-eq) to handle leading zeros correctly
