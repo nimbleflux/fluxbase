@@ -43,7 +43,7 @@
     "@tanstack/react-router": "^1.163.2",
     "@tanstack/react-table": "^8.21.3",
     "@xyflow/react": "^12.10.1",
-    "axios": "^1.13.5",
+    "axios": "^1.13.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.1.1",
