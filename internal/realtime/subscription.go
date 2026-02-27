@@ -503,18 +503,33 @@ func (sm *SubscriptionManager) RemoveConnectionSubscriptions(connID string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	subsToRemove := make([]string, 0)
 	for subID, sub := range sm.subscriptions {
 		if sub.ConnID == connID {
-			subsToRemove = append(subsToRemove, subID)
+			// Remove from user subscriptions
+			if userSubs, exists := sm.userSubs[sub.UserID]; exists {
+				delete(userSubs, subID)
+				if len(userSubs) == 0 {
+					delete(sm.userSubs, sub.UserID)
+				}
+			}
+
+			// Remove from table subscriptions
+			tableKey := fmt.Sprintf("%s.%s", sub.Schema, sub.Table)
+			if tableSubs, exists := sm.tableSubs[tableKey]; exists {
+				delete(tableSubs, subID)
+				if len(tableSubs) == 0 {
+					delete(sm.tableSubs, tableKey)
+				}
+			}
+
+			delete(sm.subscriptions, subID)
+
+			log.Info().
+				Str("sub_id", subID).
+				Str("user_id", sub.UserID).
+				Msg("Removed subscription")
 		}
 	}
-
-	sm.mu.Unlock()
-	for _, subID := range subsToRemove {
-		_ = sm.RemoveSubscription(subID)
-	}
-	sm.mu.Lock()
 }
 
 // FilterEventForSubscribers filters a change event for all subscribers with RLS
@@ -540,19 +555,21 @@ func (sm *SubscriptionManager) FilterEventForSubscribers(ctx context.Context, ev
 	for _, subID := range subIDsCopy {
 		sm.mu.RLock()
 		sub, exists := sm.subscriptions[subID]
-		sm.mu.RUnlock()
-
 		if !exists {
+			sm.mu.RUnlock()
 			continue
 		}
+		// Copy claims while holding lock to prevent concurrent map access
+		claims := copyClaims(sub.Claims)
+		sm.mu.RUnlock()
 
 		// Check if event type matches subscription
 		if !sm.matchesEvent(event.Type, sub.Event) {
 			continue
 		}
 
-		// Check RLS access
-		if sm.checkRLSAccess(ctx, sub, event) {
+		// Check RLS access with copied claims
+		if sm.checkRLSAccess(ctx, sub, event, claims) {
 			// Check Supabase-compatible filter
 			if sm.matchesFilter(event, sub) {
 				result[sub.ConnID] = event
@@ -588,7 +605,9 @@ func (sm *SubscriptionManager) matchesFilter(event *ChangeEvent, sub *Subscripti
 
 // checkRLSAccess verifies if a user can access a record based on RLS policies
 // Uses a short-lived cache to reduce database load for repeated checks
-func (sm *SubscriptionManager) checkRLSAccess(ctx context.Context, sub *Subscription, event *ChangeEvent) bool {
+// Claims are passed as a parameter to avoid concurrent map access - they must be copied
+// while holding the lock before calling this function.
+func (sm *SubscriptionManager) checkRLSAccess(ctx context.Context, sub *Subscription, event *ChangeEvent, claims map[string]interface{}) bool {
 	if sm.db == nil {
 		return true // No DB means no RLS check (test mode)
 	}
@@ -613,7 +632,7 @@ func (sm *SubscriptionManager) checkRLSAccess(ctx context.Context, sub *Subscrip
 	}
 
 	// Generate cache key and check cache first
-	cacheKey := sm.rlsCache.generateCacheKey(sub.Schema, sub.Table, sub.Role, recordID, sub.Claims)
+	cacheKey := sm.rlsCache.generateCacheKey(sub.Schema, sub.Table, sub.Role, recordID, claims)
 	if allowed, found := sm.rlsCache.get(cacheKey); found {
 		log.Debug().
 			Str("user_id", sub.UserID).
@@ -631,16 +650,16 @@ func (sm *SubscriptionManager) checkRLSAccess(ctx context.Context, sub *Subscrip
 		Str("role", sub.Role).
 		Str("table", fmt.Sprintf("%s.%s", sub.Schema, sub.Table)).
 		Interface("record_id", recordID).
-		Interface("claims", copyClaims(sub.Claims)).
+		Interface("claims", copyClaims(claims)).
 		Msg("Starting RLS access check")
 
-	visible, err := sm.db.CheckRLSAccess(ctx, sub.Schema, sub.Table, sub.Role, sub.Claims, recordID)
+	visible, err := sm.db.CheckRLSAccess(ctx, sub.Schema, sub.Table, sub.Role, claims, recordID)
 	if err != nil {
 		log.Error().
 			Err(err).
 			Str("table", fmt.Sprintf("%s.%s", sub.Schema, sub.Table)).
 			Interface("record_id", recordID).
-			Interface("claims", copyClaims(sub.Claims)).
+			Interface("claims", copyClaims(claims)).
 			Msg("RLS check failed")
 		return false
 	}
@@ -819,18 +838,25 @@ func (sm *SubscriptionManager) GetLogSubscribers(executionID string) []string {
 // RemoveConnectionLogSubscriptions removes all log subscriptions for a connection
 func (sm *SubscriptionManager) RemoveConnectionLogSubscriptions(connID string) {
 	sm.mu.Lock()
+	defer sm.mu.Unlock()
 
-	subsToRemove := make([]string, 0)
 	for subID, sub := range sm.logSubs {
 		if sub.ConnID == connID {
-			subsToRemove = append(subsToRemove, subID)
+			// Remove from execution ID subscriptions
+			if execSubs, exists := sm.execLogSubs[sub.ExecutionID]; exists {
+				delete(execSubs, subID)
+				if len(execSubs) == 0 {
+					delete(sm.execLogSubs, sub.ExecutionID)
+				}
+			}
+
+			delete(sm.logSubs, subID)
+
+			log.Info().
+				Str("sub_id", subID).
+				Str("execution_id", sub.ExecutionID).
+				Msg("Removed execution log subscription")
 		}
-	}
-
-	sm.mu.Unlock()
-
-	for _, subID := range subsToRemove {
-		_ = sm.RemoveLogSubscription(subID)
 	}
 }
 
@@ -905,18 +931,16 @@ func (sm *SubscriptionManager) GetAllLogsSubscribers() map[string]*AllLogsSubscr
 // RemoveConnectionAllLogsSubscriptions removes all all-logs subscriptions for a connection
 func (sm *SubscriptionManager) RemoveConnectionAllLogsSubscriptions(connID string) {
 	sm.mu.Lock()
+	defer sm.mu.Unlock()
 
-	subsToRemove := make([]string, 0)
 	for subID, sub := range sm.allLogsSubs {
 		if sub.ConnID == connID {
-			subsToRemove = append(subsToRemove, subID)
+			delete(sm.allLogsSubs, subID)
+
+			log.Info().
+				Str("sub_id", subID).
+				Msg("Removed all-logs subscription")
 		}
-	}
-
-	sm.mu.Unlock()
-
-	for _, subID := range subsToRemove {
-		_ = sm.RemoveAllLogsSubscription(subID)
 	}
 }
 
