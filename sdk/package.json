@@ -1,6 +1,6 @@
 {
   "name": "@fluxbase/sdk",
-  "version": "2026.2.8-rc.1",
+  "version": "2026.2.8",
   "description": "Official TypeScript SDK for Fluxbase - Backend as a Service",
   "type": "module",
   "main": "./dist/index.cjs",
