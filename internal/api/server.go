@@ -1926,6 +1926,7 @@ func (s *Server) setupRoutes() {
 		// Routes will be at /api/v1/admin/branches (from branch handler's RegisterRoutes)
 		branchAuthGroup := v1.Group("/",
 			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
+			RequireRole("admin", "dashboard_admin", "service_role"),
 		)
 		s.branchHandler.RegisterRoutes(branchAuthGroup)
 		log.Debug().Msg("Database Branching routes registered")
