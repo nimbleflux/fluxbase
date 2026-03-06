@@ -635,26 +635,65 @@ func (h *DashboardAuthHandler) RequireDashboardAuth(c fiber.Ctx) error {
 	return c.Next()
 }
 
-// getIPAddress extracts the client IP address from the request
+// getIPAddress extracts the client IP address from the request.
+// Security note: This function only trusts X-Forwarded-For and X-Real-IP headers
+// when the request comes from a private IP range (likely a trusted proxy/load balancer).
+// For direct connections, it uses the actual connection IP to prevent spoofing.
 func getIPAddress(c fiber.Ctx) net.IP {
-	// Try X-Forwarded-For header first (for proxies)
-	xff := c.Get("X-Forwarded-For")
-	if xff != "" {
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			ip := strings.TrimSpace(ips[0])
-			return net.ParseIP(ip)
+	// Get the direct connection IP first
+	directIP := net.ParseIP(c.IP())
+
+	// Only trust proxy headers if the connection is from a private/trusted IP range
+	// This is a heuristic for detecting trusted proxies (internal load balancers, etc.)
+	if isPrivateOrLocalIP(directIP) {
+		// Try X-Forwarded-For header first (for proxies)
+		xff := c.Get("X-Forwarded-For")
+		if xff != "" {
+			ips := strings.Split(xff, ",")
+			if len(ips) > 0 {
+				// Take the rightmost IP (added by the most recent proxy)
+				ip := strings.TrimSpace(ips[len(ips)-1])
+				if parsed := net.ParseIP(ip); parsed != nil {
+					return parsed
+				}
+			}
+		}
+
+		// Try X-Real-IP header
+		xri := c.Get("X-Real-IP")
+		if xri != "" {
+			if parsed := net.ParseIP(xri); parsed != nil {
+				return parsed
+			}
 		}
 	}
 
-	// Try X-Real-IP header
-	xri := c.Get("X-Real-IP")
-	if xri != "" {
-		return net.ParseIP(xri)
+	// Fall back to direct connection IP
+	return directIP
+}
+
+// isPrivateOrLocalIP checks if an IP is in a private range or is localhost
+func isPrivateOrLocalIP(ip net.IP) bool {
+	if ip == nil {
+		return false
 	}
 
-	// Fall back to RemoteAddr (IP() method for Fiber)
-	return net.ParseIP(c.IP())
+	// Check for loopback
+	if ip.IsLoopback() {
+		return true
+	}
+
+	// Check for private ranges
+	if ip.IsPrivate() {
+		return true
+	}
+
+	// Check for link-local addresses
+	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+
+	return false
 }
 
 // isPasswordLoginDisabled checks if password login is disabled for the dashboard

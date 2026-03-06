@@ -34,10 +34,11 @@ func RequireMigrationsEnabled(cfg *config.MigrationsConfig) fiber.Handler {
 // RequireMigrationsIPAllowlist restricts access to migrations API by IP range
 // Only IPs within the configured ranges are allowed
 // If no IP ranges are configured, all IPs are allowed
-func RequireMigrationsIPAllowlist(cfg *config.MigrationsConfig) fiber.Handler {
+// The serverConfig is used for trusted proxy configuration to prevent IP spoofing
+func RequireMigrationsIPAllowlist(migrationsCfg *config.MigrationsConfig, serverCfg *config.ServerConfig) fiber.Handler {
 	// Parse allowed IP ranges at startup
 	var allowedNets []*net.IPNet
-	for _, ipRange := range cfg.AllowedIPRanges {
+	for _, ipRange := range migrationsCfg.AllowedIPRanges {
 		_, network, err := net.ParseCIDR(ipRange)
 		if err != nil {
 			log.Error().Err(err).Str("range", ipRange).Msg("Invalid IP range in migrations config")
@@ -52,7 +53,7 @@ func RequireMigrationsIPAllowlist(cfg *config.MigrationsConfig) fiber.Handler {
 			return c.Next()
 		}
 
-		clientIP := getClientIP(c)
+		clientIP := GetTrustedClientIP(c, serverCfg)
 
 		// Check if IP is in any allowed range
 		for _, network := range allowedNets {
@@ -288,34 +289,6 @@ func MigrationsAuditLog() fiber.Handler {
 
 		return err
 	}
-}
-
-// getClientIP extracts real client IP from headers (for proxy environments)
-func getClientIP(c fiber.Ctx) net.IP {
-	// Try X-Forwarded-For header first (for proxies)
-	xff := c.Get("X-Forwarded-For")
-	if xff != "" {
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			ip := strings.TrimSpace(ips[0])
-			parsed := net.ParseIP(ip)
-			if parsed != nil {
-				return parsed
-			}
-		}
-	}
-
-	// Try X-Real-IP header
-	xri := c.Get("X-Real-IP")
-	if xri != "" {
-		parsed := net.ParseIP(xri)
-		if parsed != nil {
-			return parsed
-		}
-	}
-
-	// Fall back to RemoteAddr
-	return net.ParseIP(c.IP())
 }
 
 // validateMigrationServiceKey validates a service key for migrations API

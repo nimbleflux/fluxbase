@@ -1876,7 +1876,7 @@ func (s *Server) setupRoutes() {
 	// Functions sync
 	funcSync := v1.Group("/admin/functions")
 	funcSync.Post("/sync",
-		middleware.RequireSyncIPAllowlist(s.config.Functions.SyncAllowedIPRanges, "functions"),
+		middleware.RequireSyncIPAllowlist(s.config.Functions.SyncAllowedIPRanges, "functions", &s.config.Server),
 		syncAuth,
 		RequireRole("admin", "dashboard_admin", "service_role"),
 		s.functionsHandler.SyncFunctions,
@@ -1886,7 +1886,7 @@ func (s *Server) setupRoutes() {
 	if s.jobsHandler != nil {
 		jobsSync := v1.Group("/admin/jobs")
 		jobsSync.Post("/sync",
-			middleware.RequireSyncIPAllowlist(s.config.Jobs.SyncAllowedIPRanges, "jobs"),
+			middleware.RequireSyncIPAllowlist(s.config.Jobs.SyncAllowedIPRanges, "jobs", &s.config.Server),
 			syncAuth,
 			RequireRole("admin", "dashboard_admin", "service_role"),
 			s.jobsHandler.SyncJobs,
@@ -1899,7 +1899,7 @@ func (s *Server) setupRoutes() {
 		aiSync := v1.Group("/admin/ai/chatbots")
 		aiSync.Post("/sync",
 			requireAI,
-			middleware.RequireSyncIPAllowlist(s.config.AI.SyncAllowedIPRanges, "ai"),
+			middleware.RequireSyncIPAllowlist(s.config.AI.SyncAllowedIPRanges, "ai", &s.config.Server),
 			syncAuth,
 			RequireRole("admin", "dashboard_admin", "service_role"),
 			s.aiHandler.SyncChatbots,
@@ -1912,7 +1912,7 @@ func (s *Server) setupRoutes() {
 		rpcSync := v1.Group("/admin/rpc")
 		rpcSync.Post("/sync",
 			requireRPC,
-			middleware.RequireSyncIPAllowlist(s.config.RPC.SyncAllowedIPRanges, "rpc"),
+			middleware.RequireSyncIPAllowlist(s.config.RPC.SyncAllowedIPRanges, "rpc", &s.config.Server),
 			syncAuth,
 			RequireRole("admin", "dashboard_admin", "service_role"),
 			s.rpcHandler.SyncProcedures,
@@ -2447,7 +2447,7 @@ func (s *Server) setupAdminRoutes(router fiber.Router) {
 		// Layer 6: Audit logging
 		migrationsAuth := []any{
 			middleware.RequireMigrationsEnabled(&s.config.Migrations),
-			middleware.RequireMigrationsIPAllowlist(&s.config.Migrations),
+			middleware.RequireMigrationsIPAllowlist(&s.config.Migrations, &s.config.Server),
 			middleware.RequireServiceKeyOnly(s.db.Pool(), s.authHandler.authService),
 			middleware.RequireMigrationScope(),
 			middleware.MigrationAPILimiterWithConfig(s.config.Security.ServiceRoleRateLimit, s.config.Security.ServiceRoleRateWindow, s.sharedMiddlewareStorage),

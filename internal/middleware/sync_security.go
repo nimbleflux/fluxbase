@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/fluxbase-eu/fluxbase/internal/config"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -11,7 +12,8 @@ import (
 // RequireSyncIPAllowlist creates middleware that restricts sync endpoints to allowed IPs
 // Reusable for both functions and jobs sync endpoints
 // If no IP ranges are configured, all IPs are allowed
-func RequireSyncIPAllowlist(allowedRanges []string, featureName string) fiber.Handler {
+// The serverConfig is used for trusted proxy configuration to prevent IP spoofing
+func RequireSyncIPAllowlist(allowedRanges []string, featureName string, serverCfg *config.ServerConfig) fiber.Handler {
 	// Parse allowed IP ranges at startup (CIDR notation)
 	var allowedNets []*net.IPNet
 	for _, ipRange := range allowedRanges {
@@ -29,7 +31,7 @@ func RequireSyncIPAllowlist(allowedRanges []string, featureName string) fiber.Ha
 			return c.Next()
 		}
 
-		clientIP := getClientIP(c)
+		clientIP := GetTrustedClientIP(c, serverCfg)
 
 		// Check if IP is in any allowed range
 		for _, network := range allowedNets {

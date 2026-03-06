@@ -3,9 +3,17 @@ package middleware
 import (
 	"net"
 	"strings"
+	"sync"
 
+	"github.com/fluxbase-eu/fluxbase/internal/config"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
+)
+
+// trustedProxyNets caches parsed trusted proxy networks
+var (
+	trustedProxyCache   []*net.IPNet
+	trustedProxyCacheMu sync.RWMutex
 )
 
 // IPExtractor is a function that extracts the client IP from a Fiber context.
@@ -85,6 +93,110 @@ func isLoopback(ip net.IP) bool {
 	// Also check for IPv4 127.x.x.x range explicitly
 	if ip4 := ip.To4(); ip4 != nil {
 		return ip4[0] == 127
+	}
+
+	return false
+}
+
+// GetTrustedClientIP extracts the real client IP address safely.
+// It only trusts X-Forwarded-For and X-Real-IP headers when the request
+// comes from a configured trusted proxy. Otherwise, it returns the direct
+// connection IP to prevent IP spoofing attacks.
+//
+// Security note: Always use this function instead of directly reading
+// X-Forwarded-For or X-Real-IP headers, as those can be spoofed by attackers.
+func GetTrustedClientIP(c fiber.Ctx, cfg *config.ServerConfig) net.IP {
+	// Get the direct connection IP first
+	directIP := getDirectIP(c)
+
+	// If no trusted proxies configured, never trust proxy headers
+	if len(cfg.TrustedProxies) == 0 {
+		return directIP
+	}
+
+	// Check if the request comes from a trusted proxy
+	if !isTrustedProxy(directIP, cfg.TrustedProxies) {
+		// Request is not from a trusted proxy, don't trust headers
+		return directIP
+	}
+
+	// Request is from a trusted proxy, try to get the real client IP from headers
+	// Try X-Forwarded-For header first
+	xff := c.Get("X-Forwarded-For")
+	if xff != "" {
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			// The rightmost IP is the one added by the trusted proxy
+			// But typically we want the original client IP (leftmost non-trusted)
+			// For simplicity with a single trusted proxy, take the last IP
+			ip := strings.TrimSpace(ips[len(ips)-1])
+			parsed := net.ParseIP(ip)
+			if parsed != nil {
+				return parsed
+			}
+		}
+	}
+
+	// Try X-Real-IP header
+	xri := c.Get("X-Real-IP")
+	if xri != "" {
+		parsed := net.ParseIP(xri)
+		if parsed != nil {
+			return parsed
+		}
+	}
+
+	// Fall back to direct IP
+	return directIP
+}
+
+// isTrustedProxy checks if an IP address is in the trusted proxy list
+func isTrustedProxy(ip net.IP, trustedProxies []string) bool {
+	if ip == nil {
+		return false
+	}
+
+	// Parse trusted proxy ranges (with caching)
+	trustedProxyCacheMu.RLock()
+	nets := trustedProxyCache
+	trustedProxyCacheMu.RUnlock()
+
+	if nets == nil {
+		// Parse and cache the networks
+		var parsedNets []*net.IPNet
+		for _, proxyRange := range trustedProxies {
+			// Handle single IPs by converting to CIDR
+			if !strings.Contains(proxyRange, "/") {
+				// It's a single IP, convert to /32 or /128
+				parsedIP := net.ParseIP(proxyRange)
+				if parsedIP != nil {
+					if parsedIP.To4() != nil {
+						proxyRange = proxyRange + "/32"
+					} else {
+						proxyRange = proxyRange + "/128"
+					}
+				}
+			}
+
+			_, network, err := net.ParseCIDR(proxyRange)
+			if err != nil {
+				log.Error().Err(err).Str("range", proxyRange).Msg("Invalid trusted proxy range")
+				continue
+			}
+			parsedNets = append(parsedNets, network)
+		}
+
+		trustedProxyCacheMu.Lock()
+		trustedProxyCache = parsedNets
+		nets = parsedNets
+		trustedProxyCacheMu.Unlock()
+	}
+
+	// Check if IP is in any trusted proxy range
+	for _, network := range nets {
+		if network.Contains(ip) {
+			return true
+		}
 	}
 
 	return false

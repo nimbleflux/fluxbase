@@ -12,65 +12,30 @@ import (
 )
 
 // =============================================================================
-// getClientIP Tests
+// GetTrustedClientIP Tests
 // =============================================================================
 
-func TestGetClientIP(t *testing.T) {
+func TestGetTrustedClientIP_NoTrustedProxies(t *testing.T) {
+	// When no trusted proxies are configured, should always use direct IP
+	cfg := &config.ServerConfig{
+		TrustedProxies: []string{},
+	}
+
 	tests := []struct {
-		name       string
-		headers    map[string]string
-		remoteAddr string
-		expectedIP string
+		name    string
+		headers map[string]string
 	}{
 		{
-			name:       "uses X-Forwarded-For first IP",
-			headers:    map[string]string{"X-Forwarded-For": "1.2.3.4, 5.6.7.8"},
-			expectedIP: "1.2.3.4",
+			name:    "ignores X-Forwarded-For when no trusted proxies",
+			headers: map[string]string{"X-Forwarded-For": "1.2.3.4"},
 		},
 		{
-			name:       "uses X-Forwarded-For single IP",
-			headers:    map[string]string{"X-Forwarded-For": "10.0.0.1"},
-			expectedIP: "10.0.0.1",
+			name:    "ignores X-Real-IP when no trusted proxies",
+			headers: map[string]string{"X-Real-IP": "5.6.7.8"},
 		},
 		{
-			name:       "uses X-Forwarded-For with spaces",
-			headers:    map[string]string{"X-Forwarded-For": "  192.168.1.1  , 10.0.0.1"},
-			expectedIP: "192.168.1.1",
-		},
-		{
-			name:       "uses X-Real-IP when no X-Forwarded-For",
-			headers:    map[string]string{"X-Real-IP": "172.16.0.1"},
-			expectedIP: "172.16.0.1",
-		},
-		{
-			name:       "prefers X-Forwarded-For over X-Real-IP",
-			headers:    map[string]string{"X-Forwarded-For": "1.1.1.1", "X-Real-IP": "2.2.2.2"},
-			expectedIP: "1.1.1.1",
-		},
-		{
-			name:       "handles IPv6 in X-Forwarded-For",
-			headers:    map[string]string{"X-Forwarded-For": "2001:db8::1"},
-			expectedIP: "2001:db8::1",
-		},
-		{
-			name:       "handles IPv6 in X-Real-IP",
-			headers:    map[string]string{"X-Real-IP": "::1"},
-			expectedIP: "::1",
-		},
-		{
-			name:       "handles invalid X-Forwarded-For, tries X-Real-IP",
-			headers:    map[string]string{"X-Forwarded-For": "invalid", "X-Real-IP": "8.8.8.8"},
-			expectedIP: "8.8.8.8",
-		},
-		{
-			name:       "handles all invalid headers, falls back to RemoteAddr",
-			headers:    map[string]string{"X-Forwarded-For": "invalid", "X-Real-IP": "also-invalid"},
-			expectedIP: "", // Falls back to c.IP() which is derived from RemoteAddr
-		},
-		{
-			name:       "no headers - uses RemoteAddr",
-			headers:    map[string]string{},
-			expectedIP: "", // Falls back to c.IP()
+			name:    "ignores both headers when no trusted proxies",
+			headers: map[string]string{"X-Forwarded-For": "1.2.3.4", "X-Real-IP": "5.6.7.8"},
 		},
 	}
 
@@ -80,7 +45,7 @@ func TestGetClientIP(t *testing.T) {
 
 			var resultIP string
 			app.Get("/test", func(c fiber.Ctx) error {
-				ip := getClientIP(c)
+				ip := GetTrustedClientIP(c, cfg)
 				if ip != nil {
 					resultIP = ip.String()
 				} else {
@@ -98,35 +63,10 @@ func TestGetClientIP(t *testing.T) {
 			require.NoError(t, err)
 			defer func() { _ = resp.Body.Close() }()
 
-			if tt.expectedIP != "" {
-				assert.Equal(t, tt.expectedIP, resultIP)
-			}
+			// Should return the direct connection IP (127.0.0.1 or ::1), not the spoofed header
+			assert.Contains(t, []string{"127.0.0.1", "::1"}, resultIP, "Should use direct IP, not spoofed headers")
 		})
 	}
-}
-
-func TestGetClientIP_MultipleIPsInForwardedFor(t *testing.T) {
-	app := fiber.New()
-
-	var resultIP string
-	app.Get("/test", func(c fiber.Ctx) error {
-		ip := getClientIP(c)
-		if ip != nil {
-			resultIP = ip.String()
-		}
-		return c.SendString("OK")
-	})
-
-	// Simulate multiple proxy hops
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set("X-Forwarded-For", "203.0.113.195, 70.41.3.18, 150.172.238.178")
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-
-	// Should use the first (leftmost) IP - the original client
-	assert.Equal(t, "203.0.113.195", resultIP)
 }
 
 // =============================================================================
@@ -207,6 +147,11 @@ func TestRequireMigrationsEnabled(t *testing.T) {
 // =============================================================================
 
 func TestRequireMigrationsIPAllowlist(t *testing.T) {
+	// Default server config with no trusted proxies
+	serverCfg := &config.ServerConfig{
+		TrustedProxies: []string{},
+	}
+
 	t.Run("allows all when no IP ranges configured", func(t *testing.T) {
 		app := fiber.New()
 
@@ -215,7 +160,7 @@ func TestRequireMigrationsIPAllowlist(t *testing.T) {
 			AllowedIPRanges: []string{}, // Empty - allow all
 		}
 
-		app.Use(RequireMigrationsIPAllowlist(cfg))
+		app.Use(RequireMigrationsIPAllowlist(cfg, serverCfg))
 		app.Get("/migrations", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
@@ -228,21 +173,21 @@ func TestRequireMigrationsIPAllowlist(t *testing.T) {
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
-	t.Run("allows IP in range", func(t *testing.T) {
+	t.Run("allows localhost when in range (direct connection)", func(t *testing.T) {
 		app := fiber.New()
 
 		cfg := &config.MigrationsConfig{
 			Enabled:         true,
-			AllowedIPRanges: []string{"10.0.0.0/8"},
+			AllowedIPRanges: []string{"127.0.0.0/8"}, // Allow localhost
 		}
 
-		app.Use(RequireMigrationsIPAllowlist(cfg))
+		app.Use(RequireMigrationsIPAllowlist(cfg, serverCfg))
 		app.Get("/migrations", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
 
 		req := httptest.NewRequest("GET", "/migrations", nil)
-		req.Header.Set("X-Forwarded-For", "10.1.2.3")
+		// Don't set X-Forwarded-For - we want to test direct connection
 
 		resp, err := app.Test(req)
 		require.NoError(t, err)
@@ -251,21 +196,21 @@ func TestRequireMigrationsIPAllowlist(t *testing.T) {
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
-	t.Run("denies IP not in range", func(t *testing.T) {
+	t.Run("denies when IP not in range", func(t *testing.T) {
 		app := fiber.New()
 
 		cfg := &config.MigrationsConfig{
 			Enabled:         true,
-			AllowedIPRanges: []string{"10.0.0.0/8"},
+			AllowedIPRanges: []string{"10.0.0.0/8"}, // Only allow 10.x.x.x
 		}
 
-		app.Use(RequireMigrationsIPAllowlist(cfg))
+		app.Use(RequireMigrationsIPAllowlist(cfg, serverCfg))
 		app.Get("/migrations", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
 
 		req := httptest.NewRequest("GET", "/migrations", nil)
-		req.Header.Set("X-Forwarded-For", "192.168.1.1")
+		// Direct connection is from localhost (127.0.0.1), not in 10.0.0.0/8
 
 		resp, err := app.Test(req)
 		require.NoError(t, err)
@@ -277,22 +222,45 @@ func TestRequireMigrationsIPAllowlist(t *testing.T) {
 		assert.Contains(t, string(body), "IP not allowlisted")
 	})
 
+	t.Run("ignores X-Forwarded-For when no trusted proxies", func(t *testing.T) {
+		app := fiber.New()
+
+		cfg := &config.MigrationsConfig{
+			Enabled:         true,
+			AllowedIPRanges: []string{"10.0.0.0/8"}, // Allow 10.x.x.x
+		}
+
+		app.Use(RequireMigrationsIPAllowlist(cfg, serverCfg))
+		app.Get("/migrations", func(c fiber.Ctx) error {
+			return c.SendString("OK")
+		})
+
+		req := httptest.NewRequest("GET", "/migrations", nil)
+		req.Header.Set("X-Forwarded-For", "10.1.2.3") // Try to spoof IP
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		// Should deny because we don't trust the header - we use the actual connection IP (localhost)
+		assert.Equal(t, 403, resp.StatusCode)
+	})
+
 	t.Run("allows IP in any of multiple ranges", func(t *testing.T) {
 		app := fiber.New()
 
 		cfg := &config.MigrationsConfig{
 			Enabled:         true,
-			AllowedIPRanges: []string{"10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"},
+			AllowedIPRanges: []string{"10.0.0.0/8", "127.0.0.0/8", "172.16.0.0/12"}, // Include localhost
 		}
 
-		app.Use(RequireMigrationsIPAllowlist(cfg))
+		app.Use(RequireMigrationsIPAllowlist(cfg, serverCfg))
 		app.Get("/migrations", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
 
-		// Test IP in second range
+		// Direct connection from localhost should be allowed
 		req := httptest.NewRequest("GET", "/migrations", nil)
-		req.Header.Set("X-Forwarded-For", "192.168.100.50")
 
 		resp, err := app.Test(req)
 		require.NoError(t, err)
@@ -306,17 +274,16 @@ func TestRequireMigrationsIPAllowlist(t *testing.T) {
 
 		cfg := &config.MigrationsConfig{
 			Enabled:         true,
-			AllowedIPRanges: []string{"invalid-cidr", "10.0.0.0/8"},
+			AllowedIPRanges: []string{"invalid-cidr", "127.0.0.0/8"}, // Include localhost
 		}
 
-		app.Use(RequireMigrationsIPAllowlist(cfg))
+		app.Use(RequireMigrationsIPAllowlist(cfg, serverCfg))
 		app.Get("/migrations", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
 
-		// Should still work with valid CIDR
+		// Should still work with valid CIDR (localhost)
 		req := httptest.NewRequest("GET", "/migrations", nil)
-		req.Header.Set("X-Forwarded-For", "10.1.2.3")
 
 		resp, err := app.Test(req)
 		require.NoError(t, err)
@@ -330,33 +297,22 @@ func TestRequireMigrationsIPAllowlist(t *testing.T) {
 
 		cfg := &config.MigrationsConfig{
 			Enabled:         true,
-			AllowedIPRanges: []string{"203.0.113.50/32"},
+			AllowedIPRanges: []string{"127.0.0.1/32"}, // Localhost only
 		}
 
-		app.Use(RequireMigrationsIPAllowlist(cfg))
+		app.Use(RequireMigrationsIPAllowlist(cfg, serverCfg))
 		app.Get("/migrations", func(c fiber.Ctx) error {
 			return c.SendString("OK")
 		})
 
-		// Exact IP should be allowed
+		// Direct connection from localhost should be allowed
 		req := httptest.NewRequest("GET", "/migrations", nil)
-		req.Header.Set("X-Forwarded-For", "203.0.113.50")
 
 		resp, err := app.Test(req)
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
 		assert.Equal(t, 200, resp.StatusCode)
-
-		// Different IP should be denied
-		req2 := httptest.NewRequest("GET", "/migrations", nil)
-		req2.Header.Set("X-Forwarded-For", "203.0.113.51")
-
-		resp2, err := app.Test(req2)
-		require.NoError(t, err)
-		defer func() { _ = resp2.Body.Close() }()
-
-		assert.Equal(t, 403, resp2.StatusCode)
 	})
 }
 
@@ -739,10 +695,11 @@ func TestRequireServiceKeyOnly_NoAuthProvided(t *testing.T) {
 // Benchmarks
 // =============================================================================
 
-func BenchmarkGetClientIP_WithForwardedFor(b *testing.B) {
+func BenchmarkGetTrustedClientIP_NoTrustedProxies(b *testing.B) {
+	cfg := &config.ServerConfig{TrustedProxies: []string{}}
 	app := fiber.New()
 	app.Get("/test", func(c fiber.Ctx) error {
-		_ = getClientIP(c)
+		_ = GetTrustedClientIP(c, cfg)
 		return c.SendString("OK")
 	})
 
@@ -756,15 +713,15 @@ func BenchmarkGetClientIP_WithForwardedFor(b *testing.B) {
 	}
 }
 
-func BenchmarkGetClientIP_WithRealIP(b *testing.B) {
+func BenchmarkGetTrustedClientIP_DirectConnection(b *testing.B) {
+	cfg := &config.ServerConfig{TrustedProxies: []string{}}
 	app := fiber.New()
 	app.Get("/test", func(c fiber.Ctx) error {
-		_ = getClientIP(c)
+		_ = GetTrustedClientIP(c, cfg)
 		return c.SendString("OK")
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set("X-Real-IP", "10.0.0.1")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -780,14 +737,15 @@ func BenchmarkMin(b *testing.B) {
 }
 
 func BenchmarkRequireMigrationsIPAllowlist_InRange(b *testing.B) {
+	serverCfg := &config.ServerConfig{TrustedProxies: []string{}}
 	app := fiber.New()
 
 	cfg := &config.MigrationsConfig{
 		Enabled:         true,
-		AllowedIPRanges: []string{"10.0.0.0/8", "192.168.0.0/16", "172.16.0.0/12"},
+		AllowedIPRanges: []string{"127.0.0.0/8"}, // Allow localhost for benchmarking
 	}
 
-	app.Use(RequireMigrationsIPAllowlist(cfg))
+	app.Use(RequireMigrationsIPAllowlist(cfg, serverCfg))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})

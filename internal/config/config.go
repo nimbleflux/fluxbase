@@ -115,6 +115,7 @@ type ServerConfig struct {
 	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
 	BodyLimit       int           `mapstructure:"body_limit"`
 	AllowedIPRanges []string      `mapstructure:"allowed_ip_ranges"` // Global IP CIDR ranges allowed to access server (empty = allow all)
+	TrustedProxies  []string      `mapstructure:"trusted_proxies"`   // Trusted proxy IP ranges for X-Forwarded-For header validation (empty = trust none)
 
 	// Per-endpoint body limits (if not specified, uses defaults from middleware)
 	BodyLimits BodyLimitsConfig `mapstructure:"body_limits"`
@@ -676,6 +677,7 @@ func setDefaults() {
 	viper.SetDefault("server.idle_timeout", "120s")          // 2 min idle timeout
 	viper.SetDefault("server.body_limit", 2*1024*1024*1024)  // 2GB
 	viper.SetDefault("server.allowed_ip_ranges", []string{}) // Empty = allow all (backward compatible)
+	viper.SetDefault("server.trusted_proxies", []string{})   // Empty = trust no proxies (most secure)
 
 	// Per-endpoint body limits (more granular than global body_limit)
 	viper.SetDefault("server.body_limits.enabled", true)

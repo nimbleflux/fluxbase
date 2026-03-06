@@ -29,7 +29,7 @@ func RequireGlobalIPAllowlist(cfg *config.ServerConfig) fiber.Handler {
 			return c.Next()
 		}
 
-		clientIP := getClientIP(c)
+		clientIP := GetTrustedClientIP(c, cfg)
 
 		// Check if IP is in any allowed range
 		for _, network := range allowedNets {
