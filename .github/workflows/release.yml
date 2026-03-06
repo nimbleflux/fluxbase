@@ -195,16 +195,27 @@ jobs:
               fi
             elif [ "$LAST_IS_RC" = true ] && [ "$RELEASE_TYPE" = "stable" ]; then
               # rc → stable: Promote RC to stable
-              BASE_YEAR="$YEAR"
-              BASE_MONTH="$MONTH"
-              BASE_ITERATION="$ITERATION"
-              MODE="promote_rc"
-
-              # Check if stable version already exists
-              if git rev-parse "v${BASE_YEAR}.${BASE_MONTH}.${BASE_ITERATION}" >/dev/null 2>&1; then
-                echo "Stable version v${BASE_YEAR}.${BASE_MONTH}.${BASE_ITERATION} already exists, incrementing iteration"
-                BASE_ITERATION="$((BASE_ITERATION + 1))"
+              # Check if RC is from a previous month - if so, start fresh with current month
+              if [ "$IS_CALVER" = true ] && ([ "$YEAR" -ne "$CURRENT_YEAR" ] || [ "$MONTH" -ne "$CURRENT_MONTH" ]); then
+                # RC is from a different month, start fresh with current date
+                echo "RC is from a different month ($YEAR.$MONTH), starting fresh with current month"
+                BASE_YEAR="$CURRENT_YEAR"
+                BASE_MONTH="$CURRENT_MONTH"
+                BASE_ITERATION="1"
                 MODE="new"
+              else
+                # Same month: promote RC to stable
+                BASE_YEAR="$YEAR"
+                BASE_MONTH="$MONTH"
+                BASE_ITERATION="$ITERATION"
+                MODE="promote_rc"
+
+                # Check if stable version already exists
+                if git rev-parse "v${BASE_YEAR}.${BASE_MONTH}.${BASE_ITERATION}" >/dev/null 2>&1; then
+                  echo "Stable version v${BASE_YEAR}.${BASE_MONTH}.${BASE_ITERATION} already exists, incrementing iteration"
+                  BASE_ITERATION="$((BASE_ITERATION + 1))"
+                  MODE="new"
+                fi
               fi
             else
               # stable → rc OR stable → stable: Start new release (increment iteration)
