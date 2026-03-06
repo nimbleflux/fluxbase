@@ -13,7 +13,6 @@
   "dependencies": {
     "@astrojs/sitemap": "^3.7.0",
     "@astrojs/starlight": "^0.37.6",
-    "@rollup/rollup-linux-arm64-gnu": "^4.59.0",
     "astro": "^5.18.0",
     "sharp": "^0.34.5",
     "starlight-typedoc": "0.21.5"
