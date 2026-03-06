@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/fluxbase-eu/fluxbase/internal/database"
 	"github.com/fluxbase-eu/fluxbase/internal/logutil"
@@ -387,12 +389,7 @@ func (h *DDLHandler) AddColumn(c fiber.Ctx) error {
 		colDef += " NOT NULL"
 	}
 	if req.DefaultValue != "" {
-		defaultVal := strings.TrimSpace(req.DefaultValue)
-		if defaultVal == "gen_random_uuid()" || defaultVal == "now()" || defaultVal == "current_timestamp" {
-			colDef += fmt.Sprintf(" DEFAULT %s", defaultVal)
-		} else {
-			colDef += fmt.Sprintf(" DEFAULT %s", escapeLiteral(defaultVal))
-		}
+		colDef += fmt.Sprintf(" DEFAULT %s", sanitizeDefaultValue(req.DefaultValue))
 	}
 
 	query := fmt.Sprintf("ALTER TABLE %s.%s ADD COLUMN %s",
@@ -640,15 +637,7 @@ func (h *DDLHandler) buildCreateTableQuery(req CreateTableRequest) (string, erro
 
 		// Add DEFAULT value
 		if col.DefaultValue != "" {
-			// Sanitize default value - prevent SQL injection
-			// For now, we'll use parameterized approach for known functions
-			defaultVal := strings.TrimSpace(col.DefaultValue)
-			if defaultVal == "gen_random_uuid()" || defaultVal == "now()" || defaultVal == "current_timestamp" {
-				colDef += fmt.Sprintf(" DEFAULT %s", defaultVal)
-			} else {
-				// For literal values, quote them safely
-				colDef += fmt.Sprintf(" DEFAULT %s", escapeLiteral(defaultVal))
-			}
+			colDef += fmt.Sprintf(" DEFAULT %s", sanitizeDefaultValue(col.DefaultValue))
 		}
 
 		columnDefs = append(columnDefs, colDef)
@@ -673,6 +662,96 @@ func (h *DDLHandler) buildCreateTableQuery(req CreateTableRequest) (string, erro
 	)
 
 	return query, nil
+}
+
+// safeDefaultFunctions is a set of PostgreSQL functions that are safe to use as DEFAULT values
+// These functions are allowed to pass through without escaping
+var safeDefaultFunctions = map[string]bool{
+	// UUID functions
+	"gen_random_uuid()":    true,
+	"uuid_generate_v4()":   true,
+	"uuid_generate_v1()":   true,
+	"uuid_generate_v1mc()": true,
+	"uuid_generate_v3()":   true,
+	"uuid_generate_v5()":   true,
+	// Date/Time functions
+	"now()":                   true,
+	"current_timestamp":       true,
+	"CURRENT_TIMESTAMP":       true,
+	"current_date":            true,
+	"CURRENT_DATE":            true,
+	"current_time":            true,
+	"CURRENT_TIME":            true,
+	"localtime":               true,
+	"LOCALTIME":               true,
+	"localtimestamp":          true,
+	"LOCALTIMESTAMP":          true,
+	"transaction_timestamp()": true,
+	"statement_timestamp()":   true,
+	"clock_timestamp()":       true,
+	// Boolean
+	"true":  true,
+	"TRUE":  true,
+	"false": true,
+	"FALSE": true,
+	// Null
+	"NULL": true,
+	"null": true,
+}
+
+// sanitizeDefaultValue sanitizes a DEFAULT value for SQL
+// It returns safe SQL functions directly or escapes literal values
+func sanitizeDefaultValue(value string) string {
+	defaultVal := strings.TrimSpace(value)
+
+	// Check if it's a safe function
+	if safeDefaultFunctions[defaultVal] {
+		return defaultVal
+	}
+
+	// Check for numeric literals (integers and floats)
+	if _, err := strconv.ParseInt(defaultVal, 10, 64); err == nil {
+		return defaultVal
+	}
+	if _, err := strconv.ParseFloat(defaultVal, 64); err == nil {
+		return defaultVal
+	}
+
+	// Check for type casts with safe functions (e.g., "now()::date", "'2024-01-01'::date")
+	if strings.Contains(defaultVal, "::") {
+		parts := strings.SplitN(defaultVal, "::", 2)
+		if len(parts) == 2 {
+			baseValue := strings.TrimSpace(parts[0])
+			castType := strings.TrimSpace(parts[1])
+			// Validate the cast type is alphanumeric (prevent injection)
+			if isValidCastType(castType) {
+				// If base is a safe function, allow the cast
+				if safeDefaultFunctions[baseValue] {
+					return defaultVal
+				}
+				// If base is already a quoted string, allow the cast
+				if strings.HasPrefix(baseValue, "'") && strings.HasSuffix(baseValue, "'") {
+					return defaultVal
+				}
+			}
+		}
+	}
+
+	// For all other values, escape as a string literal
+	return escapeLiteral(defaultVal)
+}
+
+// isValidCastType checks if a cast type is valid (alphanumeric with allowed chars)
+func isValidCastType(t string) bool {
+	if t == "" {
+		return false
+	}
+	for _, r := range t {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '[' && r != ']' && r != ' ' && r != ',' {
+			return false
+		}
+	}
+	return true
 }
 
 // escapeLiteral escapes a string literal for SQL
