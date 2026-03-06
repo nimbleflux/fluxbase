@@ -232,7 +232,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.7.3
+          deno-version: 2.7.4
 
       - name: Setup database users
         env:
@@ -514,7 +514,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build Docker image (test only, no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
@@ -575,7 +575,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build docs Docker image (test only, no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.docs
