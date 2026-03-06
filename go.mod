@@ -26,7 +26,7 @@ require (
 	github.com/kapmahc/epub v0.1.1
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/mailgun/mailgun-go/v5 v5.14.0
-	github.com/minio/minio-go/v7 v7.0.98
+	github.com/minio/minio-go/v7 v7.0.99
 	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db
 	github.com/olekukonko/tablewriter v1.1.3
 	github.com/otiai10/gosseract/v2 v2.4.1
