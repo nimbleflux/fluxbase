@@ -124,7 +124,7 @@ services:
 
   # ClickHouse Service (for logging backend testing)
   clickhouse:
-    image: clickhouse:26.1
+    image: clickhouse:26.2
     container_name: fluxbase-clickhouse-dev
     restart: unless-stopped
     ports:
