@@ -14,31 +14,54 @@ jobs:
     name: Delete Old CI Images
     runs-on: ubuntu-latest
     steps:
-      - name: Delete old CI images for fluxbase-postgres
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: fluxbase-postgres
-          package-type: container
-          token: ${{ secrets.GITHUB_TOKEN }}
-          # Delete versions tagged with 'ci-*' older than 7 days
-          min-versions-to-keep: 0
-          delete-untagged-versions: false
-          # Only delete versions with ci- prefix in tags
-          # Note: This action doesn't support tag filtering directly,
-          # so we use a script approach instead
-
       - name: Clean up ci-* tagged images
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Fetching all versions of fluxbase-postgres package..."
 
+          # Protected tags that should NEVER be deleted (production releases)
+          # Major versions
+          PROTECTED_TAGS="latest 18 17 16 15"
+
+          # Function to check if a tag is protected
+          is_protected() {
+            local tag="$1"
+            # Check against explicit protected list (major versions, latest)
+            for protected in $PROTECTED_TAGS; do
+              if [ "$tag" = "$protected" ]; then
+                return 0
+              fi
+            done
+            # Protect major versions (e.g., "18", "17")
+            if [[ "$tag" =~ ^[0-9]+$ ]]; then
+              return 0
+            fi
+            # Protect minor/patch versions and immutable tags
+            # Examples: "18.1", "17.2", "18.1.1", "18.1-v3", "17.2-v5"
+            if [[ "$tag" =~ ^[0-9]+\.[0-9]+ ]]; then
+              return 0
+            fi
+            return 1
+          }
+
+          # Function to check if all tags start with ci-
+          all_tags_are_ci() {
+            local tags="$1"
+            while IFS= read -r tag; do
+              if [[ ! "$tag" =~ ^ci- ]]; then
+                return 1
+              fi
+            done <<< "$tags"
+            return 0
+          }
+
           # Get all versions with their tags
           VERSIONS=$(gh api /user/packages/container/fluxbase-postgres/versions \
-            --jq '.[] | select(.metadata.container.tags[] | startswith("ci-")) | {id: .id, tags: .metadata.container.tags, created: .created_at}')
+            --jq '.[] | {id: .id, tags: .metadata.container.tags, created: .created_at}')
 
           if [ -z "$VERSIONS" ]; then
-            echo "No CI images found."
+            echo "No images found."
             exit 0
           fi
 
@@ -50,7 +73,33 @@ jobs:
           echo "$VERSIONS" | jq -c '.' | while read -r version; do
             ID=$(echo "$version" | jq -r '.id')
             CREATED=$(echo "$version" | jq -r '.created')
-            TAGS=$(echo "$version" | jq -r '.tags | join(", ")')
+            TAGS=$(echo "$version" | jq -r '.tags[]')
+
+            # Skip if version has no tags
+            if [ -z "$TAGS" ]; then
+              echo "Skipping version $ID (no tags)"
+              continue
+            fi
+
+            # Check if any tag is protected
+            HAS_PROTECTED=false
+            while IFS= read -r tag; do
+              if is_protected "$tag"; then
+                echo "PROTECTED: Version $ID has protected tag: $tag"
+                HAS_PROTECTED=true
+                break
+              fi
+            done <<< "$TAGS"
+
+            if [ "$HAS_PROTECTED" = true ]; then
+              continue
+            fi
+
+            # Check if ALL tags start with ci- (only delete pure CI images)
+            if ! all_tags_are_ci "$TAGS"; then
+              echo "Skipping version $ID (has non-CI tags)"
+              continue
+            fi
 
             # Convert created date to seconds
             CREATED_SECONDS=$(date -d "$CREATED" +%s 2>/dev/null || echo "0")
@@ -59,10 +108,12 @@ jobs:
             AGE=$((NOW - CREATED_SECONDS))
 
             if [ $AGE -gt $SEVEN_DAYS ]; then
-              echo "Deleting version $ID (tags: $TAGS, age: $((AGE / 86400)) days old)"
+              TAGS_DISPLAY=$(echo "$TAGS" | tr '\n' ', ' | sed 's/,$//')
+              echo "Deleting version $ID (tags: $TAGS_DISPLAY, age: $((AGE / 86400)) days old)"
               gh api --method DELETE /user/packages/container/fluxbase-postgres/versions/$ID || echo "Failed to delete $ID"
             else
-              echo "Keeping version $ID (tags: $TAGS, age: $((AGE / 86400)) days old)"
+              TAGS_DISPLAY=$(echo "$TAGS" | tr '\n' ', ' | sed 's/,$//')
+              echo "Keeping version $ID (tags: $TAGS_DISPLAY, age: $((AGE / 86400)) days old)"
             fi
           done
 
