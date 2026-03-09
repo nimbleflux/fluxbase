@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -159,8 +160,16 @@ func (h *OAuthHandler) Authorize(c fiber.Ctx) error {
 		})
 	}
 
+	// Build auth URL options
+	authURLOpts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}
+
+	// Add prompt=consent for Google to ensure refresh tokens on subsequent logins
+	if strings.ToLower(providerName) == "google" {
+		authURLOpts = append(authURLOpts, oauth2.SetAuthURLParam("prompt", "consent"))
+	}
+
 	// Generate authorization URL
-	authURL := oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	authURL := oauthConfig.AuthCodeURL(state, authURLOpts...)
 
 	log.Info().
 		Str("provider", providerName).

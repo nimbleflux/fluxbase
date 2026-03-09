@@ -1,4 +1,4 @@
-import type { FluxbaseFetch } from './fetch'
+import type { FluxbaseFetch } from "./fetch";
 import type {
   OAuthProvider,
   CreateOAuthProviderRequest,
@@ -9,7 +9,7 @@ import type {
   AuthSettings,
   UpdateAuthSettingsRequest,
   UpdateAuthSettingsResponse,
-} from './types'
+} from "./types";
 
 /**
  * OAuth Provider Manager
@@ -66,8 +66,10 @@ export class OAuthProviderManager {
    * ```
    */
   async listProviders(): Promise<OAuthProvider[]> {
-    const providers = await this.fetch.get<OAuthProvider[]>('/api/v1/admin/oauth/providers')
-    return Array.isArray(providers) ? providers : []
+    const providers = await this.fetch.get<OAuthProvider[]>(
+      "/api/v1/admin/oauth/providers",
+    );
+    return Array.isArray(providers) ? providers : [];
   }
 
   /**
@@ -89,7 +91,9 @@ export class OAuthProviderManager {
    * ```
    */
   async getProvider(providerId: string): Promise<OAuthProvider> {
-    return await this.fetch.get<OAuthProvider>(`/api/v1/admin/oauth/providers/${providerId}`)
+    return await this.fetch.get<OAuthProvider>(
+      `/api/v1/admin/oauth/providers/${providerId}`,
+    );
   }
 
   /**
@@ -129,7 +133,7 @@ export class OAuthProviderManager {
    *   client_id: 'client-id',
    *   client_secret: 'client-secret',
    *   redirect_url: 'https://yourapp.com/auth/callback',
-   *   scopes: ['openid', 'profile', 'email'],
+   *   scopes: ['openid', 'profile', 'email', 'offline_access'],
    *   is_custom: true,
    *   authorization_url: 'https://sso.example.com/oauth/authorize',
    *   token_url: 'https://sso.example.com/oauth/token',
@@ -137,8 +141,13 @@ export class OAuthProviderManager {
    * })
    * ```
    */
-  async createProvider(request: CreateOAuthProviderRequest): Promise<CreateOAuthProviderResponse> {
-    return await this.fetch.post<CreateOAuthProviderResponse>('/api/v1/admin/oauth/providers', request)
+  async createProvider(
+    request: CreateOAuthProviderRequest,
+  ): Promise<CreateOAuthProviderResponse> {
+    return await this.fetch.post<CreateOAuthProviderResponse>(
+      "/api/v1/admin/oauth/providers",
+      request,
+    );
   }
 
   /**
@@ -179,12 +188,12 @@ export class OAuthProviderManager {
    */
   async updateProvider(
     providerId: string,
-    request: UpdateOAuthProviderRequest
+    request: UpdateOAuthProviderRequest,
   ): Promise<UpdateOAuthProviderResponse> {
     return await this.fetch.put<UpdateOAuthProviderResponse>(
       `/api/v1/admin/oauth/providers/${providerId}`,
-      request
-    )
+      request,
+    );
   }
 
   /**
@@ -213,10 +222,12 @@ export class OAuthProviderManager {
    * }
    * ```
    */
-  async deleteProvider(providerId: string): Promise<DeleteOAuthProviderResponse> {
+  async deleteProvider(
+    providerId: string,
+  ): Promise<DeleteOAuthProviderResponse> {
     return await this.fetch.delete<DeleteOAuthProviderResponse>(
-      `/api/v1/admin/oauth/providers/${providerId}`
-    )
+      `/api/v1/admin/oauth/providers/${providerId}`,
+    );
   }
 
   /**
@@ -232,8 +243,10 @@ export class OAuthProviderManager {
    * await client.admin.oauth.enableProvider('provider-id')
    * ```
    */
-  async enableProvider(providerId: string): Promise<UpdateOAuthProviderResponse> {
-    return await this.updateProvider(providerId, { enabled: true })
+  async enableProvider(
+    providerId: string,
+  ): Promise<UpdateOAuthProviderResponse> {
+    return await this.updateProvider(providerId, { enabled: true });
   }
 
   /**
@@ -249,8 +262,10 @@ export class OAuthProviderManager {
    * await client.admin.oauth.disableProvider('provider-id')
    * ```
    */
-  async disableProvider(providerId: string): Promise<UpdateOAuthProviderResponse> {
-    return await this.updateProvider(providerId, { enabled: false })
+  async disableProvider(
+    providerId: string,
+  ): Promise<UpdateOAuthProviderResponse> {
+    return await this.updateProvider(providerId, { enabled: false });
   }
 }
 
@@ -295,7 +310,7 @@ export class AuthSettingsManager {
    * ```
    */
   async get(): Promise<AuthSettings> {
-    return await this.fetch.get<AuthSettings>('/api/v1/admin/auth/settings')
+    return await this.fetch.get<AuthSettings>("/api/v1/admin/auth/settings");
   }
 
   /**
@@ -336,8 +351,13 @@ export class AuthSettingsManager {
    * })
    * ```
    */
-  async update(request: UpdateAuthSettingsRequest): Promise<UpdateAuthSettingsResponse> {
-    return await this.fetch.put<UpdateAuthSettingsResponse>('/api/v1/admin/auth/settings', request)
+  async update(
+    request: UpdateAuthSettingsRequest,
+  ): Promise<UpdateAuthSettingsResponse> {
+    return await this.fetch.put<UpdateAuthSettingsResponse>(
+      "/api/v1/admin/auth/settings",
+      request,
+    );
   }
 }
 
@@ -358,11 +378,11 @@ export class AuthSettingsManager {
  * ```
  */
 export class FluxbaseOAuth {
-  public providers: OAuthProviderManager
-  public authSettings: AuthSettingsManager
+  public providers: OAuthProviderManager;
+  public authSettings: AuthSettingsManager;
 
   constructor(fetch: FluxbaseFetch) {
-    this.providers = new OAuthProviderManager(fetch)
-    this.authSettings = new AuthSettingsManager(fetch)
+    this.providers = new OAuthProviderManager(fetch);
+    this.authSettings = new AuthSettingsManager(fetch);
   }
 }

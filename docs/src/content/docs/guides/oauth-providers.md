@@ -18,21 +18,46 @@ OAuth authentication enables:
 
 Fluxbase includes built-in support for well-known providers and custom OIDC providers:
 
-| Provider | Type | Auto-Discovery |
-|----------|------|----------------|
-| Google | Well-known | Yes |
-| GitHub | Well-known | Yes |
-| Microsoft/Azure AD | Well-known | Yes |
-| Apple | Well-known | Yes |
-| Facebook | Well-known | Yes |
-| Twitter | Well-known | Yes |
-| LinkedIn | Well-known | Yes |
-| GitLab | Well-known | Yes |
-| Bitbucket | Well-known | Yes |
-| Keycloak | Custom OIDC | Requires `issuer_url` |
-| Auth0 | Custom OIDC | Requires `issuer_url` |
-| Authelia | Custom OIDC | Requires `issuer_url` |
-| Any OIDC Provider | Custom OIDC | Requires `issuer_url` |
+| Provider           | Type        | Auto-Discovery        |
+| ------------------ | ----------- | --------------------- |
+| Google             | Well-known  | Yes                   |
+| GitHub             | Well-known  | Yes                   |
+| Microsoft/Azure AD | Well-known  | Yes                   |
+| Apple              | Well-known  | Yes                   |
+| Facebook           | Well-known  | Yes                   |
+| Twitter (X)        | Well-known  | Yes                   |
+| LinkedIn           | Well-known  | Yes                   |
+| GitLab             | Well-known  | Yes                   |
+| Bitbucket          | Well-known  | Yes                   |
+| Keycloak           | Custom OIDC | Requires `issuer_url` |
+| Auth0              | Custom OIDC | Requires `issuer_url` |
+| Authelia           | Custom OIDC | Requires `issuer_url` |
+| Any OIDC Provider  | Custom OIDC | Requires `issuer_url` |
+
+### Provider-Specific Configuration
+
+Each OAuth provider has different requirements for scopes and refresh tokens:
+
+| Provider           | OIDC | Refresh Token Mechanism                         | Required Scopes                                  |
+| ------------------ | ---- | ----------------------------------------------- | ------------------------------------------------ |
+| **Google**         | Yes  | `access_type=offline` + `prompt=consent` (auto) | `openid`, `email`, `profile`                     |
+| **GitHub**         | No   | Different mechanism (GitHub Apps)               | `read:user`, `user:email`                        |
+| **Microsoft**      | Yes  | OIDC authorization code flow                    | `openid`, `email`, `profile`, `offline_access`   |
+| **GitLab**         | Yes  | OIDC authorization code flow                    | `read_user`, `openid`, `email`, `offline_access` |
+| **Apple**          | No   | Short-lived tokens only                         | `email`, `name`                                  |
+| **Facebook**       | No   | Long-lived tokens via API (no refresh)          | `email`, `public_profile`                        |
+| **Twitter (X)**    | No   | OAuth 2.0 PKCE flow                             | `offline.access`, `users.read`, `tweet.read`     |
+| **LinkedIn**       | No   | Auto-issued refresh_token                       | `openid`, `profile`, `email`                     |
+| **Bitbucket**      | Yes  | Rotating refresh tokens                         | `account`, `email`                               |
+| **OIDC Providers** | Yes  | OIDC authorization code flow                    | `openid`, `email`, `profile`, `offline_access`   |
+
+**Notes:**
+
+- **Google**: Fluxbase automatically adds `access_type=offline` and `prompt=consent` parameters
+- **GitHub**: Not fully OIDC-compliant; refresh tokens require GitHub Apps setup
+- **Apple**: Tokens are short-lived; users must re-authenticate periodically
+- **Facebook**: No standard refresh tokens; consider implementing long-lived token exchange
+- **Twitter (X)**: Note the scope uses a **dot** (`offline.access`), not underscore
 
 ## Configuration
 
@@ -62,7 +87,7 @@ auth:
       enabled: true
       client_id: "YOUR_AZURE_AD_CLIENT_ID"
       client_secret: "YOUR_CLIENT_SECRET"
-      scopes: [openid, email, profile]
+      scopes: [openid, email, profile, offline_access]
       display_name: "Microsoft"
 
     - name: apple
@@ -78,7 +103,7 @@ auth:
       issuer_url: "https://auth.example.com/realms/main"
       client_id: "fluxbase-client"
       client_secret: "YOUR_CLIENT_SECRET"
-      scopes: [openid, email, profile]
+      scopes: [openid, email, profile, offline_access]
       display_name: "Corporate SSO"
 
     - name: auth0
@@ -86,31 +111,31 @@ auth:
       issuer_url: "https://your-tenant.auth0.com"
       client_id: "YOUR_AUTH0_CLIENT_ID"
       client_secret: "YOUR_CLIENT_SECRET"
-      scopes: [openid, email, profile]
+      scopes: [openid, email, profile, offline_access]
       display_name: "Auth0"
 ```
 
 ### Configuration Options
 
-| Option | Description | Required |
-|--------|-------------|----------|
-| `name` | Provider identifier (lowercase, e.g., "google", "keycloak") | Yes |
-| `enabled` | Enable this provider | Yes |
-| `client_id` | OAuth client ID from the provider | Yes |
-| `client_secret` | OAuth client secret | Yes (except Apple) |
-| `issuer_url` | OIDC issuer URL for discovery | Required for custom providers |
-| `scopes` | OAuth scopes to request | No (defaults provided) |
-| `display_name` | Human-friendly name for UI | No |
+| Option          | Description                                                 | Required                      |
+| --------------- | ----------------------------------------------------------- | ----------------------------- |
+| `name`          | Provider identifier (lowercase, e.g., "google", "keycloak") | Yes                           |
+| `enabled`       | Enable this provider                                        | Yes                           |
+| `client_id`     | OAuth client ID from the provider                           | Yes                           |
+| `client_secret` | OAuth client secret                                         | Yes (except Apple)            |
+| `issuer_url`    | OIDC issuer URL for discovery                               | Required for custom providers |
+| `scopes`        | OAuth scopes to request                                     | No (defaults provided)        |
+| `display_name`  | Human-friendly name for UI                                  | No                            |
 
 **Additional options (via Admin API or database):**
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `authorization_url` | Custom authorization endpoint | Auto-discovered |
-| `token_url` | Custom token endpoint | Auto-discovered |
-| `user_info_url` | Custom userinfo endpoint | Auto-discovered |
-| `allow_dashboard_login` | Allow for admin dashboard SSO | false |
-| `allow_app_login` | Allow for app user authentication | true |
+| Option                  | Description                       | Default         |
+| ----------------------- | --------------------------------- | --------------- |
+| `authorization_url`     | Custom authorization endpoint     | Auto-discovered |
+| `token_url`             | Custom token endpoint             | Auto-discovered |
+| `user_info_url`         | Custom userinfo endpoint          | Auto-discovered |
+| `allow_dashboard_login` | Allow for admin dashboard SSO     | false           |
+| `allow_app_login`       | Allow for app user authentication | true            |
 
 ### Via Admin Dashboard
 
@@ -119,6 +144,7 @@ You can also configure OAuth providers through the admin UI at **Authentication 
 ![Add OAuth Provider in Admin Dashboard](../../../assets/screenshot-add-oauth-provider.png)
 
 The admin dashboard supports:
+
 - Auto-discovery from OpenID Discovery URLs
 - Manual endpoint configuration for non-standard providers
 - Provider testing before enabling
@@ -154,15 +180,15 @@ FLUXBASE_AUTH_OAUTH_PROVIDERS_2_CLIENT_SECRET=your-keycloak-secret
 
 ## Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/auth/oauth/providers` | GET | List available OAuth providers (public) |
-| `/api/v1/auth/oauth/:provider/authorize` | GET | Initiate OAuth flow (redirects to provider) |
-| `/api/v1/auth/oauth/:provider/callback` | GET | OAuth callback handler |
-| `/api/v1/admin/oauth/providers` | GET | List all providers (admin) |
-| `/api/v1/admin/oauth/providers` | POST | Create new provider (admin) |
-| `/api/v1/admin/oauth/providers/:id` | PATCH | Update provider (admin) |
-| `/api/v1/admin/oauth/providers/:id` | DELETE | Delete provider (admin) |
+| Endpoint                                 | Method | Description                                 |
+| ---------------------------------------- | ------ | ------------------------------------------- |
+| `/api/v1/auth/oauth/providers`           | GET    | List available OAuth providers (public)     |
+| `/api/v1/auth/oauth/:provider/authorize` | GET    | Initiate OAuth flow (redirects to provider) |
+| `/api/v1/auth/oauth/:provider/callback`  | GET    | OAuth callback handler                      |
+| `/api/v1/admin/oauth/providers`          | GET    | List all providers (admin)                  |
+| `/api/v1/admin/oauth/providers`          | POST   | Create new provider (admin)                 |
+| `/api/v1/admin/oauth/providers/:id`      | PATCH  | Update provider (admin)                     |
+| `/api/v1/admin/oauth/providers/:id`      | DELETE | Delete provider (admin)                     |
 
 ## Setup Guide
 
@@ -189,6 +215,7 @@ https://your-domain.com/api/v1/auth/oauth/{provider}/callback
 ```
 
 For example:
+
 - Google: `https://your-domain.com/api/v1/auth/oauth/google/callback`
 - GitHub: `https://your-domain.com/api/v1/auth/oauth/github/callback`
 
@@ -265,7 +292,7 @@ auth:
     - name: apple
       enabled: true
       client_id: "com.yourapp.service"
-      client_secret: "YOUR_APPLE_SECRET"  # Generated JWT
+      client_secret: "YOUR_APPLE_SECRET" # Generated JWT
       scopes: [openid, email, name]
 ```
 
@@ -322,40 +349,40 @@ auth:
 **Initiate OAuth flow:**
 
 ```typescript
-import { FluxbaseClient } from '@fluxbase/sdk'
+import { FluxbaseClient } from "@fluxbase/sdk";
 
-const client = new FluxbaseClient({ url: 'https://api.example.com' })
+const client = new FluxbaseClient({ url: "https://api.example.com" });
 
 // Get available OAuth providers
-const { data: providers } = await client.auth.getOAuthProviders()
+const { data: providers } = await client.auth.getOAuthProviders();
 // [{ name: 'google', display_name: 'Google' }, ...]
 
 // Get OAuth authorization URL
 const { data } = await client.auth.signInWithOAuth({
-  provider: 'google',
+  provider: "google",
   options: {
     redirectTo: `${window.location.origin}/auth/callback`,
   },
-})
+});
 
 // Redirect to provider
-window.location.href = data.url
+window.location.href = data.url;
 ```
 
 **Handle callback:**
 
 ```typescript
 // In your /auth/callback route
-const code = searchParams.get('code')
-const state = searchParams.get('state')
+const code = searchParams.get("code");
+const state = searchParams.get("state");
 
 const { user, session } = await client.auth.exchangeCodeForSession({
   code,
   state,
-})
+});
 
 // User is now authenticated
-console.log('Logged in as:', user.email)
+console.log("Logged in as:", user.email);
 ```
 
 ### React SDK
@@ -364,30 +391,32 @@ console.log('Logged in as:', user.email)
 import {
   useOAuthProviders,
   useSignInWithOAuth,
-  useSession
-} from '@fluxbase/sdk-react'
+  useSession,
+} from "@fluxbase/sdk-react";
 
 function OAuthLoginButtons() {
-  const { data: providers, isLoading } = useOAuthProviders()
-  const signIn = useSignInWithOAuth()
+  const { data: providers, isLoading } = useOAuthProviders();
+  const signIn = useSignInWithOAuth();
 
-  if (isLoading) return <div>Loading...</div>
+  if (isLoading) return <div>Loading...</div>;
 
   return (
     <div>
-      {providers?.map(provider => (
+      {providers?.map((provider) => (
         <button
           key={provider.name}
-          onClick={() => signIn.mutate({
-            provider: provider.name,
-            redirectTo: '/dashboard'
-          })}
+          onClick={() =>
+            signIn.mutate({
+              provider: provider.name,
+              redirectTo: "/dashboard",
+            })
+          }
         >
           Sign in with {provider.display_name || provider.name}
         </button>
       ))}
     </div>
-  )
+  );
 }
 ```
 
@@ -395,21 +424,21 @@ function OAuthLoginButtons() {
 
 ```tsx
 // pages/auth/callback.tsx
-import { useEffect } from 'react'
-import { useSession } from '@fluxbase/sdk-react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect } from "react";
+import { useSession } from "@fluxbase/sdk-react";
+import { useNavigate } from "react-router-dom";
 
 function OAuthCallback() {
-  const { data: session, isLoading } = useSession()
-  const navigate = useNavigate()
+  const { data: session, isLoading } = useSession();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!isLoading && session) {
-      navigate('/dashboard')
+      navigate("/dashboard");
     }
-  }, [session, isLoading])
+  }, [session, isLoading]);
 
-  return <div>Completing sign in...</div>
+  return <div>Completing sign in...</div>;
 }
 ```
 
@@ -422,6 +451,7 @@ GET /api/v1/auth/oauth/providers
 ```
 
 Response:
+
 ```json
 {
   "providers": [
@@ -455,6 +485,7 @@ Authorization: Bearer <admin-token>
 ```
 
 Response:
+
 ```json
 {
   "providers": [
@@ -537,15 +568,15 @@ Fluxbase automatically generates and validates state tokens to prevent CSRF atta
 
 ### Best Practices
 
-| Practice | Description |
-|----------|-------------|
-| **Use HTTPS in production** | OAuth requires secure connections |
-| **Protect client secrets** | Store in environment variables, never in code |
-| **Use PKCE** | Fluxbase supports PKCE for enhanced security |
-| **Limit scopes** | Only request necessary permissions |
-| **Rotate secrets** | Periodically rotate client secrets |
-| **Monitor OAuth usage** | Watch for unusual patterns and failed attempts |
-| **Validate redirect URIs** | Use exact match, avoid wildcards |
+| Practice                    | Description                                    |
+| --------------------------- | ---------------------------------------------- |
+| **Use HTTPS in production** | OAuth requires secure connections              |
+| **Protect client secrets**  | Store in environment variables, never in code  |
+| **Use PKCE**                | Fluxbase supports PKCE for enhanced security   |
+| **Limit scopes**            | Only request necessary permissions             |
+| **Rotate secrets**          | Periodically rotate client secrets             |
+| **Monitor OAuth usage**     | Watch for unusual patterns and failed attempts |
+| **Validate redirect URIs**  | Use exact match, avoid wildcards               |
 
 ## Role-Based Access Control (RBAC)
 
@@ -568,7 +599,7 @@ auth:
       # RBAC configuration
       required_claims:
         roles:
-          - "admin"           # User must have at least ONE of these role values
+          - "admin" # User must have at least ONE of these role values
           - "editor"
         department:
           - "IT"
@@ -576,7 +607,7 @@ auth:
 
       denied_claims:
         status:
-          - "suspended"       # Reject users with ANY of these status values
+          - "suspended" # Reject users with ANY of these status values
           - "inactive"
 ```
 
@@ -584,10 +615,10 @@ auth:
 
 Two types of claim validation rules:
 
-| Rule | Logic | Example Use Case |
-| --- | --- | --- |
-| `required_claims` | User must have at least ONE matching value per claim | Require admin OR editor role |
-| `denied_claims` | Reject if ANY value matches | Block suspended or inactive users |
+| Rule              | Logic                                                | Example Use Case                  |
+| ----------------- | ---------------------------------------------------- | --------------------------------- |
+| `required_claims` | User must have at least ONE matching value per claim | Require admin OR editor role      |
+| `denied_claims`   | Reject if ANY value matches                          | Block suspended or inactive users |
 
 **Execution order**: Denied claims are checked first (highest priority), then required claims.
 
@@ -597,9 +628,9 @@ OAuth claims can be strings or arrays. The validation handles both:
 
 ```json
 {
-  "roles": "admin",           // Single string value
+  "roles": "admin", // Single string value
   "groups": ["admins", "IT"], // Array of strings
-  "level": 5                  // Number (converted to string)
+  "level": 5 // Number (converted to string)
 }
 ```
 
@@ -620,7 +651,7 @@ auth:
       allow_dashboard_login: true
       allow_app_login: false
       required_claims:
-        hd: ["company.com"]  # Google Workspace domain
+        hd: ["company.com"] # Google Workspace domain
         role: ["admin", "superuser"]
 ```
 
@@ -639,7 +670,7 @@ auth:
       allow_dashboard_login: true
       required_claims:
         groups:
-          - "FluxbaseAdmins"       # Azure AD group name
+          - "FluxbaseAdmins" # Azure AD group name
           - "ApplicationAdmins"
       denied_claims:
         groups:
@@ -704,6 +735,7 @@ When claim validation fails, users see clear error messages:
 Fluxbase validates claims from the OAuth ID token (JWT). The ID token is returned during the token exchange and contains user identity and claims.
 
 For custom claims:
+
 1. Configure your IdP to include claims in ID token (not just userinfo endpoint)
 2. Request appropriate scopes to receive the claims
 3. Some providers require custom scopes for custom claims
@@ -754,6 +786,7 @@ function(user, context, callback) {
 **"Claim values are case-sensitive"**
 
 Claim values are matched exactly:
+
 - `"Admin"` ≠ `"admin"`
 - `"IT-Team"` ≠ `"IT Team"`
 
@@ -795,6 +828,7 @@ Once SSO is configured for dashboard login:
 3. Save settings
 
 When enabled:
+
 - Login page shows only SSO buttons
 - Password form is hidden
 - Backend rejects password attempts
@@ -827,28 +861,131 @@ This temporarily re-enables password login.
 
 ```typescript
 // User must be authenticated
-const { url } = await client.auth.linkIdentity({ provider: 'github' })
-window.location.href = url
+const { url } = await client.auth.linkIdentity({ provider: "github" });
+window.location.href = url;
 ```
 
 ### Unlink OAuth Provider
 
 ```typescript
-await client.auth.unlinkIdentity({ provider: 'github' })
+await client.auth.unlinkIdentity({ provider: "github" });
 ```
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| **Redirect URI mismatch** | Ensure redirect URI in Fluxbase config exactly matches provider registration (include protocol, no trailing slashes) |
-| **Invalid state parameter** | Enable cookies (state stored in cookie), verify cross-site cookie settings |
-| **Client secret invalid** | Verify secret hasn't expired, regenerate if needed |
-| **Users can't sign in** | Check provider returns email, verify scopes include necessary permissions |
-| **Custom provider not working** | Verify `issuer_url` is accessible, check OIDC discovery endpoint |
-| **Token encryption errors** | Ensure `FLUXBASE_ENCRYPTION_KEY` is exactly 32 bytes |
-| **CORS errors** | Configure allowed origins in Fluxbase CORS settings |
-| **Dev vs prod URLs** | Use environment variables for redirect URLs |
+| Issue                           | Solution                                                                                                             |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **Redirect URI mismatch**       | Ensure redirect URI in Fluxbase config exactly matches provider registration (include protocol, no trailing slashes) |
+| **Invalid state parameter**     | Enable cookies (state stored in cookie), verify cross-site cookie settings                                           |
+| **Client secret invalid**       | Verify secret hasn't expired, regenerate if needed                                                                   |
+| **Users can't sign in**         | Check provider returns email, verify scopes include necessary permissions                                            |
+| **Custom provider not working** | Verify `issuer_url` is accessible, check OIDC discovery endpoint                                                     |
+| **Token encryption errors**     | Ensure `FLUXBASE_ENCRYPTION_KEY` is exactly 32 bytes                                                                 |
+| **CORS errors**                 | Configure allowed origins in Fluxbase CORS settings                                                                  |
+| **Dev vs prod URLs**            | Use environment variables for redirect URLs                                                                          |
+
+### Refresh Token Issues
+
+If users need to re-authenticate frequently or sessions don't persist, check provider-specific requirements:
+
+#### Google
+
+- **Mechanism**: `access_type=offline` parameter + `prompt=consent`
+- **Automatic**: Fluxbase adds both parameters automatically
+- **Scopes**: `[openid, email, profile]` - **NO** `offline_access`
+
+```yaml
+scopes: [openid, email, profile] # ✅ Correct
+```
+
+#### Microsoft & GitLab
+
+- **Mechanism**: Standard OIDC with `offline_access` scope
+- **Scopes**: `[openid, email, profile, offline_access]`
+
+```yaml
+scopes: [openid, email, profile, offline_access] # ✅ Correct
+```
+
+#### GitHub
+
+- **Mechanism**: Not OIDC-compliant; uses GitHub App tokens
+- **Note**: Standard OAuth may not provide refresh tokens; consider GitHub Apps
+- **Scopes**: `[read:user, user:email]` - **NO** `offline_access`
+
+```yaml
+scopes: [read:user, user:email] # ✅ Correct
+```
+
+#### Twitter (X)
+
+- **Mechanism**: OAuth 2.0 PKCE flow
+- **Important**: Uses **dot** not underscore!
+- **Scopes**: `[tweet.read, users.read, offline.access]`
+
+```yaml
+scopes: [tweet.read, users.read, offline.access] # ✅ Note the dot!
+```
+
+#### LinkedIn
+
+- **Mechanism**: Standard OAuth 2.0
+- **Note**: Issues refresh tokens automatically
+- **Scopes**: `[r_liteprofile, r_emailaddress]`
+
+```yaml
+scopes: [r_liteprofile, r_emailaddress] # ✅ Correct
+```
+
+#### Bitbucket
+
+- **Mechanism**: OAuth 2.0 with rotating refresh tokens
+- **Scopes**: `[account, email]`
+
+```yaml
+scopes: [account, email] # ✅ Correct
+```
+
+#### Apple
+
+- **Mechanism**: Short-lived tokens only
+- **Note**: Users must re-authenticate periodically (Apple design)
+- **Scopes**: `[email, name]` - No refresh tokens
+
+```yaml
+scopes: [email, name] # ✅ Correct (no refresh token support)
+```
+
+#### Facebook
+
+- **Mechanism**: Long-lived tokens via separate API exchange
+- **Note**: Standard OAuth does not provide refresh tokens
+- **Scopes**: `[email, public_profile]`
+
+```yaml
+scopes: [email, public_profile] # ✅ Standard (no refresh tokens)
+```
+
+#### Custom OIDC (Keycloak, Auth0, Authelia, etc.)
+
+- **Mechanism**: Standard OIDC authorization code flow
+- **Scopes**: `[openid, email, profile, offline_access]`
+
+```yaml
+scopes: [openid, email, profile, offline_access] # ✅ Correct
+```
+
+**Why refresh tokens matter:**
+
+- Enable long-lived sessions without requiring re-authentication
+- Allow automatic token refresh in the background
+- Essential for production applications with persistent login
+
+**How Fluxbase handles it:**
+
+- Automatically adds `access_type=offline` for all providers
+- Adds `prompt=consent` for Google (ensures refresh tokens on repeat logins)
+- Stores refresh tokens securely in the database (encrypted if key configured)
 
 ### Debug Logging
 
@@ -859,6 +996,7 @@ debug: true
 ```
 
 Check logs for:
+
 - OAuth request/response details
 - Token exchange errors
 - User info extraction
