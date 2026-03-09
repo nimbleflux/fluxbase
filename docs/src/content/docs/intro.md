@@ -117,7 +117,7 @@ WebSocket-based AI chatbot integration:
 | **Row-Level Security** | ✅ Yes                        | ✅ Yes                                 | ⚠️ Rules-based      |
 | **Client SDK**         | TypeScript, React, Go         | JS, Flutter, Python, Swift, Kotlin, C# | TypeScript/JS       |
 | **Horizontal Scaling** | ✅ Yes (distributed backends) | ✅ Yes (read replicas)                 | ✅ Yes (auto)       |
-| **Open Source**        | ✅ AGPLv2                     | ✅ Apache 2.0                          | ❌ Proprietary      |
+| **Open Source**        | ✅ AGPLv3                     | ✅ Apache 2.0                          | ❌ Proprietary      |
 
 ## Getting Started
 
@@ -221,4 +221,4 @@ graph TB
 
 ## License
 
-Fluxbase is open source and released under the [AGPLv2 license](https://github.com/fluxbase-eu/fluxbase/blob/main/LICENSE).
+Fluxbase is open source and released under the [AGPLv3 license](https://www.gnu.org/licenses/agpl-3.0.html). Commercial licenses are available for proprietary use—see [Pricing](/pricing/) for details.
