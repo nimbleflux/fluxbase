@@ -4,17 +4,21 @@
 # This Dockerfile generates TypeDoc API documentation from the SDK source files
 # and builds the complete documentation site.
 
-FROM oven/bun:1-debian AS base
+FROM oven/bun:1.2.15-debian AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-WORKDIR /app/docs
+WORKDIR /app
 
-# Copy workspace configuration (bun uses workspaces from package.json)
-COPY package.json ../
+# Copy workspace configuration and all package.json files
+COPY package.json ./
+COPY docs/package.json ./docs/
+COPY sdk/package.json ./sdk/
+COPY sdk-react/package.json ./sdk-react/
+COPY admin/package.json ./admin/
 
-# Copy package files
-COPY docs/package.json ./
+# Copy lock file and install all workspace dependencies
+COPY bun.lock ./
 RUN bun install --frozen-lockfile
 
 # Build the documentation
@@ -24,13 +28,14 @@ WORKDIR /app
 
 # Copy workspace configuration
 COPY package.json ./
+COPY bun.lock ./
 
 # Copy SDK source files (needed for TypeDoc generation)
 COPY sdk/ ./sdk/
 COPY sdk-react/ ./sdk-react/
 
 # Copy docs with node_modules
-COPY --from=deps /app/docs/node_modules ./docs/node_modules
+COPY --from=deps /app/node_modules ./node_modules
 COPY docs/ ./docs/
 
 # Build the static site (Astro/Starlight with starlight-typedoc)
