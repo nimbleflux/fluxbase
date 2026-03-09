@@ -889,8 +889,16 @@ func (h *DashboardAuthHandler) InitiateOAuthLogin(c fiber.Ctx) error {
 	h.oauthConfigs[state] = config
 	h.oauthConfigsMu.Unlock()
 
+	// Build auth URL options
+	authURLOpts := []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}
+
+	// Add prompt=consent for Google to ensure refresh tokens on subsequent logins
+	if strings.ToLower(providerName) == "google" {
+		authURLOpts = append(authURLOpts, oauth2.SetAuthURLParam("prompt", "consent"))
+	}
+
 	// Redirect to OAuth provider
-	authorizeURL := config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	authorizeURL := config.AuthCodeURL(state, authURLOpts...)
 
 	log.Debug().
 		Str("state", state).
@@ -942,7 +950,7 @@ func (h *DashboardAuthHandler) buildOAuthConfig(provider, clientID, clientSecret
 				TokenURL: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
 			}
 			if len(scopes) == 0 {
-				scopes = []string{"openid", "email", "profile"}
+				scopes = []string{"openid", "email", "profile", "offline_access"}
 			}
 		case "gitlab":
 			endpoint = oauth2.Endpoint{
@@ -950,7 +958,7 @@ func (h *DashboardAuthHandler) buildOAuthConfig(provider, clientID, clientSecret
 				TokenURL: "https://gitlab.com/oauth/token",
 			}
 			if len(scopes) == 0 {
-				scopes = []string{"read_user", "openid", "email"}
+				scopes = []string{"read_user", "openid", "email", "offline_access"}
 			}
 		default:
 			return nil
