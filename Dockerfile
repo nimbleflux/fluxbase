@@ -37,6 +37,10 @@ RUN mkdir -p /build/internal/jobs /build/internal/runtime \
 # Build SDK-React
 RUN bun run --cwd sdk-react build
 
+# Refresh dependencies to ensure proper symlinks after SDK builds
+# (SDK exports point to dist/ which didn't exist during initial install)
+RUN bun install
+
 # Install Node.js for vite build (bun has compatibility issues with vite 7)
 RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm && rm -rf /var/lib/apt/lists/*
 
