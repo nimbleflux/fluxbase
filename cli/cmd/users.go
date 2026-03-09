@@ -81,9 +81,7 @@ Examples:
 	RunE:    runUsersDelete,
 }
 
-var (
-	usersSearchQuery string
-)
+var usersSearchQuery string
 
 func init() {
 	// List flags

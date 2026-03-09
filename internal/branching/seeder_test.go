@@ -111,9 +111,9 @@ func TestSeeder_DiscoverSeedFiles(t *testing.T) {
 		// Create seed files
 		file1 := filepath.Join(tempDir, "001_initial.sql")
 		file2 := filepath.Join(tempDir, "002_users.sql")
-		err = os.WriteFile(file1, []byte("-- Initial seed\nINSERT INTO config VALUES ('key', 'value');"), 0644)
+		err = os.WriteFile(file1, []byte("-- Initial seed\nINSERT INTO config VALUES ('key', 'value');"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(file2, []byte("-- Users seed\nINSERT INTO users VALUES (1, 'admin');"), 0644)
+		err = os.WriteFile(file2, []byte("-- Users seed\nINSERT INTO users VALUES (1, 'admin');"), 0o644)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -137,11 +137,11 @@ func TestSeeder_DiscoverSeedFiles(t *testing.T) {
 		sqlFile := filepath.Join(tempDir, "001_seed.sql")
 		txtFile := filepath.Join(tempDir, "readme.txt")
 		mdFile := filepath.Join(tempDir, "notes.md")
-		err = os.WriteFile(sqlFile, []byte("INSERT INTO t VALUES (1);"), 0644)
+		err = os.WriteFile(sqlFile, []byte("INSERT INTO t VALUES (1);"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(txtFile, []byte("This is a text file"), 0644)
+		err = os.WriteFile(txtFile, []byte("This is a text file"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(mdFile, []byte("# Notes"), 0644)
+		err = os.WriteFile(mdFile, []byte("# Notes"), 0o644)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -163,9 +163,9 @@ func TestSeeder_DiscoverSeedFiles(t *testing.T) {
 		// Create file and subdirectory
 		sqlFile := filepath.Join(tempDir, "001_seed.sql")
 		subDir := filepath.Join(tempDir, "subdir")
-		err = os.WriteFile(sqlFile, []byte("INSERT INTO t VALUES (1);"), 0644)
+		err = os.WriteFile(sqlFile, []byte("INSERT INTO t VALUES (1);"), 0o644)
 		require.NoError(t, err)
-		err = os.Mkdir(subDir, 0755)
+		err = os.Mkdir(subDir, 0o755)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -187,7 +187,7 @@ func TestSeeder_DiscoverSeedFiles(t *testing.T) {
 		files := []string{"003_third.sql", "001_first.sql", "002_second.sql"}
 		for _, name := range files {
 			path := filepath.Join(tempDir, name)
-			err = os.WriteFile(path, []byte("SELECT 1;"), 0644)
+			err = os.WriteFile(path, []byte("SELECT 1;"), 0o644)
 			require.NoError(t, err)
 		}
 
@@ -211,7 +211,7 @@ func TestSeeder_DiscoverSeedFiles(t *testing.T) {
 
 		expectedContent := "-- Seed file\nINSERT INTO users (id, name) VALUES (1, 'test');\nINSERT INTO users (id, name) VALUES (2, 'admin');"
 		sqlFile := filepath.Join(tempDir, "001_users.sql")
-		err = os.WriteFile(sqlFile, []byte(expectedContent), 0644)
+		err = os.WriteFile(sqlFile, []byte(expectedContent), 0o644)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -233,7 +233,7 @@ func TestSeeder_DiscoverSeedFiles(t *testing.T) {
 
 		// Create file named just ".sql"
 		sqlFile := filepath.Join(tempDir, ".sql")
-		err = os.WriteFile(sqlFile, []byte("SELECT 1;"), 0644)
+		err = os.WriteFile(sqlFile, []byte("SELECT 1;"), 0o644)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -254,7 +254,7 @@ func TestSeeder_DiscoverSeedFiles(t *testing.T) {
 		defer func() { _ = os.RemoveAll(tempDir) }()
 
 		sqlFile := filepath.Join(tempDir, "001_empty.sql")
-		err = os.WriteFile(sqlFile, []byte(""), 0644)
+		err = os.WriteFile(sqlFile, []byte(""), 0o644)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -274,7 +274,7 @@ func TestSeeder_DiscoverSeedFiles(t *testing.T) {
 		defer func() { _ = os.RemoveAll(tempDir) }()
 
 		sqlFile := filepath.Join(tempDir, "001_users-roles_mapping.sql")
-		err = os.WriteFile(sqlFile, []byte("SELECT 1;"), 0644)
+		err = os.WriteFile(sqlFile, []byte("SELECT 1;"), 0o644)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -308,7 +308,7 @@ func TestSeeder_SeedFileSorting(t *testing.T) {
 
 		for _, seed := range seeds {
 			path := filepath.Join(tempDir, seed.Name+".sql")
-			err = os.WriteFile(path, []byte("SELECT 1;"), 0644)
+			err = os.WriteFile(path, []byte("SELECT 1;"), 0o644)
 			require.NoError(t, err)
 		}
 
@@ -394,7 +394,7 @@ func TestSeeder_EdgeCases(t *testing.T) {
 		longName = "001_" + "a_very_long_seed_file_name_that_describes_what_it_does_in_detail"
 
 		sqlFile := filepath.Join(tempDir, longName+".sql")
-		err = os.WriteFile(sqlFile, []byte("SELECT 1;"), 0644)
+		err = os.WriteFile(sqlFile, []byte("SELECT 1;"), 0o644)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -412,7 +412,7 @@ func TestSeeder_EdgeCases(t *testing.T) {
 
 		unicodeContent := "INSERT INTO messages (text) VALUES ('Hello, 世界! 🚀');"
 		sqlFile := filepath.Join(tempDir, "001_unicode.sql")
-		err = os.WriteFile(sqlFile, []byte(unicodeContent), 0644)
+		err = os.WriteFile(sqlFile, []byte(unicodeContent), 0o644)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -434,7 +434,7 @@ func TestSeeder_EdgeCases(t *testing.T) {
 			largeContent[i] = 'A'
 		}
 		sqlFile := filepath.Join(tempDir, "001_large.sql")
-		err = os.WriteFile(sqlFile, largeContent, 0644)
+		err = os.WriteFile(sqlFile, largeContent, 0o644)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -457,7 +457,7 @@ func TestSeeder_Validation(t *testing.T) {
 		defer func() { _ = os.RemoveAll(tempDir) }()
 
 		sqlFile := filepath.Join(tempDir, "001_test.sql")
-		err = os.WriteFile(sqlFile, []byte("SELECT 1;"), 0644)
+		err = os.WriteFile(sqlFile, []byte("SELECT 1;"), 0o644)
 		require.NoError(t, err)
 
 		seeder := NewSeeder(tempDir)
@@ -482,7 +482,7 @@ func TestSeeder_Concurrency(t *testing.T) {
 		// Create some seed files
 		for i := 1; i <= 5; i++ {
 			path := filepath.Join(tempDir, "00"+string(rune('0'+i))+"_seed.sql")
-			err = os.WriteFile(path, []byte("SELECT 1;"), 0644)
+			err = os.WriteFile(path, []byte("SELECT 1;"), 0o644)
 			require.NoError(t, err)
 		}
 
@@ -554,7 +554,7 @@ func BenchmarkSeeder_DiscoverSeedFiles(b *testing.B) {
 			name = "100_" + name
 		}
 		path := filepath.Join(tempDir, name)
-		err = os.WriteFile(path, []byte("SELECT 1; SELECT 2; SELECT 3;"), 0644)
+		err = os.WriteFile(path, []byte("SELECT 1; SELECT 2; SELECT 3;"), 0o644)
 		require.NoError(b, err)
 	}
 

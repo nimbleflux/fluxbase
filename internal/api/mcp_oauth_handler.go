@@ -187,7 +187,6 @@ func (h *MCPOAuthHandler) handleClientRegistration(c fiber.Ctx) error {
 		"user_agent":    c.Get("User-Agent"),
 		"registered_at": time.Now().UTC(),
 	})
-
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to register OAuth client")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -277,7 +276,6 @@ func (h *MCPOAuthHandler) handleAuthorize(c fiber.Ctx) error {
 		FROM auth.mcp_oauth_clients
 		WHERE client_id = $1
 	`, clientID).Scan(&client.ClientID, &client.ClientName, &client.RedirectURIs, &client.Scopes, &client.IsActive)
-
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_client",
@@ -347,7 +345,6 @@ func (h *MCPOAuthHandler) handleAuthorize(c fiber.Ctx) error {
 		INSERT INTO auth.mcp_oauth_codes (code, client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, state)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`, code, clientID, userID, redirectURI, requestedScopes, codeChallenge, codeChallengeMethod, state)
-
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to store authorization code")
 		return h.redirectWithError(c, redirectURI, "server_error", "Failed to process authorization", state)
@@ -433,7 +430,6 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 		&authCode.ClientID, &authCode.UserID, &authCode.RedirectURI,
 		&authCode.Scopes, &authCode.CodeChallenge, &authCode.CodeChallengeMethod, &authCode.ExpiresAt,
 	)
-
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_grant",
@@ -504,7 +500,6 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 		INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
 		VALUES ('access', $1, $2, $3, $4, $5)
 	`, accessTokenHash, clientID, authCode.UserID, authCode.Scopes, accessTokenExpiry)
-
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to store access token")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -517,7 +512,6 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 		INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
 		VALUES ('refresh', $1, $2, $3, $4, $5)
 	`, refreshTokenHash, clientID, authCode.UserID, authCode.Scopes, refreshTokenExpiry)
-
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to store refresh token")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -567,7 +561,6 @@ func (h *MCPOAuthHandler) handleRefreshTokenGrant(c fiber.Ctx) error {
 		FROM auth.mcp_oauth_tokens
 		WHERE token_hash = $1 AND token_type = 'refresh' AND NOT is_revoked AND expires_at > NOW()
 	`, refreshTokenHash).Scan(&token.ID, &token.ClientID, &token.UserID, &token.Scopes)
-
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_grant",
@@ -644,7 +637,6 @@ func (h *MCPOAuthHandler) handleRevoke(c fiber.Ctx) error {
 		SET is_revoked = true, revoked_at = NOW(), revoked_reason = 'user_revoked'
 		WHERE token_hash = $1
 	`, tokenHash)
-
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to revoke token")
 	}

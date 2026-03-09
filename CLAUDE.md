@@ -280,15 +280,15 @@ golangci-lint run ./...  # Includes type checking
 
 ```bash
 # Admin UI
-cd admin && npm run type-check
-cd admin && npm run lint
+cd admin && pnpm run type-check
+cd admin && pnpm run lint
 
 # SDK
-cd sdk && npm run type-check
-cd sdk && npm run lint
+cd sdk && pnpm run type-check
+cd sdk && pnpm run lint
 
 # SDK React
-cd sdk-react && npm run type-check  # Uses tsc --noEmit
+cd sdk-react && pnpm run type-check  # Uses tsc --noEmit
 ```
 
 **What gets checked:**

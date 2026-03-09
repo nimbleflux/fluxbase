@@ -11,10 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var (
-	// ErrSettingNotFound is returned when a system setting is not found
-	ErrSettingNotFound = errors.New("system setting not found")
-)
+// ErrSettingNotFound is returned when a system setting is not found
+var ErrSettingNotFound = errors.New("system setting not found")
 
 // SystemSetting represents a system-wide configuration setting
 type SystemSetting struct {
@@ -61,7 +59,6 @@ func (s *SystemSettingsService) IsSetupComplete(ctx context.Context) (bool, erro
 			WHERE key = 'setup_completed'
 		)
 	`).Scan(&exists)
-
 	if err != nil {
 		return false, err
 	}
@@ -108,7 +105,6 @@ func (s *SystemSettingsService) GetSetupInfo(ctx context.Context) (*SetupComplet
 		SELECT value FROM app.settings
 		WHERE key = 'setup_completed'
 	`).Scan(&valueJSON)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrSettingNotFound
@@ -141,7 +137,6 @@ func (s *SystemSettingsService) GetSetting(ctx context.Context, key string) (*Sy
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrSettingNotFound
@@ -230,7 +225,6 @@ func (s *SystemSettingsService) SetSetting(ctx context.Context, key string, valu
 		    description = EXCLUDED.description,
 		    updated_at = NOW()
 	`, key, valueJSON, description)
-
 	if err != nil {
 		return err
 	}
@@ -248,7 +242,6 @@ func (s *SystemSettingsService) DeleteSetting(ctx context.Context, key string) e
 	result, err := s.db.Exec(ctx, `
 		DELETE FROM app.settings WHERE key = $1
 	`, key)
-
 	if err != nil {
 		return err
 	}

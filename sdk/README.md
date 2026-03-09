@@ -121,7 +121,11 @@ Check out working examples in the [`/example`](../example/) directory:
 For React applications, use [`@fluxbase/sdk-react`](../sdk-react/) for hooks and automatic state management:
 
 ```bash
+# npm
 npm install @fluxbase/sdk @fluxbase/sdk-react @tanstack/react-query
+
+# pnpm
+pnpm add @fluxbase/sdk @fluxbase/sdk-react @tanstack/react-query
 ```
 
 See the **[React Hooks Guide](../../docs/docs/sdks/react-hooks.md)** for details.

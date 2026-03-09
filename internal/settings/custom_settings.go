@@ -180,7 +180,6 @@ func (s *CustomSettingsService) CreateSetting(ctx context.Context, req CreateCus
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		// Check for unique constraint violation
 		if database.IsUniqueViolation(err) {
@@ -223,7 +222,6 @@ func (s *CustomSettingsService) GetSetting(ctx context.Context, key string) (*Cu
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -308,7 +306,6 @@ func (s *CustomSettingsService) UpdateSetting(ctx context.Context, key string, r
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +337,6 @@ func (s *CustomSettingsService) DeleteSetting(ctx context.Context, key string, u
 	result, err := s.db.Exec(ctx, `
 		DELETE FROM app.settings WHERE key = $1
 	`, key)
-
 	if err != nil {
 		return err
 	}
@@ -445,7 +441,6 @@ func (s *CustomSettingsService) CreateSecretSetting(ctx context.Context, req Cre
 		&metadata.CreatedAt,
 		&metadata.UpdatedAt,
 	)
-
 	if err != nil {
 		if database.IsUniqueViolation(err) {
 			return nil, ErrCustomSettingDuplicate
@@ -485,7 +480,6 @@ func (s *CustomSettingsService) GetSecretSettingMetadata(ctx context.Context, ke
 		&metadata.CreatedAt,
 		&metadata.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -561,7 +555,6 @@ func (s *CustomSettingsService) UpdateSecretSetting(ctx context.Context, key str
 		&metadata.CreatedAt,
 		&metadata.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -703,7 +696,6 @@ func (s *CustomSettingsService) CreateUserSetting(ctx context.Context, userID uu
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		if database.IsUniqueViolation(err) {
 			return nil, ErrCustomSettingDuplicate
@@ -736,7 +728,6 @@ func (s *CustomSettingsService) GetUserOwnSetting(ctx context.Context, userID uu
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -775,7 +766,6 @@ func (s *CustomSettingsService) GetSystemSetting(ctx context.Context, key string
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -860,7 +850,6 @@ func (s *CustomSettingsService) UpdateUserSetting(ctx context.Context, userID uu
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -906,7 +895,6 @@ func (s *CustomSettingsService) UpsertUserSetting(ctx context.Context, userID uu
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -924,7 +912,6 @@ func (s *CustomSettingsService) DeleteUserSetting(ctx context.Context, userID uu
 		DELETE FROM app.settings
 		WHERE key = $1 AND user_id = $2 AND is_secret = false
 	`, key, userID)
-
 	if err != nil {
 		return err
 	}
@@ -1031,7 +1018,6 @@ func (s *CustomSettingsService) CreateSecretSettingWithTx(ctx context.Context, t
 		&metadata.CreatedAt,
 		&metadata.UpdatedAt,
 	)
-
 	if err != nil {
 		if database.IsUniqueViolation(err) {
 			return nil, ErrCustomSettingDuplicate
@@ -1071,7 +1057,6 @@ func (s *CustomSettingsService) GetSecretSettingMetadataWithTx(ctx context.Conte
 		&metadata.CreatedAt,
 		&metadata.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -1147,7 +1132,6 @@ func (s *CustomSettingsService) UpdateSecretSettingWithTx(ctx context.Context, t
 		&metadata.CreatedAt,
 		&metadata.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -1247,7 +1231,6 @@ func (s *CustomSettingsService) GetUserOwnSettingWithTx(ctx context.Context, tx 
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -1285,7 +1268,6 @@ func (s *CustomSettingsService) GetSystemSettingWithTx(ctx context.Context, tx Q
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -1368,7 +1350,6 @@ func (s *CustomSettingsService) UpsertUserSettingWithTx(ctx context.Context, tx 
 		&setting.CreatedAt,
 		&setting.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -1386,7 +1367,6 @@ func (s *CustomSettingsService) DeleteUserSettingWithTx(ctx context.Context, tx 
 		DELETE FROM app.settings
 		WHERE key = $1 AND user_id = $2 AND is_secret = false
 	`, key, userID)
-
 	if err != nil {
 		return err
 	}

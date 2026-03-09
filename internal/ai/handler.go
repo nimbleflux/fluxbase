@@ -326,7 +326,8 @@ func (h *Handler) syncFromFilesystem(c fiber.Ctx, namespace string) error {
 func (h *Handler) syncFromPayload(c fiber.Ctx, namespace string, chatbots []struct {
 	Name string `json:"name"`
 	Code string `json:"code"`
-}, deleteMissing bool, dryRun bool) error {
+}, deleteMissing bool, dryRun bool,
+) error {
 	ctx := c.RequestCtx()
 
 	// Get existing chatbots in this namespace

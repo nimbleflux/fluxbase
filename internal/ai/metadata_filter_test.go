@@ -393,7 +393,6 @@ func TestBuildMetadataFilterSQL_SingleCondition(t *testing.T) {
 
 	argIndex := 1
 	sql, args, err := buildMetadataFilterSQL(group, &argIndex)
-
 	if err != nil {
 		t.Fatalf("buildMetadataFilterSQL() error = %v", err)
 	}
@@ -424,7 +423,6 @@ func TestBuildMetadataFilterSQL_MultipleConditionsAND(t *testing.T) {
 
 	argIndex := 1
 	sql, args, err := buildMetadataFilterSQL(group, &argIndex)
-
 	if err != nil {
 		t.Fatalf("buildMetadataFilterSQL() error = %v", err)
 	}
@@ -456,7 +454,6 @@ func TestBuildMetadataFilterSQL_MultipleConditionsOR(t *testing.T) {
 
 	argIndex := 1
 	sql, args, err := buildMetadataFilterSQL(group, &argIndex)
-
 	if err != nil {
 		t.Fatalf("buildMetadataFilterSQL() error = %v", err)
 	}
@@ -501,7 +498,6 @@ func TestBuildMetadataFilterSQL_NestedGroups(t *testing.T) {
 
 	argIndex := 1
 	sql, args, err := buildMetadataFilterSQL(group, &argIndex)
-
 	if err != nil {
 		t.Fatalf("buildMetadataFilterSQL() error = %v", err)
 	}
@@ -530,7 +526,6 @@ func TestBuildMetadataFilterSQL_INOperator(t *testing.T) {
 
 	argIndex := 1
 	sql, args, err := buildMetadataFilterSQL(group, &argIndex)
-
 	if err != nil {
 		t.Fatalf("buildMetadataFilterSQL() error = %v", err)
 	}
@@ -558,7 +553,6 @@ func TestBuildMetadataFilterSQL_BetweenOperator(t *testing.T) {
 
 	argIndex := 1
 	sql, args, err := buildMetadataFilterSQL(group, &argIndex)
-
 	if err != nil {
 		t.Fatalf("buildMetadataFilterSQL() error = %v", err)
 	}

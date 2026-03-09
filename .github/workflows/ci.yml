@@ -38,18 +38,21 @@ jobs:
           go mod download
           go mod verify
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
       - name: Set up Node.js for embedded SDK generation
         uses: actions/setup-node@v6
         with:
           node-version: "24.14.0"
-          cache: "npm"
-          cache-dependency-path: sdk/package-lock.json
 
       - name: Generate embedded SDK for Jobs runtime
         run: |
           cd sdk
-          npm ci
-          npm run generate:embedded-sdk
+          bun install --frozen-lockfile
+          bun run generate:embedded-sdk
 
       - name: Create dist directory with placeholder for embed directive
         run: |
@@ -63,13 +66,22 @@ jobs:
       - name: Run golangci-lint
         run: golangci-lint run --timeout 10m ./...
 
-      - name: Check go fmt
+      - name: Install gofumpt
+        run: go install mvdan.cc/gofumpt@latest
+
+      - name: Install lefthook
+        run: go install github.com/evilmartians/lefthook@latest
+
+      - name: Check Go formatting with gofumpt
         run: |
-          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-            echo "Please run 'go fmt ./...'"
-            gofmt -s -l .
+          if [ "$(gofumpt -l . | wc -l)" -gt 0 ]; then
+            echo "Please run 'make fmt' or 'gofumpt -w .'"
+            gofumpt -l .
             exit 1
           fi
+
+      - name: Run pre-commit checks with lefthook
+        run: lefthook run pre-commit
 
   lint-typescript:
     name: Lint TypeScript
@@ -77,20 +89,22 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "24.14.0"
-          cache: "npm"
-          cache-dependency-path: admin/package-lock.json
 
-      - name: Install Admin dependencies
-        working-directory: ./admin
-        run: npm ci
+      - name: Install dependencies (workspace)
+        run: bun install --frozen-lockfile
 
       - name: Lint Admin
         working-directory: ./admin
-        run: npm run lint
+        run: bun run lint
 
   test-sdk:
     name: Test SDK
@@ -98,16 +112,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "24.14.0"
-          cache: "npm"
-          cache-dependency-path: sdk/package-lock.json
 
-      - name: Install SDK dependencies
-        working-directory: ./sdk
-        run: npm ci
+      - name: Install dependencies (workspace)
+        run: bun install --frozen-lockfile
 
       - name: Verify test file content (debug)
         working-directory: ./sdk
@@ -117,7 +133,7 @@ jobs:
 
       - name: Run SDK tests with coverage
         working-directory: ./sdk
-        run: npm run test:ci
+        run: bun run test:ci
 
       - name: Upload SDK coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -132,31 +148,23 @@ jobs:
 
       - name: Type check SDK
         working-directory: ./sdk
-        run: npm run type-check
+        run: bun run type-check
 
       - name: Build SDK
         working-directory: ./sdk
-        run: npm run build
-
-      - name: Install SDK-React dependencies
-        working-directory: ./sdk-react
-        run: npm ci
+        run: bun run build
 
       - name: Type check SDK-React
         working-directory: ./sdk-react
-        run: npx tsc --noEmit
+        run: bunx tsc --noEmit
 
       - name: Build SDK-React
         working-directory: ./sdk-react
-        run: npm run build
-
-      - name: Install Admin dependencies
-        working-directory: ./admin
-        run: npm ci
+        run: bun run build
 
       - name: Type check Admin
         working-directory: ./admin
-        run: npx tsc -b
+        run: bunx tsc -b
 
   test-go:
     name: Test Go
@@ -216,18 +224,21 @@ jobs:
           go mod download
           go mod verify
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
       - name: Set up Node.js for embedded SDK generation
         uses: actions/setup-node@v6
         with:
           node-version: "24.14.0"
-          cache: "npm"
-          cache-dependency-path: sdk/package-lock.json
 
       - name: Generate embedded SDK for Jobs runtime
         run: |
           cd sdk
-          npm ci
-          npm run generate:embedded-sdk
+          bun install --frozen-lockfile
+          bun run generate:embedded-sdk
 
       - name: Install Deno
         uses: denoland/setup-deno@v2
@@ -424,42 +435,39 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "24.14.0"
-          cache: "npm"
-          cache-dependency-path: |
-            sdk/package-lock.json
-            sdk-react/package-lock.json
-            admin/package-lock.json
 
-      - name: Build SDKs
-        run: |
-          # Build SDK
-          cd sdk
-          npm ci
-          npm run build
+      - name: Install dependencies (workspace)
+        run: bun install --frozen-lockfile
 
-          # Build SDK React
-          cd ../sdk-react
-          npm ci
-          npm run build
+      - name: Build SDK
+        working-directory: ./sdk
+        run: bun run build
 
       - name: Generate embedded SDK for Jobs runtime
         working-directory: ./sdk
-        run: npm run generate:embedded-sdk
+        run: bun run generate:embedded-sdk
+
+      - name: Build SDK React
+        working-directory: ./sdk-react
+        run: bun run build
 
       - name: Build Admin UI
-        run: |
-          # Build Admin UI (depends on SDKs)
-          cd admin
-          npm ci
-          npm run build
+        working-directory: ./admin
+        run: bun run build
 
-          # Copy built files to internal/adminui/dist for embedding
-          mkdir -p ../internal/adminui/dist
-          cp -r dist/* ../internal/adminui/dist/
+      - name: Copy Admin UI to internal/adminui/dist
+        run: |
+          mkdir -p internal/adminui/dist
+          cp -r admin/dist/* internal/adminui/dist/
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -531,33 +539,30 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "24.14.0"
-          cache: "npm"
-          cache-dependency-path: |
-            sdk/package-lock.json
-            sdk-react/package-lock.json
-            docs/package-lock.json
 
-      - name: Build SDKs (required for TypeDoc)
-        run: |
-          # Build SDK
-          cd sdk
-          npm ci
-          npm run build
+      - name: Install dependencies (workspace)
+        run: bun install --frozen-lockfile
 
-          # Build SDK React
-          cd ../sdk-react
-          npm ci
-          npm run build
+      - name: Build SDK
+        working-directory: ./sdk
+        run: bun run build
+
+      - name: Build SDK React
+        working-directory: ./sdk-react
+        run: bun run build
 
       - name: Build docs site
         working-directory: ./docs
-        run: |
-          npm ci
-          npm run build
+        run: bun run build
 
       - name: Check for broken links
         uses: lycheeverse/lychee-action@v2

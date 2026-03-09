@@ -469,7 +469,6 @@ func (s *DBStateStore) Validate(ctx context.Context, state string) bool {
 		DELETE FROM auth.oauth_states
 		WHERE state = $1 AND expires_at > NOW()
 	`, state)
-
 	if err != nil {
 		return false
 	}
@@ -488,7 +487,6 @@ func (s *DBStateStore) GetAndValidate(ctx context.Context, state string) (*State
 		WHERE state = $1 AND expires_at > NOW()
 		RETURNING provider, redirect_uri, code_verifier, nonce, expires_at
 	`, state).Scan(&metadata.Provider, &metadata.RedirectURI, &metadata.CodeVerifier, &metadata.Nonce, &expiresAt)
-
 	if err != nil {
 		return nil, false
 	}

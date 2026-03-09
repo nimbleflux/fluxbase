@@ -25,7 +25,7 @@ FLUXBASE_SERVER_ADDRESS=:9090
 FLUXBASE_SERVER_READ_TIMEOUT=60s
 FLUXBASE_DATABASE_URL=postgresql://localhost:5432/testdb
 `
-	err := os.WriteFile(envPath, []byte(envContent), 0600)
+	err := os.WriteFile(envPath, []byte(envContent), 0o600)
 	require.NoError(t, err)
 
 	// Verify file was created
@@ -54,7 +54,7 @@ func TestLoadEnvFile_InvalidFormat_Ignored(t *testing.T) {
 INVALID_LINE_WITHOUT_EQUALS
 FLUXBASE_SERVER_ADDRESS=:9090
 `
-	err := os.WriteFile(envPath, []byte(invalidEnv), 0600)
+	err := os.WriteFile(envPath, []byte(invalidEnv), 0o600)
 	require.NoError(t, err)
 
 	// Verify file exists

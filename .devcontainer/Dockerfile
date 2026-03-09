@@ -4,108 +4,109 @@ FROM golang:1.26.1-bookworm
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install base dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    wget \
-    vim \
-    nano \
-    htop \
-    build-essential \
-    pkg-config \
-    postgresql-client \
-    redis-tools \
-    httpie \
-    jq \
-    tree \
-    zip \
-    unzip \
-    sudo \
-    locales \
-    ca-certificates \
-    gnupg \
-    lsb-release \
-    software-properties-common \
-    zsh \
-    lsof \
+# =============================================================================
+# LAYER 1: Base system packages (rarely changes)
+# =============================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl wget vim nano htop build-essential pkg-config \
+    postgresql-client redis-tools httpie jq tree zip unzip sudo \
+    locales ca-certificates gnupg lsb-release software-properties-common \
+    zsh lsof \
     # OCR dependencies for knowledge base PDF extraction
-    tesseract-ocr \
-    libtesseract-dev \
-    libleptonica-dev \
-    tesseract-ocr-eng \
-    poppler-utils \
+    tesseract-ocr libtesseract-dev libleptonica-dev tesseract-ocr-eng poppler-utils \
     # Image processing library for govips
     libvips-dev \
     # Graphviz for rendering dependency graphs
     graphviz \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set up locale
-RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
     && locale-gen en_US.UTF-8 \
     && update-locale LANG=en_US.UTF-8
-ENV LANG=en_US.UTF-8 \
-    LANGUAGE=en_US:en \
-    LC_ALL=en_US.UTF-8
 
-# Install Docker CLI
+ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
+
+# =============================================================================
+# LAYER 2: Docker CLI (rarely changes)
+# =============================================================================
 RUN install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
     && apt-get update \
-    && apt-get install -y docker-ce-cli docker-compose-plugin \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 24
-RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
-    && apt-get install -y nodejs \
-    && npm install -g \
-    typescript \
-    @types/node \
-    eslint \
-    prettier \
-    @swc/cli \
-    @swc/core \
-    tsx \
-    nodemon \
-    concurrently \
-    npm-check-updates \
-    serve \
-    && rm -rf /var/lib/apt/lists/*
+# =============================================================================
+# LAYER 3: Bun runtime (includes Node.js compatibility, rarely changes)
+# =============================================================================
+ARG BUN_VERSION=1.2.15
+ENV BUN_INSTALL=/home/vscode/.bun
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then BUN_ARCH="x64"; \
+    elif [ "$ARCH" = "aarch64" ]; then BUN_ARCH="aarch64"; \
+    else echo "Unsupported architecture: $ARCH" && exit 1; fi \
+    && curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-${BUN_ARCH}.zip" -o /tmp/bun.zip \
+    && unzip -q /tmp/bun.zip -d /tmp \
+    && mkdir -p /usr/local/bun/bin \
+    && mv /tmp/bun-linux-${BUN_ARCH}/bun /usr/local/bun/bin/ \
+    && ln -s /usr/local/bun/bin/bun /usr/local/bin/bun \
+    && ln -s /usr/local/bun/bin/bun /usr/local/bin/bunx \
+    && rm -rf /tmp/bun.zip /tmp/bun-linux-${BUN_ARCH} \
+    && bun --version
 
-# Install Deno (required for edge functions bundling)
+# =============================================================================
+# LAYER 4: Pinned runtime versions (changes when you update versions)
+# =============================================================================
+# Pin Deno version instead of latest
+ARG DENO_VERSION=2.7.4
 RUN ARCH=$(dpkg --print-architecture) \
     && if [ "$ARCH" = "amd64" ]; then DENO_ARCH="x86_64-unknown-linux-gnu"; \
     elif [ "$ARCH" = "arm64" ]; then DENO_ARCH="aarch64-unknown-linux-gnu"; \
     else echo "Unsupported architecture: $ARCH" && exit 1; fi \
-    && DENO_VERSION=$(curl -s https://api.github.com/repos/denoland/deno/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/') \
     && curl -fsSL "https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-${DENO_ARCH}.zip" -o /tmp/deno.zip \
     && unzip -q /tmp/deno.zip -d /usr/local/bin \
     && chmod +x /usr/local/bin/deno \
     && rm /tmp/deno.zip \
     && deno --version
 
-# Create vscode user
+# =============================================================================
+# LAYER 5: Create user (rarely changes)
+# =============================================================================
 ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME -s /bin/zsh \
-    && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
+    && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
-# Install Oh My Zsh for vscode user
+# =============================================================================
+# LAYER 6: User setup - global tools (moderately stable)
+# =============================================================================
 USER $USERNAME
-RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
-    && echo 'export PATH="/go/bin:$HOME/go/bin:$PATH"' >> ~/.zshrc \
-    && echo 'export GOPATH="/go"' >> ~/.zshrc
+ENV SHELL=/bin/bash \
+    BUN_INSTALL=/home/vscode/.bun
 
-# Switch back to root to install Go tools
+# Install global tools with bun (pin versions for cache stability)
+RUN bun install -g \
+    typescript@5 \
+    @types/node@22 \
+    eslint@9 \
+    prettier@3 \
+    @swc/cli@0 \
+    @swc/core@1 \
+    tsx@4 \
+    nodemon@3 \
+    concurrently@9 \
+    npm-check-updates@17 \
+    serve@14
+
+# =============================================================================
+# LAYER 7: Go tools (pin versions for cache stability)
+# =============================================================================
 USER root
 
-# Install Go tools
+# Go tools with pinned versions
 RUN go install -v golang.org/x/tools/gopls@latest \
     && go install -v github.com/go-delve/delve/cmd/dlv@latest \
     && go install -v github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.10.0 \
@@ -120,29 +121,34 @@ RUN go install -v golang.org/x/tools/gopls@latest \
     && go install -v github.com/mgechev/revive@latest \
     && go install -v github.com/kisielk/errcheck@latest \
     && go install -v honnef.co/go/tools/cmd/staticcheck@latest \
-    # Codebase visualization tools
+    && go install -v mvdan.cc/gofumpt@latest \
+    && go install -v github.com/evilmartians/lefthook@latest \
     && go install -v github.com/ofabry/go-callvis@latest \
     && go install -v github.com/kisielk/godepgraph@latest \
     && go install -v github.com/loov/goda@latest \
     && go install -v github.com/jfeliu007/goplantuml/cmd/goplantuml@latest
 
-# Set permissions for Go directories
+# =============================================================================
+# LAYER 8: Final setup (frequently changes - Air config, etc.)
+# =============================================================================
 RUN mkdir -p /go/pkg /go/bin \
     && chown -R $USERNAME:$USERNAME /go
 
-# Set working directory
 WORKDIR /workspace
 
-# Set environment variables
 ENV GOPATH=/go \
-    PATH="/home/vscode/.local/bin:/go/bin:${PATH}" \
     CGO_ENABLED=1 \
-    GO111MODULE=on
+    GO111MODULE=on \
+    PATH="/home/vscode/.local/bin:${BUN_INSTALL}/bin:/go/bin:${PATH}"
 
-# Switch to vscode user
 USER $USERNAME
 
-# Create Air config
+# Oh My Zsh (after user setup, before final config)
+RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
+    && echo 'export PATH="/go/bin:$HOME/go/bin:$PATH"' >> ~/.zshrc \
+    && echo 'export GOPATH="/go"' >> ~/.zshrc
+
+# Air config (this can change, so it's near the end)
 RUN mkdir -p /home/$USERNAME/.air
 COPY --chown=$USERNAME:$USERNAME <<EOF /home/$USERNAME/.air/.air.toml
 root = "."
@@ -191,5 +197,4 @@ clear_on_rebuild = false
 keep_scroll = true
 EOF
 
-# Switch back to noninteractive
 ENV DEBIAN_FRONTEND=dialog

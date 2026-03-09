@@ -106,7 +106,7 @@ await client.admin.oauth.createProvider({
   client_id: 'client-id',
   client_secret: 'client-secret',
   redirect_url: 'https://yourapp.com/auth/callback',
-  scopes: ['openid', 'profile', 'email'],
+  scopes: ['openid', 'profile', 'email', 'offline_access'],
   is_custom: true,
   authorization_url: 'https://sso.example.com/oauth/authorize',
   token_url: 'https://sso.example.com/oauth/token',

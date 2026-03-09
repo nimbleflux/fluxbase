@@ -65,7 +65,6 @@ func (s *Storage) CreateMigration(ctx context.Context, m *Migration) error {
 			m.Namespace, m.Name, m.Description, m.UpSQL, m.DownSQL, m.CreatedBy,
 		).Scan(&m.ID, &m.Version, &m.Status, &m.CreatedAt, &m.UpdatedAt)
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to create migration: %w", err)
 	}
@@ -90,7 +89,6 @@ func (s *Storage) GetMigration(ctx context.Context, namespace, name string) (*Mi
 			&m.CreatedAt, &m.UpdatedAt, &m.AppliedAt, &m.RolledBackAt,
 		)
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get migration: %w", err)
 	}
@@ -138,7 +136,6 @@ func (s *Storage) ListMigrations(ctx context.Context, namespace string, status *
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list migrations: %w", err)
 	}
@@ -189,7 +186,6 @@ func (s *Storage) UpdateMigration(ctx context.Context, namespace, name string, u
 		}
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to update migration: %w", err)
 	}
@@ -211,7 +207,6 @@ func (s *Storage) DeleteMigration(ctx context.Context, namespace, name string) e
 		}
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to delete migration: %w", err)
 	}
@@ -242,7 +237,6 @@ func (s *Storage) UpdateMigrationStatus(ctx context.Context, id uuid.UUID, statu
 		_, err := tx.Exec(ctx, query, args...)
 		return err
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to update migration status: %w", err)
 	}
@@ -265,7 +259,6 @@ func (s *Storage) LogExecution(ctx context.Context, log *ExecutionLog) error {
 			log.ErrorMessage, log.Logs, log.ExecutedBy,
 		).Scan(&log.ID, &log.ExecutedAt)
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to log execution: %w", err)
 	}
@@ -305,7 +298,6 @@ func (s *Storage) GetExecutionLogs(ctx context.Context, migrationID uuid.UUID, l
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get execution logs: %w", err)
 	}

@@ -195,7 +195,6 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 		ON CONFLICT (bucket_id, path)
 		DO UPDATE SET mime_type = $3, size = $4, metadata = $5, owner_id = $6, updated_at = NOW()
 	`, bucket, key, contentType, file.Size, metadataJSON, ownerUUID)
-
 	if err != nil {
 		// Delete from provider since DB insert failed
 		_ = h.storage.Provider.Delete(ctx, bucket, key)
@@ -305,7 +304,6 @@ func (h *StorageHandler) DownloadFile(c fiber.Ctx) error {
 		FROM storage.objects
 		WHERE bucket_id = $1 AND path = $2
 	`, bucket, key).Scan(&objectID, &mimeType, &fileSize)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -545,7 +543,6 @@ func (h *StorageHandler) DeleteFile(c fiber.Ctx) error {
 		DELETE FROM storage.objects
 		WHERE bucket_id = $1 AND path = $2
 	`, bucket, key)
-
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "policy") {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -567,7 +564,6 @@ func (h *StorageHandler) DeleteFile(c fiber.Ctx) error {
 		err = h.db.Pool().QueryRow(ctx, `
 			SELECT EXISTS(SELECT 1 FROM storage.objects WHERE bucket_id = $1 AND path = $2)
 		`, bucket, key).Scan(&fileExists)
-
 		if err != nil {
 			// If we can't check existence, log it but still return 404
 			// This is safer than returning 500 for a delete operation
@@ -664,7 +660,6 @@ func (h *StorageHandler) GetFileInfo(c fiber.Ctx) error {
 		FROM storage.objects
 		WHERE bucket_id = $1 AND path = $2
 	`, bucket, key).Scan(&id, &mimeType, &size, &metadata, &ownerID, &createdAt, &updatedAt)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{

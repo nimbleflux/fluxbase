@@ -18,9 +18,7 @@ var extensionsCmd = &cobra.Command{
 	Long:    `List, enable, and disable PostgreSQL extensions.`,
 }
 
-var (
-	extSchema string
-)
+var extSchema string
 
 var extensionsListCmd = &cobra.Command{
 	Use:   "list",

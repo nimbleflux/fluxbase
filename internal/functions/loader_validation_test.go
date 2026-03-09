@@ -230,7 +230,7 @@ func TestLoadFunctionCode_FlatFile(t *testing.T) {
 	code := `export default async function(req) { return new Response("Hello"); }`
 	filePath := filepath.Join(tmpDir, "myfunction.ts")
 
-	err := os.WriteFile(filePath, []byte(code), 0644)
+	err := os.WriteFile(filePath, []byte(code), 0o644)
 	require.NoError(t, err)
 
 	loadedCode, err := LoadFunctionCode(tmpDir, "myfunction")
@@ -243,11 +243,11 @@ func TestLoadFunctionCode_DirectoryBased(t *testing.T) {
 	code := `export default async function(req) { return new Response("Hello"); }`
 	funcDir := filepath.Join(tmpDir, "myfunction")
 
-	err := os.MkdirAll(funcDir, 0755)
+	err := os.MkdirAll(funcDir, 0o755)
 	require.NoError(t, err)
 
 	indexPath := filepath.Join(funcDir, "index.ts")
-	err = os.WriteFile(indexPath, []byte(code), 0644)
+	err = os.WriteFile(indexPath, []byte(code), 0o644)
 	require.NoError(t, err)
 
 	loadedCode, err := LoadFunctionCode(tmpDir, "myfunction")
@@ -270,13 +270,13 @@ func TestLoadFunctionCode_Priority(t *testing.T) {
 	flatCode := `// Flat file`
 	directoryCode := `// Directory index`
 
-	err := os.WriteFile(filepath.Join(tmpDir, "myfunction.ts"), []byte(flatCode), 0644)
+	err := os.WriteFile(filepath.Join(tmpDir, "myfunction.ts"), []byte(flatCode), 0o644)
 	require.NoError(t, err)
 
-	err = os.MkdirAll(filepath.Join(tmpDir, "myfunction"), 0755)
+	err = os.MkdirAll(filepath.Join(tmpDir, "myfunction"), 0o755)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(tmpDir, "myfunction", "index.ts"), []byte(directoryCode), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, "myfunction", "index.ts"), []byte(directoryCode), 0o644)
 	require.NoError(t, err)
 
 	// Flat file should have priority
@@ -293,7 +293,7 @@ func TestLoadFunctionCodeWithFiles_FlatFileNoSupporting(t *testing.T) {
 	tmpDir := t.TempDir()
 	code := `export default async function(req) { return new Response("Hello"); }`
 
-	err := os.WriteFile(filepath.Join(tmpDir, "myfunction.ts"), []byte(code), 0644)
+	err := os.WriteFile(filepath.Join(tmpDir, "myfunction.ts"), []byte(code), 0o644)
 	require.NoError(t, err)
 
 	mainCode, supportingFiles, err := LoadFunctionCodeWithFiles(tmpDir, "myfunction")
@@ -308,13 +308,13 @@ func TestLoadFunctionCodeWithFiles_DirectoryWithSupporting(t *testing.T) {
 	utilsCode := `export function helper() { return "helper"; }`
 
 	funcDir := filepath.Join(tmpDir, "myfunction")
-	err := os.MkdirAll(funcDir, 0755)
+	err := os.MkdirAll(funcDir, 0o755)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(funcDir, "index.ts"), []byte(mainCode), 0644)
+	err = os.WriteFile(filepath.Join(funcDir, "index.ts"), []byte(mainCode), 0o644)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(funcDir, "utils.ts"), []byte(utilsCode), 0644)
+	err = os.WriteFile(filepath.Join(funcDir, "utils.ts"), []byte(utilsCode), 0o644)
 	require.NoError(t, err)
 
 	loadedMain, supportingFiles, err := LoadFunctionCodeWithFiles(tmpDir, "myfunction")
@@ -330,13 +330,13 @@ func TestLoadFunctionCodeWithFiles_NestedDirectories(t *testing.T) {
 	utilsCode := `export function helper() { return "helper"; }`
 
 	funcDir := filepath.Join(tmpDir, "myfunction")
-	err := os.MkdirAll(filepath.Join(funcDir, "helpers"), 0755)
+	err := os.MkdirAll(filepath.Join(funcDir, "helpers"), 0o755)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(funcDir, "index.ts"), []byte(mainCode), 0644)
+	err = os.WriteFile(filepath.Join(funcDir, "index.ts"), []byte(mainCode), 0o644)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(funcDir, "helpers", "utils.ts"), []byte(utilsCode), 0644)
+	err = os.WriteFile(filepath.Join(funcDir, "helpers", "utils.ts"), []byte(utilsCode), 0o644)
 	require.NoError(t, err)
 
 	loadedMain, supportingFiles, err := LoadFunctionCodeWithFiles(tmpDir, "myfunction")
@@ -356,13 +356,13 @@ func TestLoadFunctionCodeWithFiles_DenoConfig(t *testing.T) {
 	}`
 
 	funcDir := filepath.Join(tmpDir, "myfunction")
-	err := os.MkdirAll(funcDir, 0755)
+	err := os.MkdirAll(funcDir, 0o755)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(funcDir, "index.ts"), []byte(mainCode), 0644)
+	err = os.WriteFile(filepath.Join(funcDir, "index.ts"), []byte(mainCode), 0o644)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(funcDir, "deno.json"), []byte(denoConfig), 0644)
+	err = os.WriteFile(filepath.Join(funcDir, "deno.json"), []byte(denoConfig), 0o644)
 	require.NoError(t, err)
 
 	loadedMain, supportingFiles, err := LoadFunctionCodeWithFiles(tmpDir, "myfunction")
@@ -420,7 +420,7 @@ func TestDeleteFunctionCode_FlatFile(t *testing.T) {
 	code := `export default async function(req) { return new Response("Hello"); }`
 
 	filePath := filepath.Join(tmpDir, "myfunction.ts")
-	err := os.WriteFile(filePath, []byte(code), 0644)
+	err := os.WriteFile(filePath, []byte(code), 0o644)
 	require.NoError(t, err)
 
 	// Verify file exists
@@ -441,11 +441,11 @@ func TestDeleteFunctionCode_DirectoryBased(t *testing.T) {
 	code := `export default async function(req) { return new Response("Hello"); }`
 
 	funcDir := filepath.Join(tmpDir, "myfunction")
-	err := os.MkdirAll(funcDir, 0755)
+	err := os.MkdirAll(funcDir, 0o755)
 	require.NoError(t, err)
 
 	indexPath := filepath.Join(funcDir, "index.ts")
-	err = os.WriteFile(indexPath, []byte(code), 0644)
+	err = os.WriteFile(indexPath, []byte(code), 0o644)
 	require.NoError(t, err)
 
 	// Verify file exists
@@ -477,7 +477,7 @@ func TestFunctionExists_FlatFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	code := `export default async function(req) { return new Response("Hello"); }`
 
-	err := os.WriteFile(filepath.Join(tmpDir, "myfunction.ts"), []byte(code), 0644)
+	err := os.WriteFile(filepath.Join(tmpDir, "myfunction.ts"), []byte(code), 0o644)
 	require.NoError(t, err)
 
 	exists, err := FunctionExists(tmpDir, "myfunction")
@@ -490,10 +490,10 @@ func TestFunctionExists_DirectoryBased(t *testing.T) {
 	code := `export default async function(req) { return new Response("Hello"); }`
 
 	funcDir := filepath.Join(tmpDir, "myfunction")
-	err := os.MkdirAll(funcDir, 0755)
+	err := os.MkdirAll(funcDir, 0o755)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(funcDir, "index.ts"), []byte(code), 0644)
+	err = os.WriteFile(filepath.Join(funcDir, "index.ts"), []byte(code), 0o644)
 	require.NoError(t, err)
 
 	exists, err := FunctionExists(tmpDir, "myfunction")
@@ -535,7 +535,7 @@ func TestListFunctionFiles_FlatFiles(t *testing.T) {
 	// Create multiple function files
 	code := `export default async function(req) { return new Response("Hello"); }`
 	for _, name := range []string{"func1", "func2", "func3"} {
-		err := os.WriteFile(filepath.Join(tmpDir, name+".ts"), []byte(code), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, name+".ts"), []byte(code), 0o644)
 		require.NoError(t, err)
 	}
 
@@ -560,9 +560,9 @@ func TestListFunctionFiles_DirectoryBased(t *testing.T) {
 	code := `export default async function(req) { return new Response("Hello"); }`
 	for _, name := range []string{"func1", "func2"} {
 		funcDir := filepath.Join(tmpDir, name)
-		err := os.MkdirAll(funcDir, 0755)
+		err := os.MkdirAll(funcDir, 0o755)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(funcDir, "index.ts"), []byte(code), 0644)
+		err = os.WriteFile(filepath.Join(funcDir, "index.ts"), []byte(code), 0o644)
 		require.NoError(t, err)
 	}
 
@@ -577,12 +577,12 @@ func TestListFunctionFiles_FlatFilePriority(t *testing.T) {
 	code := `export default async function(req) { return new Response("Hello"); }`
 
 	// Create both flat file and directory for same function
-	err := os.WriteFile(filepath.Join(tmpDir, "myfunc.ts"), []byte(code), 0644)
+	err := os.WriteFile(filepath.Join(tmpDir, "myfunc.ts"), []byte(code), 0o644)
 	require.NoError(t, err)
 
-	err = os.MkdirAll(filepath.Join(tmpDir, "myfunc"), 0755)
+	err = os.MkdirAll(filepath.Join(tmpDir, "myfunc"), 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(tmpDir, "myfunc", "index.ts"), []byte(code), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, "myfunc", "index.ts"), []byte(code), 0o644)
 	require.NoError(t, err)
 
 	files, err := ListFunctionFiles(tmpDir)
@@ -599,13 +599,13 @@ func TestListFunctionFiles_SkipsInvalid(t *testing.T) {
 
 	// Create valid function
 	code := `export default async function(req) { return new Response("Hello"); }`
-	err := os.WriteFile(filepath.Join(tmpDir, "valid-func.ts"), []byte(code), 0644)
+	err := os.WriteFile(filepath.Join(tmpDir, "valid-func.ts"), []byte(code), 0o644)
 	require.NoError(t, err)
 
 	// Create files that should be skipped
-	err = os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# readme"), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# readme"), 0o644)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("node_modules"), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("node_modules"), 0o644)
 	require.NoError(t, err)
 
 	files, err := ListFunctionFiles(tmpDir)
@@ -637,17 +637,17 @@ func TestLoadSharedModulesFromFilesystem_WithModules(t *testing.T) {
 
 	// Create _shared directory
 	sharedDir := filepath.Join(tmpDir, "_shared")
-	err := os.MkdirAll(sharedDir, 0755)
+	err := os.MkdirAll(sharedDir, 0o755)
 	require.NoError(t, err)
 
 	// Create shared modules
 	corsCode := `export const corsHeaders = { "Access-Control-Allow-Origin": "*" };`
 	utilsCode := `export function helper() { return "helper"; }`
 
-	err = os.WriteFile(filepath.Join(sharedDir, "cors.ts"), []byte(corsCode), 0644)
+	err = os.WriteFile(filepath.Join(sharedDir, "cors.ts"), []byte(corsCode), 0o644)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(sharedDir, "utils.ts"), []byte(utilsCode), 0644)
+	err = os.WriteFile(filepath.Join(sharedDir, "utils.ts"), []byte(utilsCode), 0o644)
 	require.NoError(t, err)
 
 	modules, err := LoadSharedModulesFromFilesystem(tmpDir)
@@ -662,11 +662,11 @@ func TestLoadSharedModulesFromFilesystem_NestedModules(t *testing.T) {
 
 	// Create _shared directory with nested structure
 	sharedDir := filepath.Join(tmpDir, "_shared")
-	err := os.MkdirAll(filepath.Join(sharedDir, "helpers"), 0755)
+	err := os.MkdirAll(filepath.Join(sharedDir, "helpers"), 0o755)
 	require.NoError(t, err)
 
 	utilsCode := `export function helper() { return "helper"; }`
-	err = os.WriteFile(filepath.Join(sharedDir, "helpers", "utils.ts"), []byte(utilsCode), 0644)
+	err = os.WriteFile(filepath.Join(sharedDir, "helpers", "utils.ts"), []byte(utilsCode), 0o644)
 	require.NoError(t, err)
 
 	modules, err := LoadSharedModulesFromFilesystem(tmpDir)

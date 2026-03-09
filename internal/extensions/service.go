@@ -237,7 +237,6 @@ func (s *Service) EnableExtension(ctx context.Context, name string, userID *stri
 		_, err := conn.Exec(ctx, sql)
 		return err
 	})
-
 	if err != nil {
 		log.Error().Err(err).Str("extension", name).Msg("Failed to create extension")
 
@@ -328,7 +327,6 @@ func (s *Service) DisableExtension(ctx context.Context, name string, userID *str
 		_, err := conn.Exec(ctx, sql)
 		return err
 	})
-
 	if err != nil {
 		log.Error().Err(err).Str("extension", name).Msg("Failed to drop extension")
 		return &DisableExtensionResponse{

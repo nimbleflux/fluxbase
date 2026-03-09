@@ -19,7 +19,6 @@ export default function handler(req) {
 
 	analyzer := NewAnalyzer("/tmp")
 	result, err := analyzer.AnalyzeBundle(context.Background(), code, "test-fn", sharedModules)
-
 	if err != nil {
 		t.Fatalf("AnalyzeBundle failed: %v", err)
 	}
@@ -46,7 +45,6 @@ export default function handler(req) {
 `
 	analyzer := NewAnalyzer("/tmp")
 	result, err := analyzer.AnalyzeBundle(context.Background(), code, "test-fn", nil)
-
 	if err != nil {
 		t.Fatalf("AnalyzeBundle failed: %v", err)
 	}
@@ -74,7 +72,6 @@ export default function handler(req) {
 `
 	analyzer := NewAnalyzer("/tmp")
 	result, err := analyzer.AnalyzeBundle(context.Background(), code, "test-fn", nil)
-
 	if err != nil {
 		t.Fatalf("AnalyzeBundle failed: %v", err)
 	}

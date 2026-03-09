@@ -4,20 +4,26 @@
 # This Dockerfile generates TypeDoc API documentation from the SDK source files
 # and builds the complete documentation site.
 
-FROM node:25.8.0-alpine AS base
+FROM oven/bun:1-debian AS base
 
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app/docs
 
+# Copy workspace configuration (bun uses workspaces from package.json)
+COPY package.json ../
+
 # Copy package files
-COPY docs/package.json docs/package-lock.json* ./
-RUN npm ci
+COPY docs/package.json ./
+RUN bun install --frozen-lockfile
 
 # Build the documentation
 FROM base AS builder
 
 WORKDIR /app
+
+# Copy workspace configuration
+COPY package.json ./
 
 # Copy SDK source files (needed for TypeDoc generation)
 COPY sdk/ ./sdk/
@@ -31,7 +37,7 @@ COPY docs/ ./docs/
 WORKDIR /app/docs
 # Set NODE_OPTIONS to provide a localstorage file path for Node.js 25
 ENV NODE_OPTIONS="--localstorage-file=/tmp/localstorage.db"
-RUN npm run build
+RUN bun run build
 
 # Production image - serve with nginx
 FROM nginx:alpine AS runner

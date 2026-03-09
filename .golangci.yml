@@ -13,12 +13,24 @@ linters:
     - govet
     - staticcheck
     - unused
+formatters:
+  enable:
+    - gofumpt
+    - goimports
 # NOTE: Some errorlint checks (comparison, assert) are disabled because they produce
 # false positives for sentinel errors that are never wrapped (e.g., pgx.ErrNoRows,
 # auth.ErrNotAdmin, branching.ErrBranchNotFound). These are defined as package-level
 # variables and compared with == which is correct for sentinel errors.
 # See https://github.com/polyfloyd/go-errorlint#disabling-checks
 linters-settings:
+  gofumpt:
+    # Choose whether or not to use the extra rules that are disabled
+    # by default
+    extra-rules: false
+  goimports:
+    # Put imports beginning with prefix after 3rd-party packages.
+    # It's a comma-separated list of prefixes.
+    local-prefixes: github.com/fluxbase
   errcheck:
     # Report about not checking of errors in type assertions: `a := b.(MyStruct)`
     check-type-assertions: true

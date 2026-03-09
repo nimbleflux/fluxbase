@@ -125,7 +125,6 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 
 		return rows.Err()
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +189,6 @@ func (s *UserManagementService) GetEnrichedUserByID(ctx context.Context, userID 
 			&user.IsLocked,
 		)
 	})
-
 	if err != nil {
 		if err.Error() == "no rows in result set" {
 			return nil, ErrUserNotFound

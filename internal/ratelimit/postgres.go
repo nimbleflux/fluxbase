@@ -39,7 +39,6 @@ func (s *PostgresStore) Get(ctx context.Context, key string) (int64, time.Time, 
 		FROM system.rate_limits
 		WHERE key = $1 AND expires_at > NOW()
 	`, key).Scan(&count, &expiresAt)
-
 	if err != nil {
 		// Not found is not an error - return zero count
 		return 0, time.Time{}, nil
@@ -68,7 +67,6 @@ func (s *PostgresStore) Increment(ctx context.Context, key string, expiration ti
 			END
 		RETURNING count
 	`, key, expiresAt).Scan(&count)
-
 	if err != nil {
 		log.Error().Err(err).Str("key", key).Msg("Failed to increment rate limit counter")
 		return 0, err

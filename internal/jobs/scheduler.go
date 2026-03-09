@@ -237,7 +237,6 @@ func (s *Scheduler) ScheduleJob(fn *JobFunctionSummary) error {
 	entryID, err := s.cron.AddFunc(scheduleConfig.CronExpression, func() {
 		s.enqueueScheduledJob(jobName, jobNamespace, scheduleParams)
 	})
-
 	if err != nil {
 		log.Error().
 			Err(err).

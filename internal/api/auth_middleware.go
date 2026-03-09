@@ -311,7 +311,6 @@ func getUserRoleFromDB(ctx context.Context, db *pgxpool.Pool, userID string) (st
 		FROM auth.users
 		WHERE id = $1
 	`, userID).Scan(&role, &appMetadata)
-
 	if err != nil {
 		return "", err
 	}

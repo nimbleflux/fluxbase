@@ -39,7 +39,7 @@ database:
 auth:
   jwt_secret: "test-secret-key-at-least-32-char"
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Set config path environment variable
@@ -126,7 +126,7 @@ server:
   address: ":8080
   invalid yaml syntax
 `
-	err := os.WriteFile(configPath, []byte(invalidYAML), 0644)
+	err := os.WriteFile(configPath, []byte(invalidYAML), 0o644)
 	require.NoError(t, err)
 
 	// Verify file exists

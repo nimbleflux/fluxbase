@@ -1065,7 +1065,7 @@ func TestLocalStorage_CleanupExpiredChunkedUploads(t *testing.T) {
 	// Create an expired upload session manually
 	expiredID := "expired-upload-id"
 	chunkDir := filepath.Join(basePath, ".chunked", expiredID)
-	err = os.MkdirAll(chunkDir, 0755)
+	err = os.MkdirAll(chunkDir, 0o755)
 	require.NoError(t, err)
 
 	// Create session file with past expiry
@@ -1082,7 +1082,7 @@ func TestLocalStorage_CleanupExpiredChunkedUploads(t *testing.T) {
 
 	sessionData, _ := json.Marshal(session)
 	sessionPath := filepath.Join(chunkDir, "session.json")
-	err = os.WriteFile(sessionPath, sessionData, 0644)
+	err = os.WriteFile(sessionPath, sessionData, 0o644)
 	require.NoError(t, err)
 
 	// Run cleanup
@@ -1106,7 +1106,7 @@ func TestLocalStorage_CleanupExpiredChunkedUploads_ActiveSession(t *testing.T) {
 	// Create a non-expired session
 	activeID := "active-upload-id"
 	chunkDir := filepath.Join(basePath, ".chunked", activeID)
-	err = os.MkdirAll(chunkDir, 0755)
+	err = os.MkdirAll(chunkDir, 0o755)
 	require.NoError(t, err)
 
 	session := ChunkedUploadSession{
@@ -1122,7 +1122,7 @@ func TestLocalStorage_CleanupExpiredChunkedUploads_ActiveSession(t *testing.T) {
 
 	sessionData, _ := json.Marshal(session)
 	sessionPath := filepath.Join(chunkDir, "session.json")
-	err = os.WriteFile(sessionPath, sessionData, 0644)
+	err = os.WriteFile(sessionPath, sessionData, 0o644)
 	require.NoError(t, err)
 
 	// Run cleanup

@@ -111,7 +111,6 @@ func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string
 			&otpCode.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +165,6 @@ func (r *OTPRepository) GetByCode(ctx context.Context, email *string, phone *str
 			&otpCode.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrOTPNotFound

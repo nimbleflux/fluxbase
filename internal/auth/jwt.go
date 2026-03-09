@@ -157,7 +157,6 @@ func (m *JWTManager) ValidateToken(tokenString string) (*TokenClaims, error) {
 		}
 		return m.secretKey, nil
 	})
-
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrExpiredToken
@@ -322,7 +321,6 @@ func (m *JWTManager) ValidateServiceRoleToken(tokenString string) (*TokenClaims,
 		}
 		return m.secretKey, nil
 	})
-
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrExpiredToken

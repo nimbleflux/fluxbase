@@ -201,7 +201,6 @@ func (s *Scheduler) ScheduleFunction(fn EdgeFunctionSummary) error {
 	entryID, err := s.cron.AddFunc(*fn.CronSchedule, func() {
 		s.executeScheduledFunction(funcName, funcNamespace)
 	})
-
 	if err != nil {
 		log.Error().
 			Err(err).

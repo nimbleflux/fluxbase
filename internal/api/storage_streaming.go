@@ -150,7 +150,6 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 		ON CONFLICT (bucket_id, path)
 		DO UPDATE SET mime_type = $3, size = $4, metadata = $5, owner_id = $6, updated_at = NOW()
 	`, bucket, key, contentType, size, metadataJSON, ownerUUID)
-
 	if err != nil {
 		// Delete from provider since DB insert failed
 		_ = h.storage.Provider.Delete(ctx, bucket, key)

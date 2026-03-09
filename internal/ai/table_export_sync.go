@@ -133,7 +133,6 @@ func (s *TableExportSyncService) CreateSyncConfig(ctx context.Context, config *C
 		config.DebounceSeconds, config.IncludeForeignKeys, config.IncludeIndexes,
 		now, now,
 	).Scan(&now, &now)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sync config: %w", err)
 	}

@@ -56,7 +56,7 @@ type SignedTokenResult struct {
 // NewLocalStorage creates a new local filesystem storage provider
 func NewLocalStorage(basePath, baseURL, signingSecret string) (*LocalStorage, error) {
 	// Create base directory if it doesn't exist
-	if err := os.MkdirAll(basePath, 0755); err != nil {
+	if err := os.MkdirAll(basePath, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create storage directory: %w", err)
 	}
 
@@ -81,7 +81,7 @@ func (ls *LocalStorage) Health(ctx context.Context) error {
 
 	// Try to create a test file
 	testFile := filepath.Join(ls.basePath, ".health_check")
-	if err := os.WriteFile(testFile, []byte("ok"), 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte("ok"), 0o644); err != nil {
 		return fmt.Errorf("storage directory not writable: %w", err)
 	}
 
@@ -159,13 +159,13 @@ func (ls *LocalStorage) Upload(ctx context.Context, bucket, key string, data io.
 
 	// Create bucket directory if it doesn't exist
 	bucketPath := filepath.Join(ls.basePath, bucket)
-	if err := os.MkdirAll(bucketPath, 0755); err != nil {
+	if err := os.MkdirAll(bucketPath, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create bucket directory: %w", err)
 	}
 
 	// Create parent directories for the key
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
@@ -206,7 +206,7 @@ func (ls *LocalStorage) Upload(ctx context.Context, bucket, key string, data io.
 		if opts.ContentType != "" {
 			metaData += fmt.Sprintf("content-type=%s\n", opts.ContentType)
 		}
-		_ = os.WriteFile(metaPath, []byte(metaData), 0644)
+		_ = os.WriteFile(metaPath, []byte(metaData), 0o644)
 	}
 
 	log.Debug().
@@ -523,7 +523,6 @@ func (ls *LocalStorage) List(ctx context.Context, bucket string, opts *ListOptio
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list objects: %w", err)
 	}
@@ -551,7 +550,7 @@ func (ls *LocalStorage) CreateBucket(ctx context.Context, bucket string) error {
 	}
 
 	// Create bucket directory
-	if err := os.MkdirAll(bucketPath, 0755); err != nil {
+	if err := os.MkdirAll(bucketPath, 0o755); err != nil {
 		return fmt.Errorf("failed to create bucket: %w", err)
 	}
 
@@ -584,7 +583,6 @@ func (ls *LocalStorage) DeleteBucket(ctx context.Context, bucket string) error {
 		}
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to check bucket contents: %w", err)
 	}
@@ -799,7 +797,7 @@ func (ls *LocalStorage) CopyObject(ctx context.Context, srcBucket, srcKey, destB
 
 	// Create destination directory
 	destDir := filepath.Dir(destPath)
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -828,7 +826,7 @@ func (ls *LocalStorage) CopyObject(ctx context.Context, srcBucket, srcKey, destB
 	if _, err := os.Stat(srcMeta); err == nil {
 		destMeta := destPath + ".meta"
 		srcMetaData, _ := os.ReadFile(srcMeta)
-		_ = os.WriteFile(destMeta, srcMetaData, 0644)
+		_ = os.WriteFile(destMeta, srcMetaData, 0o644)
 	}
 
 	return nil
@@ -877,7 +875,7 @@ func (ls *LocalStorage) InitChunkedUpload(ctx context.Context, bucket, key strin
 
 	// Create chunked upload directory
 	chunkDir := ls.getChunkedUploadDir(uploadID)
-	if err := os.MkdirAll(chunkDir, 0755); err != nil {
+	if err := os.MkdirAll(chunkDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create chunk directory: %w", err)
 	}
 
@@ -909,7 +907,7 @@ func (ls *LocalStorage) InitChunkedUpload(ctx context.Context, bucket, key strin
 		_ = os.RemoveAll(chunkDir)
 		return nil, fmt.Errorf("failed to marshal session: %w", err)
 	}
-	if err := os.WriteFile(sessionPath, sessionData, 0644); err != nil {
+	if err := os.WriteFile(sessionPath, sessionData, 0o644); err != nil {
 		_ = os.RemoveAll(chunkDir)
 		return nil, fmt.Errorf("failed to save session: %w", err)
 	}
@@ -999,7 +997,7 @@ func (ls *LocalStorage) CompleteChunkedUpload(ctx context.Context, session *Chun
 
 	// Create parent directories
 	destDir := filepath.Dir(destPath)
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -1047,7 +1045,7 @@ func (ls *LocalStorage) CompleteChunkedUpload(ctx context.Context, session *Chun
 		if session.ContentType != "" {
 			metaData += fmt.Sprintf("content-type=%s\n", session.ContentType)
 		}
-		_ = os.WriteFile(metaPath, []byte(metaData), 0644)
+		_ = os.WriteFile(metaPath, []byte(metaData), 0o644)
 	}
 
 	// Clean up chunk directory
@@ -1139,7 +1137,7 @@ func (ls *LocalStorage) UpdateChunkedUploadSession(session *ChunkedUploadSession
 		return fmt.Errorf("failed to marshal session: %w", err)
 	}
 
-	if err := os.WriteFile(sessionPath, sessionData, 0644); err != nil {
+	if err := os.WriteFile(sessionPath, sessionData, 0o644); err != nil {
 		return fmt.Errorf("failed to save session: %w", err)
 	}
 

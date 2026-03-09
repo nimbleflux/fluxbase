@@ -529,7 +529,6 @@ func TestGraphQL_RLS_PublicData(t *testing.T) {
 
 // TestGraphQL_RLS_ServiceRoleBypassesRLS tests that service role can see all data via GraphQL
 func TestGraphQL_RLS_ServiceRoleBypassesRLS(t *testing.T) {
-
 	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupGraphQLRLSTest(t)
 	// NO defer tc.Close() - shared context is managed by TestMain

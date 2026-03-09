@@ -83,7 +83,6 @@ func TestMockUserRepository_Update(t *testing.T) {
 		Email:         &newEmail,
 		EmailVerified: &verified,
 	})
-
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}

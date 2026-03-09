@@ -3,7 +3,7 @@
  */
 
 import React, { ReactElement } from "react";
-import { render, RenderOptions } from "@testing-library/react";
+import { render, RenderOptions, RenderResult } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FluxbaseProvider } from "./context";
 import type { FluxbaseClient } from "@fluxbase/sdk";
@@ -196,7 +196,7 @@ export function renderWithProviders(
     client?: FluxbaseClient;
     queryClient?: QueryClient;
   },
-) {
+): RenderResult & { client: FluxbaseClient; queryClient: QueryClient } {
   const {
     client = createMockClient(),
     queryClient,

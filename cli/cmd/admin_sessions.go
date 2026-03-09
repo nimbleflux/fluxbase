@@ -19,9 +19,7 @@ var adminSessionsCmd = &cobra.Command{
 	Long:    `List and revoke active admin sessions.`,
 }
 
-var (
-	sessionForce bool
-)
+var sessionForce bool
 
 var adminSessionsListCmd = &cobra.Command{
 	Use:   "list",

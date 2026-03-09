@@ -33,8 +33,10 @@ var migrationsFS embed.FS
 
 // Type aliases for backward compatibility with refactored code
 // These aliases allow the middleware and handlers to use simpler type names
-type Querier interface{}
-type TxConnection = pgx.Tx
+type (
+	Querier      interface{}
+	TxConnection = pgx.Tx
+)
 
 // quoteIdentifier safely quotes a PostgreSQL identifier to prevent SQL injection.
 // It wraps the identifier in double quotes and escapes any embedded double quotes.
@@ -874,7 +876,6 @@ func (c *Connection) grantRolesToRuntimeUser() error {
 			"SELECT EXISTS(SELECT FROM pg_catalog.pg_roles WHERE rolname = $1)",
 			role,
 		).Scan(&exists)
-
 		if err != nil {
 			log.Warn().Err(err).Str("role", role).Msg("Failed to check if role exists")
 			continue

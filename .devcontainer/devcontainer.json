@@ -169,5 +169,6 @@
     "FLUXBASE_STORAGE_S3_SECRET_KEY": "minioadmin",
     "FLUXBASE_STORAGE_S3_REGION": "us-east-1",
     "FLUXBASE_MCP_ENABLED": "true"
-  }
+  },
+  "runArgs": ["--memory=8g", "--memory-swap=8g"]
 }

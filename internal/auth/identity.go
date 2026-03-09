@@ -102,7 +102,6 @@ func (r *IdentityRepository) GetByID(ctx context.Context, id string) (*UserIdent
 			&identity.UpdatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrIdentityNotFound
@@ -134,7 +133,6 @@ func (r *IdentityRepository) GetByProviderAndUserID(ctx context.Context, provide
 			&identity.UpdatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrIdentityNotFound
@@ -185,7 +183,6 @@ func (r *IdentityRepository) Create(ctx context.Context, userID, provider, provi
 			&identity.UpdatedAt,
 		)
 	})
-
 	if err != nil {
 		return nil, err
 	}

@@ -389,7 +389,6 @@ func (h *SAMLProviderHandler) CreateSAMLProvider(c fiber.Ctx) error {
 		allowDashboardLogin, allowAppLogin, allowIDPInitiated,
 		req.AllowedRedirectHosts, req.RequiredGroups, req.RequiredGroupsAll, req.DeniedGroups, groupAttribute,
 	).Scan(&id, &createdAt, &updatedAt)
-
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return c.Status(409).JSON(fiber.Map{

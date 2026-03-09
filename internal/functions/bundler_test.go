@@ -12,7 +12,6 @@ import (
 
 func TestNewBundler(t *testing.T) {
 	bundler, err := NewBundler()
-
 	// This test might fail if Deno is not installed
 	if err != nil {
 		t.Skip("Deno not installed, skipping bundler tests")
@@ -177,7 +176,6 @@ export async function handler(req) {
 }`
 
 		result, err := bundler.Bundle(ctx, code)
-
 		// This might fail if Deno config is not set up or network is unavailable
 		if err != nil {
 			if strings.Contains(err.Error(), "network") ||

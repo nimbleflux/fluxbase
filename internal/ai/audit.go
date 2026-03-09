@@ -103,7 +103,6 @@ func (l *AuditLogger) LogQuery(ctx context.Context, entry *AuditEntry) error {
 		entry.IPAddress, entry.UserAgent,
 		entry.CreatedAt,
 	)
-
 	if err != nil {
 		log.Error().Err(err).Str("id", entry.ID).Msg("Failed to log AI query to audit table")
 		return err
@@ -357,7 +356,6 @@ func (l *AuditLogger) GetStats(ctx context.Context, since time.Time) (*AuditStat
 		&stats.RejectedQueries,
 		&stats.AverageDurationMs,
 	)
-
 	if err != nil {
 		return nil, err
 	}

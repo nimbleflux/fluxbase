@@ -409,7 +409,6 @@ func LogRLSViolation(ctx context.Context, db *database.Connection, c fiber.Ctx, 
 		requestID,   // request_id
 		detailsJSON, // details
 	)
-
 	if err != nil {
 		// Log error but don't fail the request
 		log.Error().

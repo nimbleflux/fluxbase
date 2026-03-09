@@ -109,7 +109,6 @@ func (h *DataExportHandler) HandleDataExport(c fiber.Ctx) error {
 		results, err = pgxRowsToJSON(rows)
 		return err
 	})
-
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to export records: %v", err),

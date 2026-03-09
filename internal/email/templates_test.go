@@ -29,7 +29,7 @@ func TestRenderMagicLinkHTML(t *testing.T) {
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "magic-link.html")
 		templateContent := `<html><body><h1>Custom Magic Link</h1><p>Link: {{.Link}}</p><p>Token: {{.Token}}</p></body></html>`
-		err := os.WriteFile(templatePath, []byte(templateContent), 0644)
+		err := os.WriteFile(templatePath, []byte(templateContent), 0o644)
 		require.NoError(t, err)
 
 		html := renderMagicLinkHTML("https://example.com/login", "token123", templatePath)
@@ -80,7 +80,7 @@ func TestRenderVerificationHTML(t *testing.T) {
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "verify.html")
 		templateContent := `<html><body><h1>Custom Verification</h1><a href="{{.Link}}">Verify Now</a><p>Code: {{.Token}}</p></body></html>`
-		err := os.WriteFile(templatePath, []byte(templateContent), 0644)
+		err := os.WriteFile(templatePath, []byte(templateContent), 0o644)
 		require.NoError(t, err)
 
 		html := renderVerificationHTML("https://example.com/verify", "code456", templatePath)
@@ -116,7 +116,7 @@ func TestRenderPasswordResetHTML(t *testing.T) {
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "reset.html")
 		templateContent := `<html><body><h1>Reset Password</h1><p>Click <a href="{{.Link}}">here</a> to reset. Token: {{.Token}}</p></body></html>`
-		err := os.WriteFile(templatePath, []byte(templateContent), 0644)
+		err := os.WriteFile(templatePath, []byte(templateContent), 0o644)
 		require.NoError(t, err)
 
 		html := renderPasswordResetHTML("https://example.com/reset", "resetToken", templatePath)
@@ -131,7 +131,7 @@ func TestRenderPasswordResetHTML(t *testing.T) {
 		templatePath := filepath.Join(tmpDir, "bad.html")
 		// Invalid template syntax
 		templateContent := `<html>{{.InvalidSyntax`
-		err := os.WriteFile(templatePath, []byte(templateContent), 0644)
+		err := os.WriteFile(templatePath, []byte(templateContent), 0o644)
 		require.NoError(t, err)
 
 		html := renderPasswordResetHTML("https://example.com/reset", "token", templatePath)
@@ -178,7 +178,7 @@ func TestLoadAndRenderTemplate(t *testing.T) {
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "test.html")
 		templateContent := `<html><body>Hello {{.Name}}!</body></html>`
-		err := os.WriteFile(templatePath, []byte(templateContent), 0644)
+		err := os.WriteFile(templatePath, []byte(templateContent), 0o644)
 		require.NoError(t, err)
 
 		data := map[string]string{"Name": "World"}
@@ -198,7 +198,7 @@ func TestLoadAndRenderTemplate(t *testing.T) {
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "invalid.html")
 		templateContent := `<html>{{.Broken`
-		err := os.WriteFile(templatePath, []byte(templateContent), 0644)
+		err := os.WriteFile(templatePath, []byte(templateContent), 0o644)
 		require.NoError(t, err)
 
 		data := map[string]string{"Key": "Value"}
@@ -211,7 +211,7 @@ func TestLoadAndRenderTemplate(t *testing.T) {
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "missing.html")
 		templateContent := `<html>{{.Missing}}</html>`
-		err := os.WriteFile(templatePath, []byte(templateContent), 0644)
+		err := os.WriteFile(templatePath, []byte(templateContent), 0o644)
 		require.NoError(t, err)
 
 		data := map[string]string{"Other": "Value"}
@@ -225,7 +225,7 @@ func TestLoadAndRenderTemplate(t *testing.T) {
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "nodata.html")
 		templateContent := `<html><body>Static content</body></html>`
-		err := os.WriteFile(templatePath, []byte(templateContent), 0644)
+		err := os.WriteFile(templatePath, []byte(templateContent), 0o644)
 		require.NoError(t, err)
 
 		html := loadAndRenderTemplate(templatePath, map[string]string{})
@@ -237,7 +237,7 @@ func TestLoadAndRenderTemplate(t *testing.T) {
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "nildata.html")
 		templateContent := `<html><body>No data needed</body></html>`
-		err := os.WriteFile(templatePath, []byte(templateContent), 0644)
+		err := os.WriteFile(templatePath, []byte(templateContent), 0o644)
 		require.NoError(t, err)
 
 		html := loadAndRenderTemplate(templatePath, nil)
@@ -456,7 +456,7 @@ func BenchmarkLoadAndRenderTemplate(b *testing.B) {
 	tmpDir := b.TempDir()
 	templatePath := filepath.Join(tmpDir, "bench.html")
 	templateContent := `<html><body>{{.Link}} - {{.Token}}</body></html>`
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0644); err != nil {
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
 		b.Fatal(err)
 	}
 	data := map[string]string{"Link": "https://example.com", "Token": "token123"}

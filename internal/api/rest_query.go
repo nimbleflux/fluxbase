@@ -87,7 +87,6 @@ func (h *RESTHandler) makePostQueryHandler(table database.TableInfo) fiber.Handl
 			results, err = pgxRowsToJSON(rows)
 			return err
 		})
-
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to execute query",

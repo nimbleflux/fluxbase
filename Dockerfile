@@ -13,31 +13,35 @@ FROM denoland/deno:bin-2.6.4 AS deno-bin
 # ------------------------------------------------------------------------------
 # Stage 1: Build SDKs and Admin UI
 # ------------------------------------------------------------------------------
-FROM node:25.8.0-bookworm AS admin-builder
+FROM oven/bun:1.3.10-debian AS admin-builder
 
 WORKDIR /build
 
-# Copy SDK packages first (admin depends on these)
+# Copy all workspace files (excluding node_modules via .dockerignore)
+COPY package.json bun.lock ./
 COPY sdk/ ./sdk/
 COPY sdk-react/ ./sdk-react/
+COPY admin/ ./admin/
+COPY docs/ ./docs/
 
-# Build SDKs
-WORKDIR /build/sdk
-RUN npm ci && npm run build
+# Install dependencies (no-cache to avoid integrity issues)
+RUN bun install --no-cache
+
+# Build SDK (run from root to ensure proper binary resolution)
+RUN bun run --cwd sdk build
 
 # Generate embedded SDK for job and function runtime
 RUN mkdir -p /build/internal/jobs /build/internal/runtime \
-    && npm run generate:embedded-sdk
+    && bun run --cwd sdk generate:embedded-sdk
 
-WORKDIR /build/sdk-react
-RUN npm ci && npm run build
+# Build SDK-React
+RUN bun run --cwd sdk-react build
 
-# Build admin UI
-WORKDIR /build/admin
-COPY admin/package*.json ./
-RUN npm ci
-COPY admin/ ./
-RUN npm run build
+# Install Node.js for vite build (bun has compatibility issues with vite 7)
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm && rm -rf /var/lib/apt/lists/*
+
+# Build admin UI (use npx with node for better vite compatibility)
+RUN cd /build/admin && bunx tsc -b && npx vite build
 
 
 # ------------------------------------------------------------------------------

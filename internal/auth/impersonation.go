@@ -101,7 +101,6 @@ func (r *ImpersonationRepository) Create(ctx context.Context, session *Impersona
 			&result.IsActive,
 		)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +156,6 @@ func (r *ImpersonationRepository) GetActiveByAdmin(ctx context.Context, adminUse
 			&session.IsActive,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNoActiveImpersonation

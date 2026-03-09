@@ -421,11 +421,11 @@ func TestLocalLogStorage_ErrorHandling(t *testing.T) {
 		readOnlyPath := filepath.Join(tmpDir, "readonly")
 
 		// Create directory
-		err := os.MkdirAll(readOnlyPath, 0750)
+		err := os.MkdirAll(readOnlyPath, 0o750)
 		require.NoError(t, err)
 
 		// Make it read-only
-		err = os.Chmod(readOnlyPath, 0444)
+		err = os.Chmod(readOnlyPath, 0o444)
 		require.NoError(t, err)
 
 		// Try to create storage in read-only directory
@@ -449,7 +449,7 @@ func TestLocalLogStorage_ErrorHandling(t *testing.T) {
 		}
 
 		// Clean up - restore permissions for temp dir cleanup
-		_ = os.Chmod(readOnlyPath, 0750)
+		_ = os.Chmod(readOnlyPath, 0o750)
 	})
 
 	t.Run("handles invalid path characters gracefully", func(t *testing.T) {

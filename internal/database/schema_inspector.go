@@ -1329,7 +1329,6 @@ func (si *SchemaInspector) IsPgVectorInstalled(ctx context.Context) (bool, strin
 		FROM pg_available_extensions
 		WHERE name = 'vector'
 	`).Scan(&version)
-
 	if err != nil {
 		// Extension not in catalog
 		return false, "", nil

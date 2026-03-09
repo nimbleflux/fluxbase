@@ -314,7 +314,6 @@ func validateMigrationServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey strin
 		 WHERE key_prefix = $1`,
 		keyPrefix,
 	).Scan(&keyID, &keyName, &keyHash, &scopes, &enabled, &expiresAt)
-
 	if err != nil {
 		log.Debug().Err(err).Str("prefix", keyPrefix).Msg("Service key not found")
 		return false
