@@ -310,6 +310,14 @@ Realtime module for WebSocket subscriptions
 
 ***
 
+### secrets
+
+> **secrets**: [`SecretsManager`](/api/sdk/classes/secretsmanager/)
+
+Secrets module for managing edge function and job secrets
+
+***
+
 ### settings
 
 > **settings**: [`SettingsClient`](/api/sdk/classes/settingsclient/)

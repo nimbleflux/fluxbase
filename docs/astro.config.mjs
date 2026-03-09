@@ -34,6 +34,7 @@ export default defineConfig({
       components: {
         Footer: "./src/components/Footer.astro",
         PageSidebar: "./src/components/PageSidebar.astro",
+        Header: "./src/components/Header.astro",
       },
       head: [
         // OpenGraph meta tags for social sharing
@@ -394,8 +395,11 @@ export default defineConfig({
         {
           label: "Legal",
           collapsed: true,
-          items: [{ label: "Privacy Policy", link: "/legal/privacy-policy/" }],
+          items: [
+            { label: "Privacy Policy", link: "/legal/privacy-policy/" },
+          ],
         },
+        { label: "Pricing", link: "/pricing/" },
       ],
     }),
   ],

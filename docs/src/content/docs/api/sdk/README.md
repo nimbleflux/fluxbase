@@ -132,6 +132,7 @@ title: "@fluxbase/sdk"
 - [CreateOAuthProviderResponse](/api/sdk/interfaces/createoauthproviderresponse/)
 - [CreateSchemaRequest](/api/sdk/interfaces/createschemarequest/)
 - [CreateSchemaResponse](/api/sdk/interfaces/createschemaresponse/)
+- [CreateSecretRequest](/api/sdk/interfaces/createsecretrequest/)
 - [CreateTableExportSyncConfig](/api/sdk/interfaces/createtableexportsyncconfig/)
 - [CreateTableRequest](/api/sdk/interfaces/createtablerequest/)
 - [CreateTableResponse](/api/sdk/interfaces/createtableresponse/)
@@ -201,6 +202,7 @@ title: "@fluxbase/sdk"
 - [ListOptions](/api/sdk/interfaces/listoptions/)
 - [ListRealtimeTablesResponse](/api/sdk/interfaces/listrealtimetablesresponse/)
 - [ListSchemasResponse](/api/sdk/interfaces/listschemasresponse/)
+- [ListSecretsOptions](/api/sdk/interfaces/listsecretsoptions/)
 - [ListSystemSettingsResponse](/api/sdk/interfaces/listsystemsettingsresponse/)
 - [ListTablesResponse](/api/sdk/interfaces/listtablesresponse/)
 - [ListUsersOptions](/api/sdk/interfaces/listusersoptions/)
@@ -248,6 +250,11 @@ title: "@fluxbase/sdk"
 - [SAMLProvidersResponse](/api/sdk/interfaces/samlprovidersresponse/)
 - [SAMLSession](/api/sdk/interfaces/samlsession/)
 - [Schema](/api/sdk/interfaces/schema/)
+- [Secret](/api/sdk/interfaces/secret/)
+- [SecretByNameOptions](/api/sdk/interfaces/secretbynameoptions/)
+- [SecretStats](/api/sdk/interfaces/secretstats/)
+- [SecretSummary](/api/sdk/interfaces/secretsummary/)
+- [SecretVersion](/api/sdk/interfaces/secretversion/)
 - [SecuritySettings](/api/sdk/interfaces/securitysettings/)
 - [SendEmailRequest](/api/sdk/interfaces/sendemailrequest/)
 - [SendGridSettings](/api/sdk/interfaces/sendgridsettings/)
@@ -300,6 +307,7 @@ title: "@fluxbase/sdk"
 - [UpdateOAuthProviderResponse](/api/sdk/interfaces/updateoauthproviderresponse/)
 - [UpdateRealtimeConfigRequest](/api/sdk/interfaces/updaterealtimeconfigrequest/)
 - [UpdateRPCProcedureRequest](/api/sdk/interfaces/updaterpcprocedurerequest/)
+- [UpdateSecretRequest](/api/sdk/interfaces/updatesecretrequest/)
 - [UpdateSystemSettingRequest](/api/sdk/interfaces/updatesystemsettingrequest/)
 - [UpdateTableExportSyncConfig](/api/sdk/interfaces/updatetableexportsyncconfig/)
 - [UpdateUserAttributes](/api/sdk/interfaces/updateuserattributes/)
@@ -374,3 +382,7 @@ title: "@fluxbase/sdk"
 - [isPostgrestSuccess](/api/sdk/functions/ispostgrestsuccess/)
 - [isString](/api/sdk/functions/isstring/)
 - [loadImportMap](/api/sdk/functions/loadimportmap/)
+
+## Secrets
+
+- [SecretsManager](/api/sdk/classes/secretsmanager/)
