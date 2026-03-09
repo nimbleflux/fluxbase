@@ -671,6 +671,11 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -1091,10 +1096,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup bun
-        uses: bun/action-setup@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          version: 10
+          bun-version: 1.2.15
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -1134,10 +1139,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup bun
-        uses: bun/action-setup@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          version: 10
+          bun-version: 1.2.15
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
