@@ -87,14 +87,72 @@ console.log('Provider created:', result.id)
 #### Built-in Provider Names
 
 Supported built-in providers:
-- `github`
 - `google`
+- `github`
 - `gitlab`
 - `microsoft`
-- `discord`
-- `slack`
+- `apple`
 - `facebook`
 - `twitter`
+- `linkedin`
+- `bitbucket`
+
+#### Important: Provider-Specific Configuration
+
+Different OAuth providers handle refresh tokens differently. Configure scopes correctly for each provider:
+
+**Google** (uses parameter, not scope):
+```typescript
+{
+  provider_name: 'google',
+  scopes: ['openid', 'email', 'profile'],
+  // Fluxbase automatically adds access_type=offline + prompt=consent
+}
+```
+
+**Microsoft, GitLab, and OIDC providers** (use `offline_access` scope):
+```typescript
+{
+  provider_name: 'microsoft', // or 'gitlab', 'keycloak', 'auth0', etc.
+  scopes: ['openid', 'email', 'profile', 'offline_access'],
+}
+```
+
+**GitHub** (not OIDC-compliant):
+```typescript
+{
+  provider_name: 'github',
+  scopes: ['read:user', 'user:email'],
+  // Note: May require GitHub Apps for refresh tokens
+}
+```
+
+**Twitter/X** (note the **dot** in scope name):
+```typescript
+{
+  provider_name: 'twitter',
+  scopes: ['tweet.read', 'users.read', 'offline.access'], // Note: offline.access
+}
+```
+
+**Apple** (short-lived tokens only):
+```typescript
+{
+  provider_name: 'apple',
+  scopes: ['email', 'name'],
+  // Note: Apple tokens are short-lived; users must re-authenticate
+}
+```
+
+**LinkedIn, Bitbucket** (standard OAuth):
+```typescript
+{
+  provider_name: 'linkedin',
+  scopes: ['r_liteprofile', 'r_emailaddress'],
+}
+```
+
+Without proper refresh token configuration, users will need to re-authenticate when their access token expires.
 
 ### Create Custom OAuth2 Provider
 
@@ -108,7 +166,7 @@ await client.admin.oauth.providers.createProvider({
   client_id: 'your-client-id',
   client_secret: 'your-client-secret',
   redirect_url: 'https://yourapp.com/auth/callback',
-  scopes: ['openid', 'profile', 'email'],
+  scopes: ['openid', 'profile', 'email', 'offline_access'],
   is_custom: true,
   authorization_url: 'https://sso.example.com/oauth/authorize',
   token_url: 'https://sso.example.com/oauth/token',
@@ -278,19 +336,19 @@ for (const config of providers) {
 Configure custom OAuth2 provider for enterprise single sign-on:
 
 ```typescript
-await client.admin.oauth.providers.createProvider({
-  provider_name: 'okta_sso',
-  display_name: 'Okta SSO',
-  enabled: true,
-  client_id: process.env.OKTA_CLIENT_ID!,
-  client_secret: process.env.OKTA_CLIENT_SECRET!,
-  redirect_url: 'https://yourapp.com/auth/callback/okta',
-  scopes: ['openid', 'profile', 'email', 'groups'],
-  is_custom: true,
-  authorization_url: 'https://your-org.okta.com/oauth2/v1/authorize',
-  token_url: 'https://your-org.okta.com/oauth2/v1/token',
-  user_info_url: 'https://your-org.okta.com/oauth2/v1/userinfo'
-})
+  await client.admin.oauth.providers.createProvider({
+    provider_name: 'okta_sso',
+    display_name: 'Okta SSO',
+    enabled: true,
+    client_id: process.env.OKTA_CLIENT_ID!,
+    client_secret: process.env.OKTA_CLIENT_SECRET!,
+    redirect_url: 'https://yourapp.com/auth/callback/okta',
+    scopes: ['openid', 'profile', 'email', 'groups', 'offline_access'],
+    is_custom: true,
+    authorization_url: 'https://your-org.okta.com/oauth2/v1/authorize',
+    token_url: 'https://your-org.okta.com/oauth2/v1/token',
+    user_info_url: 'https://your-org.okta.com/oauth2/v1/userinfo'
+  })
 
 console.log('Enterprise SSO configured')
 ```
