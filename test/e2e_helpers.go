@@ -1980,7 +1980,6 @@ func (tc *TestContext) CreateDashboardAdminUser(email, password string) (userID,
 		 SET password_hash = EXCLUDED.password_hash
 		 RETURNING id`,
 		email, string(passwordHash), "Admin User").Scan(&userID)
-
 	if err != nil {
 		require.NoError(tc.T, err, "Failed to create dashboard admin user")
 	}

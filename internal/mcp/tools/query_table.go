@@ -260,7 +260,6 @@ func (t *QueryTableTool) Execute(ctx context.Context, args map[string]any, authC
 		results, err = scanRowsToMaps(rows)
 		return err
 	})
-
 	if err != nil {
 		log.Error().Err(err).Str("query", sqlQuery).Msg("MCP: query_table execution failed")
 		return &mcp.ToolResult{
@@ -645,7 +644,6 @@ func (t *QueryTableTool) executeVectorSearch(
 		results, err = scanRowsToMaps(rows)
 		return err
 	})
-
 	if err != nil {
 		log.Error().Err(err).Str("query", sqlQuery).Msg("MCP: query_table vector search failed")
 		return &mcp.ToolResult{

@@ -42,7 +42,6 @@ func (s *SecretsService) GetUserSecret(ctx context.Context, userID uuid.UUID, ke
 		FROM app.settings
 		WHERE key = $1 AND user_id = $2 AND is_secret = true AND encrypted_value IS NOT NULL
 	`, key, userID).Scan(&encryptedValue)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrSecretNotFound
@@ -75,7 +74,6 @@ func (s *SecretsService) GetSystemSecret(ctx context.Context, key string) (strin
 		FROM app.settings
 		WHERE key = $1 AND user_id IS NULL AND is_secret = true AND encrypted_value IS NOT NULL
 	`, key).Scan(&encryptedValue)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrSecretNotFound
@@ -263,7 +261,6 @@ func (s *SecretsService) GetUserSetting(ctx context.Context, userID uuid.UUID, k
 		FROM app.settings
 		WHERE key = $1 AND user_id = $2
 	`, key, userID).Scan(&isSecret, &encryptedValue, &value)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrSettingNotFound
@@ -296,7 +293,6 @@ func (s *SecretsService) GetSystemSetting(ctx context.Context, key string) (stri
 		FROM app.settings
 		WHERE key = $1 AND user_id IS NULL
 	`, key).Scan(&isSecret, &encryptedValue, &value)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrSettingNotFound

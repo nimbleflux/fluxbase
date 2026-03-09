@@ -67,7 +67,6 @@ func (h *StorageHandler) ShareObject(c fiber.Ctx) error {
 		SELECT id FROM storage.objects
 		WHERE bucket_id = $1 AND path = $2
 	`, bucket, key).Scan(&objectID)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -86,7 +85,6 @@ func (h *StorageHandler) ShareObject(c fiber.Ctx) error {
 		ON CONFLICT (object_id, user_id)
 		DO UPDATE SET permission = $3
 	`, objectID, req.UserID, req.Permission)
-
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "policy") {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -157,7 +155,6 @@ func (h *StorageHandler) RevokeShare(c fiber.Ctx) error {
 		SELECT id FROM storage.objects
 		WHERE bucket_id = $1 AND path = $2
 	`, bucket, key).Scan(&objectID)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -174,7 +171,6 @@ func (h *StorageHandler) RevokeShare(c fiber.Ctx) error {
 		DELETE FROM storage.object_permissions
 		WHERE object_id = $1 AND user_id = $2
 	`, objectID, sharedUserID)
-
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "policy") {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -245,7 +241,6 @@ func (h *StorageHandler) ListShares(c fiber.Ctx) error {
 		SELECT id FROM storage.objects
 		WHERE bucket_id = $1 AND path = $2
 	`, bucket, key).Scan(&objectID)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{

@@ -196,7 +196,6 @@ SET realtime_enabled = true,
 
 		return tx.Commit(ctx)
 	})
-
 	if err != nil {
 		log.Error().Err(err).Str("table", req.Schema+"."+req.Table).Msg("Failed to enable realtime")
 		return c.Status(500).JSON(fiber.Map{
@@ -286,7 +285,6 @@ WHERE schema_name = $1 AND table_name = $2`
 
 		return tx.Commit(ctx)
 	})
-
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to disable realtime")
 		return c.Status(500).JSON(fiber.Map{

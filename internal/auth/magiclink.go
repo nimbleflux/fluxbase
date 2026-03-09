@@ -101,7 +101,6 @@ func (r *MagicLinkRepository) Create(ctx context.Context, email string, expiryDu
 			&magicLink.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +131,6 @@ func (r *MagicLinkRepository) GetByToken(ctx context.Context, token string) (*Ma
 			&magicLink.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrMagicLinkNotFound

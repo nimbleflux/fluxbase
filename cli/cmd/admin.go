@@ -24,9 +24,7 @@ Use subcommands to manage:
   - password-reset: Send password reset emails`,
 }
 
-var (
-	adminResetEmail string
-)
+var adminResetEmail string
 
 var adminPasswordResetCmd = &cobra.Command{
 	Use:   "password-reset",

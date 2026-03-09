@@ -1245,7 +1245,7 @@ type mockJobsConfig struct {
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	path := dir + "/" + name
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write file %s: %v", path, err)
 	}
 }
@@ -1253,7 +1253,7 @@ func writeFile(t *testing.T, dir, name, content string) {
 func createDir(t *testing.T, parent, name string) string {
 	t.Helper()
 	path := parent + "/" + name
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatalf("failed to create directory %s: %v", path, err)
 	}
 	return path

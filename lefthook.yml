@@ -1,0 +1,84 @@
+# Lefthook configuration for Fluxbase
+# https://github.com/evilmartians/lefthook
+
+# Install lefthook:
+#   go install github.com/evilmartians/lefthook@latest
+#   lefthook install
+
+# Run all hooks manually:
+#   lefthook run pre-commit
+
+# Skip hooks:
+#   git commit --no-verify
+#   LEFTHOOK=0 git commit
+
+pre-commit:
+  parallel: true
+  commands:
+    go-fmt:
+      glob: "*.go"
+      run: |
+        if ! command -v gofumpt &> /dev/null; then
+          go install mvdan.cc/gofumpt@latest
+        fi
+        gofumpt -w {staged_files}
+        git add {staged_files}
+
+    go-lint:
+      glob: "*.go"
+      run: |
+        if ! command -v golangci-lint &> /dev/null; then
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.10.0
+        fi
+        golangci-lint run {staged_files}
+
+    typescript-admin:
+      glob: "admin/src/**/*.{ts,tsx}"
+      run: |
+        cd admin && bun run type-check
+
+    typescript-sdk:
+      glob: "sdk/src/**/*.ts"
+      run: |
+        cd sdk && bun run type-check
+
+    typescript-sdk-react:
+      glob: "sdk-react/src/**/*.{ts,tsx}"
+      run: |
+        cd sdk-react && bun run type-check
+
+    prettier:
+      glob: "{admin,sdk,sdk-react,docs}/**/*.{ts,tsx,js,jsx,json,md,css}"
+      run: |
+        bun exec prettier --write --no-config "{staged_files}"
+        git add {staged_files}
+
+commit-msg:
+  commands:
+    conventional:
+      run: |
+        # Check commit message follows conventional commits format
+        # Format: type: description OR type(scope): description
+        MSG_FILE={1}
+        MSG=$(cat "$MSG_FILE")
+        PATTERN="^(feat|fix|refactor|docs|test|chore|perf|ci|build|revert)(\(.+\))?!?:\s.+"
+
+        if ! echo "$MSG" | grep -qE "$PATTERN"; then
+          echo "Commit message does not follow conventional commits format!"
+          echo ""
+          echo "Expected format: type: description"
+          echo "  or: type(scope): description"
+          echo ""
+          echo "Types: feat, fix, refactor, docs, test, chore, perf, ci, build, revert"
+          echo ""
+          echo "Examples:"
+          echo "  feat: add user authentication"
+          echo "  fix(auth): resolve token expiration issue"
+          echo "  refactor(api): simplify error handling"
+          exit 1
+        fi
+
+pre-push:
+  commands:
+    tests:
+      run: make test

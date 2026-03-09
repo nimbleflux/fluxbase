@@ -68,7 +68,6 @@ func (r *NonceRepository) Validate(ctx context.Context, nonce, userID string) (b
 		valid = true
 		return nil
 	})
-
 	if err != nil {
 		return false, err
 	}

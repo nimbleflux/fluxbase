@@ -91,7 +91,6 @@ func (h *SettingsHandler) GetSetting(c fiber.Ctx) error {
 
 		return nil
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -180,7 +179,6 @@ func (h *SettingsHandler) GetSettings(c fiber.Ctx) error {
 
 		return rows.Err()
 	})
-
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get settings")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

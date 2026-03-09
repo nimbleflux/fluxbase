@@ -58,7 +58,6 @@ func (p *SQLPipeline) ExecuteTransform(ctx context.Context, kb *KnowledgeBase, d
 		&transformedContent,
 		&transformedMetadata,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute transformation function %s: %w", *kb.TransformationFunction, err)
 	}

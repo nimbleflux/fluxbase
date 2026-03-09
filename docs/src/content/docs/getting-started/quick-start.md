@@ -116,7 +116,14 @@ For a complete walkthrough, see the [First API Tutorial](/guides/tutorials/first
 Install the TypeScript SDK:
 
 ```bash
+# bun (recommended)
+bun add @fluxbase/sdk
+
+# npm
 npm install @fluxbase/sdk
+
+# pnpm
+pnpm add @fluxbase/sdk
 ```
 
 ```typescript

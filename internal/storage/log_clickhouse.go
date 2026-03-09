@@ -407,7 +407,6 @@ func (s *ClickHouseLogStorage) Stats(ctx context.Context) (*LogStats, error) {
 		       MIN(timestamp) as oldest,
 		       MAX(timestamp) as newest
 		FROM %s`, s.tableName)).Scan(&totalCount, &oldestEntry, &newestEntry)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get log stats: %w", err)
 	}

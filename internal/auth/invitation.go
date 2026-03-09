@@ -105,7 +105,6 @@ func (s *InvitationService) CreateInvitation(ctx context.Context, email, role st
 		&invitation.Accepted,
 		&invitation.CreatedAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +131,6 @@ func (s *InvitationService) ValidateToken(ctx context.Context, token string) (*I
 		&invitation.AcceptedAt,
 		&invitation.CreatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvitationNotFound
@@ -162,7 +160,6 @@ func (s *InvitationService) AcceptInvitation(ctx context.Context, token string) 
 		SET accepted = true, accepted_at = $1
 		WHERE token = $2 AND accepted = false AND expires_at > $1
 	`, now, token)
-
 	if err != nil {
 		return err
 	}
@@ -182,7 +179,6 @@ func (s *InvitationService) RevokeInvitation(ctx context.Context, token string) 
 	result, err := s.db.Exec(ctx, `
 		DELETE FROM dashboard.invitation_tokens WHERE token = $1
 	`, token)
-
 	if err != nil {
 		return err
 	}
@@ -202,7 +198,6 @@ func (s *InvitationService) GetInvitationByEmail(ctx context.Context, email stri
 		WHERE email = $1 AND accepted = false AND expires_at > NOW()
 		ORDER BY created_at DESC
 	`, email)
-
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +281,6 @@ func (s *InvitationService) CleanupExpiredInvitations(ctx context.Context) (int6
 		DELETE FROM dashboard.invitation_tokens
 		WHERE expires_at < NOW() AND accepted = false
 	`)
-
 	if err != nil {
 		return 0, err
 	}

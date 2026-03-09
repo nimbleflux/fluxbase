@@ -18,6 +18,7 @@ config/fluxbase.yaml
 
 # Development files
 node_modules
+**/node_modules
 .vscode
 .idea
 *.log

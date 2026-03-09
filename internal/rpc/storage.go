@@ -58,7 +58,6 @@ func (s *Storage) CreateProcedure(ctx context.Context, proc *Procedure) error {
 		proc.MaxExecutionTimeSeconds, proc.RequireRoles, proc.IsPublic, proc.DisableExecutionLogs, proc.Schedule,
 		proc.Enabled, proc.Version, proc.Source, proc.CreatedBy, proc.CreatedAt, proc.UpdatedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to create procedure: %w", err)
 	}
@@ -113,7 +112,6 @@ func (s *Storage) UpdateProcedure(ctx context.Context, proc *Procedure) error {
 		proc.Enabled,
 		proc.UpdatedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to update procedure: %w", err)
 	}
@@ -417,7 +415,6 @@ func (s *Storage) CreateExecution(ctx context.Context, exec *Execution) error {
 		exec.UserID, exec.UserRole, exec.UserEmail, exec.IsAsync,
 		exec.CreatedAt, exec.StartedAt, exec.CompletedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to create execution: %w", err)
 	}
@@ -449,7 +446,6 @@ func (s *Storage) UpdateExecution(ctx context.Context, exec *Execution) error {
 		exec.StartedAt,
 		exec.CompletedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to update execution: %w", err)
 	}

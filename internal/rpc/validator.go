@@ -14,8 +14,7 @@ import (
 var namedParamPattern = regexp.MustCompile(`\$([a-zA-Z_][a-zA-Z0-9_]*)`)
 
 // Validator handles validation of RPC inputs and SQL queries
-type Validator struct {
-}
+type Validator struct{}
 
 // NewValidator creates a new validator
 func NewValidator() *Validator {

@@ -150,7 +150,6 @@ func (h *BulkOperationsHandler) handleBulkDelete(c fiber.Ctx, ctx context.Contex
 		rowsAffected = result.RowsAffected()
 		return nil
 	})
-
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to delete records: %v", err),
@@ -183,7 +182,6 @@ func (h *BulkOperationsHandler) handleBulkExport(c fiber.Ctx, ctx context.Contex
 		results, err = pgxRowsToJSON(rows)
 		return err
 	})
-
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to export records: %v", err),

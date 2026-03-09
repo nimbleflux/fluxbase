@@ -1051,6 +1051,7 @@ var (
 	_ TokenBlacklistRepositoryInterface = (*MockTokenBlacklistRepository)(nil)
 	_ PasswordResetRepositoryInterface  = (*MockPasswordResetRepository)(nil)
 )
+
 var (
 	_ UserRepositoryInterface           = (*MockUserRepository)(nil)
 	_ SessionRepositoryInterface        = (*MockSessionRepository)(nil)

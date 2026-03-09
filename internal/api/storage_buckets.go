@@ -60,7 +60,6 @@ func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
 		INSERT INTO storage.buckets (id, name, public, allowed_mime_types, max_file_size)
 		VALUES ($1, $2, $3, $4, $5)
 	`, bucket, bucket, req.Public, req.AllowedMimeTypes, req.MaxFileSize)
-
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "already exists") {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{

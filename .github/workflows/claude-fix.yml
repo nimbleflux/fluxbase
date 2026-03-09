@@ -88,6 +88,11 @@ jobs:
           name: issue-body
           path: /tmp
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -99,7 +104,7 @@ jobs:
           go-version: '1.26.1'
 
       - name: Install Claude Code CLI
-        run: npm install -g @anthropic-ai/claude-code
+        run: pnpm add -g @anthropic-ai/claude-code
 
       - name: Create branch
         id: branch

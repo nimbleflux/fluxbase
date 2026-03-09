@@ -766,7 +766,6 @@ func (s *Service) IsServiceRoleTokenRevoked(ctx context.Context, jti string) (bo
 			WHERE revokes_all = TRUE AND expires_at > NOW()
 		)
 	`).Scan(&globalRevocation)
-
 	if err != nil {
 		return false, fmt.Errorf("failed to check global revocation status: %w", err)
 	}
@@ -783,7 +782,6 @@ func (s *Service) IsServiceRoleTokenRevoked(ctx context.Context, jti string) (bo
 			WHERE revoked_jti = $1 AND expires_at > NOW()
 		)
 	`, jti).Scan(&tokenRevoked)
-
 	if err != nil {
 		return false, fmt.Errorf("failed to check token revocation status: %w", err)
 	}
@@ -801,7 +799,6 @@ func (s *Service) EmergencyRevokeAllServiceRoleTokens(ctx context.Context, revok
 		VALUES (TRUE, $1, $2, NOW() + INTERVAL '7 days')
 		RETURNING id
 	`, revokedBy, reason).Scan(&id)
-
 	if err != nil {
 		return 0, fmt.Errorf("failed to create emergency revocation: %w", err)
 	}
@@ -827,7 +824,6 @@ func (s *Service) EmergencyRevokeServiceRoleToken(ctx context.Context, jti, revo
 		VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')
 		ON CONFLICT (revoked_jti) DO NOTHING
 	`, jti, revokedBy, reason)
-
 	if err != nil {
 		return fmt.Errorf("failed to create emergency revocation: %w", err)
 	}
@@ -1121,7 +1117,6 @@ func (s *Service) VerifyTOTPWithContext(ctx context.Context, userID, code, ipAdd
 				SET backup_codes = $1, updated_at = NOW()
 				WHERE id = $2
 			`, backupCodes, userID)
-
 			if err != nil {
 				return fmt.Errorf("failed to update backup codes: %w", err)
 			}

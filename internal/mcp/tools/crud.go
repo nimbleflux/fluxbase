@@ -192,7 +192,6 @@ func (t *InsertRecordTool) Execute(ctx context.Context, args map[string]any, aut
 		results, err = scanRowsToMaps(rows)
 		return err
 	})
-
 	if err != nil {
 		log.Error().Err(err).Str("query", query).Msg("MCP: insert_record execution failed")
 		return &mcp.ToolResult{
@@ -387,7 +386,6 @@ func (t *UpdateRecordTool) Execute(ctx context.Context, args map[string]any, aut
 		results, err = scanRowsToMaps(rows)
 		return err
 	})
-
 	if err != nil {
 		log.Error().Err(err).Str("query", query).Msg("MCP: update_record execution failed")
 		return &mcp.ToolResult{
@@ -555,7 +553,6 @@ func (t *DeleteRecordTool) Execute(ctx context.Context, args map[string]any, aut
 		results, err = scanRowsToMaps(rows)
 		return err
 	})
-
 	if err != nil {
 		log.Error().Err(err).Str("query", query).Msg("MCP: delete_record execution failed")
 		return &mcp.ToolResult{

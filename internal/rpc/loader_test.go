@@ -58,7 +58,7 @@ func TestLoader_LoadProcedures(t *testing.T) {
 		// Create a simple SQL file
 		sqlContent := `-- Simple query
 SELECT * FROM users`
-		err := os.WriteFile(filepath.Join(tmpDir, "get_users.sql"), []byte(sqlContent), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "get_users.sql"), []byte(sqlContent), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -76,12 +76,12 @@ SELECT * FROM users`
 
 		// Create namespace directory
 		nsDir := filepath.Join(tmpDir, "admin")
-		err := os.MkdirAll(nsDir, 0755)
+		err := os.MkdirAll(nsDir, 0o755)
 		require.NoError(t, err)
 
 		// Create a SQL file in namespace
 		sqlContent := `SELECT * FROM admin_users`
-		err = os.WriteFile(filepath.Join(nsDir, "list_admins.sql"), []byte(sqlContent), 0644)
+		err = os.WriteFile(filepath.Join(nsDir, "list_admins.sql"), []byte(sqlContent), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -98,11 +98,11 @@ SELECT * FROM users`
 		tmpDir := t.TempDir()
 
 		// Create SQL and non-SQL files
-		err := os.WriteFile(filepath.Join(tmpDir, "query.sql"), []byte("SELECT 1"), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "query.sql"), []byte("SELECT 1"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("readme"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("readme"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpDir, "script.sh"), []byte("#!/bin/bash"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "script.sh"), []byte("#!/bin/bash"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -118,9 +118,9 @@ SELECT * FROM users`
 		tmpDir := t.TempDir()
 
 		// Create files with different case extensions
-		err := os.WriteFile(filepath.Join(tmpDir, "query1.sql"), []byte("SELECT 1"), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "query1.sql"), []byte("SELECT 1"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpDir, "query2.SQL"), []byte("SELECT 2"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "query2.SQL"), []byte("SELECT 2"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -135,12 +135,12 @@ SELECT * FROM users`
 		tmpDir := t.TempDir()
 
 		// Create a valid SQL file
-		err := os.WriteFile(filepath.Join(tmpDir, "valid.sql"), []byte("SELECT 1"), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "valid.sql"), []byte("SELECT 1"), 0o644)
 		require.NoError(t, err)
 
 		// Create unreadable file (simulated by creating directory with .sql name)
 		// This will cause an error when trying to read as file
-		err = os.Mkdir(filepath.Join(tmpDir, "invalid.sql"), 0755)
+		err = os.Mkdir(filepath.Join(tmpDir, "invalid.sql"), 0o755)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -184,15 +184,15 @@ func TestLoader_LoadProceduresFromNamespace(t *testing.T) {
 		// Create two namespaces
 		ns1Dir := filepath.Join(tmpDir, "namespace1")
 		ns2Dir := filepath.Join(tmpDir, "namespace2")
-		err := os.MkdirAll(ns1Dir, 0755)
+		err := os.MkdirAll(ns1Dir, 0o755)
 		require.NoError(t, err)
-		err = os.MkdirAll(ns2Dir, 0755)
+		err = os.MkdirAll(ns2Dir, 0o755)
 		require.NoError(t, err)
 
 		// Add files to both
-		err = os.WriteFile(filepath.Join(ns1Dir, "proc1.sql"), []byte("SELECT 1"), 0644)
+		err = os.WriteFile(filepath.Join(ns1Dir, "proc1.sql"), []byte("SELECT 1"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(ns2Dir, "proc2.sql"), []byte("SELECT 2"), 0644)
+		err = os.WriteFile(filepath.Join(ns2Dir, "proc2.sql"), []byte("SELECT 2"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -367,7 +367,7 @@ func TestLoader_LoadProcedureWithAnnotations(t *testing.T) {
 -- @fluxbase:allowed-tables users, orders
 SELECT * FROM users WHERE id = $user_id`
 
-		err := os.WriteFile(filepath.Join(tmpDir, "test.sql"), []byte(sqlContent), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "test.sql"), []byte(sqlContent), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -394,7 +394,7 @@ func TestLoader_EdgeCases(t *testing.T) {
 	t.Run("handles empty SQL file", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
-		err := os.WriteFile(filepath.Join(tmpDir, "empty.sql"), []byte(""), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "empty.sql"), []byte(""), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -412,7 +412,7 @@ func TestLoader_EdgeCases(t *testing.T) {
 
 		sqlContent := `-- This is just a comment
 -- Another comment`
-		err := os.WriteFile(filepath.Join(tmpDir, "comments.sql"), []byte(sqlContent), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "comments.sql"), []byte(sqlContent), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -428,10 +428,10 @@ func TestLoader_EdgeCases(t *testing.T) {
 		tmpDir := t.TempDir()
 
 		deepDir := filepath.Join(tmpDir, "a", "b", "c")
-		err := os.MkdirAll(deepDir, 0755)
+		err := os.MkdirAll(deepDir, 0o755)
 		require.NoError(t, err)
 
-		err = os.WriteFile(filepath.Join(deepDir, "deep.sql"), []byte("SELECT 1"), 0644)
+		err = os.WriteFile(filepath.Join(deepDir, "deep.sql"), []byte("SELECT 1"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)

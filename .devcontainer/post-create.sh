@@ -93,22 +93,43 @@ fi
 # Run migrations
 echo "🗄️  Running database migrations..."
 cd /workspace
+# Check for dirty migration state and fix it
+DIRTY_VERSION=$(PGPASSWORD=postgres psql -h postgres -U postgres -d fluxbase_dev -tAc "SELECT version FROM schema_migrations WHERE dirty = true" 2>/dev/null || echo "")
+if [ -n "$DIRTY_VERSION" ]; then
+  echo "⚠️  Fixing dirty migration at version $DIRTY_VERSION..."
+  migrate -path internal/database/migrations -database "postgresql://postgres:postgres@postgres:5432/fluxbase_dev?sslmode=disable" force "$DIRTY_VERSION" || true
+fi
 make migrate-up || echo "⚠️  Migrations may have already been run"
 
-# Install documentation dependencies
-if [ -f /workspace/docs/package.json ]; then
-  echo "📚 Installing documentation dependencies..."
-  cd /workspace/docs
-  npm install
-  cd /workspace
-  echo "✅ Documentation dependencies installed"
+# bun is already set up in the Dockerfile - just verify it's available
+echo "📦 Verifying bun..."
+if command -v bun &> /dev/null; then
+  echo "✅ bun $(bun --version) ready"
+else
+  echo "⚠️  bun not found, installing..."
+  BUN_VERSION=1.2.15
+  curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-$(uname -m).zip" -o /tmp/bun.zip
+  unzip -q /tmp/bun.zip -d /tmp
+  sudo mv /tmp/bun-linux-* /usr/local/bun
+  sudo ln -sf /usr/local/bun/bin/bun /usr/local/bin/bun
+  sudo ln -sf /usr/local/bun/bin/bunx /usr/local/bin/bunx
+  rm /tmp/bun.zip
+  echo "✅ bun $(bun --version) installed"
 fi
 
-# Build the project to verify everything works
-echo "🔨 Building project..."
-cd /workspace
-go build -o /tmp/fluxbase cmd/fluxbase/main.go && rm /tmp/fluxbase
-echo "✅ Project builds successfully"
+# Install all workspace dependencies
+if [ -f /workspace/package.json ]; then
+  echo "📚 Installing workspace dependencies..."
+  cd /workspace
+  bun install
+  echo "✅ Workspace dependencies installed"
+fi
+
+# Build the project to verify everything works (skip to avoid OOM during initial setup)
+# echo "🔨 Building project..."
+# cd /workspace
+# go build -o /tmp/fluxbase cmd/fluxbase/main.go && rm /tmp/fluxbase
+# echo "✅ Project builds successfully"
 
 # Build and install the Fluxbase CLI
 echo "🛠️  Building Fluxbase CLI..."
@@ -141,11 +162,11 @@ echo "✅ Shell completions configured"
 
 # Install Claude Code CLI
 echo "🤖 Installing Claude Code CLI..."
-sudo npm install -g @anthropic-ai/claude-code 2>/dev/null || true
+bun add -g @anthropic-ai/claude-code 2>/dev/null || true
 if command -v claude &> /dev/null; then
   echo "✅ Claude Code CLI installed"
 else
-  echo "⚠️  Claude Code CLI installation failed - you can install it manually with: npm install -g @anthropic-ai/claude-code"
+  echo "⚠️  Claude Code CLI installation failed - you can install it manually with: bun add -g @anthropic-ai/claude-code"
 fi
 
 # Configure Claude MCP server for Fluxbase
@@ -218,10 +239,18 @@ chmod +x /home/vscode/.local/bin/configure-claude-mcp
 echo "✅ Claude MCP configuration helper installed (run 'configure-claude-mcp' after starting Fluxbase)"
 
 # Set up git pre-commit hook (uses comprehensive scripts/pre-commit)
-echo "🪝 Setting up git pre-commit hook..."
+echo "🪝 Setting up git hooks with lefthook..."
 cd /workspace
-make install-hooks
-echo "✅ Git pre-commit hook configured"
+
+# Install lefthook if not already installed
+if ! command -v lefthook &> /dev/null; then
+  echo "Installing lefthook..."
+  go install github.com/evilmartians/lefthook@latest
+fi
+
+# Initialize lefthook hooks
+lefthook install
+echo "✅ Git hooks configured with lefthook"
 
 # SQLTools configuration for PostgreSQL
 echo "🔧 Configuring SQLTools..."

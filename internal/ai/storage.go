@@ -111,7 +111,6 @@ func (s *Storage) CreateChatbot(ctx context.Context, chatbot *Chatbot) error {
 		chatbot.Version, chatbot.Source,
 		chatbot.CreatedBy, chatbot.CreatedAt, chatbot.UpdatedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to create chatbot: %w", err)
 	}
@@ -214,7 +213,6 @@ func (s *Storage) UpdateChatbot(ctx context.Context, chatbot *Chatbot) error {
 		chatbot.UseMCPSchema,
 		chatbot.UpdatedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to update chatbot: %w", err)
 	}
@@ -656,7 +654,6 @@ func (s *Storage) CreateProvider(ctx context.Context, provider *ProviderRecord) 
 		provider.IsDefault, provider.UseForEmbeddings, provider.EmbeddingModel, provider.Config, provider.Enabled, provider.CreatedBy,
 		provider.CreatedAt, provider.UpdatedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to create provider: %w", err)
 	}
@@ -694,7 +691,6 @@ func (s *Storage) UpdateProvider(ctx context.Context, provider *ProviderRecord) 
 		provider.EmbeddingModel,
 		provider.UpdatedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to update provider: %w", err)
 	}

@@ -332,7 +332,6 @@ func (m *IdempotencyMiddleware) getRecord(ctx context.Context, key string) (*Ide
 		&record.CompletedAt,
 		&record.ExpiresAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}

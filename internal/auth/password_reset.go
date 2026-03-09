@@ -110,7 +110,6 @@ func (r *PasswordResetRepository) Create(ctx context.Context, userID string, exp
 			&passwordResetToken.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +140,6 @@ func (r *PasswordResetRepository) GetByToken(ctx context.Context, token string) 
 			&passwordResetToken.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrPasswordResetTokenNotFound
@@ -173,7 +171,6 @@ func (r *PasswordResetRepository) GetLatestByUserID(ctx context.Context, userID 
 			&passwordResetToken.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrPasswordResetTokenNotFound

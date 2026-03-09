@@ -746,7 +746,6 @@ func (h *OAuthHandler) Logout(c fiber.Ctx) error {
 		FROM dashboard.oauth_providers
 		WHERE provider_name = $1 AND enabled = TRUE
 	`, providerName).Scan(&clientID, &clientSecret, &revocationEndpoint, &endSessionEndpoint, &isEncrypted)
-
 	if err != nil {
 		log.Error().Err(err).Str("provider", providerName).Msg("Failed to get OAuth provider for logout")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

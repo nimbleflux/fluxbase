@@ -123,3 +123,4 @@ values.tmp.yml
 
 .lycheecache
 .claude/settings.local.json
+.husky/

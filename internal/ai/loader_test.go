@@ -49,7 +49,7 @@ func TestLoader_LoadAll(t *testing.T) {
 
 		// Create chatbot directory and file
 		chatbotDir := filepath.Join(tmpDir, "test-bot")
-		err = os.MkdirAll(chatbotDir, 0755)
+		err = os.MkdirAll(chatbotDir, 0o755)
 		require.NoError(t, err)
 
 		chatbotCode := `
@@ -61,7 +61,7 @@ export default async function handler(ctx) {
 	return { message: "Hello" };
 }
 `
-		err = os.WriteFile(filepath.Join(chatbotDir, "index.ts"), []byte(chatbotCode), 0644)
+		err = os.WriteFile(filepath.Join(chatbotDir, "index.ts"), []byte(chatbotCode), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -82,11 +82,11 @@ export default async function handler(ctx) {
 
 		// Create nested chatbot directory
 		chatbotDir := filepath.Join(tmpDir, "analytics", "reports")
-		err = os.MkdirAll(chatbotDir, 0755)
+		err = os.MkdirAll(chatbotDir, 0o755)
 		require.NoError(t, err)
 
 		chatbotCode := `export default async function handler(ctx) { return {}; }`
-		err = os.WriteFile(filepath.Join(chatbotDir, "index.ts"), []byte(chatbotCode), 0644)
+		err = os.WriteFile(filepath.Join(chatbotDir, "index.ts"), []byte(chatbotCode), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -104,9 +104,9 @@ export default async function handler(ctx) {
 
 		// Create hidden directory
 		hiddenDir := filepath.Join(tmpDir, ".hidden")
-		err = os.MkdirAll(hiddenDir, 0755)
+		err = os.MkdirAll(hiddenDir, 0o755)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(hiddenDir, "index.ts"), []byte("export default {}"), 0644)
+		err = os.WriteFile(filepath.Join(hiddenDir, "index.ts"), []byte("export default {}"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -122,9 +122,9 @@ export default async function handler(ctx) {
 
 		// Create node_modules directory
 		nodeModulesDir := filepath.Join(tmpDir, "node_modules", "some-package")
-		err = os.MkdirAll(nodeModulesDir, 0755)
+		err = os.MkdirAll(nodeModulesDir, 0o755)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(nodeModulesDir, "index.ts"), []byte("export default {}"), 0644)
+		err = os.WriteFile(filepath.Join(nodeModulesDir, "index.ts"), []byte("export default {}"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -140,9 +140,9 @@ export default async function handler(ctx) {
 
 		// Create _shared directory
 		sharedDir := filepath.Join(tmpDir, "_shared")
-		err = os.MkdirAll(sharedDir, 0755)
+		err = os.MkdirAll(sharedDir, 0o755)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(sharedDir, "index.ts"), []byte("export default {}"), 0644)
+		err = os.WriteFile(filepath.Join(sharedDir, "index.ts"), []byte("export default {}"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -158,9 +158,9 @@ export default async function handler(ctx) {
 
 		// Create directory with non-index.ts file
 		botDir := filepath.Join(tmpDir, "bot")
-		err = os.MkdirAll(botDir, 0755)
+		err = os.MkdirAll(botDir, 0o755)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(botDir, "other.ts"), []byte("export default {}"), 0644)
+		err = os.WriteFile(filepath.Join(botDir, "other.ts"), []byte("export default {}"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -178,7 +178,7 @@ func TestLoader_LoadOne(t *testing.T) {
 
 		// Create chatbot
 		botDir := filepath.Join(tmpDir, "my-bot")
-		err = os.MkdirAll(botDir, 0755)
+		err = os.MkdirAll(botDir, 0o755)
 		require.NoError(t, err)
 
 		chatbotCode := `
@@ -187,7 +187,7 @@ func TestLoader_LoadOne(t *testing.T) {
  */
 export default async function handler(ctx) { return {}; }
 `
-		err = os.WriteFile(filepath.Join(botDir, "index.ts"), []byte(chatbotCode), 0644)
+		err = os.WriteFile(filepath.Join(botDir, "index.ts"), []byte(chatbotCode), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -204,9 +204,9 @@ export default async function handler(ctx) { return {}; }
 
 		// Create namespaced chatbot
 		botDir := filepath.Join(tmpDir, "custom-ns", "my-bot")
-		err = os.MkdirAll(botDir, 0755)
+		err = os.MkdirAll(botDir, 0o755)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(botDir, "index.ts"), []byte("export default {}"), 0644)
+		err = os.WriteFile(filepath.Join(botDir, "index.ts"), []byte("export default {}"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -235,9 +235,9 @@ func TestLoader_ChatbotExists(t *testing.T) {
 
 	// Create one chatbot
 	botDir := filepath.Join(tmpDir, "existing-bot")
-	err = os.MkdirAll(botDir, 0755)
+	err = os.MkdirAll(botDir, 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(botDir, "index.ts"), []byte("export default {}"), 0644)
+	err = os.WriteFile(filepath.Join(botDir, "index.ts"), []byte("export default {}"), 0o644)
 	require.NoError(t, err)
 
 	loader := NewLoader(tmpDir)
@@ -275,14 +275,14 @@ func TestLoader_WatchForChanges(t *testing.T) {
 
 		// Create a chatbot file
 		namespaceDir := filepath.Join(tmpDir, "test")
-		err = os.MkdirAll(namespaceDir, 0755)
+		err = os.MkdirAll(namespaceDir, 0o755)
 		require.NoError(t, err)
 
 		// Give the watcher time to detect the new directory
 		time.Sleep(100 * time.Millisecond)
 
 		chatbotFile := filepath.Join(namespaceDir, "mybot.ts")
-		err = os.WriteFile(chatbotFile, []byte("export default function() {}"), 0644)
+		err = os.WriteFile(chatbotFile, []byte("export default function() {}"), 0o644)
 		require.NoError(t, err)
 
 		// Wait for change event (with timeout)
@@ -297,7 +297,7 @@ func TestLoader_WatchForChanges(t *testing.T) {
 		}
 
 		// Modify the file
-		err = os.WriteFile(chatbotFile, []byte("export default function() { return 'updated'; }"), 0644)
+		err = os.WriteFile(chatbotFile, []byte("export default function() { return 'updated'; }"), 0o644)
 		require.NoError(t, err)
 
 		// Wait for modify event
@@ -337,7 +337,7 @@ func TestLoader_WatchForChanges(t *testing.T) {
 
 		// Create a non-JS file
 		testFile := filepath.Join(tmpDir, "README.md")
-		err = os.WriteFile(testFile, []byte("# Test"), 0644)
+		err = os.WriteFile(testFile, []byte("# Test"), 0o644)
 		require.NoError(t, err)
 
 		// Should not receive any events

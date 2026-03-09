@@ -68,7 +68,7 @@ func TestFunctionsReloadEndpoint(t *testing.T) {
 
 	for name, code := range testFunctions {
 		filePath := filepath.Join(functionsDir, name+".ts")
-		err := os.WriteFile(filePath, []byte(code), 0644)
+		err := os.WriteFile(filePath, []byte(code), 0o644)
 		require.NoError(t, err, "Failed to create test function file: %s", name)
 	}
 
@@ -143,7 +143,7 @@ func TestFunctionsReloadUpdatesExistingFunctions(t *testing.T) {
 	return { status: 200, body: "version 1" };
 }`
 	filePath := filepath.Join(functionsDir, functionName+".ts")
-	err := os.WriteFile(filePath, []byte(initialCode), 0644)
+	err := os.WriteFile(filePath, []byte(initialCode), 0o644)
 	require.NoError(t, err)
 
 	// First reload - should create the function
@@ -160,7 +160,7 @@ func TestFunctionsReloadUpdatesExistingFunctions(t *testing.T) {
 	updatedCode := `async function handler(req) {
 	return { status: 200, body: "version 2" };
 }`
-	err = os.WriteFile(filePath, []byte(updatedCode), 0644)
+	err = os.WriteFile(filePath, []byte(updatedCode), 0o644)
 	require.NoError(t, err)
 
 	// Second reload - should update the function
@@ -193,12 +193,12 @@ func TestFunctionsReloadWithInvalidFiles(t *testing.T) {
 	for name, content := range invalidFiles {
 		// These should be rejected by the filesystem or validation
 		filePath := filepath.Join(functionsDir, name+".ts")
-		_ = os.WriteFile(filePath, []byte(content), 0644)
+		_ = os.WriteFile(filePath, []byte(content), 0o644)
 	}
 
 	// Create a valid function
 	validPath := filepath.Join(functionsDir, "valid-function.ts")
-	err := os.WriteFile(validPath, []byte("async function handler(req) { return { status: 200 }; }"), 0644)
+	err := os.WriteFile(validPath, []byte("async function handler(req) { return { status: 200 }; }"), 0o644)
 	require.NoError(t, err)
 
 	// Reload - should process valid function and skip/report invalid ones
@@ -243,7 +243,7 @@ func TestFunctionsReloadConcurrent(t *testing.T) {
 
 	// Create a test function file
 	filePath := filepath.Join(functionsDir, "concurrent-test.ts")
-	err := os.WriteFile(filePath, []byte("async function handler(req) { return { status: 200 }; }"), 0644)
+	err := os.WriteFile(filePath, []byte("async function handler(req) { return { status: 200 }; }"), 0o644)
 	require.NoError(t, err)
 
 	// Send multiple concurrent reload requests
@@ -277,7 +277,7 @@ func TestFunctionsDirectoryBasedPattern(t *testing.T) {
 	// Test 1: Create a directory-based function
 	dirFunctionName := "complex-function"
 	dirFunctionPath := filepath.Join(functionsDir, dirFunctionName)
-	err := os.Mkdir(dirFunctionPath, 0755)
+	err := os.Mkdir(dirFunctionPath, 0o755)
 	require.NoError(t, err, "Failed to create function directory")
 
 	indexFilePath := filepath.Join(dirFunctionPath, "index.ts")
@@ -288,7 +288,7 @@ func TestFunctionsDirectoryBasedPattern(t *testing.T) {
 		body: JSON.stringify({ message: "Directory-based function", type: "directory" })
 	};
 }`
-	err = os.WriteFile(indexFilePath, []byte(dirFunctionCode), 0644)
+	err = os.WriteFile(indexFilePath, []byte(dirFunctionCode), 0o644)
 	require.NoError(t, err, "Failed to create index.ts file")
 
 	// Test 2: Create a flat file function
@@ -301,7 +301,7 @@ func TestFunctionsDirectoryBasedPattern(t *testing.T) {
 		body: JSON.stringify({ message: "Flat file function", type: "flat" })
 	};
 }`
-	err = os.WriteFile(flatFilePath, []byte(flatFunctionCode), 0644)
+	err = os.WriteFile(flatFilePath, []byte(flatFunctionCode), 0o644)
 	require.NoError(t, err, "Failed to create flat function file")
 
 	// Reload functions - should load both patterns
@@ -327,7 +327,7 @@ func TestFunctionsPriorityPattern(t *testing.T) {
 
 	// Create directory-based version
 	dirPath := filepath.Join(functionsDir, functionName)
-	err := os.Mkdir(dirPath, 0755)
+	err := os.Mkdir(dirPath, 0o755)
 	require.NoError(t, err, "Failed to create function directory")
 
 	dirIndexPath := filepath.Join(dirPath, "index.ts")
@@ -337,7 +337,7 @@ func TestFunctionsPriorityPattern(t *testing.T) {
 		body: JSON.stringify({ source: "directory" })
 	};
 }`
-	err = os.WriteFile(dirIndexPath, []byte(dirCode), 0644)
+	err = os.WriteFile(dirIndexPath, []byte(dirCode), 0o644)
 	require.NoError(t, err, "Failed to create directory-based function")
 
 	// Create flat file version (should take priority)
@@ -348,7 +348,7 @@ func TestFunctionsPriorityPattern(t *testing.T) {
 		body: JSON.stringify({ source: "flat" })
 	};
 }`
-	err = os.WriteFile(flatPath, []byte(flatCode), 0644)
+	err = os.WriteFile(flatPath, []byte(flatCode), 0o644)
 	require.NoError(t, err, "Failed to create flat file function")
 
 	// Reload functions - should only create one function using the flat file

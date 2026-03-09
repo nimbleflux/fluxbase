@@ -31,7 +31,7 @@ func NewLocalLogStorage(basePath string) (*LocalLogStorage, error) {
 	}
 
 	// Ensure base path exists
-	if err := os.MkdirAll(basePath, 0750); err != nil {
+	if err := os.MkdirAll(basePath, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %w", err)
 	}
 
@@ -106,7 +106,7 @@ func (s *LocalLogStorage) Write(ctx context.Context, entries []*LogEntry) error 
 func (s *LocalLogStorage) writeEntries(filePath string, entries []*LogEntry, append bool) error {
 	// Ensure directory exists
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0750); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("failed to create log directory: %w", err)
 	}
 
@@ -124,7 +124,7 @@ func (s *LocalLogStorage) writeEntries(filePath string, entries []*LogEntry, app
 		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
 	}
 
-	f, err := os.OpenFile(filePath, flags, 0600) //nolint:gosec // File path is constructed from trusted prefix
+	f, err := os.OpenFile(filePath, flags, 0o600) //nolint:gosec // File path is constructed from trusted prefix
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
@@ -382,7 +382,7 @@ func (s *LocalLogStorage) Health(ctx context.Context) error {
 	_, err := os.Stat(s.basePath)
 	if os.IsNotExist(err) {
 		// Try to create it
-		if err := os.MkdirAll(s.basePath, 0750); err != nil {
+		if err := os.MkdirAll(s.basePath, 0o750); err != nil {
 			return fmt.Errorf("log directory not accessible: %w", err)
 		}
 	} else if err != nil {
@@ -391,7 +391,7 @@ func (s *LocalLogStorage) Health(ctx context.Context) error {
 
 	// Try to write a test file
 	testFile := filepath.Join(s.basePath, ".health_check")
-	if err := os.WriteFile(testFile, []byte("ok"), 0600); err != nil {
+	if err := os.WriteFile(testFile, []byte("ok"), 0o600); err != nil {
 		return fmt.Errorf("cannot write to log directory: %w", err)
 	}
 	_ = os.Remove(testFile)

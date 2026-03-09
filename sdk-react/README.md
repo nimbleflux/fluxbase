@@ -17,7 +17,11 @@ React hooks for Fluxbase - Backend as a Service.
 ## Installation
 
 ```bash
+# npm
 npm install @fluxbase/sdk @fluxbase/sdk-react @tanstack/react-query
+
+# pnpm
+pnpm add @fluxbase/sdk @fluxbase/sdk-react @tanstack/react-query
 ```
 
 ## Quick Start

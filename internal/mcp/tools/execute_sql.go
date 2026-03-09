@@ -125,7 +125,6 @@ func (t *ExecuteSQLTool) executeSQL(
 	// Validate the SQL using the existing SQLValidator
 	validator := ai.NewSQLValidator(allowedSchemas, allowedTables, allowedOperations)
 	validationResult, normalizedSQL, err := validator.ValidateAndNormalize(sqlQuery)
-
 	if err != nil {
 		log.Warn().
 			Str("sql", sqlQuery).

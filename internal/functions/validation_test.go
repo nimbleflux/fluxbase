@@ -207,13 +207,13 @@ func TestValidateFunctionPathTraversal(t *testing.T) {
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	functionsDir := filepath.Join(tmpDir, "functions")
-	if err := os.MkdirAll(functionsDir, 0755); err != nil {
+	if err := os.MkdirAll(functionsDir, 0o755); err != nil {
 		t.Fatalf("Failed to create functions dir: %v", err)
 	}
 
 	// Create a file outside the functions directory
 	outsideFile := filepath.Join(tmpDir, "outside.ts")
-	if err := os.WriteFile(outsideFile, []byte("malicious"), 0644); err != nil {
+	if err := os.WriteFile(outsideFile, []byte("malicious"), 0o644); err != nil {
 		t.Fatalf("Failed to create outside file: %v", err)
 	}
 
@@ -234,37 +234,37 @@ func TestResolveFunctionPath(t *testing.T) {
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	functionsDir := filepath.Join(tmpDir, "functions")
-	if err := os.MkdirAll(functionsDir, 0755); err != nil {
+	if err := os.MkdirAll(functionsDir, 0o755); err != nil {
 		t.Fatalf("Failed to create functions dir: %v", err)
 	}
 
 	// Create a flat file function
 	flatFunc := filepath.Join(functionsDir, "flat-function.ts")
-	if err := os.WriteFile(flatFunc, []byte("// flat function"), 0644); err != nil {
+	if err := os.WriteFile(flatFunc, []byte("// flat function"), 0o644); err != nil {
 		t.Fatalf("Failed to create flat function: %v", err)
 	}
 
 	// Create a directory-based function
 	dirFuncDir := filepath.Join(functionsDir, "dir-function")
-	if err := os.MkdirAll(dirFuncDir, 0755); err != nil {
+	if err := os.MkdirAll(dirFuncDir, 0o755); err != nil {
 		t.Fatalf("Failed to create dir function directory: %v", err)
 	}
 	dirFuncIndex := filepath.Join(dirFuncDir, "index.ts")
-	if err := os.WriteFile(dirFuncIndex, []byte("// directory function"), 0644); err != nil {
+	if err := os.WriteFile(dirFuncIndex, []byte("// directory function"), 0o644); err != nil {
 		t.Fatalf("Failed to create dir function index: %v", err)
 	}
 
 	// Create a function with both patterns (flat file takes precedence)
 	bothFuncFlat := filepath.Join(functionsDir, "both-function.ts")
-	if err := os.WriteFile(bothFuncFlat, []byte("// flat takes precedence"), 0644); err != nil {
+	if err := os.WriteFile(bothFuncFlat, []byte("// flat takes precedence"), 0o644); err != nil {
 		t.Fatalf("Failed to create both function flat: %v", err)
 	}
 	bothFuncDir := filepath.Join(functionsDir, "both-function")
-	if err := os.MkdirAll(bothFuncDir, 0755); err != nil {
+	if err := os.MkdirAll(bothFuncDir, 0o755); err != nil {
 		t.Fatalf("Failed to create both function directory: %v", err)
 	}
 	bothFuncIndex := filepath.Join(bothFuncDir, "index.ts")
-	if err := os.WriteFile(bothFuncIndex, []byte("// directory version"), 0644); err != nil {
+	if err := os.WriteFile(bothFuncIndex, []byte("// directory version"), 0o644); err != nil {
 		t.Fatalf("Failed to create both function index: %v", err)
 	}
 
@@ -357,13 +357,13 @@ func TestResolveFunctionPath_PathTraversal(t *testing.T) {
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	functionsDir := filepath.Join(tmpDir, "functions")
-	if err := os.MkdirAll(functionsDir, 0755); err != nil {
+	if err := os.MkdirAll(functionsDir, 0o755); err != nil {
 		t.Fatalf("Failed to create functions dir: %v", err)
 	}
 
 	// Create a file outside the functions directory
 	outsideFile := filepath.Join(tmpDir, "outside.ts")
-	if err := os.WriteFile(outsideFile, []byte("// should not be accessible"), 0644); err != nil {
+	if err := os.WriteFile(outsideFile, []byte("// should not be accessible"), 0o644); err != nil {
 		t.Fatalf("Failed to create outside file: %v", err)
 	}
 

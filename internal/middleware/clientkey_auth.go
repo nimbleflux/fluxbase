@@ -776,7 +776,6 @@ func validateServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) bool {
 		keyPrefix,
 	).Scan(&keyID, &keyName, &keyHash, &scopes, &enabled, &expiresAt,
 		&rateLimitPerMinute, &rateLimitPerHour)
-
 	if err != nil {
 		log.Debug().Err(err).Str("prefix", keyPrefix).Msg("Service key not found")
 		return false

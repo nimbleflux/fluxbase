@@ -141,7 +141,7 @@ func (h *RealtimeHandler) HandleWebSocket(c fiber.Ctx) error {
 	}
 
 	var userID *string
-	var role = "anon" // Default to anonymous role
+	role := "anon" // Default to anonymous role
 	var rawClaims map[string]interface{}
 
 	if token != "" && h.authService != nil {
@@ -459,7 +459,6 @@ func (h *RealtimeHandler) handleMessage(conn *Connection, msg ClientMessage) {
 			event,
 			filter,
 		)
-
 		if err != nil {
 			_ = conn.SendMessage(ServerMessage{
 				Type:  MessageTypeError,

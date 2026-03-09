@@ -87,7 +87,6 @@ func (s *Storage) CreateSecret(ctx context.Context, secret *Secret, plainValue s
 			secret.Description, secret.ExpiresAt, userID,
 		).Scan(&secret.ID, &secret.Version, &secret.CreatedAt, &secret.UpdatedAt)
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to create secret: %w", err)
 	}
@@ -118,7 +117,6 @@ func (s *Storage) GetSecret(ctx context.Context, id uuid.UUID) (*Secret, error) 
 			&secret.CreatedAt, &secret.UpdatedAt, &secret.CreatedBy, &secret.UpdatedBy,
 		)
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
@@ -157,7 +155,6 @@ func (s *Storage) GetSecretByName(ctx context.Context, name string, namespace *s
 			&secret.CreatedAt, &secret.UpdatedAt, &secret.CreatedBy, &secret.UpdatedBy,
 		)
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get secret by name: %w", err)
 	}
@@ -213,7 +210,6 @@ func (s *Storage) ListSecrets(ctx context.Context, scope *string, namespace *str
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list secrets: %w", err)
 	}
@@ -262,7 +258,6 @@ func (s *Storage) UpdateSecret(ctx context.Context, id uuid.UUID, plainValue *st
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, args...).Scan(&newVersion, &encryptedValue)
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to update secret: %w", err)
 	}
@@ -291,7 +286,6 @@ func (s *Storage) DeleteSecret(ctx context.Context, id uuid.UUID) error {
 		}
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to delete secret: %w", err)
 	}
@@ -329,7 +323,6 @@ func (s *Storage) GetVersions(ctx context.Context, secretID uuid.UUID) ([]Secret
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get secret versions: %w", err)
 	}
@@ -350,7 +343,6 @@ func (s *Storage) RollbackToVersion(ctx context.Context, secretID uuid.UUID, ver
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, getQuery, secretID, version).Scan(&encryptedValue)
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to get version %d: %w", version, err)
 	}
@@ -367,7 +359,6 @@ func (s *Storage) RollbackToVersion(ctx context.Context, secretID uuid.UUID, ver
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, updateQuery, secretID, encryptedValue, userID).Scan(&newVersion)
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to rollback secret: %w", err)
 	}
@@ -419,7 +410,6 @@ func (s *Storage) GetSecretsForNamespace(ctx context.Context, namespace string) 
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get secrets for namespace: %w", err)
 	}
@@ -453,7 +443,6 @@ func (s *Storage) GetStats(ctx context.Context) (total int, expiringSoon int, ex
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query).Scan(&total, &expiringSoon, &expired)
 	})
-
 	if err != nil {
 		err = fmt.Errorf("failed to get secret stats: %w", err)
 	}

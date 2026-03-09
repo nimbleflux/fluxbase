@@ -44,5 +44,7 @@ type AdminExecutor interface {
 }
 
 // Ensure Connection implements both interfaces
-var _ Executor = (*Connection)(nil)
-var _ AdminExecutor = (*Connection)(nil)
+var (
+	_ Executor      = (*Connection)(nil)
+	_ AdminExecutor = (*Connection)(nil)
+)

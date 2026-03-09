@@ -198,6 +198,7 @@ func TestBranchAccessLevel(t *testing.T) {
 		assert.Equal(t, "read", string(BranchAccessRead))
 	})
 }
+
 func TestActivityAction(t *testing.T) {
 	actions := []ActivityAction{
 		ActivityActionCreated,
@@ -222,6 +223,7 @@ func TestActivityStatus(t *testing.T) {
 		assert.NotEmpty(t, string(status))
 	}
 }
+
 func TestGrantAccessRequest_Struct(t *testing.T) {
 	t.Run("grant access with all fields", func(t *testing.T) {
 		userID := uuid.New()

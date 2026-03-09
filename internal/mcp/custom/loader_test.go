@@ -115,7 +115,7 @@ func TestLoader_LoadAll(t *testing.T) {
 		content := `// @fluxbase:name test_tool
 // @fluxbase:description A test tool
 console.log('test');`
-		err := os.WriteFile(filepath.Join(tmpDir, "test.ts"), []byte(content), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "test.ts"), []byte(content), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -133,7 +133,7 @@ console.log('test');`
 
 		content := `// @fluxbase:name js_tool
 console.log('js');`
-		err := os.WriteFile(filepath.Join(tmpDir, "tool.js"), []byte(content), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "tool.js"), []byte(content), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -149,13 +149,13 @@ console.log('js');`
 		tmpDir := t.TempDir()
 
 		// Create various file types
-		err := os.WriteFile(filepath.Join(tmpDir, "tool.ts"), []byte("// TS file"), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "tool.ts"), []byte("// TS file"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("readme"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("readme"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpDir, "config.json"), []byte("{}"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "config.json"), []byte("{}"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpDir, "script.sh"), []byte("#!/bin/bash"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "script.sh"), []byte("#!/bin/bash"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -170,11 +170,11 @@ console.log('js');`
 		tmpDir := t.TempDir()
 
 		// Create a subdirectory with .ts name (weird but should be ignored)
-		err := os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755)
+		err := os.Mkdir(filepath.Join(tmpDir, "subdir"), 0o755)
 		require.NoError(t, err)
 
 		// Create a valid tool
-		err = os.WriteFile(filepath.Join(tmpDir, "tool.ts"), []byte("// tool"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "tool.ts"), []byte("// tool"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -189,11 +189,11 @@ console.log('js');`
 		tmpDir := t.TempDir()
 
 		// Create multiple tool files
-		err := os.WriteFile(filepath.Join(tmpDir, "tool1.ts"), []byte("// @fluxbase:name tool1"), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "tool1.ts"), []byte("// @fluxbase:name tool1"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpDir, "tool2.ts"), []byte("// @fluxbase:name tool2"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "tool2.ts"), []byte("// @fluxbase:name tool2"), 0o644)
 		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpDir, "tool3.js"), []byte("// @fluxbase:name tool3"), 0644)
+		err = os.WriteFile(filepath.Join(tmpDir, "tool3.js"), []byte("// @fluxbase:name tool3"), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -357,7 +357,7 @@ func TestLoader_loadTool(t *testing.T) {
 	t.Run("loads tool with defaults", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		content := `console.log('hello');`
-		err := os.WriteFile(filepath.Join(tmpDir, "basic.ts"), []byte(content), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "basic.ts"), []byte(content), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -389,7 +389,7 @@ func TestLoader_loadTool(t *testing.T) {
 // @fluxbase:scopes admin, write
 
 console.log('configured');`
-		err := os.WriteFile(filepath.Join(tmpDir, "configured.ts"), []byte(content), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "configured.ts"), []byte(content), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -412,7 +412,7 @@ console.log('configured');`
 	t.Run("parses scopes with spaces", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		content := `// @fluxbase:scopes admin,  write ,  read`
-		err := os.WriteFile(filepath.Join(tmpDir, "scopes.ts"), []byte(content), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "scopes.ts"), []byte(content), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)
@@ -430,7 +430,7 @@ console.log('configured');`
 function test() {
   return "hello";
 }`
-		err := os.WriteFile(filepath.Join(tmpDir, "code.ts"), []byte(content), 0644)
+		err := os.WriteFile(filepath.Join(tmpDir, "code.ts"), []byte(content), 0o644)
 		require.NoError(t, err)
 
 		loader := NewLoader(tmpDir)

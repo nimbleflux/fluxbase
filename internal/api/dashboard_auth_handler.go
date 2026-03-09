@@ -719,7 +719,6 @@ func (h *DashboardAuthHandler) isPasswordLoginDisabled(ctx context.Context) bool
 			WHERE key = 'disable_dashboard_password_login' AND category = 'auth'
 		`).Scan(&disabled)
 	})
-
 	if err != nil {
 		// If setting doesn't exist or error, default to allowing password login
 		return false

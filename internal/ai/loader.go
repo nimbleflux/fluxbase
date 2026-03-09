@@ -74,7 +74,6 @@ func (l *Loader) LoadAll() ([]*Chatbot, error) {
 		chatbots = append(chatbots, chatbot)
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk chatbots directory: %w", err)
 	}

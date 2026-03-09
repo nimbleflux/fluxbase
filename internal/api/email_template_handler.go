@@ -249,7 +249,6 @@ func (h *EmailTemplateHandler) GetTemplate(c fiber.Ctx) error {
 		&template.CreatedAt,
 		&template.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Return default template
@@ -318,7 +317,6 @@ func (h *EmailTemplateHandler) UpdateTemplate(c fiber.Ctx) error {
 		    updated_at = NOW()
 		RETURNING id
 	`, templateType, req.Subject, req.HTMLBody, req.TextBody).Scan(&templateID)
-
 	if err != nil {
 		log.Error().Err(err).Str("type", templateType).Msg("Failed to update email template")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -358,7 +356,6 @@ func (h *EmailTemplateHandler) ResetTemplate(c fiber.Ctx) error {
 		DELETE FROM dashboard.email_templates
 		WHERE template_type = $1
 	`, templateType)
-
 	if err != nil {
 		log.Error().Err(err).Str("type", templateType).Msg("Failed to reset email template")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -429,7 +426,6 @@ func (h *EmailTemplateHandler) TestTemplate(c fiber.Ctx) error {
 		&emailTemplate.CreatedAt,
 		&emailTemplate.UpdatedAt,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Use default template

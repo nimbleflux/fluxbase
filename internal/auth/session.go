@@ -87,7 +87,6 @@ func (r *SessionRepository) Create(ctx context.Context, userID, accessToken, ref
 			&session.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +117,6 @@ func (r *SessionRepository) GetByAccessToken(ctx context.Context, accessToken st
 			&session.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrSessionNotFound
@@ -157,7 +155,6 @@ func (r *SessionRepository) GetByRefreshToken(ctx context.Context, refreshToken 
 			&session.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrSessionNotFound

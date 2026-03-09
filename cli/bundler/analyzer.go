@@ -36,7 +36,7 @@ func (a *Analyzer) AnalyzeBundle(ctx context.Context, code string, functionName 
 
 	// Write main file
 	mainPath := filepath.Join(tmpDir, "index.ts")
-	if err := os.WriteFile(mainPath, []byte(code), 0600); err != nil {
+	if err := os.WriteFile(mainPath, []byte(code), 0o600); err != nil {
 		return nil, fmt.Errorf("failed to write main file: %w", err)
 	}
 
@@ -57,10 +57,10 @@ func (a *Analyzer) AnalyzeBundle(ctx context.Context, code string, functionName 
 
 		fullPath := filepath.Join(tmpDir, modulePath)
 		dir := filepath.Dir(fullPath)
-		if err := os.MkdirAll(dir, 0750); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return nil, fmt.Errorf("failed to create directory for %s: %w", modulePath, err)
 		}
-		if err := os.WriteFile(fullPath, []byte(content), 0600); err != nil {
+		if err := os.WriteFile(fullPath, []byte(content), 0o600); err != nil {
 			return nil, fmt.Errorf("failed to write shared module %s: %w", modulePath, err)
 		}
 	}

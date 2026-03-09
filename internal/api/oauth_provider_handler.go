@@ -469,7 +469,6 @@ func (h *OAuthProviderHandler) CreateOAuthProvider(c fiber.Ctx) error {
 		req.UserInfoURL, req.RevocationEndpoint, req.EndSessionEndpoint,
 		allowDashboardLogin, allowAppLogin, requiredClaimsJSON, deniedClaimsJSON, userID,
 	).Scan(&id, &createdAt, &updatedAt)
-
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
 			return c.Status(409).JSON(fiber.Map{

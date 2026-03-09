@@ -128,7 +128,6 @@ func (r *UserRepository) Create(ctx context.Context, req CreateUserRequest, pass
 			&user.UpdatedAt,
 		)
 	})
-
 	if err != nil {
 		// Check for unique constraint violation
 		if database.IsUniqueViolation(err) {
@@ -167,7 +166,6 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*User, error) 
 			&user.UpdatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
@@ -205,7 +203,6 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*User, e
 			&user.UpdatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
@@ -320,7 +317,6 @@ func (r *UserRepository) Update(ctx context.Context, id string, req UpdateUserRe
 			&user.UpdatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
@@ -519,7 +515,6 @@ func (r *UserRepository) CreateInTable(ctx context.Context, req CreateUserReques
 			&user.UpdatedAt,
 		)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -600,7 +595,6 @@ func (r *UserRepository) UpdateInTable(ctx context.Context, id string, req Updat
 			&user.UpdatedAt,
 		)
 	})
-
 	if err != nil {
 		if err.Error() == "no rows in result set" {
 			return nil, ErrUserNotFound
@@ -696,7 +690,6 @@ func (r *UserRepository) GetByIDFromTable(ctx context.Context, id string, userTy
 			&user.UpdatedAt,
 		)
 	})
-
 	if err != nil {
 		if err.Error() == "no rows in result set" {
 			return nil, ErrUserNotFound

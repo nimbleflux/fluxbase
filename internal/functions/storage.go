@@ -155,7 +155,6 @@ func (s *Storage) CreateFunction(ctx context.Context, fn *EdgeFunction) error {
 			fn.CronSchedule, fn.CreatedBy, fn.Source,
 		).Scan(&fn.ID, &fn.Version, &fn.CreatedAt, &fn.UpdatedAt)
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to create function: %w", err)
 	}
@@ -189,7 +188,6 @@ func (s *Storage) GetFunction(ctx context.Context, name string) (*EdgeFunction, 
 			&fn.CreatedAt, &fn.UpdatedAt, &fn.CreatedBy, &fn.Source,
 		)
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get function: %w", err)
 	}
@@ -220,7 +218,6 @@ func (s *Storage) GetFunctionByNamespace(ctx context.Context, name string, names
 			&fn.CreatedAt, &fn.UpdatedAt, &fn.CreatedBy, &fn.Source,
 		)
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get function: %w", err)
 	}
@@ -266,7 +263,6 @@ func (s *Storage) ListFunctions(ctx context.Context) ([]EdgeFunctionSummary, err
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list functions: %w", err)
 	}
@@ -311,7 +307,6 @@ func (s *Storage) ListAllFunctions(ctx context.Context) ([]EdgeFunctionSummary, 
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list all functions: %w", err)
 	}
@@ -340,7 +335,6 @@ func (s *Storage) ListFunctionNamespaces(ctx context.Context) ([]string, error) 
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list function namespaces: %w", err)
 	}
@@ -386,7 +380,6 @@ func (s *Storage) ListFunctionsByNamespace(ctx context.Context, namespace string
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list functions by namespace: %w", err)
 	}
@@ -463,7 +456,6 @@ func (s *Storage) LogExecution(ctx context.Context, exec *EdgeFunctionExecution)
 			exec.DurationMs, exec.Result, exec.Logs, exec.ErrorMessage, exec.CompletedAt,
 		).Scan(&exec.ID, &exec.ExecutedAt)
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to log execution: %w", err)
 	}
@@ -483,7 +475,6 @@ func (s *Storage) CreateExecution(ctx context.Context, id uuid.UUID, functionID 
 		_, err := tx.Exec(ctx, query, id, functionID, triggerType)
 		return err
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to create execution: %w", err)
 	}
@@ -503,7 +494,6 @@ func (s *Storage) CompleteExecution(ctx context.Context, id uuid.UUID, status st
 		_, err := tx.Exec(ctx, query, id, status, statusCode, durationMs, result, logs, errorMessage)
 		return err
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to complete execution: %w", err)
 	}
@@ -546,7 +536,6 @@ func (s *Storage) GetExecutions(ctx context.Context, functionName string, limit 
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get executions: %w", err)
 	}
@@ -659,7 +648,6 @@ func (s *Storage) ListAllExecutions(ctx context.Context, filters AdminExecutionF
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list executions: %w", err)
 	}
@@ -686,7 +674,6 @@ func (s *Storage) CreateSharedModule(ctx context.Context, module *SharedModule) 
 			module.ModulePath, module.Content, module.Description, module.CreatedBy,
 		).Scan(&module.ID, &module.Version, &module.CreatedAt, &module.UpdatedAt)
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to create shared module: %w", err)
 	}
@@ -709,7 +696,6 @@ func (s *Storage) GetSharedModule(ctx context.Context, modulePath string) (*Shar
 			&module.Version, &module.CreatedAt, &module.UpdatedAt, &module.CreatedBy,
 		)
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shared module: %w", err)
 	}
@@ -746,7 +732,6 @@ func (s *Storage) ListSharedModules(ctx context.Context) ([]SharedModule, error)
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list shared modules: %w", err)
 	}
@@ -766,7 +751,6 @@ func (s *Storage) UpdateSharedModule(ctx context.Context, modulePath string, con
 		_, err := tx.Exec(ctx, query, content, description, modulePath)
 		return err
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to update shared module: %w", err)
 	}
@@ -782,7 +766,6 @@ func (s *Storage) DeleteSharedModule(ctx context.Context, modulePath string) err
 		_, err := tx.Exec(ctx, query, modulePath)
 		return err
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to delete shared module: %w", err)
 	}
@@ -817,7 +800,6 @@ func (s *Storage) SaveFunctionFiles(ctx context.Context, functionID uuid.UUID, f
 
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to save function files: %w", err)
 	}
@@ -855,7 +837,6 @@ func (s *Storage) GetFunctionFiles(ctx context.Context, functionID uuid.UUID) ([
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get function files: %w", err)
 	}

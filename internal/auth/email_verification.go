@@ -116,7 +116,6 @@ func (r *EmailVerificationRepository) Create(ctx context.Context, userID string,
 			&token.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +147,6 @@ func (r *EmailVerificationRepository) GetByToken(ctx context.Context, token stri
 			&emailToken.CreatedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrEmailVerificationTokenNotFound

@@ -12,10 +12,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-var (
-	// ErrTokenBlacklisted is returned when a token is found in the blacklist
-	ErrTokenBlacklisted = errors.New("token has been revoked")
-)
+// ErrTokenBlacklisted is returned when a token is found in the blacklist
+var ErrTokenBlacklisted = errors.New("token has been revoked")
 
 // TokenBlacklistEntry represents a blacklisted token
 type TokenBlacklistEntry struct {
@@ -102,7 +100,6 @@ func (r *TokenBlacklistRepository) GetByJTI(ctx context.Context, jti string) (*T
 			&entry.ExpiresAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

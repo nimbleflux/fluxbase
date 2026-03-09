@@ -245,12 +245,12 @@ func SaveFunctionCode(functionsDir, functionName, code string) error {
 	}
 
 	// Ensure functions directory exists
-	if err := os.MkdirAll(functionsDir, 0755); err != nil {
+	if err := os.MkdirAll(functionsDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create functions directory: %w", err)
 	}
 
 	// Write the file with appropriate permissions (read/write for owner, read for others)
-	if err := os.WriteFile(functionPath, []byte(code), 0644); err != nil {
+	if err := os.WriteFile(functionPath, []byte(code), 0o644); err != nil {
 		return fmt.Errorf("failed to write function file: %w", err)
 	}
 

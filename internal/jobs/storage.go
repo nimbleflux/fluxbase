@@ -621,7 +621,6 @@ func (s *Storage) ResubmitJob(ctx context.Context, originalJobID uuid.UUID) (*Jo
 		newJob.Payload, newJob.Priority, newJob.MaxDurationSeconds, newJob.ProgressTimeoutSeconds,
 		newJob.MaxRetries, newJob.CreatedBy, newJob.UserRole, newJob.UserEmail,
 	).Scan(&newJob.CreatedAt)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new job: %w", err)
 	}
@@ -804,7 +803,6 @@ func (s *Storage) GetJobByIDAdmin(ctx context.Context, jobID uuid.UUID) (*Job, e
 			&job.CreatedAt, &job.ScheduledAt, &job.StartedAt, &job.LastProgressAt, &job.CompletedAt,
 		)
 	})
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("job not found: %s", jobID)
@@ -931,7 +929,6 @@ func (s *Storage) ListJobsAdmin(ctx context.Context, filters *JobFilters) ([]*Jo
 
 		return rows.Err()
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1059,7 +1056,6 @@ func (s *Storage) GetJobStats(ctx context.Context, namespace *string) (*JobStats
 
 		return rows.Err()
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1168,7 +1164,6 @@ func (s *Storage) ListWorkers(ctx context.Context) ([]*WorkerRecord, error) {
 
 		return rows.Err()
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1237,7 +1232,6 @@ func (s *Storage) ListJobNamespaces(ctx context.Context) ([]string, error) {
 		}
 		return rows.Err()
 	})
-
 	if err != nil {
 		return nil, err
 	}

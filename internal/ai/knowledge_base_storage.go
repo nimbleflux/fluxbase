@@ -2569,7 +2569,6 @@ func (s *KnowledgeBaseStorage) GetUserQuota(ctx context.Context, userID string) 
 		&quota.CreatedAt,
 		&quota.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -2595,7 +2594,6 @@ func (s *KnowledgeBaseStorage) SetUserQuota(ctx context.Context, quota *UserQuot
 		quota.MaxChunks,
 		quota.MaxStorageBytes,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to set user quota: %w", err)
 	}

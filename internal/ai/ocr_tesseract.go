@@ -175,7 +175,7 @@ func (p *TesseractProvider) pdfToImages(ctx context.Context, pdfData []byte) ([]
 
 	// Write PDF to temp file
 	pdfPath := filepath.Join(tmpDir, "input.pdf")
-	if err := os.WriteFile(pdfPath, pdfData, 0600); err != nil {
+	if err := os.WriteFile(pdfPath, pdfData, 0o600); err != nil {
 		os.RemoveAll(tmpDir)
 		return nil, "", fmt.Errorf("failed to write PDF temp file: %w", err)
 	}

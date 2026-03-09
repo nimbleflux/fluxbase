@@ -18,7 +18,7 @@ func TestLoadFunctionCode(t *testing.T) {
 	testCode := "async function handler(req) { return { status: 200 }; }"
 	testFunctionName := "test-function"
 	testFilePath := filepath.Join(tmpDir, testFunctionName+".ts")
-	if err := os.WriteFile(testFilePath, []byte(testCode), 0644); err != nil {
+	if err := os.WriteFile(testFilePath, []byte(testCode), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -145,7 +145,7 @@ func TestDeleteFunctionCode(t *testing.T) {
 	// Create a test function file to delete
 	testFunctionName := "test-function"
 	testFilePath := filepath.Join(tmpDir, testFunctionName+".ts")
-	if err := os.WriteFile(testFilePath, []byte("test"), 0644); err != nil {
+	if err := os.WriteFile(testFilePath, []byte("test"), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -205,26 +205,26 @@ func TestListFunctionFiles(t *testing.T) {
 	testFunctions := []string{"function1", "function2", "function-3"}
 	for _, name := range testFunctions {
 		filePath := filepath.Join(tmpDir, name+".ts")
-		if err := os.WriteFile(filePath, []byte("test"), 0644); err != nil {
+		if err := os.WriteFile(filePath, []byte("test"), 0o644); err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 	}
 
 	// Create a non-.ts file (should be ignored)
 	nonTsFile := filepath.Join(tmpDir, "readme.md")
-	if err := os.WriteFile(nonTsFile, []byte("readme"), 0644); err != nil {
+	if err := os.WriteFile(nonTsFile, []byte("readme"), 0o644); err != nil {
 		t.Fatalf("Failed to create non-ts file: %v", err)
 	}
 
 	// Create a subdirectory (should be ignored)
 	subDir := filepath.Join(tmpDir, "subdir")
-	if err := os.MkdirAll(subDir, 0755); err != nil {
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 
 	// Create a file with invalid name (should be skipped)
 	invalidFile := filepath.Join(tmpDir, "../invalid.ts")
-	if err := os.WriteFile(invalidFile, []byte("test"), 0644); err == nil {
+	if err := os.WriteFile(invalidFile, []byte("test"), 0o644); err == nil {
 		// Only if we successfully created it (might fail due to path issues)
 		defer func() { _ = os.Remove(invalidFile) }()
 	}
@@ -291,7 +291,7 @@ func TestFunctionExists(t *testing.T) {
 	// Create a test function file
 	testFunctionName := "test-function"
 	testFilePath := filepath.Join(tmpDir, testFunctionName+".ts")
-	if err := os.WriteFile(testFilePath, []byte("test"), 0644); err != nil {
+	if err := os.WriteFile(testFilePath, []byte("test"), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 

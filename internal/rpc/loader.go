@@ -72,7 +72,6 @@ func (l *Loader) LoadProcedures() ([]*LoadedProcedure, error) {
 		procedures = append(procedures, proc)
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk procedures directory: %w", err)
 	}
@@ -196,7 +195,6 @@ func (l *Loader) LoadProceduresFromNamespace(namespace string) ([]*LoadedProcedu
 		procedures = append(procedures, proc)
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk namespace directory: %w", err)
 	}

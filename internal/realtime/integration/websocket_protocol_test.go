@@ -6,12 +6,12 @@ package integration
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"sync"
 
 	"github.com/fluxbase-eu/fluxbase/internal/pubsub"
 	"github.com/fluxbase-eu/fluxbase/internal/realtime"

@@ -216,7 +216,7 @@ func (b *Bundler) Bundle(ctx context.Context, code string, sharedModules map[str
 
 	// Write main file to working directory
 	mainPath := filepath.Join(workDir, ".fluxbase-bundle-entry.ts")
-	if err := os.WriteFile(mainPath, []byte(code), 0600); err != nil { //nolint:gosec // temp file for bundling
+	if err := os.WriteFile(mainPath, []byte(code), 0o600); err != nil { //nolint:gosec // temp file for bundling
 		return nil, fmt.Errorf("failed to write main file: %w", err)
 	}
 
@@ -231,11 +231,11 @@ func (b *Bundler) Bundle(ctx context.Context, code string, sharedModules map[str
 
 			// Create parent directory if needed
 			dir := filepath.Dir(fullPath)
-			if err := os.MkdirAll(dir, 0750); err != nil { //nolint:gosec // temp directory for bundling
+			if err := os.MkdirAll(dir, 0o750); err != nil { //nolint:gosec // temp directory for bundling
 				return nil, fmt.Errorf("failed to create directory for %s: %w", modulePath, err)
 			}
 
-			if err := os.WriteFile(fullPath, []byte(content), 0600); err != nil { //nolint:gosec // temp file for bundling
+			if err := os.WriteFile(fullPath, []byte(content), 0o600); err != nil { //nolint:gosec // temp file for bundling
 				return nil, fmt.Errorf("failed to write shared module %s: %w", modulePath, err)
 			}
 		}

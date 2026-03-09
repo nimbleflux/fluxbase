@@ -167,9 +167,7 @@ Examples:
 	RunE:    runGraphQLIntrospect,
 }
 
-var (
-	introspectTypesOnly bool
-)
+var introspectTypesOnly bool
 
 func init() {
 	// Query flags

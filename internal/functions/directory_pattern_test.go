@@ -17,15 +17,15 @@ func TestDirectoryBasedFunctions(t *testing.T) {
 
 	// Create flat file function
 	flatCode := `async function handler(req) { return { status: 200, body: "flat" }; }`
-	err = os.WriteFile(filepath.Join(tmpDir, "flat-func.ts"), []byte(flatCode), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, "flat-func.ts"), []byte(flatCode), 0o644)
 	require.NoError(t, err)
 
 	// Create directory-based function
 	dirPath := filepath.Join(tmpDir, "dir-func")
-	err = os.Mkdir(dirPath, 0755)
+	err = os.Mkdir(dirPath, 0o755)
 	require.NoError(t, err)
 	dirCode := `async function handler(req) { return { status: 200, body: "directory" }; }`
-	err = os.WriteFile(filepath.Join(dirPath, "index.ts"), []byte(dirCode), 0644)
+	err = os.WriteFile(filepath.Join(dirPath, "index.ts"), []byte(dirCode), 0o644)
 	require.NoError(t, err)
 
 	// Test: List all functions
@@ -76,15 +76,15 @@ func TestFlatFilePriority(t *testing.T) {
 
 	// Create directory-based version
 	dirPath := filepath.Join(tmpDir, functionName)
-	err = os.Mkdir(dirPath, 0755)
+	err = os.Mkdir(dirPath, 0o755)
 	require.NoError(t, err)
 	dirCode := `async function handler(req) { return { status: 200, body: "directory" }; }`
-	err = os.WriteFile(filepath.Join(dirPath, "index.ts"), []byte(dirCode), 0644)
+	err = os.WriteFile(filepath.Join(dirPath, "index.ts"), []byte(dirCode), 0o644)
 	require.NoError(t, err)
 
 	// Create flat file version (should take priority)
 	flatCode := `async function handler(req) { return { status: 200, body: "flat" }; }`
-	err = os.WriteFile(filepath.Join(tmpDir, functionName+".ts"), []byte(flatCode), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, functionName+".ts"), []byte(flatCode), 0o644)
 	require.NoError(t, err)
 
 	// Test: List functions should only return one
@@ -113,11 +113,11 @@ func TestDirectoryWithoutIndexTs(t *testing.T) {
 
 	// Create directory without index.ts
 	dirPath := filepath.Join(tmpDir, "no-index")
-	err = os.Mkdir(dirPath, 0755)
+	err = os.Mkdir(dirPath, 0o755)
 	require.NoError(t, err)
 
 	// Create some other file in the directory
-	err = os.WriteFile(filepath.Join(dirPath, "helper.ts"), []byte("// helper"), 0644)
+	err = os.WriteFile(filepath.Join(dirPath, "helper.ts"), []byte("// helper"), 0o644)
 	require.NoError(t, err)
 
 	// Test: Should not find any functions
@@ -139,14 +139,14 @@ func TestResolveFunctionPath_BasicPatterns(t *testing.T) {
 
 	// Create flat file
 	flatCode := "flat"
-	err = os.WriteFile(filepath.Join(tmpDir, "flat.ts"), []byte(flatCode), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, "flat.ts"), []byte(flatCode), 0o644)
 	require.NoError(t, err)
 
 	// Create directory-based function
 	dirPath := filepath.Join(tmpDir, "dir")
-	err = os.Mkdir(dirPath, 0755)
+	err = os.Mkdir(dirPath, 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(dirPath, "index.ts"), []byte("dir"), 0644)
+	err = os.WriteFile(filepath.Join(dirPath, "index.ts"), []byte("dir"), 0o644)
 	require.NoError(t, err)
 
 	// Test: Resolve flat file

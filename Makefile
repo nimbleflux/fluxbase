@@ -1,4 +1,4 @@
-.PHONY: help dev build clean test migrate-up migrate-down migrate-create db-reset db-reset-full deps setup-dev install-hooks uninstall-hooks docs docs-build docs-check-links version docker-build docker-push release cli cli-install cli-completions viz-deps viz-deps-svg viz-internal viz-callgraph viz-callgraph-svg viz-uml viz-uml-api viz-uml-auth viz-module-deps viz-all test-cleanup
+.PHONY: help dev build clean fmt lint test migrate-up migrate-down migrate-create db-reset db-reset-full deps setup-dev install-hooks uninstall-hooks docs docs-build docs-check-links version docker-build docker-push release cli cli-install cli-completions viz-deps viz-deps-svg viz-internal viz-callgraph viz-callgraph-svg viz-uml viz-uml-api viz-uml-auth viz-module-deps viz-all test-cleanup
 
 # Variables
 BINARY_NAME=fluxbase-server
@@ -88,16 +88,16 @@ dev: ## Build and run backend + frontend dev server (all-in-one)
 	@lsof -ti:5050 | xargs -r kill -9 2>/dev/null || true
 	@if [ ! -d "sdk/node_modules" ]; then \
 		echo "${YELLOW}Installing SDK dependencies...${NC}"; \
-		cd sdk && unset NODE_OPTIONS && npm install; \
+		cd sdk && unset NODE_OPTIONS && bun install; \
 	fi
 	@echo "${YELLOW}Generating embedded SDK for job runtime...${NC}"
-	@cd sdk && unset NODE_OPTIONS && npm run generate:embedded-sdk
+	@cd sdk && unset NODE_OPTIONS && bun run generate:embedded-sdk
 	@if [ ! -d "admin/node_modules" ]; then \
 		echo "${YELLOW}Installing admin UI dependencies...${NC}"; \
-		cd admin && unset NODE_OPTIONS && npm install; \
+		cd admin && unset NODE_OPTIONS && bun install; \
 	fi
 	@echo "${YELLOW}Building admin UI...${NC}"
-	@cd admin && unset NODE_OPTIONS && npm run build
+	@cd admin && unset NODE_OPTIONS && bun run build
 	@rm -rf internal/adminui/dist
 	@cp -r admin/dist internal/adminui/dist
 	@echo "${GREEN}Backend:${NC}     http://localhost:8080"
@@ -106,7 +106,7 @@ dev: ## Build and run backend + frontend dev server (all-in-one)
 	@echo ""
 	@echo "${YELLOW}Press Ctrl+C to stop both servers${NC}"
 	@echo ""
-	@bash -c 'trap "kill 0" EXIT; ./run-server.sh & SERVER_PID=$$!; cd admin && unset NODE_OPTIONS && npm run dev & NPM_PID=$$!; wait -n 2>/dev/null || while kill -0 $$SERVER_PID 2>/dev/null && kill -0 $$NPM_PID 2>/dev/null; do sleep 1; done'
+	@bash -c 'trap "kill 0" EXIT; ./run-server.sh & SERVER_PID=$$!; cd admin && unset NODE_OPTIONS && bun run dev & PNPM_PID=$$!; wait -n 2>/dev/null || while kill -0 $$SERVER_PID 2>/dev/null && kill -0 $$PNPM_PID 2>/dev/null; do sleep 1; done'
 
 version: ## Show version information
 	@echo "${GREEN}Version:${NC}    $(VERSION)"
@@ -115,9 +115,9 @@ version: ## Show version information
 
 build: ## Build production binary with embedded admin UI
 	@echo "${YELLOW}Generating embedded SDK for job runtime...${NC}"
-	@cd sdk && unset NODE_OPTIONS && npm run generate:embedded-sdk
+	@cd sdk && unset NODE_OPTIONS && bun run generate:embedded-sdk
 	@echo "${YELLOW}Building admin UI...${NC}"
-	@cd admin && unset NODE_OPTIONS && npm run build
+	@cd admin && unset NODE_OPTIONS && bun run build
 	@rm -rf internal/adminui/dist
 	@cp -r admin/dist internal/adminui/dist
 	@echo "${YELLOW}Building ${BINARY_NAME} v$(VERSION)...${NC}"
@@ -131,6 +131,18 @@ clean: ## Clean build artifacts
 	@rm -f coverage.out coverage.html
 	@rm -rf internal/adminui/dist
 	@echo "${GREEN}Clean complete!${NC}"
+
+fmt: ## Format Go code with gofumpt (stricter than gofmt)
+	@echo "${YELLOW}Formatting Go code...${NC}"
+	@command -v gofumpt >/dev/null 2>&1 || go install mvdan.cc/gofumpt@latest
+	@gofumpt -w .
+	@echo "${GREEN}Formatting complete!${NC}"
+
+lint: ## Run golangci-lint with all enabled linters
+	@echo "${YELLOW}Running golangci-lint...${NC}"
+	@command -v golangci-lint >/dev/null 2>&1 || curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$(go env GOPATH)/bin v2.10.0
+	@golangci-lint run --timeout 10m ./...
+	@echo "${GREEN}Linting complete!${NC}"
 
 test: ## Run all tests with race detector (short mode - skips slow tests, excludes e2e)
 	@FLUXBASE_LOG_LEVEL=info ./scripts/test-runner.sh go test -timeout 2m -v -race -short -cover $(shell go list ./... | grep -v '/test/e2e')
@@ -230,12 +242,12 @@ test-storage: ## Run storage tests only
 
 test-sdk: ## Run SDK tests (TypeScript)
 	@echo "${YELLOW}Running SDK tests...${NC}"
-	@cd sdk && unset NODE_OPTIONS && npm test -- src/admin.test.ts src/auth.test.ts src/management.test.ts src/ddl.test.ts src/impersonation.test.ts src/settings.test.ts src/oauth.test.ts
+	@cd sdk && unset NODE_OPTIONS && bun test -- src/admin.test.ts src/auth.test.ts src/management.test.ts src/ddl.test.ts src/impersonation.test.ts src/settings.test.ts src/oauth.test.ts
 	@echo "${GREEN}SDK tests complete!${NC}"
 
 test-sdk-react: ## Build React SDK (includes type checking)
 	@echo "${YELLOW}Building React SDK...${NC}"
-	@cd sdk-react && unset NODE_OPTIONS && npm run build
+	@cd sdk-react && unset NODE_OPTIONS && bun run build
 	@echo "${GREEN}React SDK build complete!${NC}"
 
 test-integration: ## Run admin integration tests (requires running server)
@@ -245,7 +257,7 @@ test-integration: ## Run admin integration tests (requires running server)
 		echo "${YELLOW}Start server with: make dev${NC}"; \
 		exit 1; \
 	fi
-	@cd examples/admin-setup && unset NODE_OPTIONS && npm test
+	@cd examples/admin-setup && unset NODE_OPTIONS && bun test
 	@echo "${GREEN}Integration tests complete!${NC}"
 
 test-all: ## Run ALL tests (backend + SDK + React + integration)
@@ -281,7 +293,7 @@ setup-dev: ## Set up development environment (first-time setup)
 	@go mod download
 	@go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 	@go install github.com/vladopajic/go-test-coverage/v2@latest
-	@cd admin && unset NODE_OPTIONS && npm install
+	@cd admin && unset NODE_OPTIONS && bun install
 	@cp .env.example .env 2>/dev/null || echo ".env already exists"
 	@$(MAKE) install-hooks
 	@echo "${GREEN}Development environment ready!${NC}"
@@ -493,7 +505,7 @@ docs: ## Serve Starlight documentation at http://localhost:4321
 	@echo "${YELLOW}Starting Starlight documentation server...${NC}"
 	@if [ ! -d "docs/node_modules" ]; then \
 		echo "${YELLOW}Installing documentation dependencies...${NC}"; \
-		cd docs && unset NODE_OPTIONS && npm install; \
+		cd docs && unset NODE_OPTIONS && bun install; \
 	fi
 	@echo ""
 	@echo "${GREEN}📚 Documentation will be available at:${NC}"
@@ -501,18 +513,18 @@ docs: ## Serve Starlight documentation at http://localhost:4321
 	@echo ""
 	@echo "${YELLOW}Press Ctrl+C to stop the server${NC}"
 	@echo ""
-	@cd docs && unset NODE_OPTIONS && npm run dev -- --host 0.0.0.0
+	@cd docs && unset NODE_OPTIONS && bun run dev -- --host 0.0.0.0
 
 docs-build: ## Build static documentation site for production
 	@echo "${YELLOW}Building documentation site...${NC}"
 	@if [ ! -d "docs/node_modules" ]; then \
 		echo "${YELLOW}Installing documentation dependencies...${NC}"; \
-		cd docs && unset NODE_OPTIONS && npm install; \
+		cd docs && unset NODE_OPTIONS && bun install; \
 	fi
-	@cd docs && unset NODE_OPTIONS && npm run build
+	@cd docs && unset NODE_OPTIONS && bun run build
 	@echo "${GREEN}Documentation built successfully!${NC}"
 	@echo "${YELLOW}Output:${NC} docs/dist/"
-	@echo "${YELLOW}To preview locally:${NC} cd docs && npm run preview"
+	@echo "${YELLOW}To preview locally:${NC} cd docs && bun run preview"
 
 docs-check-links: docs-build ## Check documentation for broken links
 	@echo "${YELLOW}Checking documentation for broken links...${NC}"

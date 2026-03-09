@@ -347,7 +347,6 @@ func (s *WebhookService) Create(ctx context.Context, webhook *Webhook) error {
 			webhook.CreatedBy,
 		).Scan(&webhook.ID, &webhook.CreatedAt, &webhook.UpdatedAt)
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to create webhook: %w", err)
 	}
@@ -424,7 +423,6 @@ func (s *WebhookService) List(ctx context.Context) ([]*Webhook, error) {
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list webhooks: %w", err)
 	}
@@ -546,7 +544,6 @@ func (s *WebhookService) Update(ctx context.Context, id uuid.UUID, webhook *Webh
 			webhook.Scope,
 			id,
 		)
-
 		if err != nil {
 			return err
 		}
@@ -557,7 +554,6 @@ func (s *WebhookService) Update(ctx context.Context, id uuid.UUID, webhook *Webh
 
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to update webhook: %w", err)
 	}
@@ -988,7 +984,6 @@ func (s *WebhookService) ListDeliveries(ctx context.Context, webhookID uuid.UUID
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list deliveries: %w", err)
 	}

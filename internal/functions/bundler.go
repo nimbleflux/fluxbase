@@ -455,7 +455,7 @@ func (b *Bundler) BundleWithFiles(ctx context.Context, mainCode string, supporti
 
 	// Write main file (index.ts) with possibly inlined code
 	mainPath := fmt.Sprintf("%s/index.ts", tmpDir)
-	if err := os.WriteFile(mainPath, []byte(mainCode), 0644); err != nil {
+	if err := os.WriteFile(mainPath, []byte(mainCode), 0o644); err != nil {
 		return nil, fmt.Errorf("failed to write main file: %w", err)
 	}
 
@@ -465,11 +465,11 @@ func (b *Bundler) BundleWithFiles(ctx context.Context, mainCode string, supporti
 
 		// Create parent directory if needed
 		dir := fullPath[:strings.LastIndex(fullPath, "/")]
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("failed to create directory for %s: %w", filePath, err)
 		}
 
-		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
 			return nil, fmt.Errorf("failed to write file %s: %w", filePath, err)
 		}
 	}
@@ -478,7 +478,7 @@ func (b *Bundler) BundleWithFiles(ctx context.Context, mainCode string, supporti
 	switch {
 	case len(sharedModules) > 0:
 		sharedDir := filepath.Join(tmpDir, "_shared")
-		if err := os.MkdirAll(sharedDir, 0755); err != nil {
+		if err := os.MkdirAll(sharedDir, 0o755); err != nil {
 			return nil, fmt.Errorf("failed to create _shared directory: %w", err)
 		}
 
@@ -494,11 +494,11 @@ func (b *Bundler) BundleWithFiles(ctx context.Context, mainCode string, supporti
 
 			// Create parent directory if needed (for nested modules like _shared/utils/db.ts)
 			dir := filepath.Dir(fullPath)
-			if err := os.MkdirAll(dir, 0755); err != nil {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return nil, fmt.Errorf("failed to create directory for %s: %w", modulePath, err)
 			}
 
-			if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
 				return nil, fmt.Errorf("failed to write shared module %s: %w", modulePath, err)
 			}
 		}
@@ -510,13 +510,13 @@ func (b *Bundler) BundleWithFiles(ctx context.Context, mainCode string, supporti
 		}
 
 		denoConfigPath := fmt.Sprintf("%s/deno.json", tmpDir)
-		if err := os.WriteFile(denoConfigPath, []byte(mergedConfig), 0644); err != nil {
+		if err := os.WriteFile(denoConfigPath, []byte(mergedConfig), 0o644); err != nil {
 			return nil, fmt.Errorf("failed to write deno.json: %w", err)
 		}
 	case functionDenoJSON != "":
 		// No shared modules, but function has deno.json - write it as-is
 		denoConfigPath := fmt.Sprintf("%s/deno.json", tmpDir)
-		if err := os.WriteFile(denoConfigPath, []byte(functionDenoJSON), 0644); err != nil {
+		if err := os.WriteFile(denoConfigPath, []byte(functionDenoJSON), 0o644); err != nil {
 			return nil, fmt.Errorf("failed to write deno.json: %w", err)
 		}
 		log.Debug().Str("path", denoConfigPath).Msg("Wrote function deno.json to temp directory")
