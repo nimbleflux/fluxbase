@@ -143,6 +143,9 @@ export {
   SettingsClient,
 } from "./settings";
 
+// Secrets module
+export { SecretsManager } from "./secrets";
+
 // DDL module
 export { DDLManager } from "./ddl";
 
@@ -530,3 +533,15 @@ export type {
   SupabaseResponse,
   SupabaseAuthResponse,
 } from "./types";
+
+// Secrets types (defined in secrets module)
+export type {
+  Secret,
+  SecretSummary,
+  SecretVersion,
+  SecretStats,
+  CreateSecretRequest,
+  UpdateSecretRequest,
+  ListSecretsOptions,
+  SecretByNameOptions,
+} from "./secrets";

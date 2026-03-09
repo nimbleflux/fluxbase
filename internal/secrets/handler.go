@@ -51,6 +51,17 @@ func (h *Handler) RegisterRoutes(app *fiber.App, authService *auth.Service, clie
 	// Read operations require read:secrets scope
 	secrets.Get("/", middleware.RequireScope(auth.ScopeSecretsRead), h.ListSecrets)
 	secrets.Get("/stats", middleware.RequireScope(auth.ScopeSecretsRead), h.GetStats)
+
+	// Name-based routes (must come BEFORE /:id routes to avoid conflicts)
+	// These allow fetching secrets by name instead of UUID
+	byName := secrets.Group("/by-name")
+	byName.Get("/:name", middleware.RequireScope(auth.ScopeSecretsRead), h.GetSecretByName)
+	byName.Get("/:name/versions", middleware.RequireScope(auth.ScopeSecretsRead), h.GetVersionsByName)
+	byName.Put("/:name", middleware.RequireScope(auth.ScopeSecretsWrite), h.UpdateSecretByName)
+	byName.Delete("/:name", middleware.RequireScope(auth.ScopeSecretsWrite), h.DeleteSecretByName)
+	byName.Post("/:name/rollback/:version", middleware.RequireScope(auth.ScopeSecretsWrite), h.RollbackByName)
+
+	// UUID-based routes (legacy, kept for backward compatibility)
 	secrets.Get("/:id", middleware.RequireScope(auth.ScopeSecretsRead), h.GetSecret)
 	secrets.Get("/:id/versions", middleware.RequireScope(auth.ScopeSecretsRead), h.GetVersions)
 
@@ -105,14 +116,7 @@ func (h *Handler) CreateSecret(c fiber.Ctx) error {
 	}
 
 	// Get user ID from context
-	var userID *uuid.UUID
-	if uid, ok := c.Locals("user_id").(uuid.UUID); ok {
-		userID = &uid
-	} else if uidStr, ok := c.Locals("user_id").(string); ok && uidStr != "" {
-		if uid, err := uuid.Parse(uidStr); err == nil {
-			userID = &uid
-		}
-	}
+	userID := getUserIDFromContext(c)
 
 	secret := &Secret{
 		Name:        req.Name,
@@ -213,15 +217,7 @@ func (h *Handler) UpdateSecret(c fiber.Ctx) error {
 		})
 	}
 
-	// Get user ID from context
-	var userID *uuid.UUID
-	if uid, ok := c.Locals("user_id").(uuid.UUID); ok {
-		userID = &uid
-	} else if uidStr, ok := c.Locals("user_id").(string); ok && uidStr != "" {
-		if uid, err := uuid.Parse(uidStr); err == nil {
-			userID = &uid
-		}
-	}
+	userID := getUserIDFromContext(c)
 
 	if err := h.storage.UpdateSecret(c.RequestCtx(), id, req.Value, req.Description, req.ExpiresAt, userID); err != nil {
 		if isNotFoundError(err) {
@@ -313,15 +309,7 @@ func (h *Handler) RollbackToVersion(c fiber.Ctx) error {
 		})
 	}
 
-	// Get user ID from context
-	var userID *uuid.UUID
-	if uid, ok := c.Locals("user_id").(uuid.UUID); ok {
-		userID = &uid
-	} else if uidStr, ok := c.Locals("user_id").(string); ok && uidStr != "" {
-		if uid, err := uuid.Parse(uidStr); err == nil {
-			userID = &uid
-		}
-	}
+	userID := getUserIDFromContext(c)
 
 	if err := h.storage.RollbackToVersion(c.RequestCtx(), id, version, userID); err != nil {
 		if isNotFoundError(err) {
@@ -359,6 +347,231 @@ func (h *Handler) GetStats(c fiber.Ctx) error {
 		"expiring_soon": expiringSoon,
 		"expired":       expired,
 	})
+}
+
+// getNamespaceFromQuery extracts the optional namespace query parameter
+func getNamespaceFromQuery(c fiber.Ctx) *string {
+	if ns := c.Query("namespace"); ns != "" {
+		return &ns
+	}
+	return nil
+}
+
+// getUserIDFromContext extracts user ID from fiber context
+func getUserIDFromContext(c fiber.Ctx) *uuid.UUID {
+	if uid, ok := c.Locals("user_id").(uuid.UUID); ok {
+		return &uid
+	}
+	if uidStr, ok := c.Locals("user_id").(string); ok && uidStr != "" {
+		if uid, err := uuid.Parse(uidStr); err == nil {
+			return &uid
+		}
+	}
+	return nil
+}
+
+// GetSecretByName retrieves a secret by name (metadata only)
+func (h *Handler) GetSecretByName(c fiber.Ctx) error {
+	name := c.Params("name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Secret name is required",
+		})
+	}
+
+	namespace := getNamespaceFromQuery(c)
+
+	secret, err := h.storage.GetSecretByName(c.RequestCtx(), name, namespace)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Secret not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to get secret: %v", err),
+		})
+	}
+
+	return c.JSON(secret)
+}
+
+// UpdateSecretByName updates a secret's value or metadata by name
+func (h *Handler) UpdateSecretByName(c fiber.Ctx) error {
+	name := c.Params("name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Secret name is required",
+		})
+	}
+
+	namespace := getNamespaceFromQuery(c)
+
+	var req UpdateSecretRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if req.Value == nil && req.Description == nil && req.ExpiresAt == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "At least one field (value, description, or expires_at) must be provided",
+		})
+	}
+
+	userID := getUserIDFromContext(c)
+
+	secret, err := h.storage.GetSecretByName(c.RequestCtx(), name, namespace)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Secret not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to get secret: %v", err),
+		})
+	}
+
+	if err := h.storage.UpdateSecret(c.RequestCtx(), secret.ID, req.Value, req.Description, req.ExpiresAt, userID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to update secret: %v", err),
+		})
+	}
+
+	updatedSecret, err := h.storage.GetSecret(c.RequestCtx(), secret.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Secret updated but failed to retrieve updated data",
+		})
+	}
+
+	return c.JSON(updatedSecret)
+}
+
+// DeleteSecretByName deletes a secret by name
+func (h *Handler) DeleteSecretByName(c fiber.Ctx) error {
+	name := c.Params("name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Secret name is required",
+		})
+	}
+
+	namespace := getNamespaceFromQuery(c)
+
+	secret, err := h.storage.GetSecretByName(c.RequestCtx(), name, namespace)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Secret not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to get secret: %v", err),
+		})
+	}
+
+	if err := h.storage.DeleteSecret(c.RequestCtx(), secret.ID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to delete secret: %v", err),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Secret deleted successfully",
+	})
+}
+
+// GetVersionsByName retrieves the version history for a secret by name
+func (h *Handler) GetVersionsByName(c fiber.Ctx) error {
+	name := c.Params("name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Secret name is required",
+		})
+	}
+
+	namespace := getNamespaceFromQuery(c)
+
+	secret, err := h.storage.GetSecretByName(c.RequestCtx(), name, namespace)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Secret not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to get secret: %v", err),
+		})
+	}
+
+	versions, err := h.storage.GetVersions(c.RequestCtx(), secret.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to get versions: %v", err),
+		})
+	}
+
+	if versions == nil {
+		versions = []SecretVersion{}
+	}
+
+	return c.JSON(versions)
+}
+
+// RollbackByName restores a secret to a previous version by name
+func (h *Handler) RollbackByName(c fiber.Ctx) error {
+	name := c.Params("name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Secret name is required",
+		})
+	}
+
+	versionStr := c.Params("version")
+	version := 0
+	if _, err := fmt.Sscanf(versionStr, "%d", &version); err != nil || version < 1 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid version number",
+		})
+	}
+
+	namespace := getNamespaceFromQuery(c)
+	userID := getUserIDFromContext(c)
+
+	secret, err := h.storage.GetSecretByName(c.RequestCtx(), name, namespace)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Secret not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to get secret: %v", err),
+		})
+	}
+
+	if err := h.storage.RollbackToVersion(c.RequestCtx(), secret.ID, version, userID); err != nil {
+		if isNotFoundError(err) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": fmt.Sprintf("Version %d not found", version),
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to rollback: %v", err),
+		})
+	}
+
+	updatedSecret, err := h.storage.GetSecret(c.RequestCtx(), secret.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Rollback successful but failed to retrieve updated data",
+		})
+	}
+
+	return c.JSON(updatedSecret)
 }
 
 // Helper functions for error detection

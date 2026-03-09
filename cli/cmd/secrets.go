@@ -210,55 +210,45 @@ func runSecretsSet(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// First, try to find if the secret already exists
-	findParams := url.Values{}
-	findParams.Set("name", name)
+	// Build URL for name-based endpoint
+	path := "/api/v1/secrets/by-name/" + url.PathEscape(name)
+	params := url.Values{}
 	if secretNamespace != "" {
-		findParams.Set("namespace", secretNamespace)
-	} else if secretScope == "global" {
-		findParams.Set("scope", "global")
+		params.Set("namespace", secretNamespace)
+	}
+	if len(params) > 0 {
+		path += "?" + params.Encode()
 	}
 
-	var existingSecrets []map[string]interface{}
-	findPath := "/api/v1/secrets?" + findParams.Encode()
-	_ = apiClient.DoGet(ctx, findPath, nil, &existingSecrets)
-
-	// Find exact match
-	var existingID string
-	for _, s := range existingSecrets {
-		sName := getStringValue(s, "name")
-		sNamespace := getStringValue(s, "namespace")
-		sScope := getStringValue(s, "scope")
-
-		// Match by name and scope/namespace
-		if sName == name {
-			if secretNamespace != "" && sNamespace == secretNamespace {
-				existingID = getStringValue(s, "id")
-				break
-			} else if secretNamespace == "" && sScope == "global" && sNamespace == "" {
-				existingID = getStringValue(s, "id")
-				break
-			}
+	// Build request body
+	body := map[string]interface{}{
+		"value": value,
+	}
+	if secretDescription != "" {
+		body["description"] = secretDescription
+	}
+	if secretExpires != "" {
+		duration, err := parseDuration(secretExpires)
+		if err != nil {
+			return fmt.Errorf("invalid expiration format: %w", err)
 		}
+		expiresAt := time.Now().Add(duration)
+		body["expires_at"] = expiresAt.Format(time.RFC3339)
 	}
 
-	if existingID != "" {
-		// Update existing secret
-		body := map[string]interface{}{
-			"value": value,
-		}
-		if secretDescription != "" {
-			body["description"] = secretDescription
-		}
-
-		if err := apiClient.DoPut(ctx, "/api/v1/secrets/"+url.PathEscape(existingID), body, nil); err != nil {
-			return err
-		}
-
+	// Try to update first
+	var existingSecret map[string]interface{}
+	err := apiClient.DoPut(ctx, path, body, &existingSecret)
+	if err == nil {
 		fmt.Printf("Secret '%s' updated.\n", name)
-	} else {
+		fmt.Printf("The secret will be available as FLUXBASE_SECRET_%s in edge functions.\n", strings.ToUpper(name))
+		return nil
+	}
+
+	// If update failed, check if it's a 404 (secret doesn't exist) - create it instead
+	if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "404") {
 		// Create new secret
-		body := map[string]interface{}{
+		createBody := map[string]interface{}{
 			"name":  name,
 			"value": value,
 			"scope": secretScope,
@@ -268,33 +258,32 @@ func runSecretsSet(cmd *cobra.Command, args []string) error {
 			if secretNamespace == "" {
 				return fmt.Errorf("--namespace is required when scope is 'namespace'")
 			}
-			body["namespace"] = secretNamespace
+			createBody["namespace"] = secretNamespace
 		}
 
 		if secretDescription != "" {
-			body["description"] = secretDescription
+			createBody["description"] = secretDescription
 		}
 
 		if secretExpires != "" {
-			// Parse duration and convert to timestamp
-			duration, err := parseDuration(secretExpires)
-			if err != nil {
-				return fmt.Errorf("invalid expiration format: %w", err)
+			duration, parseErr := parseDuration(secretExpires)
+			if parseErr != nil {
+				return fmt.Errorf("invalid expiration format: %w", parseErr)
 			}
 			expiresAt := time.Now().Add(duration)
-			body["expires_at"] = expiresAt.Format(time.RFC3339)
+			createBody["expires_at"] = expiresAt.Format(time.RFC3339)
 		}
 
-		if err := apiClient.DoPost(ctx, "/api/v1/secrets", body, nil); err != nil {
+		if err := apiClient.DoPost(ctx, "/api/v1/secrets", createBody, nil); err != nil {
 			return err
 		}
 
 		fmt.Printf("Secret '%s' created.\n", name)
+		fmt.Printf("The secret will be available as FLUXBASE_SECRET_%s in edge functions.\n", strings.ToUpper(name))
+		return nil
 	}
 
-	fmt.Printf("The secret will be available as FLUXBASE_SECRET_%s in edge functions.\n", strings.ToUpper(name))
-
-	return nil
+	return err
 }
 
 func runSecretsGet(cmd *cobra.Command, args []string) error {
@@ -303,39 +292,15 @@ func runSecretsGet(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Find the secret by name
-	params := url.Values{}
-	params.Set("name", name)
+	// Use name-based endpoint
+	path := "/api/v1/secrets/by-name/" + url.PathEscape(name)
 	if secretNamespace != "" {
-		params.Set("namespace", secretNamespace)
+		path += "?namespace=" + url.QueryEscape(secretNamespace)
 	}
 
-	var secrets []map[string]interface{}
-	path := "/api/v1/secrets?" + params.Encode()
-
-	if err := apiClient.DoGet(ctx, path, nil, &secrets); err != nil {
-		return err
-	}
-
-	// Find exact match
 	var secret map[string]interface{}
-	for _, s := range secrets {
-		sName := getStringValue(s, "name")
-		sNamespace := getStringValue(s, "namespace")
-
-		if sName == name {
-			if secretNamespace != "" && sNamespace == secretNamespace {
-				secret = s
-				break
-			} else if secretNamespace == "" && sNamespace == "" {
-				secret = s
-				break
-			}
-		}
-	}
-
-	if secret == nil {
-		return fmt.Errorf("secret '%s' not found", name)
+	if err := apiClient.DoGet(ctx, path, nil, &secret); err != nil {
+		return err
 	}
 
 	formatter := GetFormatter()
@@ -348,44 +313,13 @@ func runSecretsDelete(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Find the secret by name first
-	params := url.Values{}
+	// Use name-based endpoint
+	path := "/api/v1/secrets/by-name/" + url.PathEscape(name)
 	if secretNamespace != "" {
-		params.Set("namespace", secretNamespace)
+		path += "?namespace=" + url.QueryEscape(secretNamespace)
 	}
 
-	var secrets []map[string]interface{}
-	path := "/api/v1/secrets"
-	if len(params) > 0 {
-		path += "?" + params.Encode()
-	}
-
-	if err := apiClient.DoGet(ctx, path, nil, &secrets); err != nil {
-		return err
-	}
-
-	// Find exact match
-	var secretID string
-	for _, s := range secrets {
-		sName := getStringValue(s, "name")
-		sNamespace := getStringValue(s, "namespace")
-
-		if sName == name {
-			if secretNamespace != "" && sNamespace == secretNamespace {
-				secretID = getStringValue(s, "id")
-				break
-			} else if secretNamespace == "" && sNamespace == "" {
-				secretID = getStringValue(s, "id")
-				break
-			}
-		}
-	}
-
-	if secretID == "" {
-		return fmt.Errorf("secret '%s' not found", name)
-	}
-
-	if err := apiClient.DoDelete(ctx, "/api/v1/secrets/"+url.PathEscape(secretID)); err != nil {
+	if err := apiClient.DoDelete(ctx, path); err != nil {
 		return err
 	}
 
@@ -399,46 +333,14 @@ func runSecretsHistory(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Find the secret by name first
-	params := url.Values{}
+	// Use name-based endpoint
+	path := "/api/v1/secrets/by-name/" + url.PathEscape(name) + "/versions"
 	if secretNamespace != "" {
-		params.Set("namespace", secretNamespace)
+		path += "?namespace=" + url.QueryEscape(secretNamespace)
 	}
 
-	var secrets []map[string]interface{}
-	listPath := "/api/v1/secrets"
-	if len(params) > 0 {
-		listPath += "?" + params.Encode()
-	}
-
-	if err := apiClient.DoGet(ctx, listPath, nil, &secrets); err != nil {
-		return err
-	}
-
-	// Find exact match
-	var secretID string
-	for _, s := range secrets {
-		sName := getStringValue(s, "name")
-		sNamespace := getStringValue(s, "namespace")
-
-		if sName == name {
-			if secretNamespace != "" && sNamespace == secretNamespace {
-				secretID = getStringValue(s, "id")
-				break
-			} else if secretNamespace == "" && sNamespace == "" {
-				secretID = getStringValue(s, "id")
-				break
-			}
-		}
-	}
-
-	if secretID == "" {
-		return fmt.Errorf("secret '%s' not found", name)
-	}
-
-	// Get version history
 	var versions []map[string]interface{}
-	if err := apiClient.DoGet(ctx, "/api/v1/secrets/"+url.PathEscape(secretID)+"/versions", nil, &versions); err != nil {
+	if err := apiClient.DoGet(ctx, path, nil, &versions); err != nil {
 		return err
 	}
 
@@ -483,45 +385,13 @@ func runSecretsRollback(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Find the secret by name first
-	params := url.Values{}
+	// Use name-based endpoint
+	path := "/api/v1/secrets/by-name/" + url.PathEscape(name) + "/rollback/" + url.PathEscape(version)
 	if secretNamespace != "" {
-		params.Set("namespace", secretNamespace)
+		path += "?namespace=" + url.QueryEscape(secretNamespace)
 	}
 
-	var secrets []map[string]interface{}
-	listPath := "/api/v1/secrets"
-	if len(params) > 0 {
-		listPath += "?" + params.Encode()
-	}
-
-	if err := apiClient.DoGet(ctx, listPath, nil, &secrets); err != nil {
-		return err
-	}
-
-	// Find exact match
-	var secretID string
-	for _, s := range secrets {
-		sName := getStringValue(s, "name")
-		sNamespace := getStringValue(s, "namespace")
-
-		if sName == name {
-			if secretNamespace != "" && sNamespace == secretNamespace {
-				secretID = getStringValue(s, "id")
-				break
-			} else if secretNamespace == "" && sNamespace == "" {
-				secretID = getStringValue(s, "id")
-				break
-			}
-		}
-	}
-
-	if secretID == "" {
-		return fmt.Errorf("secret '%s' not found", name)
-	}
-
-	// Rollback to version
-	if err := apiClient.DoPost(ctx, "/api/v1/secrets/"+url.PathEscape(secretID)+"/rollback/"+url.PathEscape(version), nil, nil); err != nil {
+	if err := apiClient.DoPost(ctx, path, nil, nil); err != nil {
 		return err
 	}
 
