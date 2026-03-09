@@ -48,6 +48,7 @@ import { FluxbaseRPC } from "./rpc";
 import { FluxbaseAdmin } from "./admin";
 import { FluxbaseManagement } from "./management";
 import { SettingsClient } from "./settings";
+import { SecretsManager } from "./secrets";
 import { FluxbaseAI } from "./ai";
 import { FluxbaseVector } from "./vector";
 import { FluxbaseGraphQL } from "./graphql";
@@ -114,6 +115,9 @@ export class FluxbaseClient<
 
   /** Settings module for reading public application settings (respects RLS policies) */
   public settings: SettingsClient;
+
+  /** Secrets module for managing edge function and job secrets */
+  public secrets: SecretsManager;
 
   /** AI module for chatbots and conversation history */
   public ai: FluxbaseAI;
@@ -305,6 +309,9 @@ export class FluxbaseClient<
 
     // Initialize settings module (public read-only access with RLS)
     this.settings = new SettingsClient(this.fetch);
+
+    // Initialize secrets module
+    this.secrets = new SecretsManager(this.fetch);
 
     // Initialize AI module
     // Convert HTTP URL to WebSocket URL (http(s) -> ws(s))

@@ -84,9 +84,9 @@ fluxbase secrets rollback API_KEY 2
 
 Secrets support two scope levels:
 
-| Scope | Description | Use Case |
-|-------|-------------|----------|
-| `global` | Available to all functions in all namespaces | Shared API keys, common credentials |
+| Scope       | Description                                         | Use Case                                       |
+| ----------- | --------------------------------------------------- | ---------------------------------------------- |
+| `global`    | Available to all functions in all namespaces        | Shared API keys, common credentials            |
 | `namespace` | Available only to functions in a specific namespace | Environment-specific secrets (prod vs staging) |
 
 ### Resolution Order
@@ -115,7 +115,7 @@ export default async function handler(req: Request): Promise<Response> {
   const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -163,14 +163,14 @@ export default async function handler(payload: unknown): Promise<void> {
 
 Fluxbase provides two secrets systems:
 
-| Feature | `fluxbase settings secrets` | `fluxbase secrets` |
-|---------|----------------------------|-------------------|
-| Storage | `app.settings` table | `functions.secrets` table |
-| Scopes | System, User | Global, Namespace |
-| User-specific | Yes (with HKDF encryption) | No |
-| Version history | No | Yes |
-| Function access | `secrets.get()` | `Deno.env.get("FLUXBASE_SECRET_*")` |
-| Best for | Application config, per-user keys | Function runtime secrets |
+| Feature         | `fluxbase settings secrets`       | `fluxbase secrets`                  |
+| --------------- | --------------------------------- | ----------------------------------- |
+| Storage         | `app.settings` table              | `functions.secrets` table           |
+| Scopes          | System, User                      | Global, Namespace                   |
+| User-specific   | Yes (with HKDF encryption)        | No                                  |
+| Version history | No                                | Yes                                 |
+| Function access | `secrets.get()`                   | `Deno.env.get("FLUXBASE_SECRET_*")` |
+| Best for        | Application config, per-user keys | Function runtime secrets            |
 
 For new projects, consider which system fits your needs:
 
@@ -254,29 +254,103 @@ Environment variables take precedence over stored secrets, useful for:
 
 ## API Reference
 
-### REST Endpoints
+### REST Endpoints (Name-Based - Recommended)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/admin/secrets` | List all secrets |
-| POST | `/api/v1/admin/secrets` | Create a secret |
-| GET | `/api/v1/admin/secrets/:name` | Get secret metadata |
-| PUT | `/api/v1/admin/secrets/:name` | Update a secret |
-| DELETE | `/api/v1/admin/secrets/:name` | Delete a secret |
-| GET | `/api/v1/admin/secrets/:name/history` | Get version history |
-| POST | `/api/v1/admin/secrets/:name/rollback` | Rollback to version |
+Name-based endpoints are the recommended way to work with secrets. They use the secret name instead of UUIDs, making them easier to use.
 
-### Request Body (Create/Update)
+| Method | Endpoint                                          | Description                                      |
+| ------ | ------------------------------------------------- | ------------------------------------------------ |
+| GET    | `/api/v1/secrets/by-name/:name`                   | Get secret by name (query: `namespace`)          |
+| PUT    | `/api/v1/secrets/by-name/:name`                   | Update secret by name (query: `namespace`)       |
+| DELETE | `/api/v1/secrets/by-name/:name`                   | Delete secret by name (query: `namespace`)       |
+| GET    | `/api/v1/secrets/by-name/:name/versions`          | Get version history by name (query: `namespace`) |
+| POST   | `/api/v1/secrets/by-name/:name/rollback/:version` | Rollback by name (query: `namespace`)            |
+
+### REST Endpoints (UUID-Based - Legacy)
+
+UUID-based endpoints are kept for backward compatibility. For new code, prefer name-based endpoints above.
+
+| Method | Endpoint                                | Description                                    |
+| ------ | --------------------------------------- | ---------------------------------------------- |
+| GET    | `/api/v1/secrets`                       | List all secrets (query: `scope`, `namespace`) |
+| GET    | `/api/v1/secrets/stats`                 | Get secret statistics                          |
+| POST   | `/api/v1/secrets`                       | Create a secret                                |
+| GET    | `/api/v1/secrets/:id`                   | Get secret metadata by UUID                    |
+| PUT    | `/api/v1/secrets/:id`                   | Update a secret by UUID                        |
+| DELETE | `/api/v1/secrets/:id`                   | Delete a secret by UUID                        |
+| GET    | `/api/v1/secrets/:id/versions`          | Get version history by UUID                    |
+| POST   | `/api/v1/secrets/:id/rollback/:version` | Rollback to version by UUID                    |
+
+### Request Body (Create)
 
 ```json
 {
   "name": "API_KEY",
   "value": "sk-your-secret-key",
   "scope": "global",
-  "namespace": "",
+  "namespace": "production",
   "description": "External API key",
   "expires_at": "2025-12-31T00:00:00Z"
 }
+```
+
+Note: `namespace` is only required when `scope` is `"namespace"`. The `:id` in UUID-based endpoints is a UUID returned after creation.
+
+### Request Body (Update)
+
+```json
+{
+  "value": "new-secret-value",
+  "description": "Updated description",
+  "expires_at": "2026-12-31T00:00:00Z"
+}
+```
+
+## SDK Usage
+
+The TypeScript SDK provides a `secrets` manager with both name-based and UUID-based methods:
+
+```typescript
+import { createClient } from "@fluxbase/sdk";
+
+const client = createClient({ url: "http://localhost:8080" });
+
+// Create a secret
+const secret = await client.secrets.create({
+  name: "API_KEY",
+  value: "sk-your-api-key",
+  scope: "global",
+  description: "External API key",
+});
+
+// Get secret by name (recommended)
+const secret = await client.secrets.get("API_KEY");
+
+// Get namespace-scoped secret
+const secret = await client.secrets.get("DATABASE_URL", {
+  namespace: "production",
+});
+
+// Update secret by name
+await client.secrets.update("API_KEY", { value: "new-api-key" });
+
+// Delete secret by name
+await client.secrets.delete("OLD_KEY");
+
+// Get version history
+const versions = await client.secrets.getVersions("API_KEY");
+
+// Rollback to version 2
+await client.secrets.rollback("API_KEY", 2);
+
+// List all secrets
+const secrets = await client.secrets.list();
+
+// List by scope
+const globalSecrets = await client.secrets.list({ scope: "global" });
+
+// Get statistics
+const stats = await client.secrets.stats();
 ```
 
 ## Next Steps
