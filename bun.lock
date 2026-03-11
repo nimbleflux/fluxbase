@@ -104,7 +104,7 @@
     },
     "sdk": {
       "name": "@fluxbase/sdk",
-      "version": "2026.3.3",
+      "version": "2026.3.4",
       "dependencies": {
         "cross-fetch": "^4.1.0",
       },
@@ -132,7 +132,7 @@
     },
     "sdk-react": {
       "name": "@fluxbase/sdk-react",
-      "version": "2026.3.3",
+      "version": "2026.3.4",
       "devDependencies": {
         "@fluxbase/sdk": "file:../sdk",
         "@tanstack/react-query": "^5.90.21",
@@ -150,7 +150,7 @@
         "vitest": "^4.0.18",
       },
       "peerDependencies": {
-        "@fluxbase/sdk": "^2026.3.3",
+        "@fluxbase/sdk": "^2026.3.4",
         "@tanstack/react-query": "^5.90.21",
         "react": "^18.0.0 || ^19.0.0",
       },
@@ -2097,6 +2097,7 @@
 
     "@fluxbase/sdk-react/@fluxbase/sdk": ["@fluxbase/sdk@file:sdk", { "dependencies": { "cross-fetch": "^4.1.0" }, "devDependencies": { "@types/node": "^25.4.0", "@vitest/coverage-v8": "^4.0.18", "docusaurus-plugin-typedoc": "^1.4.2", "esbuild": "^0.27.3", "ts-node": "^10.9.2", "tsup": "^8.5.1", "typedoc": "^0.28.17", "typedoc-plugin-markdown": "^4.10.0", "typescript": "^5.9.3", "vitest": "^4.0.18" }, "optionalDependencies": { "@rollup/rollup-darwin-arm64": "^4.59.0" }, "peerDependencies": { "esbuild": ">=0.27.3" }, "optionalPeers": ["esbuild"] }],
 
+    "@fluxbase/sdk-react/@fluxbase/sdk": ["@fluxbase/sdk@file:sdk", { "dependencies": { "cross-fetch": "^4.1.0" }, "devDependencies": { "@types/node": "^25.4.0", "@vitest/coverage-v8": "^4.0.18", "docusaurus-plugin-typedoc": "^1.4.2", "esbuild": "^0.27.3", "ts-node": "^10.9.2", "tsup": "^8.5.1", "typedoc": "^0.28.17", "typedoc-plugin-markdown": "^4.10.0", "typescript": "^5.9.3", "vitest": "^4.0.18" }, "optionalDependencies": { "@rollup/rollup-darwin-arm64": "^4.59.0" }, "peerDependencies": { "esbuild": ">=0.27.3" }, "optionalPeers": ["esbuild"] }],
 
     "@radix-ui/react-alert-dialog/@radix-ui/react-slot": ["@radix-ui/react-slot@1.2.3", "", { "dependencies": { "@radix-ui/react-compose-refs": "1.1.2" }, "peerDependencies": { "@types/react": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-aeNmHnBxbi2St0au6VBVC7JXFlhLlOnvIIlePNniyUNAClzmtAUEY8/pBiK3iHjufOlwA+c20/8jngo7xcrg8A=="],
 
