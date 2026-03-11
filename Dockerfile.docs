@@ -39,10 +39,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY docs/ ./docs/
 
 # Build the static site (Astro/Starlight with starlight-typedoc)
-WORKDIR /app/docs
+WORKDIR /app
 # Set NODE_OPTIONS to provide a localstorage file path for Node.js 25
 ENV NODE_OPTIONS="--localstorage-file=/tmp/localstorage.db"
-RUN bun run build
+ENV PATH="/app/node_modules/.bin:$PATH"
+RUN bun run --cwd docs build
 
 # Production image - serve with nginx
 FROM nginx:alpine AS runner

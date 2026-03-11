@@ -221,6 +221,8 @@ title: "@fluxbase/sdk"
 - [PostgrestError](/api/sdk/interfaces/postgresterror/)
 - [PostgrestResponse](/api/sdk/interfaces/postgrestresponse/)
 - [PresenceState](/api/sdk/interfaces/presencestate/)
+- [ProviderTokenNotFoundError](/api/sdk/interfaces/providertokennotfounderror/)
+- [ProviderTokenResponse](/api/sdk/interfaces/providertokenresponse/)
 - [QueryFilter](/api/sdk/interfaces/queryfilter/)
 - [RealtimeBroadcastPayload](/api/sdk/interfaces/realtimebroadcastpayload/)
 - [~~RealtimeChangePayload~~](/api/sdk/interfaces/realtimechangepayload/)

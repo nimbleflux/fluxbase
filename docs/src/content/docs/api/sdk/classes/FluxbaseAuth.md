@@ -291,6 +291,67 @@ Get OAuth authorization URL for a provider
 
 ***
 
+### getProviderToken()
+
+> **getProviderToken**(`provider`): `Promise`\<[`DataResponse`](/api/sdk/type-aliases/dataresponse/)\<[`ProviderTokenResponse`](/api/sdk/interfaces/providertokenresponse/)\>\>
+
+Get provider OAuth tokens for calling external APIs
+
+Retrieves the stored OAuth tokens for a provider (e.g., Google, GitHub) that
+the user has previously authenticated with. Use these tokens to call provider
+APIs directly (e.g., Google Drive API).
+
+The access_token is automatically refreshed if it has expired or is about to expire.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `provider` | `string` | OAuth provider name (e.g., 'google', 'github') |
+
+#### Returns
+
+`Promise`\<[`DataResponse`](/api/sdk/type-aliases/dataresponse/)\<[`ProviderTokenResponse`](/api/sdk/interfaces/providertokenresponse/)\>\>
+
+Promise with provider tokens (access_token, refresh_token, etc.)
+
+#### Examples
+
+```typescript
+// Get Google tokens to call Google Drive API
+const { data, error } = await client.auth.getProviderToken('google')
+
+if (error) {
+  if (error.error_code === 'oauth_token_not_found') {
+    // User needs to sign in with Google first
+    window.location.href = error.authorize_url
+  }
+  return
+}
+
+// Use the access token to call Google Drive API
+const response = await fetch('https://www.googleapis.com/drive/v3/files', {
+  headers: {
+    'Authorization': `Bearer ${data.access_token}`
+  }
+})
+const files = await response.json()
+```
+
+```typescript
+// Check token expiry before making API calls
+const { data } = await client.auth.getProviderToken('google')
+
+if (data.expires_in < 60) {
+  console.warn('Token expires soon, consider caching and refreshing')
+}
+
+// Token expiry is also available as ISO timestamp
+console.log('Token expires at:', data.token_expiry)
+```
+
+***
+
 ### getSAMLLoginUrl()
 
 > **getSAMLLoginUrl**(`provider`, `options?`): `Promise`\<[`DataResponse`](/api/sdk/type-aliases/dataresponse/)\<[`SAMLLoginResponse`](/api/sdk/interfaces/samlloginresponse/)\>\>
