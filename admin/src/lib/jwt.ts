@@ -50,6 +50,8 @@ export function decodeJWT(token: string): JWTPayload {
     const decoded = atob(base64)
     return JSON.parse(decoded) as JWTPayload
   } catch (error) {
-    throw new Error('Failed to decode JWT payload', { cause: error })
+    throw new Error(
+      `Failed to decode JWT payload: ${error instanceof Error ? error.message : String(error)}`
+    )
   }
 }
