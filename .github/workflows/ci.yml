@@ -135,16 +135,16 @@ jobs:
         working-directory: ./sdk
         run: bun run test:ci
 
-      - name: Upload SDK coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./sdk/coverage/coverage-final.json
-          flags: sdk
-          name: sdk-coverage
-          fail_ci_if_error: true
-          verbose: true
-          slug: fluxbase-eu/fluxbase
+      # - name: Upload SDK coverage to Codecov
+      #   uses: codecov/codecov-action@v5
+      #   with:
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #     files: ./sdk/coverage/coverage-final.json
+      #     flags: sdk
+      #     name: sdk-coverage
+      #     fail_ci_if_error: true
+      #     verbose: true
+      #     slug: fluxbase-eu/fluxbase
 
       - name: Type check SDK
         working-directory: ./sdk
@@ -399,16 +399,16 @@ jobs:
           # Check thresholds against combined (unit + e2e) coverage
           go-test-coverage --config=.testcoverage.yml
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.out
-          flags: unittests
-          name: go-codecov
-          fail_ci_if_error: true
-          verbose: true
-          slug: fluxbase-eu/fluxbase
+      # - name: Upload coverage to Codecov
+      #   uses: codecov/codecov-action@v5
+      #   with:
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #     files: ./coverage.out
+      #     flags: unittests
+      #     name: go-codecov
+      #     fail_ci_if_error: true
+      #     verbose: true
+      #     slug: fluxbase-eu/fluxbase
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v7
