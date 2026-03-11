@@ -46,12 +46,6 @@ export function decodeJWT(token: string): JWTPayload {
   const base64 = payload.replace(/-/g, '+').replace(/_/g, '/')
 
   // Decode base64 and parse JSON
-  try {
-    const decoded = atob(base64)
-    return JSON.parse(decoded) as JWTPayload
-  } catch (error) {
-    throw new Error(
-      `Failed to decode JWT payload: ${error instanceof Error ? error.message : String(error)}`
-    )
-  }
+  const decoded = atob(base64)
+  return JSON.parse(decoded) as JWTPayload
 }
