@@ -24,6 +24,7 @@
         "./src/*"
       ],
       "@fluxbase/sdk": ["../sdk/dist/index.d.ts"],
+      "@fluxbase/sdk-react": ["../sdk-react/dist/index.d.ts"],
       "monaco-editor": ["../node_modules/.bun/monaco-editor@0.55.1/node_modules/monaco-editor/esm/vs/editor/editor.main.d.ts"]
     },
     /* Linting */
