@@ -30,15 +30,12 @@ export function EditableCell({
   const handleStartEdit = () => {
     if (isReadOnly) return
 
-    // Convert value to string for editing
-    let stringValue = ''
-    if (value === null || value === undefined) {
-      stringValue = ''
-    } else if (typeof value === 'object') {
-      stringValue = JSON.stringify(value)
-    } else {
-      stringValue = String(value)
-    }
+    const stringValue =
+      value === null || value === undefined
+        ? ''
+        : typeof value === 'object'
+          ? JSON.stringify(value)
+          : String(value)
 
     setEditValue(stringValue)
     setIsEditing(true)
