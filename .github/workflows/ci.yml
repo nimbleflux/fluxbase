@@ -156,7 +156,7 @@ jobs:
 
       - name: Type check SDK-React
         working-directory: ./sdk-react
-        run: bunx tsc --noEmit
+        run: bun run type-check
 
       - name: Build SDK-React
         working-directory: ./sdk-react
@@ -164,7 +164,7 @@ jobs:
 
       - name: Type check Admin
         working-directory: ./admin
-        run: bunx tsc -b
+        run: bun run type-check
 
   test-go:
     name: Test Go
