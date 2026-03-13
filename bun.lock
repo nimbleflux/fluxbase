@@ -2202,6 +2202,10 @@
 
     "recast/source-map": ["source-map@0.6.1", "", {}, "sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g=="],
 
+    "shadcn-admin/@nimbleflux/fluxbase-sdk": ["@nimbleflux/fluxbase-sdk@file:sdk", { "dependencies": { "cross-fetch": "^4.1.0" }, "devDependencies": { "@types/node": "^25.4.0", "@vitest/coverage-v8": "^4.0.18", "docusaurus-plugin-typedoc": "^1.4.2", "esbuild": "^0.27.3", "ts-node": "^10.9.2", "tsup": "^8.5.1", "typedoc": "^0.28.17", "typedoc-plugin-markdown": "^4.10.0", "typescript": "^5.9.3", "vitest": "^4.0.18" }, "optionalDependencies": { "@rollup/rollup-darwin-arm64": "^4.59.0" }, "peerDependencies": { "esbuild": ">=0.27.3" }, "optionalPeers": ["esbuild"] }],
+
+    "shadcn-admin/@nimbleflux/fluxbase-sdk-react": ["@nimbleflux/fluxbase-sdk-react@file:sdk-react", { "devDependencies": { "@tanstack/react-query": "^5.90.21", "@testing-library/jest-dom": "^6.9.1", "@testing-library/react": "^16.3.2", "@types/react": "^19.2.14", "@vitest/coverage-v8": "^4.0.18", "jsdom": "^28.1.0", "prettier": "^3.8.1", "react": "^19.2.4", "react-dom": "^19.2.4", "tsup": "^8.5.1", "typedoc": "^0.28.17", "typescript": "^5.9.3", "vitest": "^4.0.18" }, "peerDependencies": { "@nimbleflux/fluxbase-sdk": "^2026.3.5", "@tanstack/react-query": "^5.90.21", "react": "^18.0.0 || ^19.0.0" } }],
+
     "shiki/@shikijs/engine-oniguruma": ["@shikijs/engine-oniguruma@4.0.2", "", { "dependencies": { "@shikijs/types": "4.0.2", "@shikijs/vscode-textmate": "^10.0.2" } }, "sha512-UpCB9Y2sUKlS9z8juFSKz7ZtysmeXCgnRF0dlhXBkmQnek7lAToPte8DkxmEYGNTMii72zU/lyXiCB6StuZeJg=="],
 
     "shiki/@shikijs/langs": ["@shikijs/langs@4.0.2", "", { "dependencies": { "@shikijs/types": "4.0.2" } }, "sha512-KaXby5dvoeuZzN0rYQiPMjFoUrz4hgwIE+D6Du9owcHcl6/g16/yT5BQxSW5cGt2MZBz6Hl0YuRqf12omRfUUg=="],
@@ -2245,6 +2249,8 @@
     "node-fetch/whatwg-url/webidl-conversions": ["webidl-conversions@3.0.1", "", {}, "sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ=="],
 
     "p-locate/p-limit/yocto-queue": ["yocto-queue@0.1.0", "", {}, "sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q=="],
+
+    "shadcn-admin/@nimbleflux/fluxbase-sdk-react/@nimbleflux/fluxbase-sdk": ["@nimbleflux/fluxbase-sdk@file:sdk", { "dependencies": { "cross-fetch": "^4.1.0" }, "devDependencies": { "@types/node": "^25.4.0", "@vitest/coverage-v8": "^4.0.18", "docusaurus-plugin-typedoc": "^1.4.2", "esbuild": "^0.27.3", "ts-node": "^10.9.2", "tsup": "^8.5.1", "typedoc": "^0.28.17", "typedoc-plugin-markdown": "^4.10.0", "typescript": "^5.9.3", "vitest": "^4.0.18" }, "optionalDependencies": { "@rollup/rollup-darwin-arm64": "^4.59.0" }, "peerDependencies": { "esbuild": ">=0.27.3" }, "optionalPeers": ["esbuild"] }],
 
     "sitemap/@types/node/undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
 
