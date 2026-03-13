@@ -39,6 +39,10 @@ exclude = [
   # External sites with flaky availability or changed URLs
   "jumpcloud\\.com/support",
   "postgresql\\.org/docs/current/security",
+
+  # AI assistant links (require auth, return 403)
+  "chatgpt\\.com",
+  "claude\\.ai",
 ]
 
 # Accept these status codes as valid
