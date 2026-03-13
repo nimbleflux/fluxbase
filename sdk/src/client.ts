@@ -53,6 +53,7 @@ import { FluxbaseAI } from "./ai";
 import { FluxbaseVector } from "./vector";
 import { FluxbaseGraphQL } from "./graphql";
 import { FluxbaseBranching } from "./branching";
+import { FluxbaseTenant } from "./tenant";
 import { QueryBuilder } from "./query-builder";
 import { SchemaQueryBuilder } from "./schema-query-builder";
 import type { FluxbaseClientOptions } from "./types";
@@ -91,6 +92,9 @@ export class FluxbaseClient<
 > {
   /** Internal HTTP client for making requests */
   private fetch: FluxbaseFetch;
+
+  /** Client options */
+  private options?: FluxbaseClientOptions;
 
   /** Authentication module for user management */
   public auth: FluxbaseAuth;
@@ -237,6 +241,37 @@ export class FluxbaseClient<
   public rpc: CallableRPC;
 
   /**
+   * Tenant management module for multi-tenant operations
+   *
+   * @example
+   * ```typescript
+   * // List tenants I have access to
+   * const { data } = await client.tenant.listMine()
+   *
+   * // Create a new tenant (instance admin only)
+   * const { data } = await client.tenant.create({
+   *   slug: 'acme-corp',
+   *   name: 'Acme Corporation'
+   * })
+   *
+   * // Get tenant details
+   * const { data } = await client.tenant.get('tenant-id')
+   *
+   * // Add a member to a tenant (tenant admin only)
+   * await client.tenant.addMember('tenant-id', {
+   *   user_id: 'user-id',
+   *   role: 'tenant_member'
+   * })
+   * ```
+   *
+   * @category Multi-Tenancy
+   */
+  public tenant: FluxbaseTenant;
+
+  /** Current tenant ID (from X-FB-Tenant header or JWT claim) */
+  private _tenantId?: string;
+
+  /**
    * Create a new Fluxbase client instance
    *
    * @param fluxbaseUrl - The URL of your Fluxbase instance
@@ -257,6 +292,9 @@ export class FluxbaseClient<
     protected fluxbaseKey: string,
     options?: FluxbaseClientOptions,
   ) {
+    // Store options for creating tenant-scoped clients
+    this.options = options;
+
     // Prepare headers with anon key
     const headers = {
       apikey: fluxbaseKey,
@@ -353,6 +391,9 @@ export class FluxbaseClient<
     });
 
     this.rpc = rpcCallable as CallableRPC;
+
+    
+    this.tenant = new FluxbaseTenant(this.fetch);
 
     // Subscribe to auth changes to update realtime token
     this.setupAuthSync();
@@ -470,6 +511,88 @@ export class FluxbaseClient<
     this.realtime.setAuth(token);
   }
 
+  
+  /**
+   * Get the current tenant ID
+   *
+   * Returns the tenant ID from X-FB-Tenant header or JWT claim, or default tenant.
+   *
+   * @returns The current tenant ID, or undefined if not set
+   *
+   * @category Multi-Tenancy
+   */
+  getTenantId(): string | undefined {
+    return this._tenantId;
+  }
+  
+  /**
+   * Set the tenant context for all subsequent requests
+   *
+   * This adds the X-FB-Tenant header to all HTTP requests and updates
+   * the realtime connection to filter by tenant.
+   *
+   * @param tenantId - The tenant ID to use for scoping
+   *
+   * @example
+   * ```typescript
+   * // Switch to a specific tenant
+   * client.setTenant('tenant-uuid-here')
+   *
+   * // All subsequent requests will be scoped to this tenant
+   * const { data } = await client.from('users').select('*').execute()
+   * ```
+   *
+   * @category Multi-Tenancy
+   */
+  setTenant(tenantId: string | undefined) {
+    this._tenantId = tenantId;
+    if (tenantId) {
+      this.fetch.setHeader('X-FB-Tenant', tenantId);
+    } else {
+      this.fetch.removeHeader('X-FB-Tenant');
+    }
+  }
+  
+  /**
+   * Create a new client scoped to a specific tenant
+   *
+   * This returns a new client instance with the tenant context set.
+   * The original client is not modified.
+   *
+   * @param tenantId - The tenant ID to scope to
+   * @returns A new FluxbaseClient instance scoped to the tenant
+   *
+   * @example
+   * ```typescript
+   * // Create a tenant-scoped client
+   * const tenantClient = client.forTenant('tenant-uuid')
+   *
+   * // Use the scoped client for tenant-specific operations
+   * const { data } = await tenantClient.from('users').select('*').execute()
+   * ```
+   *
+   * @category Multi-Tenancy
+   */
+  forTenant(tenantId: string): FluxbaseClient<Database, _SchemaName> {
+    
+    const options: FluxbaseClientOptions = {
+      ...this.options,
+      headers: {
+        ...this.options?.headers,
+        'X-FB-Tenant': tenantId,
+      },
+    };
+    
+    const scopedClient = new FluxbaseClient<Database, _SchemaName>(
+      this.fluxbaseUrl,
+      this.fluxbaseKey,
+      options,
+    );
+    scopedClient._tenantId = tenantId;
+    
+    return scopedClient;
+  }
+  
   /**
    * Create or get a realtime channel (Supabase-compatible)
    *

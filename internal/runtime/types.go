@@ -35,6 +35,11 @@ type ExecutionRequest struct {
 	UserRole  string    `json:"user_role,omitempty"`
 	BaseURL   string    `json:"base_url,omitempty"` // base URL for constructing absolute URLs in runtime
 
+	// Multi-tenancy fields
+	TenantID        string `json:"tenant_id,omitempty"`         // Current tenant ID
+	TenantRole      string `json:"tenant_role,omitempty"`       // User's role in current tenant
+	IsInstanceAdmin bool   `json:"is_instance_admin,omitempty"` // True for instance-level admins
+
 	// HTTP context (functions)
 	Method    string            `json:"method,omitempty"`
 	URL       string            `json:"url,omitempty"`

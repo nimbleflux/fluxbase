@@ -7,5 +7,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ['react', '@tanstack/react-query', '@fluxbase/sdk'],
+  external: ['react', '@tanstack/react-query', '@nimbleflux/fluxbase-sdk'],
 })

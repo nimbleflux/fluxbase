@@ -49,12 +49,24 @@ func generateUserToken(jwtSecret string, req ExecutionRequest, runtimeType Runti
 		claims["role"] = "authenticated"
 	}
 
+	// Add multi-tenancy context
+	if req.TenantID != "" {
+		claims["tenant_id"] = req.TenantID
+	}
+	if req.TenantRole != "" {
+		claims["tenant_role"] = req.TenantRole
+	}
+	if req.IsInstanceAdmin {
+		claims["is_instance_admin"] = true
+	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(jwtSecret))
 }
 
 // generateServiceToken generates a JWT token with service_role that bypasses RLS
 // This token allows executions to access all data regardless of ownership
+// IMPORTANT: Service tokens still include tenant_id for audit and optional scoping
 func generateServiceToken(jwtSecret string, req ExecutionRequest, runtimeType RuntimeType, timeout time.Duration) (string, error) {
 	if jwtSecret == "" {
 		return "", fmt.Errorf("JWT secret not configured")
@@ -79,6 +91,17 @@ func generateServiceToken(jwtSecret string, req ExecutionRequest, runtimeType Ru
 		claims["execution_id"] = req.ID.String()
 	case RuntimeTypeJob:
 		claims["job_id"] = req.ID.String()
+	}
+
+	// Add multi-tenancy context for audit purposes
+	// Even though service_role bypasses RLS, we include tenant_id for:
+	// 1. Audit logging
+	// 2. Optional tenant-scoped operations via forTenant()
+	if req.TenantID != "" {
+		claims["tenant_id"] = req.TenantID
+	}
+	if req.IsInstanceAdmin {
+		claims["is_instance_admin"] = true
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useFluxbaseClient } from './context'
-import type { ClientKey, CreateClientKeyRequest } from '@fluxbase/sdk'
+import type { ClientKey, CreateClientKeyRequest } from '@nimbleflux/fluxbase-sdk'
 
 export interface UseClientKeysOptions {
   /**

@@ -181,6 +181,16 @@ func SetRLSContext(ctx context.Context, tx pgx.Tx, userID string, role string, c
 		if claims.IsAnonymous {
 			jwtClaims["is_anonymous"] = claims.IsAnonymous
 		}
+		// Multi-tenancy fields
+		if claims.TenantID != nil {
+			jwtClaims["tenant_id"] = *claims.TenantID
+		}
+		if claims.TenantRole != "" {
+			jwtClaims["tenant_role"] = claims.TenantRole
+		}
+		if claims.IsInstanceAdmin {
+			jwtClaims["is_instance_admin"] = true
+		}
 	}
 
 	// Marshal to JSON
@@ -439,4 +449,80 @@ func splitTableName(fullName string) []string {
 	}
 
 	return parts
+}
+
+// SetRLSContextWithTenant sets both RLS and tenant context for a transaction
+// This is the recommended way to set context for tenant-scoped operations
+func SetRLSContextWithTenant(ctx context.Context, tx pgx.Tx, userID, role string, claims *auth.TokenClaims, tenantID string) error {
+	// First set the base RLS context
+	if err := SetRLSContext(ctx, tx, userID, role, claims); err != nil {
+		return err
+	}
+
+	// Then set the tenant context
+	if tenantID != "" {
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID); err != nil {
+			log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to set tenant context")
+			return fmt.Errorf("failed to set tenant context: %w", err)
+		}
+		log.Debug().Str("tenant_id", tenantID).Msg("Tenant context set for transaction")
+	}
+
+	return nil
+}
+
+// WrapWithRLSAndTenant wraps a database operation with both RLS and tenant context
+func WrapWithRLSAndTenant(ctx context.Context, conn *database.Connection, c fiber.Ctx, fn func(tx pgx.Tx) error) error {
+	// Get branch pool if available
+	pool := conn.Pool()
+	if branchPool := GetBranchPool(ctx); branchPool != nil {
+		pool = branchPool
+	}
+
+	// Start transaction
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Get RLS context
+	role := c.Locals("rls_role")
+	if role == nil {
+		role = "anon"
+	}
+
+	// Get tenant ID
+	tenantID, _ := c.Locals("tenant_id").(string)
+
+	// Extract JWT claims if available
+	var claims *auth.TokenClaims
+	if jwtClaims := c.Locals("claims"); jwtClaims != nil {
+		if tc, ok := jwtClaims.(*auth.TokenClaims); ok {
+			claims = tc
+		}
+	}
+
+	// Convert userID to string
+	var userIDStr string
+	if userID := c.Locals("rls_user_id"); userID != nil {
+		userIDStr = fmt.Sprintf("%v", userID)
+	}
+
+	// Set RLS and tenant context
+	if err := SetRLSContextWithTenant(ctx, tx, userIDStr, role.(string), claims, tenantID); err != nil {
+		return err
+	}
+
+	// Execute the wrapped function
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }

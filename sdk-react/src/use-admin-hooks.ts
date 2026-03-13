@@ -14,7 +14,7 @@ import type {
   Webhook,
   CreateWebhookRequest,
   UpdateWebhookRequest
-} from '@fluxbase/sdk'
+} from '@nimbleflux/fluxbase-sdk'
 
 // ============================================================================
 // useAppSettings Hook

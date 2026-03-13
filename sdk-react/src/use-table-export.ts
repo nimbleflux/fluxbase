@@ -13,7 +13,7 @@ import type {
   TableExportSyncConfig,
   CreateTableExportSyncConfig,
   UpdateTableExportSyncConfig,
-} from '@fluxbase/sdk'
+} from '@nimbleflux/fluxbase-sdk'
 
 // ============================================================================
 // useTableDetails Hook

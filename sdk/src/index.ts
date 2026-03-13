@@ -124,6 +124,9 @@ export { FluxbaseAdminStorage } from "./admin-storage";
 // Admin module
 export { FluxbaseAdmin } from "./admin";
 
+// Tenant module
+export { FluxbaseTenant } from "./tenant";
+
 // Management module
 export {
   FluxbaseManagement,
@@ -522,6 +525,15 @@ export type {
   EmbedResponse,
   VectorSearchOptions,
   VectorSearchResult,
+
+  // Multi-tenancy types
+  Tenant,
+  TenantMembership,
+  TenantWithRole,
+  CreateTenantOptions,
+  UpdateTenantOptions,
+  AddTenantMemberOptions,
+  UpdateTenantMemberOptions,
 
   // Branching types
   BranchStatus,

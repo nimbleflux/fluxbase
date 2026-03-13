@@ -8,7 +8,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useFluxbaseClient } from "./context";
-import type { CaptchaConfig, CaptchaProvider } from "@fluxbase/sdk";
+import type { CaptchaConfig, CaptchaProvider } from "@nimbleflux/fluxbase-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**

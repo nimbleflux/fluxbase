@@ -11,6 +11,7 @@ import { Search } from '@/components/search'
 import { SkipToMain } from '@/components/skip-to-main'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { ImpersonationSelector } from '@/features/impersonation/components/impersonation-selector'
+import { TenantSelector } from '@/components/tenant-selector'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -41,6 +42,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
             <Header fixed>
               <Search />
               <div className='ms-auto flex items-center space-x-4'>
+                <TenantSelector />
                 <ImpersonationSelector />
                 <ThemeSwitch />
                 <ConfigDrawer />
