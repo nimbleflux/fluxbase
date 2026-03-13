@@ -138,7 +138,7 @@ func TestClickHouseLogStorage_buildQuery(t *testing.T) {
 
 		query := storage.buildQuery(opts)
 
-		assert.Contains(t, query.where, "mapGet(execution_data, 'execution_type', '') = ?")
+		assert.Contains(t, query.where, "execution_data['execution_type'] = ?")
 		assert.Equal(t, "function", query.args[0])
 	})
 
@@ -189,7 +189,7 @@ func TestClickHouseLogStorage_buildQuery(t *testing.T) {
 		query := storage.buildQuery(opts)
 
 		// Should have exclusion patterns for static assets
-		assert.Contains(t, query.where, "mapGet(http_data, 'path', '') NOT LIKE ?")
+		assert.Contains(t, query.where, "http_data['path'] NOT LIKE ?")
 		// Args should contain static extensions
 		assert.True(t, len(query.args) > 0)
 	})

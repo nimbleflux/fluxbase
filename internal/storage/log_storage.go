@@ -80,13 +80,14 @@ type LogStorageConfig struct {
 	TimescaleDBEnabled       bool          `mapstructure:"timescaledb_enabled"`
 	TimescaleDBCompression   bool          `mapstructure:"timescaledb_compress"`
 	TimescaleDBCompressAfter time.Duration `mapstructure:"timescaledb_compress_after"`
+	TimescaleDBRetainAfter   time.Duration `mapstructure:"timescaledb_retain_after"`
 
 	// Loki settings (used when backend is "loki")
 	LokiURL      string   `mapstructure:"loki_url"` // required
 	LokiUsername string   `mapstructure:"loki_username"`
 	LokiPassword string   `mapstructure:"loki_password"`
 	LokiTenantID string   `mapstructure:"loki_tenant_id"`
-	LokiLabels   []string `mapstructure:"loki_static_labels"` // default: ["app", "env"]
+	LokiLabels   []string `mapstructure:"loki_labels"` // default: ["app", "env"]
 
 	// Batching configuration
 	BatchSize     int `mapstructure:"batch_size"`

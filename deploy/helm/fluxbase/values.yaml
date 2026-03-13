@@ -599,10 +599,35 @@ config:
   ## @param config.logging.console_enabled Enable console logging
   ## @param config.logging.console_level Console log level
   ## @param config.logging.console_format Console log format (json or text)
-  ## @param config.logging.backend Logging backend (postgres, s3, local)
+  ## @param config.logging.backend Logging backend (postgres, timescaledb, elasticsearch, opensearch, clickhouse, loki, s3, local)
   ## @param config.logging.s3_bucket S3 bucket for logs
   ## @param config.logging.s3_prefix S3 prefix for logs
   ## @param config.logging.local_path Local path for logs
+  ## @param config.logging.timescaledb_enabled Enable TimescaleDB features
+  ## @param config.logging.timescaledb_compression Enable TimescaleDB compression
+  ## @param config.logging.timescaledb_compress_after Compress data older than this
+  ## @param config.logging.timescaledb_retain_after Drop chunks older than this
+  ## @param config.logging.elasticsearch_urls Elasticsearch node URLs
+  ## @param config.logging.elasticsearch_username Elasticsearch username
+  ## @param config.logging.elasticsearch_password Elasticsearch password
+  ## @param config.logging.elasticsearch_index Elasticsearch index name
+  ## @param config.logging.elasticsearch_version Elasticsearch major version (8 or 9)
+  ## @param config.logging.opensearch_urls OpenSearch node URLs
+  ## @param config.logging.opensearch_username OpenSearch username
+  ## @param config.logging.opensearch_password OpenSearch password
+  ## @param config.logging.opensearch_index OpenSearch index name
+  ## @param config.logging.opensearch_version OpenSearch major version
+  ## @param config.logging.clickhouse_addresses ClickHouse server addresses
+  ## @param config.logging.clickhouse_username ClickHouse username
+  ## @param config.logging.clickhouse_password ClickHouse password
+  ## @param config.logging.clickhouse_database ClickHouse database name
+  ## @param config.logging.clickhouse_table ClickHouse table name
+  ## @param config.logging.clickhouse_ttl_days ClickHouse TTL in days
+  ## @param config.logging.loki_url Loki server URL
+  ## @param config.logging.loki_username Loki username
+  ## @param config.logging.loki_password Loki password
+  ## @param config.logging.loki_tenant_id Loki tenant ID
+  ## @param config.logging.loki_labels Static labels for Loki logs
   ## @param config.logging.batch_size Log batch size
   ## @param config.logging.flush_interval Log flush interval
   ## @param config.logging.buffer_size Log buffer size
@@ -623,6 +648,37 @@ config:
     s3_bucket: ""
     s3_prefix: ""
     local_path: ""
+    # TimescaleDB settings
+    timescaledb_enabled: false
+    timescaledb_compression: true
+    timescaledb_compress_after: "168h"
+    timescaledb_retain_after: "2160h"
+    # Elasticsearch settings
+    elasticsearch_urls: []
+    elasticsearch_username: ""
+    elasticsearch_password: ""
+    elasticsearch_index: "fluxbase-logs"
+    elasticsearch_version: 8
+    # OpenSearch settings
+    opensearch_urls: []
+    opensearch_username: ""
+    opensearch_password: ""
+    opensearch_index: "fluxbase-logs"
+    opensearch_version: 2
+    # ClickHouse settings
+    clickhouse_addresses: []
+    clickhouse_username: "default"
+    clickhouse_password: ""
+    clickhouse_database: "fluxbase"
+    clickhouse_table: "logs"
+    clickhouse_ttl_days: 30
+    # Loki settings
+    loki_url: ""
+    loki_username: ""
+    loki_password: ""
+    loki_tenant_id: ""
+    loki_labels: []
+    # General settings
     batch_size: 100
     flush_interval: "5s"
     buffer_size: 1000

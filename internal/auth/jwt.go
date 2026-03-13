@@ -6,6 +6,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -43,19 +44,39 @@ type JWTManager struct {
 }
 
 // NewJWTManager creates a new JWT manager
-func NewJWTManager(secretKey string, accessTTL, refreshTTL time.Duration) *JWTManager {
+func NewJWTManager(secretKey string, accessTTL, refreshTTL time.Duration) (*JWTManager, error) {
+	if len(secretKey) < 32 {
+		return nil, errors.New("JWT secret key must be at least 32 characters (256 bits)")
+	}
+
+	if len(secretKey) < 64 {
+		log.Warn().
+			Int("length", len(secretKey)).
+			Msg("JWT secret key is shorter than recommended 64 characters")
+	}
+
 	return &JWTManager{
 		secretKey:       []byte(secretKey),
 		accessTokenTTL:  accessTTL,
 		refreshTokenTTL: refreshTTL,
-		serviceRoleTTL:  24 * time.Hour, // Default 24 hours
-		anonTTL:         24 * time.Hour, // Default 24 hours
+		serviceRoleTTL:  24 * time.Hour,
+		anonTTL:         24 * time.Hour,
 		issuer:          "fluxbase",
-	}
+	}, nil
 }
 
 // NewJWTManagerWithConfig creates a new JWT manager with full configuration
-func NewJWTManagerWithConfig(secretKey string, accessTTL, refreshTTL, serviceRoleTTL, anonTTL time.Duration) *JWTManager {
+func NewJWTManagerWithConfig(secretKey string, accessTTL, refreshTTL, serviceRoleTTL, anonTTL time.Duration) (*JWTManager, error) {
+	if len(secretKey) < 32 {
+		return nil, errors.New("JWT secret key must be at least 32 characters (256 bits)")
+	}
+
+	if len(secretKey) < 64 {
+		log.Warn().
+			Int("length", len(secretKey)).
+			Msg("JWT secret key is shorter than recommended 64 characters")
+	}
+
 	return &JWTManager{
 		secretKey:       []byte(secretKey),
 		accessTokenTTL:  accessTTL,
@@ -63,7 +84,7 @@ func NewJWTManagerWithConfig(secretKey string, accessTTL, refreshTTL, serviceRol
 		serviceRoleTTL:  serviceRoleTTL,
 		anonTTL:         anonTTL,
 		issuer:          "fluxbase",
-	}
+	}, nil
 }
 
 // GenerateAccessToken generates a new access token

@@ -622,13 +622,14 @@ logging:
   # timescaledb_enabled: false           # FLUXBASE_LOGGING_TIMESTCALEDB_ENABLED - Enable TimescaleDB features
   # timescaledb_compress: true          # FLUXBASE_LOGGING_TIMESTCALEDB_COMPRESS - Enable compression
   # timescaledb_compress_after: "168h"   # FLUXBASE_LOGGING_TIMESTCALEDB_COMPRESS_AFTER - Compress data older than
+  # timescaledb_retain_after: "2160h"    # FLUXBASE_LOGGING_TIMESTCALEDB_RETAIN_AFTER - Drop chunks older than (90 days)
 
   # Loki settings (when backend is "loki")
   # loki_url: "http://localhost:3100"  # FLUXBASE_LOGGING_LOKI_URL - Loki push API URL (required)
   # loki_username: ""                   # FLUXBASE_LOGGING_LOKI_USERNAME - Basic auth username
   # loki_password: ""                   # FLUXBASE_LOGGING_LOKI_PASSWORD - Basic auth password
   # loki_tenant_id: ""                # FLUXBASE_LOGGING_LOKI_TENANT_ID - Tenant ID for multi-tenancy
-  # loki_static_labels:                 # FLUXBASE_LOGGING_LOKI_STATIC_LABELS - Static labels to add to all logs
+  # loki_labels:                        # FLUXBASE_LOGGING_LOKI_LABELS - Static labels to add to all logs
   #   - app
   #   - env
 

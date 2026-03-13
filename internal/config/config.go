@@ -556,7 +556,7 @@ type LoggingConfig struct {
 	ConsoleFormat  string `mapstructure:"console_format"`  // Output format: json or console
 
 	// Backend settings
-	Backend string `mapstructure:"backend"` // Primary backend: postgres (default), s3, local
+	Backend string `mapstructure:"backend"` // Primary backend: postgres (default), s3, local, timescaledb, loki, elasticsearch, opensearch, clickhouse
 
 	// S3 backend settings (when backend is "s3")
 	S3Bucket string `mapstructure:"s3_bucket"` // S3 bucket for logs
@@ -564,6 +564,41 @@ type LoggingConfig struct {
 
 	// Local backend settings (when backend is "local")
 	LocalPath string `mapstructure:"local_path"` // Directory for log files (default: "./logs")
+
+	// TimescaleDB settings (when backend is "timescaledb")
+	TimescaleDBEnabled       bool          `mapstructure:"timescaledb_enabled"`
+	TimescaleDBCompression   bool          `mapstructure:"timescaledb_compression"`
+	TimescaleDBCompressAfter time.Duration `mapstructure:"timescaledb_compress_after"` // Compress after this duration (default: 7d)
+	TimescaleDBRetainAfter   time.Duration `mapstructure:"timescaledb_retain_after"`   // Drop chunks older than this (default: 90d)
+
+	// Loki settings (when backend is "loki")
+	LokiURL      string   `mapstructure:"loki_url"`       // Loki server URL (required)
+	LokiUsername string   `mapstructure:"loki_username"`  // Username for basic auth
+	LokiPassword string   `mapstructure:"loki_password"`  // Password for basic auth
+	LokiTenantID string   `mapstructure:"loki_tenant_id"` // Tenant ID for multi-tenant Loki
+	LokiLabels   []string `mapstructure:"loki_labels"`    // Static labels to add to all logs
+
+	// Elasticsearch settings (when backend is "elasticsearch")
+	ElasticsearchURLs     []string `mapstructure:"elasticsearch_urls"`     // Elasticsearch node URLs
+	ElasticsearchUsername string   `mapstructure:"elasticsearch_username"` // Username for basic auth
+	ElasticsearchPassword string   `mapstructure:"elasticsearch_password"` // Password for basic auth
+	ElasticsearchIndex    string   `mapstructure:"elasticsearch_index"`    // Index name pattern (default: "fluxbase-logs")
+	ElasticsearchVersion  int      `mapstructure:"elasticsearch_version"`  // Major version: 8 or 9 (default: 8)
+
+	// OpenSearch settings (when backend is "opensearch")
+	OpenSearchURLs     []string `mapstructure:"opensearch_urls"`     // OpenSearch node URLs
+	OpenSearchUsername string   `mapstructure:"opensearch_username"` // Username for basic auth
+	OpenSearchPassword string   `mapstructure:"opensearch_password"` // Password for basic auth
+	OpenSearchIndex    string   `mapstructure:"opensearch_index"`    // Index name pattern (default: "fluxbase-logs")
+	OpenSearchVersion  int      `mapstructure:"opensearch_version"`  // Major version (default: 2)
+
+	// ClickHouse settings (when backend is "clickhouse")
+	ClickHouseAddresses []string `mapstructure:"clickhouse_addresses"` // ClickHouse node addresses (default: ["localhost:9000"])
+	ClickHouseUsername  string   `mapstructure:"clickhouse_username"`  // Username (default: "default")
+	ClickHousePassword  string   `mapstructure:"clickhouse_password"`  // Password
+	ClickHouseDatabase  string   `mapstructure:"clickhouse_database"`  // Database name (default: "fluxbase")
+	ClickHouseTable     string   `mapstructure:"clickhouse_table"`     // Table name (default: "logs")
+	ClickHouseTTL       int      `mapstructure:"clickhouse_ttl_days"`  // TTL in days (default: 30)
 
 	// Batching settings
 	BatchSize     int           `mapstructure:"batch_size"`     // Number of entries per batch (default: 100)

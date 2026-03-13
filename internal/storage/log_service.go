@@ -37,7 +37,8 @@ func NewLogService(cfg LogStorageConfig, db *database.Connection, fileStorage Pr
 		tsdbCfg := TimescaleDBConfig{
 			Enabled:       true,
 			Compressed:    true,
-			CompressAfter: 168 * time.Hour, // 7 days
+			CompressAfter: 168 * time.Hour,  // 7 days
+			RetainAfter:   2160 * time.Hour, // 90 days
 		}
 		storage, err = newTimescaleDBLogStorage(tsdbCfg, db)
 		if err != nil {
@@ -90,6 +91,7 @@ func NewLogService(cfg LogStorageConfig, db *database.Connection, fileStorage Pr
 			Enabled:       cfg.TimescaleDBEnabled,
 			Compressed:    cfg.TimescaleDBCompression,
 			CompressAfter: cfg.TimescaleDBCompressAfter,
+			RetainAfter:   cfg.TimescaleDBRetainAfter,
 		}
 		storage, err = newTimescaleDBLogStorage(tsdbCfg, db)
 		if err != nil {
@@ -104,6 +106,7 @@ func NewLogService(cfg LogStorageConfig, db *database.Connection, fileStorage Pr
 			Enabled:       cfg.TimescaleDBEnabled,
 			Compressed:    cfg.TimescaleDBCompression,
 			CompressAfter: cfg.TimescaleDBCompressAfter,
+			RetainAfter:   cfg.TimescaleDBRetainAfter,
 		}
 		storage, err = newPostgresTimescaleDBStorage(tsdbCfg, db)
 		if err != nil {
