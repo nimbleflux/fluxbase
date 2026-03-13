@@ -223,7 +223,7 @@ services:
       - minio_data:/data
 
   fluxbase-1:
-    image: ghcr.io/fluxbase-eu/fluxbase:latest
+    image: ghcr.io/nimbleflux/fluxbase:latest
     environment:
       DATABASE_URL: postgres://fluxbase:secure-password@postgres:5432/fluxbase
       FLUXBASE_STORAGE_PROVIDER: s3
@@ -237,7 +237,7 @@ services:
       - minio
 
   fluxbase-2:
-    image: ghcr.io/fluxbase-eu/fluxbase:latest
+    image: ghcr.io/nimbleflux/fluxbase:latest
     environment:
       DATABASE_URL: postgres://fluxbase:secure-password@postgres:5432/fluxbase
       FLUXBASE_STORAGE_PROVIDER: s3
@@ -285,7 +285,7 @@ spec:
     spec:
       containers:
         - name: fluxbase
-          image: ghcr.io/fluxbase-eu/fluxbase:latest
+          image: ghcr.io/nimbleflux/fluxbase:latest
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -415,7 +415,7 @@ fluxbase --disable-scheduler --disable-realtime
 services:
   # API instances (handle HTTP traffic)
   fluxbase:
-    image: ghcr.io/fluxbase-eu/fluxbase:latest
+    image: ghcr.io/nimbleflux/fluxbase:latest
     environment:
       FLUXBASE_SCALING_BACKEND: postgres
       FLUXBASE_SCALING_ENABLE_SCHEDULER_LEADER_ELECTION: "true"
@@ -424,7 +424,7 @@ services:
 
   # Worker instances (process background jobs only)
   fluxbase-worker:
-    image: ghcr.io/fluxbase-eu/fluxbase:latest
+    image: ghcr.io/nimbleflux/fluxbase:latest
     command: ["fluxbase", "--worker-only"]
     environment:
       FLUXBASE_SCALING_BACKEND: postgres

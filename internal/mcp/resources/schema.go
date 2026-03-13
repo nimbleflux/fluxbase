@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fluxbase-eu/fluxbase/internal/database"
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 // SchemaResource provides database schema information

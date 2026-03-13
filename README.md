@@ -1,6 +1,6 @@
 # Fluxbase
 
-[![CI](https://github.com/fluxbase-eu/fluxbase/actions/workflows/ci.yml/badge.svg)](https://github.com/fluxbase-eu/fluxbase/actions/workflows/ci.yml)
+[![CI](https://github.com/nimbleflux/fluxbase/actions/workflows/ci.yml/badge.svg)](https://github.com/nimbleflux/fluxbase/actions/workflows/ci.yml)
 
 > **Beta Software**: Fluxbase is currently in beta. While we're working hard to stabilize the API and features, you may encounter breaking changes between versions. We welcome feedback and contributions!
 
@@ -43,6 +43,6 @@ For more information about Fluxbase, look into [the docs](https://fluxbase.eu/ge
 
 For issues, questions, and discussions:
 
-- GitHub Issues: [github.com/fluxbase-eu/fluxbase/issues](https://github.com/fluxbase-eu/fluxbase/issues)
+- GitHub Issues: [github.com/nimbleflux/fluxbase/issues](https://github.com/nimbleflux/fluxbase/issues)
 - Documentation: [fluxbase.eu](https://fluxbase.eu)
 - Discord: [discord.gg/BXPRHkQzkA](https://discord.gg/BXPRHkQzkA)

@@ -3,7 +3,7 @@
 
 services:
   postgres:
-    image: ghcr.io/fluxbase-eu/fluxbase-postgres:18
+    image: ghcr.io/nimbleflux/fluxbase-postgres:18
     container_name: fluxbase-postgres
     environment:
       POSTGRES_USER: fluxbase
@@ -20,7 +20,7 @@ services:
       - fluxbase
 
   fluxbase:
-    image: ghcr.io/fluxbase-eu/fluxbase:${FLUXBASE_VERSION:-2026.1.11}
+    image: ghcr.io/nimbleflux/fluxbase:${FLUXBASE_VERSION:-2026.1.11}
     container_name: fluxbase
     ports:
       - "8080:8080"

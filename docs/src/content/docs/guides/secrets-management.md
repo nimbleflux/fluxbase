@@ -311,7 +311,7 @@ Note: `namespace` is only required when `scope` is `"namespace"`. The `:id` in U
 The TypeScript SDK provides a `secrets` manager with both name-based and UUID-based methods:
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient({ url: "http://localhost:8080" });
 

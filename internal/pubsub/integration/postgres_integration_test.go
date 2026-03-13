@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/pubsub"
-	"github.com/fluxbase-eu/fluxbase/internal/testutil"
+	"github.com/nimbleflux/fluxbase/internal/pubsub"
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

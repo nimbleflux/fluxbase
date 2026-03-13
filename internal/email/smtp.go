@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/smtp"
 
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // SMTPService handles email sending via SMTP

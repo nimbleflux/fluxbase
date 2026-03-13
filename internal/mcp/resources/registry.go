@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 // ResourceProvider defines the interface for an MCP resource provider

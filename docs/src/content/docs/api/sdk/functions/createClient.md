@@ -45,7 +45,7 @@ A configured Fluxbase client instance with full TypeScript support
 ## Example
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 // Initialize with anon key (identical to Supabase)
 const client = createClient(

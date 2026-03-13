@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/auth"
-	"github.com/fluxbase-eu/fluxbase/internal/config"
-	"github.com/fluxbase-eu/fluxbase/internal/email"
-	"github.com/fluxbase-eu/fluxbase/internal/testutil"
-	"github.com/fluxbase-eu/fluxbase/test"
+	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/email"
+	"github.com/nimbleflux/fluxbase/internal/testutil"
+	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

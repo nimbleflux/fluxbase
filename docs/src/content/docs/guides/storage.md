@@ -130,13 +130,13 @@ graph TB
 ## Installation
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ## Basic Usage
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-anon-key");
 
@@ -225,7 +225,7 @@ Track upload progress by providing an `onUploadProgress` callback in the upload 
 ### Vanilla SDK
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-anon-key");
 const file = document.getElementById("fileInput").files[0];
@@ -248,7 +248,7 @@ const { data, error } = await client.storage
 ### React Hook (with automatic state management)
 
 ```tsx
-import { useStorageUploadWithProgress } from "@fluxbase/sdk-react";
+import { useStorageUploadWithProgress } from "@nimbleflux/fluxbase-sdk-react";
 
 function UploadComponent() {
   const { upload, progress, reset } = useStorageUploadWithProgress("avatars");
@@ -285,7 +285,7 @@ function UploadComponent() {
 
 ```tsx
 import { useState } from "react";
-import { useStorageUpload } from "@fluxbase/sdk-react";
+import { useStorageUpload } from "@nimbleflux/fluxbase-sdk-react";
 
 function UploadComponent() {
   const upload = useStorageUpload("avatars");

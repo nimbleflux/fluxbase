@@ -18,13 +18,13 @@ DDL operations directly modify your database structure. Use with caution in prod
 The DDL module is included with the Fluxbase SDK:
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient(
   'http://localhost:8080',
@@ -824,7 +824,7 @@ import type {
   Column,
   Table,
   ListTablesResponse
-} from '@fluxbase/sdk'
+} from '@nimbleflux/fluxbase-sdk'
 
 // Type-safe column definitions
 const columns: CreateColumnRequest[] = [

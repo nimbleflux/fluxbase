@@ -119,7 +119,7 @@ Debug issues and test RLS policies by viewing data as different users.
 Here's a complete example showing how to use multiple advanced features together to set up an admin dashboard:
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient(
   'http://localhost:8080',
@@ -518,7 +518,7 @@ while (true) {
 ### Comprehensive Error Handling
 
 ```typescript
-import { FluxbaseError } from '@fluxbase/sdk'
+import { FluxbaseError } from '@nimbleflux/fluxbase-sdk'
 
 async function robustAdminOperation() {
   try {
@@ -561,7 +561,7 @@ async function robustAdminOperation() {
 
 ```typescript
 import { vi } from 'vitest'
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 describe('Admin Operations', () => {
   it('should set up OAuth provider', async () => {

@@ -4,7 +4,7 @@ package e2e
 import (
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/ai"
+	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/stretchr/testify/require"
 )
 

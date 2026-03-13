@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/config"
-	"github.com/fluxbase-eu/fluxbase/internal/crypto"
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

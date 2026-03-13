@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fluxbase-eu/fluxbase/cli/cmd"
+	"github.com/nimbleflux/fluxbase/cli/cmd"
 )
 
 func main() {

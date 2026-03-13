@@ -5,9 +5,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/fluxbase-eu/fluxbase/cli/client"
-	cliconfig "github.com/fluxbase-eu/fluxbase/cli/config"
-	"github.com/fluxbase-eu/fluxbase/cli/output"
+	"github.com/nimbleflux/fluxbase/cli/client"
+	cliconfig "github.com/nimbleflux/fluxbase/cli/config"
+	"github.com/nimbleflux/fluxbase/cli/output"
 )
 
 var (

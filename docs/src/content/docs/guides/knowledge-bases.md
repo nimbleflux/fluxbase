@@ -113,7 +113,7 @@ FLUXBASE_AI_EMBEDDING_MODEL=nomic-embed-text
 ### Using the SDK
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "service-role-key");
 

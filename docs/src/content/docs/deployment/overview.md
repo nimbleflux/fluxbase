@@ -366,6 +366,6 @@ Choose your deployment method:
 ## Support
 
 - **Documentation**: https://fluxbase.eu
-- **GitHub Issues**: https://github.com/fluxbase-eu/fluxbase/issues
+- **GitHub Issues**: https://github.com/nimbleflux/fluxbase/issues
 - **Community**: Discord or Forum
 - **Enterprise Support**: Available for production deployments

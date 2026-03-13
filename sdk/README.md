@@ -1,8 +1,8 @@
-# @fluxbase/sdk
+# @nimbleflux/fluxbase-sdk
 
 Official TypeScript/JavaScript SDK for Fluxbase - Backend as a Service.
 
-[![npm version](https://img.shields.io/npm/v/@fluxbase/sdk.svg)](https://www.npmjs.com/package/@fluxbase/sdk)
+[![npm version](https://img.shields.io/npm/v/@nimbleflux/fluxbase-sdk.svg)](https://www.npmjs.com/package/@nimbleflux/fluxbase-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
@@ -20,17 +20,17 @@ Official TypeScript/JavaScript SDK for Fluxbase - Backend as a Service.
 ## Installation
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 # or
-yarn add @fluxbase/sdk
+yarn add @nimbleflux/fluxbase-sdk
 # or
-pnpm add @fluxbase/sdk
+pnpm add @nimbleflux/fluxbase-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 // Create a client
 const client = createClient({
@@ -118,14 +118,14 @@ Check out working examples in the [`/example`](../example/) directory:
 
 ## React Integration
 
-For React applications, use [`@fluxbase/sdk-react`](../sdk-react/) for hooks and automatic state management:
+For React applications, use [`@nimbleflux/fluxbase-sdk-react`](../sdk-react/) for hooks and automatic state management:
 
 ```bash
 # npm
-npm install @fluxbase/sdk @fluxbase/sdk-react @tanstack/react-query
+npm install @nimbleflux/fluxbase-sdk @nimbleflux/fluxbase-sdk-react @tanstack/react-query
 
 # pnpm
-pnpm add @fluxbase/sdk @fluxbase/sdk-react @tanstack/react-query
+pnpm add @nimbleflux/fluxbase-sdk @nimbleflux/fluxbase-sdk-react @tanstack/react-query
 ```
 
 See the **[React Hooks Guide](../../docs/docs/sdks/react-hooks.md)** for details.
@@ -142,5 +142,5 @@ MIT © Fluxbase
 
 - [Documentation](../../docs/docs/sdks/getting-started.md)
 - [API Reference](../../docs/static/api/sdk/)
-- [GitHub](https://github.com/fluxbase-eu/fluxbase)
-- [Issues](https://github.com/fluxbase-eu/fluxbase/issues)
+- [GitHub](https://github.com/nimbleflux/fluxbase)
+- [Issues](https://github.com/nimbleflux/fluxbase/issues)

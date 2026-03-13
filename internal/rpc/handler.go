@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/fluxbase-eu/fluxbase/internal/auth"
-	"github.com/fluxbase-eu/fluxbase/internal/config"
-	"github.com/fluxbase-eu/fluxbase/internal/database"
-	"github.com/fluxbase-eu/fluxbase/internal/logging"
-	"github.com/fluxbase-eu/fluxbase/internal/observability"
+	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/logging"
+	"github.com/nimbleflux/fluxbase/internal/observability"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 )

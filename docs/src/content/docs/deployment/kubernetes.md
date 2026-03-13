@@ -95,7 +95,7 @@ replicaCount: 3
 # Image configuration
 image:
   registry: ghcr.io
-  repository: fluxbase-eu/fluxbase
+  repository: nimbleflux/fluxbase
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 
@@ -269,14 +269,14 @@ helm install fluxbase ./fluxbase \
 
 ### Full values.yaml Reference
 
-See [values.yaml](https://github.com/fluxbase-eu/fluxbase/blob/main/deploy/helm/fluxbase/values.yaml) for all available options.
+See [values.yaml](https://github.com/nimbleflux/fluxbase/blob/main/deploy/helm/fluxbase/values.yaml) for all available options.
 
 **Key sections**:
 
 | Section               | Description                   | Default                             |
 | --------------------- | ----------------------------- | ----------------------------------- |
 | `replicaCount`        | Number of Fluxbase pods       | 3                                   |
-| `image`               | Container image configuration | ghcr.io/fluxbase-eu/fluxbase:latest |
+| `image`               | Container image configuration | ghcr.io/nimbleflux/fluxbase:latest |
 | `config.database`     | Database connection settings  | PostgreSQL defaults                 |
 | `config.server`       | HTTP server settings          | Port 8080                           |
 | `config.jwt`          | JWT authentication settings   | 60 min expiry                       |

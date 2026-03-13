@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // =============================================================================

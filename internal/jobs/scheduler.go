@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"

@@ -91,7 +91,7 @@ CREATE INDEX ON documents USING hnsw (embedding vector_cosine_ops);
 ### 2. Generate and Store Embeddings
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient('http://localhost:8080', 'your-api-key')
 

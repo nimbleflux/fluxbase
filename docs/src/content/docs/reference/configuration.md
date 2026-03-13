@@ -1021,7 +1021,7 @@ version: "3.8"
 
 services:
   fluxbase:
-    image: ghcr.io/fluxbase-eu/fluxbase:latest
+    image: ghcr.io/nimbleflux/fluxbase:latest
     environment:
       # Database
       FLUXBASE_DATABASE_HOST: postgres
@@ -1065,7 +1065,7 @@ services:
       - ./fluxbase.yaml:/app/fluxbase.yaml
 
   postgres:
-    image: ghcr.io/fluxbase-eu/fluxbase-postgres:18
+    image: ghcr.io/nimbleflux/fluxbase-postgres:18
     environment:
       POSTGRES_DB: fluxbase
       POSTGRES_USER: fluxbase

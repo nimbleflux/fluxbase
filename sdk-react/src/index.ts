@@ -3,8 +3,8 @@
  *
  * @example
  * ```tsx
- * import { createClient } from '@fluxbase/sdk'
- * import { FluxbaseProvider, useAuth, useTable } from '@fluxbase/sdk-react'
+ * import { createClient } from '@nimbleflux/fluxbase-sdk'
+ * import { FluxbaseProvider, useAuth, useTable } from '@nimbleflux/fluxbase-sdk-react'
  * import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
  *
  * const client = createClient({ url: 'http://localhost:8080' })
@@ -172,4 +172,4 @@ export type {
   GraphQLError,
   GraphQLErrorLocation,
   GraphQLRequestOptions,
-} from "@fluxbase/sdk";
+} from "@nimbleflux/fluxbase-sdk";

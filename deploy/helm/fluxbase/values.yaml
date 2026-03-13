@@ -57,7 +57,7 @@ extraDeploy: []
 ##
 image:
   registry: ghcr.io
-  repository: fluxbase-eu/fluxbase
+  repository: nimbleflux/fluxbase
   # Overrides the image tag whose default is the chart appVersion
   tag: ""
   digest: ""
@@ -1571,7 +1571,7 @@ postgresql:
   ##
   image:
     registry: ghcr.io
-    repository: fluxbase-eu/fluxbase-postgres
+    repository: nimbleflux/fluxbase-postgres
     tag: "18.1-v1"
     pullPolicy: IfNotPresent
 

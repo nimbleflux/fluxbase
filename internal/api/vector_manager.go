@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/fluxbase-eu/fluxbase/internal/ai"
-	"github.com/fluxbase-eu/fluxbase/internal/config"
-	"github.com/fluxbase-eu/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/ai"
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/rs/zerolog/log"
 )
 

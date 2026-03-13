@@ -22,7 +22,7 @@ The admin dashboard for Fluxbase, built with React 19, TypeScript, and Vite.
 - **Shadcn UI** - Beautiful, accessible component library
 - **Tailwind CSS v4** - Utility-first styling
 - **Radix UI** - Accessible primitives
-- **@fluxbase/sdk-react** - Fluxbase React hooks
+- **@nimbleflux/fluxbase-sdk-react** - Fluxbase React hooks
 
 ## Development
 

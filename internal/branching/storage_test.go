@@ -240,8 +240,8 @@ func TestBranch_Fields(t *testing.T) {
 func TestBranch_GitHubFields(t *testing.T) {
 	t.Run("branch linked to GitHub PR", func(t *testing.T) {
 		prNumber := 42
-		prURL := "https://github.com/fluxbase-eu/fluxbase/pull/42"
-		repo := "fluxbase-eu/fluxbase"
+		prURL := "https://github.com/nimbleflux/fluxbase/pull/42"
+		repo := "nimbleflux/fluxbase"
 
 		branch := Branch{
 			ID:             uuid.New(),
@@ -254,8 +254,8 @@ func TestBranch_GitHubFields(t *testing.T) {
 		}
 
 		assert.Equal(t, 42, *branch.GitHubPRNumber)
-		assert.Equal(t, "https://github.com/fluxbase-eu/fluxbase/pull/42", *branch.GitHubPRURL)
-		assert.Equal(t, "fluxbase-eu/fluxbase", *branch.GitHubRepo)
+		assert.Equal(t, "https://github.com/nimbleflux/fluxbase/pull/42", *branch.GitHubPRURL)
+		assert.Equal(t, "nimbleflux/fluxbase", *branch.GitHubRepo)
 	})
 
 	t.Run("branch not linked to GitHub", func(t *testing.T) {
@@ -609,7 +609,7 @@ func TestGitHubConfig_Struct(t *testing.T) {
 
 		cfg := GitHubConfig{
 			ID:                   uuid.New(),
-			Repository:           "fluxbase-eu/fluxbase",
+			Repository:           "nimbleflux/fluxbase",
 			AutoCreateOnPR:       true,
 			AutoDeleteOnMerge:    true,
 			DefaultDataCloneMode: DataCloneModeSchemaOnly,
@@ -619,7 +619,7 @@ func TestGitHubConfig_Struct(t *testing.T) {
 		}
 
 		assert.NotEqual(t, uuid.Nil, cfg.ID)
-		assert.Equal(t, "fluxbase-eu/fluxbase", cfg.Repository)
+		assert.Equal(t, "nimbleflux/fluxbase", cfg.Repository)
 		assert.True(t, cfg.AutoCreateOnPR)
 		assert.True(t, cfg.AutoDeleteOnMerge)
 		assert.Equal(t, DataCloneModeSchemaOnly, cfg.DefaultDataCloneMode)

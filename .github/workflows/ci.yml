@@ -144,7 +144,7 @@ jobs:
       #     name: sdk-coverage
       #     fail_ci_if_error: true
       #     verbose: true
-      #     slug: fluxbase-eu/fluxbase
+      #     slug: nimbleflux/fluxbase
 
       - name: Type check SDK
         working-directory: ./sdk
@@ -171,7 +171,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: ghcr.io/fluxbase-eu/fluxbase-postgres:${{ inputs.postgres_tag || '18' }}
+        image: ghcr.io/nimbleflux/fluxbase-postgres:${{ inputs.postgres_tag || '18' }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -408,7 +408,7 @@ jobs:
       #     name: go-codecov
       #     fail_ci_if_error: true
       #     verbose: true
-      #     slug: fluxbase-eu/fluxbase
+      #     slug: nimbleflux/fluxbase
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v7
@@ -496,7 +496,7 @@ jobs:
         run: |
           output_name="fluxbase-${{ matrix.goos }}-${{ matrix.goarch }}"
           BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          go build -ldflags="-s -w -X github.com/fluxbase-eu/fluxbase/cli/cmd.Version=dev-${GITHUB_SHA::8} -X github.com/fluxbase-eu/fluxbase/cli/cmd.Commit=${GITHUB_SHA} -X github.com/fluxbase-eu/fluxbase/cli/cmd.BuildDate=${BUILD_DATE}" -o "dist/${output_name}" cli/main.go
+          go build -ldflags="-s -w -X github.com/nimbleflux/fluxbase/cli/cmd.Version=dev-${GITHUB_SHA::8} -X github.com/nimbleflux/fluxbase/cli/cmd.Commit=${GITHUB_SHA} -X github.com/nimbleflux/fluxbase/cli/cmd.BuildDate=${BUILD_DATE}" -o "dist/${output_name}" cli/main.go
 
       - name: Upload server artifacts
         uses: actions/upload-artifact@v7

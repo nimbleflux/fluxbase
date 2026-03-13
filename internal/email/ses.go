@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ses"
 	"github.com/aws/aws-sdk-go-v2/service/ses/types"
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
 )
 

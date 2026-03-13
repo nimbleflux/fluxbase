@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/branching"
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/branching"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )

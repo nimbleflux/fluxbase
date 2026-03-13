@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/crypto"
+	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/google/uuid"
 )
 

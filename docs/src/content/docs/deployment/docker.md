@@ -15,14 +15,14 @@ Fluxbase provides official Docker images with:
 - Admin UI embedded
 - Automatic database migrations
 
-**Image Registry**: `ghcr.io/fluxbase-eu/fluxbase`
+**Image Registry**: `ghcr.io/nimbleflux/fluxbase`
 
 ## Quick Start
 
 ### 1. Pull the Docker Image
 
 ```bash
-docker pull ghcr.io/fluxbase-eu/fluxbase:latest
+docker pull ghcr.io/nimbleflux/fluxbase:latest
 ```
 
 ### 2. Run with Docker Compose
@@ -34,7 +34,7 @@ version: "3.8"
 
 services:
   postgres:
-    image: ghcr.io/fluxbase-eu/fluxbase-postgres:18
+    image: ghcr.io/nimbleflux/fluxbase-postgres:18
     container_name: fluxbase-postgres
     environment:
       POSTGRES_USER: postgres
@@ -53,7 +53,7 @@ services:
       retries: 5
 
   fluxbase:
-    image: ghcr.io/fluxbase-eu/fluxbase:latest
+    image: ghcr.io/nimbleflux/fluxbase:latest
     container_name: fluxbase
     depends_on:
       postgres:
@@ -154,7 +154,7 @@ version: "3.8"
 
 services:
   postgres:
-    image: ghcr.io/fluxbase-eu/fluxbase-postgres:18
+    image: ghcr.io/nimbleflux/fluxbase-postgres:18
     container_name: fluxbase-postgres
     environment:
       POSTGRES_USER: postgres
@@ -204,7 +204,7 @@ services:
     restart: unless-stopped
 
   fluxbase:
-    image: ghcr.io/fluxbase-eu/fluxbase:latest
+    image: ghcr.io/nimbleflux/fluxbase:latest
     container_name: fluxbase
     depends_on:
       postgres:
@@ -338,7 +338,7 @@ AWS_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ```bash
 # Clone the repository
-git clone https://github.com/fluxbase-eu/fluxbase.git
+git clone https://github.com/nimbleflux/fluxbase.git
 cd fluxbase
 
 # Build the image
@@ -362,7 +362,7 @@ docker buildx create --use
 # Build for multiple platforms
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t ghcr.io/fluxbase-eu/fluxbase:latest \
+  -t ghcr.io/nimbleflux/fluxbase:latest \
   --push \
   .
 ```
@@ -705,7 +705,7 @@ docker compose ps
 ```bash
 # Use specific version
 docker compose stop fluxbase
-docker run -d --name fluxbase ghcr.io/fluxbase-eu/fluxbase:0.0.1
+docker run -d --name fluxbase ghcr.io/nimbleflux/fluxbase:0.0.1
 ```
 
 ---
@@ -745,7 +745,7 @@ docker run -d --name fluxbase ghcr.io/fluxbase-eu/fluxbase:0.0.1
 
 5. **Scan images for vulnerabilities**:
    ```bash
-   docker scan ghcr.io/fluxbase-eu/fluxbase:latest
+   docker scan ghcr.io/nimbleflux/fluxbase:latest
    ```
 
 ---

@@ -4,8 +4,8 @@ import type {
   AIProvider,
   CreateAIProviderRequest,
   UpdateAIProviderRequest,
-} from '@fluxbase/sdk'
-import { useFluxbaseClient } from '@fluxbase/sdk-react'
+} from '@nimbleflux/fluxbase-sdk'
+import { useFluxbaseClient } from '@nimbleflux/fluxbase-sdk-react'
 import { Bot, Plus, Trash2, Star, Pencil, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import {

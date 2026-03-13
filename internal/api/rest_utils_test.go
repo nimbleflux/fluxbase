@@ -3,7 +3,7 @@ package api
 import (
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/stretchr/testify/assert"
 )
 

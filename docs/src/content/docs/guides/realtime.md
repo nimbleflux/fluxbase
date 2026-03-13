@@ -8,13 +8,13 @@ Fluxbase provides real-time database change notifications via WebSockets, powere
 ## Installation
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ## Basic Usage
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-anon-key");
 
@@ -62,7 +62,7 @@ interface RealtimeChangePayload {
 
 ```typescript
 import { useEffect, useState } from 'react'
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 function useRealtimeTable(tableName) {
   const [data, setData] = useState([])
@@ -351,7 +351,7 @@ Presence tracking enables real-time user online/offline status and custom state 
 Track when users join and leave channels:
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient('http://localhost:8080', 'your-anon-key')
 
@@ -466,7 +466,7 @@ Build a user list with online indicators:
 
 ```typescript
 import { useEffect, useState } from 'react'
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 interface UserPresence {
   key: string

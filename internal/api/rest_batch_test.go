@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/config"
-	"github.com/fluxbase-eu/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

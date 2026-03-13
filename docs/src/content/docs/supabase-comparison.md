@@ -37,7 +37,7 @@ import { createClient } from "@supabase/supabase-js";
 const client = createClient("https://project.supabase.co", "anon-key");
 
 // Fluxbase
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 const client = createClient("http://localhost:8080", "api-key");
 
 // Everything else is identical
@@ -197,7 +197,7 @@ See [Deployment: Scaling](/deployment/scaling#horizontal-scaling) for full confi
 **Fluxbase:**
 
 - [Documentation](/)
-- [GitHub](https://github.com/fluxbase-eu/fluxbase)
+- [GitHub](https://github.com/nimbleflux/fluxbase)
 - [API Reference](/api/sdk/classes/fluxbaseclient/)
 
 **Supabase:**

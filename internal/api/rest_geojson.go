@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fluxbase-eu/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // isGeoJSON checks if a value looks like a GeoJSON object

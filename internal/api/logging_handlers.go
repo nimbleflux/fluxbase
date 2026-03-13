@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/logging"
-	"github.com/fluxbase-eu/fluxbase/internal/storage"
+	"github.com/nimbleflux/fluxbase/internal/logging"
+	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/gofiber/fiber/v3"
 )
 

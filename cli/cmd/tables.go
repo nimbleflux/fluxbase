@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/fluxbase-eu/fluxbase/cli/output"
+	"github.com/nimbleflux/fluxbase/cli/output"
 )
 
 var tablesCmd = &cobra.Command{

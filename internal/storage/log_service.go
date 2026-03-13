@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // LogService wraps a log storage provider and provides additional functionality.

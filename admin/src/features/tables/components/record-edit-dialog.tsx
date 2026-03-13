@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useInsert, useUpdate } from '@fluxbase/sdk-react'
+import { useInsert, useUpdate } from '@nimbleflux/fluxbase-sdk-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

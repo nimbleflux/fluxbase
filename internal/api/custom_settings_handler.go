@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/fluxbase-eu/fluxbase/internal/settings"
+	"github.com/nimbleflux/fluxbase/internal/settings"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"

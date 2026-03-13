@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 
-	database "github.com/fluxbase-eu/fluxbase/internal/database"
-	"github.com/fluxbase-eu/fluxbase/test/dbhelpers"
+	database "github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/test/dbhelpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

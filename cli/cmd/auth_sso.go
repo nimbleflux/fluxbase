@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	cliconfig "github.com/fluxbase-eu/fluxbase/cli/config"
-	"github.com/fluxbase-eu/fluxbase/cli/util"
+	cliconfig "github.com/nimbleflux/fluxbase/cli/config"
+	"github.com/nimbleflux/fluxbase/cli/util"
 )
 
 // SSOProvider represents an SSO provider for dashboard login

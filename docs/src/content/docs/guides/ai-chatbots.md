@@ -47,7 +47,7 @@ The chatbot system:
 ## Installation
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ## Basic Usage
@@ -55,7 +55,7 @@ npm install @fluxbase/sdk
 ### Connecting to a Chatbot
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-anon-key");
 
@@ -113,7 +113,7 @@ The chat client provides several event callbacks:
 
 ```typescript
 import { useState, useEffect, useRef } from 'react'
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 function ChatInterface() {
   const [messages, setMessages] = useState<string[]>([])

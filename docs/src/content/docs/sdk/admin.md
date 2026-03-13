@@ -25,7 +25,7 @@ The Admin SDK is designed for:
 The Admin SDK is included in the main Fluxbase SDK:
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ## Quick Start
@@ -33,7 +33,7 @@ npm install @fluxbase/sdk
 ### Initialize Admin Client
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient(
   'http://localhost:8080',
@@ -347,7 +347,7 @@ This sends a password reset email to the user or returns the new password.
 ### Admin Dashboard
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 // Initialize client
 const client = createClient(
@@ -458,7 +458,7 @@ main().catch(console.error)
 
 ```typescript
 import { useState, useEffect } from 'react'
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient(
   'http://localhost:8080',
@@ -550,7 +550,7 @@ function AdminDashboard() {
 ### Bulk Operations
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient(
   'http://localhost:8080',
@@ -637,7 +637,7 @@ if (confirm('Delete all users inactive for 90+ days?')) {
 ## Error Handling
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient(
   'http://localhost:8080',
@@ -800,7 +800,7 @@ import type {
   UpdateUserRoleRequest,
   ResetUserPasswordResponse,
   DeleteUserResponse,
-} from '@fluxbase/sdk'
+} from '@nimbleflux/fluxbase-sdk'
 ```
 
 ---

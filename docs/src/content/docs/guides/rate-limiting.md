@@ -521,7 +521,7 @@ Sample log output:
 The SDK automatically handles rate limit responses with exponential backoff:
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient({
   baseUrl: "http://localhost:8080",

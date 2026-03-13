@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

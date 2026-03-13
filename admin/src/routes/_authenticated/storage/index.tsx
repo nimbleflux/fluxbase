@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { createFileRoute } from '@tanstack/react-router'
-import type { AdminStorageObject, AdminBucket } from '@fluxbase/sdk'
-import { useFluxbaseClient } from '@fluxbase/sdk-react'
+import type { AdminStorageObject, AdminBucket } from '@nimbleflux/fluxbase-sdk'
+import { useFluxbaseClient } from '@nimbleflux/fluxbase-sdk-react'
 import {
   FolderOpen,
   FolderPlus,

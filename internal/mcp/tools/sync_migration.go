@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
-	"github.com/fluxbase-eu/fluxbase/internal/migrations"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/migrations"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"

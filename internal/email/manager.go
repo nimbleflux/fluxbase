@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/fluxbase-eu/fluxbase/internal/auth"
-	"github.com/fluxbase-eu/fluxbase/internal/config"
-	"github.com/fluxbase-eu/fluxbase/internal/settings"
+	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/settings"
 	"github.com/rs/zerolog/log"
 )
 

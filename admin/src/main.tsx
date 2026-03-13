@@ -7,7 +7,7 @@ import {
   QueryClientProvider,
 } from '@tanstack/react-query'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
-import { FluxbaseProvider } from '@fluxbase/sdk-react'
+import { FluxbaseProvider } from '@nimbleflux/fluxbase-sdk-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { fluxbaseClient } from '@/lib/fluxbase-client'

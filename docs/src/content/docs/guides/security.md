@@ -45,7 +45,7 @@ CREATE POLICY user_profiles_isolation ON user_profiles
 Fluxbase uses JWT tokens for authentication:
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-anon-key");
 

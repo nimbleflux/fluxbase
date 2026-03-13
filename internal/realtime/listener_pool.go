@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/pubsub"
+	"github.com/nimbleflux/fluxbase/internal/pubsub"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"

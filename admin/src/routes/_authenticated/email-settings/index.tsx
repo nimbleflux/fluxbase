@@ -2,7 +2,7 @@ import { useState } from 'react'
 import z from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, getRouteApi } from '@tanstack/react-router'
-import type { EmailProviderSettings } from '@fluxbase/sdk'
+import type { EmailProviderSettings } from '@nimbleflux/fluxbase-sdk'
 import {
   Mail,
   FileText,
@@ -50,7 +50,7 @@ export const Route = createFileRoute('/_authenticated/email-settings/')({
 
 const route = getRouteApi('/_authenticated/email-settings/')
 
-// EmailProviderSettings type is imported from @fluxbase/sdk
+// EmailProviderSettings type is imported from @nimbleflux/fluxbase-sdk
 
 interface EmailTemplate {
   id: string

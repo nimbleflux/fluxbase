@@ -20,7 +20,7 @@ All impersonation sessions are logged for security and compliance.
 ## Basic Usage
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient(
   'http://localhost:8080',

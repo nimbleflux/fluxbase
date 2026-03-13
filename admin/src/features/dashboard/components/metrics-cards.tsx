@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useFluxbaseClient } from '@fluxbase/sdk-react'
+import { useFluxbaseClient } from '@nimbleflux/fluxbase-sdk-react'
 import {
   ArrowUpRight,
   ArrowDownRight,

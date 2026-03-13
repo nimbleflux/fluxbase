@@ -9,8 +9,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
-	"github.com/fluxbase-eu/fluxbase/internal/storage"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/rs/zerolog/log"
 )
 

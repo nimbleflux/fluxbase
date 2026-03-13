@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 // ThinkTool implements a reasoning tool that forces the AI to plan before acting.

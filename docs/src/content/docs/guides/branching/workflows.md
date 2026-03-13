@@ -40,7 +40,7 @@ Configure your application to use the branch:
 
 ```typescript
 // TypeScript SDK
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const fluxbase = createClient(
   'http://localhost:8080',
@@ -136,7 +136,7 @@ jobs:
 
       - name: Install Fluxbase CLI
         run: |
-          curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash
 
       - name: Create/Update Preview Branch
         if: github.event.action != 'closed'

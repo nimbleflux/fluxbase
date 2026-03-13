@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useFluxbaseClient } from '@fluxbase/sdk-react'
+import { useFluxbaseClient } from '@nimbleflux/fluxbase-sdk-react'
 import { CheckCircle2, XCircle, AlertTriangle, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'

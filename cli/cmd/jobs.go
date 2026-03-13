@@ -12,9 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/fluxbase-eu/fluxbase/cli/annotations"
-	"github.com/fluxbase-eu/fluxbase/cli/bundler"
-	"github.com/fluxbase-eu/fluxbase/cli/output"
+	"github.com/nimbleflux/fluxbase/cli/annotations"
+	"github.com/nimbleflux/fluxbase/cli/bundler"
+	"github.com/nimbleflux/fluxbase/cli/output"
 )
 
 var jobsCmd = &cobra.Command{

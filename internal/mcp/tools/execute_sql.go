@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/ai"
-	"github.com/fluxbase-eu/fluxbase/internal/database"
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
-	"github.com/fluxbase-eu/fluxbase/internal/middleware"
+	"github.com/nimbleflux/fluxbase/internal/ai"
+	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 )

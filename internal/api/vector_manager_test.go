@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/ai"
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/ai"
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

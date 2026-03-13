@@ -77,7 +77,7 @@ CREATE POLICY "Authenticated users can read non-secret settings"
 #### Framework Settings (Structured)
 
 ```typescript
-import { FluxbaseClient } from "@fluxbase/sdk";
+import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = new FluxbaseClient("https://api.myapp.com", "admin_key");
 

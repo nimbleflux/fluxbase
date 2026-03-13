@@ -91,7 +91,7 @@ docker build \
 
 ## Image Tags
 
-Images are published to `ghcr.io/fluxbase-eu/fluxbase-postgres`:
+Images are published to `ghcr.io/nimbleflux/fluxbase-postgres`:
 
 - `:18.1` - Specific PostgreSQL version (rolling, updates with new imageVersion)
 - `:18.1-v1` - Immutable tag (PostgreSQL version + image version)

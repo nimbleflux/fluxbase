@@ -320,7 +320,7 @@ SELECT * FROM posts;
 ### Test via SDK
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "user-api-key");
 

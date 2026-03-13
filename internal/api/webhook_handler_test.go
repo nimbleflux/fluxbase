@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/webhook"
+	"github.com/nimbleflux/fluxbase/internal/webhook"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"

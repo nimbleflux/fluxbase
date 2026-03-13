@@ -211,7 +211,7 @@ auth:
 ### TypeScript SDK
 
 ```typescript
-import { FluxbaseClient } from '@fluxbase/sdk'
+import { FluxbaseClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = new FluxbaseClient({ url: 'http://localhost:8080' })
 
@@ -238,7 +238,7 @@ const { data: session } = await client.auth.getSession()
 import {
   useSAMLProviders,
   useInitiateSAMLLogin
-} from '@fluxbase/sdk-react'
+} from '@nimbleflux/fluxbase-sdk-react'
 
 function SSOLoginButtons() {
   const { data: providers, isLoading } = useSAMLProviders()
@@ -271,7 +271,7 @@ After SAML authentication, users are redirected to your specified URL with a ses
 ```tsx
 // pages/auth/callback.tsx
 import { useEffect } from 'react'
-import { useSession } from '@fluxbase/sdk-react'
+import { useSession } from '@nimbleflux/fluxbase-sdk-react'
 import { useNavigate } from 'react-router-dom'
 
 function SAMLCallback() {
@@ -570,7 +570,7 @@ if (data.saml_logout && data.slo_url) {
 ### React SDK
 
 ```tsx
-import { useSignOut, useSession } from '@fluxbase/sdk-react'
+import { useSignOut, useSession } from '@nimbleflux/fluxbase-sdk-react'
 
 function LogoutButton() {
   const signOut = useSignOut()

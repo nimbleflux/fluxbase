@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/fluxbase-eu/fluxbase/internal/ai"
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/ai"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/rs/zerolog/log"
 )
 

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
-	"github.com/fluxbase-eu/fluxbase/internal/rpc"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/rpc"
 	"github.com/rs/zerolog/log"
 )
 

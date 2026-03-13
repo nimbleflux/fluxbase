@@ -116,6 +116,7 @@ on:
         default: true
 
 permissions:
+  id-token: write
   contents: write
   packages: write
   actions: read
@@ -632,7 +633,7 @@ jobs:
               echo ''
               echo '**Docker:**'
               echo '```bash'
-              echo "docker pull ghcr.io/fluxbase-eu/fluxbase:${VERSION}"
+              echo "docker pull ghcr.io/nimbleflux/fluxbase:${VERSION}"
               echo '```'
               echo ''
               echo '**NPM SDK:**'
@@ -642,7 +643,7 @@ jobs:
               echo ''
               echo '**Helm:**'
               echo '```bash'
-              echo "helm install fluxbase oci://ghcr.io/fluxbase-eu/charts/fluxbase --version ${VERSION}"
+              echo "helm install fluxbase oci://ghcr.io/nimbleflux/charts/fluxbase --version ${VERSION}"
               echo '```'
               echo ''
               echo '**CLI:**'
@@ -833,7 +834,7 @@ jobs:
         run: |
           VERSION=${{ needs.get-version.outputs.version }}
           output_name="fluxbase-${{ matrix.goos }}-${{ matrix.goarch }}"
-          go build -ldflags="-s -w -X github.com/fluxbase-eu/fluxbase/cli/cmd.Version=${VERSION} -X github.com/fluxbase-eu/fluxbase/cli/cmd.Commit=${{ github.sha }} -X github.com/fluxbase-eu/fluxbase/cli/cmd.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "${output_name}" cli/main.go
+          go build -ldflags="-s -w -X github.com/nimbleflux/fluxbase/cli/cmd.Version=${VERSION} -X github.com/nimbleflux/fluxbase/cli/cmd.Commit=${{ github.sha }} -X github.com/nimbleflux/fluxbase/cli/cmd.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "${output_name}" cli/main.go
 
           # Create checksums
           sha256sum "${output_name}" > "${output_name}.sha256"
@@ -895,7 +896,7 @@ jobs:
           else
             output_name="fluxbase-${{ matrix.goos }}-${{ matrix.goarch }}"
           fi
-          go build -ldflags="-s -w -X github.com/fluxbase-eu/fluxbase/cli/cmd.Version=${VERSION} -X github.com/fluxbase-eu/fluxbase/cli/cmd.Commit=${{ github.sha }} -X github.com/fluxbase-eu/fluxbase/cli/cmd.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "${output_name}" cli/main.go
+          go build -ldflags="-s -w -X github.com/nimbleflux/fluxbase/cli/cmd.Version=${VERSION} -X github.com/nimbleflux/fluxbase/cli/cmd.Commit=${{ github.sha }} -X github.com/nimbleflux/fluxbase/cli/cmd.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "${output_name}" cli/main.go
 
           # Create checksums
           sha256sum "${output_name}" > "${output_name}.sha256"
@@ -1197,10 +1198,10 @@ jobs:
       - name: Publish Go module
         run: |
           # Go modules are automatically available when tagged
-          echo "Go module published at github.com/fluxbase-eu/fluxbase@${{ needs.get-version.outputs.tag_name }}"
+          echo "Go module published at github.com/nimbleflux/fluxbase@${{ needs.get-version.outputs.tag_name }}"
 
           # Update pkg.go.dev
-          curl "https://proxy.golang.org/github.com/fluxbase-eu/fluxbase/@v/${{ needs.get-version.outputs.tag_name }}.info"
+          curl "https://proxy.golang.org/github.com/nimbleflux/fluxbase/@v/${{ needs.get-version.outputs.tag_name }}.info"
 
   publish-helm-chart:
     name: Publish Helm Chart to GHCR

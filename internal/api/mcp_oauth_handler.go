@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/auth"
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"

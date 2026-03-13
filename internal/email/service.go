@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // Service defines the interface for email providers

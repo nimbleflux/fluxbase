@@ -19,13 +19,13 @@ Fluxbase webhooks trigger HTTP requests to your specified endpoint whenever data
 ### Installation
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ### Quick Start
 
 ```typescript
-import { FluxbaseClient } from "@fluxbase/sdk";
+import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
 
 // Initialize client (requires authentication)
 const client = new FluxbaseClient({
@@ -235,7 +235,7 @@ The timestamp is included to prevent replay attacks - signatures older than 5 mi
 #### Using the SDK (Recommended)
 
 ```typescript
-import { FluxbaseClient } from "@fluxbase/sdk";
+import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
 import express from "express";
 
 const app = express();
@@ -274,7 +274,7 @@ app.listen(3000);
 
 ```go
 import (
-    "github.com/fluxbase-eu/fluxbase/internal/webhook"
+    "github.com/nimbleflux/fluxbase/internal/webhook"
     "time"
 )
 
@@ -455,7 +455,7 @@ When an event occurs, Fluxbase sends a POST request to your webhook URL with the
 
 ```javascript
 const express = require("express");
-const { FluxbaseClient } = require("@fluxbase/sdk");
+const { FluxbaseClient } = require("@nimbleflux/fluxbase-sdk");
 
 const app = express();
 app.use(express.json());

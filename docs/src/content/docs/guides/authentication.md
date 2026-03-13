@@ -47,13 +47,13 @@ Optional requirements (configurable):
 ## Installation
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { FluxbaseClient } from "@fluxbase/sdk";
+import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = new FluxbaseClient({
   url: "http://localhost:8080",

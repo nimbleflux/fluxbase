@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/fluxbase-eu/fluxbase/internal/functions"
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/functions"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 // FunctionsResource provides edge functions information

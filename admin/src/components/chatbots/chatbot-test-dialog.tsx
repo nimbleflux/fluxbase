@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
-import { FluxbaseAIChat } from '@fluxbase/sdk'
+import { FluxbaseAIChat } from '@nimbleflux/fluxbase-sdk'
 import {
   Bot,
   Send,

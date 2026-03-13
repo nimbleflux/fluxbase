@@ -349,7 +349,7 @@ auth:
 **Initiate OAuth flow:**
 
 ```typescript
-import { FluxbaseClient } from "@fluxbase/sdk";
+import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = new FluxbaseClient({ url: "https://api.example.com" });
 
@@ -392,7 +392,7 @@ import {
   useOAuthProviders,
   useSignInWithOAuth,
   useSession,
-} from "@fluxbase/sdk-react";
+} from "@nimbleflux/fluxbase-sdk-react";
 
 function OAuthLoginButtons() {
   const { data: providers, isLoading } = useOAuthProviders();
@@ -425,7 +425,7 @@ function OAuthLoginButtons() {
 ```tsx
 // pages/auth/callback.tsx
 import { useEffect } from "react";
-import { useSession } from "@fluxbase/sdk-react";
+import { useSession } from "@nimbleflux/fluxbase-sdk-react";
 import { useNavigate } from "react-router-dom";
 
 function OAuthCallback() {

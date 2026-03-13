@@ -85,13 +85,13 @@ Create a new Node.js project:
 mkdir my-fluxbase-app
 cd my-fluxbase-app
 npm init -y
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 Create a file `index.ts`:
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 // Replace with your server URL and client key
 const fluxbase = createClient(
@@ -171,7 +171,7 @@ Enable signups in the dashboard:
 Update your `index.ts` to sign up a user:
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const fluxbase = createClient(
   'http://localhost:8080',
@@ -204,7 +204,7 @@ Run it to create the user.
 Now let's build a complete example:
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const fluxbase = createClient(
   'http://localhost:8080',

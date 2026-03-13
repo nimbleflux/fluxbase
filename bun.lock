@@ -9,10 +9,10 @@
       "name": "shadcn-admin",
       "version": "2026.1.1-rc.1",
       "dependencies": {
-        "@fluxbase/sdk": "file:../sdk",
-        "@fluxbase/sdk-react": "file:../sdk-react",
         "@hookform/resolvers": "^5.2.2",
         "@monaco-editor/react": "^4.7.0",
+        "@nimbleflux/fluxbase-sdk": "file:../sdk",
+        "@nimbleflux/fluxbase-sdk-react": "file:../sdk-react",
         "@radix-ui/react-accordion": "^1.2.12",
         "@radix-ui/react-alert-dialog": "^1.1.15",
         "@radix-ui/react-avatar": "^1.1.11",
@@ -103,7 +103,7 @@
       },
     },
     "sdk": {
-      "name": "@fluxbase/sdk",
+      "name": "@nimbleflux/fluxbase-sdk",
       "version": "2026.3.5",
       "dependencies": {
         "cross-fetch": "^4.1.0",
@@ -131,7 +131,7 @@
       ],
     },
     "sdk-react": {
-      "name": "@fluxbase/sdk-react",
+      "name": "@nimbleflux/fluxbase-sdk-react",
       "version": "2026.3.5",
       "devDependencies": {
         "@tanstack/react-query": "^5.90.21",
@@ -149,7 +149,7 @@
         "vitest": "^4.0.18",
       },
       "peerDependencies": {
-        "@fluxbase/sdk": "^2026.3.3",
+        "@nimbleflux/fluxbase-sdk": "^2026.3.5",
         "@tanstack/react-query": "^5.90.21",
         "react": "^18.0.0 || ^19.0.0",
       },
@@ -344,10 +344,6 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.11", "", {}, "sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg=="],
 
-    "@fluxbase/sdk": ["@fluxbase/sdk@workspace:sdk"],
-
-    "@fluxbase/sdk-react": ["@fluxbase/sdk-react@workspace:sdk-react"],
-
     "@gerrit0/mini-shiki": ["@gerrit0/mini-shiki@3.23.0", "", { "dependencies": { "@shikijs/engine-oniguruma": "^3.23.0", "@shikijs/langs": "^3.23.0", "@shikijs/themes": "^3.23.0", "@shikijs/types": "^3.23.0", "@shikijs/vscode-textmate": "^10.0.2" } }, "sha512-bEMORlG0cqdjVyCEuU0cDQbORWX+kYCeo0kV1lbxF5bt4r7SID2l9bqsxJEM0zndaxpOUT7riCyIVEuqq/Ynxg=="],
 
     "@hookform/resolvers": ["@hookform/resolvers@5.2.2", "", { "dependencies": { "@standard-schema/utils": "^0.3.0" }, "peerDependencies": { "react-hook-form": "^7.55.0" } }, "sha512-A/IxlMLShx3KjV/HeTcTfaMxdwy690+L/ZADoeaTltLx+CVuzkeVIPuybK3jrRfw7YZnmdKsVVHAlEPIAEUNlA=="],
@@ -427,6 +423,10 @@
     "@monaco-editor/react": ["@monaco-editor/react@4.7.0", "", { "dependencies": { "@monaco-editor/loader": "^1.5.0" }, "peerDependencies": { "monaco-editor": ">= 0.25.0 < 1", "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-cyzXQCtO47ydzxpQtCGSQGOC8Gk3ZUeBXFAxD+CWXYFo5OqZyZUonFl0DwUlTyAfRHntBfw2p3w4s9R6oe1eCA=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.1", "", { "dependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1", "@tybys/wasm-util": "^0.10.1" } }, "sha512-p64ah1M1ld8xjWv3qbvFwHiFVWrq1yFvV4f7w+mzaqiR4IlSgkqhcRdHwsGgomwzBH51sRY4NEowLxnaBjcW/A=="],
+
+    "@nimbleflux/fluxbase-sdk": ["@nimbleflux/fluxbase-sdk@workspace:sdk"],
+
+    "@nimbleflux/fluxbase-sdk-react": ["@nimbleflux/fluxbase-sdk-react@workspace:sdk-react"],
 
     "@nodelib/fs.scandir": ["@nodelib/fs.scandir@2.1.5", "", { "dependencies": { "@nodelib/fs.stat": "2.0.5", "run-parallel": "^1.1.9" } }, "sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g=="],
 
@@ -2202,10 +2202,6 @@
 
     "recast/source-map": ["source-map@0.6.1", "", {}, "sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g=="],
 
-    "shadcn-admin/@fluxbase/sdk": ["@fluxbase/sdk@file:sdk", { "dependencies": { "cross-fetch": "^4.1.0" }, "devDependencies": { "@types/node": "^25.4.0", "@vitest/coverage-v8": "^4.0.18", "docusaurus-plugin-typedoc": "^1.4.2", "esbuild": "^0.27.3", "ts-node": "^10.9.2", "tsup": "^8.5.1", "typedoc": "^0.28.17", "typedoc-plugin-markdown": "^4.10.0", "typescript": "^5.9.3", "vitest": "^4.0.18" }, "optionalDependencies": { "@rollup/rollup-darwin-arm64": "^4.59.0" }, "peerDependencies": { "esbuild": ">=0.27.3" }, "optionalPeers": ["esbuild"] }],
-
-    "shadcn-admin/@fluxbase/sdk-react": ["@fluxbase/sdk-react@file:sdk-react", { "devDependencies": { "@tanstack/react-query": "^5.90.21", "@testing-library/jest-dom": "^6.9.1", "@testing-library/react": "^16.3.2", "@types/react": "^19.2.14", "@vitest/coverage-v8": "^4.0.18", "jsdom": "^28.1.0", "prettier": "^3.8.1", "react": "^19.2.4", "react-dom": "^19.2.4", "tsup": "^8.5.1", "typedoc": "^0.28.17", "typescript": "^5.9.3", "vitest": "^4.0.18" }, "peerDependencies": { "@fluxbase/sdk": "^2026.3.3", "@tanstack/react-query": "^5.90.21", "react": "^18.0.0 || ^19.0.0" } }],
-
     "shiki/@shikijs/engine-oniguruma": ["@shikijs/engine-oniguruma@4.0.2", "", { "dependencies": { "@shikijs/types": "4.0.2", "@shikijs/vscode-textmate": "^10.0.2" } }, "sha512-UpCB9Y2sUKlS9z8juFSKz7ZtysmeXCgnRF0dlhXBkmQnek7lAToPte8DkxmEYGNTMii72zU/lyXiCB6StuZeJg=="],
 
     "shiki/@shikijs/langs": ["@shikijs/langs@4.0.2", "", { "dependencies": { "@shikijs/types": "4.0.2" } }, "sha512-KaXby5dvoeuZzN0rYQiPMjFoUrz4hgwIE+D6Du9owcHcl6/g16/yT5BQxSW5cGt2MZBz6Hl0YuRqf12omRfUUg=="],
@@ -2249,8 +2245,6 @@
     "node-fetch/whatwg-url/webidl-conversions": ["webidl-conversions@3.0.1", "", {}, "sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ=="],
 
     "p-locate/p-limit/yocto-queue": ["yocto-queue@0.1.0", "", {}, "sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q=="],
-
-    "shadcn-admin/@fluxbase/sdk-react/@fluxbase/sdk": ["@fluxbase/sdk@file:sdk", { "dependencies": { "cross-fetch": "^4.1.0" }, "devDependencies": { "@types/node": "^25.4.0", "@vitest/coverage-v8": "^4.0.18", "docusaurus-plugin-typedoc": "^1.4.2", "esbuild": "^0.27.3", "ts-node": "^10.9.2", "tsup": "^8.5.1", "typedoc": "^0.28.17", "typedoc-plugin-markdown": "^4.10.0", "typescript": "^5.9.3", "vitest": "^4.0.18" }, "optionalDependencies": { "@rollup/rollup-darwin-arm64": "^4.59.0" }, "peerDependencies": { "esbuild": ">=0.27.3" }, "optionalPeers": ["esbuild"] }],
 
     "sitemap/@types/node/undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
 

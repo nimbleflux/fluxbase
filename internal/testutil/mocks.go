@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/storage"
+	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/google/uuid"
 )
 

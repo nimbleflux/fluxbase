@@ -122,7 +122,7 @@ Deploy one Fluxbase instance with embedded workers:
 ```bash
 # Docker
 docker run -e FLUXBASE_JOBS_EMBEDDED_WORKER_COUNT=4 \
-  ghcr.io/fluxbase-eu/fluxbase:latest
+  ghcr.io/nimbleflux/fluxbase:latest
 
 # Binary
 FLUXBASE_JOBS_EMBEDDED_WORKER_COUNT=4 ./fluxbase
@@ -192,7 +192,7 @@ workers?.forEach((worker) => {
 ## Installation
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ## Quick Start
@@ -200,7 +200,7 @@ npm install @fluxbase/sdk
 ### Submit a Job
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", {
   apiKey: "your-anon-key",
@@ -933,7 +933,7 @@ await client.admin.jobs.terminate(jobId);
 ### Method 1: SDK Upload
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 import { readFile } from "fs/promises";
 
 const client = createClient(process.env.FLUXBASE_URL!, {

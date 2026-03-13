@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/cli/config"
+	"github.com/nimbleflux/fluxbase/cli/config"
 )
 
 // Client is the Fluxbase API client

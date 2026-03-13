@@ -19,28 +19,28 @@ The easiest way to install the Fluxbase CLI:
 
 ```bash
 # Install latest version
-curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash
 
 # Install specific version
-curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | bash -s -- v2026.3.5
+curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash -s -- v2026.3.5
 ```
 
 The script automatically detects your OS and architecture, downloads the appropriate binary, and installs it to `/usr/local/bin`.
 
 ### Manual Download
 
-Download the latest CLI binary for your platform from the [GitHub Releases page](https://github.com/fluxbase-eu/fluxbase/releases).
+Download the latest CLI binary for your platform from the [GitHub Releases page](https://github.com/nimbleflux/fluxbase/releases).
 
 #### macOS
 
 ```bash
 # macOS (Apple Silicon)
-curl -LO https://github.com/fluxbase-eu/fluxbase/releases/latest/download/fluxbase-darwin-arm64.tar.gz
+curl -LO https://github.com/nimbleflux/fluxbase/releases/latest/download/fluxbase-darwin-arm64.tar.gz
 tar -xzf fluxbase-darwin-arm64.tar.gz
 sudo mv fluxbase-darwin-arm64 /usr/local/bin/fluxbase
 
 # macOS (Intel)
-curl -LO https://github.com/fluxbase-eu/fluxbase/releases/latest/download/fluxbase-darwin-amd64.tar.gz
+curl -LO https://github.com/nimbleflux/fluxbase/releases/latest/download/fluxbase-darwin-amd64.tar.gz
 tar -xzf fluxbase-darwin-amd64.tar.gz
 sudo mv fluxbase-darwin-amd64 /usr/local/bin/fluxbase
 ```
@@ -49,19 +49,19 @@ sudo mv fluxbase-darwin-amd64 /usr/local/bin/fluxbase
 
 ```bash
 # Linux (x86_64)
-curl -LO https://github.com/fluxbase-eu/fluxbase/releases/latest/download/fluxbase-linux-amd64.tar.gz
+curl -LO https://github.com/nimbleflux/fluxbase/releases/latest/download/fluxbase-linux-amd64.tar.gz
 tar -xzf fluxbase-linux-amd64.tar.gz
 sudo mv fluxbase-linux-amd64 /usr/local/bin/fluxbase
 
 # Linux (ARM64)
-curl -LO https://github.com/fluxbase-eu/fluxbase/releases/latest/download/fluxbase-linux-arm64.tar.gz
+curl -LO https://github.com/nimbleflux/fluxbase/releases/latest/download/fluxbase-linux-arm64.tar.gz
 tar -xzf fluxbase-linux-arm64.tar.gz
 sudo mv fluxbase-linux-arm64 /usr/local/bin/fluxbase
 ```
 
 #### Windows
 
-Download from the [releases page](https://github.com/fluxbase-eu/fluxbase/releases):
+Download from the [releases page](https://github.com/nimbleflux/fluxbase/releases):
 
 1. Download `fluxbase-windows-amd64.zip`
 2. Extract the archive
@@ -72,7 +72,7 @@ Or using PowerShell:
 
 ```powershell
 # Download and extract
-Invoke-WebRequest -Uri "https://github.com/fluxbase-eu/fluxbase/releases/latest/download/fluxbase-windows-amd64.zip" -OutFile "fluxbase-windows-amd64.zip"
+Invoke-WebRequest -Uri "https://github.com/nimbleflux/fluxbase/releases/latest/download/fluxbase-windows-amd64.zip" -OutFile "fluxbase-windows-amd64.zip"
 Expand-Archive -Path "fluxbase-windows-amd64.zip" -DestinationPath "."
 
 # Move to a directory in PATH (run as Administrator)
@@ -85,7 +85,7 @@ If you have Go 1.25+ installed, you can build the CLI from source:
 
 ```bash
 # Clone the repository
-git clone https://github.com/fluxbase-eu/fluxbase.git
+git clone https://github.com/nimbleflux/fluxbase.git
 cd fluxbase
 
 # Build and install
@@ -115,7 +115,7 @@ built: 2024-01-15T10:30:00Z
 Run the install script again to update to the latest version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash
 ```
 
 ### Checking for Updates
@@ -127,7 +127,7 @@ Compare your version with the latest release:
 fluxbase version
 
 # Check latest release on GitHub
-curl -s https://api.github.com/repos/fluxbase-eu/fluxbase/releases/latest | grep tag_name
+curl -s https://api.github.com/repos/nimbleflux/fluxbase/releases/latest | grep tag_name
 ```
 
 ## Uninstallation
@@ -206,10 +206,10 @@ If you get a permission error during installation:
 
 ```bash
 # macOS/Linux: Install with sudo
-sudo curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | sudo bash
+sudo curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | sudo bash
 
 # Or install to a user directory
-curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | bash -s -- --prefix ~/.local
+curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash -s -- --prefix ~/.local
 ```
 
 ### macOS Gatekeeper Warning

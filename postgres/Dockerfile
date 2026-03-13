@@ -1,5 +1,5 @@
 # Fluxbase Postgres - PostgreSQL with popular extensions pre-installed
-# https://github.com/fluxbase-eu/fluxbase
+# https://github.com/nimbleflux/fluxbase
 #
 # Build args:
 #   POSTGRES_VERSION - Full version (e.g., 18.1)
@@ -13,7 +13,7 @@ FROM postgres:${POSTGRES_VERSION}
 
 ARG POSTGRES_MAJOR=18
 
-LABEL org.opencontainers.image.source="https://github.com/fluxbase-eu/fluxbase"
+LABEL org.opencontainers.image.source="https://github.com/nimbleflux/fluxbase"
 LABEL org.opencontainers.image.description="PostgreSQL ${POSTGRES_MAJOR} with extensions for Fluxbase"
 LABEL org.opencontainers.image.licenses="MIT"
 

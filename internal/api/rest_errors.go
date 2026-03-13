@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fluxbase-eu/fluxbase/internal/middleware"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/rs/zerolog/log"

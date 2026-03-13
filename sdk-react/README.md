@@ -1,8 +1,8 @@
-# @fluxbase/sdk-react
+# @nimbleflux/fluxbase-sdk-react
 
 React hooks for Fluxbase - Backend as a Service.
 
-[![npm version](https://img.shields.io/npm/v/@fluxbase/sdk-react.svg)](https://www.npmjs.com/package/@fluxbase/sdk-react)
+[![npm version](https://img.shields.io/npm/v/@nimbleflux/fluxbase-sdk-react.svg)](https://www.npmjs.com/package/@nimbleflux/fluxbase-sdk-react)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
@@ -18,17 +18,17 @@ React hooks for Fluxbase - Backend as a Service.
 
 ```bash
 # npm
-npm install @fluxbase/sdk @fluxbase/sdk-react @tanstack/react-query
+npm install @nimbleflux/fluxbase-sdk @nimbleflux/fluxbase-sdk-react @tanstack/react-query
 
 # pnpm
-pnpm add @fluxbase/sdk @fluxbase/sdk-react @tanstack/react-query
+pnpm add @nimbleflux/fluxbase-sdk @nimbleflux/fluxbase-sdk-react @tanstack/react-query
 ```
 
 ## Quick Start
 
 ```tsx
-import { createClient } from "@fluxbase/sdk";
-import { FluxbaseProvider, useAuth, useTable } from "@fluxbase/sdk-react";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
+import { FluxbaseProvider, useAuth, useTable } from "@nimbleflux/fluxbase-sdk-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Create clients
@@ -191,5 +191,5 @@ MIT © Fluxbase
 - [Documentation](../../docs/docs/sdks/react-hooks.md)
 - [API Reference](../../docs/static/api/sdk-react/)
 - [Core SDK](../sdk/)
-- [GitHub](https://github.com/fluxbase-eu/fluxbase)
-- [Issues](https://github.com/fluxbase-eu/fluxbase/issues)
+- [GitHub](https://github.com/nimbleflux/fluxbase)
+- [Issues](https://github.com/nimbleflux/fluxbase/issues)

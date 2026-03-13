@@ -4,7 +4,7 @@
     "src/index.ts"
   ],
   "out": "../docs/static/api/sdk",
-  "name": "@fluxbase/sdk",
+  "name": "@nimbleflux/fluxbase-sdk",
   "readme": "README.md",
   "plugin": [],
   "excludePrivate": true,
@@ -28,7 +28,7 @@
     "*"
   ],
   "navigationLinks": {
-    "GitHub": "https://github.com/fluxbase-eu/fluxbase",
+    "GitHub": "https://github.com/nimbleflux/fluxbase",
     "Documentation": "https://fluxbase.eu"
   }
 }

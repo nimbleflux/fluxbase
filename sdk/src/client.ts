@@ -11,7 +11,7 @@
  *
  * @example
  * ```typescript
- * import { createClient } from '@fluxbase/sdk'
+ * import { createClient } from '@nimbleflux/fluxbase-sdk'
  *
  * const client = createClient({
  *   url: 'http://localhost:8080',
@@ -580,7 +580,7 @@ function getEnvVar(name: string): string | undefined {
  *
  * @example
  * ```typescript
- * import { createClient } from '@fluxbase/sdk'
+ * import { createClient } from '@nimbleflux/fluxbase-sdk'
  *
  * // Initialize with anon key (identical to Supabase)
  * const client = createClient(

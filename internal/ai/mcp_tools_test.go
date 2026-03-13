@@ -3,7 +3,7 @@ package ai
 import (
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/stretchr/testify/assert"
 )
 

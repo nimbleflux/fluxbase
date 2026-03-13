@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/auth"
-	"github.com/fluxbase-eu/fluxbase/internal/email"
+	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/email"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"

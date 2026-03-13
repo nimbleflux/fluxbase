@@ -3,10 +3,10 @@ package api
 import (
 	"context"
 
-	"github.com/fluxbase-eu/fluxbase/internal/auth"
-	"github.com/fluxbase-eu/fluxbase/internal/config"
-	"github.com/fluxbase-eu/fluxbase/internal/email"
-	"github.com/fluxbase-eu/fluxbase/internal/settings"
+	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/email"
+	"github.com/nimbleflux/fluxbase/internal/settings"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 )

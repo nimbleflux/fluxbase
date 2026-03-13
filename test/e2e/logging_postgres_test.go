@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/fluxbase-eu/fluxbase/internal/database"
-	"github.com/fluxbase-eu/fluxbase/internal/storage"
-	test "github.com/fluxbase-eu/fluxbase/test"
+	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/storage"
+	test "github.com/nimbleflux/fluxbase/test"
 )
 
 // =============================================================================

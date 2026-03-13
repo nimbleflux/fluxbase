@@ -285,7 +285,7 @@ See the [CLI Command Reference](/cli/commands#graphql-commands) for complete doc
 ### TypeScript SDK
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient({ url: 'http://localhost:8080' })
 
@@ -315,7 +315,7 @@ const { data, errors } = await client.graphql.mutation<CreateUserMutation>(`
 ### React SDK
 
 ```tsx
-import { useGraphQLQuery, useGraphQLMutation } from '@fluxbase/sdk-react'
+import { useGraphQLQuery, useGraphQLMutation } from '@nimbleflux/fluxbase-sdk-react'
 
 function UsersList() {
   const { data, isLoading, error } = useGraphQLQuery<UsersQuery>(

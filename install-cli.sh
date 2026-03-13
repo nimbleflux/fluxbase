@@ -3,8 +3,8 @@
 # Fluxbase CLI Install Script
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | bash -s -- v0.1.0
+#   curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash -s -- v0.1.0
 #
 # Environment variables:
 #   FLUXBASE_INSTALL_DIR - Installation directory (default: /usr/local/bin)
@@ -12,7 +12,7 @@
 
 set -e
 
-REPO="fluxbase-eu/fluxbase"
+REPO="nimbleflux/fluxbase"
 INSTALL_DIR="${FLUXBASE_INSTALL_DIR:-/usr/local/bin}"
 BINARY_NAME="fluxbase"
 

@@ -16,7 +16,7 @@ import {
   useUpdate,
   useDelete,
   useFluxbaseClient,
-} from '@fluxbase/sdk-react'
+} from '@nimbleflux/fluxbase-sdk-react'
 import { Plus, Trash2, ShieldAlert, Rows3, Rows4 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api'

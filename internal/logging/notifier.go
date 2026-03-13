@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/fluxbase-eu/fluxbase/internal/pubsub"
-	"github.com/fluxbase-eu/fluxbase/internal/storage"
+	"github.com/nimbleflux/fluxbase/internal/pubsub"
+	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
 // LogChannel is the PubSub channel for execution log notifications.

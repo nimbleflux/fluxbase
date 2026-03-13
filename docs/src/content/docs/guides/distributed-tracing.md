@@ -224,7 +224,7 @@ Create custom spans for additional visibility:
 ### Basic Custom Span
 
 ```go
-import "github.com/fluxbase-eu/fluxbase/internal/observability"
+import "github.com/nimbleflux/fluxbase/internal/observability"
 
 // Start a custom span
 ctx, span := observability.StartSpan(ctx, "my-custom-operation")
@@ -244,7 +244,7 @@ if err != nil {
 ```go
 import (
     "go.opentelemetry.io/otel/attribute"
-    "github.com/fluxbase-eu/fluxbase/internal/observability"
+    "github.com/nimbleflux/fluxbase/internal/observability"
 )
 
 ctx, span := observability.StartSpan(ctx, "process-data")

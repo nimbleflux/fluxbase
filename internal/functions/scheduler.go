@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/database"
-	"github.com/fluxbase-eu/fluxbase/internal/runtime"
-	"github.com/fluxbase-eu/fluxbase/internal/secrets"
+	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/runtime"
+	"github.com/nimbleflux/fluxbase/internal/secrets"
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"

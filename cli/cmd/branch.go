@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cliconfig "github.com/fluxbase-eu/fluxbase/cli/config"
-	"github.com/fluxbase-eu/fluxbase/cli/output"
+	cliconfig "github.com/nimbleflux/fluxbase/cli/config"
+	"github.com/nimbleflux/fluxbase/cli/output"
 )
 
 var branchCmd = &cobra.Command{

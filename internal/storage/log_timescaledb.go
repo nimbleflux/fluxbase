@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // TimescaleDBLogStorage implements LogStorage using TimescaleDB (PostgreSQL extension).

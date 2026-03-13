@@ -18,13 +18,13 @@ Settings management requires admin authentication. All operations in this guide 
 The settings module is included with the Fluxbase SDK:
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient(
   'http://localhost:8080',
@@ -980,7 +980,7 @@ import type {
   UpdateEmailProviderSettingsRequest,
   TestEmailSettingsResponse,
   EmailSettingOverride
-} from '@fluxbase/sdk'
+} from '@nimbleflux/fluxbase-sdk'
 
 // Type-safe app settings operations
 const settings: AppSettings = await client.admin.settings.app.get()

@@ -6,7 +6,7 @@ import React, { ReactElement } from "react";
 import { render, RenderOptions, RenderResult } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FluxbaseProvider } from "./context";
-import type { FluxbaseClient } from "@fluxbase/sdk";
+import type { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
 import { vi } from "vitest";
 
 /**

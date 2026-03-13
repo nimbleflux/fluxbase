@@ -3,7 +3,7 @@
  * Works with edge functions, jobs, and RPC executions
  */
 import { useEffect, useState, useRef, useCallback } from 'react'
-import type { ExecutionLogEvent, ExecutionType } from '@fluxbase/sdk'
+import type { ExecutionLogEvent, ExecutionType } from '@nimbleflux/fluxbase-sdk'
 import { logsApi } from '@/lib/api'
 import { fluxbaseClient } from '@/lib/fluxbase-client'
 

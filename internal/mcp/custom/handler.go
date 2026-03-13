@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/rs/zerolog/log"
 )
 

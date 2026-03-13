@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fluxbase-eu/fluxbase/internal/branching"
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/branching"
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 )

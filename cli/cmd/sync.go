@@ -13,8 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/fluxbase-eu/fluxbase/cli/annotations"
-	"github.com/fluxbase-eu/fluxbase/cli/bundler"
+	"github.com/nimbleflux/fluxbase/cli/annotations"
+	"github.com/nimbleflux/fluxbase/cli/bundler"
 )
 
 var syncCmd = &cobra.Command{

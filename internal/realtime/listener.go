@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/jobs"
-	"github.com/fluxbase-eu/fluxbase/internal/pubsub"
-	"github.com/fluxbase-eu/fluxbase/internal/storage"
+	"github.com/nimbleflux/fluxbase/internal/jobs"
+	"github.com/nimbleflux/fluxbase/internal/pubsub"
+	"github.com/nimbleflux/fluxbase/internal/storage"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"

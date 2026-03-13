@@ -130,14 +130,14 @@ WebSocket-based AI chatbot integration:
 
 ```bash
 # Download the latest binary
-curl -L https://github.com/fluxbase-eu/fluxbase/releases/latest/download/fluxbase-linux-amd64 -o fluxbase
+curl -L https://github.com/nimbleflux/fluxbase/releases/latest/download/fluxbase-linux-amd64 -o fluxbase
 chmod +x fluxbase
 
 # Or use Docker
-docker run -p 8080:8080 ghcr.io/fluxbase-eu/fluxbase:latest
+docker run -p 8080:8080 ghcr.io/nimbleflux/fluxbase:latest
 
 # Or build from source
-git clone https://github.com/fluxbase-eu/fluxbase.git
+git clone https://github.com/nimbleflux/fluxbase.git
 cd fluxbase
 make build
 ./fluxbase
@@ -216,7 +216,7 @@ graph TB
 
 ## Community & Support
 
-- **GitHub**: [github.com/fluxbase-eu/fluxbase](https://github.com/fluxbase-eu/fluxbase)
+- **GitHub**: [github.com/nimbleflux/fluxbase](https://github.com/nimbleflux/fluxbase)
 - **Discord**: [discord.gg/BXPRHkQzkA](https://discord.gg/BXPRHkQzkA)
 
 ## License

@@ -50,7 +50,7 @@ async function loadFs(): Promise<boolean> {
  *
  * @example
  * ```typescript
- * import { denoExternalPlugin } from '@fluxbase/sdk'
+ * import { denoExternalPlugin } from '@nimbleflux/fluxbase-sdk'
  * import * as esbuild from 'esbuild'
  *
  * const result = await esbuild.build({
@@ -169,7 +169,7 @@ export interface BundleResult {
  *
  * @example
  * ```typescript
- * import { bundleCode } from '@fluxbase/sdk'
+ * import { bundleCode } from '@nimbleflux/fluxbase-sdk'
  *
  * const bundled = await bundleCode({
  *   code: `

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"

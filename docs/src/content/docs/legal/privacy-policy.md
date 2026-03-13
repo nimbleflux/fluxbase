@@ -67,4 +67,4 @@ When you self-host Fluxbase, you are the data controller for all data stored in 
 
 ## Contact
 
-For privacy inquiries, contact us through our [GitHub repository](https://github.com/fluxbase-eu/fluxbase) or [Discord community](https://discord.gg/BXPRHkQzkA).
+For privacy inquiries, contact us through our [GitHub repository](https://github.com/nimbleflux/fluxbase) or [Discord community](https://discord.gg/BXPRHkQzkA).

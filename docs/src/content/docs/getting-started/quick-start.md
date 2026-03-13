@@ -13,7 +13,7 @@ Get Fluxbase running in under 5 minutes using Docker.
 ## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/fluxbase-eu/fluxbase.git
+git clone https://github.com/nimbleflux/fluxbase.git
 cd fluxbase/deploy
 ```
 
@@ -117,17 +117,17 @@ Install the TypeScript SDK:
 
 ```bash
 # bun (recommended)
-bun add @fluxbase/sdk
+bun add @nimbleflux/fluxbase-sdk
 
 # npm
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 
 # pnpm
-pnpm add @fluxbase/sdk
+pnpm add @nimbleflux/fluxbase-sdk
 ```
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const fluxbase = createClient('http://localhost:8080', 'your-client-key')
 

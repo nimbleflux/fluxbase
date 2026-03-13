@@ -3,7 +3,7 @@
  */
 
 import { createContext, useContext, type ReactNode } from 'react'
-import type { FluxbaseClient } from '@fluxbase/sdk'
+import type { FluxbaseClient } from '@nimbleflux/fluxbase-sdk'
 
 const FluxbaseContext = createContext<FluxbaseClient | null>(null)
 

@@ -19,7 +19,7 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/fluxbase-eu/fluxbase",
+          href: "https://github.com/nimbleflux/fluxbase",
         },
         {
           icon: "discord",
@@ -28,7 +28,7 @@ export default defineConfig({
         },
       ],
       editLink: {
-        baseUrl: "https://github.com/fluxbase-eu/fluxbase/edit/main/docs/",
+        baseUrl: "https://github.com/nimbleflux/fluxbase/edit/main/docs/",
       },
       credits: true,
       components: {

@@ -114,7 +114,7 @@ Result: 267×200 (scaled to cover, not cropped)
 ### TypeScript SDK
 
 ```typescript
-import { FluxbaseClient } from '@fluxbase/sdk'
+import { FluxbaseClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = new FluxbaseClient({ url: 'http://localhost:8080' })
 const storage = client.storage
@@ -158,7 +158,7 @@ const { data: signedUrl } = await storage
 import {
   useStorageTransformUrl,
   useStorageSignedUrl
-} from '@fluxbase/sdk-react'
+} from '@nimbleflux/fluxbase-sdk-react'
 
 function ImageGallery() {
   // Get transform URL (synchronous, no network request)

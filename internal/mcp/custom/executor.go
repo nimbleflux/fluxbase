@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
-	"github.com/fluxbase-eu/fluxbase/internal/runtime"
-	"github.com/fluxbase-eu/fluxbase/internal/secrets"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/runtime"
+	"github.com/nimbleflux/fluxbase/internal/secrets"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )

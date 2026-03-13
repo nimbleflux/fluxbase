@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	test "github.com/fluxbase-eu/fluxbase/test"
+	test "github.com/nimbleflux/fluxbase/test"
 )
 
 // Package-level singleton for shared test context.

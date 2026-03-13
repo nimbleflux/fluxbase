@@ -14,7 +14,7 @@ LDFLAGS := -s -w -X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.Bui
 
 # Docker variables
 DOCKER_REGISTRY ?= ghcr.io
-DOCKER_ORG ?= fluxbase-eu
+DOCKER_ORG ?= nimbleflux
 DOCKER_IMAGE := $(DOCKER_REGISTRY)/$(DOCKER_ORG)/fluxbase
 
 # Database connection variables
@@ -160,7 +160,7 @@ test-coverage: ## Run ALL tests (unit + e2e) with combined coverage (requires po
 	@echo "${YELLOW}[1/5] Running Go unit tests with coverage for code metrics (~30-60 seconds)...${NC}"
 	@echo "${BLUE}Note: Integration tests with service goroutines are skipped for accurate coverage metrics${NC}"
 	@echo ""
-	@FLUXBASE_LOG_LEVEL=info FLUXBASE_PARALLEL_TEST=true NO_COLOR=1 go test -v -timeout 30m -short -coverprofile=coverage.out -covermode=atomic -p 1 $(shell go list ./... | grep -v "^github.com/fluxbase-eu/fluxbase/test/e2e$$") 2>&1 | tee /tmp/go-test-output.txt
+	@FLUXBASE_LOG_LEVEL=info FLUXBASE_PARALLEL_TEST=true NO_COLOR=1 go test -v -timeout 30m -short -coverprofile=coverage.out -covermode=atomic -p 1 $(shell go list ./... | grep -v "^github.com/nimbleflux/fluxbase/test/e2e$$") 2>&1 | tee /tmp/go-test-output.txt
 	@echo ""
 	@echo "${BLUE}Full test output written to: ${YELLOW}/tmp/go-test-output.txt${NC}"
 	@echo ""
@@ -621,7 +621,7 @@ release: ## Create a new release (test, build, tag, push)
 cli: ## Build the Fluxbase CLI tool
 	@echo "${YELLOW}Building ${CLI_BINARY_NAME} v$(VERSION)...${NC}"
 	@mkdir -p build/
-	@go build -ldflags="-X github.com/fluxbase-eu/fluxbase/cli/cmd.Version=$(VERSION) -X github.com/fluxbase-eu/fluxbase/cli/cmd.Commit=$(COMMIT) -X github.com/fluxbase-eu/fluxbase/cli/cmd.BuildDate=$(BUILD_DATE)" -o build/${CLI_BINARY_NAME} ${CLI_MAIN_PATH}
+	@go build -ldflags="-X github.com/nimbleflux/fluxbase/cli/cmd.Version=$(VERSION) -X github.com/nimbleflux/fluxbase/cli/cmd.Commit=$(COMMIT) -X github.com/nimbleflux/fluxbase/cli/cmd.BuildDate=$(BUILD_DATE)" -o build/${CLI_BINARY_NAME} ${CLI_MAIN_PATH}
 	@echo "${GREEN}CLI build complete: build/${CLI_BINARY_NAME}${NC}"
 
 cli-install: cli ## Build and install CLI to /usr/local/bin
@@ -641,11 +641,11 @@ cli-completions: cli ## Generate shell completion scripts
 cli-cross-compile: ## Cross-compile CLI for multiple platforms
 	@echo "${YELLOW}Cross-compiling CLI for multiple platforms...${NC}"
 	@mkdir -p build/dist
-	@GOOS=darwin GOARCH=amd64 go build -ldflags="-X github.com/fluxbase-eu/fluxbase/cli/cmd.Version=$(VERSION)" -o build/dist/fluxbase-darwin-amd64 ${CLI_MAIN_PATH}
-	@GOOS=darwin GOARCH=arm64 go build -ldflags="-X github.com/fluxbase-eu/fluxbase/cli/cmd.Version=$(VERSION)" -o build/dist/fluxbase-darwin-arm64 ${CLI_MAIN_PATH}
-	@GOOS=linux GOARCH=amd64 go build -ldflags="-X github.com/fluxbase-eu/fluxbase/cli/cmd.Version=$(VERSION)" -o build/dist/fluxbase-linux-amd64 ${CLI_MAIN_PATH}
-	@GOOS=linux GOARCH=arm64 go build -ldflags="-X github.com/fluxbase-eu/fluxbase/cli/cmd.Version=$(VERSION)" -o build/dist/fluxbase-linux-arm64 ${CLI_MAIN_PATH}
-	@GOOS=windows GOARCH=amd64 go build -ldflags="-X github.com/fluxbase-eu/fluxbase/cli/cmd.Version=$(VERSION)" -o build/dist/fluxbase-windows-amd64.exe ${CLI_MAIN_PATH}
+	@GOOS=darwin GOARCH=amd64 go build -ldflags="-X github.com/nimbleflux/fluxbase/cli/cmd.Version=$(VERSION)" -o build/dist/fluxbase-darwin-amd64 ${CLI_MAIN_PATH}
+	@GOOS=darwin GOARCH=arm64 go build -ldflags="-X github.com/nimbleflux/fluxbase/cli/cmd.Version=$(VERSION)" -o build/dist/fluxbase-darwin-arm64 ${CLI_MAIN_PATH}
+	@GOOS=linux GOARCH=amd64 go build -ldflags="-X github.com/nimbleflux/fluxbase/cli/cmd.Version=$(VERSION)" -o build/dist/fluxbase-linux-amd64 ${CLI_MAIN_PATH}
+	@GOOS=linux GOARCH=arm64 go build -ldflags="-X github.com/nimbleflux/fluxbase/cli/cmd.Version=$(VERSION)" -o build/dist/fluxbase-linux-arm64 ${CLI_MAIN_PATH}
+	@GOOS=windows GOARCH=amd64 go build -ldflags="-X github.com/nimbleflux/fluxbase/cli/cmd.Version=$(VERSION)" -o build/dist/fluxbase-windows-amd64.exe ${CLI_MAIN_PATH}
 	@echo "${GREEN}Cross-compilation complete! Binaries in build/dist/${NC}"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -698,13 +698,13 @@ viz-workflows: ## Generate workflow diagrams (REST, auth, functions, jobs, stora
 viz-deps: ## Generate package dependency graph (PNG)
 	@echo "${YELLOW}Generating package dependency graph...${NC}"
 	@mkdir -p build/viz
-	@godepgraph -s github.com/fluxbase-eu/fluxbase/... 2>/dev/null | dot -Tpng -o build/viz/deps.png
+	@godepgraph -s github.com/nimbleflux/fluxbase/... 2>/dev/null | dot -Tpng -o build/viz/deps.png
 	@echo "${GREEN}Dependency graph: build/viz/deps.png${NC}"
 
 viz-deps-svg: ## Generate package dependency graph (SVG, interactive)
 	@echo "${YELLOW}Generating package dependency graph (SVG)...${NC}"
 	@mkdir -p build/viz
-	@godepgraph -s github.com/fluxbase-eu/fluxbase/... 2>/dev/null | dot -Tsvg -o build/viz/deps.svg
+	@godepgraph -s github.com/nimbleflux/fluxbase/... 2>/dev/null | dot -Tsvg -o build/viz/deps.svg
 	@echo "${GREEN}Dependency graph: build/viz/deps.svg${NC}"
 
 viz-internal-detailed: ## [ADVANCED] Complete internal dependency graph (complex, may be hard to read)
@@ -712,7 +712,7 @@ viz-internal-detailed: ## [ADVANCED] Complete internal dependency graph (complex
 	@echo "${RED}Warning: This generates a complex graph with many nodes. Try 'make viz-architecture' for a cleaner view.${NC}"
 	@mkdir -p build/viz
 	@goda graph -cluster ./internal/... 2>/dev/null | \
-		sed 's|github.com/fluxbase-eu/fluxbase/internal/||g' | \
+		sed 's|github.com/nimbleflux/fluxbase/internal/||g' | \
 		sfdp -Tsvg -Gsize=30,30 -Goverlap=scale -Gsplines=true -Gsep=1.5 -Gnodesep=2 -o build/viz/internal-deps-complete.svg
 	@echo "${GREEN}Complete internal dependencies: build/viz/internal-deps-complete.svg${NC}"
 
@@ -720,7 +720,7 @@ viz-internal-hierarchical: ## [ADVANCED] Complete internal graph with hierarchic
 	@echo "${YELLOW}Generating complete internal dependencies (hierarchical)...${NC}"
 	@mkdir -p build/viz
 	@goda graph -cluster ./internal/... 2>/dev/null | \
-		sed 's|github.com/fluxbase-eu/fluxbase/internal/||g' | \
+		sed 's|github.com/nimbleflux/fluxbase/internal/||g' | \
 		dot -Tsvg -Grankdir=TB -Gnodesep=1.5 -Granksep=2 -o build/viz/internal-deps-hierarchical.svg
 	@echo "${GREEN}Hierarchical dependencies: build/viz/internal-deps-hierarchical.svg${NC}"
 
@@ -728,19 +728,19 @@ viz-core-modules: ## Generate dependency graph for core modules only (api, auth,
 	@echo "${YELLOW}Generating core module dependencies...${NC}"
 	@mkdir -p build/viz
 	@goda graph "reach(./internal/api/... + ./internal/auth/... + ./internal/database/..., ./internal/...)" 2>/dev/null | \
-		sed 's|github.com/fluxbase-eu/fluxbase/internal/||g' | \
+		sed 's|github.com/nimbleflux/fluxbase/internal/||g' | \
 		dot -Tsvg -Grankdir=TB -Gnodesep=1.5 -Granksep=2 -o build/viz/core-modules.svg
 	@echo "${GREEN}Core module dependencies: build/viz/core-modules.svg${NC}"
 
 viz-callgraph: ## Generate call graph (opens in browser)
 	@echo "${YELLOW}Generating call graph visualization...${NC}"
 	@echo "${BLUE}This will open a browser window. Press Ctrl+C to stop.${NC}"
-	@go-callvis -group pkg,type -focus github.com/fluxbase-eu/fluxbase ./cmd/fluxbase
+	@go-callvis -group pkg,type -focus github.com/nimbleflux/fluxbase ./cmd/fluxbase
 
 viz-callgraph-svg: ## Generate call graph as SVG file
 	@echo "${YELLOW}Generating call graph SVG...${NC}"
 	@mkdir -p build/viz
-	@go-callvis -group pkg,type -format svg -file build/viz/callgraph -focus github.com/fluxbase-eu/fluxbase ./cmd/fluxbase 2>/dev/null || true
+	@go-callvis -group pkg,type -format svg -file build/viz/callgraph -focus github.com/nimbleflux/fluxbase ./cmd/fluxbase 2>/dev/null || true
 	@echo "${GREEN}Call graph: build/viz/callgraph.svg${NC}"
 
 viz-uml: ## Generate UML class diagrams (PlantUML format)

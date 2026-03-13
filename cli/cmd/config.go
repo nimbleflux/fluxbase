@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cliconfig "github.com/fluxbase-eu/fluxbase/cli/config"
+	cliconfig "github.com/nimbleflux/fluxbase/cli/config"
 )
 
 var configCmd = &cobra.Command{

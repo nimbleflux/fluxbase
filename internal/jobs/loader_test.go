@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 func TestParseAnnotations_ProgressTimeout(t *testing.T) {

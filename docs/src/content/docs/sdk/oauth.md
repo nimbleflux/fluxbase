@@ -15,7 +15,7 @@ The OAuth SDK consists of two main managers:
 ## Getting Started
 
 ```typescript
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
 const client = createClient(
   'http://localhost:8080',
@@ -511,7 +511,7 @@ console.log(`- Max sessions per user: ${settings.max_sessions_per_user}`)
 Handle common errors when working with OAuth configuration:
 
 ```typescript
-import { FluxbaseError } from '@fluxbase/sdk'
+import { FluxbaseError } from '@nimbleflux/fluxbase-sdk'
 
 try {
   await client.admin.oauth.providers.createProvider({

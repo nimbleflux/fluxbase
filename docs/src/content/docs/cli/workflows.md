@@ -183,7 +183,7 @@ jobs:
 
       - name: Install Fluxbase CLI
         run: |
-          curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash
           echo "/usr/local/bin" >> $GITHUB_PATH
 
       - name: Deploy to production
@@ -205,7 +205,7 @@ deploy:
   image: ubuntu:latest
   before_script:
     - apt-get update && apt-get install -y curl
-    - curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | bash
+    - curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash
   script:
     - fluxbase sync --namespace production
   variables:
@@ -436,7 +436,7 @@ jobs:
 
       - name: Install Fluxbase CLI
         run: |
-          curl -fsSL https://raw.githubusercontent.com/fluxbase-eu/fluxbase/main/install-cli.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash
           echo "/usr/local/bin" >> $GITHUB_PATH
 
       - name: Create preview branch

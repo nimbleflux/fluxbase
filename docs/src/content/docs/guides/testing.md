@@ -411,7 +411,7 @@ jobs:
 
     services:
       postgres:
-        image: ghcr.io/fluxbase-eu/fluxbase-postgres:18
+        image: ghcr.io/nimbleflux/fluxbase-postgres:18
         env:
           POSTGRES_PASSWORD: postgres
         options: >-

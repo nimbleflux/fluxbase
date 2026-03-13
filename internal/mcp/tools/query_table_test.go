@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
-	"github.com/fluxbase-eu/fluxbase/internal/query"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/query"
 	"github.com/stretchr/testify/assert"
 )
 

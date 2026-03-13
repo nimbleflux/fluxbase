@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 )

@@ -2,7 +2,7 @@
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": ["src/index.ts"],
   "out": "../docs/static/api/sdk-react",
-  "name": "@fluxbase/sdk-react",
+  "name": "@nimbleflux/fluxbase-sdk-react",
   "readme": "README.md",
   "plugin": [],
   "excludePrivate": true,
@@ -27,7 +27,7 @@
     "*"
   ],
   "navigationLinks": {
-    "GitHub": "https://github.com/fluxbase-eu/fluxbase",
+    "GitHub": "https://github.com/nimbleflux/fluxbase",
     "Documentation": "https://fluxbase.eu"
   }
 }

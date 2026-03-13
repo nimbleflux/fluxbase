@@ -20,8 +20,8 @@ import {
   useWebhooks,
   useAppSettings,
   useSystemSettings
-} from '@fluxbase/sdk-react'
-import type { EnrichedUser } from '@fluxbase/sdk'
+} from '@nimbleflux/fluxbase-sdk-react'
+import type { EnrichedUser } from '@nimbleflux/fluxbase-sdk'
 
 // ============================================================================
 // Admin Login Component

@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	test "github.com/fluxbase-eu/fluxbase/test"
+	test "github.com/nimbleflux/fluxbase/test"
 )
 
 // TestMain is the entry point for running tests in this package when using go test

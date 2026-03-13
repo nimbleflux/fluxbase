@@ -20,7 +20,7 @@ Use this when bundling functions/jobs with esbuild to handle npm:, https://, and
 ## Example
 
 ```typescript
-import { denoExternalPlugin } from '@fluxbase/sdk'
+import { denoExternalPlugin } from '@nimbleflux/fluxbase-sdk'
 import * as esbuild from 'esbuild'
 
 const result = await esbuild.build({

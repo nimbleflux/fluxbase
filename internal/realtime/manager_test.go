@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/pubsub"
+	"github.com/nimbleflux/fluxbase/internal/pubsub"
 	"github.com/stretchr/testify/assert"
 )
 

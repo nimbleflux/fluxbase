@@ -2,7 +2,7 @@
 editUrl: false
 next: false
 prev: false
-title: "@fluxbase/sdk"
+title: "@nimbleflux/fluxbase-sdk"
 ---
 
 ## Admin

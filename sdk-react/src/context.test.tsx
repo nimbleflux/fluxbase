@@ -7,7 +7,7 @@ import { render, screen, renderHook } from '@testing-library/react';
 import React from 'react';
 import { FluxbaseProvider, useFluxbaseClient } from './context';
 import { createMockClient } from './test-utils';
-import type { FluxbaseClient } from '@fluxbase/sdk';
+import type { FluxbaseClient } from '@nimbleflux/fluxbase-sdk';
 
 describe('FluxbaseProvider', () => {
   it('should render children', () => {

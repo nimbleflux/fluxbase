@@ -33,7 +33,7 @@ Error if esbuild is not available
 ## Example
 
 ```typescript
-import { bundleCode } from '@fluxbase/sdk'
+import { bundleCode } from '@nimbleflux/fluxbase-sdk'
 
 const bundled = await bundleCode({
   code: `

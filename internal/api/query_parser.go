@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fluxbase-eu/fluxbase/internal/config"
-	"github.com/fluxbase-eu/fluxbase/internal/query"
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/query"
 	"github.com/rs/zerolog/log"
 )
 

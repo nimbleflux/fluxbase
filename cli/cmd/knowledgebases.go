@@ -16,8 +16,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/fluxbase-eu/fluxbase/cli/output"
-	"github.com/fluxbase-eu/fluxbase/cli/util"
+	"github.com/nimbleflux/fluxbase/cli/output"
+	"github.com/nimbleflux/fluxbase/cli/util"
 )
 
 var kbCmd = &cobra.Command{

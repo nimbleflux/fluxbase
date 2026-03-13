@@ -21,13 +21,13 @@ Production-ready code examples for common Fluxbase use cases.
 ### Installation
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ### Initialize Client
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-anon-key");
 ```

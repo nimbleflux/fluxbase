@@ -14,13 +14,13 @@ The Management SDK provides tools for managing client keys, webhooks, and invita
 The management module is included with the Fluxbase SDK:
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient(
   "http://localhost:8080",
@@ -546,7 +546,7 @@ console.log("Invitation revoked");
 ### Client Key Management Dashboard
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient(
   "http://localhost:8080",
@@ -606,7 +606,7 @@ setupClientKeyDashboard().catch(console.error);
 ```typescript
 import express from "express";
 import crypto from "crypto";
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const app = express();
 const client = createClient(
@@ -700,7 +700,7 @@ app.listen(3000, () => {
 ### Invitation Management System
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient(
   "http://localhost:8080",
@@ -886,7 +886,7 @@ import type {
   CreateInvitationRequest,
   ValidateInvitationResponse,
   AcceptInvitationResponse,
-} from "@fluxbase/sdk";
+} from "@nimbleflux/fluxbase-sdk";
 ```
 
 ---

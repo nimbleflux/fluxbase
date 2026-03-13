@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/fluxbase-eu/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 )

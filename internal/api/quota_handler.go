@@ -3,8 +3,8 @@ package api
 import (
 	"fmt"
 
-	"github.com/fluxbase-eu/fluxbase/internal/ai"
-	"github.com/fluxbase-eu/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/ai"
+	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/gofiber/fiber/v3"
 )
 

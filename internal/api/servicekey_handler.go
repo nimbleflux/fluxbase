@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/fluxbase-eu/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 
 // ServiceKeyHandler handles service key management requests

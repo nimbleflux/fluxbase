@@ -96,7 +96,7 @@ import dashboardScreenshot from "../../assets/screenshot-dashboard.png";
 **Clone and generate secrets**
 
 ```bash
-git clone https://github.com/fluxbase-eu/fluxbase.git
+git clone https://github.com/nimbleflux/fluxbase.git
 cd fluxbase/deploy
 ./generate-keys.sh  # Select option 1 (Docker Compose)
 ```
@@ -120,11 +120,11 @@ Then open [localhost:8080/admin/setup](http://localhost:8080/admin/setup), enter
 **Install the SDK and connect**
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 // Get your API key from the admin dashboard → Client Keys
 const client = createClient("http://localhost:8080", "your-anon-key");

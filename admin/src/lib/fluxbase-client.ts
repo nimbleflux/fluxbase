@@ -1,7 +1,7 @@
 /**
  * Fluxbase SDK client configuration for Admin UI
  */
-import { createClient } from '@fluxbase/sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 import { getAccessToken } from './auth'
 
 // Declare the runtime config type injected by the server

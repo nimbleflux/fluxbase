@@ -328,7 +328,7 @@ Fluxbase automatically creates spans for:
 Create custom spans for additional visibility:
 
 ```go
-import "github.com/fluxbase-eu/fluxbase/internal/observability"
+import "github.com/nimbleflux/fluxbase/internal/observability"
 
 // Start a custom span
 ctx, span := observability.StartSpan(ctx, "my-operation")

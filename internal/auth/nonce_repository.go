@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/jackc/pgx/v5"
 )
 

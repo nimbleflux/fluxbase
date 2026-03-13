@@ -3,7 +3,7 @@ package middleware
 import (
 	"errors"
 
-	"github.com/fluxbase-eu/fluxbase/internal/branching"
+	"github.com/nimbleflux/fluxbase/internal/branching"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"

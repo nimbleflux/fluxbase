@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/gofiber/fiber/v3"
 	"github.com/graphql-go/graphql/gqlerrors"
 	"github.com/stretchr/testify/assert"

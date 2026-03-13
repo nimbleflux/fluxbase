@@ -272,7 +272,7 @@ security:
 ### SDK Usage with Adaptive Trust
 
 ```typescript
-import { FluxbaseClient } from "@fluxbase/sdk";
+import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = new FluxbaseClient({ url: "http://localhost:8080" });
 
@@ -656,7 +656,7 @@ const config = await response.json();
 ### TypeScript SDK
 
 ```typescript
-import { FluxbaseClient } from "@fluxbase/sdk";
+import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = new FluxbaseClient({ url: "http://localhost:8080" });
 
@@ -698,7 +698,7 @@ import {
   useCaptcha,
   useSignUp,
   isCaptchaRequiredForEndpoint,
-} from "@fluxbase/sdk-react";
+} from "@nimbleflux/fluxbase-sdk-react";
 
 function SignUpForm() {
   const { data: config } = useCaptchaConfig();

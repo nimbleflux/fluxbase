@@ -50,8 +50,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@fluxbase/sdk': path.resolve(__dirname, '../sdk/dist/index.js'),
-      '@fluxbase/sdk-react': path.resolve(__dirname, '../sdk-react/dist/index.mjs'),
+      '@nimbleflux/fluxbase-sdk': path.resolve(__dirname, '../sdk/dist/index.js'),
+      '@nimbleflux/fluxbase-sdk-react': path.resolve(__dirname, '../sdk-react/dist/index.mjs'),
       // Force all React imports to use a consistent version (supports workspace setup)
       react: resolveModule('react'),
       'react-dom': resolveModule('react-dom'),

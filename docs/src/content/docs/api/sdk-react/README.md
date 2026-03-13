@@ -2,7 +2,7 @@
 editUrl: false
 next: false
 prev: false
-title: "@fluxbase/sdk-react"
+title: "@nimbleflux/fluxbase-sdk-react"
 ---
 
 ## Client

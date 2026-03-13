@@ -1,7 +1,7 @@
 package ai
 
 import (
-	"github.com/fluxbase-eu/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 // ChatbotAuthContext creates an MCP AuthContext from a ChatContext and Chatbot configuration.

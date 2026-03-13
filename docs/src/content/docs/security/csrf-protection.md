@@ -160,7 +160,7 @@ makeRequest("/api/v1/tables/users", {
 The Fluxbase SDK handles CSRF tokens automatically:
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-anon-key");
 
@@ -177,7 +177,7 @@ await client
 ### React Example
 
 ```tsx
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-anon-key");
 
@@ -216,7 +216,7 @@ function UserForm() {
 </template>
 
 <script>
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-anon-key");
 
@@ -281,7 +281,7 @@ package main
 
 import (
     "github.com/gofiber/fiber/v2"
-    "github.com/fluxbase-eu/fluxbase/internal/middleware"
+    "github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 func main() {
@@ -349,7 +349,7 @@ curl -X POST http://localhost:8080/api/v1/tables/users \
 
 ```typescript
 import { describe, it, expect } from "vitest";
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 describe("CSRF Protection", () => {
   it("should reject requests without CSRF token", async () => {

@@ -26,13 +26,13 @@ Edge Functions are serverless functions powered by Deno that execute JavaScript/
 ## Installation
 
 ```bash
-npm install @fluxbase/sdk
+npm install @nimbleflux/fluxbase-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { FluxbaseClient } from "@fluxbase/sdk";
+import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = new FluxbaseClient({
   url: "http://localhost:8080",
@@ -118,7 +118,7 @@ interface Request {
 Edge functions can import and use the Fluxbase SDK for database operations, authentication, and more:
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 async function handler(req) {
   // Create a service client with elevated permissions
@@ -825,7 +825,7 @@ Mount a directory with function files:
 # docker-compose.yml
 services:
   fluxbase:
-    image: ghcr.io/fluxbase-eu/fluxbase:latest
+    image: ghcr.io/nimbleflux/fluxbase:latest
     volumes:
       - ./functions:/app/functions
     environment:

@@ -134,7 +134,7 @@ fi
 # Build and install the Fluxbase CLI
 echo "🛠️  Building Fluxbase CLI..."
 cd /workspace
-go build -ldflags="-X github.com/fluxbase-eu/fluxbase/cli/cmd.Version=dev" -o /go/bin/fluxbase-cli cli/main.go
+go build -ldflags="-X github.com/nimbleflux/fluxbase/cli/cmd.Version=dev" -o /go/bin/fluxbase-cli cli/main.go
 echo "✅ CLI built successfully"
 
 # Create symlinks for convenient CLI access

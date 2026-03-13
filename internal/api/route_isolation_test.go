@@ -4,7 +4,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/middleware"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

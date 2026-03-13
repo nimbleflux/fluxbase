@@ -487,7 +487,7 @@ If you discover a security vulnerability in Fluxbase, please report it responsib
 
 Subscribe to security updates:
 
-- **GitHub**: Watch the [Fluxbase repository](https://github.com/fluxbase-eu/fluxbase)
+- **GitHub**: Watch the [Fluxbase repository](https://github.com/nimbleflux/fluxbase)
 - **Email**: Subscribe to the security mailing list
 - **RSS**: Security advisories feed
 

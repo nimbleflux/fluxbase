@@ -4,7 +4,7 @@ package e2e
 import (
 	"testing"
 
-	test "github.com/fluxbase-eu/fluxbase/test"
+	test "github.com/nimbleflux/fluxbase/test"
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/require"
 )

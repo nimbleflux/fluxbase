@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/fluxbase-eu/fluxbase/internal/storage"
-	"github.com/fluxbase-eu/fluxbase/test"
+	"github.com/nimbleflux/fluxbase/internal/storage"
+	"github.com/nimbleflux/fluxbase/test"
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/fluxbase-eu/fluxbase/internal/storage"
+	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 )

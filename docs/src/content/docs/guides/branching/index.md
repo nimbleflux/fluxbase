@@ -216,7 +216,7 @@ flowchart TB
 ## Using TypeScript SDK
 
 ```typescript
-import { createClient } from "@fluxbase/sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-key");
 

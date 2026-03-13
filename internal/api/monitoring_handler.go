@@ -6,12 +6,12 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/fluxbase-eu/fluxbase/internal/auth"
-	"github.com/fluxbase-eu/fluxbase/internal/jobs"
-	"github.com/fluxbase-eu/fluxbase/internal/logging"
-	"github.com/fluxbase-eu/fluxbase/internal/middleware"
-	"github.com/fluxbase-eu/fluxbase/internal/realtime"
-	"github.com/fluxbase-eu/fluxbase/internal/storage"
+	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/jobs"
+	"github.com/nimbleflux/fluxbase/internal/logging"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
+	"github.com/nimbleflux/fluxbase/internal/realtime"
+	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

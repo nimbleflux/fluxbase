@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/fluxbase-eu/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
 )
 
