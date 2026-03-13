@@ -23,6 +23,8 @@ type TimescaleDBConfig struct {
 	Compressed bool
 	// CompressAfter specifies how long to wait before compressing data
 	CompressAfter time.Duration
+	// RetainAfter specifies how long to keep data before dropping (retention policy)
+	RetainAfter time.Duration
 }
 
 // newTimescaleDBLogStorage creates a new TimescaleDB-backed log storage.
@@ -123,8 +125,9 @@ func (s *TimescaleDBLogStorage) enableTimescaleDB(ctx context.Context, cfg Times
 			-- Add primary key without partitioning
 			ALTER TABLE logging.entries ADD PRIMARY KEY (id);
 
-			-- Convert to hypertable
+			-- Convert to hypertable with 1-day chunks for optimal logging performance
 			SELECT create_hypertable('logging.entries', 'timestamp',
+				chunk_time_interval => INTERVAL '1 day',
 				if_not_exists => TRUE,
 				migrate_data => TRUE
 			);
@@ -166,6 +169,26 @@ func (s *TimescaleDBLogStorage) enableTimescaleDB(ctx context.Context, cfg Times
 			if err != nil {
 				return fmt.Errorf("failed to add compression policy: %w", err)
 			}
+		}
+	}
+
+	// Add retention policy if configured
+	if cfg.RetainAfter > 0 {
+		// First remove existing retention policy if any
+		_, err = s.db.Pool().Exec(ctx, `
+			SELECT remove_retention_policy('logging.entries', if_exists => TRUE);
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to remove existing retention policy: %w", err)
+		}
+
+		// Add new retention policy
+		retainInterval := fmt.Sprintf("INTERVAL '%d seconds'", int64(cfg.RetainAfter.Seconds()))
+		_, err = s.db.Pool().Exec(ctx, `
+			SELECT add_retention_policy('logging.entries', $1::interval)
+		`, retainInterval)
+		if err != nil {
+			return fmt.Errorf("failed to add retention policy: %w", err)
 		}
 	}
 

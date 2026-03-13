@@ -90,7 +90,10 @@ func NewService(
 	sessionRepo := NewSessionRepository(db)
 	magicLinkRepo := NewMagicLinkRepository(db)
 
-	jwtManager := NewJWTManagerWithConfig(cfg.JWTSecret, cfg.JWTExpiry, cfg.RefreshExpiry, cfg.ServiceRoleTTL, cfg.AnonTTL)
+	jwtManager, err := NewJWTManagerWithConfig(cfg.JWTSecret, cfg.JWTExpiry, cfg.RefreshExpiry, cfg.ServiceRoleTTL, cfg.AnonTTL)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create JWT manager")
+	}
 	passwordHasher := NewPasswordHasherWithConfig(PasswordHasherConfig{MinLength: cfg.PasswordMinLen, Cost: cfg.BcryptCost})
 	oauthManager := NewOAuthManager()
 

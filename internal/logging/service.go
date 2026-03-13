@@ -40,6 +40,41 @@ func New(cfg *config.LoggingConfig, db *database.Connection, fileStorage storage
 		BatchSize:     cfg.BatchSize,
 		FlushInterval: int(cfg.FlushInterval.Milliseconds()),
 		BufferSize:    cfg.BufferSize,
+
+		// TimescaleDB settings
+		TimescaleDBEnabled:       cfg.TimescaleDBEnabled,
+		TimescaleDBCompression:   cfg.TimescaleDBCompression,
+		TimescaleDBCompressAfter: cfg.TimescaleDBCompressAfter,
+		TimescaleDBRetainAfter:   cfg.TimescaleDBRetainAfter,
+
+		// Loki settings
+		LokiURL:      cfg.LokiURL,
+		LokiUsername: cfg.LokiUsername,
+		LokiPassword: cfg.LokiPassword,
+		LokiTenantID: cfg.LokiTenantID,
+		LokiLabels:   cfg.LokiLabels,
+
+		// Elasticsearch settings
+		ElasticsearchURLs:     cfg.ElasticsearchURLs,
+		ElasticsearchUsername: cfg.ElasticsearchUsername,
+		ElasticsearchPassword: cfg.ElasticsearchPassword,
+		ElasticsearchIndex:    cfg.ElasticsearchIndex,
+		ElasticsearchVersion:  cfg.ElasticsearchVersion,
+
+		// OpenSearch settings
+		OpenSearchURLs:     cfg.OpenSearchURLs,
+		OpenSearchUsername: cfg.OpenSearchUsername,
+		OpenSearchPassword: cfg.OpenSearchPassword,
+		OpenSearchIndex:    cfg.OpenSearchIndex,
+		OpenSearchVersion:  cfg.OpenSearchVersion,
+
+		// ClickHouse settings
+		ClickHouseAddresses: cfg.ClickHouseAddresses,
+		ClickHouseUsername:  cfg.ClickHouseUsername,
+		ClickHousePassword:  cfg.ClickHousePassword,
+		ClickHouseDatabase:  cfg.ClickHouseDatabase,
+		ClickHouseTable:     cfg.ClickHouseTable,
+		ClickHouseTTL:       cfg.ClickHouseTTL,
 	}
 
 	logService, err := storage.NewLogService(storageCfg, db, fileStorage)

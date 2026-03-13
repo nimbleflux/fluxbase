@@ -9,22 +9,77 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testSecretKey = "test-secret-key-must-be-32-characters!"
+
 func TestNewJWTManager(t *testing.T) {
-	secretKey := "test-secret-key"
 	accessTTL := 15 * time.Minute
 	refreshTTL := 7 * 24 * time.Hour
 
-	manager := NewJWTManager(secretKey, accessTTL, refreshTTL)
+	manager, err := NewJWTManager(testSecretKey, accessTTL, refreshTTL)
+	require.NoError(t, err)
 
 	assert.NotNil(t, manager)
-	assert.Equal(t, []byte(secretKey), manager.secretKey)
+	assert.Equal(t, []byte(testSecretKey), manager.secretKey)
 	assert.Equal(t, accessTTL, manager.accessTokenTTL)
 	assert.Equal(t, refreshTTL, manager.refreshTokenTTL)
 	assert.Equal(t, "fluxbase", manager.issuer)
 }
 
+func TestNewJWTManager_SecretKeyValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		secretKey string
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:      "valid 32 character key",
+			secretKey: "12345678901234567890123456789012",
+			wantErr:   false,
+		},
+		{
+			name:      "valid 64 character key",
+			secretKey: "1234567890123456789012345678901212345678901234567890123456789012",
+			wantErr:   false,
+		},
+		{
+			name:      "too short - 31 characters",
+			secretKey: "1234567890123456789012345678901",
+			wantErr:   true,
+			errMsg:    "JWT secret key must be at least 32 characters",
+		},
+		{
+			name:      "too short - 1 character",
+			secretKey: "x",
+			wantErr:   true,
+			errMsg:    "JWT secret key must be at least 32 characters",
+		},
+		{
+			name:      "empty key",
+			secretKey: "",
+			wantErr:   true,
+			errMsg:    "JWT secret key must be at least 32 characters",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager, err := NewJWTManager(tt.secretKey, 15*time.Minute, 7*24*time.Hour)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+				assert.Nil(t, manager)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, manager)
+			}
+		})
+	}
+}
+
 func TestGenerateAccessToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	userID := "user123"
 	email := "test@example.com"
@@ -36,7 +91,6 @@ func TestGenerateAccessToken(t *testing.T) {
 	assert.NotEmpty(t, token)
 	assert.NotNil(t, claims)
 
-	// Verify claims
 	assert.Equal(t, userID, claims.UserID)
 	assert.Equal(t, email, claims.Email)
 	assert.Equal(t, role, claims.Role)
@@ -48,13 +102,13 @@ func TestGenerateAccessToken(t *testing.T) {
 	assert.NotNil(t, claims.ExpiresAt)
 	assert.NotEmpty(t, claims.ID)
 
-	// Verify expiry is approximately 15 minutes from now
 	expectedExpiry := time.Now().Add(15 * time.Minute)
 	assert.WithinDuration(t, expectedExpiry, claims.ExpiresAt.Time, 5*time.Second)
 }
 
 func TestGenerateRefreshToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	userID := "user123"
 	email := "test@example.com"
@@ -67,7 +121,6 @@ func TestGenerateRefreshToken(t *testing.T) {
 	assert.NotEmpty(t, token)
 	assert.NotNil(t, claims)
 
-	// Verify claims
 	assert.Equal(t, userID, claims.UserID)
 	assert.Equal(t, email, claims.Email)
 	assert.Equal(t, role, claims.Role)
@@ -75,13 +128,13 @@ func TestGenerateRefreshToken(t *testing.T) {
 	assert.Equal(t, "refresh", claims.TokenType)
 	assert.Equal(t, "fluxbase", claims.Issuer)
 
-	// Verify expiry is approximately 7 days from now
 	expectedExpiry := time.Now().Add(7 * 24 * time.Hour)
 	assert.WithinDuration(t, expectedExpiry, claims.ExpiresAt.Time, 5*time.Second)
 }
 
 func TestGenerateTokenPair(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	userID := "user123"
 	email := "test@example.com"
@@ -94,7 +147,6 @@ func TestGenerateTokenPair(t *testing.T) {
 	assert.NotEmpty(t, refreshToken)
 	assert.NotEmpty(t, sessionID)
 
-	// Validate both tokens
 	accessClaims, err := manager.ValidateAccessToken(accessToken)
 	require.NoError(t, err)
 	assert.Equal(t, sessionID, accessClaims.SessionID)
@@ -108,7 +160,8 @@ func TestGenerateTokenPair(t *testing.T) {
 }
 
 func TestValidateToken_Success(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	userID := "user123"
 	email := "test@example.com"
@@ -117,7 +170,6 @@ func TestValidateToken_Success(t *testing.T) {
 	token, originalClaims, err := manager.GenerateAccessToken(userID, email, role, nil, nil)
 	require.NoError(t, err)
 
-	// Validate the token
 	claims, err := manager.ValidateToken(token)
 
 	require.NoError(t, err)
@@ -129,7 +181,8 @@ func TestValidateToken_Success(t *testing.T) {
 }
 
 func TestValidateToken_InvalidToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name  string
@@ -151,13 +204,14 @@ func TestValidateToken_InvalidToken(t *testing.T) {
 }
 
 func TestValidateToken_WrongSecret(t *testing.T) {
-	manager1 := NewJWTManager("secret1", 15*time.Minute, 7*24*time.Hour)
-	manager2 := NewJWTManager("secret2", 15*time.Minute, 7*24*time.Hour)
+	manager1, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+	manager2, err := NewJWTManager("different-secret-key-must-be-32-chars!", 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	token, _, err := manager1.GenerateAccessToken("user123", "test@example.com", "user", nil, nil)
 	require.NoError(t, err)
 
-	// Try to validate with wrong secret
 	claims, err := manager2.ValidateToken(token)
 
 	assert.Error(t, err)
@@ -165,13 +219,12 @@ func TestValidateToken_WrongSecret(t *testing.T) {
 }
 
 func TestValidateToken_ExpiredToken(t *testing.T) {
-	// Create manager with very short TTL
-	manager := NewJWTManager("test-secret", 1*time.Millisecond, 1*time.Millisecond)
+	manager, err := NewJWTManager(testSecretKey, 1*time.Millisecond, 1*time.Millisecond)
+	require.NoError(t, err)
 
 	token, _, err := manager.GenerateAccessToken("user123", "test@example.com", "user", nil, nil)
 	require.NoError(t, err)
 
-	// Wait for token to expire
 	time.Sleep(10 * time.Millisecond)
 
 	claims, err := manager.ValidateToken(token)
@@ -182,7 +235,8 @@ func TestValidateToken_ExpiredToken(t *testing.T) {
 }
 
 func TestValidateAccessToken_Success(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	token, _, err := manager.GenerateAccessToken("user123", "test@example.com", "user", nil, nil)
 	require.NoError(t, err)
@@ -194,7 +248,8 @@ func TestValidateAccessToken_Success(t *testing.T) {
 }
 
 func TestValidateAccessToken_RefreshTokenFails(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	token, _, err := manager.GenerateRefreshToken("user123", "test@example.com", "authenticated", "session123", nil, nil)
 	require.NoError(t, err)
@@ -207,7 +262,8 @@ func TestValidateAccessToken_RefreshTokenFails(t *testing.T) {
 }
 
 func TestValidateRefreshToken_Success(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	token, _, err := manager.GenerateRefreshToken("user123", "test@example.com", "authenticated", "session123", nil, nil)
 	require.NoError(t, err)
@@ -219,7 +275,8 @@ func TestValidateRefreshToken_Success(t *testing.T) {
 }
 
 func TestValidateRefreshToken_AccessTokenFails(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	token, _, err := manager.GenerateAccessToken("user123", "test@example.com", "user", nil, nil)
 	require.NoError(t, err)
@@ -232,31 +289,28 @@ func TestValidateRefreshToken_AccessTokenFails(t *testing.T) {
 }
 
 func TestRefreshAccessToken_Success(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
-	// Generate initial token pair
 	_, refreshToken, sessionID, err := manager.GenerateTokenPair("user123", "test@example.com", "user", nil, nil)
 	require.NoError(t, err)
 
-	// Refresh the access token
 	newAccessToken, err := manager.RefreshAccessToken(refreshToken)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, newAccessToken)
 
-	// Validate the new access token
 	claims, err := manager.ValidateAccessToken(newAccessToken)
 	require.NoError(t, err)
 	assert.Equal(t, "user123", claims.UserID)
 	assert.Equal(t, "test@example.com", claims.Email)
-	// Note: Session ID will be different as we generate a new one
 	assert.NotEmpty(t, claims.SessionID)
-	// The original session ID should not match since we create a new session
 	_ = sessionID
 }
 
 func TestRefreshAccessToken_InvalidRefreshToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	newToken, err := manager.RefreshAccessToken("invalid-token")
 
@@ -265,12 +319,12 @@ func TestRefreshAccessToken_InvalidRefreshToken(t *testing.T) {
 }
 
 func TestRefreshAccessToken_AccessTokenFails(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	accessToken, _, _, err := manager.GenerateTokenPair("user123", "test@example.com", "user", nil, nil)
 	require.NoError(t, err)
 
-	// Try to refresh using access token (should fail)
 	newToken, err := manager.RefreshAccessToken(accessToken)
 
 	assert.Error(t, err)
@@ -279,7 +333,8 @@ func TestRefreshAccessToken_AccessTokenFails(t *testing.T) {
 }
 
 func TestExtractUserID_Success(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	userID := "user123"
 	token, _, err := manager.GenerateAccessToken(userID, "test@example.com", "user", nil, nil)
@@ -292,7 +347,8 @@ func TestExtractUserID_Success(t *testing.T) {
 }
 
 func TestExtractUserID_InvalidToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	userID, err := manager.ExtractUserID("invalid-token")
 
@@ -301,7 +357,8 @@ func TestExtractUserID_InvalidToken(t *testing.T) {
 }
 
 func TestGetTokenExpiry_Success(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	token, claims, err := manager.GenerateAccessToken("user123", "test@example.com", "user", nil, nil)
 	require.NoError(t, err)
@@ -314,7 +371,8 @@ func TestGetTokenExpiry_Success(t *testing.T) {
 }
 
 func TestGetTokenExpiry_InvalidToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	expiry, err := manager.GetTokenExpiry("invalid-token")
 
@@ -323,12 +381,12 @@ func TestGetTokenExpiry_InvalidToken(t *testing.T) {
 }
 
 func TestTokenClaims_StandardCompliance(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	token, claims, err := manager.GenerateAccessToken("user123", "test@example.com", "user", nil, nil)
 	require.NoError(t, err)
 
-	// Parse token to verify standard JWT compliance
 	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
 		return manager.secretKey, nil
 	})
@@ -336,7 +394,6 @@ func TestTokenClaims_StandardCompliance(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, parsedToken.Valid)
 
-	// Verify all standard claims are present
 	assert.NotNil(t, claims.IssuedAt)
 	assert.NotNil(t, claims.ExpiresAt)
 	assert.NotNil(t, claims.NotBefore)
@@ -346,9 +403,9 @@ func TestTokenClaims_StandardCompliance(t *testing.T) {
 }
 
 func TestConcurrentTokenGeneration(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
-	// Generate tokens concurrently
 	const numGoroutines = 100
 	results := make(chan string, numGoroutines)
 
@@ -366,17 +423,14 @@ func TestConcurrentTokenGeneration(t *testing.T) {
 		}(i)
 	}
 
-	// Collect all tokens
 	tokens := make(map[string]bool)
 	for i := 0; i < numGoroutines; i++ {
 		token := <-results
 		tokens[token] = true
 	}
 
-	// All tokens should be unique
 	assert.Len(t, tokens, numGoroutines)
 
-	// All tokens should be valid
 	for token := range tokens {
 		claims, err := manager.ValidateAccessToken(token)
 		require.NoError(t, err)
@@ -384,33 +438,31 @@ func TestConcurrentTokenGeneration(t *testing.T) {
 	}
 }
 
-// Tests for Supabase-compatible service role JWT support
-
 func TestGenerateServiceRoleToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	token, err := manager.GenerateServiceRoleToken()
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, token)
 
-	// Validate the token
 	claims, err := manager.ValidateServiceRoleToken(token)
 	require.NoError(t, err)
 	assert.Equal(t, "service_role", claims.Role)
 	assert.Equal(t, "fluxbase", claims.Issuer)
-	assert.Empty(t, claims.UserID) // Service role tokens have no user
+	assert.Empty(t, claims.UserID)
 }
 
 func TestGenerateAnonToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	token, err := manager.GenerateAnonToken()
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, token)
 
-	// Validate the token
 	claims, err := manager.ValidateServiceRoleToken(token)
 	require.NoError(t, err)
 	assert.Equal(t, "anon", claims.Role)
@@ -419,7 +471,8 @@ func TestGenerateAnonToken(t *testing.T) {
 }
 
 func TestValidateServiceRoleToken_Success(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name     string
@@ -463,9 +516,9 @@ func TestValidateServiceRoleToken_Success(t *testing.T) {
 }
 
 func TestValidateServiceRoleToken_InvalidRole(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
-	// Generate a token with an invalid role (e.g., "admin" is not in allowed list)
 	token, _, err := manager.GenerateAccessToken("user123", "test@example.com", "admin", nil, nil)
 	require.NoError(t, err)
 
@@ -477,13 +530,14 @@ func TestValidateServiceRoleToken_InvalidRole(t *testing.T) {
 }
 
 func TestValidateServiceRoleToken_WrongSecret(t *testing.T) {
-	manager1 := NewJWTManager("secret1", 15*time.Minute, 7*24*time.Hour)
-	manager2 := NewJWTManager("secret2", 15*time.Minute, 7*24*time.Hour)
+	manager1, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+	manager2, err := NewJWTManager("different-secret-key-must-be-32-chars!", 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	token, err := manager1.GenerateServiceRoleToken()
 	require.NoError(t, err)
 
-	// Try to validate with wrong secret
 	claims, err := manager2.ValidateServiceRoleToken(token)
 
 	assert.Error(t, err)
@@ -491,9 +545,9 @@ func TestValidateServiceRoleToken_WrongSecret(t *testing.T) {
 }
 
 func TestValidateServiceRoleToken_SupabaseFormat(t *testing.T) {
-	// Use a consistent secret for Supabase-style tokens
 	secret := "super-secret-jwt-token-with-at-least-32-characters-long"
-	manager := NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name   string
@@ -509,7 +563,6 @@ func TestValidateServiceRoleToken_SupabaseFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a Supabase-style JWT manually
 			now := time.Now()
 			claims := jwt.MapClaims{
 				"role": tt.role,
@@ -524,7 +577,6 @@ func TestValidateServiceRoleToken_SupabaseFormat(t *testing.T) {
 			tokenString, err := token.SignedString([]byte(secret))
 			require.NoError(t, err)
 
-			// Validate using our function
 			parsedClaims, err := manager.ValidateServiceRoleToken(tokenString)
 			require.NoError(t, err)
 			assert.Equal(t, tt.role, parsedClaims.Role)
@@ -533,10 +585,10 @@ func TestValidateServiceRoleToken_SupabaseFormat(t *testing.T) {
 }
 
 func TestValidateServiceRoleToken_InvalidIssuer(t *testing.T) {
-	secret := "test-secret"
-	manager := NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour)
+	secret := "test-secret-key-must-be-32-characters!"
+	manager, err := NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
-	// Create a token with an unknown issuer
 	now := time.Now()
 	claims := jwt.MapClaims{
 		"role": "service_role",
@@ -557,16 +609,16 @@ func TestValidateServiceRoleToken_InvalidIssuer(t *testing.T) {
 }
 
 func TestValidateServiceRoleToken_ExpiredToken(t *testing.T) {
-	secret := "test-secret"
-	manager := NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour)
+	secret := "test-secret-key-must-be-32-characters!"
+	manager, err := NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
-	// Create an expired token
 	now := time.Now()
 	claims := jwt.MapClaims{
 		"role": "service_role",
 		"iss":  "supabase-demo",
 		"iat":  now.Add(-2 * time.Hour).Unix(),
-		"exp":  now.Add(-1 * time.Hour).Unix(), // Expired 1 hour ago
+		"exp":  now.Add(-1 * time.Hour).Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -580,14 +632,10 @@ func TestValidateServiceRoleToken_ExpiredToken(t *testing.T) {
 	assert.Nil(t, parsedClaims)
 }
 
-// =============================================================================
-// Anonymous Token Tests
-// =============================================================================
-
 func TestGenerateAnonymousAccessToken(t *testing.T) {
-	secret := "test-secret"
 	accessTTL := 15 * time.Minute
-	manager := NewJWTManager(secret, accessTTL, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, accessTTL, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	t.Run("generates valid anonymous access token", func(t *testing.T) {
 		userID := "anon-user-123"
@@ -596,7 +644,6 @@ func TestGenerateAnonymousAccessToken(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotEmpty(t, tokenString)
 
-		// Validate the token
 		claims, err := manager.ValidateToken(tokenString)
 		require.NoError(t, err)
 
@@ -616,7 +663,6 @@ func TestGenerateAnonymousAccessToken(t *testing.T) {
 		expiry, err := manager.GetTokenExpiry(tokenString)
 		require.NoError(t, err)
 
-		// Expiry should be approximately accessTTL from now
 		expectedExpiry := time.Now().Add(accessTTL)
 		assert.WithinDuration(t, expectedExpiry, expiry, 5*time.Second)
 	})
@@ -629,7 +675,6 @@ func TestGenerateAnonymousAccessToken(t *testing.T) {
 		token2, err := manager.GenerateAnonymousAccessToken(userID)
 		require.NoError(t, err)
 
-		// Tokens should be different (different JTI)
 		assert.NotEqual(t, token1, token2)
 	})
 
@@ -646,9 +691,9 @@ func TestGenerateAnonymousAccessToken(t *testing.T) {
 }
 
 func TestGenerateAnonymousRefreshToken(t *testing.T) {
-	secret := "test-secret"
 	refreshTTL := 7 * 24 * time.Hour
-	manager := NewJWTManager(secret, 15*time.Minute, refreshTTL)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, refreshTTL)
+	require.NoError(t, err)
 
 	t.Run("generates valid anonymous refresh token", func(t *testing.T) {
 		userID := "anon-user-123"
@@ -657,7 +702,6 @@ func TestGenerateAnonymousRefreshToken(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotEmpty(t, tokenString)
 
-		// Validate the token
 		claims, err := manager.ValidateToken(tokenString)
 		require.NoError(t, err)
 
@@ -695,14 +739,13 @@ func TestGenerateAnonymousRefreshToken(t *testing.T) {
 		token2, err := manager.GenerateAnonymousRefreshToken(userID)
 		require.NoError(t, err)
 
-		// Tokens should be different (different JTI)
 		assert.NotEqual(t, token1, token2)
 	})
 }
 
 func TestAnonymousTokenValidation(t *testing.T) {
-	secret := "test-secret"
-	manager := NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
 	t.Run("anonymous access token passes ValidateAccessToken", func(t *testing.T) {
 		userID := "anon-user"
@@ -746,7 +789,8 @@ func TestAnonymousTokenValidation(t *testing.T) {
 		tokenString, err := manager.GenerateAnonymousAccessToken("user")
 		require.NoError(t, err)
 
-		wrongManager := NewJWTManager("wrong-secret", 15*time.Minute, 7*24*time.Hour)
+		wrongManager, err := NewJWTManager("different-secret-key-must-be-32-chars!", 15*time.Minute, 7*24*time.Hour)
+		require.NoError(t, err)
 		_, err = wrongManager.ValidateToken(tokenString)
 		assert.Error(t, err)
 	})

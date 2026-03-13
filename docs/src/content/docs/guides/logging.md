@@ -13,17 +13,17 @@ The logging system stores execution logs from edge functions, background jobs, a
 
 Fluxbase supports multiple specialized logging backends optimized for different use cases:
 
-| Backend                      | Best For                                                            | Description                                                                |
-| ---------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| **PostgreSQL**               | General purpose, queries, retention                                 | Default backend with native partitioning and TimescaleDB extension support |
-| **PostgreSQL + TimescaleDB** | Time-series optimization, automatic compression, retention policies | Enhanced PostgreSQL for high-volume time-series data                       |
-| **Elasticsearch**            | Full-text search, complex queries, K8s ecosystem                    | Industry standard for log analytics with Kibana integration                |
-| **OpenSearch**               | Elasticsearch-compatible, AWS OSS alternative                       | Same benefits as Elasticsearch for AWS deployments                         |
-| **ClickHouse**               | Columnar storage, excellent compression, SQL interface              | High-performance analytics database with exceptional compression ratio     |
-| **TimescaleDB** (standalone) | Dedicated time-series database, automatic partitioning              | Production-grade hypertables with built-in retention and compression       |
-| **Loki**                     | Label-based logging, Grafana ecosystem                              | Highly efficient for high-cardinality data, minimal storage cost           | Designed for cloud-native environments and horizontal scaling |
-| **S3**                       | Object storage, archival                                            | Cost-effective long-term log storage for compliance and audit trails       |
-| **Local**                    | File-based storage                                                  | Development and testing                                                    | Simple local filesystem storage for single-node setups        |
+| Backend                      | Best For                                            | Description                                                                |
+| ---------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------- |
+| **PostgreSQL**               | General purpose, queries, retention                 | Default backend with native partitioning and TimescaleDB extension support |
+| **PostgreSQL + TimescaleDB** | Time-series optimization, compression, retention    | Enhanced PostgreSQL for high-volume time-series data                       |
+| **Elasticsearch**            | Full-text search, complex queries, K8s ecosystem    | Industry standard for log analytics with Kibana integration                |
+| **OpenSearch**               | Elasticsearch-compatible, AWS OSS alternative       | Same benefits as Elasticsearch for AWS deployments                         |
+| **ClickHouse**               | Columnar storage, excellent compression, SQL        | High-performance analytics database with exceptional compression ratio     |
+| **TimescaleDB** (standalone) | Dedicated time-series database, auto-partitioning   | Production-grade hypertables with built-in retention and compression       |
+| **Loki**                     | Label-based logging, Grafana ecosystem              | Highly efficient for high-cardinality data, minimal storage cost           |
+| **S3**                       | Object storage, archival                            | Cost-effective long-term log storage for compliance and audit trails       |
+| **Local**                    | File-based storage                                  | Development and testing with simple local filesystem storage               |
 
 ### Backend Selection Guide
 
@@ -70,6 +70,101 @@ Choose the logging backend based on your specific requirements:
 - Label-based grouping is highly efficient
 - Minimal storage overhead
 - Best for horizontally scalable deployments
+
+### Backend Configuration
+
+Configure your logging backend in `fluxbase.yaml`:
+
+#### PostgreSQL (Default)
+
+```yaml
+logging:
+  backend: postgres
+  batch_size: 100
+  flush_interval: 5s
+```
+
+#### TimescaleDB
+
+```yaml
+logging:
+  backend: timescaledb
+  timescaledb_enabled: true
+  timescaledb_compression: true
+  timescaledb_compress_after: 168h    # Compress after 7 days
+  timescaledb_retain_after: 2160h     # Drop chunks after 90 days
+```
+
+#### Elasticsearch
+
+```yaml
+logging:
+  backend: elasticsearch
+  elasticsearch_urls:
+    - http://elasticsearch:9200
+  elasticsearch_username: ""
+  elasticsearch_password: ""
+  elasticsearch_index: fluxbase-logs
+  elasticsearch_version: 8  # 8 or 9
+```
+
+#### OpenSearch
+
+```yaml
+logging:
+  backend: opensearch
+  opensearch_urls:
+    - http://opensearch:9200
+  opensearch_username: admin
+  opensearch_password: ""
+  opensearch_index: fluxbase-logs
+  opensearch_version: 2
+```
+
+#### ClickHouse
+
+```yaml
+logging:
+  backend: clickhouse
+  clickhouse_addresses:
+    - localhost:9000
+  clickhouse_username: default
+  clickhouse_password: ""
+  clickhouse_database: fluxbase
+  clickhouse_table: logs
+  clickhouse_ttl_days: 30
+```
+
+#### Loki
+
+```yaml
+logging:
+  backend: loki
+  loki_url: http://loki:3100
+  loki_username: ""
+  loki_password: ""
+  loki_tenant_id: ""
+  loki_labels:
+    - app
+    - env
+```
+
+#### S3
+
+```yaml
+logging:
+  backend: s3
+  s3_bucket: my-logs-bucket
+  s3_prefix: logs/
+```
+
+#### Local Filesystem
+
+```yaml
+logging:
+  backend: local
+  local_path: /var/log/fluxbase
+```
 
 ### Architecture
 

@@ -43,6 +43,22 @@ func NewMockSettingsCache() *MockSettingsCache {
 	}
 }
 
+func mustNewJWTManager(secret string, accessTTL, refreshTTL time.Duration) *JWTManager {
+	m, err := NewJWTManager(secret, accessTTL, refreshTTL)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
+func mustNewJWTManagerWithConfig(secret string, accessTTL, refreshTTL, serviceRoleTTL, anonTTL time.Duration) *JWTManager {
+	m, err := NewJWTManagerWithConfig(secret, accessTTL, refreshTTL, serviceRoleTTL, anonTTL)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
 func (m *MockSettingsCache) GetBool(ctx context.Context, key string, defaultValue bool) bool {
 	if val, ok := m.boolSettings[key]; ok {
 		return val
@@ -124,7 +140,7 @@ func NewTestableService() *TestableService {
 		userRepo:              NewMockUserRepository(),
 		sessionRepo:           NewMockSessionRepository(),
 		tokenBlacklistRepo:    NewMockTokenBlacklistRepository(),
-		jwtManager:            NewJWTManager(cfg.JWTSecret, cfg.JWTExpiry, cfg.RefreshExpiry),
+		jwtManager:            mustNewJWTManager(cfg.JWTSecret, cfg.JWTExpiry, cfg.RefreshExpiry),
 		passwordHasher:        NewPasswordHasherWithConfig(PasswordHasherConfig{MinLength: cfg.PasswordMinLen, Cost: cfg.BcryptCost}),
 		settingsCache:         NewMockSettingsCache(),
 		config:                cfg,
@@ -1712,7 +1728,7 @@ func TestService_RefreshToken_WrongTokenType(t *testing.T) {
 		JWTSecret: "test-secret-key-at-least-32-chars-long",
 		JWTExpiry: 15 * time.Minute,
 	}
-	jwtManager := NewJWTManager(cfg.JWTSecret, cfg.JWTExpiry, 7*24*time.Hour)
+	jwtManager := mustNewJWTManager(cfg.JWTSecret, cfg.JWTExpiry, 7*24*time.Hour)
 	accessToken, _, err := jwtManager.GenerateAccessToken("user-id", "test@example.com", "authenticated", nil, nil)
 	require.NoError(t, err)
 
@@ -1737,7 +1753,7 @@ func TestService_RefreshToken_SessionNotFound(t *testing.T) {
 		JWTExpiry:     15 * time.Minute,
 		RefreshExpiry: 7 * 24 * time.Hour,
 	}
-	jwtManager := NewJWTManager(cfg.JWTSecret, cfg.JWTExpiry, cfg.RefreshExpiry)
+	jwtManager := mustNewJWTManager(cfg.JWTSecret, cfg.JWTExpiry, cfg.RefreshExpiry)
 	refreshToken, _, err := jwtManager.GenerateRefreshToken("user-id", "test@example.com", "authenticated", "session-id", nil, nil)
 	require.NoError(t, err)
 
@@ -1888,7 +1904,7 @@ func TestService_ValidateServiceRoleToken_Success(t *testing.T) {
 		JWTSecret:      "test-secret-key-at-least-32-chars-long",
 		ServiceRoleTTL: 24 * time.Hour,
 	}
-	jwtManager := NewJWTManagerWithConfig(cfg.JWTSecret, 15*time.Minute, 7*24*time.Hour, cfg.ServiceRoleTTL, 1*time.Hour)
+	jwtManager := mustNewJWTManagerWithConfig(cfg.JWTSecret, 15*time.Minute, 7*24*time.Hour, cfg.ServiceRoleTTL, 1*time.Hour)
 
 	token, err := jwtManager.GenerateServiceRoleToken()
 	require.NoError(t, err)

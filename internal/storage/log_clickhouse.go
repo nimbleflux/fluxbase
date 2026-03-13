@@ -664,7 +664,7 @@ func (s *ClickHouseLogStorage) buildQuery(opts LogQueryOptions) queryBuild {
 
 	// ExecutionType is in execution_data map
 	if opts.ExecutionType != "" {
-		conditions = append(conditions, "mapGet(execution_data, 'execution_type', '') = ?")
+		conditions = append(conditions, "execution_data['execution_type'] = ?")
 		args = append(args, opts.ExecutionType)
 	}
 
@@ -691,13 +691,13 @@ func (s *ClickHouseLogStorage) buildQuery(opts LogQueryOptions) queryBuild {
 
 	if opts.HideStaticAssets && opts.Category == LogCategoryHTTP {
 		// Exclude logs where the HTTP path ends with static asset extensions
-		conditions = append(conditions, "mapGet(http_data, 'path', '') NOT LIKE ?")
+		conditions = append(conditions, "http_data['path'] NOT LIKE ?")
 		args = append(args, "%.js")
-		conditions = append(conditions, "mapGet(http_data, 'path', '') NOT LIKE ?")
+		conditions = append(conditions, "http_data['path'] NOT LIKE ?")
 		args = append(args, "%.css")
-		conditions = append(conditions, "mapGet(http_data, 'path', '') NOT LIKE ?")
+		conditions = append(conditions, "http_data['path'] NOT LIKE ?")
 		args = append(args, "%.png")
-		conditions = append(conditions, "mapGet(http_data, 'path', '') NOT LIKE ?")
+		conditions = append(conditions, "http_data['path'] NOT LIKE ?")
 		args = append(args, "%.jpg")
 		// Add more extensions as needed
 	}
