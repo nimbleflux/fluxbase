@@ -31,6 +31,11 @@ type TokenClaims struct {
 	AppMetadata  any                    `json:"app_metadata,omitempty"`  // Application/admin-only metadata
 	RawClaims    map[string]interface{} `json:"-"`                       // Full claims map for RLS (not serialized)
 	jwt.RegisteredClaims
+
+	// Multi-tenancy fields
+	TenantID        *string `json:"tenant_id,omitempty"`         // Current tenant ID
+	TenantRole      string  `json:"tenant_role,omitempty"`       // User's role in current tenant (tenant_admin, tenant_member)
+	IsInstanceAdmin bool    `json:"is_instance_admin,omitempty"` // True for instance-level admins
 }
 
 // JWTManager handles JWT token operations
@@ -167,6 +172,125 @@ func (m *JWTManager) GenerateTokenPair(userID, email, role string, userMetadata,
 	}
 
 	return accessToken, refreshToken, sessionID, nil
+}
+
+// TenantTokenOptions contains options for generating tenant-aware tokens
+type TenantTokenOptions struct {
+	TenantID        *string
+	TenantRole      string
+	IsInstanceAdmin bool
+}
+
+// GenerateAccessTokenWithTenant generates a new access token with tenant context
+func (m *JWTManager) GenerateAccessTokenWithTenant(userID, email, role string, userMetadata, appMetadata any, tenantOpts TenantTokenOptions) (string, *TokenClaims, error) {
+	now := time.Now()
+	sessionID := uuid.New().String()
+
+	claims := &TokenClaims{
+		UserID:          userID,
+		Email:           email,
+		Role:            role,
+		SessionID:       sessionID,
+		TokenType:       "access",
+		UserMetadata:    userMetadata,
+		AppMetadata:     appMetadata,
+		TenantID:        tenantOpts.TenantID,
+		TenantRole:      tenantOpts.TenantRole,
+		IsInstanceAdmin: tenantOpts.IsInstanceAdmin,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTokenTTL)),
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(m.secretKey)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return tokenString, claims, nil
+}
+
+// GenerateTokenPairWithTenant generates both access and refresh tokens with tenant context
+func (m *JWTManager) GenerateTokenPairWithTenant(userID, email, role string, userMetadata, appMetadata any, tenantOpts TenantTokenOptions) (accessToken, refreshToken string, sessionID string, err error) {
+	// Generate access token with tenant context
+	accessToken, claims, err := m.GenerateAccessTokenWithTenant(userID, email, role, userMetadata, appMetadata, tenantOpts)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	sessionID = claims.SessionID
+
+	// Generate refresh token with the same session ID, role, and tenant context
+	now := time.Now()
+	refreshClaims := &TokenClaims{
+		UserID:          userID,
+		Email:           email,
+		Role:            role,
+		SessionID:       sessionID,
+		TokenType:       "refresh",
+		UserMetadata:    userMetadata,
+		AppMetadata:     appMetadata,
+		TenantID:        tenantOpts.TenantID,
+		TenantRole:      tenantOpts.TenantRole,
+		IsInstanceAdmin: tenantOpts.IsInstanceAdmin,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshTokenTTL)),
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshToken, err = token.SignedString(m.secretKey)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	return accessToken, refreshToken, sessionID, nil
+}
+
+// RefreshAccessTokenWithTenant generates a new access token from a refresh token, preserving tenant context
+func (m *JWTManager) RefreshAccessTokenWithTenant(refreshTokenString string, tenantOpts *TenantTokenOptions) (string, error) {
+	// Validate refresh token
+	claims, err := m.ValidateRefreshToken(refreshTokenString)
+	if err != nil {
+		return "", err
+	}
+
+	// Use provided tenant options or preserve existing from refresh token
+	opts := TenantTokenOptions{
+		TenantID:        claims.TenantID,
+		TenantRole:      claims.TenantRole,
+		IsInstanceAdmin: claims.IsInstanceAdmin,
+	}
+	if tenantOpts != nil {
+		if tenantOpts.TenantID != nil {
+			opts.TenantID = tenantOpts.TenantID
+		}
+		if tenantOpts.TenantRole != "" {
+			opts.TenantRole = tenantOpts.TenantRole
+		}
+		if tenantOpts.IsInstanceAdmin {
+			opts.IsInstanceAdmin = true
+		}
+	}
+
+	// Generate new access token with tenant context
+	accessToken, _, err := m.GenerateAccessTokenWithTenant(claims.UserID, claims.Email, claims.Role, claims.UserMetadata, claims.AppMetadata, opts)
+	if err != nil {
+		return "", err
+	}
+
+	return accessToken, nil
 }
 
 // ValidateToken validates and parses a JWT token

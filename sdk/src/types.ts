@@ -4443,6 +4443,98 @@ export interface UpdateRealtimeConfigRequest {
 }
 
 // ============================================================================
+// Multi-Tenancy Types
+// ============================================================================
+
+/**
+ * Tenant in the system
+ */
+export interface Tenant {
+  /** Unique identifier for the tenant */
+  id: string;
+  /** URL-friendly identifier (e.g., "acme-corp") */
+  slug: string;
+  /** Display name */
+  name: string;
+  /** Whether this is the default tenant */
+  is_default: boolean;
+  /** Arbitrary metadata */
+  metadata?: Record<string, unknown>;
+  /** Creation timestamp */
+  created_at: string;
+  /** Last update timestamp */
+  updated_at?: string;
+  /** Soft delete timestamp */
+  deleted_at?: string | null;
+}
+
+/**
+ * User's membership in a tenant
+ */
+export interface TenantMembership {
+  /** Unique identifier for the membership */
+  id: string;
+  /** Tenant ID */
+  tenant_id: string;
+  /** User ID */
+  user_id: string;
+  /** Role in tenant (tenant_admin or tenant_member) */
+  role: "tenant_admin" | "tenant_member";
+  /** Creation timestamp */
+  created_at: string;
+  /** Last update timestamp */
+  updated_at?: string;
+}
+
+/**
+ * Tenant with user's role (for "my tenants" endpoint)
+ */
+export interface TenantWithRole extends Tenant {
+  /** Current user's role in this tenant */
+  my_role: "tenant_admin" | "tenant_member";
+}
+
+/**
+ * Options for creating a tenant
+ */
+export interface CreateTenantOptions {
+  /** URL-friendly identifier (lowercase letters, numbers, hyphens) */
+  slug: string;
+  /** Display name */
+  name: string;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Options for updating a tenant
+ */
+export interface UpdateTenantOptions {
+  /** New display name */
+  name?: string;
+  /** Updated metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Options for adding a member to a tenant
+ */
+export interface AddTenantMemberOptions {
+  /** User ID to add */
+  user_id: string;
+  /** Role to assign */
+  role: "tenant_admin" | "tenant_member";
+}
+
+/**
+ * Options for updating a member's role
+ */
+export interface UpdateTenantMemberOptions {
+  /** New role */
+  role: "tenant_admin" | "tenant_member";
+}
+
+// ============================================================================
 // Deprecated Supabase-compatible type aliases (for backward compatibility)
 // ============================================================================
 

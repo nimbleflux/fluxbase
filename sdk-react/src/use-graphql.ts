@@ -5,7 +5,7 @@
  *
  * @example
  * ```tsx
- * import { useGraphQLQuery, useGraphQLMutation } from '@fluxbase/sdk-react'
+ * import { useGraphQLQuery, useGraphQLMutation } from '@nimbleflux/fluxbase-sdk-react'
  *
  * function UsersList() {
  *   const { data, isLoading, error } = useGraphQLQuery<UsersQuery>(
@@ -33,7 +33,7 @@ import type {
   GraphQLResponse,
   GraphQLError,
   GraphQLRequestOptions,
-} from "@fluxbase/sdk";
+} from "@nimbleflux/fluxbase-sdk";
 
 /**
  * Options for useGraphQLQuery hook

@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
 import { useFluxbaseClient } from './context'
-import type { QueryBuilder } from '@fluxbase/sdk'
+import type { QueryBuilder } from '@nimbleflux/fluxbase-sdk'
 
 export interface UseFluxbaseQueryOptions<T> extends Omit<UseQueryOptions<T[], Error>, 'queryKey' | 'queryFn'> {
   /**

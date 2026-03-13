@@ -16,7 +16,7 @@ import type {
   UploadProgress,
   TransformOptions,
   SignedUrlOptions,
-} from "@fluxbase/sdk";
+} from "@nimbleflux/fluxbase-sdk";
 
 /**
  * Hook to list files in a bucket
@@ -141,7 +141,7 @@ export function useStorageUploadWithProgress(bucket: string) {
         .from(bucket)
         .upload(path, file, {
           ...options,
-          onUploadProgress: (p: import("@fluxbase/sdk").UploadProgress) => {
+          onUploadProgress: (p: import("@nimbleflux/fluxbase-sdk").UploadProgress) => {
             setProgress(p);
           },
         });

@@ -1,0 +1,11 @@
+--
+-- MULTI-TENANCY: ROLLBACK RLS HELPER FUNCTIONS
+--
+
+DROP FUNCTION IF EXISTS get_tenant_by_slug(TEXT);
+DROP FUNCTION IF EXISTS user_is_tenant_member(UUID, UUID);
+DROP FUNCTION IF EXISTS user_tenant_ids(UUID);
+DROP FUNCTION IF EXISTS current_tenant_role();
+DROP FUNCTION IF EXISTS is_instance_admin(UUID);
+DROP FUNCTION IF EXISTS user_has_tenant_role(UUID, UUID, TEXT);
+DROP FUNCTION IF EXISTS current_tenant_id();

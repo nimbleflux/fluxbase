@@ -85,6 +85,20 @@ export class FluxbaseFetch {
   }
 
   /**
+   * Set a custom header on all requests
+   */
+  setHeader(name: string, value: string) {
+    this.defaultHeaders[name] = value
+  }
+
+  /**
+   * Remove a custom header
+   */
+  removeHeader(name: string) {
+    delete this.defaultHeaders[name]
+  }
+
+  /**
    * Make an HTTP request
    */
   async request<T = unknown>(path: string, options: FetchOptions): Promise<T> {

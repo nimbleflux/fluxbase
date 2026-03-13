@@ -75,6 +75,42 @@ const _fluxbase = _createFluxbaseClient(_fluxbaseUrl, _userToken, 'UserClient');
 // Service client - bypasses RLS for system-level operations
 const _fluxbaseService = _createFluxbaseClient(_fluxbaseUrl, _serviceToken, 'ServiceClient');
 
+// Tenant utilities for multi-tenant operations
+const _tenantUtils = {
+  // Current tenant from execution context
+  _currentTenantId: %s.tenant_id || null,
+  
+  // Get current tenant ID
+  getCurrentTenantId() {
+    return this._currentTenantId;
+  },
+  
+  // Create a tenant-scoped service client
+  // IMPORTANT: Use this for tenant-scoped operations with service client
+  // Example: const tenantClient = tenant.forTenant('tenant-uuid');
+  forTenant(tenantId) {
+    if (!tenantId) {
+      throw new Error('tenantId is required for forTenant()');
+    }
+    return _createFluxbaseClient(_fluxbaseUrl, _serviceToken, 'ServiceClient', {
+      'X-FB-Tenant': tenantId
+    });
+  },
+  
+  // Get client for current tenant (from execution context)
+  forCurrentTenant() {
+    if (!this._currentTenantId) {
+      throw new Error('No current tenant in execution context. Use forTenant(tenantId) explicitly.');
+    }
+    return this.forTenant(this._currentTenantId);
+  },
+  
+  // Check if tenant context is available
+  hasTenantContext() {
+    return this._currentTenantId !== null;
+  }
+};
+
 // Function utilities object - matching job utilities API
 const _functionUtils = {
   // Report progress (0-100)
@@ -104,7 +140,13 @@ const _functionUtils = {
         id: request.user_id,
         email: request.user_email,
         role: request.user_role
-      } : null
+      } : null,
+      // Multi-tenancy context
+      tenant: request.tenant_id ? {
+        id: request.tenant_id,
+        role: request.tenant_role
+      } : null,
+      is_instance_admin: request.is_instance_admin || false
     };
   },
 
@@ -189,7 +231,11 @@ const _functionUtils = {
 };
 
 // Expose Fluxbase as a global object for user code (documented API)
-const Fluxbase = _functionUtils;
+// Includes tenant utilities for multi-tenant operations
+const Fluxbase = {
+  ..._functionUtils,
+  tenant: _tenantUtils
+};
 
 // User function code (imports extracted)
 %s
@@ -335,6 +381,40 @@ const _fluxbase = _createFluxbaseClient(_fluxbaseUrl, _jobToken, 'UserClient');
 // Service client - bypasses RLS for system-level operations
 const _fluxbaseService = _createFluxbaseClient(_fluxbaseUrl, _serviceToken, 'ServiceClient');
 
+// Tenant utilities for multi-tenant operations
+const _tenantUtils = {
+  // Current tenant from execution context
+  _currentTenantId: (%s).tenant_id || null,
+  
+  // Get current tenant ID
+  getCurrentTenantId() {
+    return this._currentTenantId;
+  },
+  
+  // Create a tenant-scoped service client
+  forTenant(tenantId) {
+    if (!tenantId) {
+      throw new Error('tenantId is required for forTenant()');
+    }
+    return _createFluxbaseClient(_fluxbaseUrl, _serviceToken, 'ServiceClient', {
+      'X-FB-Tenant': tenantId
+    });
+  },
+  
+  // Get client for current tenant
+  forCurrentTenant() {
+    if (!this._currentTenantId) {
+      throw new Error('No current tenant in execution context. Use forTenant(tenantId) explicitly.');
+    }
+    return this.forTenant(this._currentTenantId);
+  },
+  
+  // Check if tenant context is available
+  hasTenantContext() {
+    return this._currentTenantId !== null;
+  }
+};
+
 // Job utilities object - using arrow functions for consistent behavior
 const _jobUtils = {
   // Report progress (0-100)
@@ -366,7 +446,13 @@ const _jobUtils = {
         id: jobContext.user_id,
         email: jobContext.user_email,
         role: jobContext.user_role
-      } : null
+      } : null,
+      // Multi-tenancy context
+      tenant: jobContext.tenant_id ? {
+        id: jobContext.tenant_id,
+        role: jobContext.tenant_role
+      } : null,
+      is_instance_admin: jobContext.is_instance_admin || false
     };
   },
 
@@ -447,7 +533,11 @@ const _jobUtils = {
 };
 
 // Expose Fluxbase as a global object for user code (documented API)
-const Fluxbase = _jobUtils;
+// Includes tenant utilities for multi-tenant operations
+const Fluxbase = {
+  ..._jobUtils,
+  tenant: _tenantUtils
+};
 
 // User job code (imports extracted)
 %s

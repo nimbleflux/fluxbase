@@ -8,7 +8,7 @@ import { useFluxbaseClient } from "./context";
 import type {
   RealtimeCallback,
   RealtimePostgresChangesPayload,
-} from "@fluxbase/sdk";
+} from "@nimbleflux/fluxbase-sdk";
 
 export interface UseRealtimeOptions {
   /**

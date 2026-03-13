@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useFluxbaseClient } from './context'
-import type { EnrichedUser, ListUsersOptions } from '@fluxbase/sdk'
+import type { EnrichedUser, ListUsersOptions } from '@nimbleflux/fluxbase-sdk'
 
 export interface UseUsersOptions extends ListUsersOptions {
   /**
