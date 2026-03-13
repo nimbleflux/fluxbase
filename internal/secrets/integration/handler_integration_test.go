@@ -655,7 +655,8 @@ func setupSecretsApp(t *testing.T, tc *testutil.IntegrationTestContext) *fiber.A
 
 	// Create auth service
 	authService := auth.NewService(db, authCfg, nil, "http://localhost:3000")
-	jwtManager := auth.NewJWTManager(authCfg.JWTSecret, authCfg.JWTExpiry, authCfg.RefreshExpiry)
+	jwtManager, err := auth.NewJWTManager(authCfg.JWTSecret, authCfg.JWTExpiry, authCfg.RefreshExpiry)
+	require.NoError(t, err)
 	clientKeyService := auth.NewClientKeyService(db.Pool(), nil)
 
 	// Create handler
@@ -726,7 +727,8 @@ func createTestUserWithToken(t *testing.T, tc *testutil.IntegrationTestContext, 
 
 	// Generate JWT token using the same secret as the test app
 	jwtSecret := "test-jwt-secret-for-integration-tests-32-chars"
-	jwtManager := auth.NewJWTManager(jwtSecret, time.Hour, 24*time.Hour)
+	jwtManager, err := auth.NewJWTManager(jwtSecret, time.Hour, 24*time.Hour)
+	require.NoError(t, err, "Failed to create JWT manager")
 
 	accessToken, _, err := jwtManager.GenerateAccessToken(userID, email, "authenticated", nil, nil)
 	require.NoError(t, err, "Failed to generate access token")

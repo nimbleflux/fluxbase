@@ -944,8 +944,11 @@ func (params *QueryParams) ToSQL(tableName string) (string, []interface{}) {
 
 	// Build ORDER BY clause
 	if len(params.Order) > 0 {
-		orderClause := params.buildOrderClause()
-		sqlParts = append(sqlParts, "ORDER BY "+orderClause)
+		orderClause, orderArgs := params.buildOrderClause(&argCounter)
+		if orderClause != "" {
+			sqlParts = append(sqlParts, "ORDER BY "+orderClause)
+			args = append(args, orderArgs...)
+		}
 	}
 
 	// Build LIMIT clause
@@ -1159,9 +1162,11 @@ func (params *QueryParams) buildWhereClause(argCounter *int) (string, []interfac
 	return strings.Join(finalConditions, " AND "), args
 }
 
-// buildOrderClause builds the ORDER BY clause
-func (params *QueryParams) buildOrderClause() string {
+// buildOrderClause builds the ORDER BY clause with parameterized vector values
+// Returns the clause string and any arguments that need to be passed to the query
+func (params *QueryParams) buildOrderClause(argCounter *int) (string, []interface{}) {
 	var orderParts []string
+	var args []interface{}
 
 	for _, order := range params.Order {
 		// Quote column name to prevent SQL injection
@@ -1174,7 +1179,7 @@ func (params *QueryParams) buildOrderClause() string {
 
 		// Check if this is a vector ordering
 		if order.VectorOp != "" && order.VectorValue != nil {
-			// Vector similarity ordering: column <=> '[0.1,0.2,...]'::vector
+			// Vector similarity ordering: column <=> $N::vector
 			var opSQL string
 			switch order.VectorOp {
 			case OpVectorL2:
@@ -1187,8 +1192,16 @@ func (params *QueryParams) buildOrderClause() string {
 				continue // Skip unknown vector operators
 			}
 
-			vectorVal := formatVectorValue(order.VectorValue)
-			part = fmt.Sprintf("%s %s '%s'::vector", quotedCol, opSQL, vectorVal)
+			// Validate and sanitize vector value before parameterization
+			vectorVal, err := validateAndFormatVector(order.VectorValue)
+			if err != nil {
+				continue // Skip invalid vector values
+			}
+
+			// Use parameterized query for vector values
+			part = fmt.Sprintf("%s %s $%d::vector", quotedCol, opSQL, *argCounter)
+			args = append(args, vectorVal)
+			*argCounter++
 		} else {
 			// Standard column ordering
 			part = quotedCol
@@ -1207,7 +1220,38 @@ func (params *QueryParams) buildOrderClause() string {
 		orderParts = append(orderParts, part)
 	}
 
-	return strings.Join(orderParts, ", ")
+	return strings.Join(orderParts, ", "), args
+}
+
+// validateAndFormatVector validates a vector value and returns it in PostgreSQL format
+// Returns an error if the vector contains potentially dangerous content
+func validateAndFormatVector(value interface{}) (string, error) {
+	vectorStr := formatVectorValue(value)
+
+	// Validate that the vector only contains valid characters
+	// Allowed: digits, decimal point, comma, space, brackets, minus sign
+	for i, ch := range vectorStr {
+		switch {
+		case ch >= '0' && ch <= '9':
+			// Digits are always safe
+		case ch == '.' || ch == ',' || ch == ' ' || ch == '[' || ch == ']':
+			// Structural characters are safe
+		case ch == '-' && i > 0 && vectorStr[i-1] != '-':
+			// Minus sign is safe if not doubled (no SQL comment)
+		case ch == 'e' || ch == 'E':
+			// Scientific notation is safe
+		default:
+			// Any other character is potentially dangerous
+			return "", fmt.Errorf("invalid character in vector value: %q at position %d", ch, i)
+		}
+	}
+
+	// Additional check: ensure no SQL metacharacters
+	if strings.Contains(vectorStr, "'") || strings.Contains(vectorStr, ";") || strings.Contains(vectorStr, "--") {
+		return "", fmt.Errorf("vector value contains forbidden SQL characters")
+	}
+
+	return vectorStr, nil
 }
 
 // parseJSONBPath parses a column name that may contain JSONB path operators

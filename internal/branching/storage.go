@@ -9,19 +9,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fluxbase-eu/fluxbase/internal/crypto"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Storage handles CRUD operations for branch metadata
 type Storage struct {
-	pool *pgxpool.Pool
+	pool          *pgxpool.Pool
+	encryptionKey string
 }
 
-// NewStorage creates a new Storage instance
-func NewStorage(pool *pgxpool.Pool) *Storage {
-	return &Storage{pool: pool}
+func NewStorage(pool *pgxpool.Pool, encryptionKey string) *Storage {
+	return &Storage{
+		pool:          pool,
+		encryptionKey: encryptionKey,
+	}
 }
 
 // CreateBranch creates a new branch record
@@ -564,13 +567,14 @@ func (s *Storage) GetGitHubConfig(ctx context.Context, repository string) (*GitH
 		WHERE repository = $1`
 
 	config := &GitHubConfig{}
+	var encryptedSecret *string
 	err := s.pool.QueryRow(ctx, query, repository).Scan(
 		&config.ID,
 		&config.Repository,
 		&config.AutoCreateOnPR,
 		&config.AutoDeleteOnMerge,
 		&config.DefaultDataCloneMode,
-		&config.WebhookSecret,
+		&encryptedSecret,
 		&config.CreatedAt,
 		&config.UpdatedAt,
 	)
@@ -580,11 +584,29 @@ func (s *Storage) GetGitHubConfig(ctx context.Context, repository string) (*GitH
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GitHub config: %w", err)
 	}
+
+	if encryptedSecret != nil && *encryptedSecret != "" {
+		decrypted, err := crypto.Decrypt(*encryptedSecret, s.encryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt webhook secret: %w", err)
+		}
+		config.WebhookSecret = &decrypted
+	}
+
 	return config, nil
 }
 
 // UpsertGitHubConfig creates or updates GitHub config
 func (s *Storage) UpsertGitHubConfig(ctx context.Context, config *GitHubConfig) error {
+	var encryptedSecret *string
+	if config.WebhookSecret != nil && *config.WebhookSecret != "" {
+		encrypted, err := crypto.Encrypt(*config.WebhookSecret, s.encryptionKey)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt webhook secret: %w", err)
+		}
+		encryptedSecret = &encrypted
+	}
+
 	query := `
 		INSERT INTO branching.github_config (
 			id, repository, auto_create_on_pr, auto_delete_on_merge,
@@ -608,7 +630,7 @@ func (s *Storage) UpsertGitHubConfig(ctx context.Context, config *GitHubConfig) 
 		config.AutoCreateOnPR,
 		config.AutoDeleteOnMerge,
 		config.DefaultDataCloneMode,
-		config.WebhookSecret,
+		encryptedSecret,
 	).Scan(&config.ID, &config.CreatedAt, &config.UpdatedAt)
 }
 
@@ -645,19 +667,29 @@ func (s *Storage) ListGitHubConfigs(ctx context.Context) ([]*GitHubConfig, error
 	var configs []*GitHubConfig
 	for rows.Next() {
 		config := &GitHubConfig{}
+		var encryptedSecret *string
 		err := rows.Scan(
 			&config.ID,
 			&config.Repository,
 			&config.AutoCreateOnPR,
 			&config.AutoDeleteOnMerge,
 			&config.DefaultDataCloneMode,
-			&config.WebhookSecret,
+			&encryptedSecret,
 			&config.CreatedAt,
 			&config.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan GitHub config: %w", err)
 		}
+
+		if encryptedSecret != nil && *encryptedSecret != "" {
+			decrypted, err := crypto.Decrypt(*encryptedSecret, s.encryptionKey)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt webhook secret: %w", err)
+			}
+			config.WebhookSecret = &decrypted
+		}
+
 		configs = append(configs, config)
 	}
 

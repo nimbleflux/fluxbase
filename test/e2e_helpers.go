@@ -1900,11 +1900,12 @@ func (tc *TestContext) CreateTestUserDirectWithRole(email, password, role string
 	`, userID, email, string(hashedPassword), role)
 
 	// Generate JWT token using the configured secret
-	jwtManager := auth.NewJWTManager(
+	jwtManager, err := auth.NewJWTManager(
 		tc.Config.Auth.JWTSecret,
 		tc.Config.Auth.JWTExpiry,
 		tc.Config.Auth.RefreshExpiry,
 	)
+	require.NoError(tc.T, err, "Failed to create JWT manager")
 
 	accessToken, _, err := jwtManager.GenerateAccessToken(userID, email, role, nil, nil)
 	require.NoError(tc.T, err, "Failed to generate access token")
@@ -2564,18 +2565,18 @@ func (tc *TestContext) CreateServiceKey(name string) string {
 // Anon keys are JWT tokens with role="anon" that allow anonymous access
 func (tc *TestContext) GenerateAnonKey() string {
 	// Create JWT manager using test config
-	jwtManager := auth.NewJWTManager(
+	jwtManager, err := auth.NewJWTManager(
 		tc.Config.Auth.JWTSecret,
 		tc.Config.Auth.JWTExpiry,
 		tc.Config.Auth.RefreshExpiry,
 	)
+	require.NoError(tc.T, err, "Failed to create JWT manager")
 
 	// Generate anonymous access token with random user ID
 	userID := uuid.New().String()
 	token, err := jwtManager.GenerateAnonymousAccessToken(userID)
 	require.NoError(tc.T, err, "Failed to generate anon key")
-	require.NotEmpty(tc.T, token, "Anon key is empty")
-
+	require.NotEmpty(tc.T, token, "Anon key should not be empty")
 	return token
 }
 

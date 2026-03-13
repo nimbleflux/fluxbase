@@ -330,7 +330,10 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	// Create handlers
 	authHandler := NewAuthHandler(db.Pool(), authService, captchaService, cfg.GetPublicBaseURL())
 	// Create dashboard JWT manager first (shared between auth service and handler)
-	dashboardJWTManager := auth.NewJWTManager(cfg.Auth.JWTSecret, 24*time.Hour, 168*time.Hour)
+	dashboardJWTManager, err := auth.NewJWTManager(cfg.Auth.JWTSecret, 24*time.Hour, 168*time.Hour)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create dashboard JWT manager")
+	}
 	dashboardAuthService := auth.NewDashboardAuthService(db, dashboardJWTManager, cfg.Auth.TOTPIssuer)
 	systemSettingsService := auth.NewSystemSettingsService(db)
 	adminAuthHandler := NewAdminAuthHandler(authService, auth.NewUserRepository(db), dashboardAuthService, systemSettingsService, cfg)
@@ -350,7 +353,10 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	realtimeAdminHandler := NewRealtimeAdminHandler(db)
 	serviceKeyHandler := NewServiceKeyHandler(db.Pool())
 	oauthProviderHandler := NewOAuthProviderHandler(db.Pool(), authService.GetSettingsCache(), cfg.EncryptionKey, cfg.GetPublicBaseURL(), cfg.Auth.OAuthProviders)
-	jwtManager := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiry, cfg.Auth.RefreshExpiry)
+	jwtManager, err := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiry, cfg.Auth.RefreshExpiry)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create JWT manager")
+	}
 	// Use public URL for OAuth callbacks (these are redirects from external OAuth providers)
 	oauthHandler := NewOAuthHandler(db.Pool(), authService, jwtManager, cfg.GetPublicBaseURL(), cfg.EncryptionKey, cfg.Auth.OAuthProviders)
 
@@ -798,7 +804,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 
 	// Initialize Database Branching if enabled
 	if cfg.Branching.Enabled {
-		branchStorage := branching.NewStorage(db.Pool())
+		branchStorage := branching.NewStorage(db.Pool(), cfg.EncryptionKey)
 		dbURL := cfg.Database.RuntimeConnectionString()
 		branchManager, err := branching.NewManager(branchStorage, cfg.Branching, db.Pool(), dbURL)
 		if err != nil {
@@ -1257,7 +1263,7 @@ func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageServic
 
 	// Database branching tools
 	if s.branchManager != nil && s.config.Branching.Enabled {
-		branchStorage := branching.NewStorage(s.db.Pool())
+		branchStorage := branching.NewStorage(s.db.Pool(), s.config.EncryptionKey)
 		toolRegistry.Register(mcptools.NewListBranchesTool(branchStorage))
 		toolRegistry.Register(mcptools.NewGetBranchTool(branchStorage))
 		toolRegistry.Register(mcptools.NewCreateBranchTool(s.branchManager))

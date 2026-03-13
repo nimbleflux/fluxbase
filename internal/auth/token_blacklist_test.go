@@ -10,19 +10,17 @@ import (
 )
 
 func TestRevokeToken_ServiceRoleTokenRejected(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
-	// Generate a service role token
 	serviceRoleToken, err := manager.GenerateServiceRoleToken()
 	require.NoError(t, err)
 
-	// Create service without repository (we only need the jwtManager for this test)
 	service := &TokenBlacklistService{
-		repo:       nil, // Not needed since we expect early return
+		repo:       nil,
 		jwtManager: manager,
 	}
 
-	// Attempt to revoke the service role token - should be rejected
 	err = service.RevokeToken(context.Background(), serviceRoleToken, "test revocation")
 
 	assert.Error(t, err)
@@ -30,40 +28,35 @@ func TestRevokeToken_ServiceRoleTokenRejected(t *testing.T) {
 }
 
 func TestRevokeToken_AnonTokenAlsoBlocked(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
-	// Generate an anon token
 	anonToken, err := manager.GenerateAnonToken()
 	require.NoError(t, err)
 
-	// Verify the token is valid as a service role token with "anon" role
 	claims, err := manager.ValidateServiceRoleToken(anonToken)
 	require.NoError(t, err)
 	assert.Equal(t, "anon", claims.Role)
 
-	// Create service without repository (we only need the jwtManager for this test)
 	service := &TokenBlacklistService{
-		repo:       nil, // Not needed since we expect early return
+		repo:       nil,
 		jwtManager: manager,
 	}
 
-	// Anon tokens should also be blocked from revocation
-	// They are validated by ValidateServiceRoleToken and should be treated the same
 	err = service.RevokeToken(context.Background(), anonToken, "test revocation")
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrCannotRevokeServiceRole)
 }
 
 func TestRevokeToken_AllServiceRoleTokensBlocked(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
-	// Create service without repository (we only need the jwtManager for this test)
 	service := &TokenBlacklistService{
-		repo:       nil, // Not needed since we expect early return
+		repo:       nil,
 		jwtManager: manager,
 	}
 
-	// Test service_role token
 	serviceRoleToken, err := manager.GenerateServiceRoleToken()
 	require.NoError(t, err)
 
@@ -75,7 +68,6 @@ func TestRevokeToken_AllServiceRoleTokensBlocked(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrCannotRevokeServiceRole)
 
-	// Test anon token - should also be blocked
 	anonToken, err := manager.GenerateAnonToken()
 	require.NoError(t, err)
 
@@ -89,32 +81,30 @@ func TestRevokeToken_AllServiceRoleTokensBlocked(t *testing.T) {
 }
 
 func TestRevokeToken_ServiceKeyRejected(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
-	// Create service without repository (we only need the jwtManager for this test)
 	service := &TokenBlacklistService{
-		repo:       nil, // Not needed since we expect early return
+		repo:       nil,
 		jwtManager: manager,
 	}
 
-	// Attempt to revoke a service key - should be rejected
-	err := service.RevokeToken(context.Background(), "sk_test1234567890abcdef", "logout")
+	err = service.RevokeToken(context.Background(), "sk_test1234567890abcdef", "logout")
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrCannotRevokeServiceKey)
 }
 
 func TestRevokeToken_ClientKeyRejected(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 
-	// Create service without repository (we only need the jwtManager for this test)
 	service := &TokenBlacklistService{
-		repo:       nil, // Not needed since we expect early return
+		repo:       nil,
 		jwtManager: manager,
 	}
 
-	// Attempt to revoke a client key - should be rejected
-	err := service.RevokeToken(context.Background(), "fbk_test1234abcd", "logout")
+	err = service.RevokeToken(context.Background(), "fbk_test1234abcd", "logout")
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrCannotRevokeClientKey)
@@ -205,7 +195,8 @@ func TestNewTokenBlacklistService(t *testing.T) {
 	})
 
 	t.Run("creates with jwt manager only", func(t *testing.T) {
-		manager := NewJWTManager("secret", time.Hour, time.Hour*24)
+		manager, err := NewJWTManager(testSecretKey, time.Hour, time.Hour*24)
+		require.NoError(t, err)
 		svc := NewTokenBlacklistService(nil, manager)
 		assert.Nil(t, svc.repo)
 		assert.Equal(t, manager, svc.jwtManager)
@@ -213,13 +204,13 @@ func TestNewTokenBlacklistService(t *testing.T) {
 }
 
 func TestRevokeToken_ServiceKeyPrefixVariations(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 	service := &TokenBlacklistService{
 		repo:       nil,
 		jwtManager: manager,
 	}
 
-	// All sk_ prefixed tokens should be rejected
 	testCases := []string{
 		"sk_",
 		"sk_short",
@@ -236,13 +227,13 @@ func TestRevokeToken_ServiceKeyPrefixVariations(t *testing.T) {
 }
 
 func TestRevokeToken_ClientKeyPrefixVariations(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 	service := &TokenBlacklistService{
 		repo:       nil,
 		jwtManager: manager,
 	}
 
-	// All fbk_ prefixed tokens should be rejected
 	testCases := []string{
 		"fbk_",
 		"fbk_short",
@@ -259,25 +250,23 @@ func TestRevokeToken_ClientKeyPrefixVariations(t *testing.T) {
 }
 
 func TestRevokeToken_NormalTokensNotPrefixBlocked(t *testing.T) {
-	manager := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour)
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 	service := &TokenBlacklistService{
 		repo:       nil,
 		jwtManager: manager,
 	}
 
-	// Tokens without special prefixes should not be blocked by prefix check
-	// (they may fail for other reasons like validation)
 	testCases := []string{
 		"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
 		"random_token",
-		"fk_not_fbk", // Similar but not fbk_
-		"s_not_sk",   // Similar but not sk_
+		"fk_not_fbk",
+		"s_not_sk",
 	}
 
 	for _, token := range testCases {
 		t.Run(token, func(t *testing.T) {
 			err := service.RevokeToken(context.Background(), token, "test")
-			// These should NOT return the prefix errors
 			assert.NotErrorIs(t, err, ErrCannotRevokeServiceKey)
 			assert.NotErrorIs(t, err, ErrCannotRevokeClientKey)
 		})
@@ -286,16 +275,13 @@ func TestRevokeToken_NormalTokensNotPrefixBlocked(t *testing.T) {
 
 func TestTokenBlacklistService_IsTokenRevoked(t *testing.T) {
 	t.Run("service delegates to repo", func(t *testing.T) {
-		// This test verifies the method signature and delegation
 		svc := NewTokenBlacklistService(nil, nil)
-		// With nil repo, this will panic, but we're testing the interface exists
 		assert.NotNil(t, svc)
 	})
 }
 
 func TestTokenBlacklistService_RevokeAllUserTokens(t *testing.T) {
 	t.Run("service delegates to repo", func(t *testing.T) {
-		// This test verifies the method signature and delegation
 		svc := NewTokenBlacklistService(nil, nil)
 		assert.NotNil(t, svc)
 	})
@@ -303,7 +289,6 @@ func TestTokenBlacklistService_RevokeAllUserTokens(t *testing.T) {
 
 func TestTokenBlacklistService_CleanupExpiredTokens(t *testing.T) {
 	t.Run("service delegates to repo", func(t *testing.T) {
-		// This test verifies the method signature and delegation
 		svc := NewTokenBlacklistService(nil, nil)
 		assert.NotNil(t, svc)
 	})

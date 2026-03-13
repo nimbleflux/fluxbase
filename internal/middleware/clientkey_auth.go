@@ -87,17 +87,30 @@ func OptionalClientKeyAuth(authService *auth.Service, clientKeyService *auth.Cli
 			claims, err := authService.ValidateToken(token)
 			if err == nil {
 				// Check if token has been revoked
+				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
 				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
-				if err == nil && !isRevoked {
-					// Valid JWT token
-					c.Locals("user_id", claims.UserID)
-					c.Locals("user_email", claims.Email)
-					c.Locals("user_name", claims.Name)
-					c.Locals("user_role", claims.Role)
-					c.Locals("session_id", claims.SessionID)
-					c.Locals("auth_type", "jwt")
-					return c.Next()
+				if err != nil {
+					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
+					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+						"error":   "service_unavailable",
+						"message": "Unable to verify token status",
+					})
 				}
+				if isRevoked {
+					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+						"error":   "token_revoked",
+						"message": "Token has been revoked",
+					})
+				}
+
+				// Valid JWT token
+				c.Locals("user_id", claims.UserID)
+				c.Locals("user_email", claims.Email)
+				c.Locals("user_name", claims.Name)
+				c.Locals("user_role", claims.Role)
+				c.Locals("session_id", claims.SessionID)
+				c.Locals("auth_type", "jwt")
+				return c.Next()
 			}
 		}
 
@@ -144,17 +157,30 @@ func RequireEitherAuth(authService *auth.Service, clientKeyService *auth.ClientK
 			claims, err := authService.ValidateToken(token)
 			if err == nil {
 				// Check if token has been revoked
+				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
 				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
-				if err == nil && !isRevoked {
-					// Valid JWT token
-					c.Locals("user_id", claims.UserID)
-					c.Locals("user_email", claims.Email)
-					c.Locals("user_name", claims.Name)
-					c.Locals("user_role", claims.Role)
-					c.Locals("session_id", claims.SessionID)
-					c.Locals("auth_type", "jwt")
-					return c.Next()
+				if err != nil {
+					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
+					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+						"error":   "service_unavailable",
+						"message": "Unable to verify token status",
+					})
 				}
+				if isRevoked {
+					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+						"error":   "token_revoked",
+						"message": "Token has been revoked",
+					})
+				}
+
+				// Valid JWT token
+				c.Locals("user_id", claims.UserID)
+				c.Locals("user_email", claims.Email)
+				c.Locals("user_name", claims.Name)
+				c.Locals("user_role", claims.Role)
+				c.Locals("session_id", claims.SessionID)
+				c.Locals("auth_type", "jwt")
+				return c.Next()
 			}
 		}
 
@@ -363,22 +389,35 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 				}
 
 				// Check if token has been revoked
+				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
 				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
-				if err == nil && !isRevoked {
-					// Valid JWT token
-					c.Locals("user_id", claims.UserID)
-					c.Locals("user_email", claims.Email)
-					c.Locals("user_role", claims.Role)
-					c.Locals("session_id", claims.SessionID)
-					c.Locals("auth_type", "jwt")
-					c.Locals("is_anonymous", claims.IsAnonymous)
-
-					// Set RLS context
-					c.Locals("rls_user_id", claims.UserID)
-					c.Locals("rls_role", claims.Role)
-
-					return c.Next()
+				if err != nil {
+					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
+					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+						"error":   "service_unavailable",
+						"message": "Unable to verify token status",
+					})
 				}
+				if isRevoked {
+					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+						"error":   "token_revoked",
+						"message": "Token has been revoked",
+					})
+				}
+
+				// Valid JWT token
+				c.Locals("user_id", claims.UserID)
+				c.Locals("user_email", claims.Email)
+				c.Locals("user_role", claims.Role)
+				c.Locals("session_id", claims.SessionID)
+				c.Locals("auth_type", "jwt")
+				c.Locals("is_anonymous", claims.IsAnonymous)
+
+				// Set RLS context
+				c.Locals("rls_user_id", claims.UserID)
+				c.Locals("rls_role", claims.Role)
+
+				return c.Next()
 			}
 
 			// If auth.users validation failed and jwtManager is provided, try dashboard.users token
@@ -561,23 +600,36 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 			claims, err := authService.ValidateToken(token)
 			if err == nil {
 				// Check if token has been revoked
+				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
 				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
-				if err == nil && !isRevoked {
-					// Valid JWT token
-					c.Locals("user_id", claims.UserID)
-					c.Locals("user_email", claims.Email)
-					c.Locals("user_role", claims.Role)
-					c.Locals("session_id", claims.SessionID)
-					c.Locals("auth_type", "jwt")
-					c.Locals("is_anonymous", claims.IsAnonymous)
-					c.Locals("jwt_claims", claims)
-
-					// Set RLS context
-					c.Locals("rls_user_id", claims.UserID)
-					c.Locals("rls_role", claims.Role)
-
-					return c.Next()
+				if err != nil {
+					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
+					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+						"error":   "service_unavailable",
+						"message": "Unable to verify token status",
+					})
 				}
+				if isRevoked {
+					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+						"error":   "token_revoked",
+						"message": "Token has been revoked",
+					})
+				}
+
+				// Valid JWT token
+				c.Locals("user_id", claims.UserID)
+				c.Locals("user_email", claims.Email)
+				c.Locals("user_role", claims.Role)
+				c.Locals("session_id", claims.SessionID)
+				c.Locals("auth_type", "jwt")
+				c.Locals("is_anonymous", claims.IsAnonymous)
+				c.Locals("jwt_claims", claims)
+
+				// Set RLS context
+				c.Locals("rls_user_id", claims.UserID)
+				c.Locals("rls_role", claims.Role)
+
+				return c.Next()
 			}
 
 			// If auth.users validation failed and jwtManager is provided, try dashboard.users token
@@ -650,23 +702,36 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 			claims, err := authService.ValidateToken(fluxbaseClientKey)
 			if err == nil {
 				// Check if token has been revoked
+				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
 				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
-				if err == nil && !isRevoked {
-					// Valid user JWT token via clientkey header
-					c.Locals("user_id", claims.UserID)
-					c.Locals("user_email", claims.Email)
-					c.Locals("user_role", claims.Role)
-					c.Locals("session_id", claims.SessionID)
-					c.Locals("auth_type", "jwt")
-					c.Locals("is_anonymous", claims.IsAnonymous)
-					c.Locals("jwt_claims", claims)
-
-					// Set RLS context
-					c.Locals("rls_user_id", claims.UserID)
-					c.Locals("rls_role", claims.Role)
-
-					return c.Next()
+				if err != nil {
+					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
+					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+						"error":   "service_unavailable",
+						"message": "Unable to verify token status",
+					})
 				}
+				if isRevoked {
+					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+						"error":   "token_revoked",
+						"message": "Token has been revoked",
+					})
+				}
+
+				// Valid user JWT token via clientkey header
+				c.Locals("user_id", claims.UserID)
+				c.Locals("user_email", claims.Email)
+				c.Locals("user_role", claims.Role)
+				c.Locals("session_id", claims.SessionID)
+				c.Locals("auth_type", "jwt")
+				c.Locals("is_anonymous", claims.IsAnonymous)
+				c.Locals("jwt_claims", claims)
+
+				// Set RLS context
+				c.Locals("rls_user_id", claims.UserID)
+				c.Locals("rls_role", claims.Role)
+
+				return c.Next()
 			}
 
 			// User JWT failed, try service role JWT

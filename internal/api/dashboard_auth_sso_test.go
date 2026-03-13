@@ -72,7 +72,8 @@ func setupDashboardAuthTestServer(t *testing.T) (*fiber.App, *DashboardAuthHandl
 	err = db.Health(ctx)
 	require.NoError(t, err)
 
-	jwtManager := auth.NewJWTManager("test-dashboard-jwt-secret", 15*time.Minute, 7*24*time.Hour)
+	jwtManager, err := auth.NewJWTManager("test-dashboard-jwt-secret-at-least-32!", 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
 	dashboardAuth := auth.NewDashboardAuthService(db, jwtManager, "FluxbaseTest")
 
 	app := fiber.New(fiber.Config{
