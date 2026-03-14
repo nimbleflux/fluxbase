@@ -4,15 +4,15 @@ go 1.26.1
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.43.0
-	github.com/aws/aws-sdk-go-v2 v1.41.3
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.11
-	github.com/aws/aws-sdk-go-v2/service/ses v1.34.20
+	github.com/aws/aws-sdk-go-v2 v1.41.4
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.12
+	github.com/aws/aws-sdk-go-v2/service/ses v1.34.21
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/crewjam/saml v0.5.1
 	github.com/davidbyttow/govips/v2 v2.17.0
 	github.com/elastic/go-elasticsearch/v8 v8.19.3
 	github.com/elastic/go-elasticsearch/v9 v9.3.1
-	github.com/evanw/esbuild v0.27.3
+	github.com/evanw/esbuild v0.27.4
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gofiber/contrib/v3/websocket v1.1.0
 	github.com/gofiber/fiber/v3 v3.1.0
@@ -63,8 +63,8 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/ClickHouse/ch-go v0.71.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.19 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.19 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.20 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.20 // indirect
 	github.com/aws/smithy-go v1.24.2 // indirect
 	github.com/beevik/etree v1.5.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
