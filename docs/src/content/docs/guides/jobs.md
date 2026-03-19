@@ -380,7 +380,7 @@ channel
 **Admins see all jobs:**
 
 ```typescript
-// Admin or dashboard_admin role can see all jobs
+// Admin, instance_admin, or tenant_admin role can see all jobs
 const channel = adminClient.realtime.channel("table:jobs.queue");
 
 channel

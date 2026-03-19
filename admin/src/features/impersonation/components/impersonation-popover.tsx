@@ -71,15 +71,15 @@ export function ImpersonationPopover({
     onStop: onImpersonationStop,
   })
 
-  // Only show to dashboard_admin users
-  const isDashboardAdmin =
+  // Only show to instance_admin users
+  const isInstanceAdmin =
     user && 'role' in user
       ? Array.isArray(user.role)
-        ? user.role.includes('dashboard_admin')
-        : user.role === 'dashboard_admin'
+        ? user.role.includes('instance_admin')
+        : user.role === 'instance_admin'
       : false
 
-  if (!isDashboardAdmin) {
+  if (!isInstanceAdmin) {
     return null
   }
 

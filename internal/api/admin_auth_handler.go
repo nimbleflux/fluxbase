@@ -142,11 +142,9 @@ func (h *AdminAuthHandler) InitialSetup(c fiber.Ctx) error {
 		return SendInternalError(c, fmt.Sprintf("Failed to create admin user: %v", err))
 	}
 
-	// Update user to be dashboard_admin with email verified
-	// Direct database update since dashboard service doesn't have these methods yet
 	_, err = h.dashboardAuth.GetDB().Exec(ctx, `
-		UPDATE dashboard.users
-		SET role = 'dashboard_admin', email_verified = true
+		UPDATE platform.users
+		SET role = 'instance_admin', email_verified = true
 		WHERE id = $1
 	`, user.ID)
 	if err != nil {
@@ -182,7 +180,7 @@ func (h *AdminAuthHandler) AdminLogin(c fiber.Ctx) error {
 		return SendInvalidBody(c)
 	}
 
-	// Use the dashboard auth service to sign in (dashboard.users, not auth.users)
+	// Use the platform auth service to sign in (platform.users, not auth.users)
 	user, loginResp, err := h.dashboardAuth.Login(ctx, req.Email, req.Password, nil, c.Get("User-Agent"))
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
@@ -197,15 +195,15 @@ func (h *AdminAuthHandler) AdminLogin(c fiber.Ctx) error {
 	// Query user's role from database (DashboardUser struct doesn't include role)
 	var userRole string
 	err = h.dashboardAuth.GetDB().QueryRow(ctx,
-		"SELECT role FROM dashboard.users WHERE id = $1",
+		"SELECT role FROM platform.users WHERE id = $1",
 		user.ID,
 	).Scan(&userRole)
 	if err != nil {
 		return SendOperationFailed(c, "verify user role")
 	}
 
-	// Check if user has dashboard_admin role
-	if userRole != "dashboard_admin" {
+	// Check if user has instance_admin role
+	if userRole != "instance_admin" {
 		return SendForbidden(c, "Access denied. Admin role required.", ErrCodeAdminRequired)
 	}
 

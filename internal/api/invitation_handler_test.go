@@ -41,12 +41,12 @@ func TestCreateInvitationRequest_Struct(t *testing.T) {
 	t.Run("all fields accessible", func(t *testing.T) {
 		req := CreateInvitationRequest{
 			Email:          "test@example.com",
-			Role:           "dashboard_admin",
+			Role:           "instance_admin",
 			ExpiryDuration: 604800, // 7 days in seconds
 		}
 
 		assert.Equal(t, "test@example.com", req.Email)
-		assert.Equal(t, "dashboard_admin", req.Role)
+		assert.Equal(t, "instance_admin", req.Role)
 		assert.Equal(t, int64(604800), req.ExpiryDuration)
 	})
 
@@ -65,7 +65,7 @@ func TestCreateInvitationRequest_Struct(t *testing.T) {
 	t.Run("default expiry duration is zero", func(t *testing.T) {
 		req := CreateInvitationRequest{
 			Email: "test@example.com",
-			Role:  "dashboard_admin",
+			Role:  "instance_admin",
 		}
 
 		assert.Equal(t, int64(0), req.ExpiryDuration)
@@ -291,7 +291,7 @@ func TestCreateInvitation_NoUserID(t *testing.T) {
 
 	app.Post("/admin/invitations", handler.CreateInvitation)
 
-	body := `{"email":"test@example.com","role":"dashboard_admin"}`
+	body := `{"email":"test@example.com","role":"instance_admin"}`
 	req := httptest.NewRequest(http.MethodPost, "/admin/invitations", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -354,7 +354,7 @@ func TestCreateInvitation_InvalidUserID(t *testing.T) {
 
 	app.Post("/admin/invitations", handler.CreateInvitation)
 
-	body := `{"email":"test@example.com","role":"dashboard_admin"}`
+	body := `{"email":"test@example.com","role":"instance_admin"}`
 	req := httptest.NewRequest(http.MethodPost, "/admin/invitations", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 

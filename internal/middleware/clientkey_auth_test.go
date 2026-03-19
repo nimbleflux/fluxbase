@@ -226,7 +226,7 @@ func TestRequireAdmin_DashboardAdmin(t *testing.T) {
 
 	app.Use(func(c fiber.Ctx) error {
 		c.Locals("auth_type", "jwt")
-		c.Locals("user_role", "dashboard_admin")
+		c.Locals("user_role", "instance_admin")
 		return c.Next()
 	})
 	app.Use(RequireAdmin())

@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/pquerna/otp/totp"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -100,7 +101,7 @@ func (s *DashboardAuthService) CreateUser(ctx context.Context, email, password, 
 	user := &DashboardUser{}
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			INSERT INTO dashboard.users (email, password_hash, full_name, email_verified)
+			INSERT INTO platform.users (email, password_hash, full_name, email_verified)
 			VALUES ($1, $2, $3, false)
 			RETURNING id, email, email_verified, full_name, avatar_url, totp_enabled,
 			          is_active, is_locked, last_login_at, created_at, updated_at
@@ -121,7 +122,7 @@ func (s *DashboardAuthService) CreateUser(ctx context.Context, email, password, 
 func (s *DashboardAuthService) HasExistingUsers(ctx context.Context) (bool, error) {
 	var count int
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT COUNT(*) FROM dashboard.users WHERE deleted_at IS NULL`).Scan(&count)
+		return tx.QueryRow(ctx, `SELECT COUNT(*) FROM platform.users WHERE deleted_at IS NULL`).Scan(&count)
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to check existing users: %w", err)
@@ -151,14 +152,14 @@ func (s *DashboardAuthService) Login(ctx context.Context, email, password string
 
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT id, email, email_verified, password_hash, full_name, avatar_url,
+			SELECT id, email, email_verified, password_hash, full_name, avatar_url, role,
 			       totp_enabled, is_active, is_locked, locked_until, failed_login_attempts,
 			       last_login_at, created_at, updated_at
-			FROM dashboard.users
+			FROM platform.users
 			WHERE email = $1 AND deleted_at IS NULL
 		`, email).Scan(
 			&user.ID, &user.Email, &user.EmailVerified, &passwordHash, &user.FullName,
-			&user.AvatarURL, &user.TOTPEnabled, &user.IsActive, &user.IsLocked,
+			&user.AvatarURL, &user.Role, &user.TOTPEnabled, &user.IsActive, &user.IsLocked,
 			&user.LockedUntil, &failedAttempts, &user.LastLoginAt, &user.CreatedAt, &user.UpdatedAt,
 		)
 	})
@@ -184,7 +185,7 @@ func (s *DashboardAuthService) Login(ctx context.Context, email, password string
 			// Lock has expired, auto-unlock the account
 			err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 				_, err := tx.Exec(ctx, `
-					UPDATE dashboard.users
+					UPDATE platform.users
 					SET is_locked = false, locked_until = NULL, failed_login_attempts = 0, updated_at = NOW()
 					WHERE id = $1
 				`, user.ID)
@@ -238,7 +239,7 @@ func (s *DashboardAuthService) Login(ctx context.Context, email, password string
 		// Increment failed login attempts and lock if threshold exceeded
 		_ = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, `
-				UPDATE dashboard.users
+				UPDATE platform.users
 				SET failed_login_attempts = failed_login_attempts + 1,
 				    is_locked = CASE WHEN failed_login_attempts >= 4 THEN true ELSE false END,
 				    locked_until = CASE WHEN failed_login_attempts >= 4 THEN NOW() + INTERVAL '15 minutes' ELSE locked_until END
@@ -261,7 +262,7 @@ func (s *DashboardAuthService) Login(ctx context.Context, email, password string
 	// Reset failed attempts on successful login
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			UPDATE dashboard.users
+			UPDATE platform.users
 			SET failed_login_attempts = 0,
 			    locked_until = NULL,
 			    last_login_at = NOW()
@@ -292,8 +293,95 @@ func (s *DashboardAuthService) Login(ctx context.Context, email, password string
 		userMetadata["avatar"] = *user.AvatarURL
 	}
 
-	// Generate JWT token pair (access + refresh)
-	accessToken, refreshToken, sessionID, err := s.jwtManager.GenerateTokenPair(user.ID.String(), user.Email, "dashboard_admin", userMetadata, nil)
+	// Use the actual role from the database, defaulting to dashboard_user if empty
+	userRole := user.Role
+	if userRole == "" {
+		userRole = "dashboard_user"
+	}
+
+	// Determine tenant context for JWT claims
+	tenantOpts := TenantTokenOptions{
+		IsInstanceAdmin: userRole == "instance_admin",
+	}
+
+	// Fetch user's tenant membership to get tenant_id and tenant_role
+	// Use default tenant for backward compatibility
+	var defaultTenantID *string
+	var tenantRole string
+
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		// First try to get the default tenant
+		var tenantID string
+		err := tx.QueryRow(ctx, `
+			SELECT t.id::text
+			FROM platform.tenants t
+			WHERE t.is_default = true AND t.deleted_at IS NULL
+			LIMIT 1
+		`).Scan(&tenantID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// No default tenant, try first tenant user is member of
+				return tx.QueryRow(ctx, `
+					SELECT tm.tenant_id::text, tm.role
+					FROM platform.tenant_memberships tm
+					INNER JOIN platform.tenants t ON t.id = tm.tenant_id
+					WHERE tm.user_id = $1 AND t.deleted_at IS NULL
+					ORDER BY t.is_default DESC, t.created_at ASC
+					LIMIT 1
+				`, user.ID).Scan(&tenantID, &tenantRole)
+			}
+			return err
+		}
+		defaultTenantID = &tenantID
+
+		// Check if user is a member of this tenant and get their role
+		var isMember bool
+		err = tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM platform.tenant_memberships
+				WHERE tenant_id = $1 AND user_id = $2
+			)
+		`, tenantID, user.ID).Scan(&isMember)
+		if err != nil {
+			return err
+		}
+
+		if isMember {
+			err = tx.QueryRow(ctx, `
+				SELECT role FROM platform.tenant_memberships
+				WHERE tenant_id = $1 AND user_id = $2
+			`, tenantID, user.ID).Scan(&tenantRole)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+		} else {
+			// User is not a member of default tenant, try any tenant they're member of
+			err = tx.QueryRow(ctx, `
+				SELECT tm.tenant_id::text, tm.role
+				FROM platform.tenant_memberships tm
+				INNER JOIN platform.tenants t ON t.id = tm.tenant_id
+				WHERE tm.user_id = $1 AND t.deleted_at IS NULL
+				ORDER BY t.is_default DESC, t.created_at ASC
+				LIMIT 1
+			`, user.ID).Scan(&tenantID, &tenantRole)
+			if err == nil {
+				defaultTenantID = &tenantID
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		log.Debug().Err(err).Str("user_id", user.ID.String()).Msg("Failed to get tenant membership, using default")
+		// Continue without tenant context - will fall back to default tenant in RLS
+	}
+
+	if defaultTenantID != nil {
+		tenantOpts.TenantID = defaultTenantID
+		tenantOpts.TenantRole = tenantRole
+	}
+
+	// Generate JWT token pair with tenant context (access + refresh)
+	accessToken, refreshToken, sessionID, err := s.jwtManager.GenerateTokenPairWithTenant(user.ID.String(), user.Email, userRole, userMetadata, nil, tenantOpts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate tokens: %w", err)
 	}
@@ -311,7 +399,7 @@ func (s *DashboardAuthService) Login(ctx context.Context, email, password string
 	// Delete any existing sessions for this user (allow only one active session)
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			DELETE FROM dashboard.sessions WHERE user_id = $1
+			DELETE FROM platform.sessions WHERE user_id = $1
 		`, user.ID)
 		return err
 	})
@@ -322,7 +410,7 @@ func (s *DashboardAuthService) Login(ctx context.Context, email, password string
 	// Create new session record with session ID from token
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			INSERT INTO dashboard.sessions (id, user_id, token, ip_address, user_agent, expires_at)
+			INSERT INTO platform.sessions (id, user_id, token, ip_address, user_agent, expires_at)
 			VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '24 hours')
 		`, sessionID, user.ID, tokenHash, ipAddressStr, userAgent)
 		return err
@@ -356,7 +444,7 @@ func (s *DashboardAuthService) ChangePassword(ctx context.Context, userID uuid.U
 	var currentHash string
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT password_hash FROM dashboard.users WHERE id = $1 AND deleted_at IS NULL
+			SELECT password_hash FROM platform.users WHERE id = $1 AND deleted_at IS NULL
 		`, userID).Scan(&currentHash)
 	})
 	if err != nil {
@@ -378,7 +466,7 @@ func (s *DashboardAuthService) ChangePassword(ctx context.Context, userID uuid.U
 	// Update password
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			UPDATE dashboard.users
+			UPDATE platform.users
 			SET password_hash = $1, updated_at = NOW()
 			WHERE id = $2
 		`, newHash, userID)
@@ -410,7 +498,7 @@ func (s *DashboardAuthService) UpdateProfile(ctx context.Context, userID uuid.UU
 
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			UPDATE dashboard.users
+			UPDATE platform.users
 			SET full_name = $1, avatar_url = $2, updated_at = NOW()
 			WHERE id = $3 AND deleted_at IS NULL
 		`, fullName, avatarURL, userID)
@@ -429,7 +517,7 @@ func (s *DashboardAuthService) DeleteAccount(ctx context.Context, userID uuid.UU
 	var passwordHash string
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT password_hash FROM dashboard.users WHERE id = $1 AND deleted_at IS NULL
+			SELECT password_hash FROM platform.users WHERE id = $1 AND deleted_at IS NULL
 		`, userID).Scan(&passwordHash)
 	})
 	if err != nil {
@@ -444,7 +532,7 @@ func (s *DashboardAuthService) DeleteAccount(ctx context.Context, userID uuid.UU
 	// Soft delete account
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			UPDATE dashboard.users
+			UPDATE platform.users
 			SET deleted_at = NOW(), updated_at = NOW()
 			WHERE id = $1
 		`, userID)
@@ -457,7 +545,7 @@ func (s *DashboardAuthService) DeleteAccount(ctx context.Context, userID uuid.UU
 	// Delete all sessions
 	_ = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			DELETE FROM dashboard.sessions WHERE user_id = $1
+			DELETE FROM platform.sessions WHERE user_id = $1
 		`, userID)
 		return err
 	})
@@ -485,7 +573,7 @@ func (s *DashboardAuthService) SetupTOTP(ctx context.Context, userID uuid.UUID, 
 	// Store secret (not yet enabled)
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			UPDATE dashboard.users
+			UPDATE platform.users
 			SET totp_secret = $1, totp_enabled = false, updated_at = NOW()
 			WHERE id = $2
 		`, secret, userID)
@@ -505,7 +593,7 @@ func (s *DashboardAuthService) EnableTOTP(ctx context.Context, userID uuid.UUID,
 	var secret string
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT totp_secret FROM dashboard.users WHERE id = $1 AND deleted_at IS NULL
+			SELECT totp_secret FROM platform.users WHERE id = $1 AND deleted_at IS NULL
 		`, userID).Scan(&secret)
 	})
 	if err != nil {
@@ -543,7 +631,7 @@ func (s *DashboardAuthService) EnableTOTP(ctx context.Context, userID uuid.UUID,
 	// Enable TOTP and store backup codes
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			UPDATE dashboard.users
+			UPDATE platform.users
 			SET totp_enabled = true, backup_codes = $1, updated_at = NOW()
 			WHERE id = $2
 		`, hashedBackupCodes, userID)
@@ -567,7 +655,7 @@ func (s *DashboardAuthService) VerifyTOTP(ctx context.Context, userID uuid.UUID,
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT totp_secret, COALESCE(backup_codes, ARRAY[]::text[])
-			FROM dashboard.users
+			FROM platform.users
 			WHERE id = $1 AND deleted_at IS NULL AND totp_enabled = true
 		`, userID).Scan(&secret, &backupCodes)
 	})
@@ -589,7 +677,7 @@ func (s *DashboardAuthService) VerifyTOTP(ctx context.Context, userID uuid.UUID,
 			backupCodes = append(backupCodes[:i], backupCodes[i+1:]...)
 			err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 				_, err := tx.Exec(ctx, `
-					UPDATE dashboard.users
+					UPDATE platform.users
 					SET backup_codes = $1, updated_at = NOW()
 					WHERE id = $2
 				`, backupCodes, userID)
@@ -611,7 +699,7 @@ func (s *DashboardAuthService) DisableTOTP(ctx context.Context, userID uuid.UUID
 	var passwordHash string
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT password_hash FROM dashboard.users WHERE id = $1 AND deleted_at IS NULL
+			SELECT password_hash FROM platform.users WHERE id = $1 AND deleted_at IS NULL
 		`, userID).Scan(&passwordHash)
 	})
 	if err != nil {
@@ -626,7 +714,7 @@ func (s *DashboardAuthService) DisableTOTP(ctx context.Context, userID uuid.UUID
 	// Disable TOTP
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			UPDATE dashboard.users
+			UPDATE platform.users
 			SET totp_enabled = false, totp_secret = NULL, backup_codes = NULL, updated_at = NOW()
 			WHERE id = $1
 		`, userID)
@@ -649,7 +737,7 @@ func (s *DashboardAuthService) GetUserByID(ctx context.Context, userID uuid.UUID
 		return tx.QueryRow(ctx, `
 			SELECT id, email, email_verified, full_name, avatar_url, totp_enabled,
 			       is_active, is_locked, last_login_at, created_at, updated_at
-			FROM dashboard.users
+			FROM platform.users
 			WHERE id = $1 AND deleted_at IS NULL
 		`, userID).Scan(
 			&user.ID, &user.Email, &user.EmailVerified, &user.FullName, &user.AvatarURL,
@@ -695,7 +783,7 @@ func (s *DashboardAuthService) logActivity(ctx context.Context, userID uuid.UUID
 
 	_ = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			INSERT INTO dashboard.activity_log (user_id, action, resource_type, resource_id, ip_address, user_agent, details)
+			INSERT INTO platform.activity_log (user_id, action, resource_type, resource_id, ip_address, user_agent, details)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
 		`, userID, action, resourceTypePtr, resourceIDPtr, ipAddressStr, userAgentPtr, metadata)
 		return err
@@ -736,8 +824,8 @@ func (s *DashboardAuthService) GetUserBySSOIdentity(ctx context.Context, provide
 		return tx.QueryRow(ctx, `
 			SELECT u.id, u.email, u.email_verified, u.full_name, u.avatar_url, u.totp_enabled,
 			       u.is_active, u.is_locked, u.last_login_at, u.created_at, u.updated_at
-			FROM dashboard.users u
-			INNER JOIN dashboard.sso_identities si ON si.user_id = u.id
+			FROM platform.users u
+			INNER JOIN platform.sso_identities si ON si.user_id = u.id
 			WHERE si.provider_type = $1 AND si.provider_name = $2 AND si.provider_user_id = $3 AND u.deleted_at IS NULL
 		`, providerType, providerName, providerUserID).Scan(
 			&user.ID, &user.Email, &user.EmailVerified, &user.FullName, &user.AvatarURL,
@@ -761,7 +849,7 @@ func (s *DashboardAuthService) GetUserByEmail(ctx context.Context, email string)
 		return tx.QueryRow(ctx, `
 			SELECT id, email, email_verified, full_name, avatar_url, totp_enabled,
 			       is_active, is_locked, last_login_at, created_at, updated_at
-			FROM dashboard.users
+			FROM platform.users
 			WHERE email = $1 AND deleted_at IS NULL
 		`, email).Scan(
 			&user.ID, &user.Email, &user.EmailVerified, &user.FullName, &user.AvatarURL,
@@ -790,7 +878,7 @@ func (s *DashboardAuthService) FindOrCreateUserBySSO(ctx context.Context, email,
 		// Update last login
 		_ = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, `
-				UPDATE dashboard.users SET last_login_at = NOW() WHERE id = $1
+				UPDATE platform.users SET last_login_at = NOW() WHERE id = $1
 			`, user.ID)
 			return err
 		})
@@ -812,7 +900,7 @@ func (s *DashboardAuthService) FindOrCreateUserBySSO(ctx context.Context, email,
 		// Update last login
 		_ = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, `
-				UPDATE dashboard.users SET last_login_at = NOW() WHERE id = $1
+				UPDATE platform.users SET last_login_at = NOW() WHERE id = $1
 			`, user.ID)
 			return err
 		})
@@ -832,7 +920,7 @@ func (s *DashboardAuthService) FindOrCreateUserBySSO(ctx context.Context, email,
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		// Create user without password (SSO-only user)
 		err := tx.QueryRow(ctx, `
-			INSERT INTO dashboard.users (email, full_name, email_verified, is_active)
+			INSERT INTO platform.users (email, full_name, email_verified, is_active)
 			VALUES ($1, $2, true, true)
 			RETURNING id, email, email_verified, full_name, avatar_url, totp_enabled,
 			          is_active, is_locked, last_login_at, created_at, updated_at
@@ -847,7 +935,7 @@ func (s *DashboardAuthService) FindOrCreateUserBySSO(ctx context.Context, email,
 
 		// Link SSO identity
 		_, err = tx.Exec(ctx, `
-			INSERT INTO dashboard.sso_identities (user_id, provider_type, provider_name, provider_user_id, email)
+			INSERT INTO platform.sso_identities (user_id, provider_type, provider_name, provider_user_id, email)
 			VALUES ($1, $2, $3, $4, $5)
 		`, user.ID, providerType, providerName, providerUserID, email)
 		return err
@@ -871,7 +959,7 @@ func (s *DashboardAuthService) LinkSSOIdentity(ctx context.Context, userID uuid.
 
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			INSERT INTO dashboard.sso_identities (user_id, provider_type, provider_name, provider_user_id, email)
+			INSERT INTO platform.sso_identities (user_id, provider_type, provider_name, provider_user_id, email)
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (provider_type, provider_name, provider_user_id) DO UPDATE SET email = EXCLUDED.email
 		`, userID, providerType, providerName, providerUserID, email)
@@ -909,7 +997,7 @@ func (s *DashboardAuthService) RequestPasswordReset(ctx context.Context, email s
 
 	// Delete any existing tokens for this user
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `DELETE FROM dashboard.password_reset_tokens WHERE user_id = $1`, user.ID)
+		_, err := tx.Exec(ctx, `DELETE FROM platform.password_reset_tokens WHERE user_id = $1`, user.ID)
 		return err
 	})
 	if err != nil {
@@ -919,7 +1007,7 @@ func (s *DashboardAuthService) RequestPasswordReset(ctx context.Context, email s
 	// Create new token (expires in 1 hour)
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
-			INSERT INTO dashboard.password_reset_tokens (user_id, token, expires_at)
+			INSERT INTO platform.password_reset_tokens (user_id, token, expires_at)
 			VALUES ($1, $2, NOW() + INTERVAL '1 hour')
 		`, user.ID, tokenHashHex)
 		return err
@@ -941,7 +1029,7 @@ func (s *DashboardAuthService) VerifyPasswordResetToken(ctx context.Context, tok
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT EXISTS(
-				SELECT 1 FROM dashboard.password_reset_tokens
+				SELECT 1 FROM platform.password_reset_tokens
 				WHERE token = $1 AND expires_at > NOW() AND used = false
 			)
 		`, tokenHashHex).Scan(&exists)
@@ -971,7 +1059,7 @@ func (s *DashboardAuthService) ResetPassword(ctx context.Context, token, newPass
 	var userID uuid.UUID
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT user_id FROM dashboard.password_reset_tokens
+			SELECT user_id FROM platform.password_reset_tokens
 			WHERE token = $1 AND expires_at > NOW() AND used = false
 		`, tokenHashHex).Scan(&userID)
 	})
@@ -992,7 +1080,7 @@ func (s *DashboardAuthService) ResetPassword(ctx context.Context, token, newPass
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		// Update password
 		_, err := tx.Exec(ctx, `
-			UPDATE dashboard.users
+			UPDATE platform.users
 			SET password_hash = $1, updated_at = NOW()
 			WHERE id = $2
 		`, newHash, userID)
@@ -1002,7 +1090,7 @@ func (s *DashboardAuthService) ResetPassword(ctx context.Context, token, newPass
 
 		// Mark token as used
 		_, err = tx.Exec(ctx, `
-			UPDATE dashboard.password_reset_tokens
+			UPDATE platform.password_reset_tokens
 			SET used = true, used_at = NOW()
 			WHERE token = $1
 		`, tokenHashHex)
@@ -1068,8 +1156,14 @@ func (s *DashboardAuthService) LoginViaSSO(ctx context.Context, user *DashboardU
 		userMetadata["avatar"] = *user.AvatarURL
 	}
 
+	// Use the actual role from the database, defaulting to dashboard_user if empty
+	userRole := user.Role
+	if userRole == "" {
+		userRole = "dashboard_user"
+	}
+
 	// Generate JWT token pair
-	accessToken, refreshToken, sessionID, err := s.jwtManager.GenerateTokenPair(user.ID.String(), user.Email, "dashboard_admin", userMetadata, nil)
+	accessToken, refreshToken, sessionID, err := s.jwtManager.GenerateTokenPair(user.ID.String(), user.Email, userRole, userMetadata, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate tokens: %w", err)
 	}
@@ -1086,12 +1180,12 @@ func (s *DashboardAuthService) LoginViaSSO(ctx context.Context, user *DashboardU
 
 	// Delete existing sessions and create new one
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `DELETE FROM dashboard.sessions WHERE user_id = $1`, user.ID)
+		_, err := tx.Exec(ctx, `DELETE FROM platform.sessions WHERE user_id = $1`, user.ID)
 		if err != nil {
 			return err
 		}
 		_, err = tx.Exec(ctx, `
-			INSERT INTO dashboard.sessions (id, user_id, token, ip_address, user_agent, expires_at)
+			INSERT INTO platform.sessions (id, user_id, token, ip_address, user_agent, expires_at)
 			VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '24 hours')
 		`, sessionID, user.ID, tokenHash, ipAddressStr, userAgent)
 		return err
@@ -1122,8 +1216,12 @@ func (s *DashboardAuthService) RefreshToken(ctx context.Context, refreshToken st
 		return nil, fmt.Errorf("invalid token type")
 	}
 
-	// Verify the token is for a dashboard user (role should be dashboard_admin)
-	if claims.Role != "dashboard_admin" {
+	// Verify the token is for a dashboard user (any dashboard role is valid)
+	validDashboardRoles := map[string]bool{
+		"instance_admin": true,
+		"tenant_admin":   true,
+	}
+	if !validDashboardRoles[claims.Role] {
 		return nil, fmt.Errorf("invalid token: not a dashboard user token")
 	}
 

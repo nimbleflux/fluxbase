@@ -132,7 +132,7 @@ console.log('Admin created:', response.user)
     id: string
     email: string
     name: string
-    role: 'dashboard_admin'
+    role: 'instance_admin' | 'tenant_admin'
     email_verified: boolean
     created_at: string
     updated_at: string
@@ -326,7 +326,8 @@ console.log('User role updated:', user.role)
 **Common Roles**:
 - `user` - Regular user
 - `admin` - Admin user
-- `dashboard_admin` - Dashboard administrator
+- `instance_admin` - Instance-level administrator (full platform access)
+- `tenant_admin` - Tenant-level administrator (limited to assigned tenants)
 - Custom roles as defined in your application
 
 ### Reset User Password
@@ -339,6 +340,177 @@ console.log(response.message) // "Password reset email sent"
 ```
 
 This sends a password reset email to the user or returns the new password.
+
+---
+
+## Tenant Management
+
+Tenant management requires `instance_admin` role.
+
+### List Tenants
+
+```typescript
+const { tenants, total } = await client.admin.listTenants({
+  limit: 50,
+  offset: 0,
+  include_deleted: false
+})
+
+tenants.forEach(tenant => {
+  console.log(`${tenant.name} (${tenant.slug}) - Default: ${tenant.is_default}`)
+})
+```
+
+**Response**:
+```typescript
+{
+  tenants: Array<{
+    id: string
+    slug: string
+    name: string
+    is_default: boolean
+    metadata: Record<string, any> | null
+    created_at: string
+    updated_at: string
+    deleted_at: string | null
+  }>
+  total: number
+}
+```
+
+### Create Tenant
+
+```typescript
+const tenant = await client.admin.createTenant({
+  slug: 'acme-corp',
+  name: 'Acme Corporation',
+  metadata: {
+    plan: 'enterprise',
+    billing_email: 'billing@acme.com'
+  }
+})
+
+console.log('Created tenant:', tenant.id)
+```
+
+**Request**:
+```typescript
+interface CreateTenantRequest {
+  slug: string
+  name: string
+  is_default?: boolean
+  metadata?: Record<string, any>
+}
+```
+
+### Update Tenant
+
+```typescript
+const tenant = await client.admin.updateTenant('tenant-uuid', {
+  name: 'Acme Corp Inc.',
+  metadata: { plan: 'pro' }
+})
+```
+
+### Delete Tenant
+
+```typescript
+// Soft delete (sets deleted_at)
+await client.admin.deleteTenant('tenant-uuid')
+```
+
+---
+
+## Service Key Management
+
+Service key management requires `instance_admin` or `tenant_admin` role.
+
+### List Service Keys
+
+```typescript
+// List all keys (instance_admin only)
+const { keys, total } = await client.admin.listServiceKeys()
+
+// List keys for specific tenant
+const { keys, total } = await client.admin.listServiceKeys({
+  tenant_id: 'tenant-uuid',
+  key_type: 'tenant_service',
+  is_active: true
+})
+```
+
+**Options**:
+```typescript
+interface ListServiceKeysOptions {
+  tenant_id?: string
+  key_type?: 'anon' | 'publishable' | 'tenant_service' | 'global_service'
+  is_active?: boolean
+  user_id?: string
+  limit?: number
+  offset?: number
+}
+```
+
+### Create Service Key
+
+```typescript
+const key = await client.admin.createServiceKey({
+  name: 'Production API Key',
+  key_type: 'tenant_service',
+  tenant_id: 'tenant-uuid',
+  scopes: ['rest:read', 'rest:write', 'storage:read'],
+  allowed_namespaces: ['public', 'app']
+})
+
+console.log('Key prefix:', key.key_prefix)
+console.log('Full key (store securely):', key.key)
+```
+
+**Request**:
+```typescript
+interface CreateServiceKeyRequest {
+  name: string
+  key_type: 'anon' | 'publishable' | 'tenant_service' | 'global_service'
+  tenant_id?: string // Required for tenant_service keys
+  user_id?: string // For publishable keys
+  scopes?: string[]
+  allowed_namespaces?: string[]
+}
+```
+
+**Key Types**:
+- `anon` - Anonymous access, no tenant context
+- `publishable` - User-scoped key
+- `tenant_service` - Tenant-scoped backend key
+- `global_service` - Platform-wide key (instance_admin only)
+
+### Rotate Service Key
+
+```typescript
+// Rotate with grace period
+const newKey = await client.admin.rotateServiceKey('old-key-id', {
+  grace_period_hours: 24
+})
+
+console.log('New key:', newKey.key)
+console.log('Old key works until:', newKey.grace_period_ends_at)
+```
+
+### Revoke Service Key
+
+```typescript
+await client.admin.revokeServiceKey('key-id', 'Security incident')
+```
+
+### Deprecate Service Key
+
+```typescript
+// Mark for deprecation with grace period
+await client.admin.deprecateServiceKey('key-id', {
+  grace_period_hours: 48,
+  replacement_key_id: 'new-key-id'
+})
+```
 
 ---
 
@@ -737,7 +909,7 @@ await client.admin.listUsers()
 async function requireAdminRole() {
   const { user } = await client.admin.me()
 
-  if (user.role !== 'admin' && user.role !== 'dashboard_admin') {
+  if (user.role !== 'admin' && user.role !== 'instance_admin' && user.role !== 'tenant_admin') {
     throw new Error('Admin role required')
   }
 

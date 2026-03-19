@@ -35,7 +35,7 @@ type Connection struct {
 	Conn            *websocket.Conn
 	Subscriptions   map[string]bool        // channel -> subscribed
 	UserID          *string                // Authenticated user ID (nil if anonymous)
-	Role            string                 // User role (e.g., "authenticated", "anon", "dashboard_admin")
+	Role            string                 // User role (e.g., "authenticated", "anon", "instance_admin")
 	Claims          map[string]interface{} // Full JWT claims for RLS (includes custom claims like meeting_id, player_id)
 	ConnectedAt     time.Time              // Connection timestamp
 	mu              sync.RWMutex

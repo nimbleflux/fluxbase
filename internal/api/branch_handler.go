@@ -27,37 +27,6 @@ func NewBranchHandler(manager *branching.Manager, router *branching.Router, cfg 
 	}
 }
 
-// RegisterRoutes registers branch management routes
-func (h *BranchHandler) RegisterRoutes(api fiber.Router) {
-	branches := api.Group("/admin/branches")
-
-	// Active branch management (must be before /:id routes to avoid conflict)
-	branches.Get("/active", h.GetActiveBranch)
-	branches.Post("/active", h.SetActiveBranch)
-	branches.Delete("/active", h.ResetActiveBranch)
-
-	// Pool stats (for debugging/monitoring)
-	branches.Get("/stats/pools", h.GetPoolStats)
-
-	branches.Post("/", h.CreateBranch)
-	branches.Get("/", h.ListBranches)
-	branches.Get("/:id", h.GetBranch)
-	branches.Delete("/:id", h.DeleteBranch)
-	branches.Post("/:id/reset", h.ResetBranch)
-	branches.Get("/:id/activity", h.GetBranchActivity)
-
-	// Access management routes
-	branches.Get("/:id/access", h.ListBranchAccess)
-	branches.Post("/:id/access", h.GrantBranchAccess)
-	branches.Delete("/:id/access/:user_id", h.RevokeBranchAccess)
-
-	// GitHub config routes
-	github := api.Group("/admin/branches/github")
-	github.Get("/configs", h.ListGitHubConfigs)
-	github.Post("/configs", h.UpsertGitHubConfig)
-	github.Delete("/configs/:repository", h.DeleteGitHubConfig)
-}
-
 // CreateBranchRequest represents the request body for creating a branch
 type CreateBranchRequest struct {
 	Name           string                  `json:"name" validate:"required,min=1,max=100"`
@@ -327,7 +296,7 @@ func (h *BranchHandler) DeleteBranch(c fiber.Ctx) error {
 	// Check authorization - service keys and dashboard admins bypass this check
 	authType, _ := c.Locals("auth_type").(string)
 	userRole, _ := c.Locals("user_role").(string)
-	isAdmin := authType == "service_key" || userRole == "dashboard_admin" || userRole == "admin"
+	isAdmin := authType == "service_key" || userRole == "instance_admin" || userRole == "admin"
 
 	if !isAdmin && userID != nil {
 		// Check if user has admin access to the branch
@@ -424,7 +393,7 @@ func (h *BranchHandler) ResetBranch(c fiber.Ctx) error {
 	// Check authorization - service keys and dashboard admins bypass this check
 	authType, _ := c.Locals("auth_type").(string)
 	userRole, _ := c.Locals("user_role").(string)
-	isAdmin := authType == "service_key" || userRole == "dashboard_admin" || userRole == "admin"
+	isAdmin := authType == "service_key" || userRole == "instance_admin" || userRole == "admin"
 
 	if !isAdmin && userID != nil {
 		// Check if user has admin access to the branch (reset is a destructive operation)
@@ -840,7 +809,7 @@ func (h *BranchHandler) ListBranchAccess(c fiber.Ctx) error {
 
 	authType, _ := c.Locals("auth_type").(string)
 	userRole, _ := c.Locals("user_role").(string)
-	isAdmin := authType == "service_key" || userRole == "dashboard_admin" || userRole == "admin"
+	isAdmin := authType == "service_key" || userRole == "instance_admin" || userRole == "admin"
 
 	if !isAdmin && userID != nil {
 		hasAccess, err := h.manager.GetStorage().HasAccess(c.RequestCtx(), branch.ID, *userID, branching.BranchAccessAdmin)
@@ -957,7 +926,7 @@ func (h *BranchHandler) GrantBranchAccess(c fiber.Ctx) error {
 
 	authType, _ := c.Locals("auth_type").(string)
 	userRole, _ := c.Locals("user_role").(string)
-	isAdmin := authType == "service_key" || userRole == "dashboard_admin" || userRole == "admin"
+	isAdmin := authType == "service_key" || userRole == "instance_admin" || userRole == "admin"
 
 	if !isAdmin && grantedBy != nil {
 		hasAccess, err := h.manager.GetStorage().HasAccess(c.RequestCtx(), branch.ID, *grantedBy, branching.BranchAccessAdmin)
@@ -1064,7 +1033,7 @@ func (h *BranchHandler) RevokeBranchAccess(c fiber.Ctx) error {
 
 	authType, _ := c.Locals("auth_type").(string)
 	userRole, _ := c.Locals("user_role").(string)
-	isAdmin := authType == "service_key" || userRole == "dashboard_admin" || userRole == "admin"
+	isAdmin := authType == "service_key" || userRole == "instance_admin" || userRole == "admin"
 
 	if !isAdmin && currentUserID != nil {
 		hasAccess, err := h.manager.GetStorage().HasAccess(c.RequestCtx(), branch.ID, *currentUserID, branching.BranchAccessAdmin)

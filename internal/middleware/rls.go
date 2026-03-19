@@ -73,7 +73,7 @@ func RLSMiddleware(config RLSConfig) fiber.Handler {
 		// Store RLS context for use in query execution
 		c.Locals("rls_user_id", userID)
 
-		// Map application role to database role (handles dashboard_admin -> service_role)
+		// Map application role to database role (handles instance_admin, tenant_service -> service_role)
 		// Important: Check for both non-nil AND non-empty string to avoid
 		// overwriting "authenticated" default with empty string (which maps to "anon")
 		if role := c.Locals("user_role"); role != nil {
@@ -101,10 +101,16 @@ func RLSMiddleware(config RLSConfig) fiber.Handler {
 // PostgreSQL-level security, and application roles (admin, user, etc.) for business logic
 func mapAppRoleToDatabaseRole(appRole string) string {
 	switch appRole {
-	case "service_role", "dashboard_admin":
-		// Service role and dashboard_admin map to service_role - has BYPASSRLS privilege
-		// Dashboard admins are Fluxbase platform admins and need full data access
+	case "service_role", "instance_admin":
+		// Service role and instance_admin map to service_role - has BYPASSRLS privilege
+		// Instance admins are Fluxbase platform admins and need full data access
 		return "service_role"
+	case "tenant_service":
+		return "tenant_service"
+	case "tenant_admin":
+		// Tenant admins map to authenticated - they respect RLS but have tenant context
+		// The tenant_id is set separately in the JWT claims for tenant-scoped access
+		return "authenticated"
 	case "anon", "":
 		// Anonymous or empty role maps to anon
 		return "anon"
@@ -475,7 +481,7 @@ func SetRLSContextWithTenant(ctx context.Context, tx pgx.Tx, userID, role string
 func WrapWithRLSAndTenant(ctx context.Context, conn *database.Connection, c fiber.Ctx, fn func(tx pgx.Tx) error) error {
 	// Get branch pool if available
 	pool := conn.Pool()
-	if branchPool := GetBranchPool(ctx); branchPool != nil {
+	if branchPool := GetBranchPool(c); branchPool != nil {
 		pool = branchPool
 	}
 

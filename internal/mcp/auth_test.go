@@ -560,8 +560,8 @@ func TestInferScopesFromRole(t *testing.T) {
 			expectedScopes: []string{"*"},
 		},
 		{
-			name:           "dashboard_admin gets wildcard",
-			role:           "dashboard_admin",
+			name:           "instance_admin gets wildcard",
+			role:           "instance_admin",
 			expectedScopes: []string{"*"},
 		},
 		{

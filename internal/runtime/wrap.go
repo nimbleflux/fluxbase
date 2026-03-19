@@ -320,7 +320,7 @@ const Fluxbase = {
     Deno.exit(1);
   }
 })();
-`, imports, embeddedSDK, string(reqJSON), string(reqJSON), codeWithoutImports, string(reqJSON))
+`, imports, embeddedSDK, string(reqJSON), string(reqJSON), string(reqJSON), codeWithoutImports, string(reqJSON))
 }
 
 // wrapJobCode wraps user code for job function execution
@@ -616,5 +616,5 @@ const Fluxbase = {
     Deno.exit(1);
   }
 })();
-`, imports, embeddedSDK, string(reqJSON), string(reqJSON), codeWithoutImports, string(reqJSON))
+`, imports, embeddedSDK, string(reqJSON), string(reqJSON), string(reqJSON), codeWithoutImports, string(reqJSON))
 }

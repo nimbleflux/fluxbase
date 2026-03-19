@@ -17,6 +17,14 @@ const providerSchema = z.enum([
 ])
 export type Provider = z.infer<typeof providerSchema>
 
+// Tenant assignment for dashboard users
+const tenantAssignmentSchema = z.object({
+  tenant_id: z.string(),
+  tenant_name: z.string(),
+  tenant_slug: z.string(),
+})
+export type TenantAssignment = z.infer<typeof tenantAssignmentSchema>
+
 // User schema matching the backend EnrichedUser struct
 const userSchema = z.object({
   id: z.string(),
@@ -31,6 +39,8 @@ const userSchema = z.object({
   app_metadata: z.record(z.string(), z.unknown()).nullable(),
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),
+  // Tenant assignments (only for platform/dashboard users with tenant_admin role)
+  tenant_assignments: z.array(tenantAssignmentSchema).optional(),
 })
 export type User = z.infer<typeof userSchema>
 

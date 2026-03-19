@@ -31,11 +31,6 @@ func NewGitHubWebhookHandler(manager *branching.Manager, router *branching.Route
 	}
 }
 
-// RegisterRoutes registers GitHub webhook routes
-func (h *GitHubWebhookHandler) RegisterRoutes(api fiber.Router) {
-	api.Post("/webhooks/github", h.HandleWebhook)
-}
-
 // GitHubWebhookPayload represents the common fields in GitHub webhook payloads
 type GitHubWebhookPayload struct {
 	Action       string              `json:"action"`

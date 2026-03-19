@@ -97,8 +97,8 @@ func NewCustomSettingsService(db *database.Connection, encryptionKey string) *Cu
 
 // CanEditSetting checks if the given role can edit a specific setting
 func CanEditSetting(editableBy []string, userRole string) bool {
-	// dashboard_admin, admin, and service_role can edit everything
-	if userRole == "dashboard_admin" || userRole == "admin" || userRole == "service_role" {
+	// instance_admin, admin, and service_role can edit everything
+	if userRole == "instance_admin" || userRole == "admin" || userRole == "service_role" {
 		return true
 	}
 
@@ -140,7 +140,7 @@ func (s *CustomSettingsService) CreateSetting(ctx context.Context, req CreateCus
 
 	// Set default editable_by if not provided
 	if len(req.EditableBy) == 0 {
-		req.EditableBy = []string{"dashboard_admin"}
+		req.EditableBy = []string{"instance_admin"}
 	}
 
 	// Default metadata to empty object if nil
@@ -429,7 +429,7 @@ func (s *CustomSettingsService) CreateSecretSetting(ctx context.Context, req Cre
 	err = s.db.QueryRow(ctx, `
 		INSERT INTO app.settings
 		(key, value, value_type, description, is_secret, encrypted_value, user_id, editable_by, category, created_by, updated_by)
-		VALUES ($1, $2, 'string', $3, true, $4, $5, ARRAY['dashboard_admin']::TEXT[], 'custom', $6, $6)
+		VALUES ($1, $2, 'string', $3, true, $4, $5, ARRAY['instance_admin']::TEXT[], 'custom', $6, $6)
 		RETURNING id, key, description, user_id, created_by, updated_by, created_at, updated_at
 	`, req.Key, valueJSON, req.Description, encryptedValue, userID, createdBy).Scan(
 		&metadata.ID,
@@ -1006,7 +1006,7 @@ func (s *CustomSettingsService) CreateSecretSettingWithTx(ctx context.Context, t
 	err = tx.QueryRow(ctx, `
 		INSERT INTO app.settings
 		(key, value, value_type, description, is_secret, encrypted_value, user_id, editable_by, category, created_by, updated_by)
-		VALUES ($1, $2, 'string', $3, true, $4, $5, ARRAY['dashboard_admin']::TEXT[], 'custom', $6, $6)
+		VALUES ($1, $2, 'string', $3, true, $4, $5, ARRAY['instance_admin']::TEXT[], 'custom', $6, $6)
 		RETURNING id, key, description, user_id, created_by, updated_by, created_at, updated_at
 	`, req.Key, valueJSON, req.Description, encryptedValue, userID, createdBy).Scan(
 		&metadata.ID,

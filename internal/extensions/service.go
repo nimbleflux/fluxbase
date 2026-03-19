@@ -58,9 +58,9 @@ func (s *Service) ListExtensions(ctx context.Context) (*ListExtensionsResponse, 
 			COALESCE(meta.created_at, NOW()) as created_at,
 			COALESCE(meta.updated_at, NOW()) as updated_at
 		FROM pg_available_extensions pg
-		LEFT JOIN dashboard.available_extensions meta
+		LEFT JOIN platform.available_extensions meta
 			ON pg.name = meta.name
-		LEFT JOIN dashboard.enabled_extensions ee
+		LEFT JOIN platform.enabled_extensions ee
 			ON pg.name = ee.extension_name AND ee.is_active = true
 		ORDER BY COALESCE(meta.category, 'utilities'), COALESCE(meta.display_name, pg.name)
 	`
@@ -146,7 +146,7 @@ func (s *Service) GetExtensionStatus(ctx context.Context, name string) (*Extensi
 	var isEnabled bool
 	err := s.db.QueryRow(ctx, `
 		SELECT COALESCE(
-			(SELECT is_active FROM dashboard.enabled_extensions
+			(SELECT is_active FROM platform.enabled_extensions
 			 WHERE extension_name = $1 AND is_active = true),
 			false
 		)
@@ -190,7 +190,7 @@ func (s *Service) EnableExtension(ctx context.Context, name string, userID *stri
 		// Extension is already installed in PostgreSQL, but ensure it's tracked
 		// This handles cases where extensions were installed manually or tracking failed
 		_, err = s.db.Exec(ctx, `
-			INSERT INTO dashboard.enabled_extensions (extension_name, enabled_by, is_active)
+			INSERT INTO platform.enabled_extensions (extension_name, enabled_by, is_active)
 			VALUES ($1, $2, true)
 			ON CONFLICT (extension_name) WHERE is_active = true
 			DO UPDATE SET enabled_at = NOW(), enabled_by = $2, error_message = NULL
@@ -255,7 +255,7 @@ func (s *Service) EnableExtension(ctx context.Context, name string, userID *stri
 
 	// Record in enabled_extensions table
 	_, err = s.db.Exec(ctx, `
-		INSERT INTO dashboard.enabled_extensions (extension_name, enabled_by, is_active)
+		INSERT INTO platform.enabled_extensions (extension_name, enabled_by, is_active)
 		VALUES ($1, $2, true)
 		ON CONFLICT (extension_name) WHERE is_active = true
 		DO UPDATE SET enabled_at = NOW(), enabled_by = $2, error_message = NULL
@@ -338,7 +338,7 @@ func (s *Service) DisableExtension(ctx context.Context, name string, userID *str
 
 	// Update enabled_extensions table
 	_, err = s.db.Exec(ctx, `
-		UPDATE dashboard.enabled_extensions
+		UPDATE platform.enabled_extensions
 		SET is_active = false, disabled_at = NOW(), disabled_by = $2
 		WHERE extension_name = $1 AND is_active = true
 	`, name, userID)
@@ -408,7 +408,7 @@ func (s *Service) getAvailableExtension(ctx context.Context, name string) (*Avai
 	err := s.db.QueryRow(ctx, `
 		SELECT id, name, display_name, COALESCE(description, ''), category,
 		       is_core, requires_restart, COALESCE(documentation_url, ''), created_at, updated_at
-		FROM dashboard.available_extensions
+		FROM platform.available_extensions
 		WHERE name = $1
 	`, name).Scan(
 		&ext.ID, &ext.Name, &ext.DisplayName, &ext.Description, &ext.Category,
@@ -426,7 +426,7 @@ func (s *Service) getAvailableExtension(ctx context.Context, name string) (*Avai
 // recordExtensionError records an error when enabling/disabling an extension fails
 func (s *Service) recordExtensionError(ctx context.Context, name string, userID *string, errorMsg string) {
 	_, err := s.db.Exec(ctx, `
-		INSERT INTO dashboard.enabled_extensions (extension_name, enabled_by, is_active, error_message)
+		INSERT INTO platform.enabled_extensions (extension_name, enabled_by, is_active, error_message)
 		VALUES ($1, $2, false, $3)
 		ON CONFLICT (extension_name) WHERE is_active = true
 		DO UPDATE SET error_message = $3, updated_at = NOW()
@@ -440,7 +440,7 @@ func (s *Service) recordExtensionError(ctx context.Context, name string, userID 
 func (s *Service) InitializeCoreExtensions(ctx context.Context) error {
 	// Get core extensions
 	rows, err := s.db.Query(ctx, `
-		SELECT name FROM dashboard.available_extensions WHERE is_core = true
+		SELECT name FROM platform.available_extensions WHERE is_core = true
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to query core extensions: %w", err)

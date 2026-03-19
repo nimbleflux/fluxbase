@@ -37,33 +37,9 @@ func NewMCPOAuthHandler(db *pgxpool.Pool, cfg *config.MCPConfig, authService *au
 	}
 }
 
-// RegisterRoutes registers OAuth routes
-// wellKnownGroup is for /.well-known endpoints (public, no auth)
-// mcpGroup is for /mcp/oauth/* endpoints
-func (h *MCPOAuthHandler) RegisterRoutes(app fiber.Router, mcpGroup fiber.Router) {
-	// Public discovery endpoints (no auth required)
-	app.Get("/.well-known/oauth-authorization-server", h.handleAuthorizationServerMetadata)
-	app.Get("/.well-known/oauth-protected-resource", h.handleProtectedResourceMetadata)
-	app.Get("/.well-known/oauth-protected-resource/mcp", h.handleProtectedResourceMetadata)
-
-	// OAuth endpoints (under /mcp/oauth/*)
-	oauth := mcpGroup.Group("/oauth")
-
-	// Dynamic Client Registration (public)
-	oauth.Post("/register", h.handleClientRegistration)
-
-	// Authorization endpoints
-	oauth.Get("/authorize", h.handleAuthorize)
-	oauth.Post("/authorize", h.handleAuthorizeConsent)
-
-	// Token endpoints
-	oauth.Post("/token", h.handleToken)
-	oauth.Post("/revoke", h.handleRevoke)
-}
-
-// handleAuthorizationServerMetadata returns OAuth 2.0 Authorization Server Metadata
+// HandleAuthorizationServerMetadata returns OAuth 2.0 Authorization Server Metadata
 // RFC 8414: https://datatracker.ietf.org/doc/html/rfc8414
-func (h *MCPOAuthHandler) handleAuthorizationServerMetadata(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleAuthorizationServerMetadata(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "OAuth is not enabled for MCP",
@@ -101,7 +77,7 @@ func (h *MCPOAuthHandler) handleAuthorizationServerMetadata(c fiber.Ctx) error {
 
 // handleProtectedResourceMetadata returns OAuth 2.0 Protected Resource Metadata
 // This tells clients where to get authorization
-func (h *MCPOAuthHandler) handleProtectedResourceMetadata(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleProtectedResourceMetadata(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "OAuth is not enabled for MCP",
@@ -120,7 +96,7 @@ func (h *MCPOAuthHandler) handleProtectedResourceMetadata(c fiber.Ctx) error {
 
 // handleClientRegistration handles Dynamic Client Registration (DCR)
 // RFC 7591: https://datatracker.ietf.org/doc/html/rfc7591
-func (h *MCPOAuthHandler) handleClientRegistration(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleClientRegistration(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled || !h.config.OAuth.DCREnabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":             "invalid_request",
@@ -214,7 +190,7 @@ func (h *MCPOAuthHandler) handleClientRegistration(c fiber.Ctx) error {
 }
 
 // handleAuthorize handles the authorization endpoint
-func (h *MCPOAuthHandler) handleAuthorize(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleAuthorize(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "OAuth is not enabled",
@@ -368,14 +344,14 @@ func (h *MCPOAuthHandler) handleAuthorize(c fiber.Ctx) error {
 }
 
 // handleAuthorizeConsent handles POST to authorization endpoint (consent form submission)
-func (h *MCPOAuthHandler) handleAuthorizeConsent(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleAuthorizeConsent(c fiber.Ctx) error {
 	// For now, redirect to GET handler
 	// In a full implementation, this would process user consent
-	return h.handleAuthorize(c)
+	return h.HandleAuthorize(c)
 }
 
 // handleToken handles the token endpoint
-func (h *MCPOAuthHandler) handleToken(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleToken(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "OAuth is not enabled",
@@ -614,7 +590,7 @@ func (h *MCPOAuthHandler) handleRefreshTokenGrant(c fiber.Ctx) error {
 }
 
 // handleRevoke handles token revocation
-func (h *MCPOAuthHandler) handleRevoke(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleRevoke(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "OAuth is not enabled",

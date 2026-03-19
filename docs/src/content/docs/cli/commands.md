@@ -1958,13 +1958,13 @@ Invite a new admin user via email.
 
 ```bash
 fluxbase admin users invite --email admin@example.com
-fluxbase admin users invite --email admin@example.com --role dashboard_admin
+fluxbase admin users invite --email admin@example.com --role instance_admin
 ```
 
 **Flags:**
 
 - `--email` - Email address to invite (required)
-- `--role` - Role for the new user: `dashboard_user` (default) or `dashboard_admin`
+- `--role` - Role for the new user: `tenant_admin` (default) or `instance_admin`
 
 #### `fluxbase admin users delete`
 

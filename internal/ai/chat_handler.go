@@ -284,8 +284,8 @@ func (h *ChatHandler) handleStartChat(ctx context.Context, chatCtx *ChatContext,
 
 	// Handle admin impersonation
 	if msg.ImpersonateUserID != "" {
-		// Only dashboard_admin can impersonate
-		if chatCtx.Role != "dashboard_admin" {
+		// Only instance_admin can impersonate
+		if chatCtx.Role != "instance_admin" {
 			h.sendError(chatCtx, "", "FORBIDDEN", "Only admins can impersonate users")
 			return
 		}

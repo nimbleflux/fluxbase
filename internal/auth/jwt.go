@@ -331,6 +331,50 @@ func (m *JWTManager) ValidateToken(tokenString string) (*TokenClaims, error) {
 	return claims, nil
 }
 
+// ValidateTokenWithSecret validates and parses a JWT token using a specific secret key
+// This is used for multi-tenant scenarios where each tenant may have a different JWT secret
+func (m *JWTManager) ValidateTokenWithSecret(tokenString, secretKey string) (*TokenClaims, error) {
+	if len(secretKey) < 32 {
+		return nil, errors.New("JWT secret key must be at least 32 characters")
+	}
+
+	secret := []byte(secretKey)
+	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+		// Verify signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidSignature
+		}
+		return secret, nil
+	})
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredToken
+		}
+		return nil, ErrInvalidToken
+	}
+
+	claims, ok := token.Claims.(*TokenClaims)
+	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	// Also parse the raw claims to capture custom claims not in TokenClaims struct
+	// This is needed for RLS policies that use custom claims (e.g., meeting_id, player_id)
+	rawToken, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return secret, nil
+	})
+	if rawToken != nil {
+		if mapClaims, ok := rawToken.Claims.(jwt.MapClaims); ok {
+			claims.RawClaims = make(map[string]interface{})
+			for k, v := range mapClaims {
+				claims.RawClaims[k] = v
+			}
+		}
+	}
+
+	return claims, nil
+}
+
 // ValidateAccessToken validates an access token specifically
 func (m *JWTManager) ValidateAccessToken(tokenString string) (*TokenClaims, error) {
 	claims, err := m.ValidateToken(tokenString)
@@ -528,6 +572,28 @@ func (m *JWTManager) GenerateServiceRoleToken() (string, error) {
 	return token.SignedString(m.secretKey)
 }
 
+// GenerateServiceRoleTokenWithTenant generates a JWT with service_role and tenant context
+func (m *JWTManager) GenerateServiceRoleTokenWithTenant(tenantID *string) (string, error) {
+	now := time.Now()
+
+	claims := &TokenClaims{
+		UserID:    "",             // No user for service role
+		Role:      "service_role", // Service role bypasses RLS
+		TokenType: "access",
+		TenantID:  tenantID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.serviceRoleTTL)),
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(m.secretKey)
+}
+
 // GenerateAnonToken generates a JWT with anon role for anonymous access
 func (m *JWTManager) GenerateAnonToken() (string, error) {
 	now := time.Now()
@@ -540,6 +606,28 @@ func (m *JWTManager) GenerateAnonToken() (string, error) {
 			Issuer:    m.issuer,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.anonTTL)), // Configurable, default 24h
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(m.secretKey)
+}
+
+// GenerateAnonTokenWithTenant generates a JWT with anon role and tenant context
+func (m *JWTManager) GenerateAnonTokenWithTenant(tenantID *string) (string, error) {
+	now := time.Now()
+
+	claims := &TokenClaims{
+		UserID:    "",     // No user for anon
+		Role:      "anon", // Anonymous role
+		TokenType: "access",
+		TenantID:  tenantID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.anonTTL)),
 			NotBefore: jwt.NewNumericDate(now),
 			ID:        uuid.New().String(),
 		},

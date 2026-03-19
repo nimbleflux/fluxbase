@@ -339,7 +339,7 @@ func GlobalAPILimiter(storage ...fiber.Storage) fiber.Handler {
 // DynamicGlobalAPILimiter creates a rate limiter that respects the dynamic setting
 // It checks the settings cache on each request, allowing real-time toggling of rate limiting
 // without server restart
-// Admin users (admin, dashboard_admin) are exempt from rate limiting
+// Admin users (admin, instance_admin) are exempt from rate limiting
 // service_role users can be rate-limited if service_role_rate_limit > 0
 func DynamicGlobalAPILimiter(settingsCache *auth.SettingsCache, storage ...fiber.Storage) fiber.Handler {
 	// Create the actual rate limiter once with optional shared storage
@@ -357,7 +357,7 @@ func DynamicGlobalAPILimiter(settingsCache *auth.SettingsCache, storage ...fiber
 		role := c.Locals("user_role")
 		if role != nil {
 			roleStr, ok := role.(string)
-			if ok && (roleStr == "admin" || roleStr == "dashboard_admin") {
+			if ok && (roleStr == "admin" || roleStr == "instance_admin") {
 				log.Debug().
 					Str("role", roleStr).
 					Str("path", c.Path()).

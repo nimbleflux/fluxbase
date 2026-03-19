@@ -38,7 +38,7 @@ func TestDashboardUser_Fields(t *testing.T) {
 		LastLoginAt:   &lastLogin,
 		CreatedAt:     now,
 		UpdatedAt:     now,
-		Role:          "dashboard_admin",
+		Role:          "instance_admin",
 	}
 
 	assert.NotEmpty(t, user.ID)
@@ -51,7 +51,7 @@ func TestDashboardUser_Fields(t *testing.T) {
 	assert.False(t, user.IsLocked)
 	assert.Nil(t, user.LockedUntil)
 	assert.NotNil(t, user.LastLoginAt)
-	assert.Equal(t, "dashboard_admin", user.Role)
+	assert.Equal(t, "instance_admin", user.Role)
 }
 
 func TestDashboardUser_NullableFields(t *testing.T) {

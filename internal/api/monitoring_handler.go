@@ -8,10 +8,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/jobs"
 	"github.com/nimbleflux/fluxbase/internal/logging"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/realtime"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 )
@@ -42,19 +40,6 @@ func (h *MonitoringHandler) SetLoggingService(loggingService *logging.Service) {
 // SetJobsStorage sets the jobs storage for job health monitoring
 func (h *MonitoringHandler) SetJobsStorage(jobsStorage *jobs.Storage) {
 	h.jobsStorage = jobsStorage
-}
-
-// RegisterRoutes registers monitoring routes with authentication
-func (h *MonitoringHandler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Apply authentication middleware to all monitoring routes
-	monitoring := app.Group("/api/v1/monitoring",
-		middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager),
-	)
-
-	// All monitoring routes require read:monitoring scope
-	monitoring.Get("/metrics", middleware.RequireScope(auth.ScopeMonitoringRead), h.GetMetrics)
-	monitoring.Get("/health", middleware.RequireScope(auth.ScopeMonitoringRead), h.GetHealth)
-	monitoring.Get("/logs", middleware.RequireScope(auth.ScopeMonitoringRead), h.GetLogs)
 }
 
 // SystemMetrics represents system-wide metrics
@@ -131,7 +116,7 @@ var startTime = time.Now()
 func (h *MonitoringHandler) GetMetrics(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view system metrics",
 		})
@@ -233,7 +218,7 @@ func (h *MonitoringHandler) GetMetrics(c fiber.Ctx) error {
 func (h *MonitoringHandler) GetHealth(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view system health",
 		})
@@ -357,7 +342,7 @@ type LogEntry struct {
 func (h *MonitoringHandler) GetLogs(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view logs",
 		})

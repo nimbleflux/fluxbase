@@ -254,7 +254,7 @@ func (h *VectorHandler) HandleEmbed(c fiber.Ctx) error {
 	if req.Provider != "" {
 		// Provider selection is admin-only
 		role, _ := c.Locals("user_role").(string)
-		isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+		isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 		if !isAdmin {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -688,7 +688,7 @@ func (h *VectorHandler) HandleGetCapabilities(c fiber.Ctx) error {
 
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+	isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 	// Non-admin users only get minimal info (enabled status)
 	if !isAdmin {

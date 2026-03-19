@@ -232,7 +232,7 @@ func (t *SearchVectorsTool) Execute(ctx context.Context, args map[string]any, au
 	}
 
 	// Check if user has admin access (service_role bypasses user filtering)
-	if authCtx.UserRole == "service_role" || authCtx.UserRole == "dashboard_admin" {
+	if authCtx.UserRole == "service_role" || authCtx.UserRole == "instance_admin" {
 		opts.IsAdmin = true
 	}
 

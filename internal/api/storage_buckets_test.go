@@ -296,7 +296,7 @@ func TestStorageHandler_DeleteBucket_MissingBucketName(t *testing.T) {
 }
 
 func TestStorageHandler_ListBuckets_RoleChecking(t *testing.T) {
-	// NOTE: Tests for admin roles (admin, dashboard_admin, service_role) removed
+	// NOTE: Tests for admin roles (admin, instance_admin, service_role) removed
 	// because they pass the role check but then panic when calling db.Pool().Begin()
 	// with nil db. Only testing forbidden cases that return early.
 	tests := []struct {
@@ -786,11 +786,11 @@ func TestStorageHandler_BucketNameValidation(t *testing.T) {
 // =============================================================================
 
 func BenchmarkListBucketsRoleCheck(b *testing.B) {
-	roles := []string{"admin", "dashboard_admin", "service_role", "authenticated", "anon"}
+	roles := []string{"admin", "instance_admin", "service_role", "authenticated", "anon"}
 
 	for i := 0; i < b.N; i++ {
 		role := roles[i%len(roles)]
-		_ = (role == "admin" || role == "dashboard_admin" || role == "service_role")
+		_ = (role == "admin" || role == "instance_admin" || role == "service_role")
 	}
 }
 

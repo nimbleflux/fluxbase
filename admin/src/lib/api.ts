@@ -6,6 +6,7 @@ import {
   clearTokens,
   type AdminUser,
 } from './auth'
+import { useTenantStore } from '@/stores/tenant-store'
 
 // Base URL for the API - priority order:
 // 1. Runtime config injected by server (FLUXBASE_PUBLIC_BASE_URL)
@@ -37,6 +38,17 @@ api.interceptors.request.use(
         config.headers.Authorization = `Bearer ${accessToken}`
       }
     }
+
+    // Add X-FB-Tenant header if a tenant is selected
+    try {
+      const currentTenant = useTenantStore.getState().currentTenant
+      if (currentTenant?.id) {
+        config.headers['X-FB-Tenant'] = currentTenant.id
+      }
+    } catch {
+      // Tenant store not available, skip header
+    }
+
     return config
   },
   (error) => {
@@ -3976,6 +3988,126 @@ export const serviceKeysApi = {
   },
 }
 
+// Platform Service Key Types (with key_type, tenant_id, is_config_managed)
+export interface PlatformServiceKey {
+  id: string
+  name: string
+  description?: string
+  key_type: 'anon' | 'publishable' | 'tenant_service' | 'global_service'
+  tenant_id?: string
+  key_prefix: string
+  scopes: string[]
+  allowed_namespaces?: string[]
+  rate_limit_per_minute?: number
+  is_active: boolean
+  is_config_managed: boolean
+  revoked_at?: string
+  revoked_by?: string
+  revocation_reason?: string
+  deprecated_at?: string
+  grace_period_ends_at?: string
+  replaced_by?: string
+  created_at: string
+  created_by?: string
+  updated_at: string
+  last_used_at?: string
+  expires_at?: string
+}
+
+export interface PlatformServiceKeyWithPlaintext extends PlatformServiceKey {
+  key?: string
+}
+
+export interface CreatePlatformServiceKeyRequest {
+  name: string
+  description?: string
+  key_type: 'anon' | 'publishable' | 'tenant_service' | 'global_service'
+  tenant_id?: string
+  scopes?: string[]
+  allowed_namespaces?: string[]
+  rate_limit_per_minute?: number
+  expires_at?: string
+}
+
+export interface UpdatePlatformServiceKeyRequest {
+  name?: string
+  description?: string
+  scopes?: string[]
+  allowed_namespaces?: string[]
+  is_active?: boolean
+  rate_limit_per_minute?: number
+}
+
+export interface RotatePlatformServiceKeyRequest {
+  grace_period_hours?: number
+  new_key_name?: string
+  new_scopes?: string[]
+}
+
+// Platform Service Keys API
+export const platformServiceKeysApi = {
+  list: async (): Promise<PlatformServiceKey[]> => {
+    const response = await api.get<PlatformServiceKey[]>('/api/v1/admin/platform/service-keys')
+    return response.data
+  },
+
+  get: async (id: string): Promise<PlatformServiceKey> => {
+    const response = await api.get<PlatformServiceKey>(
+      `/api/v1/admin/platform/service-keys/${id}`
+    )
+    return response.data
+  },
+
+  create: async (
+    request: CreatePlatformServiceKeyRequest
+  ): Promise<PlatformServiceKeyWithPlaintext> => {
+    const response = await api.post<PlatformServiceKeyWithPlaintext>(
+      '/api/v1/admin/platform/service-keys',
+      request
+    )
+    return response.data
+  },
+
+  update: async (
+    id: string,
+    request: UpdatePlatformServiceKeyRequest
+  ): Promise<{ success: boolean; message: string }> => {
+    const response = await api.patch<{ success: boolean; message: string }>(
+      `/api/v1/admin/platform/service-keys/${id}`,
+      request
+    )
+    return response.data
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/api/v1/admin/platform/service-keys/${id}`)
+  },
+
+  disable: async (id: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.post<{ success: boolean; message: string }>(
+      `/api/v1/admin/platform/service-keys/${id}/disable`
+    )
+    return response.data
+  },
+
+  enable: async (id: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.post<{ success: boolean; message: string }>(
+      `/api/v1/admin/platform/service-keys/${id}/enable`
+    )
+    return response.data
+  },
+
+  rotate: async (
+    id: string,
+    request: RotatePlatformServiceKeyRequest
+  ): Promise<PlatformServiceKeyWithPlaintext & { grace_period_ends_at: string }> => {
+    const response = await api.post<
+      PlatformServiceKeyWithPlaintext & { grace_period_ends_at: string }
+    >(`/api/v1/admin/platform/service-keys/${id}/rotate`, request)
+    return response.data
+  },
+}
+
 // Captcha Settings Types
 export interface CaptchaSettingsResponse {
   enabled: boolean
@@ -4465,6 +4597,118 @@ export interface PolicyTemplate {
   command: string
   using: string
   with_check: string
+}
+
+// ============================================
+// Tenant Management API Types
+// ============================================
+
+export interface Tenant {
+  id: string
+  slug: string
+  name: string
+  is_default: boolean
+  metadata?: Record<string, unknown>
+  created_at: string
+  updated_at?: string
+  deleted_at?: string
+}
+
+export interface TenantWithRole extends Tenant {
+  my_role?: 'tenant_admin' | 'tenant_member'
+}
+
+export interface TenantMembership {
+  id: string
+  tenant_id: string
+  user_id: string
+  role: 'tenant_admin' | 'tenant_member'
+  created_at: string
+  updated_at?: string
+  email?: string
+  user_role?: string
+}
+
+export interface CreateTenantRequest {
+  slug: string
+  name: string
+  metadata?: Record<string, unknown>
+}
+
+export interface UpdateTenantRequest {
+  name?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface AddMemberRequest {
+  user_id: string
+  role: 'tenant_admin' | 'tenant_member'
+}
+
+export interface UpdateMemberRequest {
+  role: 'tenant_admin' | 'tenant_member'
+}
+
+// Tenant Management API
+export const tenantsApi = {
+  list: async (): Promise<Tenant[]> => {
+    const response = await api.get<Tenant[]>('/api/v1/admin/tenants')
+    return response.data || []
+  },
+
+  listMine: async (): Promise<TenantWithRole[]> => {
+    const response = await api.get<TenantWithRole[]>('/api/v1/admin/tenants/mine')
+    return response.data || []
+  },
+
+  get: async (id: string): Promise<Tenant> => {
+    const response = await api.get<Tenant>(`/api/v1/admin/tenants/${id}`)
+    return response.data
+  },
+
+  create: async (data: CreateTenantRequest): Promise<Tenant> => {
+    const response = await api.post<Tenant>('/api/v1/admin/tenants', data)
+    return response.data
+  },
+
+  update: async (id: string, data: UpdateTenantRequest): Promise<Tenant> => {
+    const response = await api.patch<Tenant>(`/api/v1/admin/tenants/${id}`, data)
+    return response.data
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/api/v1/admin/tenants/${id}`)
+  },
+
+  listMembers: async (tenantId: string): Promise<TenantMembership[]> => {
+    const response = await api.get<TenantMembership[]>(
+      `/api/v1/admin/tenants/${tenantId}/members`
+    )
+    return response.data || []
+  },
+
+  addMember: async (
+    tenantId: string,
+    data: AddMemberRequest
+  ): Promise<TenantMembership> => {
+    const response = await api.post<TenantMembership>(
+      `/api/v1/admin/tenants/${tenantId}/members`,
+      data
+    )
+    return response.data
+  },
+
+  updateMemberRole: async (
+    tenantId: string,
+    userId: string,
+    data: UpdateMemberRequest
+  ): Promise<void> => {
+    await api.patch(`/api/v1/admin/tenants/${tenantId}/members/${userId}`, data)
+  },
+
+  removeMember: async (tenantId: string, userId: string): Promise<void> => {
+    await api.delete(`/api/v1/admin/tenants/${tenantId}/members/${userId}`)
+  },
 }
 
 // RLS Policy API

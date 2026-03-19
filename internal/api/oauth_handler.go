@@ -17,6 +17,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/crypto"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"
 )
@@ -124,10 +125,13 @@ func (h *OAuthHandler) Authorize(c fiber.Ctx) error {
 	// Get optional redirect_uri parameter for custom callback URL
 	redirectURI := c.Query("redirect_uri")
 
+	// Get tenant context for tenant-specific provider lookup
+	tenantID := middleware.GetTenantIDFromContext(c)
+
 	// Get OAuth provider configuration from database
-	oauthConfig, err := h.getProviderConfig(ctx, providerName)
+	oauthConfig, err := h.getProviderConfig(ctx, providerName, tenantID)
 	if err != nil {
-		log.Error().Err(err).Str("provider", providerName).Msg("Failed to get OAuth provider config")
+		log.Error().Err(err).Str("provider", providerName).Str("tenant_id", tenantID).Msg("Failed to get OAuth provider config")
 		return c.Status(400).JSON(fiber.Map{
 			"error": fmt.Sprintf("OAuth provider '%s' not configured or disabled", providerName),
 		})
@@ -224,8 +228,11 @@ func (h *OAuthHandler) Callback(c fiber.Ctx) error {
 		})
 	}
 
+	// Get tenant context for fiber context
+	tenantID := middleware.GetTenantIDFromContext(c)
+
 	// Get OAuth provider configuration
-	oauthConfig, err := h.getProviderConfig(ctx, providerName)
+	oauthConfig, err := h.getProviderConfig(ctx, providerName, tenantID)
 	if err != nil {
 		log.Error().Err(err).Str("provider", providerName).Msg("Failed to get OAuth provider config")
 		return c.Status(400).JSON(fiber.Map{
@@ -290,7 +297,7 @@ func (h *OAuthHandler) Callback(c fiber.Ctx) error {
 	var requiredClaimsJSON, deniedClaimsJSON []byte
 	err = h.db.QueryRow(ctx, `
 		SELECT required_claims, denied_claims
-		FROM dashboard.oauth_providers
+		FROM platform.oauth_providers
 		WHERE provider_name = $1 AND enabled = TRUE AND allow_app_login = TRUE
 	`, providerName).Scan(&requiredClaimsJSON, &deniedClaimsJSON)
 
@@ -394,7 +401,7 @@ func (h *OAuthHandler) ListEnabledProviders(c fiber.Ctx) error {
 	// SECURITY: Only list providers that allow app login
 	query := `
 		SELECT provider_name, display_name, redirect_url
-		FROM dashboard.oauth_providers
+		FROM platform.oauth_providers
 		WHERE enabled = TRUE AND allow_app_login = TRUE
 		ORDER BY display_name
 	`
@@ -431,15 +438,10 @@ func (h *OAuthHandler) ListEnabledProviders(c fiber.Ctx) error {
 // Helper functions
 
 // getProviderConfig retrieves OAuth configuration from database
-func (h *OAuthHandler) getProviderConfig(ctx context.Context, providerName string) (*oauth2.Config, error) {
+// Supports tenant-specific providers with fallback to platform-level providers
+func (h *OAuthHandler) getProviderConfig(ctx context.Context, providerName string, tenantID string) (*oauth2.Config, error) {
 	// SECURITY: Only allow providers that enable app login
-	query := `
-		SELECT client_id, client_secret, redirect_url, scopes,
-		       authorization_url, token_url, is_custom, allow_app_login,
-		       COALESCE(is_encrypted, false) AS is_encrypted
-		FROM dashboard.oauth_providers
-		WHERE provider_name = $1 AND enabled = TRUE
-	`
+	// Priority: tenant-specific provider > platform-level provider
 
 	var clientID, clientSecret, redirectURL string
 	var scopes []string
@@ -447,17 +449,47 @@ func (h *OAuthHandler) getProviderConfig(ctx context.Context, providerName strin
 	var isCustom bool
 	var allowAppLogin bool
 	var isEncrypted bool
+	var found bool
 
-	err := h.db.QueryRow(ctx, query, providerName).Scan(
-		&clientID, &clientSecret, &redirectURL, &scopes,
-		&authURL, &tokenURL, &isCustom, &allowAppLogin, &isEncrypted,
-	)
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("OAuth provider '%s' not found or disabled", providerName)
+	// First, try tenant-specific provider if tenant context is available
+	if tenantID != "" {
+		query := `
+			SELECT client_id, client_secret, redirect_url, scopes,
+			       authorization_url, token_url, is_custom, allow_app_login,
+			       COALESCE(is_encrypted, false) AS is_encrypted
+			FROM platform.oauth_providers
+			WHERE provider_name = $1 AND tenant_id = $2::uuid AND enabled = TRUE
+		`
+		err := h.db.QueryRow(ctx, query, providerName, tenantID).Scan(
+			&clientID, &clientSecret, &redirectURL, &scopes,
+			&authURL, &tokenURL, &isCustom, &allowAppLogin, &isEncrypted,
+		)
+		if err == nil {
+			found = true
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("failed to query tenant OAuth provider: %w", err)
+		}
 	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to query OAuth provider: %w", err)
+
+	// Fallback to platform-level provider if no tenant-specific provider found
+	if !found {
+		query := `
+			SELECT client_id, client_secret, redirect_url, scopes,
+			       authorization_url, token_url, is_custom, allow_app_login,
+			       COALESCE(is_encrypted, false) AS is_encrypted
+			FROM platform.oauth_providers
+			WHERE provider_name = $1 AND tenant_id IS NULL AND enabled = TRUE
+		`
+		err := h.db.QueryRow(ctx, query, providerName).Scan(
+			&clientID, &clientSecret, &redirectURL, &scopes,
+			&authURL, &tokenURL, &isCustom, &allowAppLogin, &isEncrypted,
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("OAuth provider '%s' not found or disabled", providerName)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to query OAuth provider: %w", err)
+		}
 	}
 
 	// SECURITY: Validate that provider allows app login
@@ -508,7 +540,7 @@ func (h *OAuthHandler) getUserInfo(ctx context.Context, providerName string, con
 
 	// Get user info URL from database
 	var userInfoURL *string
-	query := "SELECT user_info_url FROM dashboard.oauth_providers WHERE provider_name = $1"
+	query := "SELECT user_info_url FROM platform.oauth_providers WHERE provider_name = $1"
 	err := h.db.QueryRow(ctx, query, providerName).Scan(&userInfoURL)
 
 	if err != nil || userInfoURL == nil {
@@ -743,7 +775,7 @@ func (h *OAuthHandler) Logout(c fiber.Ctx) error {
 	err := h.db.QueryRow(ctx, `
 		SELECT client_id, client_secret, revocation_endpoint, end_session_endpoint,
 		       COALESCE(is_encrypted, false) AS is_encrypted
-		FROM dashboard.oauth_providers
+		FROM platform.oauth_providers
 		WHERE provider_name = $1 AND enabled = TRUE
 	`, providerName).Scan(&clientID, &clientSecret, &revocationEndpoint, &endSessionEndpoint, &isEncrypted)
 	if err != nil {
@@ -1119,7 +1151,7 @@ func (h *OAuthHandler) getProviderConfigForToken(ctx context.Context, providerNa
 		SELECT client_id, client_secret, redirect_url, scopes,
 		       authorization_url, token_url, is_custom,
 		       COALESCE(is_encrypted, false) AS is_encrypted
-		FROM dashboard.oauth_providers
+		FROM platform.oauth_providers
 		WHERE provider_name = $1 AND enabled = TRUE
 	`
 

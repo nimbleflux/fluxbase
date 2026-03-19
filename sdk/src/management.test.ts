@@ -476,12 +476,12 @@ describe('InvitationsManager', () => {
       expect(result.invite_link).toContain('/invite/')
     })
 
-    it('should create invitation for dashboard_admin', async () => {
+    it('should create invitation for instance_admin', async () => {
       const response: CreateInvitationResponse = {
         invitation: {
           id: 'invite-123',
           email: 'admin@example.com',
-          role: 'dashboard_admin',
+          role: 'instance_admin',
           invited_by: 'admin-123',
           expires_at: '2024-02-02T10:00:00Z',
           created_at: '2024-01-26T10:00:00Z',
@@ -495,10 +495,10 @@ describe('InvitationsManager', () => {
 
       const result = await manager.create({
         email: 'admin@example.com',
-        role: 'dashboard_admin',
+        role: 'instance_admin',
       })
 
-      expect(result.invitation.role).toBe('dashboard_admin')
+      expect(result.invitation.role).toBe('instance_admin')
       expect(result.email_sent).toBe(true)
     })
   })

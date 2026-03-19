@@ -25,13 +25,13 @@ func TestRoleSatisfiesRequirement(t *testing.T) {
 		{"service_role satisfies anon", "service_role", "anon", true},
 		{"service_role satisfies custom role", "service_role", "moderator", true},
 
-		// dashboard_admin can access everything (highest privilege)
-		{"dashboard_admin satisfies admin", "dashboard_admin", "admin", true},
-		{"dashboard_admin satisfies authenticated", "dashboard_admin", "authenticated", true},
-		{"dashboard_admin satisfies anon", "dashboard_admin", "anon", true},
-		{"dashboard_admin satisfies custom role", "dashboard_admin", "editor", true},
+		// instance_admin can access everything (highest privilege)
+		{"instance_admin satisfies admin", "instance_admin", "admin", true},
+		{"instance_admin satisfies authenticated", "instance_admin", "authenticated", true},
+		{"instance_admin satisfies anon", "instance_admin", "anon", true},
+		{"instance_admin satisfies custom role", "instance_admin", "editor", true},
 
-		// Admin can access everything except service_role/dashboard_admin level
+		// Admin can access everything except service_role/instance_admin level
 		{"admin satisfies admin", "admin", "admin", true},
 		{"admin satisfies authenticated", "admin", "authenticated", true},
 		{"admin satisfies anon", "admin", "anon", true},

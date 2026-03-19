@@ -7,7 +7,6 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
@@ -193,15 +192,4 @@ func (h *BulkOperationsHandler) handleBulkExport(c fiber.Ctx, ctx context.Contex
 		"count":   len(results),
 		"records": results,
 	})
-}
-
-// RegisterRoutes registers the bulk operations endpoints
-func (h *BulkOperationsHandler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Apply authentication middleware
-	bulk := app.Group("/api/v1/bulk",
-		middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager),
-	)
-
-	// Bulk operations require write scope
-	bulk.Post("", middleware.RequireScope(auth.ScopeTablesWrite), h.HandleBulkAction)
 }

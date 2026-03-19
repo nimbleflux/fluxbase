@@ -83,7 +83,7 @@ func (s *InvitationService) CreateInvitation(ctx context.Context, email, role st
 	}
 
 	err = s.db.QueryRow(ctx, `
-		INSERT INTO dashboard.invitation_tokens (id, email, token, role, invited_by, expires_at, accepted, created_at)
+		INSERT INTO platform.invitation_tokens (id, email, token, role, invited_by, expires_at, accepted, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, email, token, role, invited_by, expires_at, accepted, created_at
 	`,
@@ -118,7 +118,7 @@ func (s *InvitationService) ValidateToken(ctx context.Context, token string) (*I
 
 	err := s.db.QueryRow(ctx, `
 		SELECT id, email, token, role, invited_by, expires_at, accepted, accepted_at, created_at
-		FROM dashboard.invitation_tokens
+		FROM platform.invitation_tokens
 		WHERE token = $1
 	`, token).Scan(
 		&invitation.ID,
@@ -156,7 +156,7 @@ func (s *InvitationService) AcceptInvitation(ctx context.Context, token string) 
 	now := time.Now()
 
 	result, err := s.db.Exec(ctx, `
-		UPDATE dashboard.invitation_tokens
+		UPDATE platform.invitation_tokens
 		SET accepted = true, accepted_at = $1
 		WHERE token = $2 AND accepted = false AND expires_at > $1
 	`, now, token)
@@ -177,7 +177,7 @@ func (s *InvitationService) AcceptInvitation(ctx context.Context, token string) 
 // RevokeInvitation revokes (deletes) an invitation token
 func (s *InvitationService) RevokeInvitation(ctx context.Context, token string) error {
 	result, err := s.db.Exec(ctx, `
-		DELETE FROM dashboard.invitation_tokens WHERE token = $1
+		DELETE FROM platform.invitation_tokens WHERE token = $1
 	`, token)
 	if err != nil {
 		return err
@@ -194,7 +194,7 @@ func (s *InvitationService) RevokeInvitation(ctx context.Context, token string) 
 func (s *InvitationService) GetInvitationByEmail(ctx context.Context, email string) ([]InvitationToken, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT id, email, token, role, invited_by, expires_at, accepted, accepted_at, created_at
-		FROM dashboard.invitation_tokens
+		FROM platform.invitation_tokens
 		WHERE email = $1 AND accepted = false AND expires_at > NOW()
 		ORDER BY created_at DESC
 	`, email)
@@ -230,7 +230,7 @@ func (s *InvitationService) GetInvitationByEmail(ctx context.Context, email stri
 func (s *InvitationService) ListInvitations(ctx context.Context, includeAccepted, includeExpired bool) ([]InvitationToken, error) {
 	query := `
 		SELECT id, email, token, role, invited_by, expires_at, accepted, accepted_at, created_at
-		FROM dashboard.invitation_tokens
+		FROM platform.invitation_tokens
 		WHERE 1=1
 	`
 
@@ -278,7 +278,7 @@ func (s *InvitationService) ListInvitations(ctx context.Context, includeAccepted
 // CleanupExpiredInvitations removes expired invitation tokens
 func (s *InvitationService) CleanupExpiredInvitations(ctx context.Context) (int64, error) {
 	result, err := s.db.Exec(ctx, `
-		DELETE FROM dashboard.invitation_tokens
+		DELETE FROM platform.invitation_tokens
 		WHERE expires_at < NOW() AND accepted = false
 	`)
 	if err != nil {

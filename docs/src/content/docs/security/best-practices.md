@@ -132,7 +132,7 @@ CREATE POLICY user_isolation ON public.user_data
 
 ### 7. Service Role Security
 
-The `service_role` and `dashboard_admin` roles have unrestricted access to all database operations and bypass RLS policies. This is necessary for administrative tasks but requires strict security measures.
+The `service_role`, `instance_admin`, and `tenant_admin` roles have elevated access to database operations. `service_role` and `instance_admin` bypass all RLS policies for full platform access, while `tenant_admin` is scoped to assigned tenants. This is necessary for administrative tasks but requires strict security measures.
 
 **⚠️ CRITICAL SECURITY IMPLICATIONS:**
 
@@ -360,7 +360,8 @@ The GraphQL endpoint enforces PostgreSQL Row Level Security for all operations:
 **Role Mapping:**
 | Application Role | Database Role |
 |-----------------|---------------|
-| `service_role`, `dashboard_admin` | `service_role` (bypasses RLS) |
+| `service_role`, `instance_admin` | `service_role` (bypasses RLS) |
+| `tenant_admin` | `tenant_service` (tenant-scoped RLS) |
 | `anon`, empty | `anon` |
 | All others (`user`, `admin`, etc.) | `authenticated` |
 

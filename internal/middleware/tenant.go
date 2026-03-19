@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/rs/zerolog/log"
 )
@@ -23,11 +24,13 @@ var (
 type TenantConfig struct {
 	// DB is the database connection pool
 	DB *database.Connection
+	// ConfigLoader is the tenant configuration loader (optional)
+	ConfigLoader *config.TenantConfigLoader
 }
 
 // TenantMiddleware extracts tenant context from request
 // Precedence: X-FB-Tenant header > JWT claim > default tenant
-func TenantMiddleware(config TenantConfig) fiber.Handler {
+func TenantMiddleware(cfg TenantConfig) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Get user ID from context (set by auth middleware)
 		userID, _ := c.Locals("user_id").(string)
@@ -45,7 +48,7 @@ func TenantMiddleware(config TenantConfig) fiber.Handler {
 		if headerTenant := c.Get("X-FB-Tenant"); headerTenant != "" {
 			// Validate user is member of this tenant (if authenticated)
 			if userID != "" {
-				isMember, err := ValidateTenantMembership(c.Context(), config.DB, userID, headerTenant)
+				isMember, err := ValidateTenantMembership(c.Context(), cfg.DB, userID, headerTenant)
 				if err != nil {
 					log.Debug().Err(err).Str("tenant_id", headerTenant).Msg("Failed to validate tenant membership")
 				} else if isMember {
@@ -67,7 +70,7 @@ func TenantMiddleware(config TenantConfig) fiber.Handler {
 
 		// 3. Fall back to default tenant
 		if tenantID == "" {
-			defaultID, err := GetDefaultTenantID(c.Context(), config.DB)
+			defaultID, err := GetDefaultTenantID(c.Context(), cfg.DB)
 			if err != nil {
 				log.Debug().Err(err).Msg("Failed to get default tenant")
 			} else {
@@ -80,6 +83,23 @@ func TenantMiddleware(config TenantConfig) fiber.Handler {
 		c.Locals("tenant_id", tenantID)
 		c.Locals("tenant_source", tenantSource)
 
+		// Look up tenant slug and store tenant-specific config
+		if tenantID != "" && cfg.ConfigLoader != nil {
+			var slug string
+			err := cfg.DB.Pool().QueryRow(c.Context(),
+				"SELECT slug FROM platform.tenants WHERE id = $1::uuid",
+				tenantID,
+			).Scan(&slug)
+			if err != nil {
+				log.Debug().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant slug")
+			} else {
+				c.Locals("tenant_slug", slug)
+				// Get tenant-specific config
+				tenantConfig := cfg.ConfigLoader.GetConfigForSlug(slug)
+				c.Locals("tenant_config", tenantConfig)
+			}
+		}
+
 		// Get tenant role if we have a user and tenant
 		if userID != "" && tenantID != "" && claims != nil {
 			// Use tenant role from claims if available and tenant matches
@@ -87,7 +107,7 @@ func TenantMiddleware(config TenantConfig) fiber.Handler {
 				c.Locals("tenant_role", claims.TenantRole)
 			} else {
 				// Fetch tenant role from database
-				role, err := GetUserTenantRole(c.Context(), config.DB, userID, tenantID)
+				role, err := GetUserTenantRole(c.Context(), cfg.DB, userID, tenantID)
 				if err != nil {
 					log.Debug().Err(err).Msg("Failed to get tenant role")
 				} else if role != "" {
@@ -100,7 +120,7 @@ func TenantMiddleware(config TenantConfig) fiber.Handler {
 		if claims != nil && claims.IsInstanceAdmin {
 			c.Locals("is_instance_admin", true)
 		} else if userID != "" {
-			isAdmin, err := IsInstanceAdmin(c.Context(), config.DB, userID)
+			isAdmin, err := IsInstanceAdmin(c.Context(), cfg.DB, userID)
 			if err != nil {
 				log.Debug().Err(err).Msg("Failed to check instance admin status")
 			} else if isAdmin {
@@ -124,15 +144,14 @@ func ValidateTenantMembership(ctx context.Context, db *database.Connection, user
 	var isMember bool
 	err := db.Pool().QueryRow(ctx,
 		`SELECT EXISTS(
-			SELECT 1 FROM tenant_memberships tm
-			INNER JOIN tenants t ON t.id = tm.tenant_id
+			SELECT 1 FROM platform.tenant_memberships tm
+			INNER JOIN platform.tenants t ON t.id = tm.tenant_id
 			WHERE tm.user_id = $1::uuid
 			AND tm.tenant_id = $2::uuid
 			AND t.deleted_at IS NULL
 		)`,
 		userID, tenantID,
 	).Scan(&isMember)
-
 	if err != nil {
 		return false, fmt.Errorf("failed to check tenant membership: %w", err)
 	}
@@ -144,14 +163,13 @@ func ValidateTenantMembership(ctx context.Context, db *database.Connection, user
 func GetUserTenantRole(ctx context.Context, db *database.Connection, userID, tenantID string) (string, error) {
 	var role string
 	err := db.Pool().QueryRow(ctx,
-		`SELECT tm.role FROM tenant_memberships tm
-		INNER JOIN tenants t ON t.id = tm.tenant_id
+		`SELECT tm.role FROM platform.tenant_memberships tm
+		INNER JOIN platform.tenants t ON t.id = tm.tenant_id
 		WHERE tm.user_id = $1::uuid
 		AND tm.tenant_id = $2::uuid
 		AND t.deleted_at IS NULL`,
 		userID, tenantID,
 	).Scan(&role)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
@@ -166,9 +184,8 @@ func GetUserTenantRole(ctx context.Context, db *database.Connection, userID, ten
 func GetDefaultTenantID(ctx context.Context, db *database.Connection) (string, error) {
 	var id string
 	err := db.Pool().QueryRow(ctx,
-		`SELECT id::text FROM tenants WHERE is_default = true AND deleted_at IS NULL LIMIT 1`,
+		`SELECT id::text FROM platform.tenants WHERE is_default = true AND deleted_at IS NULL LIMIT 1`,
 	).Scan(&id)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrTenantNotFound
@@ -184,7 +201,7 @@ func IsInstanceAdmin(ctx context.Context, db *database.Connection, userID string
 	var isAdmin bool
 	err := db.Pool().QueryRow(ctx,
 		`SELECT EXISTS(
-			SELECT 1 FROM dashboard.users
+			SELECT 1 FROM platform.users
 			WHERE id = $1::uuid
 			AND role = 'instance_admin'
 			AND deleted_at IS NULL
@@ -192,7 +209,6 @@ func IsInstanceAdmin(ctx context.Context, db *database.Connection, userID string
 		)`,
 		userID,
 	).Scan(&isAdmin)
-
 	if err != nil {
 		return false, fmt.Errorf("failed to check instance admin: %w", err)
 	}
@@ -216,13 +232,22 @@ func SetTenantSessionContext(ctx context.Context, tx pgx.Tx, tenantID string) er
 }
 
 // RequireTenantRole creates a middleware that requires a specific tenant role
+// If the user is an instance admin AND has a tenant context set, they are treated as a tenant admin
 func RequireTenantRole(requiredRole string) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
-		if isInstanceAdmin {
+		tenantID, _ := c.Locals("tenant_id").(string)
+		tenantSource, _ := c.Locals("tenant_source").(string)
+
+		// Check if instance admin is acting as tenant admin (has explicit tenant context)
+		actingAsTenantAdmin := tenantID != "" && (tenantSource == "header" || tenantSource == "jwt")
+
+		// Instance admin without tenant context can bypass tenant role checks
+		if isInstanceAdmin && !actingAsTenantAdmin {
 			return c.Next()
 		}
 
+		// Otherwise, require proper tenant role
 		tenantRole, _ := c.Locals("tenant_role").(string)
 		if tenantRole == "" {
 			return fiber.NewError(fiber.StatusForbidden, "tenant membership required")
@@ -237,12 +262,24 @@ func RequireTenantRole(requiredRole string) fiber.Handler {
 }
 
 // RequireInstanceAdmin creates a middleware that requires instance admin role
+// This will DENY access if the user is acting as a tenant admin (has a tenant context set)
 func RequireInstanceAdmin() fiber.Handler {
 	return func(c fiber.Ctx) error {
 		isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
 		if !isInstanceAdmin {
 			return fiber.NewError(fiber.StatusForbidden, "instance admin role required")
 		}
+
+		// Check if user is acting as tenant admin (has a tenant context set)
+		// If so, deny access to instance-admin-only endpoints
+		tenantID, _ := c.Locals("tenant_id").(string)
+		tenantSource, _ := c.Locals("tenant_source").(string)
+
+		// If tenant context was explicitly set (via header or JWT), user is acting as tenant admin
+		if tenantID != "" && (tenantSource == "header" || tenantSource == "jwt") {
+			return fiber.NewError(fiber.StatusForbidden, "instance admin access not available when acting as tenant admin")
+		}
+
 		return c.Next()
 	}
 }
@@ -250,8 +287,8 @@ func RequireInstanceAdmin() fiber.Handler {
 // GetUserTenantIDs gets all tenant IDs that a user is a member of
 func GetUserTenantIDs(ctx context.Context, db *database.Connection, userID string) ([]string, error) {
 	rows, err := db.Pool().Query(ctx,
-		`SELECT tm.tenant_id::text FROM tenant_memberships tm
-		INNER JOIN tenants t ON t.id = tm.tenant_id
+		`SELECT tm.tenant_id::text FROM platform.tenant_memberships tm
+		INNER JOIN platform.tenants t ON t.id = tm.tenant_id
 		WHERE tm.user_id = $1::uuid
 		AND t.deleted_at IS NULL
 		ORDER BY t.name`,
@@ -272,4 +309,31 @@ func GetUserTenantIDs(ctx context.Context, db *database.Connection, userID strin
 	}
 
 	return tenantIDs, nil
+}
+
+// GetTenantIDFromContext extracts the tenant ID from fiber context locals
+// Returns empty string if not set
+func GetTenantIDFromContext(c fiber.Ctx) string {
+	tenantID, _ := c.Locals("tenant_id").(string)
+	return tenantID
+}
+
+// GetTenantSourceFromContext extracts the tenant source from fiber context locals
+// Returns empty string if not set (possible values: "header", "jwt", "default")
+func GetTenantSourceFromContext(c fiber.Ctx) string {
+	source, _ := c.Locals("tenant_source").(string)
+	return source
+}
+
+// GetTenantRoleFromContext extracts the user's tenant role from fiber context locals
+// Returns empty string if not set (possible values: "tenant_admin", "tenant_member")
+func GetTenantRoleFromContext(c fiber.Ctx) string {
+	role, _ := c.Locals("tenant_role").(string)
+	return role
+}
+
+// IsInstanceAdminFromContext checks if the user is an instance admin from fiber context
+func IsInstanceAdminFromContext(c fiber.Ctx) bool {
+	isAdmin, _ := c.Locals("is_instance_admin").(bool)
+	return isAdmin
 }

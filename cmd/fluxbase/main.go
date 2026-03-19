@@ -12,10 +12,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nimbleflux/fluxbase/internal/api"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/keys"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -180,8 +183,27 @@ func main() {
 		log.Warn().Err(err).Msg("Failed to recreate connection pool, continuing with existing pool")
 	}
 
+	// Ensure default tenant and service keys exist
+	log.Info().Msg("Initializing default tenant and service keys...")
+	if err := ensureDefaultTenantAndKeys(db.Pool(), cfg); err != nil {
+		log.Warn().Err(err).Msg("Failed to initialize default tenant and keys - continuing startup")
+	}
+
+	// Initialize tenant config loader for multi-tenant configuration overrides
+	tenantConfigLoader, err := config.NewTenantConfigLoader(cfg)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to load tenant configurations")
+	}
+	log.Info().
+		Int("tenant_configs", len(tenantConfigLoader.GetLoadedSlugs())).
+		Str("config_dir", cfg.Tenants.ConfigDir).
+		Msg("Tenant configuration loader initialized")
+
 	// Initialize API server
 	server := api.NewServer(cfg, db, Version)
+
+	// Set tenant config loader for multi-tenant config overrides
+	server.SetTenantConfigLoader(tenantConfigLoader)
 
 	// Generate and set service role and anon keys for edge functions
 	// These are JWT tokens that edge functions can use to call the Fluxbase API
@@ -196,8 +218,11 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to create JWT manager")
 	}
 
+	// Get default tenant ID for JWT claims
+	defaultTenantID := getDefaultTenantID(db.Pool())
+
 	// Generate service role token (full admin access, bypasses RLS)
-	serviceRoleKey, err := jwtManager.GenerateServiceRoleToken()
+	serviceRoleKey, err := jwtManager.GenerateServiceRoleTokenWithTenant(defaultTenantID)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to generate service role key")
 	} else {
@@ -208,7 +233,7 @@ func main() {
 	}
 
 	// Generate anon token (public access)
-	anonKey, err := jwtManager.GenerateAnonToken()
+	anonKey, err := jwtManager.GenerateAnonTokenWithTenant(defaultTenantID)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to generate anon key")
 	} else {
@@ -442,4 +467,210 @@ func getEmailProviderInfo(email config.EmailConfig) string {
 		return fmt.Sprintf("smtp (%s:%d)", email.SMTPHost, email.SMTPPort)
 	}
 	return email.Provider
+}
+
+// ensureDefaultTenantAndKeys ensures the default tenant and service keys exist
+func ensureDefaultTenantAndKeys(pool *pgxpool.Pool, cfg *config.Config) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var tenantID uuid.UUID
+	var tenantExists bool
+
+	// Check if default tenant exists
+	err := pool.QueryRow(ctx,
+		"SELECT id, true FROM platform.tenants WHERE slug = 'default' AND deleted_at IS NULL",
+	).Scan(&tenantID, &tenantExists)
+	if err != nil && err.Error() != "no rows in result set" {
+		// Try alternative error check for pgx
+		if !isNoRowsError(err) {
+			return fmt.Errorf("failed to check for default tenant: %w", err)
+		}
+	}
+
+	if !tenantExists {
+		// Create default tenant
+		tenantName := cfg.Tenants.Default.Name
+		if tenantName == "" {
+			tenantName = "Default"
+		}
+
+		err := pool.QueryRow(ctx,
+			"INSERT INTO platform.tenants (slug, name, is_default) VALUES ('default', $1, true) RETURNING id",
+			tenantName,
+		).Scan(&tenantID)
+		if err != nil {
+			return fmt.Errorf("failed to create default tenant: %w", err)
+		}
+		log.Info().Str("id", tenantID.String()).Msg("Created default tenant")
+	} else {
+		log.Debug().Str("id", tenantID.String()).Msg("Default tenant already exists")
+	}
+
+	// Handle service key
+	if err := ensureServiceKey(ctx, pool, cfg, tenantID, keys.KeyTypeTenantService); err != nil {
+		return fmt.Errorf("failed to ensure service key: %w", err)
+	}
+
+	// Handle anon key
+	if err := ensureServiceKey(ctx, pool, cfg, tenantID, keys.KeyTypeAnon); err != nil {
+		return fmt.Errorf("failed to ensure anon key: %w", err)
+	}
+
+	return nil
+}
+
+// ensureServiceKey ensures a service key exists for the given type
+func ensureServiceKey(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, tenantID uuid.UUID, keyType string) error {
+	var configKey string
+	var keyName string
+
+	switch keyType {
+	case keys.KeyTypeTenantService:
+		configKey = cfg.Tenants.Default.ServiceKey
+		if cfg.Tenants.Default.ServiceKeyFile != "" {
+			if data, err := os.ReadFile(cfg.Tenants.Default.ServiceKeyFile); err == nil {
+				configKey = strings.TrimSpace(string(data))
+			} else {
+				log.Warn().Err(err).Str("file", cfg.Tenants.Default.ServiceKeyFile).Msg("Failed to read service key file")
+			}
+		}
+		keyName = "Default Service Key"
+	case keys.KeyTypeAnon:
+		configKey = cfg.Tenants.Default.AnonKey
+		if cfg.Tenants.Default.AnonKeyFile != "" {
+			if data, err := os.ReadFile(cfg.Tenants.Default.AnonKeyFile); err == nil {
+				configKey = strings.TrimSpace(string(data))
+			} else {
+				log.Warn().Err(err).Str("file", cfg.Tenants.Default.AnonKeyFile).Msg("Failed to read anon key file")
+			}
+		}
+		keyName = "Default Anon Key"
+	default:
+		return fmt.Errorf("unsupported key type: %s", keyType)
+	}
+
+	// Check for existing key of this type for this tenant
+	var existingKeyID uuid.UUID
+	var existingKeyHash string
+	err := pool.QueryRow(ctx,
+		"SELECT id, key_hash FROM platform.service_keys WHERE tenant_id = $1 AND key_type = $2 AND is_active = true AND revoked_at IS NULL",
+		tenantID, keyType,
+	).Scan(&existingKeyID, &existingKeyHash)
+	hasExistingKey := err == nil
+
+	if configKey != "" {
+		// Config-managed key provided
+		keyHash, err := keys.HashKey(configKey)
+		if err != nil {
+			return fmt.Errorf("failed to hash config key: %w", err)
+		}
+
+		if hasExistingKey {
+			// Check if hash matches
+			if keys.VerifyKey(configKey, existingKeyHash) {
+				log.Debug().Str("type", keyType).Msg("Config-managed key already stored")
+				return nil
+			}
+			// Key changed, deactivate old and create new
+			_, err := pool.Exec(ctx,
+				"UPDATE platform.service_keys SET is_active = false WHERE id = $1",
+				existingKeyID,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to deactivate old key: %w", err)
+			}
+		}
+
+		// Insert new config-managed key
+		keyPrefix := keys.ExtractPrefix(configKey)
+		_, err = pool.Exec(ctx,
+			`INSERT INTO platform.service_keys 
+			(key_type, tenant_id, name, key_hash, key_prefix, is_active, is_config_managed, scopes, rate_limit_per_minute)
+			VALUES ($1, $2, $3, $4, $5, true, true, $6, $7)`,
+			keyType, tenantID, keyName, keyHash, keyPrefix, getDefaultScopes(keyType), getDefaultRateLimit(keyType),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert config-managed key: %w", err)
+		}
+
+		log.Info().Str("type", keyType).Msg("Stored config-managed key")
+		return nil
+	}
+
+	// No config key provided
+	if hasExistingKey {
+		log.Debug().Str("type", keyType).Msg("Service key already exists")
+		return nil
+	}
+
+	// Generate new key
+	fullKey, keyHash, keyPrefix, err := keys.GenerateKey(keyType)
+	if err != nil {
+		return fmt.Errorf("failed to generate key: %w", err)
+	}
+
+	// Insert generated key
+	_, err = pool.Exec(ctx,
+		`INSERT INTO platform.service_keys 
+		(key_type, tenant_id, name, key_hash, key_prefix, is_active, is_config_managed, scopes, rate_limit_per_minute)
+		VALUES ($1, $2, $3, $4, $5, true, false, $6, $7)`,
+		keyType, tenantID, keyName, keyHash, keyPrefix, getDefaultScopes(keyType), getDefaultRateLimit(keyType),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert generated key: %w", err)
+	}
+
+	// Display generated key once at WARN level for visibility
+	log.Warn().
+		Str("type", keyType).
+		Str("key", fullKey).
+		Msg("Generated new service key - save this key securely, it will not be shown again")
+
+	return nil
+}
+
+// getDefaultScopes returns default scopes for a key type
+func getDefaultScopes(keyType string) []string {
+	switch keyType {
+	case keys.KeyTypeTenantService:
+		return []string{"*"}
+	case keys.KeyTypeAnon:
+		return []string{"read"}
+	default:
+		return []string{}
+	}
+}
+
+// getDefaultRateLimit returns default rate limit for a key type
+func getDefaultRateLimit(keyType string) int {
+	switch keyType {
+	case keys.KeyTypeTenantService:
+		return 10000
+	case keys.KeyTypeAnon:
+		return 60
+	default:
+		return 60
+	}
+}
+
+// getDefaultTenantID returns the default tenant ID
+func getDefaultTenantID(pool *pgxpool.Pool) *string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var tenantID string
+	err := pool.QueryRow(ctx,
+		"SELECT id::text FROM platform.tenants WHERE slug = 'default' AND deleted_at IS NULL",
+	).Scan(&tenantID)
+	if err != nil {
+		log.Debug().Err(err).Msg("Failed to get default tenant ID")
+		return nil
+	}
+	return &tenantID
+}
+
+// isNoRowsError checks if the error is a "no rows" error
+func isNoRowsError(err error) bool {
+	return err != nil && (err.Error() == "no rows in result set" || strings.Contains(err.Error(), "no rows"))
 }

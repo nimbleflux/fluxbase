@@ -46,7 +46,7 @@ type RLSContext struct {
 // This is a copy of the middleware function to avoid import cycles
 func mapAppRoleToDatabaseRole(appRole string) string {
 	switch appRole {
-	case "service_role", "dashboard_admin":
+	case "service_role", "instance_admin":
 		return "service_role"
 	case "anon", "":
 		return "anon"

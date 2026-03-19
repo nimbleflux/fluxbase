@@ -112,6 +112,7 @@ type Server struct {
 	secretsHandler         *secrets.Handler
 	secretsStorage         *secrets.Storage
 	serviceKeyHandler      *ServiceKeyHandler
+	tenantHandler          *TenantHandler
 	schemaExportHandler    *SchemaExportHandler
 	mcpHandler             *mcp.Handler
 	mcpOAuthHandler        *MCPOAuthHandler
@@ -151,6 +152,9 @@ type Server struct {
 	// Test transaction support (for HTTP API tests with transaction isolation)
 	// When set, HTTP requests use this transaction instead of the connection pool
 	testTx pgx.Tx
+
+	// Tenant configuration loader for multi-tenant config overrides
+	tenantConfigLoader *config.TenantConfigLoader
 }
 
 // NewServer creates a new HTTP server
@@ -243,14 +247,17 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	// the 'allow_user_client_keys' setting check during client key validation
 	clientKeyService := auth.NewClientKeyService(db.Pool(), nil)
 
-	// Initialize storage service (use public URL for signed URLs that users will access)
-	storageService, err := storage.NewService(&cfg.Storage, cfg.GetPublicBaseURL(), cfg.Auth.JWTSecret)
+	// Initialize storage manager (use public URL for signed URLs that users will access)
+	storageManager, err := storage.NewManager(&cfg.Storage, cfg.GetPublicBaseURL(), cfg.Auth.JWTSecret)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize storage service")
+		log.Fatal().Err(err).Msg("Failed to initialize storage manager")
 	}
 
+	// Get base service for backward compatibility
+	storageService := storageManager.GetBaseService()
+
 	// Ensure default buckets exist
-	if err := storageService.EnsureDefaultBuckets(context.Background()); err != nil {
+	if err := storageManager.EnsureDefaultBuckets(context.Background()); err != nil {
 		log.Warn().Err(err).Msg("Failed to ensure default buckets")
 	}
 
@@ -352,6 +359,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	ddlHandler := NewDDLHandler(db)
 	realtimeAdminHandler := NewRealtimeAdminHandler(db)
 	serviceKeyHandler := NewServiceKeyHandler(db.Pool())
+	tenantHandler := NewTenantHandler(db)
 	oauthProviderHandler := NewOAuthProviderHandler(db.Pool(), authService.GetSettingsCache(), cfg.EncryptionKey, cfg.GetPublicBaseURL(), cfg.Auth.OAuthProviders)
 	jwtManager, err := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiry, cfg.Auth.RefreshExpiry)
 	if err != nil {
@@ -781,6 +789,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		secretsHandler:         secretsHandler,
 		secretsStorage:         secretsStorage,
 		serviceKeyHandler:      serviceKeyHandler,
+		tenantHandler:          tenantHandler,
 		schemaExportHandler:    schemaExportHandler,
 		mcpHandler:             mcp.NewHandler(&cfg.MCP, db),
 		mcpOAuthHandler:        NewMCPOAuthHandler(db.Pool(), &cfg.MCP, authService, cfg.BaseURL, cfg.GetPublicBaseURL()),
@@ -791,6 +800,9 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		rateLimiter:             rateLimitStore,
 		pubSub:                  ps,
 		sharedMiddlewareStorage: sharedMiddlewareStorage,
+
+		// Tenant configuration loader for multi-tenant config overrides
+		tenantConfigLoader: nil, // Initialized later after migrations
 	}
 
 	// Initialize MCP Server if enabled
@@ -1497,457 +1509,35 @@ func (s *Server) setupMiddlewares() {
 
 // setupRoutes sets up all routes
 func (s *Server) setupRoutes() {
-	// Root path - simple health response
-	s.app.Get("/", func(c fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"status": "ok",
-		})
-	})
+	s.auditRoutesAtStartup()
 
-	// Health check endpoint
-	s.app.Get("/health", s.handleHealth)
-
-	// API v1 routes - versioned for future compatibility
-	v1 := s.app.Group("/api/v1")
-
-	// Setup RLS middleware (before REST API routes)
-	rlsConfig := middleware.RLSConfig{
-		DB: s.db,
+	if err := s.registerRoutesViaRegistry(); err != nil {
+		log.Fatal().Err(err).Msg("Failed to setup routes via registry")
 	}
 
-	// REST API routes (auto-generated from database schema)
-	// Required authentication (JWT, API key, or service key) - rejects unauthenticated requests
-	// Metadata listing (GET /) requires admin role; data operations use RLS filtering
-	// Pass jwtManager to support dashboard admin tokens (maps to service_role for full access)
-	// BranchContext middleware enables queries against non-main branches via X-Fluxbase-Branch header
-	restMiddlewares := []any{
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager),
-		middleware.RLSMiddleware(rlsConfig),
-	}
-	// Add branch context middleware if branching is enabled
-	if s.branchRouter != nil {
-		restMiddlewares = append(restMiddlewares, middleware.BranchContextSimple(s.branchRouter))
-	}
-	// Add ETag middleware for conditional requests (304 Not Modified)
-	restMiddlewares = append(restMiddlewares, middleware.ETagWithConfig(middleware.ETagConfig{
-		Weak:              true,
-		SkipPaths:         []string{}, // Don't skip any paths within /tables
-		IncludeMethods:    []string{"GET"},
-		EnableConditional: true,
-	}))
-	rest := v1.Group("/tables", restMiddlewares...)
-	s.setupRESTRoutes(rest)
-
-	// Auth routes with CSRF protection
-	// CSRF middleware protects against cross-site request forgery attacks
-	csrfMiddleware := middleware.CSRF(middleware.CSRFConfig{
-		TokenLength:    32,
-		TokenLookup:    "header:X-CSRF-Token",
-		CookieName:     "csrf_token",
-		CookiePath:     "/",
-		CookieSecure:   s.config.Tracing.Environment == "production",
-		CookieHTTPOnly: true,
-		CookieSameSite: "Strict",
-		Expiration:     24 * time.Hour,
-	})
-
-	// Dashboard auth routes (separate from application auth)
-	// IMPORTANT: Must be registered BEFORE app auth routes so dashboard OAuth/SAML handlers
-	// can check state ownership and call c.Next() if not theirs
-	s.dashboardAuthHandler.RegisterRoutes(s.app)
-
-	authRoutes := v1.Group("/auth", csrfMiddleware)
-	s.setupAuthRoutes(authRoutes)
-
-	// Public settings routes - optional authentication with RLS support
-	// These routes respect app.settings RLS policies based on is_public and is_secret flags
-	settings := v1.Group("/settings", OptionalAuthMiddleware(s.authHandler.authService))
-	settings.Get("/:key", s.settingsHandler.GetSetting)
-	settings.Post("/batch", s.settingsHandler.GetSettings)
-
-	// User secret settings routes - require authentication
-	// Users can only access their own secrets (encrypted, server-side decryption only)
-	userSecrets := v1.Group("/settings/secret",
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-	)
-	userSecrets.Post("/", s.userSettingsHandler.CreateSecret)
-	userSecrets.Get("/", s.userSettingsHandler.ListSecrets)
-	userSecrets.Get("/*", s.userSettingsHandler.GetSecret)
-	userSecrets.Put("/*", s.userSettingsHandler.UpdateSecret)
-	userSecrets.Delete("/*", s.userSettingsHandler.DeleteSecret)
-
-	// User settings routes - require authentication
-	// Non-encrypted user settings with user -> system fallback support
-	// Mirrors edge function secrets helper pattern for regular settings
-	userSettings := v1.Group("/settings/user",
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-	)
-	userSettings.Get("/list", s.userSettingsHandler.ListSettings)                  // List user's own settings
-	userSettings.Get("/own/:key", s.userSettingsHandler.GetUserOwnSetting)         // Get user's own only
-	userSettings.Get("/system/:key", s.userSettingsHandler.GetSystemSettingPublic) // Get system setting
-	userSettings.Get("/:key", s.userSettingsHandler.GetSetting)                    // Get with user -> system fallback
-	userSettings.Put("/:key", s.userSettingsHandler.SetSetting)                    // Create/update user setting
-	userSettings.Delete("/:key", s.userSettingsHandler.DeleteSetting)              // Delete user setting
-
-	// client keys routes - require authentication
-	// When 'allow_user_client_keys' setting is disabled, only admins can manage keys
-	s.clientKeyHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager, s.authHandler.authService.GetSettingsCache())
-
-	// Secrets routes - require authentication
-	s.secretsHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-
-	// Custom MCP tools/resources routes - require admin authentication
-	if s.customMCPHandler != nil && s.config.MCP.Enabled {
-		s.customMCPHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-	}
-
-	// Webhook routes - require authentication
-	s.webhookHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-
-	// Monitoring routes - require authentication
-	s.monitoringHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-
-	// Edge functions routes - require authentication by default, but per-function config can override
-	// Protected by feature flag middleware
-	s.functionsHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-
-	// Jobs routes - require authentication
-	// Protected by feature flag middleware
-	// Note: Admin routes are registered in setupAdminRoutes with proper auth middleware
-	if s.jobsHandler != nil {
-		s.jobsHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-	}
-
-	// Internal AI routes - for custom MCP tools, edge functions, and jobs
-	// These endpoints allow runtime code to access AI capabilities via utils.ai.chat() and utils.ai.embed()
-	// SECURITY: Restricted to localhost only + service token authentication
-	// Only server-side runtimes (MCP tools, edge functions, jobs) can access these endpoints
-	if s.internalAIHandler != nil && s.config.AI.Enabled {
-		internalAI := v1.Group("/internal/ai",
-			middleware.RequireInternal(), // Localhost only - prevents external access
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager),
-		)
-		internalAI.Post("/chat", s.internalAIHandler.HandleChat)
-		internalAI.Post("/embed", s.internalAIHandler.HandleEmbed)
-		internalAI.Get("/providers", s.internalAIHandler.HandleListProviders)
-		log.Debug().Msg("Internal AI routes registered for MCP tools/functions/jobs (localhost only)")
-	}
-
-	// Storage routes - optional authentication (allows unauthenticated access to public buckets)
-	// Protected by feature flag middleware
-	// BranchContext middleware enables storage operations against non-main branches
-	storageMiddlewares := []any{
-		middleware.RequireStorageEnabled(s.authHandler.authService.GetSettingsCache()),
-		middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.DB()),
-	}
-	if s.branchRouter != nil {
-		storageMiddlewares = append(storageMiddlewares, middleware.BranchContextSimple(s.branchRouter))
-	}
-	storage := v1.Group("/storage", storageMiddlewares...)
-	s.setupStorageRoutes(storage)
-
-	// MCP routes - Model Context Protocol for AI assistants
-	// Requires authentication via client key, service key, or OAuth token
-	if s.config.MCP.Enabled && s.mcpHandler != nil {
-		// Register OAuth routes first (some are public, some need the MCP group)
-		if s.config.MCP.OAuth.Enabled && s.mcpOAuthHandler != nil {
-			// Create MCP group without auth for OAuth endpoints
-			mcpOAuthGroup := s.app.Group(s.config.MCP.BasePath)
-			s.mcpOAuthHandler.RegisterRoutes(s.app, mcpOAuthGroup)
-			log.Debug().Msg("MCP OAuth routes registered")
-		}
-
-		// Create auth middleware that also accepts MCP OAuth tokens
-		mcpAuthMiddleware := s.createMCPAuthMiddleware()
-
-		mcpGroup := s.app.Group(s.config.MCP.BasePath, mcpAuthMiddleware)
-		s.mcpHandler.RegisterRoutes(mcpGroup)
-		log.Debug().Str("base_path", s.config.MCP.BasePath).Msg("MCP routes registered")
-	}
-
-	// Database Branching routes - GitHub webhook only
-	// Branch management routes are registered later after admin group is created
-	if s.config.Branching.Enabled && s.githubWebhook != nil {
-		// GitHub webhook endpoint (no auth, uses signature verification)
-		// Rate limited to prevent abuse - use specific path to avoid affecting other /api/v1 routes
-		s.app.Post("/api/v1/webhooks/github",
-			middleware.GitHubWebhookLimiter(s.sharedMiddlewareStorage),
-			s.githubWebhook.HandleWebhook,
-		)
-	}
-
-	// Realtime WebSocket endpoint (not versioned as it's WebSocket)
-	// WebSocket validates auth internally, but make it required
-	// Protected by feature flag middleware and realtime:connect scope
-	s.app.Get("/realtime",
-		middleware.RequireRealtimeEnabled(s.authHandler.authService.GetSettingsCache()),
-		middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		middleware.RequireScope(auth.ScopeRealtimeConnect),
-		s.realtimeHandler.HandleWebSocket,
-	)
-
-	// Realtime stats endpoint - require authentication and realtime:connect scope
-	// Protected by feature flag middleware
-	s.app.Get("/api/v1/realtime/stats",
-		middleware.RequireRealtimeEnabled(s.authHandler.authService.GetSettingsCache()),
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		middleware.RequireScope(auth.ScopeRealtimeConnect),
-		s.handleRealtimeStats,
-	)
-
-	// Realtime broadcast endpoint - require authentication and realtime:broadcast scope
-	// Protected by feature flag middleware
-	s.app.Post("/api/v1/realtime/broadcast",
-		middleware.RequireRealtimeEnabled(s.authHandler.authService.GetSettingsCache()),
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		middleware.RequireScope(auth.ScopeRealtimeBroadcast),
-		s.handleRealtimeBroadcast,
-	)
-
-	// AI WebSocket endpoint (require AI enabled and authentication)
-	if s.aiChatHandler != nil {
-		s.app.Get("/ai/ws",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiChatHandler.HandleWebSocket,
-		)
-
-		// Public AI chatbot list endpoint
-		s.app.Get("/api/v1/ai/chatbots",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.ListPublicChatbots,
-		)
-
-		// Chatbot lookup by name (smart namespace resolution)
-		// Must be registered BEFORE /:id to avoid routing conflicts
-		s.app.Get("/api/v1/ai/chatbots/by-name/:name",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.LookupChatbotByName,
-		)
-
-		s.app.Get("/api/v1/ai/chatbots/:id",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.GetPublicChatbot,
-		)
-
-		// User conversation history endpoints (require authentication)
-		s.app.Get("/api/v1/ai/conversations",
+	// AI user knowledge base routes - conditional setup based on docProcessor availability
+	if s.kbStorage != nil {
+		userKBRouter := s.app.Group("/api/v1/ai",
 			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
 			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.ListUserConversations,
 		)
-
-		s.app.Get("/api/v1/ai/conversations/:id",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.GetUserConversation,
-		)
-
-		s.app.Delete("/api/v1/ai/conversations/:id",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.DeleteUserConversation,
-		)
-
-		s.app.Patch("/api/v1/ai/conversations/:id",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.UpdateUserConversation,
-		)
-
-		// User-facing Knowledge Base routes (require authentication)
-		if s.kbStorage != nil {
-			userKBRouter := s.app.Group("/api/v1/ai",
-				middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-				middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			)
-			// Use document-enabled routes if processor is available
-			if s.docProcessor != nil {
-				ai.RegisterUserKnowledgeBaseRoutesWithDocuments(userKBRouter, s.kbStorage, s.docProcessor)
-				log.Info().Msg("User-facing knowledge base routes registered (with document support)")
-			} else {
-				ai.RegisterUserKnowledgeBaseRoutes(userKBRouter, s.kbStorage)
-				log.Info().Msg("User-facing knowledge base routes registered")
-			}
+		if s.docProcessor != nil {
+			ai.RegisterUserKnowledgeBaseRoutesWithDocuments(userKBRouter, s.kbStorage, s.docProcessor)
+		} else {
+			ai.RegisterUserKnowledgeBaseRoutes(userKBRouter, s.kbStorage)
 		}
 	}
 
-	// Public RPC endpoints (only if RPC is enabled) with scope enforcement
-	if s.rpcHandler != nil {
-		// List public procedures - requires read:rpc scope
-		s.app.Get("/api/v1/rpc/procedures",
-			middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			middleware.RequireScope(auth.ScopeRPCRead),
-			s.rpcHandler.ListPublicProcedures,
-		)
-
-		// Invoke RPC procedure - requires execute:rpc scope
-		s.app.Post("/api/v1/rpc/:namespace/:name",
-			middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			middleware.RequireScope(auth.ScopeRPCExecute),
-			s.rpcHandler.Invoke,
-		)
-
-		// Get execution status (public - users can see their own) - requires read:rpc scope
-		s.app.Get("/api/v1/rpc/executions/:id",
-			middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			middleware.RequireScope(auth.ScopeRPCRead),
-			s.rpcHandler.GetPublicExecution,
-		)
-
-		// Get execution logs (public - users can see their own) - requires read:rpc scope
-		s.app.Get("/api/v1/rpc/executions/:id/logs",
-			middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			middleware.RequireScope(auth.ScopeRPCRead),
-			s.rpcHandler.GetPublicExecutionLogs,
-		)
-	}
-
-	// Vector search endpoints (only if vector handler is initialized)
-	if s.vectorHandler != nil {
-		// Capabilities endpoint (public - no auth required)
-		// Returns information about pgvector installation status and embedding configuration
-		s.app.Get("/api/v1/capabilities/vector", s.vectorHandler.HandleGetCapabilities)
-
-		// Embedding endpoint (requires authentication)
-		s.app.Post("/api/v1/vector/embed",
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.vectorHandler.HandleEmbed,
-		)
-
-		// Vector search endpoint (requires authentication)
-		s.app.Post("/api/v1/vector/search",
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.vectorHandler.HandleSearch,
-		)
-
-		log.Info().Msg("Vector search routes registered")
-	}
-
-	// GraphQL endpoint (if enabled)
-	if s.graphqlHandler != nil {
-		// GraphQL uses its own auth handling to set up RLS context
-		s.app.Post("/api/v1/graphql",
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager),
-			s.graphqlHandler.HandleGraphQL,
-		)
-		// Introspection endpoint (GET)
-		s.app.Get("/api/v1/graphql",
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager),
-			s.graphqlHandler.HandleIntrospection,
-		)
-		log.Info().Msg("GraphQL endpoint registered at /api/v1/graphql")
-	}
-
-	// Admin API routes - always available (protected by their own auth middleware)
-	admin := v1.Group("/admin")
-	s.setupAdminRoutes(admin)
-
-	// Public invitation routes (no auth required)
-	invitations := v1.Group("/invitations")
-	s.setupPublicInvitationRoutes(invitations)
-
-	log.Info().Msg("Admin API routes registered")
-
-	// Admin UI and dashboard auth routes - only enabled when admin.enabled=true
-	// Requires setup_token for the dashboard authentication system
+	// Admin UI routes - external package
 	if s.config.Admin.Enabled {
 		if s.config.Security.SetupToken == "" {
 			log.Error().Msg("Admin UI is enabled but FLUXBASE_SECURITY_SETUP_TOKEN is not set. Admin UI will not be registered for security reasons.")
 		} else {
-			// Dashboard auth routes (setup, login, etc.)
-			s.setupDashboardAuthRoutes(admin)
-
-			// Admin UI (embedded React app)
-			// Pass the public base URL so it can be injected into the frontend at runtime
 			adminUI := adminui.New(s.config.GetPublicBaseURL())
 			adminUI.RegisterRoutes(s.app)
-			log.Info().Msg("Admin UI enabled")
 		}
-	} else {
-		log.Info().Msg("Admin UI is disabled. Set FLUXBASE_ADMIN_ENABLED=true to enable the admin dashboard UI.")
 	}
 
-	// Sync endpoints - always available (independent of admin dashboard)
-	// Each is protected by IP allowlist + auth + role requirements + feature flag middleware
-	syncAuth := UnifiedAuthMiddleware(s.authHandler.authService, s.dashboardAuthHandler.jwtManager, s.db.Pool())
-
-	// Functions sync
-	funcSync := v1.Group("/admin/functions")
-	funcSync.Post("/sync",
-		middleware.RequireSyncIPAllowlist(s.config.Functions.SyncAllowedIPRanges, "functions", &s.config.Server),
-		syncAuth,
-		RequireRole("admin", "dashboard_admin", "service_role"),
-		s.functionsHandler.SyncFunctions,
-	)
-
-	// Jobs sync (requires jobsHandler)
-	if s.jobsHandler != nil {
-		jobsSync := v1.Group("/admin/jobs")
-		jobsSync.Post("/sync",
-			middleware.RequireSyncIPAllowlist(s.config.Jobs.SyncAllowedIPRanges, "jobs", &s.config.Server),
-			syncAuth,
-			RequireRole("admin", "dashboard_admin", "service_role"),
-			s.jobsHandler.SyncJobs,
-		)
-	}
-
-	// AI chatbots sync (requires aiHandler)
-	if s.aiHandler != nil {
-		requireAI := middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache())
-		aiSync := v1.Group("/admin/ai/chatbots")
-		aiSync.Post("/sync",
-			requireAI,
-			middleware.RequireSyncIPAllowlist(s.config.AI.SyncAllowedIPRanges, "ai", &s.config.Server),
-			syncAuth,
-			RequireRole("admin", "dashboard_admin", "service_role"),
-			s.aiHandler.SyncChatbots,
-		)
-	}
-
-	// RPC sync (requires rpcHandler)
-	if s.rpcHandler != nil {
-		requireRPC := middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache())
-		rpcSync := v1.Group("/admin/rpc")
-		rpcSync.Post("/sync",
-			requireRPC,
-			middleware.RequireSyncIPAllowlist(s.config.RPC.SyncAllowedIPRanges, "rpc", &s.config.Server),
-			syncAuth,
-			RequireRole("admin", "dashboard_admin", "service_role"),
-			s.rpcHandler.SyncProcedures,
-		)
-	}
-
-	// Database Branching routes (require authentication)
-	// Registered under /api/v1 with auth middleware
-	if s.config.Branching.Enabled && s.branchHandler != nil {
-		// Create a group at /api/v1 for branch routes with auth middleware
-		// Routes will be at /api/v1/admin/branches (from branch handler's RegisterRoutes)
-		branchAuthGroup := v1.Group("/",
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			RequireRole("admin", "dashboard_admin", "service_role"),
-		)
-		s.branchHandler.RegisterRoutes(branchAuthGroup)
-		log.Debug().Msg("Database Branching routes registered")
-	}
-
-	// OpenAPI specification
-	// Uses optional auth middleware to detect admin users and provide full spec with database schema
-	// Non-admin users get minimal spec with only auth endpoints
-	openAPIHandler := NewOpenAPIHandler(s.db)
-	s.app.Get("/openapi.json",
-		middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		openAPIHandler.GetOpenAPISpec,
-	)
-
-	// 404 handler
 	s.app.Use(func(c fiber.Ctx) error {
 		return c.Status(404).JSON(fiber.Map{
 			"error": "Not Found",
@@ -1956,546 +1546,24 @@ func (s *Server) setupRoutes() {
 	})
 }
 
-// setupRESTRoutes sets up dynamic REST routes using wildcard patterns
-// This allows new tables created via migrations to be immediately accessible
-// without requiring a server restart.
-func (s *Server) setupRESTRoutes(router fiber.Router) {
-	log.Info().Msg("Setting up dynamic REST API routes with wildcard patterns")
-
-	// Metadata endpoint - list all tables (admin only)
-	// Regular users should not be able to discover all tables; they access tables by name with RLS
-	router.Get("/", RequireRole("admin", "dashboard_admin", "service_role"), s.rest.HandleGetTables)
-
-	// Dynamic routes using wildcard patterns
-	// Order matters: more specific routes first
-
-	// POST query endpoint for complex filters (avoids URL length limits)
-	// Routes: /tables/:schema/:table/query and /tables/:table/query
-	router.Post("/:schema/:table/query",
-		middleware.RequireScope(auth.ScopeTablesRead),
-		s.rest.HandleDynamicQuery)
-	router.Post("/:schema/query",
-		middleware.RequireScope(auth.ScopeTablesRead),
-		s.rest.HandleDynamicQuery)
-
-	// Routes with ID parameter: /tables/:schema/:table/:id and /tables/:table/:id
-	// These handle GET (fetch one), PUT (replace), PATCH (update), DELETE (remove)
-	router.Get("/:schema/:table/:id",
-		middleware.RequireScope(auth.ScopeTablesRead),
-		s.rest.HandleDynamicTableById)
-	router.Put("/:schema/:table/:id",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTableById)
-	router.Patch("/:schema/:table/:id",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTableById)
-	router.Delete("/:schema/:table/:id",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTableById)
-
-	// Collection routes: /tables/:schema/:table and /tables/:table
-	// These handle GET (list), POST (create), PATCH (batch update), DELETE (batch delete)
-	router.Get("/:schema/:table",
-		middleware.RequireScope(auth.ScopeTablesRead),
-		s.rest.HandleDynamicTable)
-	router.Post("/:schema/:table",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-	router.Patch("/:schema/:table",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-	router.Delete("/:schema/:table",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-
-	// Single-segment routes for public schema: /tables/:table
-	// Note: Fiber parses /tables/posts as schema="posts", table=""
-	// The handler detects this and treats it as public.posts
-	router.Get("/:schema",
-		middleware.RequireScope(auth.ScopeTablesRead),
-		s.rest.HandleDynamicTable)
-	router.Post("/:schema",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-	router.Patch("/:schema",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-	router.Delete("/:schema",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-
-	log.Info().Msg("Dynamic REST API routes configured")
-}
-
-// setupAuthRoutes sets up authentication routes
-func (s *Server) setupAuthRoutes(router fiber.Router) {
-	// Import rate limiters from middleware package using config values
-	// Pass shared storage to prevent multiple GC goroutines
-	rateLimiters := map[string]fiber.Handler{
-		"signup":         middleware.AuthSignupLimiterWithConfig(s.config.Security.AuthSignupRateLimit, s.config.Security.AuthSignupRateWindow, s.sharedMiddlewareStorage),
-		"login":          middleware.AuthLoginLimiterWithConfig(s.config.Security.AuthLoginRateLimit, s.config.Security.AuthLoginRateWindow, s.sharedMiddlewareStorage),
-		"refresh":        middleware.AuthRefreshLimiterWithConfig(s.config.Security.AuthRefreshRateLimit, s.config.Security.AuthRefreshRateWindow, s.sharedMiddlewareStorage),
-		"magiclink":      middleware.AuthMagicLinkLimiterWithConfig(s.config.Security.AuthMagicLinkRateLimit, s.config.Security.AuthMagicLinkRateWindow, s.sharedMiddlewareStorage),
-		"password_reset": middleware.AuthPasswordResetLimiterWithConfig(s.config.Security.AuthPasswordResetRateLimit, s.config.Security.AuthPasswordResetRateWindow, s.sharedMiddlewareStorage),
-		"otp":            middleware.AuthMagicLinkLimiterWithConfig(s.config.Security.AuthMagicLinkRateLimit, s.config.Security.AuthMagicLinkRateWindow, s.sharedMiddlewareStorage), // Use same rate limit as magic link
-		"2fa":            middleware.Auth2FALimiterWithConfig(s.config.Security.Auth2FARateLimit, s.config.Security.Auth2FARateWindow, s.sharedMiddlewareStorage),                   // Strict rate limit for 2FA verification
-	}
-
-	// Use the auth handler's RegisterRoutes method with rate limiters
-	// Pass the router (which is /api/v1/auth) instead of the whole app
-	s.authHandler.RegisterRoutes(router, rateLimiters)
-
-	// OAuth routes
-	router.Get("/oauth/providers", s.oauthHandler.ListEnabledProviders)
-	router.Get("/oauth/:provider/authorize", s.oauthHandler.Authorize)
-	router.Get("/oauth/:provider/callback", s.oauthHandler.Callback)
-
-	// OAuth token retrieval - allows users to get their stored provider tokens
-	// Requires authentication (user must be logged in with Fluxbase JWT)
-	router.Get("/oauth/:provider/token",
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		s.oauthHandler.GetProviderToken,
-	)
-
-	// OAuth Single Logout routes
-	// Logout requires authentication, callback is public (validates via state parameter)
-	router.Post("/oauth/:provider/logout",
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		s.oauthHandler.Logout,
-	)
-	router.Get("/oauth/:provider/logout/callback", s.oauthHandler.LogoutCallback)
-}
-
-// setupStorageRoutes sets up storage routes
-func (s *Server) setupStorageRoutes(router fiber.Router) {
-	// Signed URL download (PUBLIC - no auth required, token provides authorization)
-	router.Get("/object", s.storageHandler.DownloadSignedObject)
-
-	// Transform config (PUBLIC - no auth required, just returns config info)
-	router.Get("/config/transforms", s.storageHandler.GetTransformConfig)
-
-	// Bucket management with scope enforcement
-	router.Get("/buckets", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.ListBuckets)
-	router.Post("/buckets/:bucket", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.CreateBucket)
-	router.Put("/buckets/:bucket", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.UpdateBucketSettings)
-	router.Delete("/buckets/:bucket", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.DeleteBucket)
-
-	// List files in bucket (must come before /:bucket/*)
-	router.Get("/:bucket", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.ListFiles)
-
-	// Multipart upload (must come before /:bucket/*)
-	router.Post("/:bucket/multipart", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.MultipartUpload)
-
-	// File sharing (must come before /:bucket/* to avoid matching generic routes)
-	router.Post("/:bucket/*/share", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.ShareObject)            // Share file with user
-	router.Delete("/:bucket/*/share/:user_id", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.RevokeShare) // Revoke share
-	router.Get("/:bucket/*/shares", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.ListShares)              // List shares
-
-	// Signed URLs (for S3-compatible storage, must come before /:bucket/*)
-	router.Post("/:bucket/sign/*", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.GenerateSignedURL)
-
-	// Streaming upload (must come before /:bucket/*)
-	// Apply storage upload rate limiting before authentication to prevent abuse
-	router.Post("/:bucket/stream/*", middleware.StorageUploadLimiter(s.sharedMiddlewareStorage), middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.StreamUpload)
-
-	// Chunked upload routes (for resumable large file uploads, must come before /:bucket/*)
-	// Apply storage upload rate limiting to chunked upload init
-	router.Post("/:bucket/chunked/init", middleware.StorageUploadLimiter(s.sharedMiddlewareStorage), middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.InitChunkedUpload)
-	router.Put("/:bucket/chunked/:uploadId/:chunkIndex", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.UploadChunk)
-	router.Post("/:bucket/chunked/:uploadId/complete", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.CompleteChunkedUpload)
-	router.Get("/:bucket/chunked/:uploadId/status", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.GetChunkedUploadStatus)
-	router.Delete("/:bucket/chunked/:uploadId", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.AbortChunkedUpload)
-
-	// File operations (generic wildcard routes - must come LAST)
-	router.Post("/:bucket/*", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.UploadFile)   // Upload file
-	router.Get("/:bucket/*", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.DownloadFile)   // Download file
-	router.Head("/:bucket/*", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.DownloadFile)  // HEAD delegates to GetFileInfo for Content-Length
-	router.Delete("/:bucket/*", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.DeleteFile) // Delete file
-}
-
-// setupDashboardAuthRoutes sets up dashboard authentication routes
-// These are only available when admin UI is enabled
-func (s *Server) setupDashboardAuthRoutes(router fiber.Router) {
-	log.Debug().Msg("setupDashboardAuthRoutes called - registering public routes")
-
-	// Public dashboard auth routes (no authentication required)
-	router.Get("/setup/status", s.adminAuthHandler.GetSetupStatus)
-	router.Post("/setup", middleware.AdminSetupLimiterWithConfig(
-		s.config.Security.AdminSetupRateLimit,
-		s.config.Security.AdminSetupRateWindow,
-		s.sharedMiddlewareStorage,
-	), s.adminAuthHandler.InitialSetup)
-	router.Post("/login", middleware.AdminLoginLimiterWithConfig(
-		s.config.Security.AdminLoginRateLimit,
-		s.config.Security.AdminLoginRateWindow,
-		s.sharedMiddlewareStorage,
-	), s.adminAuthHandler.AdminLogin)
-	router.Post("/refresh", s.adminAuthHandler.AdminRefreshToken)
-
-	log.Debug().Msg("Dashboard auth routes registered: GET /setup/status, POST /setup, POST /login, POST /refresh")
-
-	// Protected dashboard auth routes
-	unifiedAuth := UnifiedAuthMiddleware(s.authHandler.authService, s.dashboardAuthHandler.jwtManager, s.db.Pool())
-	router.Post("/logout", unifiedAuth, s.adminAuthHandler.AdminLogout)
-	router.Get("/me", unifiedAuth, s.adminAuthHandler.GetCurrentAdmin)
-}
-
-// setupAdminRoutes sets up admin API routes
-func (s *Server) setupAdminRoutes(router fiber.Router) {
-	// Protected admin routes (require authentication from either auth.users or dashboard.users)
-	// UnifiedAuthMiddleware accepts tokens from both authentication systems
-	// The db pool is passed to allow real-time role checking from auth.users
-	unifiedAuth := UnifiedAuthMiddleware(s.authHandler.authService, s.dashboardAuthHandler.jwtManager, s.db.Pool())
-
-	// Admin panel routes (require admin or dashboard_admin role)
-	router.Get("/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.handleGetTables)
-	router.Get("/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.handleGetTableSchema)
-	router.Get("/schemas", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.handleGetSchemas)
-	router.Post("/query", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.handleExecuteQuery)
-
-	// DDL routes (schema and table management) - require admin or dashboard_admin role
-	router.Get("/ddl/schemas", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.ListSchemas)
-	router.Post("/ddl/schemas", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.CreateSchema)
-	router.Get("/ddl/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.ListTables)
-	router.Post("/ddl/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.CreateTable)
-	router.Delete("/ddl/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.DeleteTable)
-
-	// Legacy DDL routes (without /ddl/ prefix) - keep for backwards compatibility
-	router.Post("/schemas", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.CreateSchema)
-	router.Post("/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.CreateTable)
-	router.Delete("/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.DeleteTable)
-	router.Patch("/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.RenameTable)
-	router.Post("/tables/:schema/:table/columns", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.AddColumn)
-	router.Delete("/tables/:schema/:table/columns/:column", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.DropColumn)
-
-	// Realtime admin routes - manage realtime enablement for tables
-	router.Post("/realtime/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.realtimeAdminHandler.HandleEnableRealtime)
-	router.Get("/realtime/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.realtimeAdminHandler.HandleListRealtimeTables)
-	router.Get("/realtime/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.realtimeAdminHandler.HandleGetRealtimeStatus)
-	router.Patch("/realtime/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.realtimeAdminHandler.HandleUpdateRealtimeConfig)
-	router.Delete("/realtime/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.realtimeAdminHandler.HandleDisableRealtime)
-
-	// OAuth provider management routes (require admin or dashboard_admin role)
-	router.Get("/oauth/providers", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.ListOAuthProviders)
-	router.Get("/oauth/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.GetOAuthProvider)
-	router.Post("/oauth/providers", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.CreateOAuthProvider)
-	router.Put("/oauth/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.UpdateOAuthProvider)
-	router.Delete("/oauth/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.DeleteOAuthProvider)
-
-	// SAML provider management routes (require admin or dashboard_admin role)
-	router.Get("/saml/providers", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.ListSAMLProviders)
-	router.Get("/saml/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.GetSAMLProvider)
-	router.Post("/saml/providers", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.CreateSAMLProvider)
-	router.Put("/saml/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.UpdateSAMLProvider)
-	router.Delete("/saml/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.DeleteSAMLProvider)
-	router.Post("/saml/validate-metadata", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.ValidateMetadata)
-	router.Post("/saml/upload-metadata", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.UploadMetadata)
-
-	// Auth settings routes (require admin or dashboard_admin role)
-	router.Get("/auth/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.GetAuthSettings)
-	router.Put("/auth/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.UpdateAuthSettings)
-
-	// Session management routes (require admin or dashboard_admin role)
-	router.Get("/auth/sessions", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.adminSessionHandler.ListSessions)
-	router.Delete("/auth/sessions/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.adminSessionHandler.RevokeSession)
-	router.Delete("/auth/sessions/user/:user_id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.adminSessionHandler.RevokeUserSessions)
-
-	// System settings routes (require admin or dashboard_admin role)
-	router.Get("/system/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.systemSettingsHandler.ListSettings)
-	router.Get("/system/settings/*", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.systemSettingsHandler.GetSetting)
-	router.Put("/system/settings/*", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.systemSettingsHandler.UpdateSetting)
-	router.Delete("/system/settings/*", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.systemSettingsHandler.DeleteSetting)
-
-	// Custom settings routes (require admin, dashboard_admin, or service_role)
-	router.Post("/settings/custom", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.CreateSetting)
-	router.Get("/settings/custom", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.ListSettings)
-
-	// System secret settings routes (must come before wildcard routes)
-	router.Post("/settings/custom/secret", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.CreateSecretSetting)
-	router.Get("/settings/custom/secrets", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.ListSecretSettings)
-	router.Get("/settings/custom/secret/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.GetSecretSetting)
-	router.Put("/settings/custom/secret/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.UpdateSecretSetting)
-	router.Delete("/settings/custom/secret/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.DeleteSecretSetting)
-
-	// User secret decryption route (service_role only - used by edge functions to decrypt user secrets)
-	router.Get("/settings/user/:user_id/secret/:key/decrypt", unifiedAuth, RequireRole("service_role"), s.userSettingsHandler.GetUserSecretValue)
-
-	// Regular custom settings wildcard routes
-	router.Get("/settings/custom/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.GetSetting)
-	router.Put("/settings/custom/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.UpdateSetting)
-	router.Delete("/settings/custom/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.DeleteSetting)
-
-	// App settings routes (require admin or dashboard_admin role)
-	router.Get("/app/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.appSettingsHandler.GetAppSettings)
-	router.Put("/app/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.appSettingsHandler.UpdateAppSettings)
-
-	// Email settings routes (require admin or dashboard_admin role)
-	router.Get("/email/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailSettingsHandler.GetSettings)
-	router.Put("/email/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailSettingsHandler.UpdateSettings)
-	router.Post("/email/settings/test", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailSettingsHandler.TestSettings)
-
-	// Captcha settings routes (require admin or dashboard_admin role)
-	router.Get("/settings/captcha", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.captchaSettingsHandler.GetSettings)
-	router.Put("/settings/captcha", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.captchaSettingsHandler.UpdateSettings)
-
-	// Email template routes (require admin or dashboard_admin role)
-	router.Get("/email/templates", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailTemplateHandler.ListTemplates)
-	router.Get("/email/templates/:type", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailTemplateHandler.GetTemplate)
-	router.Put("/email/templates/:type", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailTemplateHandler.UpdateTemplate)
-	router.Post("/email/templates/:type/reset", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailTemplateHandler.ResetTemplate)
-	router.Post("/email/templates/:type/test", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailTemplateHandler.TestTemplate)
-
-	// User management routes (require admin, dashboard_admin, or service_role)
-	router.Get("/users", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.ListUsers)
-	router.Post("/users/invite", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.InviteUser)
-	router.Delete("/users/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.DeleteUser)
-	router.Patch("/users/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.UpdateUser)
-	router.Patch("/users/:id/role", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.UpdateUserRole)
-	router.Post("/users/:id/reset-password", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.ResetUserPassword)
-
-	// Quota management routes (require admin, dashboard_admin, or service_role)
-	if s.quotaHandler != nil {
-		router.Get("/users-with-quotas", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.quotaHandler.ListUsersWithQuotas)
-		router.Get("/users/:id/quota", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.quotaHandler.GetUserQuota)
-		router.Put("/users/:id/quota", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.quotaHandler.SetUserQuota)
-	}
-
-	// Invitation management routes (require admin or dashboard_admin role)
-	router.Post("/invitations", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.invitationHandler.CreateInvitation)
-	router.Get("/invitations", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.invitationHandler.ListInvitations)
-	router.Delete("/invitations/:token", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.invitationHandler.RevokeInvitation)
-
-	// Service key management routes (require admin, dashboard_admin, or service_role)
-	router.Get("/service-keys", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.ListServiceKeys)
-	router.Get("/service-keys/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.GetServiceKey)
-	router.Post("/service-keys", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.CreateServiceKey)
-	router.Patch("/service-keys/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.UpdateServiceKey)
-	router.Delete("/service-keys/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.DeleteServiceKey)
-	router.Post("/service-keys/:id/disable", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.DisableServiceKey)
-	router.Post("/service-keys/:id/enable", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.EnableServiceKey)
-	router.Post("/service-keys/:id/revoke", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.serviceKeyHandler.RevokeServiceKey)
-	router.Post("/service-keys/:id/deprecate", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.serviceKeyHandler.DeprecateServiceKey)
-	router.Post("/service-keys/:id/rotate", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.serviceKeyHandler.RotateServiceKey)
-	router.Get("/service-keys/:id/revocations", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.serviceKeyHandler.GetRevocationHistory)
-
-	// SQL Editor route (require admin or dashboard_admin role)
-	router.Post("/sql/execute", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.sqlHandler.ExecuteSQL)
-
-	// Schema export routes (for TypeScript type generation) - require admin, dashboard_admin, or service_role
-	router.Get("/schema/typescript", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.schemaExportHandler.HandleExportTypeScript)
-	router.Post("/schema/typescript", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.schemaExportHandler.HandleExportTypeScript)
-
-	// Functions management routes (require admin, dashboard_admin, or service_role)
-	router.Post("/functions/reload", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.functionsHandler.ReloadFunctions)
-	router.Get("/functions/namespaces", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.functionsHandler.ListNamespaces)
-	// Note: Functions sync is registered outside setupAdminRoutes so it works when admin dashboard is disabled
-	// Functions executions - admin endpoint to list all executions
-	router.Get("/functions/executions", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.functionsHandler.ListAllExecutions)
-	// Functions execution logs - admin endpoint to get logs for a specific execution
-	router.Get("/functions/executions/:executionId/logs", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.functionsHandler.GetExecutionLogs)
-
-	// Jobs management routes (require admin, dashboard_admin, or service_role)
-	// Only register if jobs are enabled
-	// Note: Jobs sync is registered outside setupAdminRoutes so it works when admin dashboard is disabled
-	if s.jobsHandler != nil {
-		router.Get("/jobs/namespaces", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.ListNamespaces)
-		router.Get("/jobs/functions", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.ListJobFunctions)
-		router.Get("/jobs/functions/:namespace/:name", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.GetJobFunction)
-		router.Delete("/jobs/functions/:namespace/:name", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.DeleteJobFunction)
-		router.Get("/jobs/stats", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.GetJobStats)
-		router.Get("/jobs/workers", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.ListWorkers)
-
-		// Queue operations - list and individual job management
-		router.Get("/jobs/queue", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.ListAllJobs)
-		router.Get("/jobs/queue/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.GetJobAdmin)
-		router.Post("/jobs/queue/:id/terminate", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.TerminateJob)
-		router.Post("/jobs/queue/:id/cancel", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.CancelJobAdmin)
-		router.Post("/jobs/queue/:id/retry", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.RetryJobAdmin)
-		router.Post("/jobs/queue/:id/resubmit", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.ResubmitJobAdmin)
-	}
-
-	// AI management routes (require admin, dashboard_admin, or service_role)
-	// Only register if AI is enabled
-	// Note: AI chatbots sync is registered outside setupAdminRoutes so it works when admin dashboard is disabled
-	if s.aiHandler != nil {
-		// Feature flag check for all AI routes
-		requireAI := middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache())
-
-		// Chatbot management
-		router.Get("/ai/chatbots", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.ListChatbots)
-		router.Get("/ai/chatbots/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetChatbot)
-		router.Put("/ai/chatbots/:id/toggle", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.ToggleChatbot)
-		router.Put("/ai/chatbots/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.UpdateChatbot)
-		router.Delete("/ai/chatbots/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.DeleteChatbot)
-
-		// Metrics
-		router.Get("/ai/metrics", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetAIMetrics)
-
-		// Conversations & Audit
-		router.Get("/ai/conversations", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetConversations)
-		router.Get("/ai/conversations/:id/messages", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetConversationMessages)
-		router.Get("/ai/audit", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetAuditLog)
-
-		// Provider management
-		router.Get("/ai/providers", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.ListProviders)
-		router.Get("/ai/providers/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetProvider)
-		router.Post("/ai/providers", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.CreateProvider)
-		router.Put("/ai/providers/:id/default", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.SetDefaultProvider)
-		router.Delete("/ai/providers/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.DeleteProvider)
-		router.Put("/ai/providers/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.UpdateProvider)
-		router.Put("/ai/providers/:id/embedding", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.SetEmbeddingProvider)
-		router.Delete("/ai/providers/:id/embedding", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.ClearEmbeddingProvider)
-
-		// Knowledge base management (RAG)
-		if s.knowledgeBaseHandler != nil {
-			router.Get("/ai/knowledge-bases", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListKnowledgeBases)
-			router.Get("/ai/knowledge-bases/capabilities", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetCapabilities)
-			router.Get("/ai/knowledge-bases/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetKnowledgeBase)
-			router.Post("/ai/knowledge-bases", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.CreateKnowledgeBase)
-			router.Put("/ai/knowledge-bases/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UpdateKnowledgeBase)
-			router.Delete("/ai/knowledge-bases/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.DeleteKnowledgeBase)
-
-			// Documents within a knowledge base
-			router.Get("/ai/knowledge-bases/:id/documents", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListDocuments)
-			router.Post("/ai/knowledge-bases/:id/documents", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.AddDocument)
-			router.Get("/ai/knowledge-bases/:id/documents/:doc_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetDocument)
-			router.Delete("/ai/knowledge-bases/:id/documents/:doc_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.DeleteDocument)
-			router.Patch("/ai/knowledge-bases/:id/documents/:doc_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UpdateDocument)
-			router.Post("/ai/knowledge-bases/:id/documents/upload", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UploadDocument)
-			router.Post("/ai/knowledge-bases/:id/documents/delete-by-filter", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.DeleteDocumentsByFilter)
-
-			// Document permissions
-			router.Post("/ai/knowledge-bases/:id/documents/:doc_id/permissions", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GrantDocumentPermission)
-			router.Get("/ai/knowledge-bases/:id/documents/:doc_id/permissions", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListDocumentPermissions)
-			router.Delete("/ai/knowledge-bases/:id/documents/:doc_id/permissions/:user_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.RevokeDocumentPermission)
-
-			// Search/test endpoint
-			router.Post("/ai/knowledge-bases/:id/search", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.SearchKnowledgeBase)
-			router.Post("/ai/knowledge-bases/:id/debug-search", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.DebugSearch)
-
-			// Chatbot knowledge base linking
-			router.Get("/ai/chatbots/:id/knowledge-bases", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListChatbotKnowledgeBases)
-			router.Post("/ai/chatbots/:id/knowledge-bases", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.LinkKnowledgeBase)
-			router.Put("/ai/chatbots/:id/knowledge-bases/:kb_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UpdateChatbotKnowledgeBase)
-			router.Delete("/ai/chatbots/:id/knowledge-bases/:kb_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UnlinkKnowledgeBase)
-
-			// Table export routes
-			router.Post("/ai/knowledge-bases/:id/tables/export", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ExportTableToKnowledgeBase)
-			router.Get("/ai/tables", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListExportableTables)
-			router.Get("/ai/tables/:schema/:table", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetTableDetails)
-
-			// Table export sync config routes
-			router.Post("/ai/knowledge-bases/:id/sync-configs", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.CreateTableExportSync)
-			router.Get("/ai/knowledge-bases/:id/sync-configs", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListTableExportSyncs)
-			router.Patch("/ai/knowledge-bases/:id/sync-configs/:syncId", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UpdateTableExportSync)
-			router.Delete("/ai/knowledge-bases/:id/sync-configs/:syncId", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.DeleteTableExportSync)
-			router.Post("/ai/knowledge-bases/:id/sync-configs/:syncId/trigger", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.TriggerTableExportSync)
-
-			// Knowledge base chatbots (reverse lookup - which chatbots use this KB)
-			router.Get("/ai/knowledge-bases/:id/chatbots", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListKnowledgeBaseChatbots)
-
-			// Knowledge graph endpoints
-			router.Get("/ai/knowledge-bases/:id/entities", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListEntities)
-			router.Get("/ai/knowledge-bases/:id/entities/search", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.SearchEntities)
-			router.Get("/ai/knowledge-bases/:id/entities/:entity_id/relationships", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetEntityRelationships)
-			router.Get("/ai/knowledge-bases/:id/graph", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetKnowledgeGraph)
+// auditRoutesAtStartup logs route audit information for security review
+func (s *Server) auditRoutesAtStartup() {
+	entries := s.auditRegisteredRoutes()
+	publicCount := 0
+	authRequiredCount := 0
+	for _, e := range entries {
+		if e.Public {
+			publicCount++
+		}
+		if e.Auth == "required" || e.Auth == "service_key" || e.Auth == "dashboard" {
+			authRequiredCount++
 		}
 	}
-
-	// RPC management routes (require admin, dashboard_admin, or service_role)
-	// Only register if RPC is enabled
-	// Note: RPC sync is registered outside setupAdminRoutes so it works when admin dashboard is disabled
-	if s.rpcHandler != nil {
-		requireRPC := middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache())
-
-		// Procedure management
-		router.Get("/rpc/namespaces", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.ListNamespaces)
-		router.Get("/rpc/procedures", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.ListProcedures)
-		router.Get("/rpc/procedures/:namespace/:name", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.GetProcedure)
-		router.Put("/rpc/procedures/:namespace/:name", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.UpdateProcedure)
-		router.Delete("/rpc/procedures/:namespace/:name", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.DeleteProcedure)
-
-		// Execution management
-		router.Get("/rpc/executions", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.ListExecutions)
-		router.Get("/rpc/executions/:id", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.GetExecution)
-		router.Get("/rpc/executions/:id/logs", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.GetExecutionLogs)
-		router.Post("/rpc/executions/:id/cancel", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.CancelExecution)
-	}
-
-	// Extensions management routes
-	router.Get("/extensions", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.extensionsHandler.ListExtensions)
-	router.Get("/extensions/:name/status", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.extensionsHandler.GetExtensionStatus)
-	router.Post("/extensions/:name/enable", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.extensionsHandler.EnableExtension)
-	router.Post("/extensions/:name/disable", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.extensionsHandler.DisableExtension)
-	router.Post("/extensions/sync", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.extensionsHandler.SyncExtensions)
-
-	// Schema graph routes (for ERD/schema visualization)
-	router.Get("/schema/graph", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetSchemaGraph)
-	router.Get("/tables/:schema/:table/relationships", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetTableRelationships)
-
-	// RLS Policy management routes
-	router.Get("/policies", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.ListPolicies)
-	router.Post("/policies", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.CreatePolicy)
-	router.Put("/policies/:schema/:table/:policy", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.UpdatePolicy)
-	router.Delete("/policies/:schema/:table/:policy", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.DeletePolicy)
-	router.Get("/policies/templates", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetPolicyTemplates)
-
-	// Table RLS status routes
-	router.Get("/tables/rls", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetTablesWithRLS)
-	router.Get("/tables/:schema/:table/rls", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetTableRLSStatus)
-	router.Post("/tables/:schema/:table/rls/toggle", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.ToggleTableRLS)
-
-	// Security warnings/advisor
-	router.Get("/security/warnings", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetSecurityWarnings)
-
-	// Migrations routes (require service key authentication with enhanced security)
-	// Only registered if migrations API is enabled in config
-	if s.config.Migrations.Enabled {
-		// Build secure middleware stack for migrations API
-		// Layer 1: Feature flag check
-		// Layer 2: IP allowlist (only allow app container)
-		// Layer 3: Service key authentication (no JWT/client keys)
-		// Layer 4: Scope validation (migrations:execute)
-		// Layer 5: Rate limiting (10 req/hour for service keys, service_role rate limit from config)
-		// Layer 6: Audit logging
-		migrationsAuth := []any{
-			middleware.RequireMigrationsEnabled(&s.config.Migrations),
-			middleware.RequireMigrationsIPAllowlist(&s.config.Migrations, &s.config.Server),
-			middleware.RequireServiceKeyOnly(s.db.Pool(), s.authHandler.authService),
-			middleware.RequireMigrationScope(),
-			middleware.MigrationAPILimiterWithConfig(s.config.Security.ServiceRoleRateLimit, s.config.Security.ServiceRoleRateWindow, s.sharedMiddlewareStorage),
-			middleware.MigrationsAuditLog(),
-		}
-
-		s.migrationsHandler.RegisterRoutes(s.app, migrationsAuth...)
-
-		log.Info().
-			Bool("enabled", s.config.Migrations.Enabled).
-			Strs("allowed_ips", s.config.Migrations.AllowedIPRanges).
-			Bool("require_service_key", s.config.Migrations.RequireServiceKey).
-			Msg("Migrations API registered with enhanced security controls")
-	} else {
-		log.Info().Msg("Migrations API disabled")
-	}
-
-	// Central logging routes (require admin, dashboard_admin, or service_role)
-	if s.loggingHandler != nil {
-		router.Get("/logs", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.loggingHandler.QueryLogs)
-		router.Get("/logs/stats", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.loggingHandler.GetLogStats)
-		router.Get("/logs/executions/:execution_id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.loggingHandler.GetExecutionLogs)
-		router.Post("/logs/flush", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.loggingHandler.FlushLogs)
-		router.Post("/logs/test", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.loggingHandler.GenerateTestLogs)
-	}
-
-	// Schema refresh endpoint (require admin, dashboard_admin, or service_role)
-	router.Post("/schema/refresh", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.handleRefreshSchema)
-}
-
-// setupPublicInvitationRoutes sets up public invitation routes (no auth required)
-func (s *Server) setupPublicInvitationRoutes(router fiber.Router) {
-	// Public invitation routes (no authentication required)
-	router.Get("/:token/validate", s.invitationHandler.ValidateInvitation)
-	router.Post("/:token/accept", s.invitationHandler.AcceptInvitation)
+	log.Info().
+		Int("total", len(entries)).
+		Int("public", publicCount).
+		Int("auth_required", authRequiredCount).
+		Msg("Route audit completed")
 }
 
 // handleHealth handles health check requests
@@ -2874,6 +1942,17 @@ func (s *Server) GetLoggingService() *logging.Service {
 	return s.loggingService
 }
 
+// SetTenantConfigLoader sets the tenant configuration loader
+// This is called after migrations complete to enable tenant-specific config overrides
+func (s *Server) SetTenantConfigLoader(loader *config.TenantConfigLoader) {
+	s.tenantConfigLoader = loader
+}
+
+// GetTenantConfigLoader returns the tenant configuration loader
+func (s *Server) GetTenantConfigLoader() *config.TenantConfigLoader {
+	return s.tenantConfigLoader
+}
+
 // SchemaCache returns the REST API schema cache
 // This is exposed for testing purposes to refresh the cache after creating tables
 func (s *Server) SchemaCache() *database.SchemaCache {
@@ -2938,7 +2017,7 @@ func customErrorHandler(c fiber.Ctx, err error) error {
 func (s *Server) handleRealtimeStats(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "tenant_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view realtime stats",
 		})

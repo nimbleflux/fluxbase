@@ -425,33 +425,6 @@ func TestUnlockUser_ParameterParsing(t *testing.T) {
 }
 
 // =============================================================================
-// RegisterRoutes Tests
-// =============================================================================
-
-func TestUserManagementHandler_RegisterRoutes(t *testing.T) {
-	t.Run("routes are registered", func(t *testing.T) {
-		// This is more of a smoke test - verifying RegisterRoutes doesn't panic
-		// Note: Can't fully test without auth service
-		app := fiber.New()
-		handler := NewUserManagementHandler(nil, nil)
-
-		// RegisterRoutes requires authService to not be nil
-		// So we just test the handler methods exist
-		assert.NotNil(t, handler.ListUsers)
-		assert.NotNil(t, handler.GetUserByID)
-		assert.NotNil(t, handler.InviteUser)
-		assert.NotNil(t, handler.DeleteUser)
-		assert.NotNil(t, handler.UpdateUserRole)
-		assert.NotNil(t, handler.UpdateUser)
-		assert.NotNil(t, handler.ResetUserPassword)
-		assert.NotNil(t, handler.LockUser)
-		assert.NotNil(t, handler.UnlockUser)
-
-		_ = app // Prevent unused variable warning
-	})
-}
-
-// =============================================================================
 // Pagination Normalization Tests (from validation_helpers)
 // =============================================================================
 

@@ -13,12 +13,10 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/logging"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/ratelimit"
 	"github.com/nimbleflux/fluxbase/internal/runtime"
 	"github.com/nimbleflux/fluxbase/internal/secrets"
@@ -301,48 +299,6 @@ func (h *Handler) checkRateLimit(c fiber.Ctx, fn *EdgeFunction) error {
 	}
 
 	return nil
-}
-
-// RegisterRoutes registers all edge function routes with authentication
-func (h *Handler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Apply authentication middleware to management endpoints
-	authMiddleware := middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager)
-
-	// Apply feature flag middleware to all functions routes
-	functions := app.Group("/api/v1/functions",
-		middleware.RequireFunctionsEnabled(authService.GetSettingsCache()),
-	)
-
-	// Management endpoints - require authentication and appropriate scopes
-	// Read operations require read:functions scope
-	functions.Get("/", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsRead), h.ListFunctions)
-	functions.Get("/:name", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsRead), h.GetFunction)
-
-	// Write operations require execute:functions scope (management)
-	functions.Post("/", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsExecute), h.CreateFunction)
-	functions.Put("/:name", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsExecute), h.UpdateFunction)
-	functions.Delete("/:name", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsExecute), h.DeleteFunction)
-
-	// Invocation endpoint - auth checked per-function in handler based on allow_unauthenticated
-	// We use OptionalAuthOrServiceKey so auth context is set if token provided (including anon key JWTs),
-	// but the handler will check the function's allow_unauthenticated setting
-	// Scope enforcement for execute:functions
-	optionalAuth := middleware.OptionalAuthOrServiceKey(authService, clientKeyService, db, jwtManager)
-	functions.Post("/:name/invoke", optionalAuth, middleware.RequireScope(auth.ScopeFunctionsExecute), h.InvokeFunction)
-	functions.Get("/:name/invoke", optionalAuth, middleware.RequireScope(auth.ScopeFunctionsExecute), h.InvokeFunction) // Also support GET for health checks
-
-	// Execution history - require authentication and read scope
-	functions.Get("/:name/executions", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsRead), h.GetExecutions)
-
-	// Shared modules endpoints - require authentication and appropriate scopes
-	shared := app.Group("/api/v1/functions/shared")
-	shared.Get("/", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsRead), h.ListSharedModules)
-	shared.Get("/*", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsRead), h.GetSharedModule) // Use /* to capture full path
-	shared.Post("/", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsExecute), h.CreateSharedModule)
-	shared.Put("/*", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsExecute), h.UpdateSharedModule)
-	shared.Delete("/*", authMiddleware, middleware.RequireScope(auth.ScopeFunctionsExecute), h.DeleteSharedModule)
-
-	// Admin reload endpoint - handled separately in server.go under admin routes
 }
 
 // CreateFunction creates a new edge function
@@ -1210,7 +1166,7 @@ func (h *Handler) GetExecutionLogs(c fiber.Ctx) error {
 }
 
 // RegisterAdminRoutes registers admin-only routes for functions management
-// These routes should be called with UnifiedAuthMiddleware and RequireRole("admin", "dashboard_admin")
+// These routes should be called with UnifiedAuthMiddleware and RequireRole("admin", "instance_admin")
 func (h *Handler) RegisterAdminRoutes(app *fiber.App) {
 	// Admin-only function reload endpoint
 	app.Post("/api/v1/admin/functions/reload", h.ReloadFunctions)
@@ -1953,7 +1909,7 @@ func normalizeSettingsKey(key string) string {
 
 // isAdminRole checks if the given role has admin privileges
 func isAdminRole(role string) bool {
-	return role == "admin" || role == "dashboard_admin" || role == "service_role"
+	return role == "admin" || role == "instance_admin" || role == "service_role"
 }
 
 func valueOr[T any](ptr *T, defaultVal T) T {

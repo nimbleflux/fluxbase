@@ -761,7 +761,7 @@ func TestRLSDashboardAdminTablesProtected(t *testing.T) {
 
 	require.Len(t, activityLog, 0, "Regular user should NOT see activity_log (dashboard admin only)")
 
-	t.Log("Dashboard admin tables correctly restricted to dashboard_admin role")
+	t.Log("Dashboard admin tables correctly restricted to instance_admin role")
 }
 
 // TestRLSImpersonationSessionsAdminOnly tests that impersonation sessions are admin-only
@@ -803,7 +803,7 @@ func TestRLSImpersonationSessionsAdminOnly(t *testing.T) {
 	`, userID)
 	require.Len(t, sessionsSuper, 1, "Dashboard admin/service role should see impersonation_sessions")
 
-	t.Log("Impersonation sessions correctly restricted to dashboard_admin only")
+	t.Log("Impersonation sessions correctly restricted to instance_admin only")
 }
 
 // TestRLSAPIKeyUsageRestriction tests that users can only see usage for their own client keys
@@ -969,8 +969,8 @@ func TestRLSRoleMapping(t *testing.T) {
 			expectedDBRole: "authenticated",
 		},
 		{
-			name:           "dashboard_admin maps to authenticated",
-			appRole:        "dashboard_admin",
+			name:           "instance_admin maps to authenticated",
+			appRole:        "instance_admin",
 			expectedDBRole: "authenticated",
 		},
 		{

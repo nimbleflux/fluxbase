@@ -8,38 +8,38 @@ DECLARE
     default_tenant_id UUID;
     user_count INTEGER;
 BEGIN
-    -- Get default tenant ID
-    SELECT id INTO default_tenant_id FROM tenants WHERE is_default = true LIMIT 1;
-    
+    -- Get default tenant ID from platform schema
+    SELECT id INTO default_tenant_id FROM platform.tenants WHERE is_default = true LIMIT 1;
+
     IF default_tenant_id IS NULL THEN
         RAISE EXCEPTION 'Default tenant not found. Run 101_migrate_admin_roles migration first.';
     END IF;
-    
+
     RAISE NOTICE 'Backfilling data to default tenant: %', default_tenant_id;
-    
+
     -- ============================================
     -- BACKFILL TENANT_ID ON ALL TABLES
     -- ============================================
-    
+
     -- Auth schema
     UPDATE auth.users SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
     UPDATE auth.webhooks SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
     UPDATE auth.client_keys SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
-    
+
     -- Storage schema
     UPDATE storage.buckets SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
     UPDATE storage.objects SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
     UPDATE storage.object_permissions SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
-    
+
     -- Functions schema
     UPDATE functions.edge_functions SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
     UPDATE functions.secrets SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
     UPDATE functions.edge_triggers SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
-    
+
     -- Jobs schema
     UPDATE jobs.functions SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
     UPDATE jobs.queue SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
-    
+
     -- AI schema
     UPDATE ai.knowledge_bases SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
     UPDATE ai.documents SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
@@ -52,27 +52,26 @@ BEGIN
     UPDATE ai.document_permissions SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
     UPDATE ai.knowledge_base_permissions SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
     UPDATE ai.table_export_sync_configs SET tenant_id = default_tenant_id WHERE tenant_id IS NULL;
-    
+
     RAISE NOTICE 'Tenant ID backfill complete';
-    
+
     -- ============================================
     -- CREATE TENANT MEMBERSHIPS FOR ALL AUTH USERS
     -- ============================================
-    
+
     -- Create memberships for all existing auth.users
-    INSERT INTO tenant_memberships (tenant_id, user_id, role, created_at)
-    SELECT 
-        default_tenant_id, 
-        id, 
-        'tenant_member', 
+    INSERT INTO platform.tenant_memberships (tenant_id, user_id, role, created_at)
+    SELECT
+        default_tenant_id,
+        id,
+        'tenant_member',
         NOW()
     FROM auth.users
-    WHERE deleted_at IS NULL
     ON CONFLICT (tenant_id, user_id) DO NOTHING;
-    
+
     GET DIAGNOSTICS user_count = ROW_COUNT;
     RAISE NOTICE 'Created % tenant memberships for auth.users', user_count;
-    
+
     RAISE NOTICE 'Data backfill complete';
 END $$;
 

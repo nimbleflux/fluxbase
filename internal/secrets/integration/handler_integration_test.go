@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -653,17 +654,50 @@ func setupSecretsApp(t *testing.T, tc *testutil.IntegrationTestContext) *fiber.A
 		RefreshExpiry: 24 * time.Hour,
 	}
 
-	// Create auth service
-	authService := auth.NewService(db, authCfg, nil, "http://localhost:3000")
 	jwtManager, err := auth.NewJWTManager(authCfg.JWTSecret, authCfg.JWTExpiry, authCfg.RefreshExpiry)
 	require.NoError(t, err)
-	clientKeyService := auth.NewClientKeyService(db.Pool(), nil)
 
 	// Create handler
 	handler := secrets.NewHandler(storage)
 
-	// Register routes
-	handler.RegisterRoutes(app, authService, clientKeyService, db.Pool(), jwtManager)
+	// Register routes manually (RegisterRoutes was removed)
+	// Simple auth middleware that validates JWT tokens
+	authMiddleware := func(c fiber.Ctx) error {
+		authHeader := c.Get("Authorization")
+		if authHeader == "" {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Missing authorization header",
+			})
+		}
+
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString == authHeader {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Invalid authorization header format",
+			})
+		}
+
+		claims, err := jwtManager.ValidateToken(tokenString)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Invalid or expired token",
+			})
+		}
+
+		c.Locals("userID", claims.UserID)
+		c.Locals("userEmail", claims.Email)
+		return c.Next()
+	}
+
+	secretsGroup := app.Group("/api/v1/secrets", authMiddleware)
+	secretsGroup.Get("/", handler.ListSecrets)
+	secretsGroup.Get("/stats", handler.GetStats)
+	secretsGroup.Post("/", handler.CreateSecret)
+	secretsGroup.Get("/:id", handler.GetSecret)
+	secretsGroup.Put("/:id", handler.UpdateSecret)
+	secretsGroup.Delete("/:id", handler.DeleteSecret)
+	secretsGroup.Get("/:id/versions", handler.GetVersions)
+	secretsGroup.Post("/:id/rollback/:version", handler.RollbackToVersion)
 
 	return app
 }
@@ -721,7 +755,7 @@ func createTestUserWithToken(t *testing.T, tc *testutil.IntegrationTestContext, 
 	require.NoError(t, err, "Failed to hash dashboard password")
 
 	_, err = tc.DB.Pool().Exec(ctx,
-		"INSERT INTO dashboard.users (id, email, password_hash, full_name, role, created_at) VALUES ($1, $2, $3, $4, 'dashboard_admin', NOW()) ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash",
+		"INSERT INTO dashboard.users (id, email, password_hash, full_name, role, created_at) VALUES ($1, $2, $3, $4, 'instance_admin', NOW()) ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash",
 		userID, email, string(dashboardPasswordHash), "Test User")
 	require.NoError(t, err, "Failed to create dashboard user")
 

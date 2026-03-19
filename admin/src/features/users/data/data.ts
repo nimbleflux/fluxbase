@@ -44,13 +44,13 @@ export const providerColors = new Map<Provider, string>([
 // Common role configurations
 export const roles = [
   {
-    label: 'Admin',
-    value: 'dashboard_admin',
+    label: 'Instance Admin',
+    value: 'instance_admin',
     icon: Shield,
   },
   {
-    label: 'User',
-    value: 'dashboard_user',
+    label: 'Tenant Admin',
+    value: 'tenant_admin',
     icon: UserCheck,
   },
 ] as const

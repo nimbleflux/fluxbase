@@ -50,7 +50,7 @@ pre-commit:
     prettier:
       glob: "{admin,sdk,sdk-react,docs}/**/*.{ts,tsx,js,jsx,json,md,css}"
       run: |
-        bun exec prettier --write --no-config "{staged_files}"
+        bunx prettier --write --no-config "{staged_files}"
         git add {staged_files}
 
 commit-msg:

@@ -818,7 +818,7 @@ func (h *Handler) GetPublicExecution(c fiber.Ctx) error {
 
 	// Check ownership (unless service role)
 	role, _ := c.Locals("user_role").(string)
-	if role != "service_role" && role != "dashboard_admin" {
+	if role != "service_role" && role != "instance_admin" {
 		if execution.UserID == nil || *execution.UserID != userID {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "Execution not found",
@@ -856,9 +856,9 @@ func (h *Handler) GetPublicExecutionLogs(c fiber.Ctx) error {
 		})
 	}
 
-	// Check ownership (unless service_role or dashboard_admin)
+	// Check ownership (unless service_role or instance_admin)
 	role, _ := c.Locals("user_role").(string)
-	if role != "service_role" && role != "dashboard_admin" {
+	if role != "service_role" && role != "instance_admin" {
 		if execution.UserID == nil || *execution.UserID != userID {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "Execution not found",

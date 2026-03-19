@@ -11,11 +11,9 @@ import (
 	"github.com/graphql-go/graphql/gqlerrors"
 	"github.com/graphql-go/graphql/language/ast"
 	"github.com/graphql-go/graphql/language/parser"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/rs/zerolog/log"
 )
 
@@ -320,19 +318,6 @@ func (h *GraphQLHandler) HandleIntrospection(c fiber.Ctx) error {
 		Data:   result.Data,
 		Errors: convertErrors(result.Errors),
 	})
-}
-
-// RegisterRoutes registers GraphQL routes with the Fiber app
-func (h *GraphQLHandler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Import middleware package
-	// GraphQL endpoint - requires authentication with RLS support
-	graphqlGroup := app.Group("/api/v1/graphql")
-
-	// POST /api/v1/graphql - execute queries/mutations (requires auth)
-	graphqlGroup.Post("/", middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager), h.HandleGraphQL)
-
-	// GET /api/v1/graphql - introspection (if enabled, requires auth)
-	graphqlGroup.Get("/", middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager), h.HandleIntrospection)
 }
 
 // InvalidateSchema invalidates the cached GraphQL schema

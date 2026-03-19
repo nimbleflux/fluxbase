@@ -97,7 +97,7 @@ func TestStorageRLS_AdminAccess(t *testing.T) {
 		WithAuth(adminToken).
 		Send()
 
-	// Admin with dashboard_admin role should bypass RLS and access the file
+	// Admin with instance_admin role should bypass RLS and access the file
 	require.Equal(t, fiber.StatusOK, downloadResp.Status(),
 		"Admin should be able to download user's private file (bypasses RLS)")
 

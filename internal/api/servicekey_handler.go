@@ -82,7 +82,7 @@ func (h *ServiceKeyHandler) ListServiceKeys(c fiber.Ctx) error {
 		SELECT id, name, description, key_prefix, scopes, enabled,
 		       rate_limit_per_minute, rate_limit_per_hour,
 		       created_by, created_at, last_used_at, expires_at
-		FROM auth.service_keys
+		FROM platform.service_keys
 		ORDER BY created_at DESC
 	`)
 	if err != nil {
@@ -137,7 +137,7 @@ func (h *ServiceKeyHandler) GetServiceKey(c fiber.Ctx) error {
 		SELECT id, name, description, key_prefix, scopes, enabled,
 		       rate_limit_per_minute, rate_limit_per_hour,
 		       created_by, created_at, last_used_at, expires_at
-		FROM auth.service_keys
+		FROM platform.service_keys
 		WHERE id = $1
 	`, id).Scan(
 		&key.ID, &key.Name, &key.Description, &key.KeyPrefix, &key.Scopes, &key.Enabled,
@@ -216,7 +216,7 @@ func (h *ServiceKeyHandler) CreateServiceKey(c fiber.Ctx) error {
 	// Insert the key
 	var key ServiceKey
 	err = h.db.QueryRow(c.RequestCtx(), `
-		INSERT INTO auth.service_keys (
+		INSERT INTO platform.service_keys (
 			name, description, key_hash, key_prefix, scopes, enabled,
 			rate_limit_per_minute, rate_limit_per_hour, created_by, expires_at
 		) VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9)
@@ -328,7 +328,7 @@ func (h *ServiceKeyHandler) UpdateServiceKey(c fiber.Ctx) error {
 	args = append(args, id)
 
 	query := fmt.Sprintf(`
-		UPDATE auth.service_keys
+		UPDATE platform.service_keys
 		SET %s
 		WHERE id = $%d
 	`, setClause, i)
@@ -375,7 +375,7 @@ func (h *ServiceKeyHandler) DeleteServiceKey(c fiber.Ctx) error {
 	}
 
 	result, err := h.db.Exec(c.RequestCtx(), `
-		DELETE FROM auth.service_keys WHERE id = $1
+		DELETE FROM platform.service_keys WHERE id = $1
 	`, id)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to delete service key")
@@ -415,7 +415,7 @@ func (h *ServiceKeyHandler) DisableServiceKey(c fiber.Ctx) error {
 	}
 
 	result, err := h.db.Exec(c.RequestCtx(), `
-		UPDATE auth.service_keys SET enabled = false WHERE id = $1
+		UPDATE platform.service_keys SET enabled = false WHERE id = $1
 	`, id)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to disable service key")
@@ -458,7 +458,7 @@ func (h *ServiceKeyHandler) EnableServiceKey(c fiber.Ctx) error {
 	}
 
 	result, err := h.db.Exec(c.RequestCtx(), `
-		UPDATE auth.service_keys SET enabled = true WHERE id = $1
+		UPDATE platform.service_keys SET enabled = true WHERE id = $1
 	`, id)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to enable service key")
@@ -526,7 +526,7 @@ func (h *ServiceKeyHandler) RevokeServiceKey(c fiber.Ctx) error {
 	// Get the key prefix for audit log
 	var keyPrefix string
 	err = h.db.QueryRow(c.RequestCtx(), `
-		SELECT key_prefix FROM auth.service_keys WHERE id = $1
+		SELECT key_prefix FROM platform.service_keys WHERE id = $1
 	`, id).Scan(&keyPrefix)
 	if err != nil {
 		return SendResourceNotFound(c, "Service key")
@@ -541,7 +541,7 @@ func (h *ServiceKeyHandler) RevokeServiceKey(c fiber.Ctx) error {
 
 	// Revoke the key
 	result, err := tx.Exec(c.RequestCtx(), `
-		UPDATE auth.service_keys
+		UPDATE platform.service_keys
 		SET enabled = false, revoked_at = NOW(), revoked_by = $2, revocation_reason = $3
 		WHERE id = $1 AND revoked_at IS NULL
 	`, id, adminUUID, req.Reason)
@@ -556,7 +556,7 @@ func (h *ServiceKeyHandler) RevokeServiceKey(c fiber.Ctx) error {
 
 	// Log to audit table
 	_, err = tx.Exec(c.RequestCtx(), `
-		INSERT INTO auth.service_key_revocations (key_id, key_prefix, revoked_by, reason, revocation_type)
+		INSERT INTO platform.service_key_revocations (key_id, key_prefix, revoked_by, reason, revocation_type)
 		VALUES ($1, $2, $3, $4, 'emergency')
 	`, id, keyPrefix, adminUUID, req.Reason)
 	if err != nil {
@@ -625,7 +625,7 @@ func (h *ServiceKeyHandler) DeprecateServiceKey(c fiber.Ctx) error {
 	graceEndTime := time.Now().Add(time.Duration(gracePeriod) * time.Hour)
 
 	result, err := h.db.Exec(c.RequestCtx(), `
-		UPDATE auth.service_keys
+		UPDATE platform.service_keys
 		SET deprecated_at = NOW(), grace_period_ends_at = $2
 		WHERE id = $1 AND deprecated_at IS NULL AND revoked_at IS NULL
 	`, id, graceEndTime)
@@ -688,7 +688,7 @@ func (h *ServiceKeyHandler) RotateServiceKey(c fiber.Ctx) error {
 		SELECT id, name, description, key_prefix, scopes, enabled,
 		       rate_limit_per_minute, rate_limit_per_hour,
 		       created_by, created_at, last_used_at, expires_at
-		FROM auth.service_keys
+		FROM platform.service_keys
 		WHERE id = $1 AND revoked_at IS NULL
 	`, id).Scan(
 		&oldKey.ID, &oldKey.Name, &oldKey.Description, &oldKey.KeyPrefix, &oldKey.Scopes, &oldKey.Enabled,
@@ -751,7 +751,7 @@ func (h *ServiceKeyHandler) RotateServiceKey(c fiber.Ctx) error {
 	// Create new key
 	var newKey ServiceKey
 	err = tx.QueryRow(c.RequestCtx(), `
-		INSERT INTO auth.service_keys (
+		INSERT INTO platform.service_keys (
 			name, description, key_hash, key_prefix, scopes, enabled,
 			rate_limit_per_minute, rate_limit_per_hour, created_by, expires_at
 		) VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9)
@@ -773,7 +773,7 @@ func (h *ServiceKeyHandler) RotateServiceKey(c fiber.Ctx) error {
 
 	// Deprecate old key and link to new one
 	_, err = tx.Exec(c.RequestCtx(), `
-		UPDATE auth.service_keys
+		UPDATE platform.service_keys
 		SET deprecated_at = NOW(), grace_period_ends_at = $2, replaced_by = $3
 		WHERE id = $1
 	`, id, graceEndTime, newKey.ID)
@@ -785,7 +785,7 @@ func (h *ServiceKeyHandler) RotateServiceKey(c fiber.Ctx) error {
 	// Log rotation to audit table
 	if createdByUUID != nil {
 		_, _ = tx.Exec(c.RequestCtx(), `
-			INSERT INTO auth.service_key_revocations (key_id, key_prefix, revoked_by, reason, revocation_type)
+			INSERT INTO platform.service_key_revocations (key_id, key_prefix, revoked_by, reason, revocation_type)
 			VALUES ($1, $2, $3, $4, 'rotation')
 		`, id, oldKey.KeyPrefix, createdByUUID, "Key rotation")
 	}
@@ -831,7 +831,7 @@ func (h *ServiceKeyHandler) GetRevocationHistory(c fiber.Ctx) error {
 
 	rows, err := h.db.Query(c.RequestCtx(), `
 		SELECT id, key_id, key_prefix, revoked_by, reason, revocation_type, created_at
-		FROM auth.service_key_revocations
+		FROM platform.service_key_revocations
 		WHERE key_id = $1
 		ORDER BY created_at DESC
 	`, id)

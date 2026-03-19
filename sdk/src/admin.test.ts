@@ -91,7 +91,7 @@ describe("FluxbaseAdmin", () => {
             id: "admin-id",
             email: "admin@example.com",
             name: "Admin User",
-            role: "dashboard_admin",
+            role: "instance_admin",
             email_verified: true,
             created_at: "2024-01-26T10:00:00Z",
             updated_at: "2024-01-26T10:00:00Z",
@@ -132,7 +132,7 @@ describe("FluxbaseAdmin", () => {
             id: "admin-id",
             email: "admin@example.com",
             name: "Admin User",
-            role: "dashboard_admin",
+            role: "instance_admin",
             email_verified: true,
             created_at: "2024-01-26T10:00:00Z",
             updated_at: "2024-01-26T10:00:00Z",
@@ -171,7 +171,7 @@ describe("FluxbaseAdmin", () => {
             id: "admin-id",
             email: "admin@example.com",
             name: "Admin User",
-            role: "dashboard_admin",
+            role: "instance_admin",
             email_verified: true,
             created_at: "2024-01-26T10:00:00Z",
             updated_at: "2024-01-26T10:00:00Z",
@@ -444,7 +444,7 @@ describe("FluxbaseAdmin", () => {
         const user: EnrichedUser = {
           id: "user-123",
           email: "user@example.com",
-          role: "dashboard_admin",
+          role: "instance_admin",
           created_at: "2024-01-26T10:00:00Z",
         };
 
@@ -452,14 +452,14 @@ describe("FluxbaseAdmin", () => {
 
         const { data: result, error } = await admin.updateUserRole(
           "user-123",
-          "dashboard_admin",
+          "instance_admin",
           "dashboard",
         );
 
         expect(mockFetch.patch).toHaveBeenCalledWith(
           "/api/v1/admin/users/user-123/role?type=dashboard",
           {
-            role: "dashboard_admin",
+            role: "instance_admin",
           },
         );
         expect(error).toBeNull();
@@ -525,7 +525,7 @@ describe("FluxbaseAdmin", () => {
           id: "admin-id",
           email: "admin@example.com",
           name: "Admin",
-          role: "dashboard_admin",
+          role: "instance_admin",
           email_verified: true,
           created_at: "2024-01-26T10:00:00Z",
           updated_at: "2024-01-26T10:00:00Z",

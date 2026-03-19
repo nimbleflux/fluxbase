@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from 'date-fns'
 import { type ColumnDef } from '@tanstack/react-table'
-import { Lock } from 'lucide-react'
+import { Lock, Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -107,6 +107,37 @@ export const usersColumns: ColumnDef<User>[] = [
     },
     enableSorting: false,
     enableHiding: false,
+  },
+  {
+    id: 'tenant_assignments',
+    accessorFn: (row) => row.tenant_assignments || [],
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Tenants' />
+    ),
+    cell: ({ row }) => {
+      const assignments = row.original.tenant_assignments
+      if (!assignments || assignments.length === 0) {
+        return <span className='text-muted-foreground'>-</span>
+      }
+      if (assignments.length === 1) {
+        return (
+          <div className='flex items-center gap-1'>
+            <Building2 className='h-3.5 w-3.5 text-muted-foreground' />
+            <span className='text-sm'>{assignments[0].tenant_name}</span>
+          </div>
+        )
+      }
+      return (
+        <div className='flex items-center gap-1'>
+          <Building2 className='h-3.5 w-3.5 text-muted-foreground' />
+          <span className='text-sm'>{assignments[0].tenant_name}</span>
+          <Badge variant='secondary' className='ml-1 px-1.5 py-0 text-xs'>
+            +{assignments.length - 1}
+          </Badge>
+        </div>
+      )
+    },
+    enableSorting: false,
   },
   {
     accessorKey: 'email_verified',

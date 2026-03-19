@@ -28,29 +28,6 @@ func NewHandler(db *database.Connection, schemaCache *database.SchemaCache) *Han
 	}
 }
 
-// RegisterRoutes registers all migration routes (admin only)
-func (h *Handler) RegisterRoutes(app *fiber.App, authMiddleware ...any) {
-	migrations := app.Group("/api/v1/admin/migrations", authMiddleware...)
-
-	// CRUD operations
-	migrations.Post("/", h.CreateMigration)
-	migrations.Get("/", h.ListMigrations)
-	migrations.Get("/:name", h.GetMigration)
-	migrations.Put("/:name", h.UpdateMigration)
-	migrations.Delete("/:name", h.DeleteMigration)
-
-	// Execution operations
-	migrations.Post("/:name/apply", h.ApplyMigration)
-	migrations.Post("/:name/rollback", h.RollbackMigration)
-	migrations.Post("/apply-pending", h.ApplyPending)
-
-	// Bulk operations
-	migrations.Post("/sync", h.SyncMigrations)
-
-	// Execution history
-	migrations.Get("/:name/executions", h.GetExecutions)
-}
-
 // CreateMigration creates a new migration
 func (h *Handler) CreateMigration(c fiber.Ctx) error {
 	var req struct {

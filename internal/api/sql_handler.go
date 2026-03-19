@@ -160,7 +160,7 @@ func (h *SQLHandler) ExecuteSQL(c fiber.Ctx) error {
 		Msg("SQL query execution attempt")
 
 	// Only use RLS context for known database roles (direct token, not impersonation)
-	// Dashboard admins (role like "dashboard_admin") get service_role access
+	// Instance admins (role like "instance_admin") get service_role access
 	if hasClaims && claims != nil && isKnownDatabaseRole(claims.Role) {
 		return h.executeWithRLSContext(c, req.Query, statements, claims, userID)
 	}

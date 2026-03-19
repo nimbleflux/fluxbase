@@ -6,10 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // Handler manages HTTP endpoints for secrets
@@ -39,37 +36,6 @@ type UpdateSecretRequest struct {
 	Value       *string    `json:"value,omitempty"`
 	Description *string    `json:"description,omitempty"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-}
-
-// RegisterRoutes registers secrets routes with authentication
-func (h *Handler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Apply authentication middleware to all secrets routes
-	secrets := app.Group("/api/v1/secrets",
-		middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager),
-	)
-
-	// Read operations require read:secrets scope
-	secrets.Get("/", middleware.RequireScope(auth.ScopeSecretsRead), h.ListSecrets)
-	secrets.Get("/stats", middleware.RequireScope(auth.ScopeSecretsRead), h.GetStats)
-
-	// Name-based routes (must come BEFORE /:id routes to avoid conflicts)
-	// These allow fetching secrets by name instead of UUID
-	byName := secrets.Group("/by-name")
-	byName.Get("/:name", middleware.RequireScope(auth.ScopeSecretsRead), h.GetSecretByName)
-	byName.Get("/:name/versions", middleware.RequireScope(auth.ScopeSecretsRead), h.GetVersionsByName)
-	byName.Put("/:name", middleware.RequireScope(auth.ScopeSecretsWrite), h.UpdateSecretByName)
-	byName.Delete("/:name", middleware.RequireScope(auth.ScopeSecretsWrite), h.DeleteSecretByName)
-	byName.Post("/:name/rollback/:version", middleware.RequireScope(auth.ScopeSecretsWrite), h.RollbackByName)
-
-	// UUID-based routes (legacy, kept for backward compatibility)
-	secrets.Get("/:id", middleware.RequireScope(auth.ScopeSecretsRead), h.GetSecret)
-	secrets.Get("/:id/versions", middleware.RequireScope(auth.ScopeSecretsRead), h.GetVersions)
-
-	// Write operations require write:secrets scope
-	secrets.Post("/", middleware.RequireScope(auth.ScopeSecretsWrite), h.CreateSecret)
-	secrets.Put("/:id", middleware.RequireScope(auth.ScopeSecretsWrite), h.UpdateSecret)
-	secrets.Delete("/:id", middleware.RequireScope(auth.ScopeSecretsWrite), h.DeleteSecret)
-	secrets.Post("/:id/rollback/:version", middleware.RequireScope(auth.ScopeSecretsWrite), h.RollbackToVersion)
 }
 
 // CreateSecret creates a new secret

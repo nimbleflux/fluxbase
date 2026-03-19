@@ -6,9 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nimbleflux/fluxbase/internal/auth"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // ClientKeyHandler handles client key-related requests
@@ -38,28 +36,6 @@ type UpdateClientKeyRequest struct {
 	Description        *string  `json:"description,omitempty"`
 	Scopes             []string `json:"scopes,omitempty"`
 	RateLimitPerMinute *int     `json:"rate_limit_per_minute,omitempty"`
-}
-
-// RegisterRoutes registers client key routes with authentication
-// Users can manage their own client keys when 'allow_user_client_keys' setting is enabled.
-// When disabled, only admins can manage client keys.
-func (h *ClientKeyHandler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager, settingsCache *auth.SettingsCache) {
-	// Apply authentication middleware and conditional admin check to all client key routes
-	// If 'allow_user_client_keys' is disabled, RequireAdminIfClientKeysDisabled enforces admin access
-	clientKeys := app.Group("/api/v1/client-keys",
-		middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager),
-		middleware.RequireAdminIfClientKeysDisabled(settingsCache),
-	)
-
-	// Read operations require read:clientkeys scope
-	clientKeys.Get("/", middleware.RequireScope(auth.ScopeClientKeysRead), h.ListClientKeys)
-	clientKeys.Get("/:id", middleware.RequireScope(auth.ScopeClientKeysRead), h.GetClientKey)
-
-	// Write operations require write:clientkeys scope
-	clientKeys.Post("/", middleware.RequireScope(auth.ScopeClientKeysWrite), h.CreateClientKey)
-	clientKeys.Patch("/:id", middleware.RequireScope(auth.ScopeClientKeysWrite), h.UpdateClientKey)
-	clientKeys.Delete("/:id", middleware.RequireScope(auth.ScopeClientKeysWrite), h.DeleteClientKey)
-	clientKeys.Post("/:id/revoke", middleware.RequireScope(auth.ScopeClientKeysWrite), h.RevokeClientKey)
 }
 
 // CreateClientKey creates a new client key
@@ -108,7 +84,7 @@ func (h *ClientKeyHandler) ListClientKeys(c fiber.Ctx) error {
 	// Get current user info
 	currentUserID, _ := c.Locals("user_id").(string)
 	role, _ := c.Locals("user_role").(string)
-	isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+	isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 	// Determine which user's keys to list
 	var userID *uuid.UUID
@@ -177,7 +153,7 @@ func (h *ClientKeyHandler) GetClientKey(c fiber.Ctx) error {
 	// Get current user info
 	currentUserID, _ := c.Locals("user_id").(string)
 	role, _ := c.Locals("user_role").(string)
-	isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+	isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 	// For simplicity, we'll just list and filter (in production, add a GetByID method)
 	clientKeys, err := h.clientKeyService.ListClientKeys(c.RequestCtx(), nil)

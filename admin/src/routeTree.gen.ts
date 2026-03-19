@@ -24,6 +24,7 @@ import { Route as authResetPasswordRouteImport } from './routes/(auth)/reset-pas
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
+import { Route as AuthenticatedTenantsIndexRouteImport } from './routes/_authenticated/tenants/index'
 import { Route as AuthenticatedTablesIndexRouteImport } from './routes/_authenticated/tables/index'
 import { Route as AuthenticatedStorageIndexRouteImport } from './routes/_authenticated/storage/index'
 import { Route as AuthenticatedStorageConfigIndexRouteImport } from './routes/_authenticated/storage-config/index'
@@ -51,6 +52,7 @@ import { Route as AuthenticatedClientKeysIndexRouteImport } from './routes/_auth
 import { Route as AuthenticatedChatbotsIndexRouteImport } from './routes/_authenticated/chatbots/index'
 import { Route as AuthenticatedAuthenticationIndexRouteImport } from './routes/_authenticated/authentication/index'
 import { Route as AuthenticatedAiProvidersIndexRouteImport } from './routes/_authenticated/ai-providers/index'
+import { Route as AuthenticatedTenantsTenantIdRouteImport } from './routes/_authenticated/tenants/$tenantId'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedApiRestRouteImport } from './routes/_authenticated/api/rest'
@@ -136,6 +138,12 @@ const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
   path: '/users/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTenantsIndexRoute =
+  AuthenticatedTenantsIndexRouteImport.update({
+    id: '/tenants/',
+    path: '/tenants/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedTablesIndexRoute =
   AuthenticatedTablesIndexRouteImport.update({
     id: '/tables/',
@@ -295,6 +303,12 @@ const AuthenticatedAiProvidersIndexRoute =
     path: '/ai-providers/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedTenantsTenantIdRoute =
+  AuthenticatedTenantsTenantIdRouteImport.update({
+    id: '/tenants/$tenantId',
+    path: '/tenants/$tenantId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsAppearanceRoute =
   AuthenticatedSettingsAppearanceRouteImport.update({
     id: '/settings/appearance',
@@ -365,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/api/rest': typeof AuthenticatedApiRestRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
+  '/tenants/$tenantId': typeof AuthenticatedTenantsTenantIdRoute
   '/ai-providers/': typeof AuthenticatedAiProvidersIndexRoute
   '/authentication/': typeof AuthenticatedAuthenticationIndexRoute
   '/chatbots/': typeof AuthenticatedChatbotsIndexRoute
@@ -392,6 +407,7 @@ export interface FileRoutesByFullPath {
   '/storage-config/': typeof AuthenticatedStorageConfigIndexRoute
   '/storage/': typeof AuthenticatedStorageIndexRoute
   '/tables/': typeof AuthenticatedTablesIndexRoute
+  '/tenants/': typeof AuthenticatedTenantsIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/knowledge-bases/$id/graph': typeof AuthenticatedKnowledgeBasesIdGraphRoute
@@ -417,6 +433,7 @@ export interface FileRoutesByTo {
   '/api/rest': typeof AuthenticatedApiRestRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
+  '/tenants/$tenantId': typeof AuthenticatedTenantsTenantIdRoute
   '/ai-providers': typeof AuthenticatedAiProvidersIndexRoute
   '/authentication': typeof AuthenticatedAuthenticationIndexRoute
   '/chatbots': typeof AuthenticatedChatbotsIndexRoute
@@ -444,6 +461,7 @@ export interface FileRoutesByTo {
   '/storage-config': typeof AuthenticatedStorageConfigIndexRoute
   '/storage': typeof AuthenticatedStorageIndexRoute
   '/tables': typeof AuthenticatedTablesIndexRoute
+  '/tenants': typeof AuthenticatedTenantsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
   '/knowledge-bases/$id/graph': typeof AuthenticatedKnowledgeBasesIdGraphRoute
@@ -471,6 +489,7 @@ export interface FileRoutesById {
   '/_authenticated/api/rest': typeof AuthenticatedApiRestRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
+  '/_authenticated/tenants/$tenantId': typeof AuthenticatedTenantsTenantIdRoute
   '/_authenticated/ai-providers/': typeof AuthenticatedAiProvidersIndexRoute
   '/_authenticated/authentication/': typeof AuthenticatedAuthenticationIndexRoute
   '/_authenticated/chatbots/': typeof AuthenticatedChatbotsIndexRoute
@@ -498,6 +517,7 @@ export interface FileRoutesById {
   '/_authenticated/storage-config/': typeof AuthenticatedStorageConfigIndexRoute
   '/_authenticated/storage/': typeof AuthenticatedStorageIndexRoute
   '/_authenticated/tables/': typeof AuthenticatedTablesIndexRoute
+  '/_authenticated/tenants/': typeof AuthenticatedTenantsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/_authenticated/knowledge-bases/$id/graph': typeof AuthenticatedKnowledgeBasesIdGraphRoute
@@ -525,6 +545,7 @@ export interface FileRouteTypes {
     | '/api/rest'
     | '/errors/$error'
     | '/settings/appearance'
+    | '/tenants/$tenantId'
     | '/ai-providers/'
     | '/authentication/'
     | '/chatbots/'
@@ -552,6 +573,7 @@ export interface FileRouteTypes {
     | '/storage-config/'
     | '/storage/'
     | '/tables/'
+    | '/tenants/'
     | '/users/'
     | '/webhooks/'
     | '/knowledge-bases/$id/graph'
@@ -577,6 +599,7 @@ export interface FileRouteTypes {
     | '/api/rest'
     | '/errors/$error'
     | '/settings/appearance'
+    | '/tenants/$tenantId'
     | '/ai-providers'
     | '/authentication'
     | '/chatbots'
@@ -604,6 +627,7 @@ export interface FileRouteTypes {
     | '/storage-config'
     | '/storage'
     | '/tables'
+    | '/tenants'
     | '/users'
     | '/webhooks'
     | '/knowledge-bases/$id/graph'
@@ -630,6 +654,7 @@ export interface FileRouteTypes {
     | '/_authenticated/api/rest'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/appearance'
+    | '/_authenticated/tenants/$tenantId'
     | '/_authenticated/ai-providers/'
     | '/_authenticated/authentication/'
     | '/_authenticated/chatbots/'
@@ -657,6 +682,7 @@ export interface FileRouteTypes {
     | '/_authenticated/storage-config/'
     | '/_authenticated/storage/'
     | '/_authenticated/tables/'
+    | '/_authenticated/tenants/'
     | '/_authenticated/users/'
     | '/_authenticated/webhooks/'
     | '/_authenticated/knowledge-bases/$id/graph'
@@ -787,6 +813,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/users/'
       preLoaderRoute: typeof AuthenticatedUsersIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tenants/': {
+      id: '/_authenticated/tenants/'
+      path: '/tenants'
+      fullPath: '/tenants/'
+      preLoaderRoute: typeof AuthenticatedTenantsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/tables/': {
@@ -978,6 +1011,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAiProvidersIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/tenants/$tenantId': {
+      id: '/_authenticated/tenants/$tenantId'
+      path: '/tenants/$tenantId'
+      fullPath: '/tenants/$tenantId'
+      preLoaderRoute: typeof AuthenticatedTenantsTenantIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings/appearance': {
       id: '/_authenticated/settings/appearance'
       path: '/settings/appearance'
@@ -1049,6 +1089,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedApiRestRoute: typeof AuthenticatedApiRestRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
+  AuthenticatedTenantsTenantIdRoute: typeof AuthenticatedTenantsTenantIdRoute
   AuthenticatedAiProvidersIndexRoute: typeof AuthenticatedAiProvidersIndexRoute
   AuthenticatedAuthenticationIndexRoute: typeof AuthenticatedAuthenticationIndexRoute
   AuthenticatedChatbotsIndexRoute: typeof AuthenticatedChatbotsIndexRoute
@@ -1076,6 +1117,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedStorageConfigIndexRoute: typeof AuthenticatedStorageConfigIndexRoute
   AuthenticatedStorageIndexRoute: typeof AuthenticatedStorageIndexRoute
   AuthenticatedTablesIndexRoute: typeof AuthenticatedTablesIndexRoute
+  AuthenticatedTenantsIndexRoute: typeof AuthenticatedTenantsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
   AuthenticatedKnowledgeBasesIdGraphRoute: typeof AuthenticatedKnowledgeBasesIdGraphRoute
@@ -1091,6 +1133,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedApiRestRoute: AuthenticatedApiRestRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
+  AuthenticatedTenantsTenantIdRoute: AuthenticatedTenantsTenantIdRoute,
   AuthenticatedAiProvidersIndexRoute: AuthenticatedAiProvidersIndexRoute,
   AuthenticatedAuthenticationIndexRoute: AuthenticatedAuthenticationIndexRoute,
   AuthenticatedChatbotsIndexRoute: AuthenticatedChatbotsIndexRoute,
@@ -1119,6 +1162,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedStorageConfigIndexRoute: AuthenticatedStorageConfigIndexRoute,
   AuthenticatedStorageIndexRoute: AuthenticatedStorageIndexRoute,
   AuthenticatedTablesIndexRoute: AuthenticatedTablesIndexRoute,
+  AuthenticatedTenantsIndexRoute: AuthenticatedTenantsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
   AuthenticatedKnowledgeBasesIdGraphRoute:

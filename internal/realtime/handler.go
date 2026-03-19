@@ -155,7 +155,7 @@ func (h *RealtimeHandler) HandleWebSocket(c fiber.Ctx) error {
 		userID = &claims.UserID
 		rawClaims = claims.RawClaims // Preserve full JWT claims for RLS
 		// Extract role from JWT claims for RLS policy enforcement
-		// Roles can be: "anon", "authenticated", "admin", "dashboard_admin", "service_role"
+		// Roles can be: "anon", "authenticated", "admin", "instance_admin", "service_role"
 		if claims.Role != "" {
 			role = claims.Role
 		} else {
@@ -367,7 +367,7 @@ func (h *RealtimeHandler) handleMessage(conn *Connection, msg ClientMessage) {
 		if isAdminChannel || isFluxbaseChannel {
 			// Admin channels require admin role
 			if isAdminChannel {
-				if conn.Role != "admin" && conn.Role != "dashboard_admin" && conn.Role != "service_role" {
+				if conn.Role != "admin" && conn.Role != "instance_admin" && conn.Role != "service_role" {
 					_ = conn.SendMessage(ServerMessage{
 						Type:  MessageTypeError,
 						Error: "admin access required to subscribe to admin channels",
@@ -592,7 +592,7 @@ func (h *RealtimeHandler) handleBroadcast(conn *Connection, msg ClientMessage) {
 	// Check if this is an admin channel subscription (read-only)
 	if len(msg.Channel) >= 15 && msg.Channel[:15] == "realtime:admin:" {
 		// Admin channels require admin role and are subscribe-only (no broadcasting)
-		if conn.Role != "admin" && conn.Role != "dashboard_admin" && conn.Role != "service_role" {
+		if conn.Role != "admin" && conn.Role != "instance_admin" && conn.Role != "service_role" {
 			_ = conn.SendMessage(ServerMessage{
 				Type:  MessageTypeError,
 				Error: "admin access required to subscribe to admin channels",
@@ -899,7 +899,7 @@ func (h *RealtimeHandler) handleSubscribeLogs(conn *Connection, msg ClientMessag
 	}
 
 	// Check ownership (unless admin/service role)
-	if conn.Role != "admin" && conn.Role != "dashboard_admin" && conn.Role != "service_role" {
+	if conn.Role != "admin" && conn.Role != "instance_admin" && conn.Role != "service_role" {
 		if conn.UserID == nil {
 			_ = conn.SendMessage(ServerMessage{
 				Type:  MessageTypeError,
@@ -973,7 +973,7 @@ func (h *RealtimeHandler) handleSubscribeLogs(conn *Connection, msg ClientMessag
 // handleSubscribeAllLogs processes all-logs subscription requests (admin only).
 func (h *RealtimeHandler) handleSubscribeAllLogs(conn *Connection, msg ClientMessage) {
 	// Require admin role for all-logs subscription
-	if conn.Role != "admin" && conn.Role != "dashboard_admin" && conn.Role != "service_role" {
+	if conn.Role != "admin" && conn.Role != "instance_admin" && conn.Role != "service_role" {
 		_ = conn.SendMessage(ServerMessage{
 			Type:  MessageTypeError,
 			Error: "admin role required for all-logs subscription",

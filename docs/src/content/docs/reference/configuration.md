@@ -152,6 +152,15 @@ realtime:
 admin:
   enabled: false # Enable React admin dashboard
 
+# Multi-Tenancy
+tenants:
+  default:
+    name: "Default Tenant" # Display name for default tenant
+    anon_key: "" # Pre-configured anonymous key (or use anon_key_file)
+    service_key: "" # Pre-configured service key (or use service_key_file)
+    anon_key_file: "" # Path to file containing anonymous key
+    service_key_file: "" # Path to file containing service key
+
 # Logging
 logging:
   console_enabled: true
@@ -465,6 +474,20 @@ The migrations API requires both IP allowlist and service key authentication. Th
 | Variable                 | Description     | Default | Example         |
 | ------------------------ | --------------- | ------- | --------------- |
 | `FLUXBASE_ADMIN_ENABLED` | Enable Admin UI | `false` | `true`, `false` |
+
+### Multi-Tenancy
+
+| Variable                                   | Description                        | Default | Example                    |
+| ------------------------------------------ | ---------------------------------- | ------- | -------------------------- |
+| `FLUXBASE_TENANTS_DEFAULT_NAME`            | Default tenant display name        | `""`    | `Default Tenant`           |
+| `FLUXBASE_TENANTS_DEFAULT_ANON_KEY`        | Pre-configured anonymous key       | `""`    | `fb_anon_...`              |
+| `FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY`     | Pre-configured service key         | `""`    | `fb_srv_...`               |
+| `FLUXBASE_TENANTS_DEFAULT_ANON_KEY_FILE`   | Path to anonymous key file         | `""`    | `/secrets/anon-key`        |
+| `FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY_FILE`| Path to service key file           | `""`    | `/secrets/service-key`     |
+
+:::tip[Loading Keys from Files]
+In production environments, use `anon_key_file` and `service_key_file` to load keys from mounted secrets (Kubernetes Secrets, Docker Secrets, etc.) instead of hardcoding them in configuration.
+:::
 
 ### Logging
 

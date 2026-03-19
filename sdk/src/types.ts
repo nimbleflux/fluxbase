@@ -1324,7 +1324,7 @@ export interface Invitation {
 
 export interface CreateInvitationRequest {
   email: string;
-  role: "dashboard_admin" | "dashboard_user";
+  role: "instance_admin" | "tenant_admin" | "dashboard_user";
   expiry_duration?: number; // Duration in seconds
 }
 

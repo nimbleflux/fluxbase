@@ -1,0 +1,574 @@
+---
+title: "Multi-Tenancy"
+description: Build multi-tenant SaaS applications with Fluxbase's built-in tenant isolation using PostgreSQL Row Level Security. Automatic data isolation per tenant with zero application code changes.
+---
+
+Fluxbase provides built-in multi-tenancy support using PostgreSQL Row Level Security (RLS) for automatic tenant isolation. This enables you to build SaaS applications where each tenant's data is completely isolated at the database level.
+
+## Overview
+
+Multi-tenancy in Fluxbase is implemented through:
+
+- **Tenant Isolation**: Row-Level Security (RLS) policies automatically filter data by tenant
+- **Tenant Service Keys**: Scoped API keys that enforce tenant boundaries
+- **Platform Admin Roles**: Two-tier admin system for instance and tenant management
+
+### Architecture
+
+```mermaid
+graph TD
+    subgraph "Platform Level"
+        A[Instance Admin] --> B[platform.tenants]
+        A --> C[platform.service_keys]
+    end
+    
+    subgraph "Tenant Level"
+        D[Tenant Admin] --> E[Tenant A]
+        D --> F[Tenant B]
+    end
+    
+    subgraph "Data Isolation"
+        E --> G[RLS Policies]
+        F --> G
+        G --> H[Tenant A Data Only]
+        G --> I[Tenant B Data Only]
+    end
+    
+    B --> E
+    B --> F
+```
+
+## Key Types
+
+### Tenant
+
+A tenant represents an organization or customer in your SaaS application:
+
+```typescript
+interface Tenant {
+  id: string // UUID
+  slug: string // URL-friendly identifier
+  name: string // Display name
+  is_default: boolean // Whether this is the default tenant
+  metadata: Record<string, any> | null // Custom metadata
+  created_at: string
+  updated_at: string
+  deleted_at: string | null // Soft delete
+}
+```
+
+### Service Key Types
+
+Fluxbase supports multiple key types for different use cases:
+
+| Key Type | Scope | Use Case |
+|----------|-------|----------|
+| `anon` | Global | Anonymous/public access, no tenant context |
+| `publishable` | User-scoped | User-specific operations, inherits user's tenant |
+| `tenant_service` | Tenant | Backend services for a specific tenant |
+| `global_service` | Instance | Platform-wide operations, bypasses RLS |
+
+## Tenant Service Keys
+
+Tenant service keys are scoped to a specific tenant and automatically enforce tenant isolation:
+
+```typescript
+import { createClient } from '@nimbleflux/fluxbase-sdk'
+
+// Tenant-scoped client - all operations are isolated to tenant
+const tenantClient = createClient(
+  'http://localhost:8080',
+  'tenant-service-key-here'
+)
+
+// This query only returns data for the key's tenant
+const users = await tenantClient.from('users').select('*')
+```
+
+### Creating Tenant Service Keys
+
+Use the Admin SDK to create tenant-scoped keys:
+
+```typescript
+// Create a tenant service key
+const key = await client.admin.createServiceKey({
+  tenant_id: 'tenant-uuid',
+  name: 'Production API Key',
+  key_type: 'tenant_service',
+  scopes: ['rest:read', 'rest:write'],
+  allowed_namespaces: ['public', 'app']
+})
+```
+
+### Key Rotation
+
+Service keys support graceful rotation:
+
+```typescript
+// Deprecate old key with grace period
+await client.admin.deprecateServiceKey('old-key-id', {
+  grace_period_hours: 24,
+  replacement_key_id: 'new-key-id'
+})
+
+// During grace period, both keys work
+// After grace period, old key is revoked
+```
+
+## Platform Admin Roles
+
+Fluxbase uses a two-tier admin system:
+
+### Instance Admin (`instance_admin`)
+
+- Full access to all tenants and data
+- Can create/delete tenants
+- Can manage global service keys
+- Can assign tenant admins
+
+### Tenant Admin (`tenant_admin`)
+
+- Limited to their assigned tenants
+- Can manage tenant service keys
+- Can manage users within their tenant
+- Cannot access other tenants
+
+### Role Assignment
+
+```sql
+-- Check if user is instance admin
+SELECT platform.is_instance_admin('user-uuid');
+
+-- Get tenants managed by a user
+SELECT * FROM platform.user_managed_tenant_ids('user-uuid');
+
+-- Assign tenant admin
+INSERT INTO platform.tenant_admin_assignments (user_id, tenant_id, assigned_by)
+VALUES ('user-uuid', 'tenant-uuid', 'admin-uuid');
+```
+
+## Configuration
+
+### Default Tenant
+
+Configure a default tenant with pre-generated keys:
+
+```yaml
+tenants:
+  default:
+    name: "Default Tenant"
+    # Option 1: Direct key values
+    anon_key: "your-anon-key"
+    service_key: "your-service-key"
+
+    # Option 2: Load from files (recommended for production)
+    anon_key_file: "/secrets/anon-key"
+    service_key_file: "/secrets/service-key"
+```
+
+### Environment Variables
+
+```bash
+FLUXBASE_TENANTS_DEFAULT_NAME="Default Tenant"
+FLUXBASE_TENANTS_DEFAULT_ANON_KEY="your-anon-key"
+FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY="your-service-key"
+FLUXBASE_TENANTS_DEFAULT_ANON_KEY_FILE="/secrets/anon-key"
+FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY_FILE="/secrets/service-key"
+```
+
+## Tenant-Specific Configuration
+
+Fluxbase supports per-tenant configuration overrides, allowing each tenant to have customized settings for authentication, storage, email, and other services. This is ideal for SaaS applications where different customers may require different configurations.
+
+### Configuration Hierarchy
+
+Values are resolved in this order (highest priority last):
+
+1. **Hardcoded defaults** - Built-in default values
+2. **Base YAML file** - `fluxbase.yaml` configuration
+3. **Tenant YAML files** - `tenants/*.yaml` files
+4. **Base environment variables** - `FLUXBASE_*` variables
+5. **Tenant-specific env vars** - `FLUXBASE_TENANTS__<SLUG>__*` variables
+
+### Overridable Sections
+
+The following configuration sections can be overridden per-tenant:
+
+| Section | Description |
+| ------- | ----------- |
+| `auth` | JWT secret, expiry, OAuth providers |
+| `storage` | Provider (local/S3), bucket, region |
+| `email` | Provider (SMTP/SES/SendGrid), from address |
+| `functions` | Timeout, memory limits |
+| `jobs` | Worker count, queue settings |
+| `ai` | Model, embedding settings |
+| `realtime` | WebSocket connection limits |
+| `api` | Page size limits |
+| `graphql` | Query depth limits |
+| `rpc` | Procedure execution limits |
+
+Instance-level settings (database, server, CORS, metrics, logging) remain global.
+
+### Inline Tenant Configs
+
+Define tenant overrides directly in `fluxbase.yaml`:
+
+```yaml
+# Base configuration (applies to all tenants)
+auth:
+  jwt_secret: "base-secret-change-in-production"
+  jwt_expiry: "15m"
+
+storage:
+  provider: "local"
+  local_path: "./storage"
+
+# Tenant-specific overrides
+tenants:
+  default:
+    name: "Platform"
+
+  configs:
+    acme-corp:
+      auth:
+        jwt_secret: "${ACME_JWT_SECRET}"  # From environment variable
+        jwt_expiry: "30m"
+      storage:
+        provider: "s3"
+        s3_bucket: "acme-fluxbase"
+        s3_region: "us-east-1"
+      email:
+        from_address: "noreply@acme.com"
+
+    beta-corp:
+      auth:
+        jwt_expiry: "1h"
+      functions:
+        default_timeout: 60  # seconds
+```
+
+### Tenant Config Files
+
+For GitOps-friendly workflows, store tenant configs in separate YAML files:
+
+```yaml
+# fluxbase.yaml
+tenants:
+  config_dir: "./tenants"  # Load tenants/*.yaml files
+```
+
+```yaml
+# tenants/acme-corp.yaml
+slug: acme-corp
+name: Acme Corporation
+metadata:
+  plan: enterprise
+  billing_email: billing@acme.com
+
+config:
+  auth:
+    jwt_secret: "${ACME_JWT_SECRET}"
+    oauth_providers:
+      - name: google
+        enabled: true
+        client_id: "${ACME_GOOGLE_CLIENT_ID}"
+        client_secret: "${ACME_GOOGLE_CLIENT_SECRET}"
+
+  storage:
+    provider: s3
+    s3_bucket: acme-fluxbase-prod
+    s3_region: us-east-1
+
+  email:
+    provider: ses
+    from_address: noreply@acme.com
+    ses_region: us-east-1
+```
+
+### Environment Variable Interpolation
+
+Tenant config files support `${VAR_NAME}` syntax for environment variable expansion:
+
+```yaml
+config:
+  auth:
+    jwt_secret: "${JWT_SECRET}"  # Replaced with JWT_SECRET env var
+  storage:
+    s3_access_key: "${AWS_ACCESS_KEY_ID}"
+    s3_secret_key: "${AWS_SECRET_ACCESS_KEY}"
+```
+
+### Tenant-Specific JWT Secrets
+
+Each tenant can have its own JWT secret, allowing complete cryptographic isolation:
+
+```yaml
+tenants:
+  configs:
+    tenant-a:
+      auth:
+        jwt_secret: "tenant-a-secret-at-least-32-characters!"
+    tenant-b:
+      auth:
+        jwt_secret: "tenant-b-secret-at-least-32-characters!"
+```
+
+When a request includes tenant context (via `X-FB-Tenant` header or JWT claims), tokens are validated using the tenant-specific secret.
+
+### Storage Isolation
+
+Configure different storage backends per tenant:
+
+```yaml
+tenants:
+  configs:
+    # EU tenant with EU data residency
+    eu-customer:
+      storage:
+        provider: s3
+        s3_bucket: eu-customer-data
+        s3_region: eu-west-1
+
+    # US tenant with US data residency
+    us-customer:
+      storage:
+        provider: s3
+        s3_bucket: us-customer-data
+        s3_region: us-east-1
+```
+
+## API Examples
+
+### Tenant Management
+
+```typescript
+import { createClient } from '@nimbleflux/fluxbase-sdk'
+
+const client = createClient('http://localhost:8080', 'global-service-key')
+
+// List all tenants
+const tenants = await client.admin.listTenants()
+
+// Create a new tenant
+const tenant = await client.admin.createTenant({
+  slug: 'acme-corp',
+  name: 'Acme Corporation',
+  metadata: {
+    plan: 'enterprise',
+    billing_email: 'billing@acme.com'
+  }
+})
+
+// Update tenant
+await client.admin.updateTenant(tenant.id, {
+  name: 'Acme Corp Inc.',
+  metadata: { plan: 'pro' }
+})
+
+// Soft delete tenant
+await client.admin.deleteTenant(tenant.id)
+```
+
+### Service Key Management
+
+```typescript
+// List keys for a tenant
+const keys = await client.admin.listServiceKeys({
+  tenant_id: 'tenant-uuid'
+})
+
+// Create tenant service key
+const key = await client.admin.createServiceKey({
+  tenant_id: 'tenant-uuid',
+  name: 'Backend Service',
+  key_type: 'tenant_service',
+  scopes: ['rest:read', 'rest:write', 'storage:read', 'storage:write']
+})
+
+// Revoke a key
+await client.admin.revokeServiceKey(key.id, 'Security incident')
+
+// Rotate keys
+const newKey = await client.admin.rotateServiceKey(oldKeyId, {
+  grace_period_hours: 48
+})
+```
+
+### Tenant Context in Queries
+
+When using a tenant service key, all queries are automatically scoped:
+
+```typescript
+// With tenant service key
+const tenantClient = createClient('http://localhost:8080', 'tenant-key')
+
+// Only returns users for this tenant
+const users = await tenantClient.from('users').select('*')
+
+// Inserts are automatically associated with tenant
+const { data, error } = await tenantClient
+  .from('posts')
+  .insert({ title: 'Hello', content: 'World' })
+// tenant_id is set automatically via RLS WITH CHECK policy
+```
+
+## Row Level Security
+
+Tenant isolation is enforced through PostgreSQL RLS policies:
+
+### Tenant Service Role
+
+The `tenant_service` role is used for tenant-scoped operations:
+
+```sql
+-- Example RLS policy for tenant isolation
+CREATE POLICY tenant_isolation ON public.posts
+FOR ALL
+TO tenant_service
+USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
+WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+```
+
+### Adding Tenant Columns
+
+All tenant-scoped tables should have a `tenant_id` column:
+
+```sql
+ALTER TABLE your_table 
+ADD COLUMN tenant_id UUID REFERENCES platform.tenants(id) ON DELETE CASCADE;
+
+CREATE INDEX idx_your_table_tenant_id ON your_table(tenant_id);
+```
+
+### RLS Policy Template
+
+```sql
+-- Enable RLS
+ALTER TABLE your_table ENABLE ROW LEVEL SECURITY;
+
+-- Tenant service can only see their tenant's data
+CREATE POLICY tenant_select ON your_table
+FOR SELECT TO tenant_service
+USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE POLICY tenant_insert ON your_table
+FOR INSERT TO tenant_service
+WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE POLICY tenant_update ON your_table
+FOR UPDATE TO tenant_service
+USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
+WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE POLICY tenant_delete ON your_table
+FOR DELETE TO tenant_service
+USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+```
+
+## Database Schema
+
+### platform.tenants
+
+```sql
+CREATE TABLE platform.tenants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    is_default BOOLEAN DEFAULT false,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    deleted_at TIMESTAMPTZ
+);
+```
+
+### platform.service_keys
+
+```sql
+CREATE TABLE platform.service_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    key_type TEXT NOT NULL, -- anon, publishable, tenant_service, global_service
+    tenant_id UUID REFERENCES platform.tenants(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    key_hash TEXT NOT NULL,
+    key_prefix TEXT NOT NULL,
+    scopes TEXT[] DEFAULT '{}',
+    allowed_namespaces TEXT[],
+    is_active BOOLEAN DEFAULT true,
+    is_config_managed BOOLEAN DEFAULT false,
+    revoked_at TIMESTAMPTZ,
+    deprecated_at TIMESTAMPTZ,
+    grace_period_ends_at TIMESTAMPTZ,
+    replaced_by UUID REFERENCES platform.service_keys(id),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### platform.tenant_admin_assignments
+
+```sql
+CREATE TABLE platform.tenant_admin_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES platform.users(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,
+    assigned_by UUID REFERENCES platform.users(id) ON DELETE SET NULL,
+    assigned_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(user_id, tenant_id)
+);
+```
+
+## Best Practices
+
+### Key Management
+
+1. **Never expose global service keys** - Use only in backend services
+2. **Rotate keys regularly** - Use graceful rotation to avoid downtime
+3. **Scope keys minimally** - Grant only needed scopes and namespaces
+4. **Use key files in production** - Avoid hardcoding keys
+
+### Tenant Isolation
+
+1. **Add tenant_id to all tables** - Every tenant-scoped table needs this column
+2. **Create RLS policies** - Enforce isolation at database level
+3. **Index tenant_id** - Essential for query performance
+4. **Test isolation** - Verify tenants can't access each other's data
+
+### Admin Access
+
+1. **Use tenant admins** - Limit instance admin access
+2. **Audit admin actions** - Log all administrative operations
+3. **Regular access reviews** - Review tenant admin assignments periodically
+
+## Troubleshooting
+
+### Empty Results with Tenant Key
+
+If queries return empty results:
+
+1. Verify the key is active: `SELECT is_active FROM platform.service_keys WHERE id = 'key-id'`
+2. Check tenant_id column exists on the table
+3. Verify RLS policy exists and uses `app.tenant_id` setting
+
+### Cross-Tenant Data Access
+
+If a tenant sees another tenant's data:
+
+1. Check RLS is enabled: `SELECT rowsecurity FROM pg_tables WHERE tablename = 'your_table'`
+2. Verify policy uses correct session variable
+3. Ensure queries are using tenant service key, not global
+
+### Key Rotation Issues
+
+If old key still works after grace period:
+
+1. Check `grace_period_ends_at` timestamp
+2. Verify `revoked_at` is set after grace period
+3. Check `is_active` is false
+
+## Related Documentation
+
+- [Row Level Security](/guides/row-level-security) - Detailed RLS implementation
+- [Admin SDK](/sdk/admin) - Admin API reference
+- [Configuration](/reference/configuration) - Configuration options

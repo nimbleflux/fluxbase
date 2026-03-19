@@ -38,6 +38,7 @@ type Config struct {
 	Scaling       ScalingConfig    `mapstructure:"scaling"`
 	Logging       LoggingConfig    `mapstructure:"logging"`
 	Admin         AdminConfig      `mapstructure:"admin"`
+	Tenants       TenantsConfig    `mapstructure:"tenants"`
 	BaseURL       string           `mapstructure:"base_url"`        // Internal base URL (for server-to-server communication)
 	PublicBaseURL string           `mapstructure:"public_base_url"` // Public base URL (for user-facing links, OAuth callbacks, etc.)
 	Debug         bool             `mapstructure:"debug"`
@@ -51,6 +52,37 @@ type Config struct {
 // AdminConfig contains admin dashboard settings
 type AdminConfig struct {
 	Enabled bool `mapstructure:"enabled"` // Enable admin dashboard UI (React app). API routes are always available when setup_token is set.
+}
+
+// TenantsConfig contains tenant configuration settings
+type TenantsConfig struct {
+	Default   DefaultTenantConfig        `mapstructure:"default"`
+	Configs   map[string]TenantOverrides `mapstructure:"configs"`    // slug -> overrides
+	ConfigDir string                     `mapstructure:"config_dir"` // optional tenants/*.yaml directory
+}
+
+// TenantOverrides holds configuration overrides for a specific tenant
+// Only user-facing sections can be overridden; infrastructure sections remain global
+type TenantOverrides struct {
+	Auth      *AuthConfig      `mapstructure:"auth"`
+	Storage   *StorageConfig   `mapstructure:"storage"`
+	Email     *EmailConfig     `mapstructure:"email"`
+	Functions *FunctionsConfig `mapstructure:"functions"`
+	Jobs      *JobsConfig      `mapstructure:"jobs"`
+	AI        *AIConfig        `mapstructure:"ai"`
+	Realtime  *RealtimeConfig  `mapstructure:"realtime"`
+	API       *APIConfig       `mapstructure:"api"`
+	GraphQL   *GraphQLConfig   `mapstructure:"graphql"`
+	RPC       *RPCConfig       `mapstructure:"rpc"`
+}
+
+// DefaultTenantConfig contains default tenant settings
+type DefaultTenantConfig struct {
+	Name           string `mapstructure:"name"`
+	AnonKey        string `mapstructure:"anon_key"`
+	ServiceKey     string `mapstructure:"service_key"`
+	AnonKeyFile    string `mapstructure:"anon_key_file"`
+	ServiceKeyFile string `mapstructure:"service_key_file"`
 }
 
 // DenoConfig contains Deno runtime settings for edge functions and background jobs
@@ -183,7 +215,7 @@ type AuthConfig struct {
 	SAMLProviders []SAMLProviderConfig `mapstructure:"saml_providers"`
 
 	// AllowUserClientKeys controls whether regular users can create their own client keys.
-	// When false, only admins (service_role or dashboard_admin) can create/manage client keys,
+	// When false, only admins (service_role or instance_admin) can create/manage client keys,
 	// and existing user-created keys are blocked from authenticating.
 	// Default: true
 	AllowUserClientKeys bool `mapstructure:"allow_user_client_keys"`
@@ -804,6 +836,13 @@ func setDefaults() {
 
 	// Admin defaults
 	viper.SetDefault("admin.enabled", false) // Admin dashboard disabled by default
+
+	// Tenants defaults
+	viper.SetDefault("tenants.default.name", "default")
+	viper.SetDefault("tenants.default.anon_key", "")
+	viper.SetDefault("tenants.default.service_key", "")
+	viper.SetDefault("tenants.default.anon_key_file", "")
+	viper.SetDefault("tenants.default.service_key_file", "")
 
 	// CORS defaults
 	viper.SetDefault("cors.allowed_origins", "http://localhost:5173,http://localhost:8080")

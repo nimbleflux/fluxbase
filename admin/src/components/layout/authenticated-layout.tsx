@@ -12,6 +12,7 @@ import { SkipToMain } from '@/components/skip-to-main'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { ImpersonationSelector } from '@/features/impersonation/components/impersonation-selector'
 import { TenantSelector } from '@/components/tenant-selector'
+import { useTenantQueryRefresh } from '@/hooks/use-tenant-query-refresh'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -19,6 +20,10 @@ type AuthenticatedLayoutProps = {
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
+
+  // Refresh all queries when tenant context changes
+  useTenantQueryRefresh()
+
   return (
     <SearchProvider>
       <LayoutProvider>

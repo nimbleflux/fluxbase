@@ -201,7 +201,7 @@ func TestHandler_handleHealth(t *testing.T) {
 		handler := NewHandler(cfg, nil)
 
 		app := fiber.New()
-		app.Get("/health", handler.handleHealth)
+		app.Get("/health", handler.HandleHealth)
 
 		req := httptest.NewRequest(http.MethodGet, "/health", nil)
 		resp, err := app.Test(req)
@@ -224,7 +224,7 @@ func TestHandler_handlePost(t *testing.T) {
 		handler := NewHandler(cfg, nil)
 
 		app := fiber.New()
-		app.Post("/", handler.handlePost)
+		app.Post("/", handler.HandlePost)
 
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
 		req.Header.Set("Content-Type", "text/plain")
@@ -243,7 +243,7 @@ func TestHandler_handlePost(t *testing.T) {
 		handler := NewHandler(cfg, nil)
 
 		app := fiber.New()
-		app.Post("/", handler.handlePost)
+		app.Post("/", handler.HandlePost)
 
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -263,7 +263,7 @@ func TestHandler_handlePost(t *testing.T) {
 		handler := NewHandler(cfg, nil)
 
 		app := fiber.New()
-		app.Post("/", handler.handlePost)
+		app.Post("/", handler.HandlePost)
 
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
 		req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -283,7 +283,7 @@ func TestHandler_handlePost(t *testing.T) {
 		handler := NewHandler(cfg, nil)
 
 		app := fiber.New()
-		app.Post("/", handler.handlePost)
+		app.Post("/", handler.HandlePost)
 
 		// Body larger than MaxMessageSize
 		largeBody := strings.Repeat("a", 100)
@@ -305,7 +305,7 @@ func TestHandler_handlePost(t *testing.T) {
 		handler := NewHandler(cfg, nil)
 
 		app := fiber.New()
-		app.Post("/", handler.handlePost)
+		app.Post("/", handler.HandlePost)
 
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
 		req.Header.Set("Content-Type", "application/json")
@@ -324,7 +324,7 @@ func TestHandler_handlePost(t *testing.T) {
 		handler := NewHandler(cfg, nil)
 
 		app := fiber.New()
-		app.Post("/", handler.handlePost)
+		app.Post("/", handler.HandlePost)
 
 		// Make requests up to the limit
 		for i := 0; i < 2; i++ {
@@ -357,7 +357,7 @@ func TestHandler_handleGet(t *testing.T) {
 		handler := NewHandler(cfg, nil)
 
 		app := fiber.New()
-		app.Get("/", handler.handleGet)
+		app.Get("/", handler.HandleGet)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.Header.Set("Accept", "application/json")
@@ -374,7 +374,7 @@ func TestHandler_handleGet(t *testing.T) {
 		handler := NewHandler(cfg, nil)
 
 		app := fiber.New()
-		app.Get("/", handler.handleGet)
+		app.Get("/", handler.HandleGet)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.Header.Set("Accept", "text/event-stream")
@@ -384,59 +384,6 @@ func TestHandler_handleGet(t *testing.T) {
 		defer func() { _ = resp.Body.Close() }()
 
 		assert.Equal(t, http.StatusNotImplemented, resp.StatusCode)
-	})
-}
-
-// =============================================================================
-// RegisterPublicRoutes Tests
-// =============================================================================
-
-func TestHandler_RegisterPublicRoutes(t *testing.T) {
-	t.Run("registers health endpoint", func(t *testing.T) {
-		cfg := &config.MCPConfig{}
-		handler := NewHandler(cfg, nil)
-
-		app := fiber.New()
-		handler.RegisterPublicRoutes(app)
-
-		req := httptest.NewRequest(http.MethodGet, "/health", nil)
-		resp, err := app.Test(req)
-		require.NoError(t, err)
-		defer func() { _ = resp.Body.Close() }()
-
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-	})
-}
-
-// =============================================================================
-// RegisterRoutes Tests
-// =============================================================================
-
-func TestHandler_RegisterRoutes(t *testing.T) {
-	t.Run("registers POST and GET endpoints", func(t *testing.T) {
-		cfg := &config.MCPConfig{
-			RateLimitPerMin: 0,
-		}
-		handler := NewHandler(cfg, nil)
-
-		app := fiber.New()
-		handler.RegisterRoutes(app)
-
-		// Test POST route exists
-		postReq := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
-		postReq.Header.Set("Content-Type", "application/json")
-		postResp, err := app.Test(postReq)
-		require.NoError(t, err)
-		_ = postResp.Body.Close()
-		assert.NotEqual(t, http.StatusNotFound, postResp.StatusCode)
-
-		// Test GET route exists
-		getReq := httptest.NewRequest(http.MethodGet, "/", nil)
-		getReq.Header.Set("Accept", "application/json")
-		getResp, err := app.Test(getReq)
-		require.NoError(t, err)
-		_ = getResp.Body.Close()
-		assert.NotEqual(t, http.StatusNotFound, getResp.StatusCode)
 	})
 }
 

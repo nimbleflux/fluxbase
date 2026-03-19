@@ -225,7 +225,7 @@ func TestAdminRoleChecking(t *testing.T) {
 		isAdmin bool
 	}{
 		{"admin role", "admin", true},
-		{"dashboard_admin role", "dashboard_admin", true},
+		{"instance_admin role", "instance_admin", true},
 		{"service_role role", "service_role", true},
 		{"authenticated role", "authenticated", false},
 		{"anon role", "anon", false},
@@ -235,7 +235,7 @@ func TestAdminRoleChecking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			isAdmin := tt.role == "admin" || tt.role == "dashboard_admin" || tt.role == "service_role"
+			isAdmin := tt.role == "admin" || tt.role == "instance_admin" || tt.role == "service_role"
 			assert.Equal(t, tt.isAdmin, isAdmin)
 		})
 	}
@@ -249,7 +249,7 @@ func TestAdminRoleCheckingInFiberContext(t *testing.T) {
 		expectedStatus int
 	}{
 		{"admin access granted", "admin", 200},
-		{"dashboard_admin access granted", "dashboard_admin", 200},
+		{"instance_admin access granted", "instance_admin", 200},
 		{"service_role access granted", "service_role", 200},
 		{"authenticated denied", "authenticated", 403},
 		{"anon denied", "anon", 403},
@@ -267,7 +267,7 @@ func TestAdminRoleCheckingInFiberContext(t *testing.T) {
 			})
 			app.Get("/admin-only", func(c fiber.Ctx) error {
 				role, _ := c.Locals("user_role").(string)
-				if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+				if role != "admin" && role != "instance_admin" && role != "service_role" {
 					return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 						"error": "Admin access required",
 					})
@@ -475,7 +475,7 @@ func BenchmarkAdminRoleCheck(b *testing.B) {
 	role := "authenticated"
 
 	for i := 0; i < b.N; i++ {
-		_ = (role == "admin" || role == "dashboard_admin" || role == "service_role")
+		_ = (role == "admin" || role == "instance_admin" || role == "service_role")
 	}
 }
 

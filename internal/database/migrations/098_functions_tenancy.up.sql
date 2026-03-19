@@ -1,6 +1,7 @@
 --
 -- MULTI-TENANCY: RLS HELPER FUNCTIONS
 -- Creates PostgreSQL functions for tenant context and membership checking
+-- Note: References public.tenants and dashboard.users which get moved to platform schema in later migrations
 --
 
 -- Get current tenant ID from JWT claims or session context
@@ -41,17 +42,13 @@ BEGIN
     END;
     
     -- Return default tenant for backward compatibility
-    SELECT id INTO default_id 
-    FROM tenants 
-    WHERE is_default = true AND deleted_at IS NULL 
-    LIMIT 1;
-    
+    SELECT id INTO default_id FROM tenants WHERE is_default = true AND deleted_at IS NULL LIMIT 1;
     RETURN default_id;
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 COMMENT ON FUNCTION current_tenant_id() IS 
-'Returns the current tenant ID from JWT claims, session variable, or default tenant. SECURITY DEFINER to access tenants table.';
+'Returns the current tenant ID from JWT claims, session variable, or default tenant';
 
 -- Check if user has specific role in tenant
 CREATE OR REPLACE FUNCTION user_has_tenant_role(
@@ -60,6 +57,10 @@ CREATE OR REPLACE FUNCTION user_has_tenant_role(
     p_role TEXT
 ) RETURNS BOOLEAN AS $$
 BEGIN
+    IF p_user_id IS NULL OR p_tenant_id IS NULL THEN
+        RETURN false;
+    END IF;
+    
     RETURN EXISTS (
         SELECT 1 FROM tenant_memberships tm
         INNER JOIN tenants t ON t.id = tm.tenant_id
@@ -72,9 +73,9 @@ END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 COMMENT ON FUNCTION user_has_tenant_role(UUID, UUID, TEXT) IS
-'Checks if a user has a specific role in a tenant. SECURITY DEFINER to bypass RLS on membership lookup.';
+'Checks if a user has a specific role in a tenant. SECURITY DEFINER to bypass RLS.';
 
--- Check if user is instance admin (global admin)
+-- Check if user is instance admin (dashboard.users at this point, renamed to platform in migration 103)
 CREATE OR REPLACE FUNCTION is_instance_admin(p_user_id UUID) RETURNS BOOLEAN AS $$
 BEGIN
     IF p_user_id IS NULL THEN
@@ -91,7 +92,7 @@ END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 COMMENT ON FUNCTION is_instance_admin(UUID) IS
-'Checks if a user is an instance-level admin with global privileges. SECURITY DEFINER to bypass RLS.';
+'Checks if a user is an instance-level admin. SECURITY DEFINER to bypass RLS.';
 
 -- Get user's effective tenant role for current tenant
 CREATE OR REPLACE FUNCTION current_tenant_role() RETURNS TEXT AS $$
@@ -117,13 +118,13 @@ END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 COMMENT ON FUNCTION current_tenant_role() IS
-'Returns the current user role in the current tenant (tenant_admin or tenant_member).';
+'Return the current user role in the current tenant';
 
 -- Get all tenant IDs for a user
 CREATE OR REPLACE FUNCTION user_tenant_ids(p_user_id UUID) RETURNS UUID[] AS $$
 BEGIN
     IF p_user_id IS NULL THEN
-        RETURN '{}';
+        RETURN ARRAY[]::UUID[];
     END IF;
     
     RETURN ARRAY(
@@ -136,7 +137,7 @@ END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 COMMENT ON FUNCTION user_tenant_ids(UUID) IS
-'Returns all tenant IDs that a user is a member of. SECURITY DEFINER to bypass RLS.';
+'Returns all tenant IDs that a user is a member of';
 
 -- Check if user is member of tenant (any role)
 CREATE OR REPLACE FUNCTION user_is_tenant_member(
@@ -180,3 +181,24 @@ $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 COMMENT ON FUNCTION get_tenant_by_slug(TEXT) IS
 'Gets tenant information by slug. SECURITY DEFINER to bypass RLS.';
+
+-- Get tenant info by ID
+CREATE OR REPLACE FUNCTION get_tenant_by_id(p_tenant_id UUID) RETURNS TABLE (
+    id UUID,
+    slug TEXT,
+    name TEXT,
+    is_default BOOLEAN,
+    metadata JSONB,
+    created_at TIMESTAMPTZ
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT t.id, t.slug, t.name, t.is_default, t.metadata, t.created_at
+    FROM tenants t
+    WHERE t.id = p_tenant_id
+    AND t.deleted_at IS NULL;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+COMMENT ON FUNCTION get_tenant_by_id(UUID) IS
+'Gets tenant information by ID. SECURITY DEFINER to bypass RLS.';

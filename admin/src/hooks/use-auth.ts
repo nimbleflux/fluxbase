@@ -52,11 +52,11 @@ export function useAuth() {
       auth.setAccessToken(access_token)
       localStorage.setItem('refresh_token', refresh_token)
 
-      // Store user in Zustand with dashboard_admin role
+      // Store user in Zustand with actual role from server
       auth.setUser({
         accountNo: user.id,
         email: user.email,
-        role: ['dashboard_admin'],
+        role: [user.role || 'tenant_admin'],
         exp: Date.now() + expires_in * 1000,
       })
 

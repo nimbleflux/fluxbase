@@ -1,5 +1,6 @@
 import { getStoredUser, type AdminUser, type DashboardUser } from '@/lib/auth'
 import { useLayout } from '@/context/layout-provider'
+import { useTenantStore } from '@/stores/tenant-store'
 import { Badge } from '@/components/ui/badge'
 import {
   Sidebar,
@@ -11,7 +12,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar'
-import { sidebarData } from './data/sidebar-data'
+import { sidebarData, filterSidebarForContext } from './data/sidebar-data'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
 
@@ -22,11 +23,24 @@ function isDashboardUser(
   return 'full_name' in user
 }
 
+// Check if user is an instance admin
+function isInstanceAdmin(user: AdminUser | DashboardUser | null): boolean {
+  if (!user) return false
+  // Check for role property (may not exist on all DashboardUser objects)
+  if ('role' in user && user.role) {
+    return user.role === 'instance_admin'
+  }
+  return false
+}
+
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
 
   // Get the logged-in user from localStorage
   const storedUser = getStoredUser()
+
+  // Get tenant context from store
+  const { actingAsTenantAdmin } = useTenantStore()
 
   // Construct user data for NavUser component
   // Handle both AdminUser (metadata.name) and DashboardUser (full_name) types
@@ -42,6 +56,12 @@ export function AppSidebar() {
           : (storedUser.metadata?.avatar as string) || '',
       }
     : sidebarData.user // Fallback to default user if not logged in
+
+  // Filter sidebar based on user context
+  const filteredNavGroups = filterSidebarForContext(sidebarData.navGroups, {
+    isInstanceAdmin: isInstanceAdmin(storedUser),
+    actingAsTenantAdmin,
+  })
 
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
@@ -71,7 +91,7 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {sidebarData.navGroups.map((props) => (
+        {filteredNavGroups.map((props) => (
           <NavGroup key={props.title} {...props} />
         ))}
       </SidebarContent>

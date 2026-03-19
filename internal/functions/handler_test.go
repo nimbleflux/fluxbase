@@ -660,8 +660,8 @@ func TestIsAdminRole(t *testing.T) {
 		assert.True(t, isAdminRole("admin"))
 	})
 
-	t.Run("dashboard_admin role is admin", func(t *testing.T) {
-		assert.True(t, isAdminRole("dashboard_admin"))
+	t.Run("instance_admin role is admin", func(t *testing.T) {
+		assert.True(t, isAdminRole("instance_admin"))
 	})
 
 	t.Run("service_role is admin", func(t *testing.T) {

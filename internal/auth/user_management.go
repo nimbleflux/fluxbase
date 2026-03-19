@@ -54,7 +54,7 @@ func NewUserManagementService(
 }
 
 // ListEnrichedUsers returns a list of users with enriched metadata
-// userType can be "app" for auth.users or "dashboard" for dashboard.users
+// userType can be "app" for auth.users or "platform" for platform.users
 func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType string) ([]*EnrichedUser, error) {
 	// Default to app users if not specified
 	if userType == "" {
@@ -64,9 +64,9 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 	// Determine which table to query
 	usersTable := "auth.users"
 	sessionsTable := "auth.sessions"
-	if userType == "dashboard" {
-		usersTable = "dashboard.users"
-		sessionsTable = "dashboard.sessions"
+	if userType == "platform" {
+		usersTable = "platform.users"
+		sessionsTable = "platform.sessions"
 	}
 
 	query := fmt.Sprintf(`
@@ -133,7 +133,7 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 }
 
 // GetEnrichedUserByID returns a single user with enriched metadata
-// userType can be "app" for auth.users or "dashboard" for dashboard.users
+// userType can be "app" for auth.users or "platform" for platform.users
 func (s *UserManagementService) GetEnrichedUserByID(ctx context.Context, userID string, userType string) (*EnrichedUser, error) {
 	// Default to app users if not specified
 	if userType == "" {
@@ -143,9 +143,9 @@ func (s *UserManagementService) GetEnrichedUserByID(ctx context.Context, userID 
 	// Determine which table to query
 	usersTable := "auth.users"
 	sessionsTable := "auth.sessions"
-	if userType == "dashboard" {
-		usersTable = "dashboard.users"
-		sessionsTable = "dashboard.sessions"
+	if userType == "platform" {
+		usersTable = "platform.users"
+		sessionsTable = "platform.sessions"
 	}
 
 	query := fmt.Sprintf(`
@@ -217,10 +217,10 @@ type InviteUserResponse struct {
 
 // InviteUser creates a new user and either sends them an invite email or returns a temp password
 func (s *UserManagementService) InviteUser(ctx context.Context, req InviteUserRequest, userType string) (*InviteUserResponse, error) {
-	// Validate role - for dashboard users, default to dashboard_admin
+	// Validate role - for dashboard users, default to instance_admin
 	if req.Role == "" {
 		if userType == "dashboard" {
-			req.Role = "dashboard_admin"
+			req.Role = "instance_admin"
 		} else {
 			req.Role = "user"
 		}
@@ -365,8 +365,8 @@ func (s *UserManagementService) UnlockUser(ctx context.Context, userID string, u
 func (s *UserManagementService) setUserLockStatus(ctx context.Context, userID string, userType string, locked bool) error {
 	// Determine which table to update
 	usersTable := "auth.users"
-	if userType == "dashboard" {
-		usersTable = "dashboard.users"
+	if userType == "platform" {
+		usersTable = "platform.users"
 	}
 
 	query := fmt.Sprintf(`

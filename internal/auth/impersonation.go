@@ -234,40 +234,40 @@ func NewImpersonationService(
 	}
 }
 
-// verifyAdminUser checks if the user is a dashboard admin
-// Returns nil if the user is a valid dashboard admin, error otherwise
-// Checks both dashboard.users and auth.users tables
+// verifyAdminUser checks if the user is a platform admin
+// Returns nil if the user is a valid platform admin, error otherwise
+// Checks both platform.users and auth.users tables
 func (s *ImpersonationService) verifyAdminUser(ctx context.Context, adminUserID string) error {
-	// First, check if user exists in dashboard.users (they are always admins)
+	// First, check if user exists in platform.users (they are always admins)
 	var count int
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT COUNT(*) FROM dashboard.users
+			SELECT COUNT(*) FROM platform.users
 			WHERE id = $1 AND deleted_at IS NULL AND is_active = true
 		`, adminUserID).Scan(&count)
 	})
 
 	if err != nil {
-		log.Debug().Err(err).Str("admin_user_id", adminUserID).Msg("Failed to check dashboard.users, falling back to auth.users")
+		log.Debug().Err(err).Str("admin_user_id", adminUserID).Msg("Failed to check platform.users, falling back to auth.users")
 	} else if count > 0 {
-		// User exists in dashboard.users and is active
-		log.Debug().Str("admin_user_id", adminUserID).Msg("Admin verified via dashboard.users")
+		// User exists in platform.users and is active
+		log.Debug().Str("admin_user_id", adminUserID).Msg("Admin verified via platform.users")
 		return nil
 	}
 
-	// Fall back to checking auth.users for users with dashboard_admin role
+	// Fall back to checking auth.users for users with instance_admin role
 	adminUser, err := s.userRepo.GetByID(ctx, adminUserID)
 	if err != nil {
 		log.Debug().Err(err).Str("admin_user_id", adminUserID).Msg("Admin user not found in auth.users either")
 		return fmt.Errorf("admin user not found: %w", err)
 	}
 
-	if adminUser.Role != "dashboard_admin" {
-		log.Debug().Str("admin_user_id", adminUserID).Str("role", adminUser.Role).Msg("User is not a dashboard_admin")
+	if adminUser.Role != "instance_admin" {
+		log.Debug().Str("admin_user_id", adminUserID).Str("role", adminUser.Role).Msg("User is not a instance_admin")
 		return ErrNotAdmin
 	}
 
-	log.Debug().Str("admin_user_id", adminUserID).Msg("Admin verified via auth.users with dashboard_admin role")
+	log.Debug().Str("admin_user_id", adminUserID).Msg("Admin verified via auth.users with instance_admin role")
 	return nil
 }
 
@@ -294,7 +294,7 @@ func (s *ImpersonationService) StartImpersonation(
 	adminUserID string,
 	req StartImpersonationRequest,
 ) (*StartImpersonationResponse, error) {
-	// Verify admin user exists and is admin (checks both dashboard.users and auth.users)
+	// Verify admin user exists and is admin (checks both platform.users and auth.users)
 	if err := s.verifyAdminUser(ctx, adminUserID); err != nil {
 		return nil, err
 	}
@@ -368,7 +368,7 @@ func (s *ImpersonationService) StartAnonImpersonation(
 	ipAddress string,
 	userAgent string,
 ) (*StartImpersonationResponse, error) {
-	// Verify admin user exists and is admin (checks both dashboard.users and auth.users)
+	// Verify admin user exists and is admin (checks both platform.users and auth.users)
 	if err := s.verifyAdminUser(ctx, adminUserID); err != nil {
 		return nil, err
 	}
@@ -438,7 +438,7 @@ func (s *ImpersonationService) StartServiceImpersonation(
 	ipAddress string,
 	userAgent string,
 ) (*StartImpersonationResponse, error) {
-	// Verify admin user exists and is admin (checks both dashboard.users and auth.users)
+	// Verify admin user exists and is admin (checks both platform.users and auth.users)
 	if err := s.verifyAdminUser(ctx, adminUserID); err != nil {
 		return nil, err
 	}

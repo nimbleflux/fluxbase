@@ -147,9 +147,9 @@ func (tc *IntegrationTestContext) CleanupTestData() {
 	tc.ExecuteSQL(`DELETE FROM auth.users WHERE email LIKE 'test-%@test.com'`)
 
 	// Clean up dashboard test users
-	tc.ExecuteSQL(`DELETE FROM dashboard.users WHERE email LIKE 'e2e-test-%'`)
-	tc.ExecuteSQL(`DELETE FROM dashboard.users WHERE email LIKE 'test-%@example.com'`)
-	tc.ExecuteSQL(`DELETE FROM dashboard.users WHERE email LIKE 'test-%@test.com'`)
+	tc.ExecuteSQL(`DELETE FROM platform.users WHERE email LIKE 'e2e-test-%'`)
+	tc.ExecuteSQL(`DELETE FROM platform.users WHERE email LIKE 'test-%@example.com'`)
+	tc.ExecuteSQL(`DELETE FROM platform.users WHERE email LIKE 'test-%@test.com'`)
 
 	// Clean up password reset tokens (orphaned from user deletion)
 	tc.ExecuteSQL(`DELETE FROM auth.password_reset_tokens WHERE user_id NOT IN (SELECT id FROM auth.users)`)

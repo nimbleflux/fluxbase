@@ -85,7 +85,7 @@ func TestSecretsStorage_CreateSecret_Integration(t *testing.T) {
 
 		tc.ExecuteSQLAsSuperuser(fmt.Sprintf(`
 			INSERT INTO dashboard.users (id, email, password_hash, full_name, role, created_at)
-			VALUES ('%s', '%s', '%s', 'Test User', 'dashboard_admin', NOW())
+			VALUES ('%s', '%s', '%s', 'Test User', 'instance_admin', NOW())
 			ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash
 		`, userUUID, uniqueEmail, passwordHash))
 
@@ -363,7 +363,7 @@ func TestSecretsStorage_UpdateSecret_Integration(t *testing.T) {
 
 		tc.ExecuteSQLAsSuperuser(fmt.Sprintf(`
 			INSERT INTO dashboard.users (id, email, password_hash, full_name, role, created_at)
-			VALUES ('%s', '%s', '%s', 'Test User', 'dashboard_admin', NOW())
+			VALUES ('%s', '%s', '%s', 'Test User', 'instance_admin', NOW())
 			ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash
 		`, userID, uniqueEmail, passwordHash))
 

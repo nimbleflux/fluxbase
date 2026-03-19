@@ -81,6 +81,11 @@ graph TD
 | `anon` | Unauthenticated requests | Policies applied, minimal default access |
 | `authenticated` | Valid JWT token | Policies applied, user context available |
 | `service_role` | Backend services only | **Bypasses all RLS policies** |
+| `tenant_service` | Tenant-scoped backend | Policies applied, tenant context enforced |
+
+:::note[Tenant Service Role]
+The `tenant_service` role is used for multi-tenant applications. It enforces RLS policies with tenant context, ensuring operations are automatically scoped to the tenant associated with the service key. This provides secure tenant isolation without bypassing RLS.
+:::
 
 ### Permission Matrix
 
@@ -93,7 +98,7 @@ This table shows the default table-level permissions for each schema. Actual row
 | **storage** | SELECT (public buckets) | Full CRUD (via RLS) | ALL |
 | **functions** | None | Full CRUD (via RLS) | ALL |
 | **realtime** | None | Full CRUD (via RLS) | ALL |
-| **dashboard** | None | Full CRUD (via RLS) | ALL |
+| **platform** | None | Full CRUD (via RLS) | ALL |
 | **jobs** | None | SELECT (via RLS) | ALL |
 | **migrations** | None | None | ALL |
 | **public** | None | None | ALL |
@@ -120,9 +125,9 @@ Edge functions management. Only dashboard admins can create, update, or delete e
 
 Realtime subscription configuration. Authenticated users can view the configuration. Only admins can modify it.
 
-#### dashboard
+#### platform
 
-Admin dashboard tables for managing users, invitations, and email templates. Only dashboard admins have access. The first user registration is allowed to bootstrap the system.
+Multi-tenancy and platform management tables (tenants, service_keys, tenant_admin_assignments). Instance admins have full access. Tenant admins can manage their tenant's keys. The `tenant_service` role provides automatic tenant isolation for tenant-scoped operations.
 
 #### jobs
 

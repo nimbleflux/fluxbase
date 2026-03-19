@@ -68,7 +68,7 @@ export function UsersInviteDialog({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: '',
-      role: 'dashboard_user',
+      role: 'tenant_admin',
       password: '',
       skip_email: false,
     },

@@ -42,7 +42,7 @@ CREATE TABLE app.settings (
     description TEXT,
     is_public BOOLEAN DEFAULT false,
     is_secret BOOLEAN DEFAULT false,
-    editable_by TEXT[] NOT NULL DEFAULT ARRAY['dashboard_admin']::TEXT[],
+    editable_by TEXT[] NOT NULL DEFAULT ARRAY['instance_admin']::TEXT[],
     metadata JSONB DEFAULT '{}'::JSONB,
     created_by UUID,
     updated_by UUID,

@@ -714,6 +714,12 @@ func (s *Service) ValidateToken(token string) (*TokenClaims, error) {
 	return s.jwtManager.ValidateToken(token)
 }
 
+// ValidateTokenWithSecret validates an access token using a specific secret key
+// This is used for multi-tenant scenarios where each tenant may have a different JWT secret
+func (s *Service) ValidateTokenWithSecret(token, secretKey string) (*TokenClaims, error) {
+	return s.jwtManager.ValidateTokenWithSecret(token, secretKey)
+}
+
 // ValidateServiceRoleToken validates a JWT containing a role claim (anon, service_role, authenticated)
 // This is used for Supabase-compatible client keys which are JWTs with role claims.
 // Unlike user tokens, these don't require user lookup or revocation checks.

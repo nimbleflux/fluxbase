@@ -66,7 +66,10 @@ test/e2e/                # End-to-end tests
 - `branching.*` - Database branch metadata, access control, GitHub config
 - `ai.*` - Knowledge bases, documents, chatbots, permissions
 - `logging.*` - Centralized logging entries with TimescaleDB hypertable support
+- `platform.*` - Multi-tenancy (tenants, service_keys, tenant_admin_assignments, users)
 - `public` - User application tables
+
+**Tenant Isolation:** All tenant-scoped tables use Row Level Security (RLS) with the `tenant_service` role for automatic tenant isolation. The `platform.tenants` table stores tenant metadata, and `platform.service_keys` manages API keys per tenant.
 
 ## Key Files by Feature
 
@@ -158,6 +161,15 @@ test/e2e/                # End-to-end tests
 
 - `internal/ai/knowledge_base.go` - Core data models
 - `internal/ai/knowledge_base_storage.go` - Storage operations
+
+**Multi-Tenancy:**
+
+- `internal/api/tenant_handler.go` - Tenant CRUD HTTP handlers
+- `internal/api/service_key_handler.go` - Service key management API
+- `internal/middleware/tenant.go` - Tenant context extraction middleware
+- `internal/database/migrations/097_tenants.up.sql` - Platform schema and tenants table
+- `internal/database/migrations/105_unified_service_keys.up.sql` - Service keys table
+- `internal/database/migrations/107_tenant_admin_assignments.up.sql` - Admin assignment table
 
 ## Common Commands
 

@@ -165,7 +165,7 @@ Invite a new admin user:
 
 ```bash
 fluxbase admin users invite --email admin@example.com
-fluxbase admin users invite --email admin@example.com --role dashboard_admin
+fluxbase admin users invite --email admin@example.com --role instance_admin
 ```
 
 View admin user details:

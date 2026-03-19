@@ -2,15 +2,23 @@
  * Database query hooks for Fluxbase SDK
  */
 
-import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
-import { useFluxbaseClient } from './context'
-import type { QueryBuilder } from '@nimbleflux/fluxbase-sdk'
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
+import { useFluxbaseClient } from "./context";
+import type { QueryBuilder } from "@nimbleflux/fluxbase-sdk";
 
-export interface UseFluxbaseQueryOptions<T> extends Omit<UseQueryOptions<T[], Error>, 'queryKey' | 'queryFn'> {
+export interface UseFluxbaseQueryOptions<T> extends Omit<
+  UseQueryOptions<T[], Error>,
+  "queryKey" | "queryFn"
+> {
   /**
    * Custom query key. If not provided, will use table name and filters.
    */
-  queryKey?: unknown[]
+  queryKey?: unknown[];
 }
 
 /**
@@ -32,35 +40,35 @@ export interface UseFluxbaseQueryOptions<T> extends Omit<UseQueryOptions<T[], Er
  */
 export function useFluxbaseQuery<T = any>(
   buildQuery: (client: ReturnType<typeof useFluxbaseClient>) => QueryBuilder<T>,
-  options?: UseFluxbaseQueryOptions<T>
+  options?: UseFluxbaseQueryOptions<T>,
 ) {
-  const client = useFluxbaseClient()
+  const client = useFluxbaseClient();
 
   // Require queryKey for stable caching - function.toString() is not reliable
   // as it can vary between renders for inline functions
   if (!options?.queryKey) {
     console.warn(
-      '[useFluxbaseQuery] No queryKey provided. This may cause cache misses. ' +
-      'Please provide a stable queryKey in options.'
-    )
+      "[useFluxbaseQuery] No queryKey provided. This may cause cache misses. " +
+        "Please provide a stable queryKey in options.",
+    );
   }
 
-  const queryKey = options?.queryKey || ['fluxbase', 'query', 'unstable']
+  const queryKey = options?.queryKey || ["fluxbase", "query", "unstable"];
 
   return useQuery({
     queryKey,
     queryFn: async () => {
-      const query = buildQuery(client)
-      const { data, error } = await query.execute()
+      const query = buildQuery(client);
+      const { data, error } = await query.execute();
 
       if (error) {
-        throw error
+        throw error;
       }
 
-      return (Array.isArray(data) ? data : data ? [data] : []) as T[]
+      return (Array.isArray(data) ? data : data ? [data] : []) as T[];
     },
     ...options,
-  })
+  });
 }
 
 /**
@@ -87,125 +95,128 @@ export function useFluxbaseQuery<T = any>(
 export function useTable<T = any>(
   table: string,
   buildQuery?: (query: QueryBuilder<T>) => QueryBuilder<T>,
-  options?: UseFluxbaseQueryOptions<T>
+  options?: UseFluxbaseQueryOptions<T>,
 ) {
-  const client = useFluxbaseClient()
-
   // Generate a stable base queryKey from table name
   // When buildQuery is provided without a custom queryKey, warn about potential cache issues
   if (buildQuery && !options?.queryKey) {
     console.warn(
       `[useTable] Using buildQuery without a custom queryKey for table "${table}". ` +
-      'This may cause cache misses. Provide a queryKey that includes your filter values.'
-    )
+        "This may cause cache misses. Provide a queryKey that includes your filter values.",
+    );
   }
 
   return useFluxbaseQuery(
     (client) => {
-      const query = client.from<T>(table)
-      return buildQuery ? buildQuery(query) : query
+      const query = client.from<T>(table);
+      return buildQuery ? buildQuery(query) : query;
     },
     {
       ...options,
       // Use table name as base key, or custom key if provided
-      queryKey: options?.queryKey || ['fluxbase', 'table', table],
-    }
-  )
+      queryKey: options?.queryKey || ["fluxbase", "table", table],
+    },
+  );
 }
 
 /**
  * Hook to insert data into a table
  */
 export function useInsert<T = any>(table: string) {
-  const client = useFluxbaseClient()
-  const queryClient = useQueryClient()
+  const client = useFluxbaseClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (data: Partial<T> | Partial<T>[]) => {
-      const query = client.from<T>(table)
-      const { data: result, error } = await query.insert(data as Partial<T>)
+      const query = client.from<T>(table);
+      const { data: result, error } = await query.insert(data as Partial<T>);
 
       if (error) {
-        throw error
+        throw error;
       }
 
-      return result
+      return result;
     },
     onSuccess: () => {
       // Invalidate all queries for this table
-      queryClient.invalidateQueries({ queryKey: ['fluxbase', 'table', table] })
+      queryClient.invalidateQueries({ queryKey: ["fluxbase", "table", table] });
     },
-  })
+  });
 }
 
 /**
  * Hook to update data in a table
  */
 export function useUpdate<T = any>(table: string) {
-  const client = useFluxbaseClient()
-  const queryClient = useQueryClient()
+  const client = useFluxbaseClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: { data: Partial<T>; buildQuery: (query: QueryBuilder<T>) => QueryBuilder<T> }) => {
-      const query = client.from<T>(table)
-      const builtQuery = params.buildQuery(query)
-      const { data: result, error } = await builtQuery.update(params.data)
+    mutationFn: async (params: {
+      data: Partial<T>;
+      buildQuery: (query: QueryBuilder<T>) => QueryBuilder<T>;
+    }) => {
+      const query = client.from<T>(table);
+      const builtQuery = params.buildQuery(query);
+      const { data: result, error } = await builtQuery.update(params.data);
 
       if (error) {
-        throw error
+        throw error;
       }
 
-      return result
+      return result;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fluxbase', 'table', table] })
+      queryClient.invalidateQueries({ queryKey: ["fluxbase", "table", table] });
     },
-  })
+  });
 }
 
 /**
  * Hook to upsert data into a table
  */
 export function useUpsert<T = any>(table: string) {
-  const client = useFluxbaseClient()
-  const queryClient = useQueryClient()
+  const client = useFluxbaseClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (data: Partial<T> | Partial<T>[]) => {
-      const query = client.from<T>(table)
-      const { data: result, error } = await query.upsert(data as Partial<T>)
+      const query = client.from<T>(table);
+      const { data: result, error } = await query.upsert(data as Partial<T>);
 
       if (error) {
-        throw error
+        throw error;
       }
 
-      return result
+      return result;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fluxbase', 'table', table] })
+      queryClient.invalidateQueries({ queryKey: ["fluxbase", "table", table] });
     },
-  })
+  });
 }
 
 /**
  * Hook to delete data from a table
  */
 export function useDelete<T = any>(table: string) {
-  const client = useFluxbaseClient()
-  const queryClient = useQueryClient()
+  const client = useFluxbaseClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (buildQuery: (query: QueryBuilder<T>) => QueryBuilder<T>) => {
-      const query = client.from<T>(table)
-      const builtQuery = buildQuery(query)
-      const { error } = await builtQuery.delete()
+    mutationFn: async (
+      buildQuery: (query: QueryBuilder<T>) => QueryBuilder<T>,
+    ) => {
+      const query = client.from<T>(table);
+      const builtQuery = buildQuery(query);
+      const { error } = await builtQuery.delete();
 
       if (error) {
-        throw error
+        throw error;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fluxbase', 'table', table] })
+      queryClient.invalidateQueries({ queryKey: ["fluxbase", "table", table] });
     },
-  })
+  });
 }

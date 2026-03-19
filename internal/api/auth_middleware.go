@@ -8,8 +8,23 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
 )
+
+// getTenantJWTSecret extracts the tenant-specific JWT secret from context if available
+// Returns empty string if no tenant config or no tenant-specific secret
+func getTenantJWTSecret(c fiber.Ctx) string {
+	tenantConfig, ok := c.Locals("tenant_config").(*config.Config)
+	if !ok || tenantConfig == nil {
+		return ""
+	}
+	// Return the tenant's JWT secret if it differs from empty (meaning it was overridden)
+	if tenantConfig.Auth.JWTSecret != "" {
+		return tenantConfig.Auth.JWTSecret
+	}
+	return ""
+}
 
 // AuthMiddleware creates a middleware for JWT authentication
 func AuthMiddleware(authService *auth.Service) fiber.Handler {
@@ -31,8 +46,15 @@ func AuthMiddleware(authService *auth.Service) fiber.Handler {
 			}
 		}
 
-		// Validate token
-		claims, err := authService.ValidateToken(token)
+		// Validate token - use tenant-specific secret if available
+		var claims *auth.TokenClaims
+		var err error
+		tenantSecret := getTenantJWTSecret(c)
+		if tenantSecret != "" {
+			claims, err = authService.ValidateTokenWithSecret(token, tenantSecret)
+		} else {
+			claims, err = authService.ValidateToken(token)
+		}
 		if err != nil {
 			log.Debug().Err(err).Msg("Invalid token")
 			return SendInvalidToken(c)
@@ -211,10 +233,10 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 		// First, try to validate as auth.users token
 		claims, err := authService.ValidateToken(token)
 		if err == nil {
-			// Check if this is a dashboard admin token (dashboard.users)
-			// Dashboard tokens use the same JWT secret but have role="dashboard_admin"
+			// Check if this is a platform admin token (platform.users)
+			// Platform tokens use the same JWT secret but have role="instance_admin"
 			// and store the user ID in Subject instead of UserID
-			if claims.Role == "dashboard_admin" {
+			if claims.Role == "instance_admin" {
 				c.Locals("user_id", claims.Subject)
 				c.Locals("user_email", claims.Email)
 				c.Locals("user_role", claims.Role)
@@ -223,7 +245,7 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 				log.Debug().
 					Str("user_id", claims.Subject).
 					Str("role", claims.Role).
-					Msg("Authenticated as dashboard.users via role check")
+					Msg("Authenticated as platform.users via role check")
 
 				return c.Next()
 			}
@@ -270,7 +292,7 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 			return c.Next()
 		}
 
-		// If auth.users validation failed, try dashboard.users token
+		// If auth.users validation failed, try platform.users token
 		dashboardClaims, err := jwtManager.ValidateAccessToken(token)
 		if err != nil {
 			// Both validations failed
@@ -278,7 +300,7 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 			return SendInvalidToken(c)
 		}
 
-		// Successfully validated as dashboard.users token
+		// Successfully validated as platform.users token
 		userID, err := uuid.Parse(dashboardClaims.Subject)
 		if err != nil {
 			return SendUnauthorized(c, "Invalid user ID in token", ErrCodeInvalidUserID)
@@ -293,7 +315,7 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 		log.Debug().
 			Str("user_id", userID.String()).
 			Str("role", dashboardClaims.Role).
-			Msg("Authenticated as dashboard.users")
+			Msg("Authenticated as platform.users")
 
 		return c.Next()
 	}

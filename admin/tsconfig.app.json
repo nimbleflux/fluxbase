@@ -23,8 +23,8 @@
       "@/*": [
         "./src/*"
       ],
-      "@nimbleflux/fluxbase-sdk": ["../sdk/dist/index.d.ts"],
-      "@nimbleflux/fluxbase-sdk-react": ["../sdk-react/dist/index.d.ts"],
+      "@nimbleflux/fluxbase-sdk": ["../sdk/src/index.ts"],
+      "@nimbleflux/fluxbase-sdk-react": ["../sdk-react/src/index.ts"],
       "monaco-editor": ["../node_modules/.bun/monaco-editor@0.55.1/node_modules/monaco-editor/esm/vs/editor/editor.main.d.ts"]
     },
     /* Linting */

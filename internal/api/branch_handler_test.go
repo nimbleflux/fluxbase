@@ -1059,46 +1059,8 @@ func TestBranchAccessLevels(t *testing.T) {
 	})
 
 	t.Run("access level hierarchy", func(t *testing.T) {
-		// Verify the access level strings
 		assert.Equal(t, "read", string(branching.BranchAccessRead))
 		assert.Equal(t, "write", string(branching.BranchAccessWrite))
 		assert.Equal(t, "admin", string(branching.BranchAccessAdmin))
-	})
-}
-
-// =============================================================================
-// RegisterRoutes Tests
-// =============================================================================
-
-func TestBranchHandler_RegisterRoutes(t *testing.T) {
-	t.Run("routes are registered without panic", func(t *testing.T) {
-		app := fiber.New()
-		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
-
-		// RegisterRoutes should not panic with nil dependencies
-		assert.NotPanics(t, func() {
-			handler.RegisterRoutes(app)
-		})
-	})
-
-	t.Run("all handler methods exist", func(t *testing.T) {
-		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
-
-		assert.NotNil(t, handler.CreateBranch)
-		assert.NotNil(t, handler.ListBranches)
-		assert.NotNil(t, handler.GetBranch)
-		assert.NotNil(t, handler.DeleteBranch)
-		assert.NotNil(t, handler.ResetBranch)
-		assert.NotNil(t, handler.GetBranchActivity)
-		assert.NotNil(t, handler.GetPoolStats)
-		assert.NotNil(t, handler.GetActiveBranch)
-		assert.NotNil(t, handler.SetActiveBranch)
-		assert.NotNil(t, handler.ResetActiveBranch)
-		assert.NotNil(t, handler.ListGitHubConfigs)
-		assert.NotNil(t, handler.UpsertGitHubConfig)
-		assert.NotNil(t, handler.DeleteGitHubConfig)
-		assert.NotNil(t, handler.ListBranchAccess)
-		assert.NotNil(t, handler.GrantBranchAccess)
-		assert.NotNil(t, handler.RevokeBranchAccess)
 	})
 }

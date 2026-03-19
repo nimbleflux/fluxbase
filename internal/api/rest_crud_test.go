@@ -29,8 +29,8 @@ func TestIsAdminUser(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "dashboard_admin role",
-			role:     "dashboard_admin",
+			name:     "instance_admin role",
+			role:     "instance_admin",
 			expected: true,
 		},
 		{

@@ -60,7 +60,7 @@ func TestCustomSettingsService_CreateSetting_Success(t *testing.T) {
 		Value:       map[string]interface{}{"enabled": true, "count": 42},
 		ValueType:   "json",
 		Description: "Test setting",
-		EditableBy:  []string{"dashboard_admin", "admin"},
+		EditableBy:  []string{"instance_admin", "admin"},
 		Metadata:    map[string]interface{}{"category": "test"},
 	}
 
@@ -92,7 +92,7 @@ func TestCustomSettingsService_CreateSetting_DefaultValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "string", setting.ValueType) // Default value type
 	assert.Len(t, setting.EditableBy, 1)
-	assert.Contains(t, setting.EditableBy, "dashboard_admin")
+	assert.Contains(t, setting.EditableBy, "instance_admin")
 }
 
 func TestCustomSettingsService_CreateSetting_DuplicateKey(t *testing.T) {
@@ -219,10 +219,10 @@ func TestCustomSettingsService_UpdateSetting_Success(t *testing.T) {
 	updateReq := settings.UpdateCustomSettingRequest{
 		Value:       map[string]interface{}{"enabled": true},
 		Description: &newDesc,
-		EditableBy:  []string{"admin", "dashboard_admin"},
+		EditableBy:  []string{"admin", "instance_admin"},
 	}
 
-	updated, err := svc.UpdateSetting(ctx, "custom.update.test", updateReq, createdBy, "dashboard_admin")
+	updated, err := svc.UpdateSetting(ctx, "custom.update.test", updateReq, createdBy, "instance_admin")
 	require.NoError(t, err)
 	assert.Equal(t, true, updated.Value["enabled"])
 	assert.Equal(t, "Updated description", updated.Description)
@@ -301,7 +301,7 @@ func TestCustomSettingsService_DeleteSetting_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete setting
-	err = svc.DeleteSetting(ctx, "custom.delete.test", "dashboard_admin")
+	err = svc.DeleteSetting(ctx, "custom.delete.test", "instance_admin")
 	require.NoError(t, err)
 
 	// Verify it's deleted
@@ -354,7 +354,7 @@ func TestCustomSettingsService_ListSettings_Success(t *testing.T) {
 	}
 
 	// List all settings
-	list, err := svc.ListSettings(ctx, "dashboard_admin")
+	list, err := svc.ListSettings(ctx, "instance_admin")
 	require.NoError(t, err)
 	assert.Len(t, list, 3)
 

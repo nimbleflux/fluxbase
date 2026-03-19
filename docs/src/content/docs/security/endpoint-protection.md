@@ -36,7 +36,7 @@ Fluxbase implements a **multi-layered security model** to protect API endpoints 
 | Public | 🔓 | No authentication required |
 | Optional | 🔑 | Auth optional, affects data visibility via RLS |
 | Required | 🔒 | Authentication required |
-| Admin | 🛡️ | Admin or dashboard_admin role required |
+| Admin | 🛡️ | Admin, instance_admin, or tenant_admin role required |
 | Service | 🔐 | Service key + additional restrictions |
 
 ---
@@ -107,7 +107,7 @@ Fluxbase supports four authentication methods, each suited for different use cas
 
 **Separate auth system** from application users:
 - Independent user table (`dashboard.users`)
-- Own JWT tokens with `dashboard_admin` role
+- Own JWT tokens with `instance_admin` or `tenant_admin` role
 - Maps to `service_role` for database operations
 
 ---
@@ -122,7 +122,8 @@ Fluxbase supports four authentication methods, each suited for different use cas
 | `authenticated` | `authenticated` | No | Logged-in application users |
 | `admin` | `authenticated` | No | Application administrators (still subject to RLS) |
 | `service_role` | `service_role` | **Yes** | Backend services with full access |
-| `dashboard_admin` | `service_role` | **Yes** | Platform administrators |
+| `instance_admin` | `service_role` | **Yes** | Full platform administrators (all tenants) |
+| `tenant_admin` | `service_role` | **Yes** | Tenant administrators (assigned tenants only) |
 
 ### Client Key Scopes
 
@@ -381,7 +382,7 @@ All REST API endpoints require authentication and apply Row-Level Security.
 
 ### Admin Endpoints (`/api/v1/admin/*`)
 
-All admin endpoints require `admin` or `dashboard_admin` role.
+All admin endpoints require `admin`, `instance_admin`, or `tenant_admin` role.
 
 #### Dashboard Authentication
 

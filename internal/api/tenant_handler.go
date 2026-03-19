@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -23,19 +24,19 @@ type Tenant struct {
 	Name      string                 `json:"name"`
 	IsDefault bool                   `json:"is_default"`
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
-	CreatedAt string                 `json:"created_at"`
-	UpdatedAt string                 `json:"updated_at,omitempty"`
-	DeletedAt *string                `json:"deleted_at,omitempty"`
+	CreatedAt time.Time              `json:"created_at"`
+	UpdatedAt time.Time              `json:"updated_at,omitempty"`
+	DeletedAt *time.Time             `json:"deleted_at,omitempty"`
 }
 
 // TenantMembership represents a user's membership in a tenant
 type TenantMembership struct {
-	ID        string `json:"id"`
-	TenantID  string `json:"tenant_id"`
-	UserID    string `json:"user_id"`
-	Role      string `json:"role"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at,omitempty"`
+	ID        string    `json:"id"`
+	TenantID  string    `json:"tenant_id"`
+	UserID    string    `json:"user_id"`
+	Role      string    `json:"role"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
 }
 
 // CreateTenantRequest is the request body for creating a tenant
@@ -97,7 +98,7 @@ func (h *TenantHandler) ListTenants(c fiber.Ctx) error {
 
 	rows, err := h.DB.Pool().Query(ctx, `
 		SELECT id, slug, name, is_default, metadata, created_at, updated_at, deleted_at
-		FROM tenants
+		FROM platform.tenants
 		WHERE deleted_at IS NULL
 		ORDER BY created_at DESC
 	`)
@@ -140,8 +141,8 @@ func (h *TenantHandler) ListMyTenants(c fiber.Ctx) error {
 
 	rows, err := h.DB.Pool().Query(ctx, `
 		SELECT t.id, t.slug, t.name, t.is_default, t.metadata, t.created_at, tm.role
-		FROM tenants t
-		INNER JOIN tenant_memberships tm ON tm.tenant_id = t.id
+		FROM platform.tenants t
+		INNER JOIN platform.tenant_memberships tm ON tm.tenant_id = t.id
 		WHERE tm.user_id = $1::uuid
 		AND t.deleted_at IS NULL
 		ORDER BY t.name
@@ -197,15 +198,14 @@ func (h *TenantHandler) GetTenant(c fiber.Ctx) error {
 	var metadata []byte
 	err := h.DB.Pool().QueryRow(ctx, `
 		SELECT id, slug, name, is_default, metadata, created_at, updated_at, deleted_at
-		FROM tenants
+		FROM platform.tenants
 		WHERE id = $1::uuid AND deleted_at IS NULL
 	`, tenantID).Scan(
 		&t.ID, &t.Slug, &t.Name, &t.IsDefault, &metadata,
 		&t.CreatedAt, &t.UpdatedAt, &t.DeletedAt,
 	)
-
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
@@ -237,7 +237,7 @@ func (h *TenantHandler) CreateTenant(c fiber.Ctx) error {
 	// Check if slug already exists
 	var exists bool
 	err := h.DB.Pool().QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM tenants WHERE slug = $1)`,
+		`SELECT EXISTS(SELECT 1 FROM platform.tenants WHERE slug = $1)`,
 		req.Slug,
 	).Scan(&exists)
 	if err != nil {
@@ -252,7 +252,7 @@ func (h *TenantHandler) CreateTenant(c fiber.Ctx) error {
 	var t Tenant
 	var metadata []byte
 	err = h.DB.Pool().QueryRow(ctx, `
-		INSERT INTO tenants (slug, name, metadata)
+		INSERT INTO platform.tenants (slug, name, metadata)
 		VALUES ($1, $2, $3)
 		RETURNING id, slug, name, is_default, metadata, created_at
 	`, req.Slug, req.Name, req.Metadata).Scan(
@@ -299,7 +299,7 @@ func (h *TenantHandler) UpdateTenant(c fiber.Ctx) error {
 	updates["updated_at"] = time.Now()
 
 	// Build and execute update
-	query := `UPDATE tenants SET `
+	query := `UPDATE platform.tenants SET `
 	args := make([]interface{}, 0, len(updates)+1)
 	i := 1
 	for k, v := range updates {
@@ -335,11 +335,11 @@ func (h *TenantHandler) DeleteTenant(c fiber.Ctx) error {
 	// Check if this is the default tenant
 	var isDefault bool
 	err := h.DB.Pool().QueryRow(ctx,
-		`SELECT is_default FROM tenants WHERE id = $1::uuid AND deleted_at IS NULL`,
+		`SELECT is_default FROM platform.tenants WHERE id = $1::uuid AND deleted_at IS NULL`,
 		tenantID,
 	).Scan(&isDefault)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to check tenant")
@@ -352,7 +352,7 @@ func (h *TenantHandler) DeleteTenant(c fiber.Ctx) error {
 
 	// Soft delete
 	result, err := h.DB.Pool().Exec(ctx,
-		`UPDATE tenants SET deleted_at = NOW() WHERE id = $1::uuid AND deleted_at IS NULL`,
+		`UPDATE platform.tenants SET deleted_at = NOW() WHERE id = $1::uuid AND deleted_at IS NULL`,
 		tenantID,
 	)
 	if err != nil {
@@ -377,10 +377,9 @@ func (h *TenantHandler) ListMembers(c fiber.Ctx) error {
 	rows, err := h.DB.Pool().Query(ctx, `
 		SELECT tm.id, tm.tenant_id, tm.user_id, tm.role, tm.created_at, tm.updated_at,
 		       u.email, u.role as user_role
-		FROM tenant_memberships tm
+		FROM platform.tenant_memberships tm
 		INNER JOIN auth.users u ON u.id = tm.user_id
 		WHERE tm.tenant_id = $1::uuid
-		AND u.deleted_at IS NULL
 		ORDER BY tm.created_at ASC
 	`, tenantID)
 	if err != nil {
@@ -435,7 +434,7 @@ func (h *TenantHandler) AddMember(c fiber.Ctx) error {
 	// Add membership
 	var m TenantMembership
 	err = h.DB.Pool().QueryRow(ctx, `
-		INSERT INTO tenant_memberships (tenant_id, user_id, role)
+		INSERT INTO platform.tenant_memberships (tenant_id, user_id, role)
 		VALUES ($1::uuid, $2::uuid, $3)
 		ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = $3, updated_at = NOW()
 		RETURNING id, tenant_id, user_id, role, created_at
@@ -468,7 +467,7 @@ func (h *TenantHandler) UpdateMemberRole(c fiber.Ctx) error {
 	}
 
 	result, err := h.DB.Pool().Exec(ctx, `
-		UPDATE tenant_memberships
+		UPDATE platform.tenant_memberships
 		SET role = $1, updated_at = NOW()
 		WHERE tenant_id = $2::uuid AND user_id = $3::uuid
 	`, req.Role, tenantID, userID)
@@ -497,7 +496,7 @@ func (h *TenantHandler) RemoveMember(c fiber.Ctx) error {
 	userID := c.Params("userId")
 
 	result, err := h.DB.Pool().Exec(ctx, `
-		DELETE FROM tenant_memberships
+		DELETE FROM platform.tenant_memberships
 		WHERE tenant_id = $1::uuid AND user_id = $2::uuid
 	`, tenantID, userID)
 	if err != nil {
@@ -530,7 +529,7 @@ func isValidSlug(s string) bool {
 		if i == len(s)-1 && (r < 'a' || r > 'z') && (r < '0' || r > '9') {
 			return false
 		}
-		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
 			return false
 		}
 	}

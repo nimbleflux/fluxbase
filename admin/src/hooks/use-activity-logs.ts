@@ -12,11 +12,28 @@ const ACTIVITY_CATEGORIES = new Set(['security', 'execution', 'system'])
 // Allowed log levels (exclude debug/trace noise)
 const ACTIVITY_LEVELS = new Set(['info', 'warn', 'error', 'fatal', 'panic'])
 
+// Patterns to exclude from activity feed (websocket noise)
+const EXCLUDED_MESSAGE_PATTERNS = [
+  /subscription/i,
+  /websocket/i,
+  /connection (established|closed)/i,
+]
+
 /**
  * Check if a log entry should be shown in the activity feed
  */
 function isActivityLog(log: ActivityLog): boolean {
-  return ACTIVITY_CATEGORIES.has(log.category) && ACTIVITY_LEVELS.has(log.level)
+  // Check category and level
+  if (!ACTIVITY_CATEGORIES.has(log.category) || !ACTIVITY_LEVELS.has(log.level)) {
+    return false
+  }
+
+  // Filter out websocket/subscription noise
+  if (EXCLUDED_MESSAGE_PATTERNS.some((pattern) => pattern.test(log.message))) {
+    return false
+  }
+
+  return true
 }
 
 export interface ActivityLog {

@@ -292,7 +292,7 @@ func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
 func (h *StorageHandler) ListBuckets(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to list buckets",
 		})

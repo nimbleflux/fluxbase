@@ -54,7 +54,7 @@ await client.admin.login({
 
 const invitation = await client.management.invitations.create({
   email: "newuser@example.com",
-  role: "dashboard_user",
+  role: "tenant_admin",
 });
 ```
 
@@ -411,7 +411,7 @@ await client.admin.login({
 
 const invitation = await client.management.invitations.create({
   email: "newuser@example.com",
-  role: "dashboard_user", // or 'dashboard_admin'
+  role: "tenant_admin", // or 'instance_admin'
   expiry_duration: 604800, // 7 days in seconds (default)
 });
 
@@ -426,13 +426,13 @@ console.log("Email Sent:", invitation.email_sent);
 **Parameters:**
 
 - `email` (required): Email address to invite
-- `role` (required): Either `'dashboard_user'` or `'dashboard_admin'`
+- `role` (required): Either `'tenant_admin'` or `'instance_admin'`
 - `expiry_duration` (optional): Duration in seconds (default: 604800 = 7 days)
 
 **Roles:**
 
-- `dashboard_user`: Can access the dashboard with limited permissions
-- `dashboard_admin`: Full admin access to instance management
+- `tenant_admin`: Admin of assigned tenant(s) with dashboard access
+- `instance_admin`: Full admin access to all tenants and instance management
 
 ### List Invitations
 
@@ -718,7 +718,7 @@ async function manageInvitations() {
   const usersToInvite = [
     { email: "user1@example.com", role: "dashboard_user" as const },
     { email: "user2@example.com", role: "dashboard_user" as const },
-    { email: "admin2@example.com", role: "dashboard_admin" as const },
+    { email: "admin2@example.com", role: "instance_admin" as const },
   ];
 
   console.log("Creating invitations...");

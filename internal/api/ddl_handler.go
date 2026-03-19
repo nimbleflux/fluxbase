@@ -237,7 +237,7 @@ func (h *DDLHandler) CreateTable(c fiber.Ctx) error {
 		})
 	}
 
-	// Grant permissions to service_role for dashboard_admin access
+	// Grant permissions to service_role for instance_admin access
 	// This is necessary because tables created via ExecuteWithAdminRole don't
 	// inherit default privileges from migration 027 (which only applies to CURRENT_USER)
 	if err := h.grantTablePermissions(ctx, req.Schema, req.Name); err != nil {
@@ -763,7 +763,7 @@ func escapeLiteral(value string) string {
 }
 
 // grantTablePermissions grants necessary permissions on a table to service_role
-// This ensures that dashboard_admin (which maps to service_role) can access the table
+// This ensures that instance_admin (which maps to service_role) can access the table
 func (h *DDLHandler) grantTablePermissions(ctx context.Context, schema, table string) error {
 	// Grant SELECT, INSERT, UPDATE, DELETE on the table to service_role
 	grantTableQuery := fmt.Sprintf(

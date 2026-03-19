@@ -23,16 +23,15 @@ const getSourceLabel = (component?: string, customCategory?: string): string | u
 const getSecurityEventDetails = (log: ActivityLog): string[] => {
   const details: string[] = []
 
-  if (log.user_id) {
-    details.push(`User: ${log.user_id}`)
-  }
-
-  if (log.ip_address) {
-    details.push(`IP: ${log.ip_address}`)
-  }
-
   // Extract relevant fields for security events
   if (log.fields) {
+    // Prefer email over user_id for display
+    if (log.fields.email) {
+      details.push(`User: ${String(log.fields.email)}`)
+    } else if (log.user_id) {
+      details.push(`User: ${log.user_id}`)
+    }
+
     if (log.fields.action) {
       details.push(`Action: ${String(log.fields.action)}`)
     }
@@ -45,6 +44,12 @@ const getSecurityEventDetails = (log: ActivityLog): string[] => {
     if (log.fields.target_user) {
       details.push(`Target: ${String(log.fields.target_user)}`)
     }
+  } else if (log.user_id) {
+    details.push(`User: ${log.user_id}`)
+  }
+
+  if (log.ip_address) {
+    details.push(`IP: ${log.ip_address}`)
   }
 
   return details

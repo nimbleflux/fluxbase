@@ -1976,7 +1976,7 @@ func (tc *TestContext) CreateDashboardAdminUser(email, password string) (userID,
 
 	err = conn.QueryRow(ctx,
 		`INSERT INTO dashboard.users (email, password_hash, full_name, role, email_verified)
-		 VALUES ($1, $2, $3, 'dashboard_admin', true)
+		 VALUES ($1, $2, $3, 'instance_admin', true)
 		 ON CONFLICT (email) DO UPDATE
 		 SET password_hash = EXCLUDED.password_hash
 		 RETURNING id`,
