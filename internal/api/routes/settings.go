@@ -30,24 +30,24 @@ func BuildSettingsRoutes(deps *SettingsDeps) *RouteGroup {
 	return &RouteGroup{
 		Name:   "settings",
 		Prefix: "/api/v1/settings",
-		Middlewares: []Middleware{
-			{Name: "OptionalAuth", Handler: deps.OptionalAuth},
-		},
 		Routes: []Route{
 			{
 				Method:  "GET",
-				Path:    "/:key",
+				Path:    "/*",
 				Handler: deps.GetSetting,
-				Summary: "Get setting by key (respects RLS)",
+				Summary: "Get a setting",
 				Auth:    AuthOptional,
 			},
 			{
-				Method:  "POST",
-				Path:    "/batch",
+				Method:  "GET",
+				Path:    "/",
 				Handler: deps.GetSettings,
-				Summary: "Get multiple settings",
+				Summary: "List all settings",
 				Auth:    AuthOptional,
 			},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Optional: deps.OptionalAuth,
 		},
 	}
 }
@@ -56,9 +56,6 @@ func BuildUserSettingsRoutes(deps *UserSettingsDeps) *RouteGroup {
 	return &RouteGroup{
 		Name:   "user-settings",
 		Prefix: "/api/v1/settings/user",
-		Middlewares: []Middleware{
-			{Name: "RequireAuth", Handler: deps.RequireAuth},
-		},
 		Routes: []Route{
 			{
 				Method:  "GET",
@@ -78,30 +75,33 @@ func BuildUserSettingsRoutes(deps *UserSettingsDeps) *RouteGroup {
 				Method:  "GET",
 				Path:    "/system/:key",
 				Handler: deps.GetSystemSetting,
-				Summary: "Get system setting",
+				Summary: "Get system setting (public info)",
 				Auth:    AuthRequired,
 			},
 			{
 				Method:  "GET",
-				Path:    "/:key",
+				Path:    "/*",
 				Handler: deps.GetSetting,
-				Summary: "Get setting with user->system fallback",
+				Summary: "Get a user setting",
 				Auth:    AuthRequired,
 			},
 			{
 				Method:  "PUT",
-				Path:    "/:key",
+				Path:    "/*",
 				Handler: deps.SetSetting,
-				Summary: "Create/update user setting",
+				Summary: "Set a user setting",
 				Auth:    AuthRequired,
 			},
 			{
 				Method:  "DELETE",
-				Path:    "/:key",
+				Path:    "/*",
 				Handler: deps.DeleteSetting,
-				Summary: "Delete user setting",
+				Summary: "Delete a user setting",
 				Auth:    AuthRequired,
 			},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Required: deps.RequireAuth,
 		},
 	}
 }
@@ -109,16 +109,13 @@ func BuildUserSettingsRoutes(deps *UserSettingsDeps) *RouteGroup {
 func BuildUserSecretsRoutes(deps *UserSettingsDeps) *RouteGroup {
 	return &RouteGroup{
 		Name:   "user-secrets",
-		Prefix: "/api/v1/settings/secret",
-		Middlewares: []Middleware{
-			{Name: "RequireAuth", Handler: deps.RequireAuth},
-		},
+		Prefix: "/api/v1/settings/user/secrets",
 		Routes: []Route{
 			{
 				Method:  "POST",
 				Path:    "/",
 				Handler: deps.CreateSecret,
-				Summary: "Create user secret (encrypted)",
+				Summary: "Create a user secret",
 				Auth:    AuthRequired,
 			},
 			{
@@ -132,23 +129,26 @@ func BuildUserSecretsRoutes(deps *UserSettingsDeps) *RouteGroup {
 				Method:  "GET",
 				Path:    "/*",
 				Handler: deps.GetSecret,
-				Summary: "Get user secret",
+				Summary: "Get a user secret",
 				Auth:    AuthRequired,
 			},
 			{
 				Method:  "PUT",
 				Path:    "/*",
 				Handler: deps.UpdateSecret,
-				Summary: "Update user secret",
+				Summary: "Update a user secret",
 				Auth:    AuthRequired,
 			},
 			{
 				Method:  "DELETE",
 				Path:    "/*",
 				Handler: deps.DeleteSecret,
-				Summary: "Delete user secret",
+				Summary: "Delete a user secret",
 				Auth:    AuthRequired,
 			},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Required: deps.RequireAuth,
 		},
 	}
 }

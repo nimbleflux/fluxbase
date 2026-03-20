@@ -42,7 +42,6 @@ func BuildSyncRoutes(deps *SyncDeps) *RouteGroup {
 			Handler: deps.SyncFunctions,
 			Middlewares: []Middleware{
 				{Name: "RequireFunctionsSyncIPAllowlist", Handler: deps.RequireFunctionsSyncIPAllowlist},
-				{Name: "RequireSyncAuth", Handler: deps.RequireSyncAuth},
 				{Name: "RequireRole", Handler: deps.RequireRole},
 			},
 			Summary: "Sync functions from filesystem",
@@ -59,7 +58,6 @@ func BuildSyncRoutes(deps *SyncDeps) *RouteGroup {
 			Handler: deps.SyncJobs,
 			Middlewares: []Middleware{
 				{Name: "RequireJobsSyncIPAllowlist", Handler: deps.RequireJobsSyncIPAllowlist},
-				{Name: "RequireSyncAuth", Handler: deps.RequireSyncAuth},
 				{Name: "RequireRole", Handler: deps.RequireRole},
 			},
 			Summary: "Sync jobs from filesystem",
@@ -77,7 +75,6 @@ func BuildSyncRoutes(deps *SyncDeps) *RouteGroup {
 			Middlewares: []Middleware{
 				{Name: "RequireAIEnabled", Handler: deps.RequireAIEnabled},
 				{Name: "RequireAISyncIPAllowlist", Handler: deps.RequireAISyncIPAllowlist},
-				{Name: "RequireSyncAuth", Handler: deps.RequireSyncAuth},
 				{Name: "RequireRole", Handler: deps.RequireRole},
 			},
 			Summary: "Sync AI chatbots from filesystem",
@@ -95,7 +92,6 @@ func BuildSyncRoutes(deps *SyncDeps) *RouteGroup {
 			Middlewares: []Middleware{
 				{Name: "RequireRPCEnabled", Handler: deps.RequireRPCEnabled},
 				{Name: "RequireRPCSyncIPAllowlist", Handler: deps.RequireRPCSyncIPAllowlist},
-				{Name: "RequireSyncAuth", Handler: deps.RequireSyncAuth},
 				{Name: "RequireRole", Handler: deps.RequireRole},
 			},
 			Summary: "Sync RPC procedures from database",
@@ -107,5 +103,8 @@ func BuildSyncRoutes(deps *SyncDeps) *RouteGroup {
 	return &RouteGroup{
 		Name:   "sync",
 		Routes: routes,
+		AuthMiddlewares: &AuthMiddlewares{
+			Required: deps.RequireSyncAuth,
+		},
 	}
 }

@@ -49,16 +49,32 @@ func ValidateMiddlewareDependencies(group *RouteGroup, route Route, fullpath str
 		}
 	}
 
+	// Check for auth - either via explicit middleware or auto-injected via AuthMiddlewares or RequireRole
 	if len(route.Roles) > 0 || len(route.Scopes) > 0 {
 		hasAuth := false
+
+		// Check explicit middleware
 		for _, mw := range allMiddleware {
 			if strings.Contains(strings.ToLower(mw.Name), "auth") {
 				hasAuth = true
 				break
 			}
 		}
+
+		// Check auto-injected auth middleware from AuthMiddlewares
+		if !hasAuth && group.AuthMiddlewares != nil && route.Auth != AuthNone {
+			if group.AuthMiddlewares.MiddlewareFor(route.Auth) != nil {
+				hasAuth = true
+			}
+		}
+
+		// Check auto-injected role middleware from RequireRole (role middleware includes auth check)
+		if !hasAuth && group.RequireRole != nil && len(route.Roles) > 0 {
+			hasAuth = true
+		}
+
 		if !hasAuth && route.Auth != AuthNone {
-			return fmt.Errorf("route %s: has roles/scopes but no auth middleware detected", fullpath)
+			return fmt.Errorf("route %s: has roles/scopes but no auth middleware detected (neither explicit nor via AuthMiddlewares or RequireRole)", fullpath)
 		}
 	}
 

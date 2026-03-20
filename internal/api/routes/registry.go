@@ -61,7 +61,7 @@ func (r *Registry) MustRegister(group *RouteGroup) {
 
 func (r *Registry) Apply(app *fiber.App) error {
 	for _, group := range r.groups {
-		if err := r.applyGroup(app, group, nil); err != nil {
+		if err := r.applyGroup(app, group, nil, nil, nil, nil); err != nil {
 			return err
 		}
 	}
@@ -70,14 +70,14 @@ func (r *Registry) Apply(app *fiber.App) error {
 
 func (r *Registry) ApplyTo(router fiber.Router) error {
 	for _, group := range r.groups {
-		if err := r.applyGroup(router, group, nil); err != nil {
+		if err := r.applyGroup(router, group, nil, nil, nil, nil); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *Registry) applyGroup(router fiber.Router, group *RouteGroup, parentMiddlewares []Middleware) error {
+func (r *Registry) applyGroup(router fiber.Router, group *RouteGroup, parentMiddlewares []Middleware, parentAuth *AuthMiddlewares, parentRequireRole func(...string) fiber.Handler, parentRequireScope func(...string) fiber.Handler) error {
 	if group == nil {
 		return nil
 	}
@@ -85,19 +85,37 @@ func (r *Registry) applyGroup(router fiber.Router, group *RouteGroup, parentMidd
 	combined := append([]Middleware{}, parentMiddlewares...)
 	combined = append(combined, group.Middlewares...)
 
+	// Inherit auth middlewares from parent if not overridden
+	authMiddlewares := parentAuth
+	if group.AuthMiddlewares != nil {
+		authMiddlewares = group.AuthMiddlewares
+	}
+
+	// Inherit RequireRole from parent if not overridden
+	requireRole := parentRequireRole
+	if group.RequireRole != nil {
+		requireRole = group.RequireRole
+	}
+
+	// Inherit RequireScope from parent if not overridden
+	requireScope := parentRequireScope
+	if group.RequireScope != nil {
+		requireScope = group.RequireScope
+	}
+
 	grp := router
 	if group.Prefix != "" {
 		grp = router.Group(group.Prefix)
 	}
 
 	for i := range group.Routes {
-		if err := r.applyRoute(grp, &group.Routes[i], combined); err != nil {
+		if err := r.applyRoute(grp, &group.Routes[i], combined, authMiddlewares, requireRole, requireScope); err != nil {
 			return err
 		}
 	}
 
 	for _, sub := range group.SubGroups {
-		if err := r.applyGroup(grp, sub, combined); err != nil {
+		if err := r.applyGroup(grp, sub, combined, authMiddlewares, requireRole, requireScope); err != nil {
 			return err
 		}
 	}
@@ -105,22 +123,45 @@ func (r *Registry) applyGroup(router fiber.Router, group *RouteGroup, parentMidd
 	return nil
 }
 
-func (r *Registry) applyRoute(router fiber.Router, route *Route, middlewares []Middleware) error {
+func (r *Registry) applyRoute(router fiber.Router, route *Route, middlewares []Middleware, authMiddlewares *AuthMiddlewares, requireRole func(...string) fiber.Handler, requireScope func(...string) fiber.Handler) error {
 	if route.Handler == nil {
 		return fmt.Errorf("route %s %s has nil handler", route.Method, route.Path)
 	}
 
 	var handlers []fiber.Handler
+
+	// First, add inherited/group middlewares
 	for _, m := range middlewares {
 		if m.Handler != nil {
 			handlers = append(handlers, m.Handler)
 		}
 	}
+
+	// Auto-inject auth middleware based on Auth field
+	if authMiddlewares != nil && route.Auth != AuthNone {
+		if authHandler := authMiddlewares.MiddlewareFor(route.Auth); authHandler != nil {
+			handlers = append(handlers, authHandler)
+		}
+	}
+
+	// Auto-inject role middleware based on Roles field
+	if requireRole != nil && len(route.Roles) > 0 {
+		handlers = append(handlers, requireRole(route.Roles...))
+	}
+
+	// Auto-inject scope middleware based on Scopes field
+	if requireScope != nil && len(route.Scopes) > 0 {
+		handlers = append(handlers, requireScope(route.Scopes...))
+	}
+
+	// Then, add route-specific middlewares (non-auth middlewares like rate limiters)
 	for _, m := range route.Middlewares {
 		if m.Handler != nil {
 			handlers = append(handlers, m.Handler)
 		}
 	}
+
+	// Finally, add the route handler
 	handlers = append(handlers, route.Handler)
 
 	if len(handlers) == 0 {
@@ -310,6 +351,7 @@ type AllDeps struct {
 	MCP               *MCPDeps
 	MCPOAuth          *MCPOAuthDeps
 	Migrations        *MigrationsDeps
+	KnowledgeBase     *KnowledgeBaseDeps
 	Root              fiber.Handler
 }
 
@@ -420,6 +462,13 @@ func RegisterAllRoutes(app *fiber.App, deps *AllDeps) error {
 	// Migrations routes
 	if deps.Migrations != nil {
 		registry.MustRegister(BuildMigrationsRoutes(deps.Migrations))
+	}
+
+	// Knowledge base routes
+	if deps.KnowledgeBase != nil {
+		if routes := BuildKnowledgeBaseRoutes(deps.KnowledgeBase); routes != nil {
+			registry.MustRegister(routes)
+		}
 	}
 
 	// Root route
@@ -550,6 +599,13 @@ func AuditRoutes(deps *AllDeps) []RouteAuditEntry {
 	// Migrations routes
 	if deps.Migrations != nil {
 		registry.MustRegister(BuildMigrationsRoutes(deps.Migrations))
+	}
+
+	// Knowledge base routes
+	if deps.KnowledgeBase != nil {
+		if routes := BuildKnowledgeBaseRoutes(deps.KnowledgeBase); routes != nil {
+			registry.MustRegister(routes)
+		}
 	}
 
 	// Root route

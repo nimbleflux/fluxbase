@@ -27,9 +27,6 @@ func BuildVectorRoutes(deps *VectorDeps) *RouteGroup {
 				Method:  "POST",
 				Path:    "/api/v1/vector/embed",
 				Handler: deps.HandleEmbed,
-				Middlewares: []Middleware{
-					{Name: "RequireAuth", Handler: deps.RequireAuth},
-				},
 				Summary: "Generate embeddings for text",
 				Auth:    AuthRequired,
 			},
@@ -37,12 +34,12 @@ func BuildVectorRoutes(deps *VectorDeps) *RouteGroup {
 				Method:  "POST",
 				Path:    "/api/v1/vector/search",
 				Handler: deps.HandleSearch,
-				Middlewares: []Middleware{
-					{Name: "RequireAuth", Handler: deps.RequireAuth},
-				},
 				Summary: "Perform vector similarity search",
 				Auth:    AuthRequired,
 			},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Required: deps.RequireAuth,
 		},
 	}
 }

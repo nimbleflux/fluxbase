@@ -2,7 +2,6 @@ package routes
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 
 type RealtimeDeps struct {
@@ -18,47 +17,40 @@ type RealtimeDeps struct {
 func BuildRealtimeRoutes(deps *RealtimeDeps) *RouteGroup {
 	return &RouteGroup{
 		Name: "realtime",
+		Middlewares: []Middleware{
+			{Name: "RequireRealtimeEnabled", Handler: deps.RequireRealtimeEnabled},
+		},
 		Routes: []Route{
 			{
 				Method:  "GET",
 				Path:    "/realtime",
 				Handler: deps.HandleWebSocket,
-				Middlewares: []Middleware{
-					{Name: "RequireRealtimeEnabled", Handler: deps.RequireRealtimeEnabled},
-					{Name: "OptionalAuth", Handler: deps.OptionalAuth},
-					{Name: "RequireScope(realtime:connect)", Handler: deps.RequireScope(auth.ScopeRealtimeConnect)},
-				},
 				Summary: "WebSocket endpoint for realtime subscriptions",
 				Auth:    AuthOptional,
-				Scopes:  []string{auth.ScopeRealtimeConnect},
+				Scopes:  []string{"realtime:connect"},
 				Public:  false,
 			},
 			{
 				Method:  "GET",
 				Path:    "/api/v1/realtime/stats",
 				Handler: deps.HandleStats,
-				Middlewares: []Middleware{
-					{Name: "RequireRealtimeEnabled", Handler: deps.RequireRealtimeEnabled},
-					{Name: "RequireAuth", Handler: deps.RequireAuth},
-					{Name: "RequireScope(realtime:connect)", Handler: deps.RequireScope(auth.ScopeRealtimeConnect)},
-				},
 				Summary: "Get realtime connection statistics",
 				Auth:    AuthRequired,
-				Scopes:  []string{auth.ScopeRealtimeConnect},
+				Scopes:  []string{"realtime:connect"},
 			},
 			{
 				Method:  "POST",
 				Path:    "/api/v1/realtime/broadcast",
 				Handler: deps.HandleBroadcast,
-				Middlewares: []Middleware{
-					{Name: "RequireRealtimeEnabled", Handler: deps.RequireRealtimeEnabled},
-					{Name: "RequireAuth", Handler: deps.RequireAuth},
-					{Name: "RequireScope(realtime:broadcast)", Handler: deps.RequireScope(auth.ScopeRealtimeBroadcast)},
-				},
 				Summary: "Broadcast message to all connected clients",
 				Auth:    AuthRequired,
-				Scopes:  []string{auth.ScopeRealtimeBroadcast},
+				Scopes:  []string{"realtime:broadcast"},
 			},
 		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Optional: deps.OptionalAuth,
+			Required: deps.RequireAuth,
+		},
+		RequireScope: deps.RequireScope,
 	}
 }

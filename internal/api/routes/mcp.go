@@ -14,9 +14,6 @@ func BuildMCPRoutes(deps *MCPDeps) *RouteGroup {
 	return &RouteGroup{
 		Name:   "mcp",
 		Prefix: deps.BasePath,
-		Middlewares: []Middleware{
-			{Name: "MCPAuth", Handler: deps.MCPAuth},
-		},
 		Routes: []Route{
 			{Method: "POST", Path: "/", Handler: deps.HandlePost, Summary: "MCP JSON-RPC requests", Auth: AuthRequired},
 			{Method: "GET", Path: "/", Handler: deps.HandleGet, Summary: "MCP SSE stream", Auth: AuthRequired},
@@ -29,6 +26,9 @@ func BuildMCPRoutes(deps *MCPDeps) *RouteGroup {
 					{Method: "GET", Path: "/health", Handler: deps.HandleHealth, Summary: "MCP health check", Public: true},
 				},
 			},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Required: deps.MCPAuth,
 		},
 	}
 }

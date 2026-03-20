@@ -2,7 +2,6 @@ package routes
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 
 type RPCDeps struct {
@@ -18,59 +17,46 @@ type RPCDeps struct {
 func BuildRPCRoutes(deps *RPCDeps) *RouteGroup {
 	return &RouteGroup{
 		Name: "rpc",
+		Middlewares: []Middleware{
+			{Name: "RequireRPCEnabled", Handler: deps.RequireRPCEnabled},
+		},
 		Routes: []Route{
 			{
 				Method:  "GET",
 				Path:    "/api/v1/rpc/procedures",
 				Handler: deps.ListProcedures,
-				Middlewares: []Middleware{
-					{Name: "RequireRPCEnabled", Handler: deps.RequireRPCEnabled},
-					{Name: "OptionalAuth", Handler: deps.OptionalAuth},
-					{Name: "RequireScope(rpc:read)", Handler: deps.RequireScope(auth.ScopeRPCRead)},
-				},
 				Summary: "List available RPC procedures",
 				Auth:    AuthOptional,
-				Scopes:  []string{auth.ScopeRPCRead},
+				Scopes:  []string{"rpc:read"},
 			},
 			{
 				Method:  "POST",
 				Path:    "/api/v1/rpc/:namespace/:name",
 				Handler: deps.Invoke,
-				Middlewares: []Middleware{
-					{Name: "RequireRPCEnabled", Handler: deps.RequireRPCEnabled},
-					{Name: "OptionalAuth", Handler: deps.OptionalAuth},
-					{Name: "RequireScope(rpc:execute)", Handler: deps.RequireScope(auth.ScopeRPCExecute)},
-				},
 				Summary: "Invoke RPC procedure",
 				Auth:    AuthOptional,
-				Scopes:  []string{auth.ScopeRPCExecute},
+				Scopes:  []string{"rpc:execute"},
 			},
 			{
 				Method:  "GET",
 				Path:    "/api/v1/rpc/executions/:id",
 				Handler: deps.GetExecution,
-				Middlewares: []Middleware{
-					{Name: "RequireRPCEnabled", Handler: deps.RequireRPCEnabled},
-					{Name: "OptionalAuth", Handler: deps.OptionalAuth},
-					{Name: "RequireScope(rpc:read)", Handler: deps.RequireScope(auth.ScopeRPCRead)},
-				},
 				Summary: "Get RPC execution status",
 				Auth:    AuthOptional,
-				Scopes:  []string{auth.ScopeRPCRead},
+				Scopes:  []string{"rpc:read"},
 			},
 			{
 				Method:  "GET",
 				Path:    "/api/v1/rpc/executions/:id/logs",
 				Handler: deps.GetExecutionLogs,
-				Middlewares: []Middleware{
-					{Name: "RequireRPCEnabled", Handler: deps.RequireRPCEnabled},
-					{Name: "OptionalAuth", Handler: deps.OptionalAuth},
-					{Name: "RequireScope(rpc:read)", Handler: deps.RequireScope(auth.ScopeRPCRead)},
-				},
 				Summary: "Get RPC execution logs",
 				Auth:    AuthOptional,
-				Scopes:  []string{auth.ScopeRPCRead},
+				Scopes:  []string{"rpc:read"},
 			},
 		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Optional: deps.OptionalAuth,
+		},
+		RequireScope: deps.RequireScope,
 	}
 }

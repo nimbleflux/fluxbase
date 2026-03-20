@@ -14,13 +14,15 @@ func BuildOpenAPIRoutes(deps *OpenAPIDeps) *RouteGroup {
 		Name: "openapi",
 		Routes: []Route{
 			{
-				Method:      "GET",
-				Path:        "/openapi.json",
-				Handler:     deps.GetOpenAPISpec,
-				Summary:     "OpenAPI specification (full spec for admins, minimal for others)",
-				Auth:        AuthOptional,
-				Middlewares: []Middleware{{Name: "OptionalAuth", Handler: deps.OptionalAuth}},
+				Method:  "GET",
+				Path:    "/openapi.json",
+				Handler: deps.GetOpenAPISpec,
+				Summary: "OpenAPI specification (full spec for admins, minimal for others)",
+				Auth:    AuthOptional,
 			},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Optional: deps.OptionalAuth,
 		},
 	}
 }

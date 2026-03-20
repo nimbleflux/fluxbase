@@ -18,12 +18,14 @@ func BuildInternalAIRoutes(deps *InternalAIDeps) *RouteGroup {
 		Prefix: "/api/v1/internal/ai",
 		Middlewares: []Middleware{
 			{Name: "RequireInternal", Handler: deps.RequireInternal},
-			{Name: "RequireAuth", Handler: deps.RequireAuth},
 		},
 		Routes: []Route{
 			{Method: "POST", Path: "/chat", Handler: deps.HandleChat, Summary: "Internal AI chat for MCP tools/functions/jobs", Auth: AuthInternal, Internal: true},
 			{Method: "POST", Path: "/embed", Handler: deps.HandleEmbed, Summary: "Internal AI embed for MCP tools/functions/jobs", Auth: AuthInternal, Internal: true},
 			{Method: "GET", Path: "/providers", Handler: deps.HandleListProviders, Summary: "List internal AI providers", Auth: AuthInternal, Internal: true},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Internal: deps.RequireAuth,
 		},
 	}
 }

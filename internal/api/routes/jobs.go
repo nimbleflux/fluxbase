@@ -22,15 +22,14 @@ func BuildJobsRoutes(deps *JobsDeps) *RouteGroup {
 	}
 	return &RouteGroup{
 		Name: "jobs",
+		Middlewares: []Middleware{
+			{Name: "RequireJobsEnabled", Handler: deps.RequireJobsEnabled},
+		},
 		Routes: []Route{
 			{
 				Method:  "POST",
 				Path:    "/api/v1/jobs/submit",
 				Handler: deps.SubmitJob,
-				Middlewares: []Middleware{
-					{Name: "RequireJobsEnabled", Handler: deps.RequireJobsEnabled},
-					{Name: "RequireAuth", Handler: deps.RequireAuth},
-				},
 				Summary: "Submit a new job",
 				Auth:    AuthRequired,
 			},
@@ -38,10 +37,6 @@ func BuildJobsRoutes(deps *JobsDeps) *RouteGroup {
 				Method:  "GET",
 				Path:    "/api/v1/jobs/:id/logs",
 				Handler: deps.GetJobLogsUser,
-				Middlewares: []Middleware{
-					{Name: "RequireJobsEnabled", Handler: deps.RequireJobsEnabled},
-					{Name: "RequireAuth", Handler: deps.RequireAuth},
-				},
 				Summary: "Get job logs",
 				Auth:    AuthRequired,
 			},
@@ -49,10 +44,6 @@ func BuildJobsRoutes(deps *JobsDeps) *RouteGroup {
 				Method:  "GET",
 				Path:    "/api/v1/jobs/:id",
 				Handler: deps.GetJob,
-				Middlewares: []Middleware{
-					{Name: "RequireJobsEnabled", Handler: deps.RequireJobsEnabled},
-					{Name: "RequireAuth", Handler: deps.RequireAuth},
-				},
 				Summary: "Get a job by ID",
 				Auth:    AuthRequired,
 			},
@@ -60,10 +51,6 @@ func BuildJobsRoutes(deps *JobsDeps) *RouteGroup {
 				Method:  "GET",
 				Path:    "/api/v1/jobs",
 				Handler: deps.ListJobs,
-				Middlewares: []Middleware{
-					{Name: "RequireJobsEnabled", Handler: deps.RequireJobsEnabled},
-					{Name: "RequireAuth", Handler: deps.RequireAuth},
-				},
 				Summary: "List jobs",
 				Auth:    AuthRequired,
 			},
@@ -71,10 +58,6 @@ func BuildJobsRoutes(deps *JobsDeps) *RouteGroup {
 				Method:  "POST",
 				Path:    "/api/v1/jobs/:id/cancel",
 				Handler: deps.CancelJob,
-				Middlewares: []Middleware{
-					{Name: "RequireJobsEnabled", Handler: deps.RequireJobsEnabled},
-					{Name: "RequireAuth", Handler: deps.RequireAuth},
-				},
 				Summary: "Cancel a job",
 				Auth:    AuthRequired,
 			},
@@ -82,13 +65,12 @@ func BuildJobsRoutes(deps *JobsDeps) *RouteGroup {
 				Method:  "POST",
 				Path:    "/api/v1/jobs/:id/retry",
 				Handler: deps.RetryJob,
-				Middlewares: []Middleware{
-					{Name: "RequireJobsEnabled", Handler: deps.RequireJobsEnabled},
-					{Name: "RequireAuth", Handler: deps.RequireAuth},
-				},
 				Summary: "Retry a job",
 				Auth:    AuthRequired,
 			},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Required: deps.RequireAuth,
 		},
 	}
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/gofiber/fiber/v3"
+	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/api/routes"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
@@ -26,6 +27,8 @@ func (s *Server) buildRealtimeRouteDeps() *routes.RealtimeDeps {
 
 func (s *Server) buildStorageRouteDeps() *routes.StorageDeps {
 	return &routes.StorageDeps{
+		RequireAuth:            middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
+		OptionalAuth:           middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
 		RequireScope:           middleware.RequireScope,
 		DownloadSignedObject:   s.storageHandler.DownloadSignedObject,
 		GetTransformConfig:     s.storageHandler.GetTransformConfig,
@@ -519,6 +522,39 @@ func (s *Server) buildMigrationsRouteDeps() *routes.MigrationsDeps {
 	}
 }
 
+func (s *Server) buildKnowledgeBaseRouteDeps() *routes.KnowledgeBaseDeps {
+	if s.kbStorage == nil {
+		return nil
+	}
+
+	handler := ai.NewUserKnowledgeBaseHandler(s.kbStorage)
+	if s.docProcessor != nil {
+		handler = ai.NewUserKnowledgeBaseHandlerWithProcessor(s.kbStorage, s.docProcessor)
+	}
+
+	deps := &routes.KnowledgeBaseDeps{
+		RequireAIEnabled: middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
+		RequireAuth:      middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
+		ListKBs:          handler.ListMyKnowledgeBases,
+		CreateKB:         handler.CreateMyKnowledgeBase,
+		GetKB:            handler.GetMyKnowledgeBase,
+		ShareKB:          handler.ShareKnowledgeBase,
+		ListPermissions:  handler.ListPermissions,
+		RevokePermission: handler.RevokePermission,
+	}
+
+	if s.docProcessor != nil {
+		deps.ListDocuments = handler.ListMyDocuments
+		deps.GetDocument = handler.GetMyDocument
+		deps.AddDocument = handler.AddMyDocument
+		deps.UploadDocument = handler.UploadMyDocument
+		deps.DeleteDocument = handler.DeleteMyDocument
+		deps.SearchKB = handler.SearchMyKB
+	}
+
+	return deps
+}
+
 func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 	unifiedAuth := UnifiedAuthMiddleware(s.authHandler.authService, s.dashboardAuthHandler.jwtManager, s.db.Pool())
 	return &routes.AdminDeps{
@@ -614,10 +650,10 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 		GetTenant:              s.tenantHandler.GetTenant,
 		UpdateTenant:           s.tenantHandler.UpdateTenant,
 		DeleteTenant:           s.tenantHandler.DeleteTenant,
-		ListMembers:            s.tenantHandler.ListMembers,
-		AddMember:              s.tenantHandler.AddMember,
-		UpdateMemberRole:       s.tenantHandler.UpdateMemberRole,
-		RemoveMember:           s.tenantHandler.RemoveMember,
+		MigrateTenant:          s.tenantHandler.MigrateTenant,
+		ListAdmins:             s.tenantHandler.ListAdmins,
+		AssignAdmin:            s.tenantHandler.AssignAdmin,
+		RemoveAdmin:            s.tenantHandler.RemoveAdmin,
 		ExecuteSQL:             s.sqlHandler.ExecuteSQL,
 		ExportTypeScript:       s.schemaExportHandler.HandleExportTypeScript,
 		ReloadFunctions:        s.functionsHandler.ReloadFunctions,
@@ -687,6 +723,7 @@ func (s *Server) registerRoutesViaRegistry() error {
 		MCP:               s.buildMCPRouteDeps(),
 		MCPOAuth:          s.buildMCPOAuthRouteDeps(),
 		Migrations:        s.buildMigrationsRouteDeps(),
+		KnowledgeBase:     s.buildKnowledgeBaseRouteDeps(),
 		Root:              s.handleHealth,
 	}
 
@@ -725,6 +762,7 @@ func (s *Server) auditRegisteredRoutes() []routes.RouteAuditEntry {
 		MCP:               s.buildMCPRouteDeps(),
 		MCPOAuth:          s.buildMCPOAuthRouteDeps(),
 		Migrations:        s.buildMigrationsRouteDeps(),
+		KnowledgeBase:     s.buildKnowledgeBaseRouteDeps(),
 		Root:              s.handleHealth,
 	}
 

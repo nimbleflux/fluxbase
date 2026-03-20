@@ -14,9 +14,6 @@ func BuildGraphQLRoutes(deps *GraphQLDeps) *RouteGroup {
 	return &RouteGroup{
 		Name:   "graphql",
 		Prefix: "/api/v1/graphql",
-		Middlewares: []Middleware{
-			{Name: "OptionalAuth", Handler: deps.OptionalAuth},
-		},
 		Routes: []Route{
 			{
 				Method:  "POST",
@@ -32,6 +29,9 @@ func BuildGraphQLRoutes(deps *GraphQLDeps) *RouteGroup {
 				Summary: "GraphQL schema introspection",
 				Auth:    AuthOptional,
 			},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Optional: deps.OptionalAuth,
 		},
 	}
 }

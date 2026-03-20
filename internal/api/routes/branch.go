@@ -29,12 +29,11 @@ func BuildBranchRoutes(deps *BranchDeps) *RouteGroup {
 	if deps == nil {
 		return nil
 	}
+	requireRole := []Middleware{{Name: "RequireRole", Handler: deps.RequireRole}}
+
 	return &RouteGroup{
-		Name: "branch",
-		Middlewares: []Middleware{
-			{Name: "RequireAuth", Handler: deps.RequireAuth},
-			{Name: "RequireRole", Handler: deps.RequireRole},
-		},
+		Name:        "branch",
+		Middlewares: requireRole,
 		Routes: []Route{
 			{
 				Method:  "GET",
@@ -164,6 +163,9 @@ func BuildBranchRoutes(deps *BranchDeps) *RouteGroup {
 				Auth:    AuthRequired,
 				Roles:   []string{"admin", "instance_admin", "service_role"},
 			},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Required: deps.RequireAuth,
 		},
 	}
 }

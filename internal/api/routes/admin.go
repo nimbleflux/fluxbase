@@ -98,10 +98,10 @@ type AdminDeps struct {
 	GetTenant              fiber.Handler
 	UpdateTenant           fiber.Handler
 	DeleteTenant           fiber.Handler
-	ListMembers            fiber.Handler
-	AddMember              fiber.Handler
-	UpdateMemberRole       fiber.Handler
-	RemoveMember           fiber.Handler
+	MigrateTenant          fiber.Handler
+	ListAdmins             fiber.Handler
+	AssignAdmin            fiber.Handler
+	RemoveAdmin            fiber.Handler
 	ExecuteSQL             fiber.Handler
 	ExportTypeScript       fiber.Handler
 	ReloadFunctions        fiber.Handler
@@ -139,72 +139,164 @@ type AdminDeps struct {
 }
 
 func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
-	auth := []Middleware{{Name: "UnifiedAuth", Handler: deps.UnifiedAuth}}
-
 	routes := []Route{
-		{Method: "GET", Path: "/tables", Handler: deps.GetTables, Summary: "List all tables", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "GET", Path: "/tables/:schema/:table", Handler: deps.GetTableSchema, Summary: "Get table schema", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "GET", Path: "/schemas", Handler: deps.GetSchemas, Summary: "List schemas", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "POST", Path: "/query", Handler: deps.ExecuteQuery, Summary: "Execute SQL query", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
+		{Method: "GET", Path: "/tables", Handler: deps.GetTables, Summary: "List all tables", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/tables/:schema/:table", Handler: deps.GetTableSchema, Summary: "Get table schema", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/schemas", Handler: deps.GetSchemas, Summary: "List schemas", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/query", Handler: deps.ExecuteQuery, Summary: "Execute SQL query", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 
-		{Method: "GET", Path: "/ddl/schemas", Handler: deps.ListSchemasDDL, Summary: "List schemas for DDL", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "POST", Path: "/ddl/schemas", Handler: deps.CreateSchemaDDL, Summary: "Create schema", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "GET", Path: "/ddl/tables", Handler: deps.ListTablesDDL, Summary: "List tables for DDL", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "POST", Path: "/ddl/tables", Handler: deps.CreateTableDDL, Summary: "Create table", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "DELETE", Path: "/ddl/tables/:schema/:table", Handler: deps.DeleteTableDDL, Summary: "Delete table", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "POST", Path: "/schemas", Handler: deps.CreateSchemaDDL, Summary: "Create schema (legacy)", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "POST", Path: "/tables", Handler: deps.CreateTableDDL, Summary: "Create table (legacy)", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "DELETE", Path: "/tables/:schema/:table", Handler: deps.DeleteTableDDL, Summary: "Delete table (legacy)", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "PATCH", Path: "/tables/:schema/:table", Handler: deps.RenameTableDDL, Summary: "Rename table", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "POST", Path: "/tables/:schema/:table/columns", Handler: deps.AddColumnDDL, Summary: "Add column", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "DELETE", Path: "/tables/:schema/:table/columns/:column", Handler: deps.DropColumnDDL, Summary: "Drop column", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
+		{Method: "GET", Path: "/ddl/schemas", Handler: deps.ListSchemasDDL, Summary: "List schemas for DDL", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/ddl/schemas", Handler: deps.CreateSchemaDDL, Summary: "Create schema", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/ddl/tables", Handler: deps.ListTablesDDL, Summary: "List tables for DDL", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/ddl/tables", Handler: deps.CreateTableDDL, Summary: "Create table", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/ddl/tables/:schema/:table", Handler: deps.DeleteTableDDL, Summary: "Delete table", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/schemas", Handler: deps.CreateSchemaDDL, Summary: "Create schema (legacy)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/tables", Handler: deps.CreateTableDDL, Summary: "Create table (legacy)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/tables/:schema/:table", Handler: deps.DeleteTableDDL, Summary: "Delete table (legacy)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "PATCH", Path: "/tables/:schema/:table", Handler: deps.RenameTableDDL, Summary: "Rename table", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/tables/:schema/:table/columns", Handler: deps.AddColumnDDL, Summary: "Add column", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/tables/:schema/:table/columns/:column", Handler: deps.DropColumnDDL, Summary: "Drop column", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 
-		{Method: "POST", Path: "/realtime/tables", Handler: deps.EnableRealtime, Summary: "Enable realtime for table", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "GET", Path: "/realtime/tables", Handler: deps.ListRealtimeTables, Summary: "List realtime tables", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "GET", Path: "/realtime/tables/:schema/:table", Handler: deps.GetRealtimeStatus, Summary: "Get realtime status", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "PATCH", Path: "/realtime/tables/:schema/:table", Handler: deps.UpdateRealtimeConfig, Summary: "Update realtime config", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "DELETE", Path: "/realtime/tables/:schema/:table", Handler: deps.DisableRealtime, Summary: "Disable realtime for table", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
+		{Method: "POST", Path: "/realtime/tables", Handler: deps.EnableRealtime, Summary: "Enable realtime for table", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/realtime/tables", Handler: deps.ListRealtimeTables, Summary: "List realtime tables", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/realtime/tables/:schema/:table", Handler: deps.GetRealtimeStatus, Summary: "Get realtime status", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "PATCH", Path: "/realtime/tables/:schema/:table", Handler: deps.UpdateRealtimeConfig, Summary: "Update realtime config", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/realtime/tables/:schema/:table", Handler: deps.DisableRealtime, Summary: "Disable realtime for table", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 
-		{Method: "GET", Path: "/oauth/providers", Handler: deps.ListOAuthProviders, Summary: "List OAuth providers", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "GET", Path: "/oauth/providers/:id", Handler: deps.GetOAuthProvider, Summary: "Get OAuth provider", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "POST", Path: "/oauth/providers", Handler: deps.CreateOAuthProvider, Summary: "Create OAuth provider", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "PUT", Path: "/oauth/providers/:id", Handler: deps.UpdateOAuthProvider, Summary: "Update OAuth provider", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "DELETE", Path: "/oauth/providers/:id", Handler: deps.DeleteOAuthProvider, Summary: "Delete OAuth provider", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
+		{Method: "GET", Path: "/oauth/providers", Handler: deps.ListOAuthProviders, Summary: "List OAuth providers", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/oauth/providers/:id", Handler: deps.GetOAuthProvider, Summary: "Get OAuth provider", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/oauth/providers", Handler: deps.CreateOAuthProvider, Summary: "Create OAuth provider", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/oauth/providers/:id", Handler: deps.UpdateOAuthProvider, Summary: "Update OAuth provider", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "DELETE", Path: "/oauth/providers/:id", Handler: deps.DeleteOAuthProvider, Summary: "Delete OAuth provider", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 
-		{Method: "GET", Path: "/saml/providers", Handler: deps.ListSAMLProviders, Summary: "List SAML providers", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "GET", Path: "/saml/providers/:id", Handler: deps.GetSAMLProvider, Summary: "Get SAML provider", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "POST", Path: "/saml/providers", Handler: deps.CreateSAMLProvider, Summary: "Create SAML provider", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "PUT", Path: "/saml/providers/:id", Handler: deps.UpdateSAMLProvider, Summary: "Update SAML provider", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "DELETE", Path: "/saml/providers/:id", Handler: deps.DeleteSAMLProvider, Summary: "Delete SAML provider", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "POST", Path: "/saml/validate-metadata", Handler: deps.ValidateSAML, Summary: "Validate SAML metadata", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "POST", Path: "/saml/upload-metadata", Handler: deps.UploadSAMLMetadata, Summary: "Upload SAML metadata", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
+		{Method: "GET", Path: "/saml/providers", Handler: deps.ListSAMLProviders, Summary: "List SAML providers", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/saml/providers/:id", Handler: deps.GetSAMLProvider, Summary: "Get SAML provider", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/saml/providers", Handler: deps.CreateSAMLProvider, Summary: "Create SAML provider", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/saml/providers/:id", Handler: deps.UpdateSAMLProvider, Summary: "Update SAML provider", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "DELETE", Path: "/saml/providers/:id", Handler: deps.DeleteSAMLProvider, Summary: "Delete SAML provider", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/saml/validate-metadata", Handler: deps.ValidateSAML, Summary: "Validate SAML metadata", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/saml/upload-metadata", Handler: deps.UploadSAMLMetadata, Summary: "Upload SAML metadata", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 
-		{Method: "GET", Path: "/auth/settings", Handler: deps.GetAuthSettings, Summary: "Get auth settings", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "PUT", Path: "/auth/settings", Handler: deps.UpdateAuthSettings, Summary: "Update auth settings", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "GET", Path: "/auth/sessions", Handler: deps.ListSessions, Summary: "List sessions", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "DELETE", Path: "/auth/sessions/:id", Handler: deps.RevokeSession, Summary: "Revoke session", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "DELETE", Path: "/auth/sessions/user/:user_id", Handler: deps.RevokeUserSessions, Summary: "Revoke user sessions", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
+		{Method: "GET", Path: "/auth/settings", Handler: deps.GetAuthSettings, Summary: "Get auth settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/auth/settings", Handler: deps.UpdateAuthSettings, Summary: "Update auth settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/auth/sessions", Handler: deps.ListSessions, Summary: "List sessions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/auth/sessions/:id", Handler: deps.RevokeSession, Summary: "Revoke session", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/auth/sessions/user/:user_id", Handler: deps.RevokeUserSessions, Summary: "Revoke user sessions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 
-		{Method: "GET", Path: "/system/settings", Handler: deps.ListSystemSettings, Summary: "List system settings", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "GET", Path: "/system/settings/*", Handler: deps.GetSystemSetting, Summary: "Get system setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "PUT", Path: "/system/settings/*", Handler: deps.UpdateSystemSetting, Summary: "Update system setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
-		{Method: "DELETE", Path: "/system/settings/*", Handler: deps.DeleteSystemSetting, Summary: "Delete system setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin")})},
+		{Method: "GET", Path: "/system/settings", Handler: deps.ListSystemSettings, Summary: "List system settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/system/settings/*", Handler: deps.GetSystemSetting, Summary: "Get system setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/system/settings/*", Handler: deps.UpdateSystemSetting, Summary: "Update system setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "DELETE", Path: "/system/settings/*", Handler: deps.DeleteSystemSetting, Summary: "Delete system setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 
-		{Method: "POST", Path: "/settings/custom", Handler: deps.CreateCustomSetting, Summary: "Create custom setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin", "service_role")})},
-		{Method: "GET", Path: "/settings/custom", Handler: deps.ListCustomSettings, Summary: "List custom settings", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin", "service_role")})},
-		{Method: "POST", Path: "/settings/custom/secret", Handler: deps.CreateSecretSetting, Summary: "Create secret setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin", "service_role")})},
-		{Method: "GET", Path: "/settings/custom/secrets", Handler: deps.ListSecretSettings, Summary: "List secret settings", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin", "service_role")})},
-		{Method: "GET", Path: "/settings/custom/secret/*", Handler: deps.GetSecretSetting, Summary: "Get secret setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin", "service_role")})},
-		{Method: "PUT", Path: "/settings/custom/secret/*", Handler: deps.UpdateSecretSetting, Summary: "Update secret setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin", "service_role")})},
-		{Method: "DELETE", Path: "/settings/custom/secret/*", Handler: deps.DeleteSecretSetting, Summary: "Delete secret setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin", "service_role")})},
-		{Method: "GET", Path: "/settings/user/:user_id/secret/:key/decrypt", Handler: deps.GetUserSecretValue, Summary: "Decrypt user secret (service_role only)", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("service_role")})},
-		{Method: "GET", Path: "/settings/custom/*", Handler: deps.GetCustomSetting, Summary: "Get custom setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin", "service_role")})},
-		{Method: "PUT", Path: "/settings/custom/*", Handler: deps.UpdateCustomSetting, Summary: "Update custom setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin", "service_role")})},
-		{Method: "DELETE", Path: "/settings/custom/*", Handler: deps.DeleteCustomSetting, Summary: "Delete custom setting", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin", "service_role")})},
+		{Method: "POST", Path: "/settings/custom", Handler: deps.CreateCustomSetting, Summary: "Create custom setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+		{Method: "GET", Path: "/settings/custom", Handler: deps.ListCustomSettings, Summary: "List custom settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+		{Method: "POST", Path: "/settings/custom/secret", Handler: deps.CreateSecretSetting, Summary: "Create secret setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+		{Method: "GET", Path: "/settings/custom/secrets", Handler: deps.ListSecretSettings, Summary: "List secret settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+		{Method: "GET", Path: "/settings/custom/secret/*", Handler: deps.GetSecretSetting, Summary: "Get secret setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+		{Method: "PUT", Path: "/settings/custom/secret/*", Handler: deps.UpdateSecretSetting, Summary: "Update secret setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+		{Method: "DELETE", Path: "/settings/custom/secret/*", Handler: deps.DeleteSecretSetting, Summary: "Delete secret setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+		{Method: "GET", Path: "/settings/user/:user_id/secret/:key/decrypt", Handler: deps.GetUserSecretValue, Summary: "Decrypt user secret (service_role only)", Auth: AuthRequired, Roles: []string{"service_role"}},
+		{Method: "GET", Path: "/settings/custom/*", Handler: deps.GetCustomSetting, Summary: "Get custom setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+		{Method: "PUT", Path: "/settings/custom/*", Handler: deps.UpdateCustomSetting, Summary: "Update custom setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+		{Method: "DELETE", Path: "/settings/custom/*", Handler: deps.DeleteCustomSetting, Summary: "Delete custom setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
 
-		{Method: "GET", Path: "/app/settings", Handler: deps.GetAppSettings, Summary: "Get app settings", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
-		{Method: "PUT", Path: "/app/settings", Handler: deps.UpdateAppSettings, Summary: "Update app settings", Auth: AuthRequired, Middlewares: append(auth, Middleware{Name: "RequireRole", Handler: deps.RequireRole("admin", "instance_admin", "tenant_admin")})},
+		{Method: "GET", Path: "/app/settings", Handler: deps.GetAppSettings, Summary: "Get app settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "PUT", Path: "/app/settings", Handler: deps.UpdateAppSettings, Summary: "Update app settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+
+		{Method: "GET", Path: "/email/settings", Handler: deps.ListEmailSettings, Summary: "List email settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/email/settings/:provider", Handler: deps.GetEmailSetting, Summary: "Get email settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/email/settings/:provider", Handler: deps.UpdateEmailSetting, Summary: "Update email settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/email/settings/:provider/test", Handler: deps.TestEmailSettings, Summary: "Test email settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/email/templates", Handler: deps.ListEmailTemplates, Summary: "List email templates", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/email/templates/:name", Handler: deps.GetEmailTemplate, Summary: "Get email template", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/email/templates/:name", Handler: deps.UpdateEmailTemplate, Summary: "Update email template", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/email/templates/:name/test", Handler: deps.TestEmailTemplate, Summary: "Test email template", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		{Method: "GET", Path: "/captcha/settings", Handler: deps.GetCaptchaSettings, Summary: "Get captcha settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/captcha/settings", Handler: deps.UpdateCaptchaSettings, Summary: "Update captcha settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		{Method: "GET", Path: "/users", Handler: deps.ListUsers, Summary: "List users", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/users/invite", Handler: deps.InviteUser, Summary: "Invite user", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/users/:id", Handler: deps.ListUsers, Summary: "Get user by ID", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "PATCH", Path: "/users/:id", Handler: deps.UpdateUser, Summary: "Update user", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/users/:id", Handler: deps.DeleteUser, Summary: "Delete user", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PATCH", Path: "/users/:id/role", Handler: deps.UpdateUserRole, Summary: "Update user role", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/users/:id/reset-password", Handler: deps.ResetUserPassword, Summary: "Reset user password", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/users/quotas", Handler: deps.ListUsersWithQuotas, Summary: "List users with quotas", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/users/:id/quota", Handler: deps.GetUserQuota, Summary: "Get user quota", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/users/:id/quota", Handler: deps.SetUserQuota, Summary: "Set user quota", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		{Method: "POST", Path: "/invitations", Handler: deps.CreateInvitation, Summary: "Create invitation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/invitations", Handler: deps.ListInvitations, Summary: "List invitations", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/invitations/:id", Handler: deps.RevokeInvitation, Summary: "Revoke invitation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+
+		{Method: "GET", Path: "/service-keys", Handler: deps.ListServiceKeys, Summary: "List service keys", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/service-keys", Handler: deps.CreateServiceKey, Summary: "Create service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/service-keys/:id", Handler: deps.GetServiceKey, Summary: "Get service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/service-keys/:id", Handler: deps.UpdateServiceKey, Summary: "Update service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "DELETE", Path: "/service-keys/:id", Handler: deps.DeleteServiceKey, Summary: "Delete service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/service-keys/:id/disable", Handler: deps.DisableServiceKey, Summary: "Disable service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/service-keys/:id/enable", Handler: deps.EnableServiceKey, Summary: "Enable service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/service-keys/:id/revoke", Handler: deps.RevokeServiceKey, Summary: "Revoke service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/service-keys/:id/deprecate", Handler: deps.DeprecateServiceKey, Summary: "Deprecate service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/service-keys/:id/rotate", Handler: deps.RotateServiceKey, Summary: "Rotate service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/service-keys/:id/revocations", Handler: deps.GetRevocationHistory, Summary: "Get revocation history", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		{Method: "GET", Path: "/tenants/mine", Handler: deps.ListMyTenants, Summary: "List my tenants", Auth: AuthRequired},
+		{Method: "GET", Path: "/tenants", Handler: deps.ListTenants, Summary: "List all tenants", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/tenants", Handler: deps.CreateTenant, Summary: "Create tenant", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/tenants/:id", Handler: deps.GetTenant, Summary: "Get tenant", Auth: AuthRequired},
+		{Method: "PATCH", Path: "/tenants/:id", Handler: deps.UpdateTenant, Summary: "Update tenant", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/tenants/:id", Handler: deps.DeleteTenant, Summary: "Delete tenant", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/tenants/:id/migrate", Handler: deps.MigrateTenant, Summary: "Migrate tenant", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/tenants/:id/admins", Handler: deps.ListAdmins, Summary: "List tenant admins", Auth: AuthRequired},
+		{Method: "POST", Path: "/tenants/:id/admins", Handler: deps.AssignAdmin, Summary: "Assign tenant admin", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/tenants/:id/admins/:user_id", Handler: deps.RemoveAdmin, Summary: "Remove tenant admin", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+
+		{Method: "POST", Path: "/sql", Handler: deps.ExecuteSQL, Summary: "Execute SQL", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/schema/export/typescript", Handler: deps.ExportTypeScript, Summary: "Export TypeScript types", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/schema/refresh", Handler: deps.RefreshSchema, Summary: "Refresh schema cache", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+
+		{Method: "POST", Path: "/functions/reload", Handler: deps.ReloadFunctions, Summary: "Reload functions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/functions/namespaces", Handler: deps.ListFunctionNamespaces, Summary: "List function namespaces", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/functions/executions", Handler: deps.ListAllExecutions, Summary: "List all function executions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/functions/executions/:id/logs", Handler: deps.GetExecutionLogs, Summary: "Get function execution logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+
+		{Method: "GET", Path: "/jobs/namespaces", Handler: deps.ListJobNamespaces, Summary: "List job namespaces", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/jobs/functions", Handler: deps.ListJobFunctions, Summary: "List job functions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/jobs/functions/:id", Handler: deps.GetJobFunction, Summary: "Get job function", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "DELETE", Path: "/jobs/functions/:id", Handler: deps.DeleteJobFunction, Summary: "Delete job function", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/jobs/stats", Handler: deps.GetJobStats, Summary: "Get job stats", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/jobs/workers", Handler: deps.ListWorkers, Summary: "List workers", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/jobs", Handler: deps.ListAllJobs, Summary: "List all jobs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/jobs/:id", Handler: deps.GetJobAdmin, Summary: "Get job (admin)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/jobs/:id/terminate", Handler: deps.TerminateJob, Summary: "Terminate job", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/jobs/:id/cancel", Handler: deps.CancelJobAdmin, Summary: "Cancel job (admin)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/jobs/:id/retry", Handler: deps.RetryJobAdmin, Summary: "Retry job (admin)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/jobs/:id/resubmit", Handler: deps.ResubmitJobAdmin, Summary: "Resubmit job", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		{Method: "GET", Path: "/ai/chatbots", Handler: deps.ListChatbots, Summary: "List chatbots", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/ai/chatbots/:id", Handler: deps.GetChatbot, Summary: "Get chatbot", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/ai/chatbots/:id/toggle", Handler: deps.ToggleChatbot, Summary: "Toggle chatbot", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "PUT", Path: "/ai/chatbots/:id", Handler: deps.UpdateChatbot, Summary: "Update chatbot", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/ai/chatbots/:id", Handler: deps.DeleteChatbot, Summary: "Delete chatbot", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/ai/metrics", Handler: deps.GetAIMetrics, Summary: "Get AI metrics", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		{Method: "GET", Path: "/logs", Handler: deps.ListLogs, Summary: "List logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/logs/stats", Handler: deps.GetLogStats, Summary: "Get log stats", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/logs/executions/:id", Handler: deps.GetExecutionLogsAdmin, Summary: "Get execution logs (admin)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/logs/flush", Handler: deps.FlushLogs, Summary: "Flush logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/logs/test", Handler: deps.GenerateTestLogs, Summary: "Generate test logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 	}
 
-	return &RouteGroup{Name: "admin", Prefix: "/api/v1/admin", Routes: routes}
+	return &RouteGroup{
+		Name:   "admin",
+		Prefix: "/api/v1/admin",
+		Routes: routes,
+		AuthMiddlewares: &AuthMiddlewares{
+			Required: deps.UnifiedAuth,
+			Unified:  deps.UnifiedAuth,
+		},
+		RequireRole: deps.RequireRole,
+	}
 }

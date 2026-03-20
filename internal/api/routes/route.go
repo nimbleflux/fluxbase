@@ -19,6 +19,43 @@ const (
 	AuthInternal   AuthRequirement = "internal"
 )
 
+// AuthMiddlewares holds the middleware handlers for each auth requirement.
+// Route groups provide these to enable automatic auth middleware injection.
+type AuthMiddlewares struct {
+	None       fiber.Handler // For AuthNone - usually nil
+	Optional   fiber.Handler // For AuthOptional
+	Required   fiber.Handler // For AuthRequired
+	Unified    fiber.Handler // For AuthUnified
+	ServiceKey fiber.Handler // For AuthServiceKey
+	Internal   fiber.Handler // For AuthInternal
+	Dashboard  fiber.Handler // For AuthDashboard
+}
+
+// MiddlewareFor returns the middleware handler for the given auth requirement.
+func (a *AuthMiddlewares) MiddlewareFor(auth AuthRequirement) fiber.Handler {
+	if a == nil {
+		return nil
+	}
+	switch auth {
+	case AuthNone:
+		return a.None
+	case AuthOptional:
+		return a.Optional
+	case AuthRequired:
+		return a.Required
+	case AuthUnified:
+		return a.Unified
+	case AuthServiceKey:
+		return a.ServiceKey
+	case AuthInternal:
+		return a.Internal
+	case AuthDashboard:
+		return a.Dashboard
+	default:
+		return nil
+	}
+}
+
 type RateLimitConfig struct {
 	Key      string
 	Requests int
@@ -95,6 +132,21 @@ type RouteGroup struct {
 	SubGroups   []*RouteGroup
 	FeatureFlag string
 	Description string
+
+	// AuthMiddlewares provides auth middleware handlers for automatic injection.
+	// When set, routes with Auth field set will automatically have the corresponding
+	// middleware applied, eliminating the need to specify auth middleware in Middlewares.
+	AuthMiddlewares *AuthMiddlewares
+
+	// RequireRole provides role-checking middleware for automatic injection.
+	// When set, routes with non-empty Roles field will automatically have
+	// this middleware applied with the specified roles.
+	RequireRole func(...string) fiber.Handler
+
+	// RequireScope provides scope-checking middleware for automatic injection.
+	// When set, routes with non-empty Scopes field will automatically have
+	// this middleware applied with the specified scopes.
+	RequireScope func(...string) fiber.Handler
 }
 
 func (r Route) MiddlewareNames() []string {

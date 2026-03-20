@@ -23,9 +23,6 @@ func BuildMigrationsRoutes(deps *MigrationsDeps) *RouteGroup {
 	return &RouteGroup{
 		Name:   "migrations",
 		Prefix: "/api/v1/admin/migrations",
-		Middlewares: []Middleware{
-			{Name: "MigrationsSecurity", Handler: deps.SecurityMiddleware},
-		},
 		Routes: []Route{
 			{Method: "POST", Path: "/", Handler: deps.CreateMigration, Summary: "Create migration", Auth: AuthRequired},
 			{Method: "GET", Path: "/", Handler: deps.ListMigrations, Summary: "List migrations", Auth: AuthRequired},
@@ -37,6 +34,9 @@ func BuildMigrationsRoutes(deps *MigrationsDeps) *RouteGroup {
 			{Method: "POST", Path: "/apply-pending", Handler: deps.ApplyPending, Summary: "Apply pending migrations", Auth: AuthRequired},
 			{Method: "POST", Path: "/sync", Handler: deps.SyncMigrations, Summary: "Sync migrations", Auth: AuthRequired},
 			{Method: "GET", Path: "/:name/executions", Handler: deps.GetExecutions, Summary: "Get execution history", Auth: AuthRequired},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Required: deps.SecurityMiddleware,
 		},
 	}
 }

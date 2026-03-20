@@ -72,24 +72,24 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 		{Method: "POST", Path: "/signin/idtoken", Handler: deps.SignInWithIDToken, Summary: "Sign in with ID token", Auth: AuthNone, Public: true},
 	}
 
-	authMw := []Middleware{{Name: "AuthMiddleware", Handler: deps.AuthMiddleware}}
+	// Authenticated routes - auth middleware is auto-injected based on Auth: AuthRequired
 	r = append(r, []Route{
-		{Method: "POST", Path: "/signout", Handler: deps.SignOut, Summary: "Sign out", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "GET", Path: "/user", Handler: deps.GetUser, Summary: "Get user", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "PATCH", Path: "/user", Handler: deps.UpdateUser, Summary: "Update user", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "POST", Path: "/impersonate", Handler: deps.StartImpersonation, Summary: "Start impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}, Middlewares: authMw},
-		{Method: "POST", Path: "/impersonate/anon", Handler: deps.StartAnonImpersonation, Summary: "Start anon impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}, Middlewares: authMw},
-		{Method: "DELETE", Path: "/impersonate", Handler: deps.StopImpersonation, Summary: "Stop impersonation", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "GET", Path: "/impersonate", Handler: deps.GetActiveImpersonation, Summary: "Get active impersonation", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "GET", Path: "/impersonate/sessions", Handler: deps.ListImpersonationSessions, Summary: "List impersonation sessions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}, Middlewares: authMw},
-		{Method: "POST", Path: "/2fa/setup", Handler: deps.SetupTOTP, Summary: "Setup 2FA", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "POST", Path: "/2fa/enable", Handler: deps.EnableTOTP, Summary: "Enable 2FA", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "POST", Path: "/2fa/disable", Handler: deps.DisableTOTP, Summary: "Disable 2FA", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "GET", Path: "/2fa/status", Handler: deps.GetTOTPStatus, Summary: "Get 2FA status", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "GET", Path: "/user/identities", Handler: deps.GetUserIdentities, Summary: "Get identities", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "POST", Path: "/user/identities", Handler: deps.LinkIdentity, Summary: "Link identity", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "DELETE", Path: "/user/identities/:id", Handler: deps.UnlinkIdentity, Summary: "Unlink identity", Auth: AuthRequired, Middlewares: authMw},
-		{Method: "POST", Path: "/reauthenticate", Handler: deps.Reauthenticate, Summary: "Reauthenticate", Auth: AuthRequired, Middlewares: authMw},
+		{Method: "POST", Path: "/signout", Handler: deps.SignOut, Summary: "Sign out", Auth: AuthRequired},
+		{Method: "GET", Path: "/user", Handler: deps.GetUser, Summary: "Get user", Auth: AuthRequired},
+		{Method: "PATCH", Path: "/user", Handler: deps.UpdateUser, Summary: "Update user", Auth: AuthRequired},
+		{Method: "POST", Path: "/impersonate", Handler: deps.StartImpersonation, Summary: "Start impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/impersonate/anon", Handler: deps.StartAnonImpersonation, Summary: "Start anon impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "DELETE", Path: "/impersonate", Handler: deps.StopImpersonation, Summary: "Stop impersonation", Auth: AuthRequired},
+		{Method: "GET", Path: "/impersonate", Handler: deps.GetActiveImpersonation, Summary: "Get active impersonation", Auth: AuthRequired},
+		{Method: "GET", Path: "/impersonate/sessions", Handler: deps.ListImpersonationSessions, Summary: "List impersonation sessions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/2fa/setup", Handler: deps.SetupTOTP, Summary: "Setup 2FA", Auth: AuthRequired},
+		{Method: "POST", Path: "/2fa/enable", Handler: deps.EnableTOTP, Summary: "Enable 2FA", Auth: AuthRequired},
+		{Method: "POST", Path: "/2fa/disable", Handler: deps.DisableTOTP, Summary: "Disable 2FA", Auth: AuthRequired},
+		{Method: "GET", Path: "/2fa/status", Handler: deps.GetTOTPStatus, Summary: "Get 2FA status", Auth: AuthRequired},
+		{Method: "GET", Path: "/user/identities", Handler: deps.GetUserIdentities, Summary: "Get identities", Auth: AuthRequired},
+		{Method: "POST", Path: "/user/identities", Handler: deps.LinkIdentity, Summary: "Link identity", Auth: AuthRequired},
+		{Method: "DELETE", Path: "/user/identities/:id", Handler: deps.UnlinkIdentity, Summary: "Unlink identity", Auth: AuthRequired},
+		{Method: "POST", Path: "/reauthenticate", Handler: deps.Reauthenticate, Summary: "Reauthenticate", Auth: AuthRequired},
 	}...)
 
 	r = append(r, []Route{
@@ -98,7 +98,14 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 		{Method: "GET", Path: "/oauth/:provider/callback", Handler: deps.OAuthCallback, Summary: "OAuth callback", Auth: AuthNone, Public: true},
 	}...)
 
-	return &RouteGroup{Name: "auth", Prefix: "/api/v1/auth", Routes: r}
+	return &RouteGroup{
+		Name:   "auth",
+		Prefix: "/api/v1/auth",
+		Routes: r,
+		AuthMiddlewares: &AuthMiddlewares{
+			Required: deps.AuthMiddleware,
+		},
+	}
 }
 
 func limiter(deps *AuthDeps, name string) []Middleware {
