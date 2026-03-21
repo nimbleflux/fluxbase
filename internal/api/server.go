@@ -523,6 +523,10 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 
 	migrationsHandler := migrations.NewHandler(db, schemaCache)
 
+	if tenantManager != nil && tenantManager.GetRouter() != nil {
+		migrationsHandler.SetTenantPoolProvider(tenantManager.GetRouter())
+	}
+
 	// Create schema export handler for TypeScript type generation
 	schemaExportHandler := NewSchemaExportHandler(schemaCache, db.Inspector())
 

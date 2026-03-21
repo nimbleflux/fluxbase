@@ -25,7 +25,7 @@ func BuildInternalAIRoutes(deps *InternalAIDeps) *RouteGroup {
 			{Method: "GET", Path: "/providers", Handler: deps.HandleListProviders, Summary: "List internal AI providers", Auth: AuthInternal, Internal: true},
 		},
 		AuthMiddlewares: &AuthMiddlewares{
-			Internal: deps.RequireAuth,
+			Internal: deps.RequireInternal,
 		},
 	}
 }

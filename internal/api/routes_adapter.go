@@ -499,8 +499,14 @@ func (s *Server) buildMigrationsRouteDeps() *routes.MigrationsDeps {
 	if s.migrationsHandler == nil || !s.config.Migrations.Enabled {
 		return nil
 	}
+
+	var tenantPoolProvider middleware.MigrationsTenantPoolProvider
+	if s.tenantManager != nil && s.tenantManager.GetRouter() != nil {
+		tenantPoolProvider = s.tenantManager.GetRouter()
+	}
+
 	return &routes.MigrationsDeps{
-		SecurityMiddleware: middleware.RequireMigrationsFullSecurity(
+		SecurityMiddleware: middleware.RequireMigrationsFullSecurityWithTenantProvider(
 			&s.config.Migrations,
 			&s.config.Server,
 			s.db.Pool(),
@@ -508,7 +514,9 @@ func (s *Server) buildMigrationsRouteDeps() *routes.MigrationsDeps {
 			s.config.Security.ServiceRoleRateLimit,
 			s.config.Security.ServiceRoleRateWindow,
 			s.sharedMiddlewareStorage,
+			tenantPoolProvider,
 		),
+		RequireRole:       RequireRole,
 		CreateMigration:   s.migrationsHandler.CreateMigration,
 		ListMigrations:    s.migrationsHandler.ListMigrations,
 		GetMigration:      s.migrationsHandler.GetMigration,

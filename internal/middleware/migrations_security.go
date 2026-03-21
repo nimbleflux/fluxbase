@@ -15,6 +15,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type MigrationsTenantPoolProvider interface {
+	GetPool(tenantID string) (*pgxpool.Pool, error)
+}
+
 type migrationsRateLimiter struct {
 	limit    int
 	window   time.Duration
@@ -71,6 +75,21 @@ func RequireMigrationsFullSecurity(
 	rateWindow time.Duration,
 	storage fiber.Storage,
 ) fiber.Handler {
+	return RequireMigrationsFullSecurityWithTenantProvider(
+		cfg, serverCfg, db, authService, rateLimit, rateWindow, storage, nil,
+	)
+}
+
+func RequireMigrationsFullSecurityWithTenantProvider(
+	cfg *config.MigrationsConfig,
+	serverCfg *config.ServerConfig,
+	db *pgxpool.Pool,
+	authService *auth.Service,
+	rateLimit int,
+	rateWindow time.Duration,
+	storage fiber.Storage,
+	tenantPoolProvider MigrationsTenantPoolProvider,
+) fiber.Handler {
 	var allowedNets []*net.IPNet
 	for _, ipRange := range cfg.AllowedIPRanges {
 		_, network, err := net.ParseCIDR(ipRange)
@@ -104,7 +123,7 @@ func RequireMigrationsFullSecurity(
 			}
 		}
 
-		if !migrationsValidateAuthAndScope(c, db, authService) {
+		if !migrationsValidateAuthAndScope(c, db, authService, tenantPoolProvider) {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Service key or service_role JWT authentication required for migrations API"})
 		}
 
@@ -132,7 +151,7 @@ func RequireMigrationsFullSecurity(
 	}
 }
 
-func migrationsValidateAuthAndScope(c fiber.Ctx, db *pgxpool.Pool, authService *auth.Service) bool {
+func migrationsValidateAuthAndScope(c fiber.Ctx, db *pgxpool.Pool, authService *auth.Service, tenantPoolProvider MigrationsTenantPoolProvider) bool {
 	authHeader := c.Get("Authorization")
 	clientkey := c.Get("clientkey")
 
@@ -149,11 +168,44 @@ func migrationsValidateAuthAndScope(c fiber.Ctx, db *pgxpool.Pool, authService *
 
 	if jwtToken != "" {
 		claims, err := authService.ValidateToken(jwtToken)
-		if err == nil && claims.Role == "service_role" {
+		if err == nil {
 			c.Locals("auth_type", "jwt")
 			c.Locals("user_role", claims.Role)
 			c.Locals("user_id", claims.UserID)
-			return true
+			c.Locals("claims", claims)
+
+			if claims.Role == "service_role" {
+				tenantID := migrationsGetTenantIDFromHeader(c)
+				if tenantID != "" && tenantPoolProvider != nil {
+					c.Locals("tenant_id", tenantID)
+					c.Locals("is_tenant_migration", true)
+					return true
+				}
+				c.Locals("is_tenant_migration", false)
+				return true
+			}
+
+			if claims.Role == "admin" || claims.Role == "instance_admin" {
+				c.Locals("is_tenant_migration", false)
+				return true
+			}
+
+			if claims.Role == "tenant_admin" || (claims.TenantID != nil && *claims.TenantID != "") {
+				tenantID := migrationsGetTenantID(c, claims)
+				if tenantID == "" {
+					log.Warn().Str("user_id", claims.UserID).Str("role", claims.Role).Msg("Tenant admin must have tenant context")
+					return false
+				}
+
+				if !migrationsValidateTenantMembership(c.RequestCtx(), db, claims.UserID, tenantID) {
+					log.Warn().Str("user_id", claims.UserID).Str("tenant_id", tenantID).Msg("User not member of tenant")
+					return false
+				}
+
+				c.Locals("tenant_id", tenantID)
+				c.Locals("is_tenant_migration", true)
+				return true
+			}
 		}
 	}
 
@@ -172,12 +224,64 @@ func migrationsValidateAuthAndScope(c fiber.Ctx, db *pgxpool.Pool, authService *
 		serviceKey = clientkey
 	}
 
-	if serviceKey != "" && migrationsValidateServiceKeyWithScope(c, db, serviceKey, "migrations:execute") {
-		return true
+	if serviceKey != "" {
+		tenantID := migrationsGetTenantIDFromHeader(c)
+
+		if tenantID != "" && tenantPoolProvider != nil {
+			tenantPool, err := tenantPoolProvider.GetPool(tenantID)
+			if err != nil {
+				log.Warn().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant pool for service key validation")
+				return false
+			}
+
+			if migrationsValidateServiceKeyWithScope(c, tenantPool, serviceKey, "migrations:execute") {
+				c.Locals("tenant_id", tenantID)
+				c.Locals("is_tenant_migration", true)
+				return true
+			}
+		}
+
+		if migrationsValidateServiceKeyWithScope(c, db, serviceKey, "migrations:execute") {
+			c.Locals("is_tenant_migration", false)
+			return true
+		}
 	}
 
 	log.Warn().Str("path", c.Path()).Str("ip", c.IP()).Msg("Migrations API auth failed")
 	return false
+}
+
+func migrationsGetTenantIDFromHeader(c fiber.Ctx) string {
+	return c.Get("X-FB-Tenant")
+}
+
+func migrationsGetTenantID(c fiber.Ctx, claims *auth.TokenClaims) string {
+	if headerTenant := c.Get("X-FB-Tenant"); headerTenant != "" {
+		return headerTenant
+	}
+	if claims.TenantID != nil {
+		return *claims.TenantID
+	}
+	return ""
+}
+
+func migrationsValidateTenantMembership(ctx context.Context, db *pgxpool.Pool, userID, tenantID string) bool {
+	var isMember bool
+	err := db.QueryRow(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM platform.tenant_admin_assignments taa
+			INNER JOIN platform.tenants t ON t.id = taa.tenant_id
+			WHERE taa.user_id = $1::uuid
+			AND taa.tenant_id = $2::uuid
+			AND t.deleted_at IS NULL
+		)`,
+		userID, tenantID,
+	).Scan(&isMember)
+	if err != nil {
+		log.Debug().Err(err).Str("user_id", userID).Str("tenant_id", tenantID).Msg("Failed to validate tenant membership")
+		return false
+	}
+	return isMember
 }
 
 func migrationsValidateServiceKeyWithScope(c fiber.Ctx, db *pgxpool.Pool, serviceKey, requiredScope string) bool {

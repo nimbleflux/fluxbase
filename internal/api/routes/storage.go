@@ -34,7 +34,8 @@ type StorageDeps struct {
 
 func BuildStorageRoutes(deps *StorageDeps) *RouteGroup {
 	return &RouteGroup{
-		Name: "storage",
+		Name:   "storage",
+		Prefix: "/api/v1/storage",
 		Routes: []Route{
 			{
 				Method:  "GET",

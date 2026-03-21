@@ -214,9 +214,22 @@ func SetRLSContext(ctx context.Context, tx pgx.Tx, userID string, role string, c
 	}
 	log.Debug().Str("jwt_claims", string(jwtClaimsJSON)).Msg("Set request.jwt.claims using parameterized query")
 
+	// Set tenant context for multi-tenancy (app.current_tenant_id)
+	// This is used by RLS policies that check auth.has_tenant_access() and storage.has_tenant_access()
+	if claims != nil && claims.TenantID != nil {
+		tenantIDStr := *claims.TenantID
+		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantIDStr)
+		if err != nil {
+			log.Error().Err(err).Str("tenant_id", tenantIDStr).Msg("Failed to set app.current_tenant_id")
+			return fmt.Errorf("failed to set app.current_tenant_id: %w", err)
+		}
+		log.Debug().Str("tenant_id", tenantIDStr).Msg("Set app.current_tenant_id for tenant isolation")
+	}
+
 	log.Debug().
 		Str("user_id", userID).
 		Str("role", role).
+		Bool("has_tenant", claims != nil && claims.TenantID != nil).
 		Msg("RLS context set for transaction")
 
 	return nil

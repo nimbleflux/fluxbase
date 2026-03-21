@@ -566,10 +566,23 @@ func (h *StorageHandler) storeUploadedObject(fiberCtx interface{}, session *stor
 		return fmt.Errorf("invalid context type")
 	}
 
-	db := h.db.Pool()
+	ctx := c.RequestCtx()
+
+	// Start a transaction to set RLS context
+	tx, err := h.db.Pool().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Set RLS context (includes tenant context for multi-tenancy)
+	if err := h.setRLSContext(ctx, tx, c); err != nil {
+		return fmt.Errorf("failed to set RLS context: %w", err)
+	}
 
 	// Insert object record into storage.objects table
 	// Note: 'name' column is auto-generated from 'path', so we don't insert it directly
+	// tenant_id is auto-populated by trigger from session context
 	query := `
 		INSERT INTO storage.objects (bucket_id, path, size, mime_type, metadata, owner_id, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
@@ -588,7 +601,7 @@ func (h *StorageHandler) storeUploadedObject(fiberCtx interface{}, session *stor
 		ownerID = session.OwnerID
 	}
 
-	_, err := db.Exec(c.RequestCtx(), query,
+	_, err = tx.Exec(ctx, query,
 		object.Bucket,
 		object.Key,
 		object.Size,
@@ -596,8 +609,16 @@ func (h *StorageHandler) storeUploadedObject(fiberCtx interface{}, session *stor
 		metadataJSON,
 		ownerID,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to insert object: %w", err)
+	}
 
-	return err
+	// Commit the transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 // fiber:context-methods migrated
