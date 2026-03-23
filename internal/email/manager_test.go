@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 func TestNewManager(t *testing.T) {
@@ -16,14 +17,14 @@ func TestNewManager(t *testing.T) {
 			Provider: "none",
 		}
 
-		manager := NewManager(cfg, nil, nil)
+		manager := NewManager(cfg, nil, nil, nil)
 		assert.NotNil(t, manager)
 		assert.NotNil(t, manager.service)
 		assert.Equal(t, cfg, manager.envConfig)
 	})
 
 	t.Run("creates manager with nil config", func(t *testing.T) {
-		manager := NewManager(nil, nil, nil)
+		manager := NewManager(nil, nil, nil, nil)
 		assert.NotNil(t, manager)
 		assert.NotNil(t, manager.service) // Should have NoOp or default service
 	})
@@ -32,7 +33,7 @@ func TestNewManager(t *testing.T) {
 func TestManager_GetService(t *testing.T) {
 	t.Run("returns current service", func(t *testing.T) {
 		cfg := &config.EmailConfig{Enabled: false}
-		manager := NewManager(cfg, nil, nil)
+		manager := NewManager(cfg, nil, nil, nil)
 
 		service := manager.GetService()
 		assert.NotNil(t, service)
@@ -61,7 +62,7 @@ func TestManager_SetSecretsService(t *testing.T) {
 
 func TestManager_WrapAsService(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: false}
-	manager := NewManager(cfg, nil, nil)
+	manager := NewManager(cfg, nil, nil, nil)
 
 	t.Run("creates service wrapper", func(t *testing.T) {
 		wrapper := manager.WrapAsService()
@@ -71,7 +72,7 @@ func TestManager_WrapAsService(t *testing.T) {
 
 func TestServiceWrapper_IsConfigured(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: false}
-	manager := NewManager(cfg, nil, nil)
+	manager := NewManager(cfg, nil, nil, nil)
 	wrapper := manager.WrapAsService()
 
 	t.Run("delegates to underlying service", func(t *testing.T) {
@@ -86,7 +87,7 @@ func TestServiceWrapper_Send(t *testing.T) {
 		Enabled:     false, // Disabled service won't actually send
 		FromAddress: "test@example.com",
 	}
-	manager := NewManager(cfg, nil, nil)
+	manager := NewManager(cfg, nil, nil, nil)
 	wrapper := manager.WrapAsService()
 
 	t.Run("delegates to underlying service", func(t *testing.T) {
@@ -100,7 +101,7 @@ func TestServiceWrapper_Send(t *testing.T) {
 
 func TestServiceWrapper_SendMagicLink(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: false}
-	manager := NewManager(cfg, nil, nil)
+	manager := NewManager(cfg, nil, nil, nil)
 	wrapper := manager.WrapAsService()
 
 	t.Run("delegates to underlying service", func(t *testing.T) {
@@ -112,7 +113,7 @@ func TestServiceWrapper_SendMagicLink(t *testing.T) {
 
 func TestServiceWrapper_SendVerificationEmail(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: false}
-	manager := NewManager(cfg, nil, nil)
+	manager := NewManager(cfg, nil, nil, nil)
 	wrapper := manager.WrapAsService()
 
 	t.Run("delegates to underlying service", func(t *testing.T) {
@@ -124,7 +125,7 @@ func TestServiceWrapper_SendVerificationEmail(t *testing.T) {
 
 func TestServiceWrapper_SendPasswordReset(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: false}
-	manager := NewManager(cfg, nil, nil)
+	manager := NewManager(cfg, nil, nil, nil)
 	wrapper := manager.WrapAsService()
 
 	t.Run("delegates to underlying service", func(t *testing.T) {
@@ -136,7 +137,7 @@ func TestServiceWrapper_SendPasswordReset(t *testing.T) {
 
 func TestServiceWrapper_SendInvitationEmail(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: false}
-	manager := NewManager(cfg, nil, nil)
+	manager := NewManager(cfg, nil, nil, nil)
 	wrapper := manager.WrapAsService()
 
 	t.Run("delegates to underlying service", func(t *testing.T) {
@@ -181,7 +182,7 @@ func TestManager_BuildConfigFromSettings(t *testing.T) {
 
 func TestManager_Concurrency(t *testing.T) {
 	cfg := &config.EmailConfig{Enabled: false}
-	manager := NewManager(cfg, nil, nil)
+	manager := NewManager(cfg, nil, nil, nil)
 
 	t.Run("concurrent GetService is safe", func(t *testing.T) {
 		done := make(chan bool)

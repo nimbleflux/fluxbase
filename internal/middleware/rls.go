@@ -8,9 +8,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/rs/zerolog/log"
 )
 
 // quoteIdentifier safely quotes a PostgreSQL identifier to prevent SQL injection.

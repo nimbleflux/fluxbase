@@ -6,9 +6,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/tenantdb"
-	"github.com/rs/zerolog/log"
 )
 
 type TenantHandler struct {

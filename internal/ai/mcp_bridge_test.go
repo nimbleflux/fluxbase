@@ -3,8 +3,9 @@ package ai
 import (
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 func TestChatbotAuthContext(t *testing.T) {

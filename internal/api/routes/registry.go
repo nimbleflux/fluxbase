@@ -53,9 +53,11 @@ func (r *Registry) Register(group *RouteGroup) error {
 	return nil
 }
 
-func (r *Registry) MustRegister(group *RouteGroup) {
-	if err := r.Register(group); err != nil {
-		panic(err)
+func (r *Registry) MustRegister(groups ...*RouteGroup) {
+	for _, group := range groups {
+		if err := r.Register(group); err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -477,7 +479,7 @@ func RegisterAllRoutes(app *fiber.App, deps *AllDeps) error {
 			Name:   "root",
 			Prefix: "/",
 			Routes: []Route{
-				{Method: "GET", Path: "/", Handler: deps.Root, Summary: "Root health check", Public: true},
+				{Method: "GET", Path: "/", Handler: deps.Root, Summary: "Root health check", Auth: AuthNone, Public: true},
 			},
 		})
 	}
@@ -614,7 +616,7 @@ func AuditRoutes(deps *AllDeps) []RouteAuditEntry {
 			Name:   "root",
 			Prefix: "/",
 			Routes: []Route{
-				{Method: "GET", Path: "/", Handler: deps.Root, Summary: "Root health check", Public: true},
+				{Method: "GET", Path: "/", Handler: deps.Root, Summary: "Root health check", Auth: AuthNone, Public: true},
 			},
 		})
 	}

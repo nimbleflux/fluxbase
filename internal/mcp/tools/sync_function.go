@@ -10,9 +10,10 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/functions"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
-	"github.com/rs/zerolog/log"
 )
 
 // SyncFunctionTool implements the sync_function MCP tool for deploying edge functions

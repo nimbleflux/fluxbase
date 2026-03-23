@@ -6,7 +6,7 @@ This devcontainer provides a complete development environment for Fluxbase with 
 
 ### Languages & Runtimes
 
-- Go 1.25
+- Go 1.26
 - Node.js 20
 - PostgreSQL client
 - Redis client
@@ -16,7 +16,7 @@ This devcontainer provides a complete development environment for Fluxbase with 
 - **Go Tools**: gopls, dlv, golangci-lint, air, migrate, swag, mockery, staticcheck
 - **Node Tools**: TypeScript, ESLint, Prettier, tsx, nodemon
 - **Testing**: gotestsum, ginkgo
-- **Database**: psql, pgAdmin 4, SQLTools
+- **Database**: psql, SQLTools
 - **Utilities**: git, gh, docker, make, httpie, jq, tree
 
 ### VS Code Extensions
@@ -46,9 +46,8 @@ This devcontainer provides a complete development environment for Fluxbase with 
 
 All services are pre-configured and ready to use:
 
-- **PostgreSQL 16**: Main database
+- **PostgreSQL 18**: Main database
 - **Redis 7**: Caching and sessions
-- **pgAdmin 4**: Database management UI
 - **MailHog**: Email testing
 
 ## Getting Started
@@ -126,7 +125,6 @@ Database connections are automatically configured in SQLTools. Access them via:
 When services are running:
 
 - Fluxbase API: http://localhost:8080
-- pgAdmin: http://localhost:5050
 - MailHog UI: http://localhost:8025
 - Documentation: http://localhost:3000 (when `make docs-dev` is running)
 

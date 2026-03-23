@@ -9,9 +9,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
-	"github.com/rs/zerolog/log"
 )
 
 // SyncChatbotTool implements the sync_chatbot MCP tool for deploying AI chatbots

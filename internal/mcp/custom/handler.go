@@ -8,8 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 // DynamicToolHandler wraps a CustomTool to implement the mcp.ToolHandler interface.

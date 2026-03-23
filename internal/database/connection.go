@@ -21,11 +21,12 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	pg_query "github.com/pganalyze/pg_query_go/v6"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/logutil"
 	"github.com/nimbleflux/fluxbase/internal/observability"
-	pg_query "github.com/pganalyze/pg_query_go/v6"
-	"github.com/rs/zerolog/log"
 )
 
 //go:embed migrations/*.sql
@@ -1036,6 +1037,79 @@ func WrapWithServiceRole(ctx context.Context, conn *Connection, fn func(tx pgx.T
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to SET LOCAL ROLE service_role")
 		return fmt.Errorf("failed to SET LOCAL ROLE service_role: %w", err)
+	}
+
+	// Execute the wrapped function
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// WrapWithTenantContext wraps a database operation with tenant context for multi-tenancy.
+// This sets the app.current_tenant_id session variable so that RLS policies and triggers
+// can enforce tenant isolation. Use this for storage operations on tenant-scoped tables.
+func WrapWithTenantContext(ctx context.Context, conn *Connection, tenantID string, fn func(tx pgx.Tx) error) error {
+	// Start transaction
+	tx, err := conn.Pool().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Set tenant context if provided
+	if tenantID != "" {
+		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
+		if err != nil {
+			log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to set tenant context")
+			return fmt.Errorf("failed to set tenant context: %w", err)
+		}
+	}
+
+	// Execute the wrapped function
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// WrapWithServiceRoleAndTenant wraps a database operation with both service_role and tenant context.
+// This bypasses RLS but still sets tenant_id for new records via the set_tenant_id trigger.
+// Use this for privileged operations that still need to associate records with a tenant.
+func WrapWithServiceRoleAndTenant(ctx context.Context, conn *Connection, tenantID string, fn func(tx pgx.Tx) error) error {
+	// Start transaction
+	tx, err := conn.Pool().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// SET LOCAL ROLE service_role - bypasses RLS for privileged operations
+	_, err = tx.Exec(ctx, "SET LOCAL ROLE service_role")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to SET LOCAL ROLE service_role")
+		return fmt.Errorf("failed to SET LOCAL ROLE service_role: %w", err)
+	}
+
+	// Set tenant context if provided (for triggers that auto-populate tenant_id)
+	if tenantID != "" {
+		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
+		if err != nil {
+			log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to set tenant context")
+			return fmt.Errorf("failed to set tenant context: %w", err)
+		}
 	}
 
 	// Execute the wrapped function

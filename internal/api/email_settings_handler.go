@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/email"
 	"github.com/nimbleflux/fluxbase/internal/settings"
-	"github.com/rs/zerolog/log"
 )
 
 // EmailSettingsHandler handles email configuration management

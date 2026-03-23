@@ -43,6 +43,7 @@ import { Route as AuthenticatedMcpToolsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
 import { Route as AuthenticatedKnowledgeBasesIndexRouteImport } from './routes/_authenticated/knowledge-bases/index'
 import { Route as AuthenticatedJobsIndexRouteImport } from './routes/_authenticated/jobs/index'
+import { Route as AuthenticatedInstanceSettingsIndexRouteImport } from './routes/_authenticated/instance-settings/index'
 import { Route as AuthenticatedFunctionsIndexRouteImport } from './routes/_authenticated/functions/index'
 import { Route as AuthenticatedFeaturesIndexRouteImport } from './routes/_authenticated/features/index'
 import { Route as AuthenticatedExtensionsIndexRouteImport } from './routes/_authenticated/extensions/index'
@@ -249,6 +250,12 @@ const AuthenticatedJobsIndexRoute = AuthenticatedJobsIndexRouteImport.update({
   path: '/jobs/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedInstanceSettingsIndexRoute =
+  AuthenticatedInstanceSettingsIndexRouteImport.update({
+    id: '/instance-settings/',
+    path: '/instance-settings/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedFunctionsIndexRoute =
   AuthenticatedFunctionsIndexRouteImport.update({
     id: '/functions/',
@@ -389,6 +396,7 @@ export interface FileRoutesByFullPath {
   '/extensions/': typeof AuthenticatedExtensionsIndexRoute
   '/features/': typeof AuthenticatedFeaturesIndexRoute
   '/functions/': typeof AuthenticatedFunctionsIndexRoute
+  '/instance-settings/': typeof AuthenticatedInstanceSettingsIndexRoute
   '/jobs/': typeof AuthenticatedJobsIndexRoute
   '/knowledge-bases/': typeof AuthenticatedKnowledgeBasesIndexRoute
   '/logs/': typeof AuthenticatedLogsIndexRoute
@@ -443,6 +451,7 @@ export interface FileRoutesByTo {
   '/extensions': typeof AuthenticatedExtensionsIndexRoute
   '/features': typeof AuthenticatedFeaturesIndexRoute
   '/functions': typeof AuthenticatedFunctionsIndexRoute
+  '/instance-settings': typeof AuthenticatedInstanceSettingsIndexRoute
   '/jobs': typeof AuthenticatedJobsIndexRoute
   '/knowledge-bases': typeof AuthenticatedKnowledgeBasesIndexRoute
   '/logs': typeof AuthenticatedLogsIndexRoute
@@ -499,6 +508,7 @@ export interface FileRoutesById {
   '/_authenticated/extensions/': typeof AuthenticatedExtensionsIndexRoute
   '/_authenticated/features/': typeof AuthenticatedFeaturesIndexRoute
   '/_authenticated/functions/': typeof AuthenticatedFunctionsIndexRoute
+  '/_authenticated/instance-settings/': typeof AuthenticatedInstanceSettingsIndexRoute
   '/_authenticated/jobs/': typeof AuthenticatedJobsIndexRoute
   '/_authenticated/knowledge-bases/': typeof AuthenticatedKnowledgeBasesIndexRoute
   '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
@@ -555,6 +565,7 @@ export interface FileRouteTypes {
     | '/extensions/'
     | '/features/'
     | '/functions/'
+    | '/instance-settings/'
     | '/jobs/'
     | '/knowledge-bases/'
     | '/logs/'
@@ -609,6 +620,7 @@ export interface FileRouteTypes {
     | '/extensions'
     | '/features'
     | '/functions'
+    | '/instance-settings'
     | '/jobs'
     | '/knowledge-bases'
     | '/logs'
@@ -664,6 +676,7 @@ export interface FileRouteTypes {
     | '/_authenticated/extensions/'
     | '/_authenticated/features/'
     | '/_authenticated/functions/'
+    | '/_authenticated/instance-settings/'
     | '/_authenticated/jobs/'
     | '/_authenticated/knowledge-bases/'
     | '/_authenticated/logs/'
@@ -948,6 +961,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedJobsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/instance-settings/': {
+      id: '/_authenticated/instance-settings/'
+      path: '/instance-settings'
+      fullPath: '/instance-settings/'
+      preLoaderRoute: typeof AuthenticatedInstanceSettingsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/functions/': {
       id: '/_authenticated/functions/'
       path: '/functions'
@@ -1099,6 +1119,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedExtensionsIndexRoute: typeof AuthenticatedExtensionsIndexRoute
   AuthenticatedFeaturesIndexRoute: typeof AuthenticatedFeaturesIndexRoute
   AuthenticatedFunctionsIndexRoute: typeof AuthenticatedFunctionsIndexRoute
+  AuthenticatedInstanceSettingsIndexRoute: typeof AuthenticatedInstanceSettingsIndexRoute
   AuthenticatedJobsIndexRoute: typeof AuthenticatedJobsIndexRoute
   AuthenticatedKnowledgeBasesIndexRoute: typeof AuthenticatedKnowledgeBasesIndexRoute
   AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
@@ -1143,6 +1164,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedExtensionsIndexRoute: AuthenticatedExtensionsIndexRoute,
   AuthenticatedFeaturesIndexRoute: AuthenticatedFeaturesIndexRoute,
   AuthenticatedFunctionsIndexRoute: AuthenticatedFunctionsIndexRoute,
+  AuthenticatedInstanceSettingsIndexRoute:
+    AuthenticatedInstanceSettingsIndexRoute,
   AuthenticatedJobsIndexRoute: AuthenticatedJobsIndexRoute,
   AuthenticatedKnowledgeBasesIndexRoute: AuthenticatedKnowledgeBasesIndexRoute,
   AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,

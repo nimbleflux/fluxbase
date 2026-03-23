@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/pubsub"
 	"github.com/nimbleflux/fluxbase/internal/ratelimit"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -397,7 +398,7 @@ func TestServer_GetStorageService(t *testing.T) {
 	})
 
 	t.Run("returns nil when storage handler has nil service", func(t *testing.T) {
-		s := &Server{storageHandler: &StorageHandler{storage: nil}}
+		s := &Server{storageHandler: &StorageHandler{storageManager: nil}}
 		assert.Nil(t, s.GetStorageService())
 	})
 }

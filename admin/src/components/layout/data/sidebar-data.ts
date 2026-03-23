@@ -30,323 +30,320 @@ import {
   HardDrive,
   Command,
   Building2,
-} from 'lucide-react'
-import { type SidebarData } from '../types'
+} from "lucide-react";
+import { type SidebarData } from "../types";
 
-export type VisibilityLevel = 'all' | 'instance-only' | 'tenant-only'
+export type VisibilityLevel = "all" | "instance-only" | "tenant-only";
 
 export interface SidebarItem {
-  title: string
-  url: string
-  icon: React.ComponentType<{ className?: string }>
-  visibility?: VisibilityLevel
-  badge?: string
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+  visibility?: VisibilityLevel;
+  badge?: string;
 }
 
 export interface SidebarGroup {
-  title: string
-  collapsible?: boolean
-  items: SidebarItem[]
-  visibility?: VisibilityLevel
+  title: string;
+  collapsible?: boolean;
+  items: SidebarItem[];
+  visibility?: VisibilityLevel;
 }
 
-export interface SidebarDataWithVisibility extends Omit<SidebarData, 'navGroups'> {
-  navGroups: SidebarGroup[]
+export interface SidebarDataWithVisibility extends Omit<
+  SidebarData,
+  "navGroups"
+> {
+  navGroups: SidebarGroup[];
 }
 
 export const sidebarData: SidebarDataWithVisibility = {
   user: {
-    name: 'Admin',
-    email: 'admin@fluxbase.eu',
-    avatar: '',
+    name: "Admin",
+    email: "admin@fluxbase.eu",
+    avatar: "",
   },
   teams: [
     {
-      name: 'Fluxbase',
+      name: "Fluxbase",
       logo: Command,
-      plan: 'Backend as a Service',
+      plan: "Backend as a Service",
     },
   ],
   navGroups: [
     {
-      title: 'Overview',
+      title: "Overview",
       items: [
         {
-          title: 'Dashboard',
-          url: '/',
+          title: "Dashboard",
+          url: "/",
           icon: LayoutDashboard,
-          visibility: 'all',
+          visibility: "all",
         },
       ],
     },
     {
-      title: 'Database',
+      title: "Database",
       collapsible: true,
       items: [
         {
-          title: 'Tables',
-          url: '/tables',
+          title: "Tables",
+          url: "/tables",
           icon: Database,
-          visibility: 'all',
+          visibility: "all",
         },
         {
-          title: 'Schema Viewer',
-          url: '/schema',
+          title: "Schema Viewer",
+          url: "/schema",
           icon: GitFork,
-          visibility: 'all',
+          visibility: "all",
         },
         {
-          title: 'SQL Editor',
-          url: '/sql-editor',
+          title: "SQL Editor",
+          url: "/sql-editor",
           icon: Code,
-          visibility: 'all',
+          visibility: "all",
         },
       ],
     },
     {
-      title: 'Users & Authentication',
+      title: "Users & Authentication",
       collapsible: true,
       items: [
         {
-          title: 'Users',
-          url: '/users',
+          title: "Users",
+          url: "/users",
           icon: Users,
-          visibility: 'all',
+          visibility: "all",
         },
         {
-          title: 'Tenants',
-          url: '/tenants',
+          title: "Tenants",
+          url: "/tenants",
           icon: Building2,
-          visibility: 'instance-only',
+          visibility: "instance-only",
         },
         {
-          title: 'Authentication',
-          url: '/authentication',
+          title: "Authentication",
+          url: "/authentication",
           icon: Shield,
-          visibility: 'all',
+          visibility: "all",
         },
       ],
     },
     {
-      title: 'AI',
+      title: "AI",
       collapsible: true,
       items: [
         {
-          title: 'Knowledge Bases',
-          url: '/knowledge-bases',
+          title: "Knowledge Bases",
+          url: "/knowledge-bases",
           icon: BookOpen,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'AI Chatbots',
-          url: '/chatbots',
+          title: "AI Chatbots",
+          url: "/chatbots",
           icon: Bot,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'Quotas',
-          url: '/quotas',
-          icon: Shield,
-          visibility: 'instance-only',
-        },
-        {
-          title: 'MCP Tools',
-          url: '/mcp-tools',
+          title: "MCP Tools",
+          url: "/mcp-tools",
           icon: Wrench,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
       ],
     },
     {
-      title: 'API & Services',
+      title: "API & Services",
       collapsible: true,
       items: [
         {
-          title: 'API Explorer',
-          url: '/api/rest',
+          title: "API Explorer",
+          url: "/api/rest",
           icon: Code2,
-          visibility: 'all',
+          visibility: "all",
         },
         {
-          title: 'Realtime',
-          url: '/realtime',
+          title: "Realtime",
+          url: "/realtime",
           icon: Radio,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'Storage',
-          url: '/storage',
+          title: "Storage",
+          url: "/storage",
           icon: FolderOpen,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'Functions',
-          url: '/functions',
+          title: "Functions",
+          url: "/functions",
           icon: FileCode,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'Jobs',
-          url: '/jobs',
+          title: "Jobs",
+          url: "/jobs",
           icon: ListTodo,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'RPC',
-          url: '/rpc',
+          title: "RPC",
+          url: "/rpc",
           icon: Terminal,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'Configuration',
-          url: '/features',
+          title: "Configuration",
+          url: "/features",
           icon: Zap,
-          visibility: 'instance-only',
+          visibility: "instance-only",
         },
         {
-          title: 'Extensions',
-          url: '/extensions',
+          title: "Extensions",
+          url: "/extensions",
           icon: Puzzle,
-          visibility: 'instance-only',
+          visibility: "instance-only",
         },
         {
-          title: 'Email',
-          url: '/email-settings',
+          title: "Email",
+          url: "/email-settings",
           icon: Mail,
-          visibility: 'all',
+          visibility: "all",
         },
         {
-          title: 'Storage Config',
-          url: '/storage-config',
+          title: "Storage Config",
+          url: "/storage-config",
           icon: HardDrive,
-          visibility: 'all',
+          visibility: "all",
         },
         {
-          title: 'AI Providers',
-          url: '/ai-providers',
+          title: "AI Providers",
+          url: "/ai-providers",
           icon: Bot,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'Database Config',
-          url: '/database-config',
+          title: "Database Config",
+          url: "/database-config",
           icon: Database,
-          visibility: 'instance-only',
+          visibility: "instance-only",
         },
       ],
     },
     {
-      title: 'Security',
+      title: "Security",
       collapsible: true,
       items: [
         {
-          title: 'RLS Policies',
-          url: '/policies',
+          title: "RLS Policies",
+          url: "/policies",
           icon: ShieldAlert,
-          visibility: 'all',
+          visibility: "all",
         },
         {
-          title: 'Security Settings',
-          url: '/security-settings',
+          title: "Security Settings",
+          url: "/security-settings",
           icon: ShieldCheck,
-          visibility: 'instance-only',
+          visibility: "tenant-only",
         },
         {
-          title: 'Secrets',
-          url: '/secrets',
+          title: "Secrets",
+          url: "/secrets",
           icon: Lock,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'Client Keys',
-          url: '/client-keys',
+          title: "Client Keys",
+          url: "/client-keys",
           icon: Key,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'Service Keys',
-          url: '/service-keys',
+          title: "Service Keys",
+          url: "/service-keys",
           icon: KeyRound,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
         {
-          title: 'Webhooks',
-          url: '/webhooks',
+          title: "Webhooks",
+          url: "/webhooks",
           icon: Webhook,
-          visibility: 'all',
+          visibility: "tenant-only",
         },
       ],
     },
     {
-      title: 'Monitoring',
+      title: "Monitoring",
       collapsible: true,
       items: [
         {
-          title: 'Log Stream',
-          url: '/logs',
+          title: "Log Stream",
+          url: "/logs",
           icon: ScrollText,
-          visibility: 'all',
+          visibility: "all",
         },
         {
-          title: 'Monitoring',
-          url: '/monitoring',
+          title: "Monitoring",
+          url: "/monitoring",
           icon: Activity,
-          visibility: 'instance-only',
+          visibility: "instance-only",
         },
       ],
     },
     {
-      title: 'Account settings',
+      title: "Account settings",
       collapsible: true,
       items: [
         {
-          title: 'Account',
-          url: '/settings',
+          title: "Account",
+          url: "/settings",
           icon: Settings,
-          visibility: 'all',
+          visibility: "all",
         },
         {
-          title: 'Appearance',
-          url: '/settings/appearance',
+          title: "Appearance",
+          url: "/settings/appearance",
           icon: Palette,
-          visibility: 'all',
+          visibility: "all",
+        },
+        {
+          title: "Instance Settings",
+          url: "/instance-settings",
+          icon: Settings,
+          visibility: "instance-only",
         },
       ],
     },
   ],
-}
+};
 
 export function filterSidebarForContext(
   groups: SidebarGroup[],
-  options: { isInstanceAdmin: boolean; actingAsTenantAdmin: boolean }
+  options: { isInstanceAdmin: boolean; actingAsTenantAdmin: boolean },
 ): SidebarGroup[] {
-  const { isInstanceAdmin, actingAsTenantAdmin } = options
+  const { isInstanceAdmin, actingAsTenantAdmin } = options;
 
-  // If instance admin AND NOT acting as tenant admin, show everything
-  if (isInstanceAdmin && !actingAsTenantAdmin) {
-    return groups
-  }
-
-  // Otherwise (tenant admin mode), filter out instance-only items
   return groups
     .map((group) => {
-      // Filter items within the group
       const filteredItems = group.items.filter((item) => {
-        const visibility = item.visibility || 'all'
-        // Hide instance-only items when acting as tenant admin
-        if (visibility === 'instance-only' && (!isInstanceAdmin || actingAsTenantAdmin)) {
-          return false
-        }
-        return true
-      })
+        const visibility = item.visibility || "all";
 
-      return {
-        ...group,
-        items: filteredItems,
-      }
+        // Instance admin NOT acting as tenant: show instance-only + all, hide tenant-only
+        if (isInstanceAdmin && !actingAsTenantAdmin) {
+          return visibility !== "tenant-only";
+        }
+
+        // Tenant admin or instance admin acting as tenant: show tenant-only + all, hide instance-only
+        if (visibility === "instance-only") {
+          return false;
+        }
+
+        return true;
+      });
+
+      return { ...group, items: filteredItems };
     })
-    .filter((group) => {
-      // Hide group if all items are filtered out
-      return group.items.length > 0
-    })
+    .filter((group) => group.items.length > 0);
 }

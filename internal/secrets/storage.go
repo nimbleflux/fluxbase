@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
@@ -68,6 +69,12 @@ func NewStorage(db *database.Connection, encryptionKey string) *Storage {
 
 // CreateSecret creates a new secret with encrypted value
 func (s *Storage) CreateSecret(ctx context.Context, secret *Secret, plainValue string, userID *uuid.UUID) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.CreateSecretWithTenant(ctx, tenantID, secret, plainValue, userID)
+}
+
+// CreateSecretWithTenant creates a new secret with encrypted value and tenant context
+func (s *Storage) CreateSecretWithTenant(ctx context.Context, tenantID string, secret *Secret, plainValue string, userID *uuid.UUID) error {
 	// Encrypt the value before storage
 	encryptedValue, err := crypto.Encrypt(plainValue, s.encryptionKey)
 	if err != nil {
@@ -81,7 +88,7 @@ func (s *Storage) CreateSecret(ctx context.Context, secret *Secret, plainValue s
 		RETURNING id, version, created_at, updated_at
 	`
 
-	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			secret.Name, secret.Scope, secret.Namespace, encryptedValue,
 			secret.Description, secret.ExpiresAt, userID,

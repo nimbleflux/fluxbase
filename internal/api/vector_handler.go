@@ -6,32 +6,47 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
-	"github.com/rs/zerolog/log"
 )
 
 // VectorHandler handles vector search endpoints
 type VectorHandler struct {
 	vectorManager   *VectorManager
 	config          *config.AIConfig
+	baseConfig      *config.Config
 	schemaInspector *database.SchemaInspector
 	db              *database.Connection
 }
 
 // NewVectorHandler creates a new vector handler using a VectorManager
-func NewVectorHandler(vectorManager *VectorManager, schemaInspector *database.SchemaInspector, db *database.Connection) (*VectorHandler, error) {
+func NewVectorHandler(vectorManager *VectorManager, schemaInspector *database.SchemaInspector, db *database.Connection, baseConfig *config.Config) (*VectorHandler, error) {
 	handler := &VectorHandler{
 		vectorManager:   vectorManager,
 		config:          vectorManager.envConfig,
+		baseConfig:      baseConfig,
 		schemaInspector: schemaInspector,
 		db:              db,
 	}
 
 	return handler, nil
+}
+
+// getConfig returns the AI config to use for the current request.
+// It checks for tenant-specific config in fiber context locals and falls back to base config.
+func (h *VectorHandler) getConfig(c fiber.Ctx) *config.AIConfig {
+	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
+		return &tc.AI
+	}
+	if h.config != nil {
+		return h.config
+	}
+	return &h.baseConfig.AI
 }
 
 // inferProviderType determines the AI provider type from explicit config or client keys
@@ -707,10 +722,13 @@ func (h *VectorHandler) HandleGetCapabilities(c fiber.Ctx) error {
 
 	// Add embedding provider info if embedding is available
 	if embeddingAvailable {
+		// Get tenant-specific config
+		cfg := h.getConfig(c)
+
 		// Determine actual provider being used
-		provider := h.config.EmbeddingProvider
+		provider := cfg.EmbeddingProvider
 		if provider == "" {
-			provider = h.config.ProviderType
+			provider = cfg.ProviderType
 		}
 		caps.EmbeddingProvider = provider
 
@@ -718,8 +736,8 @@ func (h *VectorHandler) HandleGetCapabilities(c fiber.Ctx) error {
 		embeddingService := h.vectorManager.GetEmbeddingService()
 		if embeddingService != nil {
 			caps.EmbeddingModel = embeddingService.DefaultModel()
-		} else if h.config.EmbeddingModel != "" {
-			caps.EmbeddingModel = h.config.EmbeddingModel
+		} else if cfg.EmbeddingModel != "" {
+			caps.EmbeddingModel = cfg.EmbeddingModel
 		}
 	}
 

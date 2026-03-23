@@ -31,10 +31,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/test"
-	"github.com/rs/zerolog/log"
 )
 
 // getEnvOrDefault returns the value of an environment variable or a default value.

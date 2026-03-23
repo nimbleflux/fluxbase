@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
 // =============================================================================
@@ -19,7 +20,7 @@ import (
 // =============================================================================
 
 func TestNewStorageHandler_NilConfig(t *testing.T) {
-	handler := NewStorageHandlerWithCache(nil, nil, nil, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, nil, nil)
 
 	assert.NotNil(t, handler)
 	assert.Nil(t, handler.transformer)
@@ -32,7 +33,7 @@ func TestNewStorageHandler_DisabledTransforms(t *testing.T) {
 		Enabled: false,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	assert.NotNil(t, handler)
 	assert.Nil(t, handler.transformer)
@@ -50,7 +51,7 @@ func TestNewStorageHandler_EnabledTransforms(t *testing.T) {
 		MaxConcurrent:  4,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	assert.NotNil(t, handler)
 	assert.NotNil(t, handler.transformer)
@@ -64,7 +65,7 @@ func TestNewStorageHandler_DefaultConcurrency(t *testing.T) {
 		MaxConcurrent: 0, // Should default to 4
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	assert.NotNil(t, handler.transformSem)
 	assert.Equal(t, 4, cap(handler.transformSem))
@@ -76,7 +77,7 @@ func TestNewStorageHandler_DefaultRateLimit(t *testing.T) {
 		RateLimit: 0, // Should default to 60
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Rate limit should be 60/60 = 1 per second
 	assert.NotZero(t, handler.transformRateLimit)
@@ -92,7 +93,7 @@ func TestStorageHandler_getTransformLimiter(t *testing.T) {
 		RateLimit: 60,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Get limiter for a key
 	limiter1 := handler.getTransformLimiter("user1:ip1")
@@ -114,7 +115,7 @@ func TestStorageHandler_getTransformLimiter_AllowsRequests(t *testing.T) {
 		RateLimit: 60, // 60 per minute = 1 per second
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	limiter := handler.getTransformLimiter("testkey")
 
@@ -131,7 +132,7 @@ func TestStorageHandler_acquireTransformSlot_NilSem(t *testing.T) {
 		Enabled: false,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Should return true when no semaphore configured
 	assert.True(t, handler.acquireTransformSlot(time.Second))
@@ -143,7 +144,7 @@ func TestStorageHandler_acquireTransformSlot_Success(t *testing.T) {
 		MaxConcurrent: 2,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Should acquire slots up to limit
 	assert.True(t, handler.acquireTransformSlot(time.Second))
@@ -160,7 +161,7 @@ func TestStorageHandler_acquireTransformSlot_Timeout(t *testing.T) {
 		MaxConcurrent: 1,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Acquire the only slot
 	assert.True(t, handler.acquireTransformSlot(time.Second))
@@ -175,7 +176,7 @@ func TestStorageHandler_acquireTransformSlot_Timeout(t *testing.T) {
 }
 
 func TestStorageHandler_releaseTransformSlot_NilSem(t *testing.T) {
-	handler := NewStorageHandlerWithCache(nil, nil, nil, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, nil, nil)
 
 	// Should not panic
 	handler.releaseTransformSlot()
@@ -186,7 +187,7 @@ func TestStorageHandler_releaseTransformSlot_NilSem(t *testing.T) {
 // =============================================================================
 
 func TestStorageHandler_GetTransformConfig_NilConfig(t *testing.T) {
-	handler := NewStorageHandlerWithCache(nil, nil, nil, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, nil, nil)
 
 	app := fiber.New()
 	app.Get("/config", handler.GetTransformConfig)
@@ -210,7 +211,7 @@ func TestStorageHandler_GetTransformConfig_Enabled(t *testing.T) {
 		AllowedFormats: []string{"webp", "jpg", "png"},
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	app := fiber.New()
 	app.Get("/config", handler.GetTransformConfig)
@@ -236,7 +237,7 @@ func TestStorageHandler_GetTransformConfig_Disabled(t *testing.T) {
 		Enabled: false,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	app := fiber.New()
 	app.Get("/config", handler.GetTransformConfig)
@@ -284,7 +285,7 @@ func TestStorageHandler_TransformerConfig(t *testing.T) {
 		BucketSize:     100,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Verify transformer was created with correct options
 	assert.NotNil(t, handler.transformer)
@@ -305,7 +306,7 @@ func TestStorageHandler_TransformerBucketing(t *testing.T) {
 		BucketSize: 100,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	opts := &storage.TransformOptions{Width: 850, Height: 650}
 	err := handler.transformer.ValidateOptions(opts)
@@ -326,7 +327,7 @@ func TestStorageHandler_ConcurrentLimiterAccess(t *testing.T) {
 		RateLimit: 1000, // High rate limit for concurrent test
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Access limiters concurrently from multiple goroutines
 	done := make(chan bool, 10)
@@ -362,7 +363,7 @@ func TestNewStorageHandler_WithCache(t *testing.T) {
 		CacheMaxSize:   1024 * 1024 * 1024, // 1GB
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	assert.NotNil(t, handler)
 	assert.NotNil(t, handler.transformer)
@@ -377,7 +378,7 @@ func TestNewStorageHandler_TransformerDefaults(t *testing.T) {
 		// Should use defaults from ImageTransformer
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	assert.NotNil(t, handler)
 	assert.NotNil(t, handler.transformer)
@@ -416,7 +417,7 @@ func TestNewStorageHandler_TransformBurstDefaults(t *testing.T) {
 				RateLimit: tt.rateLimit,
 			}
 
-			handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+			handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 			assert.NotNil(t, handler)
 			assert.GreaterOrEqual(t, handler.transformBurst, tt.expectedBurstMin)
@@ -433,7 +434,7 @@ func TestGetTransformConfig_AllFields(t *testing.T) {
 		AllowedFormats: []string{"webp", "avif", "jpg", "png"},
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	app := fiber.New()
 	app.Get("/config", handler.GetTransformConfig)
@@ -492,7 +493,7 @@ func TestStorageHandler_ConcurrentSlotAcquisition(t *testing.T) {
 		MaxConcurrent: 2,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Acquire all slots
 	assert.True(t, handler.acquireTransformSlot(time.Millisecond*100))
@@ -521,7 +522,7 @@ func TestStorageHandler_MultipleLimiterInstances(t *testing.T) {
 		RateLimit: 60,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Create multiple limiters for different keys
 	keys := []string{"user1:ip1", "user1:ip2", "user2:ip1", "user2:ip2"}
@@ -557,7 +558,7 @@ func TestStorageHandler_ZeroMaxConcurrent(t *testing.T) {
 		MaxConcurrent: 0, // Should default to 4
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Should have default capacity
 	assert.Equal(t, 4, cap(handler.transformSem))
@@ -573,7 +574,7 @@ func TestStorageHandler_NegativeRateLimit(t *testing.T) {
 		RateLimit: -10, // Should be treated as 0, which defaults to 60
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Should have a rate limit (using default)
 	assert.NotZero(t, handler.transformRateLimit)
@@ -585,7 +586,7 @@ func TestStorageHandler_ReleaseSlotWithoutAcquire(t *testing.T) {
 		MaxConcurrent: 2,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	// Release without acquire - should not panic
 	handler.releaseTransformSlot()
@@ -628,7 +629,7 @@ func BenchmarkStorageHandler_getTransformLimiter(b *testing.B) {
 		RateLimit: 60,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -642,7 +643,7 @@ func BenchmarkStorageHandler_acquireReleaseSlot(b *testing.B) {
 		MaxConcurrent: 100,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -657,7 +658,7 @@ func BenchmarkStorageHandler_ConcurrentLimiterAccess(b *testing.B) {
 		RateLimit: 1000,
 	}
 
-	handler := NewStorageHandlerWithCache(nil, nil, cfg, nil)
+	handler := NewStorageHandlerWithCache(nil, nil, nil, cfg, nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // =============================================================================
@@ -23,7 +24,7 @@ func TestNewWorker(t *testing.T) {
 			DefaultMaxDuration:     30 * time.Minute,
 		}
 
-		worker := NewWorker(cfg, nil, "jwt-secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "jwt-secret", "http://localhost", nil, nil, nil)
 
 		require.NotNil(t, worker)
 		assert.NotEqual(t, uuid.Nil, worker.ID)
@@ -40,8 +41,8 @@ func TestNewWorker(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker1 := NewWorker(cfg, nil, "secret", "http://localhost", nil)
-		worker2 := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker1 := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
+		worker2 := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.NotEqual(t, worker1.ID, worker2.ID)
 	})
@@ -51,7 +52,7 @@ func TestNewWorker(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.Contains(t, worker.Name, "@")
 	})
@@ -67,7 +68,7 @@ func TestWorker_setDrainingState(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.False(t, worker.draining)
 	})
@@ -79,7 +80,7 @@ func TestWorker_JobCount(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.Equal(t, 0, worker.currentJobCount)
 	})
@@ -95,7 +96,7 @@ func TestWorker_MaxConcurrent(t *testing.T) {
 			MaxConcurrentPerWorker: 10,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.Equal(t, 10, worker.MaxConcurrent)
 	})
@@ -105,7 +106,7 @@ func TestWorker_MaxConcurrent(t *testing.T) {
 			MaxConcurrentPerWorker: 1,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.Equal(t, 1, worker.MaxConcurrent)
 	})
@@ -121,7 +122,7 @@ func TestWorker_Stop(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Simulate worker completion by closing shutdownComplete in a goroutine
 		// (normally this would be done by the worker's goroutines when they finish)
@@ -153,7 +154,7 @@ func TestWorker_CancelJob(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Should not panic
 		worker.cancelJob(uuid.New())
@@ -172,7 +173,7 @@ func TestWorker_Runtime(t *testing.T) {
 			DefaultMaxDuration:     30 * time.Minute,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.NotNil(t, worker.Runtime)
 	})
@@ -188,7 +189,7 @@ func TestWorker_PublicURL(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "https://api.example.com", nil)
+		worker := NewWorker(cfg, nil, "secret", "https://api.example.com", nil, nil, nil)
 
 		assert.Equal(t, "https://api.example.com", worker.publicURL)
 	})
@@ -204,7 +205,7 @@ func TestWorker_CurrentJobs(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// currentJobs is a sync.Map - verify it's usable
 		count := 0
@@ -226,7 +227,7 @@ func TestWorker_JobCountOperations(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		assert.Equal(t, 0, worker.currentJobCount)
 
 		worker.incrementJobCount()
@@ -241,7 +242,7 @@ func TestWorker_JobCountOperations(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		worker.currentJobCount = 3
 
 		worker.decrementJobCount()
@@ -256,7 +257,7 @@ func TestWorker_JobCountOperations(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		assert.Equal(t, 0, worker.currentJobCount)
 
 		worker.decrementJobCount()
@@ -275,7 +276,7 @@ func TestWorker_hasCapacity(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.True(t, worker.hasCapacity())
 	})
@@ -285,7 +286,7 @@ func TestWorker_hasCapacity(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		worker.currentJobCount = 3
 
 		assert.True(t, worker.hasCapacity())
@@ -296,7 +297,7 @@ func TestWorker_hasCapacity(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		worker.currentJobCount = 5
 
 		assert.False(t, worker.hasCapacity())
@@ -309,7 +310,7 @@ func TestWorker_hasCapacity(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		worker.draining = true
 
 		// hasCapacity returns true because it only checks count < max
@@ -327,7 +328,7 @@ func TestWorker_setDraining(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		assert.False(t, worker.draining)
 
 		worker.setDraining(true)
@@ -339,7 +340,7 @@ func TestWorker_setDraining(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		worker.setDraining(true)
 		worker.setDraining(true)
@@ -357,7 +358,7 @@ func TestWorker_isDraining(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.False(t, worker.isDraining())
 	})
@@ -367,7 +368,7 @@ func TestWorker_isDraining(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		worker.setDraining(true)
 
 		assert.True(t, worker.isDraining())
@@ -384,7 +385,7 @@ func TestWorker_GetCurrentJobCount(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		assert.Equal(t, 0, worker.getCurrentJobCount())
 
 		worker.currentJobCount = 3
@@ -401,7 +402,7 @@ func TestWorker_ConcurrentJobCountAccess(t *testing.T) {
 		MaxConcurrentPerWorker: 100,
 	}
 
-	worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+	worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 	// Run concurrent increments and decrements
 	done := make(chan bool)
@@ -439,7 +440,7 @@ func TestWorker_ShutdownChannels(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.NotNil(t, worker.shutdownChan)
 		assert.NotNil(t, worker.shutdownComplete)
@@ -466,7 +467,7 @@ func TestWorker_Modes(t *testing.T) {
 				MaxConcurrentPerWorker: 5,
 			}
 
-			worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+			worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 			assert.Equal(t, tc.mode, worker.Config.WorkerMode)
 		})
 	}
@@ -763,7 +764,7 @@ func TestWorker_Start_Validation(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Note: We can't fully test Start without database and runtime
 		// but we can verify it doesn't panic on nil inputs
@@ -779,7 +780,7 @@ func TestWorker_Stop_Multiple(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Verify draining state
 		assert.False(t, worker.isDraining())
@@ -797,7 +798,7 @@ func TestWorker_CancelJob_Extended(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Should handle zero UUID gracefully
 		worker.cancelJob(uuid.UUID{})
@@ -808,7 +809,7 @@ func TestWorker_CancelJob_Extended(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Should not panic when job doesn't exist
 		worker.cancelJob(uuid.New())
@@ -819,7 +820,7 @@ func TestWorker_CancelJob_Extended(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Should handle multiple cancels without issues
 		worker.cancelJob(uuid.New())
@@ -834,7 +835,7 @@ func TestWorker_InterruptAllJobs(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Should not panic when no jobs are running
 		worker.interruptAllJobs()
@@ -847,7 +848,7 @@ func TestWorker_ShutdownChannels_Extended(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.NotNil(t, worker.shutdownChan)
 		assert.NotNil(t, worker.shutdownComplete)
@@ -861,7 +862,7 @@ func TestWorker_Modes_Extended(t *testing.T) {
 			WorkerMode: "deno",
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		assert.NotNil(t, worker)
 	})
 
@@ -870,7 +871,7 @@ func TestWorker_Modes_Extended(t *testing.T) {
 			WorkerMode: "docker",
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		assert.NotNil(t, worker)
 	})
 
@@ -879,7 +880,7 @@ func TestWorker_Modes_Extended(t *testing.T) {
 			WorkerMode: "process",
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		assert.NotNil(t, worker)
 	})
 }
@@ -890,7 +891,7 @@ func TestWorker_HandleLogMessage(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Should not panic with nil progress
 		worker.handleLogMessage(uuid.New(), "info", "test message")
@@ -901,7 +902,7 @@ func TestWorker_HandleLogMessage(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Should not panic when job doesn't exist
 		worker.handleLogMessage(uuid.New(), "error", "error message")
@@ -914,7 +915,7 @@ func TestWorker_LoadSettingsSecrets(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Should return nil when no settings service
 		secrets := worker.loadSettingsSecrets(context.Background(), nil)
@@ -926,7 +927,7 @@ func TestWorker_LoadSettingsSecrets(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		userID := uuid.New()
 		// Should return nil when no settings service

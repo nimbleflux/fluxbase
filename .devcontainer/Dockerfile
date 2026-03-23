@@ -36,9 +36,19 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 
 # =============================================================================
-# LAYER 3: Bun runtime (includes Node.js compatibility, rarely changes)
+# LAYER 3: Node.js runtime (for Astro docs and other Node.js tools)
 # =============================================================================
-ARG BUN_VERSION=1.2.15
+ARG NODE_VERSION=22
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && node --version \
+    && npm --version
+
+# =============================================================================
+# LAYER 4: Bun runtime (includes Node.js compatibility, rarely changes)
+# =============================================================================
+ARG BUN_VERSION=1.3.11
 ENV BUN_INSTALL=/home/vscode/.bun
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then BUN_ARCH="x64"; \
@@ -54,7 +64,7 @@ RUN ARCH=$(uname -m) && \
     && bun --version
 
 # =============================================================================
-# LAYER 4: Pinned runtime versions (changes when you update versions)
+# LAYER 5: Pinned runtime versions (changes when you update versions)
 # =============================================================================
 # Pin Deno version instead of latest
 ARG DENO_VERSION=2.7.4
@@ -69,7 +79,7 @@ RUN ARCH=$(dpkg --print-architecture) \
     && deno --version
 
 # =============================================================================
-# LAYER 5: Create user (rarely changes)
+# LAYER 6: Create user (rarely changes)
 # =============================================================================
 ARG USERNAME=vscode
 ARG USER_UID=1000
@@ -81,7 +91,7 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
 # =============================================================================
-# LAYER 6: User setup - global tools (moderately stable)
+# LAYER 7: User setup - global tools (moderately stable)
 # =============================================================================
 USER $USERNAME
 ENV SHELL=/bin/bash \
@@ -102,7 +112,7 @@ RUN bun install -g \
     serve@14
 
 # =============================================================================
-# LAYER 7: Go tools (pin versions for cache stability)
+# LAYER 8: Go tools (pin versions for cache stability)
 # =============================================================================
 USER root
 
@@ -126,10 +136,11 @@ RUN go install -v golang.org/x/tools/gopls@latest \
     && go install -v github.com/ofabry/go-callvis@latest \
     && go install -v github.com/kisielk/godepgraph@latest \
     && go install -v github.com/loov/goda@latest \
-    && go install -v github.com/jfeliu007/goplantuml/cmd/goplantuml@latest
+    && go install -v github.com/jfeliu007/goplantuml/cmd/goplantuml@latest \
+    && go install -v github.com/jorgerojas26/lazysql@latest
 
 # =============================================================================
-# LAYER 8: Final setup (frequently changes - Air config, etc.)
+# LAYER 9: Final setup (frequently changes - Air config, etc.)
 # =============================================================================
 RUN mkdir -p /go/pkg /go/bin \
     && chown -R $USERNAME:$USERNAME /go

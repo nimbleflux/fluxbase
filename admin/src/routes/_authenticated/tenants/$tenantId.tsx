@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Copy,
   Loader2,
+  Settings,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -44,6 +45,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { TenantSettingsTab } from './-TenantSettingsTab'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -222,7 +224,7 @@ function TenantDetailPage() {
 
       <div className='flex-1 overflow-auto p-6'>
         <Tabs value={activeTab} onValueChange={setActiveTab} className='w-full'>
-          <TabsList className='grid w-full max-w-lg grid-cols-3'>
+          <TabsList className='grid w-full max-w-lg grid-cols-4'>
             <TabsTrigger value='members'>
               <Users className='mr-2 h-4 w-4' />
               Members
@@ -234,6 +236,10 @@ function TenantDetailPage() {
             <TabsTrigger value='saml'>
               <Shield className='mr-2 h-4 w-4' />
               SAML
+            </TabsTrigger>
+            <TabsTrigger value='settings'>
+              <Settings className='mr-2 h-4 w-4' />
+              Settings
             </TabsTrigger>
           </TabsList>
 
@@ -397,6 +403,10 @@ function TenantDetailPage() {
 
           <TabsContent value='saml' className='mt-6'>
             <TenantSAMLProvidersTab tenantId={tenantId} />
+          </TabsContent>
+
+          <TabsContent value='settings' className='mt-6'>
+            <TenantSettingsTab tenantId={tenantId} />
           </TabsContent>
         </Tabs>
       </div>

@@ -4,27 +4,37 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // EnrichedUser represents a user with additional metadata for admin view
 type EnrichedUser struct {
-	ID             string                 `json:"id"`
-	Email          string                 `json:"email"`
-	EmailVerified  bool                   `json:"email_verified"`
-	Role           string                 `json:"role"`
-	Provider       string                 `json:"provider"` // "email", "invite_pending", "magic_link"
-	ActiveSessions int                    `json:"active_sessions"`
-	LastSignIn     *time.Time             `json:"last_sign_in"`
-	IsLocked       bool                   `json:"is_locked"`
-	UserMetadata   map[string]interface{} `json:"user_metadata"`
-	AppMetadata    map[string]interface{} `json:"app_metadata"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
+	ID                string                 `json:"id"`
+	Email             string                 `json:"email"`
+	EmailVerified     bool                   `json:"email_verified"`
+	Role              string                 `json:"role"`
+	Provider          string                 `json:"provider"` // "email", "invite_pending", "magic_link"
+	ActiveSessions    int                    `json:"active_sessions"`
+	LastSignIn        *time.Time             `json:"last_sign_in"`
+	IsLocked          bool                   `json:"is_locked"`
+	UserMetadata      map[string]interface{} `json:"user_metadata"`
+	AppMetadata       map[string]interface{} `json:"app_metadata"`
+	CreatedAt         time.Time              `json:"created_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
+	TenantAssignments []TenantAssignment     `json:"tenant_assignments,omitempty"`
+}
+
+// TenantAssignment represents a user's assignment to a tenant
+type TenantAssignment struct {
+	TenantID   string `json:"tenant_id"`
+	TenantName string `json:"tenant_name"`
+	TenantSlug string `json:"tenant_slug"`
 }
 
 // UserManagementService provides admin operations for user management
@@ -64,9 +74,30 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 	// Determine which table to query
 	usersTable := "auth.users"
 	sessionsTable := "auth.sessions"
+	tenantAssignmentsSelect := ""
+	tenantAssignmentsJoin := ""
+
 	if userType == "platform" {
 		usersTable = "platform.users"
 		sessionsTable = "platform.sessions"
+		// Join to get tenant assignments for platform users
+		tenantAssignmentsJoin = `
+			LEFT JOIN LATERAL (
+				SELECT COALESCE(
+					jsonb_agg(
+						jsonb_build_object(
+							'tenant_id', t.id,
+							'tenant_name', t.name,
+							'tenant_slug', t.slug
+						)
+					),
+					'[]'::jsonb
+				) as assignments
+				FROM platform.tenant_admin_assignments taa
+				JOIN platform.tenants t ON t.id = taa.tenant_id
+				WHERE taa.user_id = u.id
+			) ta ON true`
+		tenantAssignmentsSelect = ", ta.assignments as tenant_assignments"
 	}
 
 	query := fmt.Sprintf(`
@@ -87,11 +118,13 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 				ELSE 'email'
 			END as provider,
 			COALESCE(u.is_locked, false) as is_locked
+			%s
 		FROM %s u
 		LEFT JOIN %s s ON u.id = s.user_id
+		%s
 		GROUP BY u.id, u.email, u.email_verified, u.role, u.user_metadata, u.app_metadata, u.created_at, u.updated_at, u.password_hash, u.is_locked
 		ORDER BY u.created_at DESC
-	`, usersTable, sessionsTable)
+	`, tenantAssignmentsSelect, usersTable, sessionsTable, tenantAssignmentsJoin)
 
 	var users []*EnrichedUser
 	err := database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
@@ -103,22 +136,52 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 
 		for rows.Next() {
 			user := &EnrichedUser{}
-			err := rows.Scan(
-				&user.ID,
-				&user.Email,
-				&user.EmailVerified,
-				&user.Role,
-				&user.UserMetadata,
-				&user.AppMetadata,
-				&user.CreatedAt,
-				&user.UpdatedAt,
-				&user.ActiveSessions,
-				&user.LastSignIn,
-				&user.Provider,
-				&user.IsLocked,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to scan enriched user: %w", err)
+			var tenantAssignmentsJSON []byte
+
+			if userType == "platform" {
+				err := rows.Scan(
+					&user.ID,
+					&user.Email,
+					&user.EmailVerified,
+					&user.Role,
+					&user.UserMetadata,
+					&user.AppMetadata,
+					&user.CreatedAt,
+					&user.UpdatedAt,
+					&user.ActiveSessions,
+					&user.LastSignIn,
+					&user.Provider,
+					&user.IsLocked,
+					&tenantAssignmentsJSON,
+				)
+				if err != nil {
+					return fmt.Errorf("failed to scan enriched user: %w", err)
+				}
+				// Parse tenant assignments from JSON
+				if len(tenantAssignmentsJSON) > 0 && string(tenantAssignmentsJSON) != "null" {
+					if err := json.Unmarshal(tenantAssignmentsJSON, &user.TenantAssignments); err != nil {
+						// Log but don't fail - tenant assignments are optional
+						user.TenantAssignments = nil
+					}
+				}
+			} else {
+				err := rows.Scan(
+					&user.ID,
+					&user.Email,
+					&user.EmailVerified,
+					&user.Role,
+					&user.UserMetadata,
+					&user.AppMetadata,
+					&user.CreatedAt,
+					&user.UpdatedAt,
+					&user.ActiveSessions,
+					&user.LastSignIn,
+					&user.Provider,
+					&user.IsLocked,
+				)
+				if err != nil {
+					return fmt.Errorf("failed to scan enriched user: %w", err)
+				}
 			}
 			users = append(users, user)
 		}

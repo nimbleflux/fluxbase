@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nimbleflux/fluxbase/internal/pubsub"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/pubsub"
 )
 
 // mockPubSub implements pubsub.PubSub for testing

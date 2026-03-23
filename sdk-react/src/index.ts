@@ -124,14 +124,10 @@ export {
 export {
   useTenants,
   useTenant,
-  useTenantMembers,
   type UseTenantsOptions,
   type UseTenantsReturn,
   type UseTenantOptions,
   type UseTenantReturn,
-  type UseTenantMembersOptions,
-  type UseTenantMembersReturn,
-  type MemberWithUser,
 } from "./use-tenant";
 
 // Table export hooks
@@ -188,10 +184,7 @@ export type {
   GraphQLRequestOptions,
   // Multi-tenancy types
   Tenant,
-  TenantMembership,
   TenantWithRole,
   CreateTenantOptions,
   UpdateTenantOptions,
-  AddTenantMemberOptions,
-  UpdateTenantMemberOptions,
 } from "@nimbleflux/fluxbase-sdk";

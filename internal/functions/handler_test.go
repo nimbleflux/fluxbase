@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // =============================================================================
@@ -18,14 +19,14 @@ import (
 
 func TestNewHandler(t *testing.T) {
 	t.Run("creates handler with nil dependencies", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 		assert.NotNil(t, handler)
 		assert.Equal(t, "/tmp/functions", handler.functionsDir)
 		assert.Equal(t, "http://localhost", handler.publicURL)
 	})
 
 	t.Run("creates handler with custom registries", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "https://npm.example.com", "https://jsr.example.com", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "https://npm.example.com", "https://jsr.example.com", nil, nil, nil, nil)
 		assert.NotNil(t, handler)
 		assert.Equal(t, "https://npm.example.com", handler.npmRegistry)
 		assert.Equal(t, "https://jsr.example.com", handler.jsrRegistry)
@@ -34,7 +35,7 @@ func TestNewHandler(t *testing.T) {
 
 func TestHandler_SetScheduler(t *testing.T) {
 	t.Run("sets scheduler reference", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 		assert.Nil(t, handler.scheduler)
 
 		scheduler := &Scheduler{}
@@ -46,7 +47,7 @@ func TestHandler_SetScheduler(t *testing.T) {
 
 func TestHandler_GetRuntime(t *testing.T) {
 	t.Run("returns runtime instance", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 		runtime := handler.GetRuntime()
 		assert.NotNil(t, runtime)
 	})
@@ -54,42 +55,42 @@ func TestHandler_GetRuntime(t *testing.T) {
 
 func TestHandler_GetPublicURL(t *testing.T) {
 	t.Run("returns configured public URL", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "https://api.example.com", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "https://api.example.com", "", "", nil, nil, nil, nil)
 		assert.Equal(t, "https://api.example.com", handler.GetPublicURL())
 	})
 }
 
 func TestHandler_GetFunctionsDir(t *testing.T) {
 	t.Run("returns configured functions directory", func(t *testing.T) {
-		handler := NewHandler(nil, "/custom/path", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/custom/path", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 		assert.Equal(t, "/custom/path", handler.GetFunctionsDir())
 	})
 }
 
 func TestHandler_createBundler(t *testing.T) {
 	t.Run("creates bundler without custom registries", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 		bundler, err := handler.createBundler()
 		require.NoError(t, err)
 		assert.NotNil(t, bundler)
 	})
 
 	t.Run("creates bundler with npm registry", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "https://npm.example.com", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "https://npm.example.com", "", nil, nil, nil, nil)
 		bundler, err := handler.createBundler()
 		require.NoError(t, err)
 		assert.NotNil(t, bundler)
 	})
 
 	t.Run("creates bundler with jsr registry", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "https://jsr.example.com", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "https://jsr.example.com", nil, nil, nil, nil)
 		bundler, err := handler.createBundler()
 		require.NoError(t, err)
 		assert.NotNil(t, bundler)
 	})
 
 	t.Run("creates bundler with both registries", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "https://npm.example.com", "https://jsr.example.com", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "https://npm.example.com", "https://jsr.example.com", nil, nil, nil, nil)
 		bundler, err := handler.createBundler()
 		require.NoError(t, err)
 		assert.NotNil(t, bundler)
@@ -102,7 +103,7 @@ func TestHandler_createBundler(t *testing.T) {
 
 func TestHandler_handleLogMessage(t *testing.T) {
 	t.Run("handles log without counter", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 		execID := uuid.New()
 
 		// Should not panic when no counter exists
@@ -110,7 +111,7 @@ func TestHandler_handleLogMessage(t *testing.T) {
 	})
 
 	t.Run("increments counter when exists", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 		execID := uuid.New()
 
 		// Set up counter
@@ -125,7 +126,7 @@ func TestHandler_handleLogMessage(t *testing.T) {
 	})
 
 	t.Run("handles invalid counter type", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 		execID := uuid.New()
 
 		// Store invalid type
@@ -1062,7 +1063,7 @@ func TestAdminExecution_Struct(t *testing.T) {
 
 func TestHandler_SetSettingsSecretsService(t *testing.T) {
 	t.Run("sets settings secrets service", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 		assert.Nil(t, handler.settingsSecretsService)
 
 		// Note: We can't create a real SecretsService without a database,
@@ -1078,14 +1079,14 @@ func TestHandler_SetSettingsSecretsService(t *testing.T) {
 
 func TestHandler_loadSettingsSecrets(t *testing.T) {
 	t.Run("returns nil when service is nil", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 
 		result := handler.loadSettingsSecrets(context.TODO(), nil)
 		assert.Nil(t, result)
 	})
 
 	t.Run("returns nil when service is nil with user ID", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 
 		userID := uuid.New()
 		result := handler.loadSettingsSecrets(context.TODO(), &userID)
@@ -1108,7 +1109,7 @@ func TestHandler_CORSConfig(t *testing.T) {
 			ExposedHeaders:   []string{"X-Request-Id"},
 		}
 
-		handler := NewHandler(nil, "/tmp/functions", corsConfig, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", corsConfig, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 
 		assert.Equal(t, []string{"https://example.com"}, handler.corsConfig.AllowedOrigins)
 		assert.Equal(t, []string{"GET", "POST"}, handler.corsConfig.AllowedMethods)
@@ -1123,7 +1124,7 @@ func TestHandler_CORSConfig(t *testing.T) {
 
 func TestHandler_LogCounters(t *testing.T) {
 	t.Run("log counters are thread-safe", func(t *testing.T) {
-		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil)
+		handler := NewHandler(nil, "/tmp/functions", config.CORSConfig{}, "secret", "http://localhost", "", "", nil, nil, nil, nil)
 
 		// Run concurrent operations
 		done := make(chan bool)

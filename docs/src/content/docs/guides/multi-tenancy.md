@@ -21,19 +21,19 @@ graph TD
         A[Instance Admin] --> B[platform.tenants]
         A --> C[platform.service_keys]
     end
-    
+
     subgraph "Tenant Level"
         D[Tenant Admin] --> E[Tenant A]
         D --> F[Tenant B]
     end
-    
+
     subgraph "Data Isolation"
         E --> G[RLS Policies]
         F --> G
         G --> H[Tenant A Data Only]
         G --> I[Tenant B Data Only]
     end
-    
+
     B --> E
     B --> F
 ```
@@ -46,14 +46,14 @@ A tenant represents an organization or customer in your SaaS application:
 
 ```typescript
 interface Tenant {
-  id: string // UUID
-  slug: string // URL-friendly identifier
-  name: string // Display name
-  is_default: boolean // Whether this is the default tenant
-  metadata: Record<string, any> | null // Custom metadata
-  created_at: string
-  updated_at: string
-  deleted_at: string | null // Soft delete
+  id: string; // UUID
+  slug: string; // URL-friendly identifier
+  name: string; // Display name
+  is_default: boolean; // Whether this is the default tenant
+  metadata: Record<string, any> | null; // Custom metadata
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null; // Soft delete
 }
 ```
 
@@ -61,28 +61,28 @@ interface Tenant {
 
 Fluxbase supports multiple key types for different use cases:
 
-| Key Type | Scope | Use Case |
-|----------|-------|----------|
-| `anon` | Global | Anonymous/public access, no tenant context |
-| `publishable` | User-scoped | User-specific operations, inherits user's tenant |
-| `tenant_service` | Tenant | Backend services for a specific tenant |
-| `global_service` | Instance | Platform-wide operations, bypasses RLS |
+| Key Type         | Scope       | Use Case                                         |
+| ---------------- | ----------- | ------------------------------------------------ |
+| `anon`           | Global      | Anonymous/public access, no tenant context       |
+| `publishable`    | User-scoped | User-specific operations, inherits user's tenant |
+| `tenant_service` | Tenant      | Backend services for a specific tenant           |
+| `global_service` | Instance    | Platform-wide operations, bypasses RLS           |
 
 ## Tenant Service Keys
 
 Tenant service keys are scoped to a specific tenant and automatically enforce tenant isolation:
 
 ```typescript
-import { createClient } from '@nimbleflux/fluxbase-sdk'
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 // Tenant-scoped client - all operations are isolated to tenant
 const tenantClient = createClient(
-  'http://localhost:8080',
-  'tenant-service-key-here'
-)
+  "http://localhost:8080",
+  "tenant-service-key-here",
+);
 
 // This query only returns data for the key's tenant
-const users = await tenantClient.from('users').select('*')
+const users = await tenantClient.from("users").select("*");
 ```
 
 ### Creating Tenant Service Keys
@@ -92,12 +92,12 @@ Use the Admin SDK to create tenant-scoped keys:
 ```typescript
 // Create a tenant service key
 const key = await client.admin.createServiceKey({
-  tenant_id: 'tenant-uuid',
-  name: 'Production API Key',
-  key_type: 'tenant_service',
-  scopes: ['rest:read', 'rest:write'],
-  allowed_namespaces: ['public', 'app']
-})
+  tenant_id: "tenant-uuid",
+  name: "Production API Key",
+  key_type: "tenant_service",
+  scopes: ["rest:read", "rest:write"],
+  allowed_namespaces: ["public", "app"],
+});
 ```
 
 ### Key Rotation
@@ -106,10 +106,10 @@ Service keys support graceful rotation:
 
 ```typescript
 // Deprecate old key with grace period
-await client.admin.deprecateServiceKey('old-key-id', {
+await client.admin.deprecateServiceKey("old-key-id", {
   grace_period_hours: 24,
-  replacement_key_id: 'new-key-id'
-})
+  replacement_key_id: "new-key-id",
+});
 
 // During grace period, both keys work
 // After grace period, old key is revoked
@@ -194,18 +194,18 @@ Values are resolved in this order (highest priority last):
 
 The following configuration sections can be overridden per-tenant:
 
-| Section | Description |
-| ------- | ----------- |
-| `auth` | JWT secret, expiry, OAuth providers |
-| `storage` | Provider (local/S3), bucket, region |
-| `email` | Provider (SMTP/SES/SendGrid), from address |
-| `functions` | Timeout, memory limits |
-| `jobs` | Worker count, queue settings |
-| `ai` | Model, embedding settings |
-| `realtime` | WebSocket connection limits |
-| `api` | Page size limits |
-| `graphql` | Query depth limits |
-| `rpc` | Procedure execution limits |
+| Section     | Description                                |
+| ----------- | ------------------------------------------ |
+| `auth`      | JWT secret, expiry, OAuth providers        |
+| `storage`   | Provider (local/S3), bucket, region        |
+| `email`     | Provider (SMTP/SES/SendGrid), from address |
+| `functions` | Timeout, memory limits                     |
+| `jobs`      | Worker count, queue settings               |
+| `ai`        | Model, embedding settings                  |
+| `realtime`  | WebSocket connection limits                |
+| `api`       | Page size limits                           |
+| `graphql`   | Query depth limits                         |
+| `rpc`       | Procedure execution limits                 |
 
 Instance-level settings (database, server, CORS, metrics, logging) remain global.
 
@@ -231,7 +231,7 @@ tenants:
   configs:
     acme-corp:
       auth:
-        jwt_secret: "${ACME_JWT_SECRET}"  # From environment variable
+        jwt_secret: "${ACME_JWT_SECRET}" # From environment variable
         jwt_expiry: "30m"
       storage:
         provider: "s3"
@@ -244,7 +244,7 @@ tenants:
       auth:
         jwt_expiry: "1h"
       functions:
-        default_timeout: 60  # seconds
+        default_timeout: 60 # seconds
 ```
 
 ### Tenant Config Files
@@ -254,7 +254,7 @@ For GitOps-friendly workflows, store tenant configs in separate YAML files:
 ```yaml
 # fluxbase.yaml
 tenants:
-  config_dir: "./tenants"  # Load tenants/*.yaml files
+  config_dir: "./tenants" # Load tenants/*.yaml files
 ```
 
 ```yaml
@@ -292,7 +292,7 @@ Tenant config files support `${VAR_NAME}` syntax for environment variable expans
 ```yaml
 config:
   auth:
-    jwt_secret: "${JWT_SECRET}"  # Replaced with JWT_SECRET env var
+    jwt_secret: "${JWT_SECRET}" # Replaced with JWT_SECRET env var
   storage:
     s3_access_key: "${AWS_ACCESS_KEY_ID}"
     s3_secret_key: "${AWS_SECRET_ACCESS_KEY}"
@@ -342,31 +342,31 @@ tenants:
 ### Tenant Management
 
 ```typescript
-import { createClient } from '@nimbleflux/fluxbase-sdk'
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = createClient('http://localhost:8080', 'global-service-key')
+const client = createClient("http://localhost:8080", "global-service-key");
 
 // List all tenants
-const tenants = await client.admin.listTenants()
+const tenants = await client.admin.listTenants();
 
 // Create a new tenant
 const tenant = await client.admin.createTenant({
-  slug: 'acme-corp',
-  name: 'Acme Corporation',
+  slug: "acme-corp",
+  name: "Acme Corporation",
   metadata: {
-    plan: 'enterprise',
-    billing_email: 'billing@acme.com'
-  }
-})
+    plan: "enterprise",
+    billing_email: "billing@acme.com",
+  },
+});
 
 // Update tenant
 await client.admin.updateTenant(tenant.id, {
-  name: 'Acme Corp Inc.',
-  metadata: { plan: 'pro' }
-})
+  name: "Acme Corp Inc.",
+  metadata: { plan: "pro" },
+});
 
 // Soft delete tenant
-await client.admin.deleteTenant(tenant.id)
+await client.admin.deleteTenant(tenant.id);
 ```
 
 ### Service Key Management
@@ -374,24 +374,24 @@ await client.admin.deleteTenant(tenant.id)
 ```typescript
 // List keys for a tenant
 const keys = await client.admin.listServiceKeys({
-  tenant_id: 'tenant-uuid'
-})
+  tenant_id: "tenant-uuid",
+});
 
 // Create tenant service key
 const key = await client.admin.createServiceKey({
-  tenant_id: 'tenant-uuid',
-  name: 'Backend Service',
-  key_type: 'tenant_service',
-  scopes: ['rest:read', 'rest:write', 'storage:read', 'storage:write']
-})
+  tenant_id: "tenant-uuid",
+  name: "Backend Service",
+  key_type: "tenant_service",
+  scopes: ["rest:read", "rest:write", "storage:read", "storage:write"],
+});
 
 // Revoke a key
-await client.admin.revokeServiceKey(key.id, 'Security incident')
+await client.admin.revokeServiceKey(key.id, "Security incident");
 
 // Rotate keys
 const newKey = await client.admin.rotateServiceKey(oldKeyId, {
-  grace_period_hours: 48
-})
+  grace_period_hours: 48,
+});
 ```
 
 ### Tenant Context in Queries
@@ -400,15 +400,15 @@ When using a tenant service key, all queries are automatically scoped:
 
 ```typescript
 // With tenant service key
-const tenantClient = createClient('http://localhost:8080', 'tenant-key')
+const tenantClient = createClient("http://localhost:8080", "tenant-key");
 
 // Only returns users for this tenant
-const users = await tenantClient.from('users').select('*')
+const users = await tenantClient.from("users").select("*");
 
 // Inserts are automatically associated with tenant
 const { data, error } = await tenantClient
-  .from('posts')
-  .insert({ title: 'Hello', content: 'World' })
+  .from("posts")
+  .insert({ title: "Hello", content: "World" });
 // tenant_id is set automatically via RLS WITH CHECK policy
 ```
 
@@ -434,7 +434,7 @@ WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
 All tenant-scoped tables should have a `tenant_id` column:
 
 ```sql
-ALTER TABLE your_table 
+ALTER TABLE your_table
 ADD COLUMN tenant_id UUID REFERENCES platform.tenants(id) ON DELETE CASCADE;
 
 CREATE INDEX idx_your_table_tenant_id ON your_table(tenant_id);
@@ -540,6 +540,72 @@ CREATE TABLE platform.tenant_admin_assignments (
 1. **Use tenant admins** - Limit instance admin access
 2. **Audit admin actions** - Log all administrative operations
 3. **Regular access reviews** - Review tenant admin assignments periodically
+
+## Instance-Level Settings & Tenant Settings
+
+Fluxbase supports a hierarchical settings system where instance-level settings can be overridden at the tenant level.
+
+### Settings Hierarchy
+
+Values are resolved in this order (highest priority last):
+
+1. **Hardcoded defaults** - Built-in default values
+2. **Config file** - `fluxbase.yaml` configuration
+3. **Instance settings (database)** - Stored in `platform.instance_settings`
+4. **Tenant settings (database)** - Stored in `platform.tenant_settings`
+
+### Overridable Settings
+
+Instance admins can control which settings tenants are allowed to override using the `overridable_settings` column in `platform.instance_settings`.
+
+```sql
+-- View instance settings with override flags
+SELECT * FROM platform.instance_settings;
+
+-- Configure which settings can be overridden
+UPDATE platform.instance_settings
+SET overridable_settings = ARRAY['storage.max_upload_size', 'email.from_address'];
+```
+
+When a setting is marked as overridable, tenants can customize their value:
+
+```sql
+-- Set tenant-specific setting
+INSERT INTO platform.tenant_settings (tenant_id, path, value)
+VALUES ('tenant-uuid', 'storage.max_upload_size', 104857600);
+
+-- Get effective setting (resolves tenant override)
+SELECT * FROM platform.get_effective_setting('tenant-uuid', 'storage.max_upload_size');
+```
+
+Settings not in `overridable_settings` cannot be changed at the tenant level.
+
+### Managing Settings via API
+
+```typescript
+// Get tenant settings
+const settings = await client.admin.getTenantSettings("tenant-uuid");
+
+// Update tenant setting
+await client.admin.updateTenantSettings("tenant-uuid", {
+  settings: {
+    "storage.max_upload_size": 104857600,
+    "email.from_address": "noreply@tenant.com",
+  },
+});
+
+// Reset to instance default
+await client.admin.resetTenantSetting("tenant-uuid", "storage.max_upload_size");
+```
+
+### Settings in Admin UI
+
+Navigate to **Tenants > [Tenant Name] > Settings** tab to manage tenant-specific settings:
+
+- View all settings with source badges (Instance/Tenant)
+- Edit overridable settings
+- Reset settings to instance defaults
+- Lock non-overridable settings
 
 ## Troubleshooting
 

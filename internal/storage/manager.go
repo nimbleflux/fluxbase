@@ -4,9 +4,10 @@ import (
 	"context"
 	"sync"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/observability"
-	"github.com/rs/zerolog/log"
 )
 
 // Manager manages tenant-specific storage services

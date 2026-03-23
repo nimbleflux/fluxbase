@@ -4,9 +4,10 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // TestQueryParser_AdditionalOperators tests operators not covered in existing tests

@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/api/routes"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
@@ -668,34 +669,86 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 		ListFunctionNamespaces: s.functionsHandler.ListNamespaces,
 		ListAllExecutions:      s.functionsHandler.ListAllExecutions,
 		GetExecutionLogs:       s.functionsHandler.GetExecutionLogs,
-		ListJobNamespaces:      nil,
-		ListJobFunctions:       nil,
-		GetJobFunction:         nil,
-		DeleteJobFunction:      nil,
-		GetJobStats:            nil,
-		ListWorkers:            nil,
-		ListAllJobs:            nil,
-		GetJobAdmin:            nil,
-		TerminateJob:           nil,
-		CancelJobAdmin:         nil,
-		RetryJobAdmin:          nil,
-		ResubmitJobAdmin:       nil,
-		ListChatbots:           nil,
-		GetChatbot:             nil,
-		ToggleChatbot:          nil,
-		UpdateChatbot:          nil,
-		DeleteChatbot:          nil,
-		GetAIMetrics:           nil,
-		SyncFunctions:          nil,
-		SyncJobs:               nil,
-		SyncChatbots:           nil,
-		SyncProcedures:         nil,
+		ListJobNamespaces:      s.jobsHandler.ListNamespaces,
+		ListJobFunctions:       s.jobsHandler.ListJobFunctions,
+		GetJobFunction:         s.jobsHandler.GetJobFunction,
+		DeleteJobFunction:      s.jobsHandler.DeleteJobFunction,
+		GetJobStats:            s.jobsHandler.GetJobStats,
+		ListWorkers:            s.jobsHandler.ListWorkers,
+		ListAllJobs:            s.jobsHandler.ListAllJobs,
+		GetJobAdmin:            s.jobsHandler.GetJobAdmin,
+		TerminateJob:           s.jobsHandler.TerminateJob,
+		CancelJobAdmin:         s.jobsHandler.CancelJobAdmin,
+		RetryJobAdmin:          s.jobsHandler.RetryJobAdmin,
+		ResubmitJobAdmin:       s.jobsHandler.ResubmitJobAdmin,
+		ListChatbots:           s.aiHandler.ListChatbots,
+		GetChatbot:             s.aiHandler.GetChatbot,
+		ToggleChatbot:          s.aiHandler.ToggleChatbot,
+		UpdateChatbot:          s.aiHandler.UpdateChatbot,
+		DeleteChatbot:          s.aiHandler.DeleteChatbot,
+		GetAIMetrics:           s.aiHandler.GetAIMetrics,
+		SyncFunctions:          s.functionsHandler.SyncFunctions,
+		SyncJobs:               s.jobsHandler.SyncJobs,
+		SyncChatbots:           s.aiHandler.SyncChatbots,
+		SyncProcedures:         s.rpcHandler.SyncProcedures,
 		RefreshSchema:          s.handleRefreshSchema,
-		ListLogs:               nil,
-		GetLogStats:            nil,
-		GetExecutionLogsAdmin:  nil,
-		FlushLogs:              nil,
-		GenerateTestLogs:       nil,
+		ListLogs:               s.loggingHandler.QueryLogs,
+		GetLogStats:            s.loggingHandler.GetLogStats,
+		GetExecutionLogsAdmin:  s.loggingHandler.GetExecutionLogs,
+		FlushLogs:              s.loggingHandler.FlushLogs,
+		GenerateTestLogs:       s.loggingHandler.GenerateTestLogs,
+
+		// Instance Settings
+		GetInstanceSettings:       s.instanceSettingsHandler.GetInstanceSettings,
+		UpdateInstanceSettings:    s.instanceSettingsHandler.UpdateInstanceSettings,
+		GetOverridableSettings:    s.instanceSettingsHandler.GetOverridableSettings,
+		UpdateOverridableSettings: s.instanceSettingsHandler.UpdateOverridableSettings,
+
+		// Extensions (instance-level)
+		ListExtensions:   s.extensionsHandler.ListExtensions,
+		GetExtension:     s.extensionsHandler.GetExtensionStatus,
+		EnableExtension:  s.extensionsHandler.EnableExtension,
+		DisableExtension: s.extensionsHandler.DisableExtension,
+		SyncExtensions:   s.extensionsHandler.SyncExtensions,
+
+		// AI Admin
+		ListAIProviders:            s.aiHandler.ListProviders,
+		ListAIConversations:        s.aiHandler.GetConversations,
+		GetAIConversationMessages:  s.aiHandler.GetConversationMessages,
+		GetAIAuditLog:              s.aiHandler.GetAuditLog,
+		ListExportableTables:       s.knowledgeBaseHandler.ListExportableTables,
+		GetExportableTableDetails:  s.knowledgeBaseHandler.GetTableDetails,
+		ExportTableToKnowledgeBase: s.knowledgeBaseHandler.ExportTableToKnowledgeBase,
+
+		// RPC Admin
+		ListRPCNamespaces:   s.rpcHandler.ListNamespaces,
+		ListProcedures:      s.rpcHandler.ListProcedures,
+		GetProcedure:        s.rpcHandler.GetProcedure,
+		UpdateProcedure:     s.rpcHandler.UpdateProcedure,
+		DeleteProcedure:     s.rpcHandler.DeleteProcedure,
+		ListRPCExecutions:   s.rpcHandler.ListExecutions,
+		GetRPCExecution:     s.rpcHandler.GetExecution,
+		GetRPCExecutionLogs: s.rpcHandler.GetExecutionLogs,
+		CancelRPCExecution:  s.rpcHandler.CancelExecution,
+
+		// Schema/RLS/Policy
+		GetSchemaGraph:        s.GetSchemaGraph,
+		GetTableRelationships: s.GetTableRelationships,
+		GetTablesWithRLS:      s.GetTablesWithRLS,
+		GetTableRLSStatus:     s.GetTableRLSStatus,
+		ToggleTableRLS:        s.ToggleTableRLS,
+		ListPolicies:          s.ListPolicies,
+		CreatePolicy:          s.CreatePolicy,
+		UpdatePolicy:          s.UpdatePolicy,
+		DeletePolicy:          s.DeletePolicy,
+		GetPolicyTemplates:    s.GetPolicyTemplates,
+		GetSecurityWarnings:   s.GetSecurityWarnings,
+
+		// Tenant Settings
+		GetTenantSettings:    s.tenantSettingsHandler.GetTenantSettings,
+		UpdateTenantSettings: s.tenantSettingsHandler.UpdateTenantSettings,
+		DeleteTenantSetting:  s.tenantSettingsHandler.DeleteTenantSetting,
+		GetTenantSetting:     s.tenantSettingsHandler.GetTenantSetting,
 	}
 }
 

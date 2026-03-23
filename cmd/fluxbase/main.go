@@ -14,14 +14,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/api"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/keys"
 	"github.com/nimbleflux/fluxbase/internal/storage"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -137,6 +138,7 @@ func main() {
 			os.Exit(1)
 		}
 		log.Info().Msg("Database connection test successful")
+		db.Close() // Close connection after test
 
 		log.Info().Msg("All validation checks passed")
 		if cleanupVips != nil {
@@ -154,13 +156,6 @@ func main() {
 		log.Error().Err(err).Msg("Failed to connect to database after multiple attempts")
 		os.Exit(1)
 	}
-
-	// Defer database close - must be after db is created and before any os.Exit calls
-	// This ensures database is closed on shutdown
-	defer func() {
-		log.Debug().Msg("Closing database connection...")
-		db.Close()
-	}()
 
 	// Run migrations
 	log.Info().Msg("Running database migrations...")
@@ -329,6 +324,11 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error().Err(err).Msg("Graceful shutdown failed")
 	}
+
+	// Close database connection AFTER server shutdown completes
+	// This ensures all workers and background services have stopped
+	log.Debug().Msg("Closing database connection...")
+	db.Close()
 
 	log.Info().Msg("Server exited")
 

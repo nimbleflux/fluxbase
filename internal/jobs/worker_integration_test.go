@@ -5,10 +5,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/nimbleflux/fluxbase/internal/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/runtime"
 )
 
 // =============================================================================
@@ -23,7 +24,7 @@ func TestWorker_ExecuteJob_Properties(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 		}
 		storage := NewStorage(nil)
-		worker := NewWorker(cfg, storage, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, storage, "secret", "http://localhost", nil, nil, nil)
 
 		assert.NotNil(t, worker.Storage)
 		assert.NotNil(t, worker.Runtime)
@@ -34,7 +35,7 @@ func TestWorker_ExecuteJob_Properties(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Simulate adding a job to currentJobs
 		jobID := uuid.New()
@@ -70,7 +71,7 @@ func TestWorker_ProgressUpdate(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		jobID := uuid.New()
 		lineCounter := 0
@@ -93,7 +94,7 @@ func TestWorker_ProgressUpdate(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		jobID := uuid.New()
 		startTime := time.Now()
@@ -122,7 +123,7 @@ func TestWorker_LogHandling(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		jobID := uuid.New()
 
@@ -183,7 +184,7 @@ func TestWorker_Configuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			worker := NewWorker(tt.config, nil, "secret", "http://localhost", nil)
+			worker := NewWorker(tt.config, nil, "secret", "http://localhost", nil, nil, nil)
 
 			assert.Equal(t, tt.config, worker.Config)
 			assert.Equal(t, tt.config.MaxConcurrentPerWorker, worker.MaxConcurrent)
@@ -200,7 +201,7 @@ func TestWorker_SecretsLoading(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// SecretsStorage can be nil (nil was passed)
 		assert.Nil(t, worker.SecretsStorage)
@@ -216,7 +217,7 @@ func TestWorker_SettingsSecrets(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.Nil(t, worker.SettingsSecretsService)
 	})
@@ -225,7 +226,7 @@ func TestWorker_SettingsSecrets(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// SettingsSecretsService is a public field that can be set
 		// Initially nil since none was provided
@@ -242,7 +243,7 @@ func TestWorker_JobCountTracking(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 100,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Run concurrent increments
 		done := make(chan bool)
@@ -280,7 +281,7 @@ func TestWorker_ShutdownFlow(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.NotNil(t, worker.shutdownChan)
 		assert.NotNil(t, worker.shutdownComplete)
@@ -305,7 +306,7 @@ func TestWorker_ShutdownFlow(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Initially not draining
 		assert.False(t, worker.isDraining())
@@ -332,7 +333,7 @@ func TestWorker_Identification(t *testing.T) {
 
 		ids := make(map[uuid.UUID]bool)
 		for i := 0; i < 100; i++ {
-			worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+			worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 			if ids[worker.ID] {
 				t.Errorf("Duplicate worker ID generated: %s", worker.ID.String())
 			}
@@ -346,7 +347,7 @@ func TestWorker_Identification(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Name should contain "worker-" prefix
 		assert.Contains(t, worker.Name, "worker-")
@@ -370,7 +371,7 @@ func TestWorker_RuntimeConfiguration(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 			DefaultMaxDuration:     30 * time.Minute,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.NotNil(t, worker.Runtime)
 	})
@@ -387,7 +388,7 @@ func TestWorker_RuntimeConfiguration(t *testing.T) {
 		}
 
 		for _, url := range testURLs {
-			worker := NewWorker(cfg, nil, "secret", url, nil)
+			worker := NewWorker(cfg, nil, "secret", url, nil, nil, nil)
 			assert.Equal(t, url, worker.publicURL)
 		}
 	})
@@ -404,7 +405,7 @@ func TestWorker_MemoryLimits(t *testing.T) {
 			MaxConcurrentPerWorker: 5,
 			DefaultMaxDuration:     30 * time.Minute,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// The runtime is created with a default memory limit
 		// We can't directly test the runtime's memory limit without accessing private fields
@@ -420,7 +421,7 @@ func TestWorker_MemoryLimits(t *testing.T) {
 func TestWorker_EdgeCases(t *testing.T) {
 	t.Run("worker with nil config", func(t *testing.T) {
 		// This should still create a worker, just with nil/zero values
-		worker := NewWorker(nil, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(nil, nil, "secret", "http://localhost", nil, nil, nil)
 
 		assert.NotNil(t, worker)
 		assert.NotEqual(t, uuid.Nil, worker.ID)
@@ -433,7 +434,7 @@ func TestWorker_EdgeCases(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "", "http://localhost", nil, nil, nil)
 
 		assert.NotNil(t, worker)
 		assert.NotNil(t, worker.Runtime)
@@ -443,7 +444,7 @@ func TestWorker_EdgeCases(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "", nil)
+		worker := NewWorker(cfg, nil, "secret", "", nil, nil, nil)
 
 		assert.NotNil(t, worker)
 		assert.Equal(t, "", worker.publicURL)
@@ -489,7 +490,7 @@ func TestWorker_Timeouts(t *testing.T) {
 				GracefulShutdownTimeout: tt.gracefulShutdownTimeout,
 				DefaultProgressTimeout:  tt.defaultProgressTimeout,
 			}
-			worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+			worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 			assert.NotNil(t, worker)
 			// The actual timeout calculation happens in Start(), which we can't test
@@ -508,7 +509,7 @@ func TestWorker_ConcurrentAccess(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 100,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Simulate concurrent job additions/removals
 		done := make(chan bool)
@@ -548,7 +549,7 @@ func TestWorker_CancelJob_Actual(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		jobID := uuid.New()
 
@@ -581,7 +582,7 @@ func TestWorker_CancelJob_Actual(t *testing.T) {
 		cfg := &config.JobsConfig{
 			MaxConcurrentPerWorker: 5,
 		}
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 		// Should not panic
 		worker.cancelJob(uuid.New())
@@ -610,7 +611,7 @@ func TestWorker_PollInterval(t *testing.T) {
 				PollInterval:  tt.interval,
 				WorkerTimeout: 5 * time.Minute,
 			}
-			worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+			worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 			assert.Equal(t, tt.interval, worker.Config.PollInterval)
 		})
@@ -630,7 +631,7 @@ func BenchmarkWorker_NewWorker(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 	}
 }
 
@@ -638,7 +639,7 @@ func BenchmarkWorker_JobCountOperations(b *testing.B) {
 	cfg := &config.JobsConfig{
 		MaxConcurrentPerWorker: 100,
 	}
-	worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+	worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -651,7 +652,7 @@ func BenchmarkWorker_HasCapacity(b *testing.B) {
 	cfg := &config.JobsConfig{
 		MaxConcurrentPerWorker: 50,
 	}
-	worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+	worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

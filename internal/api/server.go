@@ -16,6 +16,8 @@ import (
 	"github.com/gofiber/storage/memory/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/adminui"
 	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/auth"
@@ -44,82 +46,84 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/nimbleflux/fluxbase/internal/tenantdb"
 	"github.com/nimbleflux/fluxbase/internal/webhook"
-	"github.com/rs/zerolog/log"
 )
 
 // Server represents the HTTP server
 type Server struct {
-	app                    *fiber.App
-	config                 *config.Config
-	db                     *database.Connection
-	tracer                 *observability.Tracer
-	rest                   *RESTHandler
-	authHandler            *AuthHandler
-	adminAuthHandler       *AdminAuthHandler
-	dashboardAuthHandler   *DashboardAuthHandler
-	clientKeyService       *auth.ClientKeyService // Added for service-wide access
-	clientKeyHandler       *ClientKeyHandler
-	storageHandler         *StorageHandler
-	webhookHandler         *WebhookHandler
-	monitoringHandler      *MonitoringHandler
-	userManagementHandler  *UserManagementHandler
-	quotaHandler           *QuotaHandler
-	invitationHandler      *InvitationHandler
-	ddlHandler             *DDLHandler
-	oauthProviderHandler   *OAuthProviderHandler
-	oauthHandler           *OAuthHandler
-	samlProviderHandler    *SAMLProviderHandler
-	samlService            *auth.SAMLService
-	adminSessionHandler    *AdminSessionHandler
-	systemSettingsHandler  *SystemSettingsHandler
-	customSettingsHandler  *CustomSettingsHandler
-	userSettingsHandler    *UserSettingsHandler
-	appSettingsHandler     *AppSettingsHandler
-	settingsHandler        *SettingsHandler
-	secretsService         *settings.SecretsService
-	emailTemplateHandler   *EmailTemplateHandler
-	emailSettingsHandler   *EmailSettingsHandler
-	captchaSettingsHandler *CaptchaSettingsHandler
-	sqlHandler             *SQLHandler
-	functionsHandler       *functions.Handler
-	functionsScheduler     *functions.Scheduler
-	jobsHandler            *jobs.Handler
-	jobsManager            *jobs.Manager
-	jobsScheduler          *jobs.Scheduler
-	migrationsHandler      *migrations.Handler
-	realtimeManager        *realtime.Manager
-	realtimeHandler        *realtime.RealtimeHandler
-	realtimeListener       realtime.RealtimeListener
-	realtimeAdminHandler   *RealtimeAdminHandler
-	webhookTriggerService  *webhook.TriggerService
-	aiHandler              *ai.Handler
-	aiChatHandler          *ai.ChatHandler
-	aiConversations        *ai.ConversationManager
-	aiMetrics              *observability.Metrics
-	knowledgeBaseHandler   *ai.KnowledgeBaseHandler
-	kbStorage              *ai.KnowledgeBaseStorage
-	docProcessor           *ai.DocumentProcessor
-	tableExportSyncService *ai.TableExportSyncService
-	rpcHandler             *rpc.Handler
-	rpcScheduler           *rpc.Scheduler
-	graphqlHandler         *GraphQLHandler
-	extensionsHandler      *extensions.Handler
-	vectorManager          *VectorManager
-	vectorHandler          *VectorHandler
-	loggingService         *logging.Service
-	loggingHandler         *LoggingHandler
-	retentionService       *logging.RetentionService
-	schemaCache            *database.SchemaCache
-	secretsHandler         *secrets.Handler
-	secretsStorage         *secrets.Storage
-	serviceKeyHandler      *ServiceKeyHandler
-	tenantHandler          *TenantHandler
-	schemaExportHandler    *SchemaExportHandler
-	mcpHandler             *mcp.Handler
-	mcpOAuthHandler        *MCPOAuthHandler
-	customMCPManager       *custom.Manager
-	customMCPHandler       *CustomMCPHandler
-	internalAIHandler      *InternalAIHandler
+	app                     *fiber.App
+	config                  *config.Config
+	db                      *database.Connection
+	tracer                  *observability.Tracer
+	rest                    *RESTHandler
+	authHandler             *AuthHandler
+	adminAuthHandler        *AdminAuthHandler
+	dashboardAuthHandler    *DashboardAuthHandler
+	clientKeyService        *auth.ClientKeyService // Added for service-wide access
+	clientKeyHandler        *ClientKeyHandler
+	storageHandler          *StorageHandler
+	webhookHandler          *WebhookHandler
+	monitoringHandler       *MonitoringHandler
+	userManagementHandler   *UserManagementHandler
+	quotaHandler            *QuotaHandler
+	invitationHandler       *InvitationHandler
+	ddlHandler              *DDLHandler
+	oauthProviderHandler    *OAuthProviderHandler
+	oauthHandler            *OAuthHandler
+	samlProviderHandler     *SAMLProviderHandler
+	samlService             *auth.SAMLService
+	adminSessionHandler     *AdminSessionHandler
+	systemSettingsHandler   *SystemSettingsHandler
+	customSettingsHandler   *CustomSettingsHandler
+	userSettingsHandler     *UserSettingsHandler
+	appSettingsHandler      *AppSettingsHandler
+	settingsHandler         *SettingsHandler
+	secretsService          *settings.SecretsService
+	emailTemplateHandler    *EmailTemplateHandler
+	emailSettingsHandler    *EmailSettingsHandler
+	captchaSettingsHandler  *CaptchaSettingsHandler
+	sqlHandler              *SQLHandler
+	functionsHandler        *functions.Handler
+	functionsScheduler      *functions.Scheduler
+	jobsHandler             *jobs.Handler
+	jobsManager             *jobs.Manager
+	jobsScheduler           *jobs.Scheduler
+	migrationsHandler       *migrations.Handler
+	realtimeManager         *realtime.Manager
+	realtimeHandler         *realtime.RealtimeHandler
+	realtimeListener        realtime.RealtimeListener
+	realtimeAdminHandler    *RealtimeAdminHandler
+	webhookTriggerService   *webhook.TriggerService
+	aiHandler               *ai.Handler
+	aiChatHandler           *ai.ChatHandler
+	aiConversations         *ai.ConversationManager
+	aiMetrics               *observability.Metrics
+	knowledgeBaseHandler    *ai.KnowledgeBaseHandler
+	kbStorage               *ai.KnowledgeBaseStorage
+	docProcessor            *ai.DocumentProcessor
+	tableExportSyncService  *ai.TableExportSyncService
+	rpcHandler              *rpc.Handler
+	rpcScheduler            *rpc.Scheduler
+	graphqlHandler          *GraphQLHandler
+	extensionsHandler       *extensions.Handler
+	vectorManager           *VectorManager
+	vectorHandler           *VectorHandler
+	loggingService          *logging.Service
+	loggingHandler          *LoggingHandler
+	retentionService        *logging.RetentionService
+	schemaCache             *database.SchemaCache
+	secretsHandler          *secrets.Handler
+	secretsStorage          *secrets.Storage
+	serviceKeyHandler       *ServiceKeyHandler
+	tenantHandler           *TenantHandler
+	instanceSettingsHandler *InstanceSettingsHandler
+	tenantSettingsHandler   *TenantSettingsHandler
+	unifiedSettingsService  *settings.UnifiedService
+	schemaExportHandler     *SchemaExportHandler
+	mcpHandler              *mcp.Handler
+	mcpOAuthHandler         *MCPOAuthHandler
+	customMCPManager        *custom.Manager
+	customMCPHandler        *CustomMCPHandler
+	internalAIHandler       *InternalAIHandler
 
 	// Database branching components
 	branchManager   *branching.Manager
@@ -233,7 +237,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 
 	// Initialize email manager (handles dynamic refresh from settings)
 	// The settings cache and secrets service will be injected later once they're initialized
-	emailManager := email.NewManager(&cfg.Email, nil, nil)
+	emailManager := email.NewManager(&cfg.Email, nil, nil, cfg)
 	// Get a service wrapper that delegates to the manager's current service
 	emailService := emailManager.WrapAsService()
 
@@ -351,7 +355,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	adminAuthHandler := NewAdminAuthHandler(authService, auth.NewUserRepository(db), dashboardAuthService, systemSettingsService, cfg)
 	// Note: dashboardAuthHandler is initialized later after samlService is created
 	clientKeyHandler := NewClientKeyHandler(clientKeyService)
-	storageHandler := NewStorageHandler(storageService, db, &cfg.Storage.Transforms)
+	storageHandler := NewStorageHandler(storageManager, db, cfg, &cfg.Storage.Transforms)
 	webhookHandler := NewWebhookHandler(webhookService)
 
 	// Initialize secrets storage and handler
@@ -390,6 +394,18 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		log.Info().Msg("Multi-tenancy enabled")
 	}
 	tenantHandler := NewTenantHandler(db, tenantManager, tenantStorage)
+
+	// Initialize unified settings service and handlers
+	unifiedSettingsService := settings.NewUnifiedService(db, cfg, cfg.EncryptionKey)
+	instanceSettingsHandler := NewInstanceSettingsHandler(unifiedSettingsService)
+	tenantSettingsHandler := NewTenantSettingsHandler(unifiedSettingsService, tenantStorage)
+
+	// Initialize tenant config resolver for request-time config resolution
+	// This enables immediate visibility of database settings changes (no caching)
+	tenantConfigResolver := NewTenantConfigResolver(db, cfg, unifiedSettingsService)
+	SetGlobalResolver(tenantConfigResolver)
+	log.Info().Msg("Tenant config resolver initialized for dynamic settings")
+
 	oauthProviderHandler := NewOAuthProviderHandler(db.Pool(), authService.GetSettingsCache(), cfg.EncryptionKey, cfg.GetPublicBaseURL(), cfg.Auth.OAuthProviders)
 	jwtManager, err := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiry, cfg.Auth.RefreshExpiry)
 	if err != nil {
@@ -474,7 +490,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	if functionsInternalURL == "" {
 		functionsInternalURL = "http://localhost" + cfg.Server.Address
 	}
-	functionsHandler := functions.NewHandler(db, cfg.Functions.FunctionsDir, cfg.CORS, cfg.Auth.JWTSecret, functionsInternalURL, cfg.Deno.NpmRegistry, cfg.Deno.JsrRegistry, authService, loggingService, secretsStorage)
+	functionsHandler := functions.NewHandler(db, cfg.Functions.FunctionsDir, cfg.CORS, cfg.Auth.JWTSecret, functionsInternalURL, cfg.Deno.NpmRegistry, cfg.Deno.JsrRegistry, authService, loggingService, secretsStorage, cfg)
 	functionsHandler.SetSettingsSecretsService(secretsService)
 	functionsScheduler := functions.NewScheduler(db, cfg.Auth.JWTSecret, functionsInternalURL, secretsStorage)
 	functionsHandler.SetScheduler(functionsScheduler)
@@ -495,7 +511,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Str("jobs_internal_url", jobsInternalURL).
 			Bool("jwt_secret_set", cfg.Auth.JWTSecret != "").
 			Msg("Initializing jobs manager with SDK credentials")
-		jobsManager = jobs.NewManager(&cfg.Jobs, db, cfg.Auth.JWTSecret, jobsInternalURL, secretsStorage)
+		jobsManager = jobs.NewManager(&cfg.Jobs, db, cfg.Auth.JWTSecret, jobsInternalURL, secretsStorage, cfg)
 		jobsManager.SetSettingsSecretsService(secretsService)
 		var err error
 		jobsHandler, err = jobs.NewHandler(db, &cfg.Jobs, jobsManager, authService, loggingService, cfg.Deno.NpmRegistry, cfg.Deno.JsrRegistry)
@@ -540,7 +556,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	// Create vector search handler (for pgvector support) - create early for embedding service sharing
 	// Embedding can be enabled explicitly (EmbeddingEnabled=true) or via fallback from AI provider
 	var vectorHandler *VectorHandler
-	vectorHandler, err = NewVectorHandler(vectorManager, db.Inspector(), db)
+	vectorHandler, err = NewVectorHandler(vectorManager, db.Inspector(), db, cfg)
 	//nolint:gocritic // Initialization state checks, not switch-compatible
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to initialize vector handler")
@@ -704,7 +720,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		rpcStorage := rpc.NewStorage(db)
 		rpcLoader := rpc.NewLoader(cfg.RPC.ProceduresDir)
 		rpcMetrics := observability.NewMetrics()
-		rpcHandler = rpc.NewHandler(db, rpcStorage, rpcLoader, rpcMetrics, &cfg.RPC, authService, loggingService)
+		rpcHandler = rpc.NewHandler(db, rpcStorage, rpcLoader, rpcMetrics, &cfg.RPC, authService, loggingService, cfg)
 
 		// Create RPC scheduler and wire it to handler
 		rpcScheduler = rpc.NewScheduler(rpcStorage, rpcHandler.GetExecutor())
@@ -723,6 +739,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		MaxConnectionsPerIP:    cfg.Realtime.MaxConnectionsPerIP,
 		ClientMessageQueueSize: cfg.Realtime.ClientMessageQueueSize,
 	})
+	realtimeManager.SetBaseConfig(cfg)
 
 	// Set up cross-instance broadcasting via pub/sub (if configured)
 	if ps != nil {
@@ -760,76 +777,79 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 
 	// Create server instance
 	server := &Server{
-		app:                    app,
-		config:                 cfg,
-		db:                     db,
-		tracer:                 tracer,
-		rest:                   NewRESTHandler(db, NewQueryParser(cfg), schemaCache, cfg),
-		authHandler:            authHandler,
-		adminAuthHandler:       adminAuthHandler,
-		dashboardAuthHandler:   dashboardAuthHandler,
-		clientKeyService:       clientKeyService, // Added for service-wide access
-		clientKeyHandler:       clientKeyHandler,
-		storageHandler:         storageHandler,
-		webhookHandler:         webhookHandler,
-		monitoringHandler:      monitoringHandler,
-		userManagementHandler:  userMgmtHandler,
-		quotaHandler:           quotaHandler,
-		invitationHandler:      invitationHandler,
-		ddlHandler:             ddlHandler,
-		realtimeAdminHandler:   realtimeAdminHandler,
-		oauthProviderHandler:   oauthProviderHandler,
-		oauthHandler:           oauthHandler,
-		samlProviderHandler:    samlProviderHandler,
-		samlService:            samlService,
-		adminSessionHandler:    adminSessionHandler,
-		systemSettingsHandler:  systemSettingsHandler,
-		customSettingsHandler:  customSettingsHandler,
-		userSettingsHandler:    userSettingsHandler,
-		appSettingsHandler:     appSettingsHandler,
-		settingsHandler:        settingsHandler,
-		secretsService:         secretsService,
-		emailTemplateHandler:   emailTemplateHandler,
-		emailSettingsHandler:   emailSettingsHandler,
-		captchaSettingsHandler: captchaSettingsHandler,
-		sqlHandler:             sqlHandler,
-		functionsHandler:       functionsHandler,
-		functionsScheduler:     functionsScheduler,
-		jobsHandler:            jobsHandler,
-		jobsManager:            jobsManager,
-		jobsScheduler:          jobsScheduler,
-		migrationsHandler:      migrationsHandler,
-		realtimeManager:        realtimeManager,
-		realtimeHandler:        realtimeHandler,
-		realtimeListener:       realtimeListener,
-		webhookTriggerService:  webhookTriggerService,
-		aiHandler:              aiHandler,
-		aiChatHandler:          aiChatHandler,
-		aiConversations:        aiConversations,
-		aiMetrics:              aiMetrics,
-		knowledgeBaseHandler:   knowledgeBaseHandler,
-		kbStorage:              kbStorage,
-		docProcessor:           docProcessor,
-		tableExportSyncService: tableExportSyncService,
-		rpcHandler:             rpcHandler,
-		rpcScheduler:           rpcScheduler,
-		extensionsHandler:      extensions.NewHandler(extensions.NewService(db)),
-		vectorManager:          vectorManager,
-		vectorHandler:          vectorHandler,
-		loggingService:         loggingService,
-		loggingHandler:         loggingHandler,
-		retentionService:       retentionService,
-		schemaCache:            schemaCache,
-		secretsHandler:         secretsHandler,
-		secretsStorage:         secretsStorage,
-		serviceKeyHandler:      serviceKeyHandler,
-		tenantHandler:          tenantHandler,
-		schemaExportHandler:    schemaExportHandler,
-		mcpHandler:             mcp.NewHandler(&cfg.MCP, db),
-		mcpOAuthHandler:        NewMCPOAuthHandler(db.Pool(), &cfg.MCP, authService, cfg.BaseURL, cfg.GetPublicBaseURL()),
-		internalAIHandler:      internalAIHandler,
-		metrics:                observability.NewMetrics(),
-		startTime:              time.Now(),
+		app:                     app,
+		config:                  cfg,
+		db:                      db,
+		tracer:                  tracer,
+		rest:                    NewRESTHandler(db, NewQueryParser(cfg), schemaCache, cfg),
+		authHandler:             authHandler,
+		adminAuthHandler:        adminAuthHandler,
+		dashboardAuthHandler:    dashboardAuthHandler,
+		clientKeyService:        clientKeyService, // Added for service-wide access
+		clientKeyHandler:        clientKeyHandler,
+		storageHandler:          storageHandler,
+		webhookHandler:          webhookHandler,
+		monitoringHandler:       monitoringHandler,
+		userManagementHandler:   userMgmtHandler,
+		quotaHandler:            quotaHandler,
+		invitationHandler:       invitationHandler,
+		ddlHandler:              ddlHandler,
+		realtimeAdminHandler:    realtimeAdminHandler,
+		oauthProviderHandler:    oauthProviderHandler,
+		oauthHandler:            oauthHandler,
+		samlProviderHandler:     samlProviderHandler,
+		samlService:             samlService,
+		adminSessionHandler:     adminSessionHandler,
+		systemSettingsHandler:   systemSettingsHandler,
+		customSettingsHandler:   customSettingsHandler,
+		userSettingsHandler:     userSettingsHandler,
+		appSettingsHandler:      appSettingsHandler,
+		settingsHandler:         settingsHandler,
+		secretsService:          secretsService,
+		emailTemplateHandler:    emailTemplateHandler,
+		emailSettingsHandler:    emailSettingsHandler,
+		captchaSettingsHandler:  captchaSettingsHandler,
+		sqlHandler:              sqlHandler,
+		functionsHandler:        functionsHandler,
+		functionsScheduler:      functionsScheduler,
+		jobsHandler:             jobsHandler,
+		jobsManager:             jobsManager,
+		jobsScheduler:           jobsScheduler,
+		migrationsHandler:       migrationsHandler,
+		realtimeManager:         realtimeManager,
+		realtimeHandler:         realtimeHandler,
+		realtimeListener:        realtimeListener,
+		webhookTriggerService:   webhookTriggerService,
+		aiHandler:               aiHandler,
+		aiChatHandler:           aiChatHandler,
+		aiConversations:         aiConversations,
+		aiMetrics:               aiMetrics,
+		knowledgeBaseHandler:    knowledgeBaseHandler,
+		kbStorage:               kbStorage,
+		docProcessor:            docProcessor,
+		tableExportSyncService:  tableExportSyncService,
+		rpcHandler:              rpcHandler,
+		rpcScheduler:            rpcScheduler,
+		extensionsHandler:       extensions.NewHandler(extensions.NewService(db)),
+		vectorManager:           vectorManager,
+		vectorHandler:           vectorHandler,
+		loggingService:          loggingService,
+		loggingHandler:          loggingHandler,
+		retentionService:        retentionService,
+		schemaCache:             schemaCache,
+		secretsHandler:          secretsHandler,
+		secretsStorage:          secretsStorage,
+		serviceKeyHandler:       serviceKeyHandler,
+		tenantHandler:           tenantHandler,
+		instanceSettingsHandler: instanceSettingsHandler,
+		tenantSettingsHandler:   tenantSettingsHandler,
+		unifiedSettingsService:  unifiedSettingsService,
+		schemaExportHandler:     schemaExportHandler,
+		mcpHandler:              mcp.NewHandler(&cfg.MCP, db),
+		mcpOAuthHandler:         NewMCPOAuthHandler(db.Pool(), &cfg.MCP, authService, cfg.BaseURL, cfg.GetPublicBaseURL()),
+		internalAIHandler:       internalAIHandler,
+		metrics:                 observability.NewMetrics(),
+		startTime:               time.Now(),
 		// Server-owned dependencies
 		rateLimiter:             rateLimitStore,
 		pubSub:                  ps,
@@ -889,7 +909,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 
 	// Create GraphQL handler (if enabled)
 	if cfg.GraphQL.Enabled {
-		server.graphqlHandler = NewGraphQLHandler(db, schemaCache, &cfg.GraphQL)
+		server.graphqlHandler = NewGraphQLHandler(db, schemaCache, &cfg.GraphQL, cfg)
 		log.Info().
 			Int("max_depth", cfg.GraphQL.MaxDepth).
 			Int("max_complexity", cfg.GraphQL.MaxComplexity).
@@ -1611,11 +1631,7 @@ func (s *Server) handleHealth(c fiber.Ctx) error {
 	}
 
 	return c.Status(httpStatus).JSON(fiber.Map{
-		"status": status,
-		"services": fiber.Map{
-			"database": dbHealthy,
-			"realtime": s.config.Realtime.Enabled,
-		},
+		"status":    status,
 		"timestamp": time.Now().UTC(),
 	})
 }
@@ -1941,12 +1957,13 @@ func (s *Server) App() *fiber.App {
 	return s.app
 }
 
-// GetStorageService returns the storage service from the storage handler
+// GetStorageService returns the base storage service from the storage handler
+// Note: For tenant-specific storage, use GetStorageConfig with storage.Manager
 func (s *Server) GetStorageService() *storage.Service {
-	if s.storageHandler == nil {
+	if s.storageHandler == nil || s.storageHandler.storageManager == nil {
 		return nil
 	}
-	return s.storageHandler.storage
+	return s.storageHandler.storageManager.GetBaseService()
 }
 
 // GetWebhookTriggerService returns the webhook trigger service for testing

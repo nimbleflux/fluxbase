@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
@@ -28,6 +30,12 @@ func NewStorage(conn *database.Connection) *Storage {
 
 // CreateJobFunction creates a new job function
 func (s *Storage) CreateJobFunction(ctx context.Context, fn *JobFunction) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.CreateJobFunctionWithTenant(ctx, tenantID, fn)
+}
+
+// CreateJobFunctionWithTenant creates a new job function with tenant context
+func (s *Storage) CreateJobFunctionWithTenant(ctx context.Context, tenantID string, fn *JobFunction) error {
 	query := `
 		INSERT INTO jobs.functions (
 			id, name, namespace, description, code, original_code, is_bundled, bundle_error,
@@ -40,17 +48,25 @@ func (s *Storage) CreateJobFunction(ctx context.Context, fn *JobFunction) error 
 		RETURNING created_at, updated_at
 	`
 
-	return s.conn.Pool().QueryRow(ctx, query,
-		fn.ID, fn.Name, fn.Namespace, fn.Description, fn.Code, fn.OriginalCode,
-		fn.IsBundled, fn.BundleError, fn.Enabled, fn.Schedule, fn.TimeoutSeconds,
-		fn.MemoryLimitMB, fn.MaxRetries, fn.ProgressTimeoutSeconds,
-		fn.AllowNet, fn.AllowEnv, fn.AllowRead, fn.AllowWrite,
-		fn.RequireRoles, fn.DisableExecutionLogs, fn.Version, fn.CreatedBy, fn.Source,
-	).Scan(&fn.CreatedAt, &fn.UpdatedAt)
+	return database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			fn.ID, fn.Name, fn.Namespace, fn.Description, fn.Code, fn.OriginalCode,
+			fn.IsBundled, fn.BundleError, fn.Enabled, fn.Schedule, fn.TimeoutSeconds,
+			fn.MemoryLimitMB, fn.MaxRetries, fn.ProgressTimeoutSeconds,
+			fn.AllowNet, fn.AllowEnv, fn.AllowRead, fn.AllowWrite,
+			fn.RequireRoles, fn.DisableExecutionLogs, fn.Version, fn.CreatedBy, fn.Source,
+		).Scan(&fn.CreatedAt, &fn.UpdatedAt)
+	})
 }
 
 // UpdateJobFunction updates an existing job function
 func (s *Storage) UpdateJobFunction(ctx context.Context, fn *JobFunction) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.UpdateJobFunctionWithTenant(ctx, tenantID, fn)
+}
+
+// UpdateJobFunctionWithTenant updates an existing job function with tenant context
+func (s *Storage) UpdateJobFunctionWithTenant(ctx context.Context, tenantID string, fn *JobFunction) error {
 	query := `
 		UPDATE jobs.functions SET
 			description = $1, code = $2, original_code = $3, is_bundled = $4, bundle_error = $5,
@@ -61,16 +77,24 @@ func (s *Storage) UpdateJobFunction(ctx context.Context, fn *JobFunction) error 
 		RETURNING version, updated_at
 	`
 
-	return s.conn.Pool().QueryRow(ctx, query,
-		fn.Description, fn.Code, fn.OriginalCode, fn.IsBundled, fn.BundleError,
-		fn.Enabled, fn.Schedule, fn.TimeoutSeconds, fn.MemoryLimitMB,
-		fn.MaxRetries, fn.ProgressTimeoutSeconds, fn.AllowNet, fn.AllowEnv,
-		fn.AllowRead, fn.AllowWrite, fn.RequireRoles, fn.DisableExecutionLogs, fn.ID,
-	).Scan(&fn.Version, &fn.UpdatedAt)
+	return database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			fn.Description, fn.Code, fn.OriginalCode, fn.IsBundled, fn.BundleError,
+			fn.Enabled, fn.Schedule, fn.TimeoutSeconds, fn.MemoryLimitMB,
+			fn.MaxRetries, fn.ProgressTimeoutSeconds, fn.AllowNet, fn.AllowEnv,
+			fn.AllowRead, fn.AllowWrite, fn.RequireRoles, fn.DisableExecutionLogs, fn.ID,
+		).Scan(&fn.Version, &fn.UpdatedAt)
+	})
 }
 
 // UpsertJobFunction creates or updates a job function atomically
 func (s *Storage) UpsertJobFunction(ctx context.Context, fn *JobFunction) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.UpsertJobFunctionWithTenant(ctx, tenantID, fn)
+}
+
+// UpsertJobFunctionWithTenant creates or updates a job function atomically with tenant context
+func (s *Storage) UpsertJobFunctionWithTenant(ctx context.Context, tenantID string, fn *JobFunction) error {
 	query := `
 		INSERT INTO jobs.functions (
 			id, name, namespace, description, code, original_code, is_bundled, bundle_error,
@@ -103,13 +127,15 @@ func (s *Storage) UpsertJobFunction(ctx context.Context, fn *JobFunction) error 
 		RETURNING id, version, created_at, updated_at
 	`
 
-	return s.conn.Pool().QueryRow(ctx, query,
-		fn.ID, fn.Name, fn.Namespace, fn.Description, fn.Code, fn.OriginalCode,
-		fn.IsBundled, fn.BundleError, fn.Enabled, fn.Schedule, fn.TimeoutSeconds,
-		fn.MemoryLimitMB, fn.MaxRetries, fn.ProgressTimeoutSeconds,
-		fn.AllowNet, fn.AllowEnv, fn.AllowRead, fn.AllowWrite,
-		fn.RequireRoles, fn.DisableExecutionLogs, fn.CreatedBy, fn.Source,
-	).Scan(&fn.ID, &fn.Version, &fn.CreatedAt, &fn.UpdatedAt)
+	return database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			fn.ID, fn.Name, fn.Namespace, fn.Description, fn.Code, fn.OriginalCode,
+			fn.IsBundled, fn.BundleError, fn.Enabled, fn.Schedule, fn.TimeoutSeconds,
+			fn.MemoryLimitMB, fn.MaxRetries, fn.ProgressTimeoutSeconds,
+			fn.AllowNet, fn.AllowEnv, fn.AllowRead, fn.AllowWrite,
+			fn.RequireRoles, fn.DisableExecutionLogs, fn.CreatedBy, fn.Source,
+		).Scan(&fn.ID, &fn.Version, &fn.CreatedAt, &fn.UpdatedAt)
+	})
 }
 
 // GetJobFunction retrieves a job function by namespace and name
@@ -277,8 +303,20 @@ func (s *Storage) ListAllJobFunctions(ctx context.Context) ([]*JobFunctionSummar
 
 // DeleteJobFunction deletes a job function
 func (s *Storage) DeleteJobFunction(ctx context.Context, namespace, name string) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.DeleteJobFunctionWithTenant(ctx, tenantID, namespace, name)
+}
+
+// DeleteJobFunctionWithTenant deletes a job function with tenant context
+func (s *Storage) DeleteJobFunctionWithTenant(ctx context.Context, tenantID string, namespace, name string) error {
 	query := `DELETE FROM jobs.functions WHERE namespace = $1 AND name = $2`
-	result, err := s.conn.Pool().Exec(ctx, query, namespace, name)
+
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, namespace, name)
+		return execErr
+	})
 	if err != nil {
 		return err
 	}
@@ -344,6 +382,12 @@ func (s *Storage) DeleteJobFunctionFiles(ctx context.Context, jobFunctionID uuid
 
 // EnqueueJob adds a new job to the queue
 func (s *Storage) EnqueueJob(ctx context.Context, job *Job) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.EnqueueJobWithTenant(ctx, tenantID, job)
+}
+
+// EnqueueJobWithTenant adds a new job to the queue with tenant context
+func (s *Storage) EnqueueJobWithTenant(ctx context.Context, tenantID string, job *Job) error {
 	query := `
 		INSERT INTO jobs.queue (
 			id, namespace, function_id, job_name, status, payload, priority,
@@ -352,11 +396,13 @@ func (s *Storage) EnqueueJob(ctx context.Context, job *Job) error {
 		RETURNING created_at
 	`
 
-	return s.conn.Pool().QueryRow(ctx, query,
-		job.ID, job.Namespace, job.JobFunctionID, job.JobName, job.Status, job.Payload,
-		job.Priority, job.MaxDurationSeconds, job.ProgressTimeoutSeconds,
-		job.MaxRetries, job.CreatedBy, job.UserRole, job.UserEmail, job.ScheduledAt,
-	).Scan(&job.CreatedAt)
+	return database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			job.ID, job.Namespace, job.JobFunctionID, job.JobName, job.Status, job.Payload,
+			job.Priority, job.MaxDurationSeconds, job.ProgressTimeoutSeconds,
+			job.MaxRetries, job.CreatedBy, job.UserRole, job.UserEmail, job.ScheduledAt,
+		).Scan(&job.CreatedAt)
+	})
 }
 
 // ComputeDeduplicationKey generates a deduplication key from job parameters

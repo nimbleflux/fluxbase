@@ -9,9 +9,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
-	"github.com/rs/zerolog/log"
 )
 
 // SAMLHandler handles SAML SSO endpoints

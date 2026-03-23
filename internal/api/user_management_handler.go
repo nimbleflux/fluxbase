@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 

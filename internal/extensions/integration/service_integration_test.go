@@ -11,10 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nimbleflux/fluxbase/internal/extensions"
-	"github.com/nimbleflux/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/extensions"
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 )
 
 // setupExtensionsTest creates a test service and performs initial setup

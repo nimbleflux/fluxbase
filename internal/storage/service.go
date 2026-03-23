@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/observability"
-	"github.com/rs/zerolog/log"
 )
 
 // Service wraps a storage provider and provides additional functionality

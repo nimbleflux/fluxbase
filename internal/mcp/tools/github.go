@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 // GitHubClient provides methods for interacting with the GitHub API

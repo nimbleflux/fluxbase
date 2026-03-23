@@ -16,7 +16,7 @@ func TestStreamUpload_EmptyKeyValidation(t *testing.T) {
 	app := fiber.New()
 
 	handler := &StorageHandler{
-		storage: nil, // Empty key check happens before storage access
+		storageManager: nil, // Empty key check happens before storage access
 	}
 
 	app.Post("/storage/:bucket/stream/*", handler.StreamUpload)
@@ -78,7 +78,7 @@ func TestStreamUpload_RouteMatching(t *testing.T) {
 			app := fiber.New()
 
 			handler := &StorageHandler{
-				storage: nil,
+				storageManager: nil,
 			}
 
 			app.Post("/storage/:bucket/stream/*", handler.StreamUpload)

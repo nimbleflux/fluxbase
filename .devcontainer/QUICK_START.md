@@ -59,7 +59,6 @@ make help             # Show all commands
 | Service       | URL                   | Credentials               |
 | ------------- | --------------------- | ------------------------- |
 | Fluxbase API  | http://localhost:8080 | -                         |
-| pgAdmin       | http://localhost:5050 | support@fluxbase.eu / dev |
 | MailHog       | http://localhost:8025 | -                         |
 | Documentation | http://localhost:3000 | -                         |
 

@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
-	"github.com/rs/zerolog/log"
 )
 
 // SearchVectorsTool implements the search_vectors MCP tool

@@ -5,8 +5,9 @@ import (
 	"path/filepath"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
 // UserKnowledgeBaseHandler handles user-facing KB endpoints
@@ -43,7 +44,32 @@ func (h *UserKnowledgeBaseHandler) SetStorageService(svc *storage.Service) {
 // GET /api/v1/ai/knowledge-bases
 func (h *UserKnowledgeBaseHandler) ListMyKnowledgeBases(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
-	userID := c.Locals("user_id").(string)
+
+	// Safely check if user_id exists in context
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		// Check if user is instance admin (service role or instance_admin role)
+		userRole := c.Locals("user_role")
+		if userRole == "instance_admin" || userRole == "service_role" {
+			// Instance admin without tenant context - return empty list
+			// A complete solution would fetch all KBs across tenants with tenant info
+			return c.JSON(fiber.Map{
+				"knowledge_bases": []interface{}{},
+				"count":           0,
+				"message":         "Select a tenant to view knowledge bases",
+			})
+		}
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User not authenticated",
+		})
+	}
+
+	userID, ok := userIDRaw.(string)
+	if !ok || userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Invalid user context",
+		})
+	}
 
 	kbs, err := h.storage.ListUserKnowledgeBases(ctx, userID)
 	if err != nil {

@@ -3,8 +3,9 @@ package api
 import (
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 func TestGetConflictTarget(t *testing.T) {

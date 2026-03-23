@@ -7,9 +7,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/tenantdb"
-	"github.com/rs/zerolog/log"
 )
 
 var ErrTenantDBUnavailable = errors.New("tenant database unavailable")

@@ -15,8 +15,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	test "github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	test "github.com/nimbleflux/fluxbase/test"
 )
 
 // TestExampleRESTCreateAndVerify demonstrates the standard pattern for testing

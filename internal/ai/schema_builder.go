@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
-	"github.com/rs/zerolog/log"
 )
 
 // MCPResourceReader is an interface for reading MCP resources

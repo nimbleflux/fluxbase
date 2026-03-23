@@ -258,7 +258,7 @@ CREATE POLICY "Users can read settings with public_api flag"
 import (
     "context"
     "time"
-    "github.com/fluxbase/fluxbase/internal/auth"
+    "github.com/nimbleflux/fluxbase/internal/auth"
 )
 
 // Initialize settings cache

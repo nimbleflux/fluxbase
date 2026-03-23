@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/migrations"
-	"github.com/nimbleflux/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/migrations"
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 )
 
 // TestMigrationsStorage_CreateAndGet verifies creating and retrieving migrations

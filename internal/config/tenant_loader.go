@@ -686,16 +686,16 @@ func (l *TenantConfigLoader) deepCopyConfig(base *Config) *Config {
 	cpy.EncryptionKey = base.EncryptionKey
 
 	// Deep copy overridable sections
-	cpy.Auth = *deepCopyAuthConfig(&base.Auth)
-	cpy.Storage = *deepCopyStorageConfig(&base.Storage)
-	cpy.Email = *deepCopyEmailConfig(&base.Email)
-	cpy.Functions = *deepCopyFunctionsConfig(&base.Functions)
-	cpy.Jobs = *deepCopyJobsConfig(&base.Jobs)
-	cpy.AI = *deepCopyAIConfig(&base.AI)
-	cpy.Realtime = *deepCopyRealtimeConfig(&base.Realtime)
-	cpy.API = *deepCopyAPIConfig(&base.API)
-	cpy.GraphQL = *deepCopyGraphQLConfig(&base.GraphQL)
-	cpy.RPC = *deepCopyRPCConfig(&base.RPC)
+	cpy.Auth = *DeepCopyAuthConfig(&base.Auth)
+	cpy.Storage = *DeepCopyStorageConfig(&base.Storage)
+	cpy.Email = *DeepCopyEmailConfig(&base.Email)
+	cpy.Functions = *DeepCopyFunctionsConfig(&base.Functions)
+	cpy.Jobs = *DeepCopyJobsConfig(&base.Jobs)
+	cpy.AI = *DeepCopyAIConfig(&base.AI)
+	cpy.Realtime = *DeepCopyRealtimeConfig(&base.Realtime)
+	cpy.API = *DeepCopyAPIConfig(&base.API)
+	cpy.GraphQL = *DeepCopyGraphQLConfig(&base.GraphQL)
+	cpy.RPC = *DeepCopyRPCConfig(&base.RPC)
 	cpy.Tenants = base.Tenants
 
 	return cpy
@@ -703,6 +703,8 @@ func (l *TenantConfigLoader) deepCopyConfig(base *Config) *Config {
 
 // normalizeSlug normalizes a tenant slug for env var lookup
 // Converts "my-tenant" to "MY_TENANT"
+//
+//nolint:unused // Kept for future use
 func normalizeSlug(slug string) string {
 	return strings.ToUpper(strings.ReplaceAll(slug, "-", "_"))
 }

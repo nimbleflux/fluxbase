@@ -15,10 +15,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/pquerna/otp/totp"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // DashboardUser represents a dashboard/platform administrator user
@@ -730,13 +731,13 @@ func (s *DashboardAuthService) GetUserByID(ctx context.Context, userID uuid.UUID
 	user := &DashboardUser{}
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT id, email, email_verified, full_name, avatar_url, totp_enabled,
+			SELECT id, email, email_verified, full_name, avatar_url, role, totp_enabled,
 			       is_active, is_locked, last_login_at, created_at, updated_at
 			FROM platform.users
 			WHERE id = $1 AND deleted_at IS NULL
 		`, userID).Scan(
 			&user.ID, &user.Email, &user.EmailVerified, &user.FullName, &user.AvatarURL,
-			&user.TOTPEnabled, &user.IsActive, &user.IsLocked, &user.LastLoginAt,
+			&user.Role, &user.TOTPEnabled, &user.IsActive, &user.IsLocked, &user.LastLoginAt,
 			&user.CreatedAt, &user.UpdatedAt,
 		)
 	})
@@ -1231,4 +1232,9 @@ func (s *DashboardAuthService) RefreshToken(ctx context.Context, refreshToken st
 		RefreshToken: refreshToken, // Refresh token stays the same
 		ExpiresIn:    int64(24 * 60 * 60),
 	}, nil
+}
+
+// ValidateToken validates a JWT token and returns the claims
+func (s *DashboardAuthService) ValidateToken(token string) (*TokenClaims, error) {
+	return s.jwtManager.ValidateToken(token)
 }

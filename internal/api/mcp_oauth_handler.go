@@ -12,9 +12,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/rs/zerolog/log"
 )
 
 // MCPOAuthHandler handles OAuth 2.1 authentication for MCP clients

@@ -4,7 +4,7 @@ package config
 
 // mergeAuthConfig merges auth overrides with base auth config
 func mergeAuthConfig(base AuthConfig, override AuthConfig) AuthConfig {
-	merged := *deepCopyAuthConfig(&base)
+	merged := *DeepCopyAuthConfig(&base)
 
 	if override.JWTSecret != "" {
 		merged.JWTSecret = override.JWTSecret
@@ -46,8 +46,8 @@ func mergeAuthConfig(base AuthConfig, override AuthConfig) AuthConfig {
 	return merged
 }
 
-// deepCopyAuthConfig creates a deep copy of AuthConfig
-func deepCopyAuthConfig(src *AuthConfig) *AuthConfig {
+// DeepCopyAuthConfig creates a deep copy of AuthConfig
+func DeepCopyAuthConfig(src *AuthConfig) *AuthConfig {
 	if src == nil {
 		return &AuthConfig{}
 	}
@@ -65,7 +65,7 @@ func deepCopyAuthConfig(src *AuthConfig) *AuthConfig {
 
 // mergeStorageConfig merges storage overrides with base storage config
 func mergeStorageConfig(base StorageConfig, override StorageConfig) StorageConfig {
-	merged := *deepCopyStorageConfig(&base)
+	merged := *DeepCopyStorageConfig(&base)
 
 	if override.Provider != "" {
 		merged.Provider = override.Provider
@@ -98,8 +98,8 @@ func mergeStorageConfig(base StorageConfig, override StorageConfig) StorageConfi
 	return merged
 }
 
-// deepCopyStorageConfig creates a deep copy of StorageConfig
-func deepCopyStorageConfig(src *StorageConfig) *StorageConfig {
+// DeepCopyStorageConfig creates a deep copy of StorageConfig
+func DeepCopyStorageConfig(src *StorageConfig) *StorageConfig {
 	if src == nil {
 		return &StorageConfig{}
 	}
@@ -113,7 +113,7 @@ func deepCopyStorageConfig(src *StorageConfig) *StorageConfig {
 
 // mergeEmailConfig merges email overrides with base email config
 func mergeEmailConfig(base EmailConfig, override EmailConfig) EmailConfig {
-	merged := *deepCopyEmailConfig(&base)
+	merged := *DeepCopyEmailConfig(&base)
 
 	if override.Provider != "" {
 		merged.Provider = override.Provider
@@ -161,8 +161,8 @@ func mergeEmailConfig(base EmailConfig, override EmailConfig) EmailConfig {
 	return merged
 }
 
-// deepCopyEmailConfig creates a deep copy of EmailConfig
-func deepCopyEmailConfig(src *EmailConfig) *EmailConfig {
+// DeepCopyEmailConfig creates a deep copy of EmailConfig
+func DeepCopyEmailConfig(src *EmailConfig) *EmailConfig {
 	if src == nil {
 		return &EmailConfig{}
 	}
@@ -172,7 +172,7 @@ func deepCopyEmailConfig(src *EmailConfig) *EmailConfig {
 
 // mergeFunctionsConfig merges functions overrides with base functions config
 func mergeFunctionsConfig(base FunctionsConfig, override FunctionsConfig) FunctionsConfig {
-	merged := *deepCopyFunctionsConfig(&base)
+	merged := *DeepCopyFunctionsConfig(&base)
 
 	if override.FunctionsDir != "" {
 		merged.FunctionsDir = override.FunctionsDir
@@ -193,8 +193,8 @@ func mergeFunctionsConfig(base FunctionsConfig, override FunctionsConfig) Functi
 	return merged
 }
 
-// deepCopyFunctionsConfig creates a deep copy of FunctionsConfig
-func deepCopyFunctionsConfig(src *FunctionsConfig) *FunctionsConfig {
+// DeepCopyFunctionsConfig creates a deep copy of FunctionsConfig
+func DeepCopyFunctionsConfig(src *FunctionsConfig) *FunctionsConfig {
 	if src == nil {
 		return &FunctionsConfig{}
 	}
@@ -204,7 +204,7 @@ func deepCopyFunctionsConfig(src *FunctionsConfig) *FunctionsConfig {
 
 // mergeJobsConfig merges jobs overrides with base jobs config
 func mergeJobsConfig(base JobsConfig, override JobsConfig) JobsConfig {
-	merged := *deepCopyJobsConfig(&base)
+	merged := *DeepCopyJobsConfig(&base)
 
 	if override.JobsDir != "" {
 		merged.JobsDir = override.JobsDir
@@ -225,8 +225,8 @@ func mergeJobsConfig(base JobsConfig, override JobsConfig) JobsConfig {
 	return merged
 }
 
-// deepCopyJobsConfig creates a deep copy of JobsConfig
-func deepCopyJobsConfig(src *JobsConfig) *JobsConfig {
+// DeepCopyJobsConfig creates a deep copy of JobsConfig
+func DeepCopyJobsConfig(src *JobsConfig) *JobsConfig {
 	if src == nil {
 		return &JobsConfig{}
 	}
@@ -236,7 +236,7 @@ func deepCopyJobsConfig(src *JobsConfig) *JobsConfig {
 
 // mergeAIConfig merges AI overrides with base AI config
 func mergeAIConfig(base AIConfig, override AIConfig) AIConfig {
-	merged := *deepCopyAIConfig(&base)
+	merged := *DeepCopyAIConfig(&base)
 
 	if override.ChatbotsDir != "" {
 		merged.ChatbotsDir = override.ChatbotsDir
@@ -260,8 +260,8 @@ func mergeAIConfig(base AIConfig, override AIConfig) AIConfig {
 	return merged
 }
 
-// deepCopyAIConfig creates a deep copy of AIConfig
-func deepCopyAIConfig(src *AIConfig) *AIConfig {
+// DeepCopyAIConfig creates a deep copy of AIConfig
+func DeepCopyAIConfig(src *AIConfig) *AIConfig {
 	if src == nil {
 		return &AIConfig{}
 	}
@@ -271,7 +271,7 @@ func deepCopyAIConfig(src *AIConfig) *AIConfig {
 
 // mergeRealtimeConfig merges realtime overrides with base realtime config
 func mergeRealtimeConfig(base RealtimeConfig, override RealtimeConfig) RealtimeConfig {
-	merged := *deepCopyRealtimeConfig(&base)
+	merged := *DeepCopyRealtimeConfig(&base)
 
 	if override.MaxConnections != 0 {
 		merged.MaxConnections = override.MaxConnections
@@ -286,8 +286,8 @@ func mergeRealtimeConfig(base RealtimeConfig, override RealtimeConfig) RealtimeC
 	return merged
 }
 
-// deepCopyRealtimeConfig creates a deep copy of RealtimeConfig
-func deepCopyRealtimeConfig(src *RealtimeConfig) *RealtimeConfig {
+// DeepCopyRealtimeConfig creates a deep copy of RealtimeConfig
+func DeepCopyRealtimeConfig(src *RealtimeConfig) *RealtimeConfig {
 	if src == nil {
 		return &RealtimeConfig{}
 	}
@@ -297,7 +297,7 @@ func deepCopyRealtimeConfig(src *RealtimeConfig) *RealtimeConfig {
 
 // mergeAPIConfig merges API overrides with base API config
 func mergeAPIConfig(base APIConfig, override APIConfig) APIConfig {
-	merged := *deepCopyAPIConfig(&base)
+	merged := *DeepCopyAPIConfig(&base)
 
 	if override.MaxPageSize != 0 {
 		merged.MaxPageSize = override.MaxPageSize
@@ -315,8 +315,8 @@ func mergeAPIConfig(base APIConfig, override APIConfig) APIConfig {
 	return merged
 }
 
-// deepCopyAPIConfig creates a deep copy of APIConfig
-func deepCopyAPIConfig(src *APIConfig) *APIConfig {
+// DeepCopyAPIConfig creates a deep copy of APIConfig
+func DeepCopyAPIConfig(src *APIConfig) *APIConfig {
 	if src == nil {
 		return &APIConfig{}
 	}
@@ -326,7 +326,7 @@ func deepCopyAPIConfig(src *APIConfig) *APIConfig {
 
 // mergeGraphQLConfig merges GraphQL overrides with base GraphQL config
 func mergeGraphQLConfig(base GraphQLConfig, override GraphQLConfig) GraphQLConfig {
-	merged := *deepCopyGraphQLConfig(&base)
+	merged := *DeepCopyGraphQLConfig(&base)
 
 	if override.MaxDepth != 0 {
 		merged.MaxDepth = override.MaxDepth
@@ -338,8 +338,8 @@ func mergeGraphQLConfig(base GraphQLConfig, override GraphQLConfig) GraphQLConfi
 	return merged
 }
 
-// deepCopyGraphQLConfig creates a deep copy of GraphQLConfig
-func deepCopyGraphQLConfig(src *GraphQLConfig) *GraphQLConfig {
+// DeepCopyGraphQLConfig creates a deep copy of GraphQLConfig
+func DeepCopyGraphQLConfig(src *GraphQLConfig) *GraphQLConfig {
 	if src == nil {
 		return &GraphQLConfig{}
 	}
@@ -349,7 +349,7 @@ func deepCopyGraphQLConfig(src *GraphQLConfig) *GraphQLConfig {
 
 // mergeRPCConfig merges RPC overrides with base RPC config
 func mergeRPCConfig(base RPCConfig, override RPCConfig) RPCConfig {
-	merged := *deepCopyRPCConfig(&base)
+	merged := *DeepCopyRPCConfig(&base)
 
 	if override.ProceduresDir != "" {
 		merged.ProceduresDir = override.ProceduresDir
@@ -364,8 +364,8 @@ func mergeRPCConfig(base RPCConfig, override RPCConfig) RPCConfig {
 	return merged
 }
 
-// deepCopyRPCConfig creates a deep copy of RPCConfig
-func deepCopyRPCConfig(src *RPCConfig) *RPCConfig {
+// DeepCopyRPCConfig creates a deep copy of RPCConfig
+func DeepCopyRPCConfig(src *RPCConfig) *RPCConfig {
 	if src == nil {
 		return &RPCConfig{}
 	}

@@ -12,9 +12,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/functions"
-	"github.com/rs/zerolog/log"
 )
 
 //go:embed builtin/*.ts

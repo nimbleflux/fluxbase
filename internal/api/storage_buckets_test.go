@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -558,9 +557,7 @@ func TestStorageHandler_CreateBucket_WithOptions(t *testing.T) {
 
 func TestStorageHandler_DeleteBucket_NotFound(t *testing.T) {
 	handler := &StorageHandler{
-		storage: &storage.Service{
-			// Mock that returns "not found" error
-		},
+		storageManager: nil, // Nil for testing error path
 	}
 
 	app := setupTestFiberApp()

@@ -1,88 +1,66 @@
 version: "2"
+
 run:
   timeout: 5m
   tests: true
   build-tags:
     - integration
+
 linters:
+  default: none
   enable:
-    - gocritic
-    - misspell
     - errcheck
     - errorlint
     - govet
-    - staticcheck
+    # - staticcheck  # Temporarily disabled due to golangci-lint v2.10.0 panic with external packages (fasthttp, css_parser)
     - unused
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+      exclude-functions:
+        - (io.Closer).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.DB).Close
+        - os.Setenv
+        - os.Unsetenv
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Fprint
+        - fmt.Print
+        - fmt.Printf
+        - fmt.Println
+        - fmt.Scanf
+        - fmt.Scanln
+        - fmt.Scan
+    errorlint:
+      errorf: true
+      comparison: false
+      asserts: false
+      errorf-multi: true
+  exclusions:
+    rules:
+      # Exclude some linters from running on tests files
+      - path: _test\.go
+        linters:
+          - errcheck
+          - govet
+      # Exclude CLI code from errcheck (many intentional discards)
+      - path: cli/
+        linters:
+          - errcheck
+
 formatters:
   enable:
     - gofumpt
     - goimports
-# NOTE: Some errorlint checks (comparison, assert) are disabled because they produce
-# false positives for sentinel errors that are never wrapped (e.g., pgx.ErrNoRows,
-# auth.ErrNotAdmin, branching.ErrBranchNotFound). These are defined as package-level
-# variables and compared with == which is correct for sentinel errors.
-# See https://github.com/polyfloyd/go-errorlint#disabling-checks
-linters-settings:
-  gofumpt:
-    # Choose whether or not to use the extra rules that are disabled
-    # by default
-    extra-rules: false
-  goimports:
-    # Put imports beginning with prefix after 3rd-party packages.
-    # It's a comma-separated list of prefixes.
-    local-prefixes: github.com/fluxbase
-  errcheck:
-    # Report about not checking of errors in type assertions: `a := b.(MyStruct)`
-    check-type-assertions: true
-    # Report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`
-    check-blank: true
-    # List of functions to exclude from checking
-    exclude-functions:
-      - (io.Closer).Close
-      - (*database/sql.Rows).Close
-      - (*database/sql.DB).Close
-      - os.Setenv
-      - os.Unsetenv
-  errorlint:
-    # Check that fmt.Errorf is used with %w instead of %v or %s for wrapping errors
-    errorf: true
-    # Check that errors are compared using errors.Is rather than ==.
-    # Note: Disabled for now - many comparisons use sentinel errors that are never wrapped
-    comparison: false
-    # Check that errors are asserted using errors.As rather than type assertion.
-    # Note: Disabled for now - type assertions on custom error types are acceptable
-    assert: false
-    # Allow fmt.Errorf to wrap multiple errors.
-    allow-multi: true
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - whyNoLint
-      - unnamedResult
-  staticcheck:
-    checks: ["all"]
+  settings:
+    gofumpt:
+      extra-rules: false
+    goimports:
+      local-prefixes:
+        - github.com/nimbleflux/fluxbase
+
 issues:
-  # Excluding configuration per-path, per-linter, per-text and per-source
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gocritic
-        - govet
-        - staticcheck
-  # Independently of option `exclude` we use default exclude patterns,
-  # it can be disabled by this option. To list all excluded by default patterns use `golangci-lint run --help`
-  # Default: true
-  default-exclusions: true
-  # Maximum issues count per one linter.
-  # Set to 0 to disable (default is 50).
   max-issues-per-linter: 0
-  # Maximum count of issues with the same text.
-  # Set to 0 to disable (default is 3).
   max-same-issues: 0

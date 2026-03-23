@@ -6,8 +6,9 @@ package api_test
 import (
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 )
 
 // TestAuthHandler_SendOTP_Integration tests sending OTP code

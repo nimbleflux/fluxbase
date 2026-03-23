@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // TestTenantConfigLoader_EnvVarOverrides tests that environment variable overrides work
@@ -233,7 +234,7 @@ config:
 `
 
 	configFile := tempDir + "/yaml-tenant.yaml"
-	err := os.WriteFile(configFile, []byte(tenantConfigContent), 0644)
+	err := os.WriteFile(configFile, []byte(tenantConfigContent), 0o644)
 	require.NoError(t, err, "Failed to write tenant config file")
 
 	// Create base config with config dir
@@ -328,7 +329,7 @@ config:
   auth:
     jwt_expiry: 1h
 `
-	err := os.WriteFile(tempDir+"/priority-tenant.yaml", []byte(tenantYAML), 0644)
+	err := os.WriteFile(tempDir+"/priority-tenant.yaml", []byte(tenantYAML), 0o644)
 	require.NoError(t, err, "Failed to write tenant config")
 
 	// Base config with 30m expiry

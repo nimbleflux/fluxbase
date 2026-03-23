@@ -4,10 +4,11 @@ import (
 	"context"
 	"sync"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/settings"
-	"github.com/rs/zerolog/log"
 )
 
 // Manager manages the email service with support for dynamic configuration refresh
@@ -17,14 +18,16 @@ type Manager struct {
 	settingsCache  *auth.SettingsCache
 	secretsService *settings.SecretsService
 	envConfig      *config.EmailConfig // Fallback to env config
+	baseConfig     *config.Config      // Full base config for tenant resolution
 }
 
 // NewManager creates a new email service manager
-func NewManager(envConfig *config.EmailConfig, settingsCache *auth.SettingsCache, secretsService *settings.SecretsService) *Manager {
+func NewManager(envConfig *config.EmailConfig, settingsCache *auth.SettingsCache, secretsService *settings.SecretsService, baseConfig *config.Config) *Manager {
 	m := &Manager{
 		settingsCache:  settingsCache,
 		secretsService: secretsService,
 		envConfig:      envConfig,
+		baseConfig:     baseConfig,
 	}
 
 	// Initialize with env config first
@@ -43,6 +46,24 @@ func (m *Manager) GetService() Service {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.service
+}
+
+// GetServiceForConfig returns an email service for the given config.
+// This is used for tenant-specific email configuration.
+func (m *Manager) GetServiceForConfig(cfg *config.EmailConfig) (Service, error) {
+	// If config is nil or not configured, fall back to the shared service
+	if cfg == nil || !cfg.IsConfigured() {
+		return m.GetService(), nil
+	}
+
+	// Create a new service for this specific config
+	service, err := NewService(cfg)
+	if err != nil {
+		// Fall back to shared service on error
+		log.Warn().Err(err).Msg("Failed to create tenant email service, using shared service")
+		return m.GetService(), nil
+	}
+	return service, nil
 }
 
 // SetSettingsCache sets the settings cache for dynamic configuration

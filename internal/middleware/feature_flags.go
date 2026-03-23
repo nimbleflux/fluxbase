@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 

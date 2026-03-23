@@ -1,8 +1,8 @@
-import { Building2, Check, ChevronsUpDown, Shield } from "lucide-react"
-import { useState, useEffect } from "react"
-import { useTenantStore, type Tenant } from "@/stores/tenant-store"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Building2, Check, ChevronsUpDown, Shield } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useTenantStore, type Tenant } from "@/stores/tenant-store";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -11,24 +11,24 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "@/components/ui/command"
+} from "@/components/ui/command";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import { tenantsApi } from "@/lib/api"
-import { getStoredUser } from "@/lib/auth"
+} from "@/components/ui/popover";
+import { tenantsApi } from "@/lib/api";
+import { getStoredUser } from "@/lib/auth";
 
 function checkIsInstanceAdmin(): boolean {
-  const user = getStoredUser()
-  if (!user) return false
-  if ('role' in user && user.role) {
+  const user = getStoredUser();
+  if (!user) return false;
+  if ("role" in user && user.role) {
     return Array.isArray(user.role)
-      ? user.role.includes('instance_admin')
-      : user.role === 'instance_admin'
+      ? user.role.includes("instance_admin")
+      : user.role === "instance_admin";
   }
-  return false
+  return false;
 }
 
 export function TenantSelector() {
@@ -41,77 +41,86 @@ export function TenantSelector() {
     setIsInstanceAdmin,
     actingAsTenantAdmin,
     setActingAsTenantAdmin,
-  } = useTenantStore()
-  const [open, setOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  } = useTenantStore();
+  const [open, setOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const admin = checkIsInstanceAdmin()
-    setIsInstanceAdmin(admin)
+    const admin = checkIsInstanceAdmin();
+    setIsInstanceAdmin(admin);
 
     async function fetchTenants() {
       try {
-        setIsLoading(true)
+        setIsLoading(true);
         if (admin) {
-          const data = await tenantsApi.list()
+          const data = await tenantsApi.list();
           setTenants(
-            data.map((t) => ({
-              id: t.id,
-              slug: t.slug,
-              name: t.name,
-              is_default: t.is_default,
-              metadata: t.metadata || {},
-              my_role: undefined,
-              created_at: t.created_at,
-              updated_at: t.updated_at,
-            } as Tenant))
-          )
+            data.map(
+              (t) =>
+                ({
+                  id: t.id,
+                  slug: t.slug,
+                  name: t.name,
+                  is_default: t.is_default,
+                  metadata: t.metadata || {},
+                  my_role: undefined,
+                  created_at: t.created_at,
+                  updated_at: t.updated_at,
+                }) as Tenant,
+            ),
+            admin, // Pass isInstanceAdmin flag
+          );
         } else {
-          const data = await tenantsApi.listMine()
+          const data = await tenantsApi.listMine();
           setTenants(
-            data.map((t) => ({
-              id: t.id,
-              slug: t.slug,
-              name: t.name,
-              is_default: t.is_default,
-              metadata: t.metadata || {},
-              my_role: t.my_role,
-              created_at: t.created_at,
-              updated_at: t.updated_at,
-            } as Tenant))
-          )
+            data.map(
+              (t) =>
+                ({
+                  id: t.id,
+                  slug: t.slug,
+                  name: t.name,
+                  is_default: t.is_default,
+                  metadata: t.metadata || {},
+                  my_role: t.my_role,
+                  created_at: t.created_at,
+                  updated_at: t.updated_at,
+                }) as Tenant,
+            ),
+            admin, // Pass isInstanceAdmin flag
+          );
         }
       } catch (error) {
-        console.error("Failed to fetch tenants:", error)
+        // eslint-disable-next-line no-console
+        console.error("Failed to fetch tenants:", error);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
     }
 
-    fetchTenants()
-  }, [setTenants, setIsInstanceAdmin])
+    fetchTenants();
+  }, [setTenants, setIsInstanceAdmin]);
 
   useEffect(() => {
     if (storeIsInstanceAdmin && currentTenant && !currentTenant.my_role) {
-      setActingAsTenantAdmin(true)
+      setActingAsTenantAdmin(true);
     } else {
-      setActingAsTenantAdmin(false)
+      setActingAsTenantAdmin(false);
     }
-  }, [storeIsInstanceAdmin, currentTenant, setActingAsTenantAdmin])
+  }, [storeIsInstanceAdmin, currentTenant, setActingAsTenantAdmin]);
 
   const handleSelectTenant = (tenant: Tenant) => {
-    setCurrentTenant(tenant)
-    setOpen(false)
-  }
+    setCurrentTenant(tenant);
+    setOpen(false);
+  };
 
   const handleClearTenant = () => {
-    setCurrentTenant(null)
-    setActingAsTenantAdmin(false)
-    setOpen(false)
-  }
+    setCurrentTenant(null);
+    setActingAsTenantAdmin(false);
+    setOpen(false);
+  };
 
   if (!isLoading && tenants.length <= 1 && !storeIsInstanceAdmin) {
-    return null
+    return null;
   }
 
   return (
@@ -126,7 +135,8 @@ export function TenantSelector() {
           className={cn(
             "w-[200px] justify-between",
             !currentTenant && "text-muted-foreground",
-            actingAsTenantAdmin && "bg-orange-500 hover:bg-orange-600 text-white border-orange-500"
+            actingAsTenantAdmin &&
+              "bg-orange-500 hover:bg-orange-600 text-white border-orange-500",
           )}
         >
           {actingAsTenantAdmin ? (
@@ -197,5 +207,5 @@ export function TenantSelector() {
         </Command>
       </PopoverContent>
     </Popover>
-  )
+  );
 }

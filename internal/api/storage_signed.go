@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
 // signedURLRateLimiter provides simple IP-based rate limiting for signed URL downloads
@@ -60,6 +61,14 @@ func (r *ipRateLimiter) allow(ip string) bool {
 // GenerateSignedURL generates a presigned URL for temporary access
 // POST /api/v1/storage/:bucket/sign/*
 func (h *StorageHandler) GenerateSignedURL(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 	key := c.Params("*")
 
@@ -111,7 +120,7 @@ func (h *StorageHandler) GenerateSignedURL(c fiber.Ctx) error {
 		opts.TransformFit = req.Transform.Fit
 	}
 
-	url, err := h.storage.Provider.GenerateSignedURL(c.RequestCtx(), bucket, key, opts)
+	url, err := svc.Provider.GenerateSignedURL(c.RequestCtx(), bucket, key, opts)
 	if err != nil {
 		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to generate signed URL")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -146,8 +155,16 @@ func (h *StorageHandler) DownloadSignedObject(c fiber.Ctx) error {
 		})
 	}
 
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	// Only local storage supports signed URL validation
-	localStorage, ok := h.storage.Provider.(*storage.LocalStorage)
+	localStorage, ok := svc.Provider.(*storage.LocalStorage)
 	if !ok {
 		// For S3, the signed URL is handled directly by S3
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -177,7 +194,7 @@ func (h *StorageHandler) DownloadSignedObject(c fiber.Ctx) error {
 		opts.Range = rangeHeader
 	}
 
-	reader, object, err := h.storage.Provider.Download(c.RequestCtx(), tokenResult.Bucket, tokenResult.Key, opts)
+	reader, object, err := svc.Provider.Download(c.RequestCtx(), tokenResult.Bucket, tokenResult.Key, opts)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{

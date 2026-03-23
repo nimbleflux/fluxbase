@@ -7,9 +7,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/query"
-	"github.com/rs/zerolog/log"
 )
 
 // validIdentifierRegex validates SQL identifiers (column names, table names, etc.)

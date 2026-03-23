@@ -10,9 +10,10 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/branching"
 	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/rs/zerolog/log"
 )
 
 // GitHubWebhookHandler handles GitHub webhook events for database branching

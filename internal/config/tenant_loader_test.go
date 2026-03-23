@@ -286,7 +286,7 @@ config:
     s3bucket: "${TEST_S3_BUCKET_123}"
     provider: s3
 `
-	if err := os.WriteFile(tenantFile, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(tenantFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to write tenant config file: %v", err)
 	}
 

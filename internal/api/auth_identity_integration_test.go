@@ -7,8 +7,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 )
 
 // TestAuthHandler_GetUserIdentities_Integration tests getting user identities

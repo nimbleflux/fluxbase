@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/gofiber/contrib/v3/websocket"
+	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/observability"
 	"github.com/nimbleflux/fluxbase/internal/pubsub"
-	"github.com/rs/zerolog/log"
 )
 
 // splitHostPort is a wrapper around net.SplitHostPort
@@ -48,6 +50,7 @@ type Manager struct {
 	clientMessageQueueSize int           // Size of per-client message queue (0 = default)
 	slowClientThreshold    int           // Queue length threshold for slow client (default: 100)
 	slowClientTimeout      time.Duration // Duration before disconnecting slow clients (default: 30s)
+	baseConfig             *config.Config
 
 	// Metrics
 	slowClientsDisconnected atomic.Uint64
@@ -56,6 +59,13 @@ type Manager struct {
 // SetMetrics sets the metrics instance for recording realtime metrics
 func (m *Manager) SetMetrics(metrics *observability.Metrics) {
 	m.metrics = metrics
+}
+
+// SetBaseConfig sets the base config for tenant-specific limit resolution
+func (m *Manager) SetBaseConfig(cfg *config.Config) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.baseConfig = cfg
 }
 
 // updateMetrics updates the realtime metrics gauges

@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/nimbleflux/fluxbase/internal/query"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestNewQueryTableTool(t *testing.T) {

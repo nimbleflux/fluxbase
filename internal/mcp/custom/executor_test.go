@@ -4,10 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/mcp"
-	"github.com/nimbleflux/fluxbase/internal/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/runtime"
 )
 
 // =============================================================================

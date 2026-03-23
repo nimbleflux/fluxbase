@@ -16,14 +16,14 @@ func BuildMCPRoutes(deps *MCPDeps) *RouteGroup {
 		Prefix: deps.BasePath,
 		Routes: []Route{
 			{Method: "POST", Path: "/", Handler: deps.HandlePost, Summary: "MCP JSON-RPC requests", Auth: AuthRequired},
-			{Method: "GET", Path: "/", Handler: deps.HandleGet, Summary: "MCP SSE stream", Auth: AuthRequired},
+			{Method: "GET", Path: "/", Handler: deps.HandleGet, Summary: "mcp SSE stream", Auth: AuthRequired},
 		},
 		SubGroups: []*RouteGroup{
 			{
 				Name:   "mcp-health",
 				Prefix: deps.BasePath,
 				Routes: []Route{
-					{Method: "GET", Path: "/health", Handler: deps.HandleHealth, Summary: "MCP health check", Public: true},
+					{Method: "GET", Path: "/health", Handler: deps.HandleHealth, Summary: "MCP health check", Auth: AuthNone, Public: true},
 				},
 			},
 		},

@@ -8,8 +8,9 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
 // StreamUpload handles streaming file upload with reduced memory usage
@@ -25,6 +26,14 @@ import (
 //   - X-Storage-Metadata: Optional. JSON object with custom metadata.
 //   - X-Storage-Upsert: Optional. "true" to overwrite existing files.
 func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 	key := c.Params("*") // Capture the rest of the path
 
@@ -43,7 +52,7 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 	}
 
 	// Validate file size
-	if err := h.storage.ValidateUploadSize(size); err != nil {
+	if err := svc.ValidateUploadSize(size); err != nil {
 		return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -105,7 +114,7 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 	}
 
 	// Upload the file to storage provider (streaming)
-	object, err := h.storage.Provider.Upload(ctx, bucket, key, body, size, opts)
+	object, err := svc.Provider.Upload(ctx, bucket, key, body, size, opts)
 	if err != nil {
 		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to upload file (streaming)")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -117,7 +126,7 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 	tx, err := h.db.Pool().Begin(ctx)
 	if err != nil {
 		// Delete from provider since DB insert failed
-		_ = h.storage.Provider.Delete(ctx, bucket, key)
+		_ = svc.Provider.Delete(ctx, bucket, key)
 		log.Error().Err(err).Msg("Failed to start transaction for streaming file upload")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to save file metadata",
@@ -127,7 +136,7 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 
 	// Set RLS context
 	if err := h.setRLSContext(ctx, tx, c); err != nil {
-		_ = h.storage.Provider.Delete(ctx, bucket, key)
+		_ = svc.Provider.Delete(ctx, bucket, key)
 		log.Error().Err(err).Msg("Failed to set RLS context")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to save file metadata",
@@ -152,7 +161,7 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 	`, bucket, key, contentType, size, metadataJSON, ownerUUID)
 	if err != nil {
 		// Delete from provider since DB insert failed
-		_ = h.storage.Provider.Delete(ctx, bucket, key)
+		_ = svc.Provider.Delete(ctx, bucket, key)
 
 		// Log the full error for debugging
 		errMsg := err.Error()
@@ -177,7 +186,7 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
-		_ = h.storage.Provider.Delete(ctx, bucket, key)
+		_ = svc.Provider.Delete(ctx, bucket, key)
 		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to commit streaming file upload")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to save file metadata",

@@ -13,6 +13,8 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
@@ -21,7 +23,6 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/runtime"
 	"github.com/nimbleflux/fluxbase/internal/secrets"
 	"github.com/nimbleflux/fluxbase/internal/settings"
-	"github.com/rs/zerolog/log"
 )
 
 // Handler manages HTTP endpoints for edge functions
@@ -39,10 +40,11 @@ type Handler struct {
 	npmRegistry            string   // Custom npm registry URL for Deno bundling
 	jsrRegistry            string   // Custom JSR registry URL for Deno bundling
 	logCounters            sync.Map // map[uuid.UUID]*int for tracking log line numbers per execution
+	baseConfig             *config.Config
 }
 
 // NewHandler creates a new edge functions handler
-func NewHandler(db *database.Connection, functionsDir string, corsConfig config.CORSConfig, jwtSecret, publicURL, npmRegistry, jsrRegistry string, authService *auth.Service, loggingService *logging.Service, secretsStorage *secrets.Storage) *Handler {
+func NewHandler(db *database.Connection, functionsDir string, corsConfig config.CORSConfig, jwtSecret, publicURL, npmRegistry, jsrRegistry string, authService *auth.Service, loggingService *logging.Service, secretsStorage *secrets.Storage, baseConfig *config.Config) *Handler {
 	h := &Handler{
 		storage:        NewStorage(db),
 		runtime:        runtime.NewRuntime(runtime.RuntimeTypeFunction, jwtSecret, publicURL),
@@ -54,6 +56,7 @@ func NewHandler(db *database.Connection, functionsDir string, corsConfig config.
 		publicURL:      publicURL,
 		npmRegistry:    npmRegistry,
 		jsrRegistry:    jsrRegistry,
+		baseConfig:     baseConfig,
 	}
 
 	// Set up log callback to capture console.log output
@@ -97,6 +100,15 @@ func (h *Handler) createBundler() (*Bundler, error) {
 // GetFunctionsDir returns the functions directory path
 func (h *Handler) GetFunctionsDir() string {
 	return h.functionsDir
+}
+
+// getConfig returns the functions config to use for the current request.
+// It checks for tenant-specific config in fiber context locals and falls back to base config.
+func (h *Handler) getConfig(c fiber.Ctx) *config.FunctionsConfig {
+	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
+		return &tc.Functions
+	}
+	return &h.baseConfig.Functions
 }
 
 // handleLogMessage is called when a function outputs a log message via console.log/console.error
@@ -497,7 +509,26 @@ func (h *Handler) CreateFunction(c fiber.Ctx) error {
 		// If bundler not available (Deno not installed), use unbundled code
 	}
 
-	// Create function
+	// Create function - get tenant-specific config for defaults
+	cfg := h.getConfig(c)
+	defaultTimeout := cfg.DefaultTimeout
+	if defaultTimeout <= 0 {
+		defaultTimeout = 30
+	}
+	defaultMemory := cfg.DefaultMemoryLimit
+	if defaultMemory <= 0 {
+		defaultMemory = 128
+	}
+	// Validate against max limits
+	timeoutSeconds := valueOr(req.TimeoutSeconds, defaultTimeout)
+	if cfg.MaxTimeout > 0 && timeoutSeconds > cfg.MaxTimeout {
+		timeoutSeconds = cfg.MaxTimeout
+	}
+	memoryLimitMB := valueOr(req.MemoryLimitMB, defaultMemory)
+	if cfg.MaxMemoryLimit > 0 && memoryLimitMB > cfg.MaxMemoryLimit {
+		memoryLimitMB = cfg.MaxMemoryLimit
+	}
+
 	fn := &EdgeFunction{
 		Name:                 req.Name,
 		Description:          req.Description,
@@ -506,8 +537,8 @@ func (h *Handler) CreateFunction(c fiber.Ctx) error {
 		IsBundled:            isBundled,
 		BundleError:          bundleError,
 		Enabled:              req.Enabled != nil && *req.Enabled,
-		TimeoutSeconds:       valueOr(req.TimeoutSeconds, 30),
-		MemoryLimitMB:        valueOr(req.MemoryLimitMB, 128),
+		TimeoutSeconds:       timeoutSeconds,
+		MemoryLimitMB:        memoryLimitMB,
 		AllowNet:             valueOr(req.AllowNet, true),
 		AllowEnv:             valueOr(req.AllowEnv, true),
 		AllowRead:            valueOr(req.AllowRead, false),

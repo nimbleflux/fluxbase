@@ -8,9 +8,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 
 // ClientKeyAuth creates middleware that authenticates requests using client keys

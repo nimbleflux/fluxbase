@@ -18,12 +18,13 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/oauth2"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/email"
-	"github.com/rs/zerolog/log"
-	"golang.org/x/oauth2"
 )
 
 // DashboardAuthHandler handles platform authentication endpoints

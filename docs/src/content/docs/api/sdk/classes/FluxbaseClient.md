@@ -9,10 +9,10 @@ Main Fluxbase client class
 
 ## Type Parameters
 
-| Type Parameter | Default type |
-| ------ | ------ |
-| `Database` | `unknown` |
-| `_SchemaName` *extends* `string` & keyof `Database` | `string` & keyof `Database` |
+| Type Parameter                                      | Default type                |
+| --------------------------------------------------- | --------------------------- |
+| `Database`                                          | `unknown`                   |
+| `_SchemaName` _extends_ `string` & keyof `Database` | `string` & keyof `Database` |
 
 ## Constructors
 
@@ -24,11 +24,11 @@ Create a new Fluxbase client instance
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `fluxbaseUrl` | `string` | The URL of your Fluxbase instance |
-| `fluxbaseKey` | `string` | The anon key (JWT token with "anon" role). Generate using scripts/generate-keys.sh |
-| `options?` | [`FluxbaseClientOptions`](/api/sdk/interfaces/fluxbaseclientoptions/) | Additional client configuration options |
+| Parameter     | Type                                                                  | Description                                                                        |
+| ------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `fluxbaseUrl` | `string`                                                              | The URL of your Fluxbase instance                                                  |
+| `fluxbaseKey` | `string`                                                              | The anon key (JWT token with "anon" role). Generate using scripts/generate-keys.sh |
+| `options?`    | [`FluxbaseClientOptions`](/api/sdk/interfaces/fluxbaseclientoptions/) | Additional client configuration options                                            |
 
 #### Returns
 
@@ -38,10 +38,10 @@ Create a new Fluxbase client instance
 
 ```typescript
 const client = new FluxbaseClient(
-  'http://localhost:8080',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',  // Anon JWT token
-  { timeout: 30000 }
-)
+  "http://localhost:8080",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...", // Anon JWT token
+  { timeout: 30000 },
+);
 ```
 
 ## Advanced
@@ -60,7 +60,7 @@ Use this for advanced scenarios like making custom API calls or admin operations
 
 ```typescript
 // Make a custom API call
-const data = await client.http.get('/api/custom-endpoint')
+const data = await client.http.get("/api/custom-endpoint");
 ```
 
 ##### Returns
@@ -83,7 +83,7 @@ Get the current authentication token
 
 The current JWT access token, or null if not authenticated
 
-***
+---
 
 ### setAuthToken()
 
@@ -95,9 +95,9 @@ This updates both the HTTP client and realtime connection with the new token.
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `token` | `string` \| `null` | The JWT access token to set, or null to clear authentication |
+| Parameter | Type               | Description                                                  |
+| --------- | ------------------ | ------------------------------------------------------------ |
+| `token`   | `string` \| `null` | The JWT access token to set, or null to clear authentication |
 
 #### Returns
 
@@ -118,19 +118,19 @@ for development, testing, and preview environments.
 
 ```typescript
 // List all branches
-const { data } = await client.branching.list()
+const { data } = await client.branching.list();
 
 // Create a feature branch
-const { data: branch } = await client.branching.create('feature/add-auth', {
-  dataCloneMode: 'schema_only',
-  expiresIn: '7d'
-})
+const { data: branch } = await client.branching.create("feature/add-auth", {
+  dataCloneMode: "schema_only",
+  expiresIn: "7d",
+});
 
 // Reset branch to parent state
-await client.branching.reset('feature/add-auth')
+await client.branching.reset("feature/add-auth");
 
 // Delete when done
-await client.branching.delete('feature/add-auth')
+await client.branching.delete("feature/add-auth");
 ```
 
 ## Database
@@ -144,14 +144,14 @@ Create a query builder for a database table
 #### Type Parameters
 
 | Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
+| -------------- | ------------ |
+| `T`            | `unknown`    |
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `table` | `string` | The table name (can include schema, e.g., 'public.users') |
+| Parameter | Type     | Description                                               |
+| --------- | -------- | --------------------------------------------------------- |
+| `table`   | `string` | The table name (can include schema, e.g., 'public.users') |
 
 #### Returns
 
@@ -163,20 +163,24 @@ A query builder instance for constructing and executing queries
 
 ```typescript
 // Simple select
-const { data } = await client.from('users').select('*').execute()
+const { data } = await client.from("users").select("*").execute();
 
 // With filters
-const { data } = await client.from('products')
-  .select('id, name, price')
-  .gt('price', 100)
-  .eq('category', 'electronics')
-  .execute()
+const { data } = await client
+  .from("products")
+  .select("id, name, price")
+  .gt("price", 100)
+  .eq("category", "electronics")
+  .execute();
 
 // Insert
-await client.from('users').insert({ name: 'John', email: 'john@example.com' }).execute()
+await client
+  .from("users")
+  .insert({ name: "John", email: "john@example.com" })
+  .execute();
 ```
 
-***
+---
 
 ### schema()
 
@@ -188,8 +192,8 @@ Use this to query tables in non-public schemas.
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
+| Parameter    | Type     | Description                                 |
+| ------------ | -------- | ------------------------------------------- |
 | `schemaName` | `string` | The schema name (e.g., 'jobs', 'analytics') |
 
 #### Returns
@@ -203,18 +207,18 @@ A schema query builder for constructing queries on that schema
 ```typescript
 // Query the logging.entries table
 const { data } = await client
-  .schema('logging')
-  .from('entries')
-  .select('*')
-  .eq('execution_id', executionId)
-  .execute()
+  .schema("logging")
+  .from("entries")
+  .select("*")
+  .eq("execution_id", executionId)
+  .execute();
 
 // Insert into a custom schema table
 await client
-  .schema('analytics')
-  .from('events')
-  .insert({ event_type: 'click', data: {} })
-  .execute()
+  .schema("analytics")
+  .from("events")
+  .insert({ event_type: "click", data: {} })
+  .execute();
 ```
 
 ## GraphQL
@@ -232,24 +236,140 @@ from your database tables.
 
 ```typescript
 // Execute a query
-const { data, errors } = await client.graphql.query(`
+const { data, errors } = await client.graphql.query(
+  `
   query GetUsers($limit: Int) {
     users(limit: $limit) {
       id
       email
     }
   }
-`, { limit: 10 })
+`,
+  { limit: 10 },
+);
 
 // Execute a mutation
-const { data, errors } = await client.graphql.mutation(`
+const { data, errors } = await client.graphql.mutation(
+  `
   mutation CreateUser($data: UserInput!) {
     insertUser(data: $data) {
       id
       email
     }
   }
-`, { data: { email: 'user@example.com' } })
+`,
+  { data: { email: "user@example.com" } },
+);
+```
+
+## Multi-Tenancy
+
+### tenant
+
+> **tenant**: [`FluxbaseTenant`](/api/sdk/classes/fluxbasetenant/)
+
+Tenant management module for multi-tenant operations
+
+#### Example
+
+```typescript
+// List tenants I have access to
+const { data } = await client.tenant.listMine();
+
+// Create a new tenant (instance admin only)
+const { data } = await client.tenant.create({
+  slug: "acme-corp",
+  name: "Acme Corporation",
+});
+
+// Get tenant details
+const { data } = await client.tenant.get("tenant-id");
+
+// Add a member to a tenant (tenant admin only)
+await client.tenant.addMember("tenant-id", {
+  user_id: "user-id",
+  role: "tenant_member",
+});
+```
+
+---
+
+### forTenant()
+
+> **forTenant**(`tenantId`): `FluxbaseClient`\<`Database`, `_SchemaName`\>
+
+Create a new client scoped to a specific tenant
+
+This returns a new client instance with the tenant context set.
+The original client is not modified.
+
+#### Parameters
+
+| Parameter  | Type     | Description               |
+| ---------- | -------- | ------------------------- |
+| `tenantId` | `string` | The tenant ID to scope to |
+
+#### Returns
+
+`FluxbaseClient`\<`Database`, `_SchemaName`\>
+
+A new FluxbaseClient instance scoped to the tenant
+
+#### Example
+
+```typescript
+// Create a tenant-scoped client
+const tenantClient = client.forTenant("tenant-uuid");
+
+// Use the scoped client for tenant-specific operations
+const { data } = await tenantClient.from("users").select("*").execute();
+```
+
+---
+
+### getTenantId()
+
+> **getTenantId**(): `string` \| `undefined`
+
+Get the current tenant ID
+
+Returns the tenant ID from X-FB-Tenant header or JWT claim, or default tenant.
+
+#### Returns
+
+`string` \| `undefined`
+
+The current tenant ID, or undefined if not set
+
+---
+
+### setTenant()
+
+> **setTenant**(`tenantId`): `void`
+
+Set the tenant context for all subsequent requests
+
+This adds the X-FB-Tenant header to all HTTP requests and updates
+the realtime connection to filter by tenant.
+
+#### Parameters
+
+| Parameter  | Type                    | Description                      |
+| ---------- | ----------------------- | -------------------------------- |
+| `tenantId` | `string` \| `undefined` | The tenant ID to use for scoping |
+
+#### Returns
+
+`void`
+
+#### Example
+
+```typescript
+// Switch to a specific tenant
+client.setTenant("tenant-uuid-here");
+
+// All subsequent requests will be scoped to this tenant
+const { data } = await client.from("users").select("*").execute();
 ```
 
 ## Other
@@ -260,7 +380,7 @@ const { data, errors } = await client.graphql.mutation(`
 
 Admin module for instance management (requires admin authentication)
 
-***
+---
 
 ### ai
 
@@ -268,7 +388,7 @@ Admin module for instance management (requires admin authentication)
 
 AI module for chatbots and conversation history
 
-***
+---
 
 ### auth
 
@@ -276,7 +396,7 @@ AI module for chatbots and conversation history
 
 Authentication module for user management
 
-***
+---
 
 ### functions
 
@@ -284,7 +404,7 @@ Authentication module for user management
 
 Functions module for invoking and managing edge functions
 
-***
+---
 
 ### jobs
 
@@ -292,7 +412,7 @@ Functions module for invoking and managing edge functions
 
 Jobs module for submitting and monitoring background jobs
 
-***
+---
 
 ### management
 
@@ -300,7 +420,7 @@ Jobs module for submitting and monitoring background jobs
 
 Management module for client keys, webhooks, and invitations
 
-***
+---
 
 ### realtime
 
@@ -308,7 +428,7 @@ Management module for client keys, webhooks, and invitations
 
 Realtime module for WebSocket subscriptions
 
-***
+---
 
 ### secrets
 
@@ -316,7 +436,7 @@ Realtime module for WebSocket subscriptions
 
 Secrets module for managing edge function and job secrets
 
-***
+---
 
 ### settings
 
@@ -324,7 +444,7 @@ Secrets module for managing edge function and job secrets
 
 Settings module for reading public application settings (respects RLS policies)
 
-***
+---
 
 ### storage
 
@@ -346,16 +466,20 @@ Can be called directly (Supabase-style) or access methods like invoke(), list(),
 
 ```typescript
 // Supabase-style direct call (uses 'default' namespace)
-const { data, error } = await client.rpc('get_user_orders', { user_id: '123' })
+const { data, error } = await client.rpc("get_user_orders", { user_id: "123" });
 
 // With full options
-const { data, error } = await client.rpc.invoke('get_user_orders', { user_id: '123' }, {
-  namespace: 'custom',
-  async: true
-})
+const { data, error } = await client.rpc.invoke(
+  "get_user_orders",
+  { user_id: "123" },
+  {
+    namespace: "custom",
+    async: true,
+  },
+);
 
 // List available procedures
-const { data: procedures } = await client.rpc.list()
+const { data: procedures } = await client.rpc.list();
 ```
 
 ## Realtime
@@ -368,9 +492,9 @@ Create or get a realtime channel (Supabase-compatible)
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `name` | `string` | Channel name |
+| Parameter | Type                                                                  | Description                    |
+| --------- | --------------------------------------------------------------------- | ------------------------------ |
+| `name`    | `string`                                                              | Channel name                   |
 | `config?` | [`RealtimeChannelConfig`](/api/sdk/interfaces/realtimechannelconfig/) | Optional channel configuration |
 
 #### Returns
@@ -382,17 +506,18 @@ RealtimeChannel instance
 #### Example
 
 ```typescript
-const channel = client.channel('room-1', {
-  broadcast: { self: true },
-  presence: { key: 'user-123' }
-})
-  .on('broadcast', { event: 'message' }, (payload) => {
-    console.log('Message:', payload)
+const channel = client
+  .channel("room-1", {
+    broadcast: { self: true },
+    presence: { key: "user-123" },
   })
-  .subscribe()
+  .on("broadcast", { event: "message" }, (payload) => {
+    console.log("Message:", payload);
+  })
+  .subscribe();
 ```
 
-***
+---
 
 ### removeChannel()
 
@@ -402,8 +527,8 @@ Remove a realtime channel (Supabase-compatible)
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
+| Parameter | Type                                                   | Description           |
+| --------- | ------------------------------------------------------ | --------------------- |
 | `channel` | [`RealtimeChannel`](/api/sdk/classes/realtimechannel/) | The channel to remove |
 
 #### Returns
@@ -415,8 +540,8 @@ Promise resolving to status
 #### Example
 
 ```typescript
-const channel = client.channel('room-1')
-await client.removeChannel(channel)
+const channel = client.channel("room-1");
+await client.removeChannel(channel);
 ```
 
 ## Vector Search
@@ -428,6 +553,7 @@ await client.removeChannel(channel)
 Vector search module for pgvector similarity search
 
 Provides convenience methods for vector similarity search:
+
 - `embed()` - Generate embeddings from text
 - `search()` - Search for similar vectors with auto-embedding
 
@@ -436,16 +562,17 @@ Provides convenience methods for vector similarity search:
 ```typescript
 // Search with automatic embedding
 const { data } = await client.vector.search({
-  table: 'documents',
-  column: 'embedding',
-  query: 'How to use TypeScript?',
-  match_count: 10
-})
+  table: "documents",
+  column: "embedding",
+  query: "How to use TypeScript?",
+  match_count: 10,
+});
 
 // Generate embeddings
-const { data } = await client.vector.embed({ text: 'Hello world' })
+const { data } = await client.vector.embed({ text: "Hello world" });
 ```
 
 Note: For more control, use the QueryBuilder methods:
+
 - `vectorSearch()` - Filter and order by vector similarity
 - `orderByVector()` - Order results by vector distance

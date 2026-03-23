@@ -12,13 +12,22 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
-	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
 // UploadFile handles file upload
 // POST /api/v1/storage/:bucket/:key
 func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 	key := c.Params("*") // Capture the rest of the path
 
@@ -39,7 +48,7 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 	// H-19: Check if bucket exists before upload
 	// Use SECURITY DEFINER function to bypass RLS when checking bucket existence
 	var bucketExists bool
-	err := h.db.Pool().QueryRow(c.RequestCtx(),
+	err = h.db.Pool().QueryRow(c.RequestCtx(),
 		`SELECT storage.bucket_exists($1)`,
 		bucket,
 	).Scan(&bucketExists)
@@ -64,7 +73,7 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 	}
 
 	// Validate file size against global limit
-	if err := h.storage.ValidateUploadSize(file.Size); err != nil {
+	if err := svc.ValidateUploadSize(file.Size); err != nil {
 		return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -150,7 +159,7 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Upload the file to storage provider first
-	object, err := h.storage.Provider.Upload(ctx, bucket, key, src, file.Size, opts)
+	object, err := svc.Provider.Upload(ctx, bucket, key, src, file.Size, opts)
 	if err != nil {
 		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to upload file")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -162,7 +171,7 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 	tx, err := h.db.Pool().Begin(ctx)
 	if err != nil {
 		// Delete from provider since DB insert failed
-		_ = h.storage.Provider.Delete(ctx, bucket, key)
+		_ = svc.Provider.Delete(ctx, bucket, key)
 		log.Error().Err(err).Msg("Failed to start transaction for file upload")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to save file metadata",
@@ -172,7 +181,7 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 
 	// Set RLS context
 	if err := h.setRLSContext(ctx, tx, c); err != nil {
-		_ = h.storage.Provider.Delete(ctx, bucket, key)
+		_ = svc.Provider.Delete(ctx, bucket, key)
 		log.Error().Err(err).Msg("Failed to set RLS context")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to save file metadata",
@@ -197,7 +206,7 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 	`, bucket, key, contentType, file.Size, metadataJSON, ownerUUID)
 	if err != nil {
 		// Delete from provider since DB insert failed
-		_ = h.storage.Provider.Delete(ctx, bucket, key)
+		_ = svc.Provider.Delete(ctx, bucket, key)
 
 		// Log the full error for debugging
 		errMsg := err.Error()
@@ -222,7 +231,7 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
-		_ = h.storage.Provider.Delete(ctx, bucket, key)
+		_ = svc.Provider.Delete(ctx, bucket, key)
 		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to commit file upload")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to save file metadata",
@@ -255,6 +264,14 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 // GET /api/v1/storage/:bucket/:key
 // HEAD /api/v1/storage/:bucket/:key (for downloadResumable to get Content-Length)
 func (h *StorageHandler) DownloadFile(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 	key := c.Params("*")
 
@@ -333,7 +350,7 @@ func (h *StorageHandler) DownloadFile(c fiber.Ctx) error {
 	}
 
 	// Download the file from provider
-	reader, object, err := h.storage.Provider.Download(ctx, bucket, key, opts)
+	reader, object, err := svc.Provider.Download(ctx, bucket, key, opts)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -401,7 +418,7 @@ func (h *StorageHandler) DownloadFile(c fiber.Ctx) error {
 			log.Warn().Err(err).Str("bucket", bucket).Str("key", key).Msg("Image transform failed, returning original")
 
 			// Re-download original since we consumed the reader
-			reader, object, err = h.storage.Provider.Download(ctx, bucket, key, opts)
+			reader, object, err = svc.Provider.Download(ctx, bucket, key, opts)
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "failed to download file",
@@ -422,7 +439,7 @@ func (h *StorageHandler) DownloadFile(c fiber.Ctx) error {
 		} else {
 			// No transformation was applied (result is nil)
 			// Re-download original since we consumed the reader
-			reader, object, err = h.storage.Provider.Download(ctx, bucket, key, opts)
+			reader, object, err = svc.Provider.Download(ctx, bucket, key, opts)
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "failed to download file",
@@ -503,6 +520,14 @@ var _ = bytes.NewReader
 // DeleteFile handles file deletion
 // DELETE /api/v1/storage/:bucket/:key
 func (h *StorageHandler) DeleteFile(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 	key := c.Params("*")
 
@@ -586,7 +611,7 @@ func (h *StorageHandler) DeleteFile(c fiber.Ctx) error {
 	}
 
 	// Delete from storage provider
-	if err := h.storage.Provider.Delete(ctx, bucket, key); err != nil {
+	if err := svc.Provider.Delete(ctx, bucket, key); err != nil {
 		log.Warn().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to delete file from provider (metadata already deleted)")
 	}
 

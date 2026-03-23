@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // =============================================================================
@@ -21,7 +22,7 @@ func TestNewManager(t *testing.T) {
 			WorkerMode: "local",
 		}
 
-		manager := NewManager(cfg, nil, "jwt-secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "jwt-secret", "http://localhost", nil, nil)
 
 		require.NotNil(t, manager)
 		assert.Equal(t, cfg, manager.Config)
@@ -34,7 +35,7 @@ func TestNewManager(t *testing.T) {
 
 	t.Run("initializes empty workers slice", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		assert.NotNil(t, manager.Workers)
 		assert.Len(t, manager.Workers, 0)
@@ -50,7 +51,7 @@ func TestManager_Start_Validation(t *testing.T) {
 		cfg := &config.JobsConfig{
 			WorkerMode: "local",
 		}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		err := manager.Start(context.Background(), 0)
 
@@ -62,7 +63,7 @@ func TestManager_Start_Validation(t *testing.T) {
 		cfg := &config.JobsConfig{
 			WorkerMode: "local",
 		}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		err := manager.Start(context.Background(), -1)
 
@@ -78,7 +79,7 @@ func TestManager_Start_Validation(t *testing.T) {
 func TestManager_GetWorkerCount(t *testing.T) {
 	t.Run("returns zero before start", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		assert.Equal(t, 0, manager.GetWorkerCount())
 	})
@@ -91,7 +92,7 @@ func TestManager_GetWorkerCount(t *testing.T) {
 func TestManager_SetSettingsSecretsService(t *testing.T) {
 	t.Run("sets nil service", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		manager.SetSettingsSecretsService(nil)
 
@@ -106,7 +107,7 @@ func TestManager_SetSettingsSecretsService(t *testing.T) {
 func TestManager_CancelJob(t *testing.T) {
 	t.Run("cancels job with no workers", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Should not panic with no workers
 		manager.CancelJob(uuid.New())
@@ -153,7 +154,7 @@ func TestManager_Stop_Simple(t *testing.T) {
 		cfg := &config.JobsConfig{
 			WorkerMode: "local",
 		}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Should not panic when stopping with no workers
 		manager.Stop()
@@ -163,7 +164,7 @@ func TestManager_Stop_Simple(t *testing.T) {
 		cfg := &config.JobsConfig{
 			WorkerMode: "local",
 		}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Multiple stops should be safe
 		manager.Stop()
@@ -179,7 +180,7 @@ func TestManager_Stop_Simple(t *testing.T) {
 func TestManager_CancelJob_Extended(t *testing.T) {
 	t.Run("cancels job with zero UUID", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Should handle zero UUID gracefully
 		manager.CancelJob(uuid.UUID{})
@@ -187,7 +188,7 @@ func TestManager_CancelJob_Extended(t *testing.T) {
 
 	t.Run("cancels multiple different jobs", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Should not panic when cancelling multiple jobs
 		manager.CancelJob(uuid.New())
@@ -206,7 +207,7 @@ func TestManager_Lifecycle(t *testing.T) {
 			WorkerMode:             "local",
 			MaxConcurrentPerWorker: 2,
 		}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		assert.NotNil(t, manager)
 		assert.Equal(t, 0, manager.GetWorkerCount())
@@ -224,7 +225,7 @@ func TestManager_Lifecycle(t *testing.T) {
 			WorkerHeartbeatInterval: 30 * time.Second,
 			WorkerTimeout:           2 * time.Minute,
 		}
-		manager := NewManager(cfg, nil, "my-secret", "https://example.com", nil)
+		manager := NewManager(cfg, nil, "my-secret", "https://example.com", nil, nil)
 
 		assert.Equal(t, cfg, manager.Config)
 		assert.Equal(t, "my-secret", manager.jwtSecret)
@@ -240,7 +241,7 @@ func TestManager_Lifecycle(t *testing.T) {
 func TestManager_SetSettingsSecretsService_Extended(t *testing.T) {
 	t.Run("sets service and can replace it", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Initially nil
 		assert.Nil(t, manager.SettingsSecretsService)

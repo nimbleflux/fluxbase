@@ -136,6 +136,58 @@ type AdminDeps struct {
 	GetExecutionLogsAdmin  fiber.Handler
 	FlushLogs              fiber.Handler
 	GenerateTestLogs       fiber.Handler
+
+	// Instance Settings
+	GetInstanceSettings       fiber.Handler
+	UpdateInstanceSettings    fiber.Handler
+	GetOverridableSettings    fiber.Handler
+	UpdateOverridableSettings fiber.Handler
+
+	// Tenant Settings
+	GetTenantSettings    fiber.Handler
+	UpdateTenantSettings fiber.Handler
+	DeleteTenantSetting  fiber.Handler
+	GetTenantSetting     fiber.Handler
+
+	// Extensions (instance-level)
+	ListExtensions   fiber.Handler
+	GetExtension     fiber.Handler
+	EnableExtension  fiber.Handler
+	DisableExtension fiber.Handler
+	SyncExtensions   fiber.Handler
+
+	// AI Admin
+	ListAIProviders            fiber.Handler
+	ListAIConversations        fiber.Handler
+	GetAIConversationMessages  fiber.Handler
+	GetAIAuditLog              fiber.Handler
+	ListExportableTables       fiber.Handler
+	GetExportableTableDetails  fiber.Handler
+	ExportTableToKnowledgeBase fiber.Handler
+
+	// RPC Admin
+	ListRPCNamespaces   fiber.Handler
+	ListProcedures      fiber.Handler
+	GetProcedure        fiber.Handler
+	UpdateProcedure     fiber.Handler
+	DeleteProcedure     fiber.Handler
+	ListRPCExecutions   fiber.Handler
+	GetRPCExecution     fiber.Handler
+	GetRPCExecutionLogs fiber.Handler
+	CancelRPCExecution  fiber.Handler
+
+	// Schema/RLS/Policy
+	GetSchemaGraph        fiber.Handler
+	GetTableRelationships fiber.Handler
+	GetTablesWithRLS      fiber.Handler
+	GetTableRLSStatus     fiber.Handler
+	ToggleTableRLS        fiber.Handler
+	ListPolicies          fiber.Handler
+	CreatePolicy          fiber.Handler
+	UpdatePolicy          fiber.Handler
+	DeletePolicy          fiber.Handler
+	GetPolicyTemplates    fiber.Handler
+	GetSecurityWarnings   fiber.Handler
 }
 
 func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
@@ -212,8 +264,8 @@ func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
 		{Method: "PUT", Path: "/email/templates/:name", Handler: deps.UpdateEmailTemplate, Summary: "Update email template", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "POST", Path: "/email/templates/:name/test", Handler: deps.TestEmailTemplate, Summary: "Test email template", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 
-		{Method: "GET", Path: "/captcha/settings", Handler: deps.GetCaptchaSettings, Summary: "Get captcha settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-		{Method: "PUT", Path: "/captcha/settings", Handler: deps.UpdateCaptchaSettings, Summary: "Update captcha settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/settings/captcha", Handler: deps.GetCaptchaSettings, Summary: "Get captcha settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/settings/captcha", Handler: deps.UpdateCaptchaSettings, Summary: "Update captcha settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 
 		{Method: "GET", Path: "/users", Handler: deps.ListUsers, Summary: "List users", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		{Method: "POST", Path: "/users/invite", Handler: deps.InviteUser, Summary: "Invite user", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
@@ -222,9 +274,10 @@ func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
 		{Method: "DELETE", Path: "/users/:id", Handler: deps.DeleteUser, Summary: "Delete user", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "PATCH", Path: "/users/:id/role", Handler: deps.UpdateUserRole, Summary: "Update user role", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "POST", Path: "/users/:id/reset-password", Handler: deps.ResetUserPassword, Summary: "Reset user password", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-		{Method: "GET", Path: "/users/quotas", Handler: deps.ListUsersWithQuotas, Summary: "List users with quotas", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-		{Method: "GET", Path: "/users/:id/quota", Handler: deps.GetUserQuota, Summary: "Get user quota", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-		{Method: "PUT", Path: "/users/:id/quota", Handler: deps.SetUserQuota, Summary: "Set user quota", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		// TODO: Implement quota handlers
+		// {Method: "GET", Path: "/users/quotas", Handler: deps.ListUsersWithQuotas, Summary: "List users with quotas", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		// {Method: "GET", Path: "/users/:id/quota", Handler: deps.GetUserQuota, Summary: "Get user quota", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		// {Method: "PUT", Path: "/users/:id/quota", Handler: deps.SetUserQuota, Summary: "Set user quota", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 
 		{Method: "POST", Path: "/invitations", Handler: deps.CreateInvitation, Summary: "Create invitation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		{Method: "GET", Path: "/invitations", Handler: deps.ListInvitations, Summary: "List invitations", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
@@ -262,10 +315,11 @@ func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
 		{Method: "GET", Path: "/functions/executions", Handler: deps.ListAllExecutions, Summary: "List all function executions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		{Method: "GET", Path: "/functions/executions/:id/logs", Handler: deps.GetExecutionLogs, Summary: "Get function execution logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 
+		// Job admin handlers
 		{Method: "GET", Path: "/jobs/namespaces", Handler: deps.ListJobNamespaces, Summary: "List job namespaces", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "GET", Path: "/jobs/functions", Handler: deps.ListJobFunctions, Summary: "List job functions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-		{Method: "GET", Path: "/jobs/functions/:id", Handler: deps.GetJobFunction, Summary: "Get job function", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-		{Method: "DELETE", Path: "/jobs/functions/:id", Handler: deps.DeleteJobFunction, Summary: "Delete job function", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/jobs/functions/:namespace/:name", Handler: deps.GetJobFunction, Summary: "Get job function", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "DELETE", Path: "/jobs/functions/:namespace/:name", Handler: deps.DeleteJobFunction, Summary: "Delete job function", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "GET", Path: "/jobs/stats", Handler: deps.GetJobStats, Summary: "Get job stats", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "GET", Path: "/jobs/workers", Handler: deps.ListWorkers, Summary: "List workers", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "GET", Path: "/jobs", Handler: deps.ListAllJobs, Summary: "List all jobs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
@@ -274,19 +328,93 @@ func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
 		{Method: "POST", Path: "/jobs/:id/cancel", Handler: deps.CancelJobAdmin, Summary: "Cancel job (admin)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "POST", Path: "/jobs/:id/retry", Handler: deps.RetryJobAdmin, Summary: "Retry job (admin)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "POST", Path: "/jobs/:id/resubmit", Handler: deps.ResubmitJobAdmin, Summary: "Resubmit job", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/jobs/sync", Handler: deps.SyncJobs, Summary: "Sync jobs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 
+		// Job queue route aliases (frontend compatibility)
+		{Method: "GET", Path: "/jobs/queue", Handler: deps.ListAllJobs, Summary: "List all jobs (queue alias)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/jobs/queue/:id", Handler: deps.GetJobAdmin, Summary: "Get job (queue alias)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/jobs/queue/:id/cancel", Handler: deps.CancelJobAdmin, Summary: "Cancel job (queue alias)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/jobs/queue/:id/terminate", Handler: deps.TerminateJob, Summary: "Terminate job (queue alias)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/jobs/queue/:id/retry", Handler: deps.RetryJobAdmin, Summary: "Retry job (queue alias)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/jobs/queue/:id/resubmit", Handler: deps.ResubmitJobAdmin, Summary: "Resubmit job (queue alias)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		// Chatbot admin handlers
 		{Method: "GET", Path: "/ai/chatbots", Handler: deps.ListChatbots, Summary: "List chatbots", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		{Method: "GET", Path: "/ai/chatbots/:id", Handler: deps.GetChatbot, Summary: "Get chatbot", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		{Method: "POST", Path: "/ai/chatbots/:id/toggle", Handler: deps.ToggleChatbot, Summary: "Toggle chatbot", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		{Method: "PUT", Path: "/ai/chatbots/:id", Handler: deps.UpdateChatbot, Summary: "Update chatbot", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		{Method: "DELETE", Path: "/ai/chatbots/:id", Handler: deps.DeleteChatbot, Summary: "Delete chatbot", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/ai/chatbots/sync", Handler: deps.SyncChatbots, Summary: "Sync chatbots", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "GET", Path: "/ai/metrics", Handler: deps.GetAIMetrics, Summary: "Get AI metrics", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 
+		// Log admin handlers
 		{Method: "GET", Path: "/logs", Handler: deps.ListLogs, Summary: "List logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "GET", Path: "/logs/stats", Handler: deps.GetLogStats, Summary: "Get log stats", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "GET", Path: "/logs/executions/:id", Handler: deps.GetExecutionLogsAdmin, Summary: "Get execution logs (admin)", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "POST", Path: "/logs/flush", Handler: deps.FlushLogs, Summary: "Flush logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "POST", Path: "/logs/test", Handler: deps.GenerateTestLogs, Summary: "Generate test logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		// Instance Settings
+		{Method: "GET", Path: "/instance/settings", Handler: deps.GetInstanceSettings, Summary: "Get instance settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PATCH", Path: "/instance/settings", Handler: deps.UpdateInstanceSettings, Summary: "Update instance settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/instance/settings/overridable", Handler: deps.GetOverridableSettings, Summary: "Get overridable settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/instance/settings/overridable", Handler: deps.UpdateOverridableSettings, Summary: "Update overridable settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		// Extensions (instance-level)
+		{Method: "GET", Path: "/extensions", Handler: deps.ListExtensions, Summary: "List extensions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/extensions/:name", Handler: deps.GetExtension, Summary: "Get extension status", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/extensions/:name/enable", Handler: deps.EnableExtension, Summary: "Enable extension", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/extensions/:name/disable", Handler: deps.DisableExtension, Summary: "Disable extension", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/extensions/sync", Handler: deps.SyncExtensions, Summary: "Sync extensions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		// AI Providers (instance-level)
+		{Method: "GET", Path: "/ai/providers", Handler: deps.ListAIProviders, Summary: "List AI providers", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		// AI Admin - Conversations, Audit, Tables
+		{Method: "GET", Path: "/ai/conversations", Handler: deps.ListAIConversations, Summary: "List AI conversations", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/ai/conversations/:id/messages", Handler: deps.GetAIConversationMessages, Summary: "Get AI conversation messages", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/ai/audit", Handler: deps.GetAIAuditLog, Summary: "Get AI audit log", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/ai/tables", Handler: deps.ListExportableTables, Summary: "List exportable AI tables", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/ai/tables/:schema/:table", Handler: deps.GetExportableTableDetails, Summary: "Get exportable table details", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/ai/tables/:schema/:table/export", Handler: deps.ExportTableToKnowledgeBase, Summary: "Export table to knowledge base", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+
+		// Tenant Settings
+		{Method: "GET", Path: "/tenants/:id/settings", Handler: deps.GetTenantSettings, Summary: "Get tenant settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "PATCH", Path: "/tenants/:id/settings", Handler: deps.UpdateTenantSettings, Summary: "Update tenant settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/tenants/:id/settings/*", Handler: deps.DeleteTenantSetting, Summary: "Delete tenant setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/tenants/:id/settings/*", Handler: deps.GetTenantSetting, Summary: "Get tenant setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+
+		// Tenant members (aliases for frontend compatibility - backend uses /admins)
+		{Method: "GET", Path: "/tenants/:id/members", Handler: deps.ListAdmins, Summary: "List tenant members", Auth: AuthRequired},
+		{Method: "POST", Path: "/tenants/:id/members", Handler: deps.AssignAdmin, Summary: "Add tenant member", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "PATCH", Path: "/tenants/:id/members/:user_id", Handler: deps.AssignAdmin, Summary: "Update tenant member", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "DELETE", Path: "/tenants/:id/members/:user_id", Handler: deps.RemoveAdmin, Summary: "Remove tenant member", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+
+		// RPC Admin routes
+		{Method: "GET", Path: "/rpc/namespaces", Handler: deps.ListRPCNamespaces, Summary: "List RPC namespaces", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/rpc/procedures", Handler: deps.ListProcedures, Summary: "List RPC procedures", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/rpc/procedures/:namespace/:name", Handler: deps.GetProcedure, Summary: "Get RPC procedure", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "PUT", Path: "/rpc/procedures/:namespace/:name", Handler: deps.UpdateProcedure, Summary: "Update RPC procedure", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "DELETE", Path: "/rpc/procedures/:namespace/:name", Handler: deps.DeleteProcedure, Summary: "Delete RPC procedure", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/rpc/sync", Handler: deps.SyncProcedures, Summary: "Sync RPC procedures", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/rpc/executions", Handler: deps.ListRPCExecutions, Summary: "List RPC executions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/rpc/executions/:id", Handler: deps.GetRPCExecution, Summary: "Get RPC execution", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/rpc/executions/:id/logs", Handler: deps.GetRPCExecutionLogs, Summary: "Get RPC execution logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/rpc/executions/:id/cancel", Handler: deps.CancelRPCExecution, Summary: "Cancel RPC execution", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+
+		// Schema/RLS/Policy routes
+		{Method: "GET", Path: "/schema/graph", Handler: deps.GetSchemaGraph, Summary: "Get schema graph", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/tables/:schema/:table/relationships", Handler: deps.GetTableRelationships, Summary: "Get table relationships", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/tables/rls", Handler: deps.GetTablesWithRLS, Summary: "Get tables with RLS status", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/tables/:schema/:table/rls", Handler: deps.GetTableRLSStatus, Summary: "Get table RLS status", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/tables/:schema/:table/rls/toggle", Handler: deps.ToggleTableRLS, Summary: "Toggle table RLS", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/policies", Handler: deps.ListPolicies, Summary: "List RLS policies", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/policies", Handler: deps.CreatePolicy, Summary: "Create RLS policy", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/policies/:schema/:table/:policy", Handler: deps.GetTableRLSStatus, Summary: "Get policies for table", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "PUT", Path: "/policies/:schema/:table/:policy", Handler: deps.UpdatePolicy, Summary: "Update RLS policy", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "DELETE", Path: "/policies/:schema/:table/:policy", Handler: deps.DeletePolicy, Summary: "Delete RLS policy", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/policies/templates", Handler: deps.GetPolicyTemplates, Summary: "Get policy templates", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "GET", Path: "/security/warnings", Handler: deps.GetSecurityWarnings, Summary: "Get security warnings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 	}
 
 	return &RouteGroup{

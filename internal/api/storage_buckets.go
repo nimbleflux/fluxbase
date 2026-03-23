@@ -12,6 +12,14 @@ import (
 // CreateBucket handles bucket creation
 // POST /api/v1/storage/buckets/:bucket
 func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 
 	if bucket == "" {
@@ -78,7 +86,7 @@ func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
 	}
 
 	// Create the bucket in storage provider
-	if err := h.storage.Provider.CreateBucket(ctx, bucket); err != nil {
+	if err := svc.Provider.CreateBucket(ctx, bucket); err != nil {
 		// Rollback will happen via defer
 		if strings.Contains(err.Error(), "already exists") {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
@@ -245,6 +253,14 @@ func (h *StorageHandler) UpdateBucketSettings(c fiber.Ctx) error {
 // DeleteBucket handles bucket deletion
 // DELETE /api/v1/storage/buckets/:bucket
 func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 
 	if bucket == "" {
@@ -253,15 +269,8 @@ func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
 		})
 	}
 
-	// Check if storage service is available
-	if h.storage == nil || h.storage.Provider == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "storage service not initialized",
-		})
-	}
-
 	// Delete the bucket
-	if err := h.storage.Provider.DeleteBucket(c.RequestCtx(), bucket); err != nil {
+	if err := svc.Provider.DeleteBucket(c.RequestCtx(), bucket); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "bucket not found",
