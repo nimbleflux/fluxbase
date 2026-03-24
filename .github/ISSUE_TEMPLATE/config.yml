@@ -1,7 +1,7 @@
 blank_issues_enabled: true
 contact_links:
   - name: Documentation
-    url: https://fluxbase.dev/docs
+    url: https://fluxbase.eu/docs
     about: Check our documentation for answers
   - name: Discussions
     url: https://github.com/nimbleflux/fluxbase/discussions
