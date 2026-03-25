@@ -102,7 +102,7 @@ export const sidebarData: SidebarDataWithVisibility = {
           title: "SQL Editor",
           url: "/sql-editor",
           icon: Code,
-          visibility: "all",
+          visibility: "tenant-only",
         },
       ],
     },

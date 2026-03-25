@@ -140,18 +140,9 @@ END;
 $$;
 
 --
--- Name: custom_resources_created_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- custom_resources_created_by_fkey, custom_tools_created_by_fkey
 --
-
-ALTER TABLE custom_resources
-ADD CONSTRAINT custom_resources_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users (id) ON DELETE SET NULL;
-
---
--- Name: custom_tools_created_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE custom_tools
-ADD CONSTRAINT custom_tools_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users (id) ON DELETE SET NULL;
 
 --
 -- Name: custom_resources_updated_at; Type: TRIGGER; Schema: -; Owner: -

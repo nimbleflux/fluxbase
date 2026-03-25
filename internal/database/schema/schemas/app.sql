@@ -180,11 +180,9 @@ CREATE POLICY "Users can read their own secret settings" ON settings FOR SELECT 
 CREATE POLICY "Users can update their own settings" ON settings FOR UPDATE TO authenticated USING (user_id = auth.current_user_id()) WITH CHECK (user_id = auth.current_user_id());
 
 --
--- Name: settings_user_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- settings_user_id_fkey
 --
-
-ALTER TABLE settings
-ADD CONSTRAINT settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE;
 
 --
 -- Name: settings; Type: PRIVILEGE; Schema: privileges; Owner: -

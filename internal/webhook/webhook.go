@@ -363,17 +363,21 @@ func (s *WebhookService) Create(ctx context.Context, webhook *Webhook) error {
 	return nil
 }
 
-// List lists all webhooks
+// List lists all webhooks, optionally filtered by tenant context
 func (s *WebhookService) List(ctx context.Context) ([]*Webhook, error) {
+	// Get tenant from context
+	tenantID := database.TenantFromContext(ctx)
+
 	query := `
 		SELECT id, name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by, created_at, updated_at
 		FROM auth.webhooks
+		WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 		ORDER BY created_at DESC
 	`
 
 	var webhooks []*Webhook
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query)
+		rows, err := tx.Query(ctx, query, tenantID)
 		if err != nil {
 			return err
 		}

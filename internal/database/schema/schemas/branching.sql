@@ -201,32 +201,9 @@ END;
 $$;
 
 --
--- Name: branches_created_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- branches_created_by_fkey, activity_log_executed_by_fkey, branch_access_granted_by_fkey, branch_access_user_id_fkey
 --
-
-ALTER TABLE branches
-ADD CONSTRAINT branches_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users (id);
-
---
--- Name: activity_log_executed_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE activity_log
-ADD CONSTRAINT activity_log_executed_by_fkey FOREIGN KEY (executed_by) REFERENCES auth.users (id);
-
---
--- Name: branch_access_granted_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE branch_access
-ADD CONSTRAINT branch_access_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES auth.users (id);
-
---
--- Name: branch_access_user_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE branch_access
-ADD CONSTRAINT branch_access_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE;
 
 --
 -- Name: branches_updated_at; Type: TRIGGER; Schema: -; Owner: -

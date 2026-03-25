@@ -608,6 +608,7 @@ CREATE TABLE IF NOT EXISTS client_keys (
     revoked boolean DEFAULT false,
     revoked_at timestamptz,
     revoked_by uuid,
+    tenant_id uuid,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
     allowed_namespaces text[],
@@ -616,6 +617,14 @@ CREATE TABLE IF NOT EXISTS client_keys (
     CONSTRAINT api_keys_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES users (id) ON DELETE SET NULL,
     CONSTRAINT api_keys_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
+
+-- Add tenant_id column if it doesn't exist (for existing databases)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'auth' AND table_name = 'client_keys' AND column_name = 'tenant_id') THEN
+        ALTER TABLE client_keys ADD COLUMN tenant_id uuid;
+    END IF;
+END $$;
 
 
 COMMENT ON COLUMN auth.client_keys.allowed_namespaces IS 'Allowed namespaces for this key. NULL = all namespaces (no restrictions), empty array = default namespace only, populated array = specific namespaces allowed.';
@@ -1738,12 +1747,21 @@ CREATE TABLE IF NOT EXISTS webhooks (
     retry_backoff_seconds integer DEFAULT 5,
     scope text DEFAULT 'user',
     created_by uuid,
+    tenant_id uuid,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
     CONSTRAINT webhooks_pkey PRIMARY KEY (id),
     CONSTRAINT webhooks_created_by_fkey FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
     CONSTRAINT webhooks_scope_check CHECK (scope IN ('user'::text, 'global'::text))
 );
+
+-- Add tenant_id column if it doesn't exist (for existing databases)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'auth' AND table_name = 'webhooks' AND column_name = 'tenant_id') THEN
+        ALTER TABLE webhooks ADD COLUMN tenant_id uuid;
+    END IF;
+END $$;
 
 
 COMMENT ON COLUMN auth.webhooks.scope IS 'Scope determines which events trigger the webhook: user = only events on records owned by created_by, global = all events (admin only)';
@@ -2567,46 +2585,10 @@ $$;
 COMMENT ON FUNCTION validate_app_metadata_update() IS 'Validates that only admins and dashboard admins can modify the app_metadata field on auth.users';
 
 --
--- Name: fk_auth_users_tenant; Type: CONSTRAINT; Schema: -; Owner: -
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- fk_auth_users_tenant, mcp_oauth_codes_user_id_fkey, mcp_oauth_tokens_user_id_fkey,
+-- fk_auth_service_keys_tenant, service_keys_revoked_by_fkey, service_key_revocations_revoked_by_fkey
 --
-
-ALTER TABLE users
-ADD CONSTRAINT fk_auth_users_tenant FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE SET NULL DEFERRABLE;
-
---
--- Name: mcp_oauth_codes_user_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE mcp_oauth_codes
-ADD CONSTRAINT mcp_oauth_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES platform.users (id) ON DELETE CASCADE;
-
---
--- Name: mcp_oauth_tokens_user_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE mcp_oauth_tokens
-ADD CONSTRAINT mcp_oauth_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES platform.users (id) ON DELETE CASCADE;
-
---
--- Name: fk_auth_service_keys_tenant; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE service_keys
-ADD CONSTRAINT fk_auth_service_keys_tenant FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE SET NULL DEFERRABLE;
-
---
--- Name: service_keys_revoked_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE service_keys
-ADD CONSTRAINT service_keys_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES platform.users (id) ON DELETE SET NULL;
-
---
--- Name: service_key_revocations_revoked_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE service_key_revocations
-ADD CONSTRAINT service_key_revocations_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES platform.users (id) ON DELETE SET NULL;
 
 --
 -- Name: Dashboard admin can manage saml_providers; Type: POLICY; Schema: -; Owner: -

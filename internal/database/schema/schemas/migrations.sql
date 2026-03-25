@@ -115,25 +115,9 @@ CREATE TABLE IF NOT EXISTS fluxbase (
 COMMENT ON TABLE fluxbase IS 'Tracks Fluxbase system migration versions (managed by golang-migrate)';
 
 --
--- Name: app_applied_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- app_applied_by_fkey, app_created_by_fkey, execution_logs_executed_by_fkey
 --
-
-ALTER TABLE app
-ADD CONSTRAINT app_applied_by_fkey FOREIGN KEY (applied_by) REFERENCES auth.users (id) ON DELETE SET NULL;
-
---
--- Name: app_created_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE app
-ADD CONSTRAINT app_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users (id) ON DELETE SET NULL;
-
---
--- Name: execution_logs_executed_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE execution_logs
-ADD CONSTRAINT execution_logs_executed_by_fkey FOREIGN KEY (executed_by) REFERENCES auth.users (id) ON DELETE SET NULL;
 
 --
 -- Name: app; Type: PRIVILEGE; Schema: privileges; Owner: -

@@ -374,13 +374,24 @@ CREATE TABLE IF NOT EXISTS secrets (
     description text,
     version integer DEFAULT 1 NOT NULL,
     expires_at timestamptz,
+    tenant_id uuid,
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
     created_by uuid,
     updated_by uuid,
     CONSTRAINT secrets_pkey PRIMARY KEY (id),
     CONSTRAINT secrets_scope_check CHECK (scope IN ('global'::text, 'namespace'::text))
+    -- Cross-schema FK secrets_tenant_id_fkey moved to post-schema-fks.sql
 );
+
+-- Add tenant_id column if it doesn't exist (for existing databases)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'functions' AND table_name = 'secrets' AND column_name = 'tenant_id') THEN
+        ALTER TABLE secrets ADD COLUMN tenant_id uuid;
+        -- FK added in post-schema-fks.sql
+    END IF;
+END $$;
 
 
 COMMENT ON TABLE secrets IS 'Encrypted secrets injected into edge functions at runtime';
@@ -417,6 +428,12 @@ CREATE INDEX IF NOT EXISTS idx_secrets_namespace ON secrets (namespace) WHERE (n
 --
 
 CREATE INDEX IF NOT EXISTS idx_secrets_scope ON secrets (scope);
+
+--
+-- Name: idx_secrets_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_secrets_tenant_id ON secrets (tenant_id) WHERE (tenant_id IS NOT NULL);
 
 --
 -- Name: unique_secrets_global_name; Type: INDEX; Schema: -; Owner: -
@@ -457,12 +474,21 @@ CREATE TABLE IF NOT EXISTS secret_versions (
     secret_id uuid NOT NULL,
     version integer NOT NULL,
     encrypted_value text NOT NULL,
+    tenant_id uuid,
     created_at timestamptz DEFAULT now() NOT NULL,
     created_by uuid,
     CONSTRAINT secret_versions_pkey PRIMARY KEY (id),
     CONSTRAINT unique_secret_version UNIQUE (secret_id, version),
     CONSTRAINT secret_versions_secret_id_fkey FOREIGN KEY (secret_id) REFERENCES secrets (id) ON DELETE CASCADE
 );
+
+-- Add tenant_id column if it doesn't exist (for existing databases)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'functions' AND table_name = 'secret_versions' AND column_name = 'tenant_id') THEN
+        ALTER TABLE secret_versions ADD COLUMN tenant_id uuid;
+    END IF;
+END $$;
 
 
 COMMENT ON TABLE secret_versions IS 'Version history for secrets (audit trail and rollback capability)';
@@ -472,6 +498,12 @@ COMMENT ON TABLE secret_versions IS 'Version history for secrets (audit trail an
 --
 
 CREATE INDEX IF NOT EXISTS idx_secret_versions_secret_id ON secret_versions (secret_id);
+
+--
+-- Name: idx_secret_versions_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_secret_versions_tenant_id ON secret_versions (tenant_id) WHERE (tenant_id IS NOT NULL);
 
 --
 -- Name: secret_versions; Type: RLS; Schema: -; Owner: -
@@ -666,32 +698,9 @@ $$;
 COMMENT ON FUNCTION update_function_dependencies_updated_at() IS 'Updates the updated_at timestamp for function_dependencies table';
 
 --
--- Name: secrets_created_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- secrets_created_by_fkey, secrets_updated_by_fkey, secret_versions_created_by_fkey, shared_modules_created_by_fkey
 --
-
-ALTER TABLE secrets
-ADD CONSTRAINT secrets_created_by_fkey FOREIGN KEY (created_by) REFERENCES platform.users (id) ON DELETE SET NULL;
-
---
--- Name: secrets_updated_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE secrets
-ADD CONSTRAINT secrets_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES platform.users (id) ON DELETE SET NULL;
-
---
--- Name: secret_versions_created_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE secret_versions
-ADD CONSTRAINT secret_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES platform.users (id) ON DELETE SET NULL;
-
---
--- Name: shared_modules_created_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE shared_modules
-ADD CONSTRAINT shared_modules_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users (id) ON DELETE SET NULL;
 
 --
 -- Name: trigger_mark_functions_on_shared_module_update; Type: TRIGGER; Schema: -; Owner: -

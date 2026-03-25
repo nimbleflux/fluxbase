@@ -343,7 +343,6 @@ type AllDeps struct {
 	Monitoring        *MonitoringDeps
 	Functions         *FunctionsDeps
 	Jobs              *JobsDeps
-	Branch            *BranchDeps
 	ClientKeys        *ClientKeysDeps
 	Secrets           *SecretsDeps
 	Sync              *SyncDeps
@@ -424,9 +423,6 @@ func RegisterAllRoutes(app *fiber.App, deps *AllDeps) error {
 	}
 	if deps.Jobs != nil {
 		registry.MustRegister(BuildJobsRoutes(deps.Jobs))
-	}
-	if deps.Branch != nil {
-		registry.MustRegister(BuildBranchRoutes(deps.Branch))
 	}
 	if deps.ClientKeys != nil {
 		registry.MustRegister(BuildClientKeysRoutes(deps.ClientKeys))
@@ -561,9 +557,6 @@ func AuditRoutes(deps *AllDeps) []RouteAuditEntry {
 	}
 	if deps.Jobs != nil {
 		registry.MustRegister(BuildJobsRoutes(deps.Jobs))
-	}
-	if deps.Branch != nil {
-		registry.MustRegister(BuildBranchRoutes(deps.Branch))
 	}
 	if deps.ClientKeys != nil {
 		registry.MustRegister(BuildClientKeysRoutes(deps.ClientKeys))

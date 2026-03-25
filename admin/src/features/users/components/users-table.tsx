@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { getRouteApi } from '@tanstack/react-router'
+import { useEffect, useState } from "react";
+import { getRouteApi } from "@tanstack/react-router";
 import {
   type SortingState,
   type VisibilityState,
@@ -11,9 +11,9 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
-} from '@tanstack/react-table'
-import { cn } from '@/lib/utils'
-import { useTableUrlState } from '@/hooks/use-table-url-state'
+} from "@tanstack/react-table";
+import { cn } from "@/lib/utils";
+import { useTableUrlState } from "@/hooks/use-table-url-state";
 import {
   Table,
   TableBody,
@@ -21,26 +21,29 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
-import { roles } from '../data/data'
-import { type User } from '../data/schema'
-import { DataTableBulkActions } from './data-table-bulk-actions'
-import { usersColumns as columns } from './users-columns'
+} from "@/components/ui/table";
+import { DataTablePagination, DataTableToolbar } from "@/components/data-table";
+import { roles } from "../data/data";
+import { type User } from "../data/schema";
+import { DataTableBulkActions } from "./data-table-bulk-actions";
+import { useUsersColumns } from "./users-columns";
 
-const route = getRouteApi('/_authenticated/users/')
+const route = getRouteApi("/_authenticated/users/");
 
 type DataTableProps = {
-  data: User[]
-}
+  data: User[];
+};
 
 export function UsersTable({ data }: DataTableProps) {
-  const search = route.useSearch()
-  const navigate = route.useNavigate()
+  const search = route.useSearch();
+  const navigate = route.useNavigate();
   // Local UI-only states
-  const [rowSelection, setRowSelection] = useState({})
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-  const [sorting, setSorting] = useState<SortingState>([])
+  const [rowSelection, setRowSelection] = useState({});
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [sorting, setSorting] = useState<SortingState>([]);
+
+  // Get columns dynamically based on tenant context
+  const columns = useUsersColumns();
 
   // Local state management for table (uncomment to use local-only state, not synced with URL)
   // const [columnFilters, onColumnFiltersChange] = useState<ColumnFiltersState>([])
@@ -60,11 +63,11 @@ export function UsersTable({ data }: DataTableProps) {
     globalFilter: { enabled: false },
     columnFilters: [
       // email per-column text filter
-      { columnId: 'email', searchKey: 'email', type: 'string' },
-      { columnId: 'provider', searchKey: 'provider', type: 'array' },
-      { columnId: 'role', searchKey: 'role', type: 'array' },
+      { columnId: "email", searchKey: "email", type: "string" },
+      { columnId: "provider", searchKey: "provider", type: "array" },
+      { columnId: "role", searchKey: "role", type: "array" },
     ],
-  })
+  });
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -89,73 +92,73 @@ export function UsersTable({ data }: DataTableProps) {
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-  })
+  });
 
   useEffect(() => {
-    ensurePageInRange(table.getPageCount())
-  }, [table, ensurePageInRange])
+    ensurePageInRange(table.getPageCount());
+  }, [table, ensurePageInRange]);
 
   return (
     <div
       className={cn(
         'max-sm:has-[div[role="toolbar"]]:mb-16', // Add margin bottom to the table on mobile when the toolbar is visible
-        'flex flex-1 flex-col gap-4'
+        "flex flex-1 flex-col gap-4",
       )}
     >
       <DataTableToolbar
         table={table}
-        searchPlaceholder='Filter by email...'
-        searchKey='email'
+        searchPlaceholder="Filter by email..."
+        searchKey="email"
         filters={[
           {
-            columnId: 'provider',
-            title: 'Provider',
+            columnId: "provider",
+            title: "Provider",
             options: [
-              { label: 'Email', value: 'email' },
-              { label: 'Invite Pending', value: 'invite_pending' },
-              { label: 'Magic Link', value: 'magic_link' },
-              { label: 'Google', value: 'google' },
-              { label: 'GitHub', value: 'github' },
-              { label: 'Microsoft', value: 'microsoft' },
-              { label: 'Apple', value: 'apple' },
-              { label: 'Facebook', value: 'facebook' },
-              { label: 'Twitter', value: 'twitter' },
-              { label: 'LinkedIn', value: 'linkedin' },
-              { label: 'GitLab', value: 'gitlab' },
-              { label: 'Bitbucket', value: 'bitbucket' },
+              { label: "Email", value: "email" },
+              { label: "Invite Pending", value: "invite_pending" },
+              { label: "Magic Link", value: "magic_link" },
+              { label: "Google", value: "google" },
+              { label: "GitHub", value: "github" },
+              { label: "Microsoft", value: "microsoft" },
+              { label: "Apple", value: "apple" },
+              { label: "Facebook", value: "facebook" },
+              { label: "Twitter", value: "twitter" },
+              { label: "LinkedIn", value: "linkedin" },
+              { label: "GitLab", value: "gitlab" },
+              { label: "Bitbucket", value: "bitbucket" },
             ],
           },
           {
-            columnId: 'role',
-            title: 'Role',
+            columnId: "role",
+            title: "Role",
             options: roles.map((role) => ({ ...role })),
           },
         ]}
       />
-      <div className='overflow-hidden rounded-md border'>
+      <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className='group/row'>
+              <TableRow key={headerGroup.id} className="group/row">
                 {headerGroup.headers.map((header) => {
                   return (
                     <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
                       className={cn(
-                        'bg-background group-hover/row:bg-muted group-data-[state=selected]/row:bg-muted',
+                        "bg-background group-hover/row:bg-muted group-data-[state=selected]/row:bg-muted",
                         header.column.columnDef.meta?.className,
-                        header.column.columnDef.meta?.thClassName
+                        header.column.columnDef.meta?.thClassName,
                       )}
                     >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
                             header.column.columnDef.header,
-                            header.getContext()
+                            header.getContext(),
                           )}
                     </TableHead>
-                  )
+                  );
                 })}
               </TableRow>
             ))}
@@ -165,21 +168,21 @@ export function UsersTable({ data }: DataTableProps) {
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
-                  data-state={row.getIsSelected() && 'selected'}
-                  className='group/row'
+                  data-state={row.getIsSelected() && "selected"}
+                  className="group/row"
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
                       className={cn(
-                        'bg-background group-hover/row:bg-muted group-data-[state=selected]/row:bg-muted',
+                        "bg-background group-hover/row:bg-muted group-data-[state=selected]/row:bg-muted",
                         cell.column.columnDef.meta?.className,
-                        cell.column.columnDef.meta?.tdClassName
+                        cell.column.columnDef.meta?.tdClassName,
                       )}
                     >
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}
@@ -189,7 +192,7 @@ export function UsersTable({ data }: DataTableProps) {
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
-                  className='h-24 text-center'
+                  className="h-24 text-center"
                 >
                   No results.
                 </TableCell>
@@ -198,8 +201,8 @@ export function UsersTable({ data }: DataTableProps) {
           </TableBody>
         </Table>
       </div>
-      <DataTablePagination table={table} className='mt-auto' />
+      <DataTablePagination table={table} className="mt-auto" />
       <DataTableBulkActions table={table} />
     </div>
-  )
+  );
 }

@@ -384,7 +384,9 @@ func (s *DeclarativeService) ApplyDeclarative(ctx context.Context) error {
 }
 
 // ApplyDeclarativeWithSource applies the declarative schema on startup with specified source.
-// It plans and applies any pending schema changes automatically.
+// It uses a two-phase approach:
+// Phase 1: Apply each schema directly (pgschema validation incompatible with our schema structure)
+// Phase 2: Apply cross-schema FKs from post-schema-fks.sql
 // The source parameter indicates the origin: 'fresh_install', 'transitioned', or 'schema_apply'.
 func (s *DeclarativeService) ApplyDeclarativeWithSource(ctx context.Context, source string) error {
 	log.Info().Str("schema_dir", s.config.SchemaDir).Msg("Checking declarative schema...")
@@ -394,10 +396,33 @@ func (s *DeclarativeService) ApplyDeclarativeWithSource(ctx context.Context, sou
 		return fmt.Errorf("schema directory not found: %s", s.config.SchemaDir)
 	}
 
-	// Always use transaction mode since we have known cross-schema dependencies.
-	// pgschema validates SQL in a temporary schema, which can't see cross-schema references.
-	if err := s.applyAllSchemasInTransaction(ctx); err != nil {
-		return fmt.Errorf("failed to apply schemas in transaction: %w", err)
+	// Phase 1: Apply each schema directly
+	// Note: pgschema validates in a temporary schema which fails for:
+	// - Self-referential FKs (tables referencing other tables in same file)
+	// - Function references (triggers calling functions from other schemas)
+	// We use direct application with idempotent SQL transforms instead.
+	for _, schema := range s.config.Schemas {
+		schemaFile := filepath.Join(s.config.SchemaDir, schema+".sql")
+
+		// Check if schema file exists
+		if _, err := os.Stat(schemaFile); os.IsNotExist(err) {
+			log.Debug().Str("schema", schema).Msg("Schema file not found, skipping")
+			continue
+		}
+
+		if err := s.applySchemaDirectFallback(ctx, schema); err != nil {
+			return fmt.Errorf("failed to apply schema %s: %w", schema, err)
+		}
+	}
+
+	// Phase 2: Apply cross-schema FKs from post-schema-fks.sql
+	if err := s.applyCrossSchemaFKs(ctx); err != nil {
+		return fmt.Errorf("failed to apply cross-schema FKs: %w", err)
+	}
+
+	// Phase 3: Apply post-schema.sql for cross-schema policies
+	if err := s.applyPostSchemaPolicies(ctx); err != nil {
+		return fmt.Errorf("failed to apply post-schema: %w", err)
 	}
 
 	// Record the schema state with the specified source
@@ -405,6 +430,122 @@ func (s *DeclarativeService) ApplyDeclarativeWithSource(ctx context.Context, sou
 		log.Warn().Err(err).Msg("Failed to record schema state")
 	}
 
+	return nil
+}
+
+// applySchemaDirectFallback applies a schema file directly (fallback when pgschema fails)
+func (s *DeclarativeService) applySchemaDirectFallback(ctx context.Context, schema string) error {
+	schemaFile := filepath.Join(s.config.SchemaDir, schema+".sql")
+
+	// Read the schema file
+	content, err := os.ReadFile(schemaFile)
+	if err != nil {
+		return fmt.Errorf("failed to read schema file: %w", err)
+	}
+
+	// Create connection
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		s.dbUser, s.dbPassword, s.dbHost, s.dbPort, s.dbName)
+	pool, err := pgxpool.New(ctx, connStr)
+	if err != nil {
+		return fmt.Errorf("failed to create connection pool: %w", err)
+	}
+	defer pool.Close()
+
+	// Set search_path to include all schemas for function/type references
+	// Schemas are applied in dependency order, so earlier schemas are already created
+	allSchemas := strings.Join(s.config.Schemas, ", ")
+	searchPath := fmt.Sprintf("%s, %s, public", schema, allSchemas)
+	_, err = pool.Exec(ctx, fmt.Sprintf("SET search_path TO %s", searchPath))
+	if err != nil {
+		return fmt.Errorf("failed to set search_path: %w", err)
+	}
+
+	idempotentSQL := makeSQLIdempotent(string(content))
+	_, err = pool.Exec(ctx, idempotentSQL)
+	if err != nil {
+		return fmt.Errorf("failed to execute schema: %w", err)
+	}
+
+	log.Info().Str("schema", schema).Msg("Schema applied directly")
+	return nil
+}
+
+// applyCrossSchemaFKs applies cross-schema foreign keys from post-schema-fks.sql
+func (s *DeclarativeService) applyCrossSchemaFKs(ctx context.Context) error {
+	fksFile := filepath.Join(s.config.SchemaDir, "post-schema-fks.sql")
+
+	// Check if file exists
+	if _, err := os.Stat(fksFile); os.IsNotExist(err) {
+		log.Debug().Msg("post-schema-fks.sql not found, skipping")
+		return nil
+	}
+
+	// Read the file
+	content, err := os.ReadFile(fksFile)
+	if err != nil {
+		return fmt.Errorf("failed to read post-schema-fks.sql: %w", err)
+	}
+
+	// Create connection
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		s.dbUser, s.dbPassword, s.dbHost, s.dbPort, s.dbName)
+	pool, err := pgxpool.New(ctx, connStr)
+	if err != nil {
+		return fmt.Errorf("failed to create connection pool: %w", err)
+	}
+	defer pool.Close()
+
+	// Execute the FK additions (they use idempotent DO blocks)
+	_, err = pool.Exec(ctx, string(content))
+	if err != nil {
+		return fmt.Errorf("failed to apply cross-schema FKs: %w", err)
+	}
+
+	log.Info().Msg("Cross-schema FKs applied")
+	return nil
+}
+
+// applyPostSchemaPolicies applies post-schema.sql for cross-schema policies
+func (s *DeclarativeService) applyPostSchemaPolicies(ctx context.Context) error {
+	postSchemaFile := filepath.Join(s.config.SchemaDir, "post-schema.sql")
+
+	// Check if file exists
+	if _, err := os.Stat(postSchemaFile); os.IsNotExist(err) {
+		log.Debug().Msg("post-schema.sql not found, skipping")
+		return nil
+	}
+
+	// Read the file
+	content, err := os.ReadFile(postSchemaFile)
+	if err != nil {
+		return fmt.Errorf("failed to read post-schema.sql: %w", err)
+	}
+
+	// Create connection
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		s.dbUser, s.dbPassword, s.dbHost, s.dbPort, s.dbName)
+	pool, err := pgxpool.New(ctx, connStr)
+	if err != nil {
+		return fmt.Errorf("failed to create connection pool: %w", err)
+	}
+	defer pool.Close()
+
+	// Build search_path with all schemas
+	allSchemas := strings.Join(s.config.Schemas, ", ")
+	_, err = pool.Exec(ctx, fmt.Sprintf("SET search_path TO %s, public", allSchemas))
+	if err != nil {
+		return fmt.Errorf("failed to set search_path: %w", err)
+	}
+
+	// Execute with idempotent transforms
+	idempotentSQL := makeSQLIdempotent(string(content))
+	_, err = pool.Exec(ctx, idempotentSQL)
+	if err != nil {
+		return fmt.Errorf("failed to apply post-schema.sql: %w", err)
+	}
+
+	log.Info().Msg("Post-schema policies applied")
 	return nil
 }
 
@@ -609,105 +750,4 @@ type SchemaStatus struct {
 	Source                 string    `json:"source"`
 	PendingChanges         int       `json:"pending_changes"`
 	HasDestructiveChanges  bool      `json:"has_destructive_changes"`
-}
-
-// applyAllSchemasInTransaction applies all schemas in a single transaction
-// This is used when there are cross-schema references that prevent individual schema application
-// It applies schemas in order, then applies post-schema.sql for cross-schema policies
-func (s *DeclarativeService) applyAllSchemasInTransaction(ctx context.Context) error {
-	log.Info().Msg("Applying all schemas in single transaction due to cross-schema references")
-
-	// Create connection string
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
-		s.dbUser,
-		s.dbPassword,
-		s.dbHost,
-		s.dbPort,
-		s.dbName,
-	)
-
-	pool, err := pgxpool.New(ctx, connStr)
-	if err != nil {
-		return fmt.Errorf("failed to create connection pool: %w", err)
-	}
-	defer pool.Close()
-
-	// Start a single transaction for all schemas
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	// Build list of all schemas for search_path (for cross-schema references)
-	allSchemas := strings.Join(s.config.Schemas, ", ")
-
-	// Apply each schema file
-	for _, schema := range s.config.Schemas {
-		schemaFile := filepath.Join(s.config.SchemaDir, schema+".sql")
-
-		// Check if schema file exists
-		if _, err := os.Stat(schemaFile); os.IsNotExist(err) {
-			log.Debug().Str("schema", schema).Msg("Schema file not found, skipping")
-			continue
-		}
-
-		// Read the schema file
-		content, err := os.ReadFile(schemaFile)
-		if err != nil {
-			return fmt.Errorf("failed to read schema file %s: %w", schemaFile, err)
-		}
-
-		// Set search_path with this schema first, then all others for cross-schema references
-		// This ensures unqualified table names go into the correct schema
-		searchPath := fmt.Sprintf("%s, %s, public", schema, allSchemas)
-		_, err = tx.Exec(ctx, fmt.Sprintf("SET LOCAL search_path TO %s", searchPath))
-		if err != nil {
-			return fmt.Errorf("failed to set search_path for schema %s: %w", schema, err)
-		}
-
-		log.Info().Str("schema", schema).Msg("Applying schema...")
-
-		// Make SQL idempotent and execute
-		idempotentSQL := makeSQLIdempotent(string(content))
-		_, err = tx.Exec(ctx, idempotentSQL)
-		if err != nil {
-			return fmt.Errorf("failed to apply schema %s: %w", schema, err)
-		}
-
-		log.Info().Str("schema", schema).Msg("Schema applied")
-	}
-
-	// Apply post-schema.sql for cross-schema policies
-	postSchemaFile := filepath.Join(s.config.SchemaDir, "post-schema.sql")
-	if _, err := os.Stat(postSchemaFile); err == nil {
-		content, err := os.ReadFile(postSchemaFile)
-		if err != nil {
-			return fmt.Errorf("failed to read post-schema.sql: %w", err)
-		}
-
-		// Set search_path to include all schemas for cross-schema policies
-		_, err = tx.Exec(ctx, fmt.Sprintf("SET LOCAL search_path TO %s, public", allSchemas))
-		if err != nil {
-			return fmt.Errorf("failed to set search_path for post-schema: %w", err)
-		}
-
-		log.Info().Msg("Applying post-schema.sql (cross-schema policies)...")
-
-		idempotentSQL := makeSQLIdempotent(string(content))
-		_, err = tx.Exec(ctx, idempotentSQL)
-		if err != nil {
-			return fmt.Errorf("failed to apply post-schema.sql: %w", err)
-		}
-
-		log.Info().Msg("Post-schema policies applied")
-	}
-
-	// Commit the transaction
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	log.Info().Msg("All schemas applied successfully")
-	return nil
 }

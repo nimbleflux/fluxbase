@@ -375,18 +375,9 @@ END;
 $$;
 
 --
--- Name: functions_created_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- functions_created_by_fkey, queue_created_by_fkey
 --
-
-ALTER TABLE functions
-ADD CONSTRAINT functions_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users (id) ON DELETE SET NULL;
-
---
--- Name: queue_created_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE queue
-ADD CONSTRAINT queue_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users (id) ON DELETE SET NULL;
 
 --
 -- Name: function_files_realtime_notify; Type: TRIGGER; Schema: -; Owner: -

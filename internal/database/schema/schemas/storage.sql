@@ -665,46 +665,10 @@ $$;
 COMMENT ON FUNCTION user_can_access_object(uuid, text) IS 'Checks if the current user can access a storage object with the required permission (read or write). Returns TRUE if: user is admin/service role, user owns the object, object is in public bucket (read only), or user has been granted permission via object_permissions table.';
 
 --
--- Name: buckets_tenant_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- buckets_tenant_id_fkey, chunked_upload_sessions_tenant_id_fkey, objects_owner_id_fkey,
+-- objects_tenant_id_fkey, object_permissions_tenant_id_fkey, object_permissions_user_id_fkey
 --
-
-ALTER TABLE buckets
-ADD CONSTRAINT buckets_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE CASCADE;
-
---
--- Name: chunked_upload_sessions_tenant_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE chunked_upload_sessions
-ADD CONSTRAINT chunked_upload_sessions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE CASCADE;
-
---
--- Name: objects_owner_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE objects
-ADD CONSTRAINT objects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES auth.users (id) ON DELETE SET NULL;
-
---
--- Name: objects_tenant_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE objects
-ADD CONSTRAINT objects_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE CASCADE;
-
---
--- Name: object_permissions_tenant_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE object_permissions
-ADD CONSTRAINT object_permissions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE CASCADE;
-
---
--- Name: object_permissions_user_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE object_permissions
-ADD CONSTRAINT object_permissions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE;
 
 --
 -- Name: storage_buckets_admin; Type: POLICY; Schema: -; Owner: -

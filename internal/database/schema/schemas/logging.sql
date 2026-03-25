@@ -757,46 +757,9 @@ CREATE INDEX IF NOT EXISTS idx_logging_entries_system_tenant_id ON entries_syste
 -- When partitions are attached, they bring their own FK constraints.
 
 --
--- Name: entries_tenant_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- entries_tenant_id_fkey (for entries_ai, entries_custom, entries_execution, entries_http, entries_security, entries_system)
 --
-
-ALTER TABLE entries_ai
-ADD CONSTRAINT entries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE CASCADE;
-
---
--- Name: entries_tenant_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE entries_custom
-ADD CONSTRAINT entries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE CASCADE;
-
---
--- Name: entries_tenant_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE entries_execution
-ADD CONSTRAINT entries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE CASCADE;
-
---
--- Name: entries_tenant_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE entries_http
-ADD CONSTRAINT entries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE CASCADE;
-
---
--- Name: entries_tenant_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE entries_security
-ADD CONSTRAINT entries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE CASCADE;
-
---
--- Name: entries_tenant_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE entries_system
-ADD CONSTRAINT entries_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id) ON DELETE CASCADE;
 
 --
 -- Name: execution_logs_migration_status; Type: VIEW; Schema: -; Owner: -

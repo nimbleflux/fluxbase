@@ -286,18 +286,9 @@ END;
 $$;
 
 --
--- Name: procedures_created_by_fkey; Type: CONSTRAINT; Schema: -; Owner: -
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- procedures_created_by_fkey, executions_user_id_fkey
 --
-
-ALTER TABLE procedures
-ADD CONSTRAINT procedures_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users (id) ON DELETE SET NULL;
-
---
--- Name: executions_user_id_fkey; Type: CONSTRAINT; Schema: -; Owner: -
---
-
-ALTER TABLE executions
-ADD CONSTRAINT executions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE SET NULL;
 
 --
 -- Name: executions_realtime_notify; Type: TRIGGER; Schema: -; Owner: -

@@ -47,6 +47,7 @@ type AuthDeps struct {
 	ListOAuthProviders        fiber.Handler
 	OAuthAuthorize            fiber.Handler
 	OAuthCallback             fiber.Handler
+	GetSPMetadata             fiber.Handler
 }
 
 func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
@@ -96,6 +97,7 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 		{Method: "GET", Path: "/oauth/providers", Handler: deps.ListOAuthProviders, Summary: "List OAuth providers", Auth: AuthNone, Public: true},
 		{Method: "GET", Path: "/oauth/:provider/authorize", Handler: deps.OAuthAuthorize, Summary: "OAuth authorize", Auth: AuthNone, Public: true},
 		{Method: "GET", Path: "/oauth/:provider/callback", Handler: deps.OAuthCallback, Summary: "OAuth callback", Auth: AuthNone, Public: true},
+		{Method: "GET", Path: "/saml/metadata/:provider", Handler: deps.GetSPMetadata, Summary: "Get SAML SP metadata", Auth: AuthNone, Public: true},
 	}...)
 
 	return &RouteGroup{

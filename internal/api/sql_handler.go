@@ -68,7 +68,7 @@ const (
 // @Failure 400 {object} fiber.Map
 // @Failure 401 {object} fiber.Map
 // @Failure 500 {object} fiber.Map
-// @Router /api/v1/sql/execute [post]
+// @Router /api/v1/admin/sql/execute [post]
 func (h *SQLHandler) ExecuteSQL(c fiber.Ctx) error {
 	// Parse request
 	var req ExecuteSQLRequest

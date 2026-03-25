@@ -84,6 +84,13 @@ func TenantMiddleware(cfg TenantConfig) fiber.Handler {
 		c.Locals("tenant_id", tenantID)
 		c.Locals("tenant_source", tenantSource)
 
+		// Also store in request context for storage layer
+		// This ensures database.TenantFromContext(ctx) works when handlers pass c.RequestCtx()
+		if tenantID != "" {
+			ctx := database.ContextWithTenant(c.RequestCtx(), tenantID)
+			c.SetContext(ctx)
+		}
+
 		// Look up tenant slug and store tenant-specific config
 		if tenantID != "" && cfg.ConfigLoader != nil {
 			var slug string
