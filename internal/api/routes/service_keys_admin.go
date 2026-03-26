@@ -9,6 +9,7 @@ import (
 //
 // Role Access:
 //   - instance_admin: Full access to all service keys
+//   - tenant_admin: Access to tenant-scoped service keys (RLS enforced)
 type ServiceKeysAdminDeps struct {
 	ListServiceKeys      fiber.Handler
 	GetServiceKey        fiber.Handler
@@ -30,19 +31,21 @@ func BuildServiceKeysAdminRoutes(deps *ServiceKeysAdminDeps) *RouteGroup {
 	}
 
 	return &RouteGroup{
-		Name: "service_keys_admin",
+		Name:         "service_keys_admin",
+		DefaultAuth:  AuthRequired,
+		DefaultRoles: []string{"admin", "instance_admin", "tenant_admin"},
 		Routes: []Route{
-			{Method: "GET", Path: "/service-keys", Handler: deps.ListServiceKeys, Summary: "List service keys", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/service-keys", Handler: deps.CreateServiceKey, Summary: "Create service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/service-keys/:id", Handler: deps.GetServiceKey, Summary: "Get service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "PUT", Path: "/service-keys/:id", Handler: deps.UpdateServiceKey, Summary: "Update service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "DELETE", Path: "/service-keys/:id", Handler: deps.DeleteServiceKey, Summary: "Delete service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/service-keys/:id/disable", Handler: deps.DisableServiceKey, Summary: "Disable service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/service-keys/:id/enable", Handler: deps.EnableServiceKey, Summary: "Enable service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/service-keys/:id/revoke", Handler: deps.RevokeServiceKey, Summary: "Revoke service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/service-keys/:id/deprecate", Handler: deps.DeprecateServiceKey, Summary: "Deprecate service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/service-keys/:id/rotate", Handler: deps.RotateServiceKey, Summary: "Rotate service key", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/service-keys/:id/revocations", Handler: deps.GetRevocationHistory, Summary: "Get revocation history", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+			{Method: "GET", Path: "/service-keys", Handler: deps.ListServiceKeys, Summary: "List service keys"},
+			{Method: "POST", Path: "/service-keys", Handler: deps.CreateServiceKey, Summary: "Create service key"},
+			{Method: "GET", Path: "/service-keys/:id", Handler: deps.GetServiceKey, Summary: "Get service key"},
+			{Method: "PUT", Path: "/service-keys/:id", Handler: deps.UpdateServiceKey, Summary: "Update service key"},
+			{Method: "DELETE", Path: "/service-keys/:id", Handler: deps.DeleteServiceKey, Summary: "Delete service key"},
+			{Method: "POST", Path: "/service-keys/:id/disable", Handler: deps.DisableServiceKey, Summary: "Disable service key"},
+			{Method: "POST", Path: "/service-keys/:id/enable", Handler: deps.EnableServiceKey, Summary: "Enable service key"},
+			{Method: "POST", Path: "/service-keys/:id/revoke", Handler: deps.RevokeServiceKey, Summary: "Revoke service key"},
+			{Method: "POST", Path: "/service-keys/:id/deprecate", Handler: deps.DeprecateServiceKey, Summary: "Deprecate service key"},
+			{Method: "POST", Path: "/service-keys/:id/rotate", Handler: deps.RotateServiceKey, Summary: "Rotate service key"},
+			{Method: "GET", Path: "/service-keys/:id/revocations", Handler: deps.GetRevocationHistory, Summary: "Get revocation history"},
 		},
 	}
 }

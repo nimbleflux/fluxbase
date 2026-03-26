@@ -31,6 +31,7 @@ func NewBranchHandler(manager *branching.Manager, router *branching.Router, cfg 
 // CreateBranchRequest represents the request body for creating a branch
 type CreateBranchRequest struct {
 	Name           string                  `json:"name" validate:"required,min=1,max=100"`
+	TenantID       *uuid.UUID              `json:"tenant_id,omitempty"`
 	ParentBranchID *uuid.UUID              `json:"parent_branch_id,omitempty"`
 	DataCloneMode  branching.DataCloneMode `json:"data_clone_mode,omitempty"`
 	Type           branching.BranchType    `json:"type,omitempty"`
@@ -72,6 +73,19 @@ func (h *BranchHandler) CreateBranch(c fiber.Ctx) error {
 		}
 	}
 
+	// Get tenant ID from context (set by tenant middleware)
+	var tenantID *uuid.UUID
+	if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
+		if id, err := uuid.Parse(tid); err == nil {
+			tenantID = &id
+		}
+	}
+
+	// If request doesn't specify tenant_id, use context tenant
+	if req.TenantID == nil && tenantID != nil {
+		req.TenantID = tenantID
+	}
+
 	// Parse expires_in to ExpiresAt
 	var expiresAt *time.Time
 	if req.ExpiresIn != nil && *req.ExpiresIn != "" {
@@ -89,6 +103,7 @@ func (h *BranchHandler) CreateBranch(c fiber.Ctx) error {
 	// Create branch request
 	branchReq := branching.CreateBranchRequest{
 		Name:           req.Name,
+		TenantID:       req.TenantID,
 		ParentBranchID: req.ParentBranchID,
 		DataCloneMode:  req.DataCloneMode,
 		Type:           req.Type,
@@ -177,6 +192,16 @@ func (h *BranchHandler) ListBranches(c fiber.Ctx) error {
 		if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
 			if id, err := uuid.Parse(uid); err == nil {
 				filter.CreatedBy = &id
+			}
+		}
+	}
+
+	// Auto-filter by tenant for non-instance-admins
+	userRole, _ := c.Locals("user_role").(string)
+	if userRole != "instance_admin" && userRole != "admin" {
+		if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
+			if id, err := uuid.Parse(tid); err == nil {
+				filter.TenantID = &id
 			}
 		}
 	}
@@ -655,7 +680,24 @@ func (h *BranchHandler) ListGitHubConfigs(c fiber.Ctx) error {
 		})
 	}
 
-	configs, err := h.manager.GetStorage().ListGitHubConfigs(c.RequestCtx())
+	// Get tenant ID from context (set by tenant middleware)
+	var tenantID *uuid.UUID
+	if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
+		if id, err := uuid.Parse(tid); err == nil {
+			tenantID = &id
+		}
+	}
+
+	// Auto-filter by tenant for non-instance-admins
+	userRole, _ := c.Locals("user_role").(string)
+	if userRole != "instance_admin" && userRole != "admin" {
+		// Non-admins can only see their tenant's configs
+	} else {
+		// Instance admins can see all configs (pass nil)
+		tenantID = nil
+	}
+
+	configs, err := h.manager.GetStorage().ListGitHubConfigs(c.RequestCtx(), tenantID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list GitHub configs")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

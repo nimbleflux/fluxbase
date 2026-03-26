@@ -395,6 +395,45 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		}
 		tenantManager = tenantdb.NewManager(tenantStorage, tenantCfg, db.Pool(), dbURL)
 		log.Info().Msg("Multi-tenancy enabled")
+
+		// Initialize tenant declarative schema service if configured
+		// Uses pgschema CLI for proper diff-based schema management
+		if cfg.Tenants.Declarative.Enabled && cfg.Tenants.Declarative.SchemaDir != "" {
+			declarativeCfg := tenantdb.DeclarativeConfig{
+				Enabled:          cfg.Tenants.Declarative.Enabled,
+				SchemaDir:        cfg.Tenants.Declarative.SchemaDir,
+				OnCreate:         cfg.Tenants.Declarative.OnCreate,
+				OnStartup:        cfg.Tenants.Declarative.OnStartup,
+				AllowDestructive: cfg.Tenants.Declarative.AllowDestructive,
+			}
+			declarativeSvc := tenantdb.NewDeclarativeService(
+				declarativeCfg,
+				"pgschema", // pgschema CLI path (must be in PATH)
+				cfg.Database.Host,
+				cfg.Database.Port,
+				cfg.Database.AdminUser,
+				cfg.Database.AdminPassword,
+				db.Pool(),
+			)
+			tenantManager.SetDeclarativeService(declarativeSvc)
+			tenantManager.SetDeclarativeConfig(declarativeCfg)
+			log.Info().
+				Str("schema_dir", cfg.Tenants.Declarative.SchemaDir).
+				Bool("on_create", cfg.Tenants.Declarative.OnCreate).
+				Bool("on_startup", cfg.Tenants.Declarative.OnStartup).
+				Msg("Tenant declarative schema service initialized")
+
+			// Apply schemas on startup if configured
+			if cfg.Tenants.Declarative.OnStartup {
+				go func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+					defer cancel()
+					if err := tenantManager.ApplyDeclarativeSchemas(ctx); err != nil {
+						log.Error().Err(err).Msg("Failed to apply tenant declarative schemas on startup")
+					}
+				}()
+			}
+		}
 	}
 	tenantHandler := NewTenantHandler(db, tenantManager, tenantStorage)
 

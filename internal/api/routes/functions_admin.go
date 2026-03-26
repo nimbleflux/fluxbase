@@ -25,12 +25,15 @@ func BuildFunctionsAdminRoutes(deps *FunctionsAdminDeps) *RouteGroup {
 	}
 
 	return &RouteGroup{
-		Name: "functions_admin",
+		Name:         "functions_admin",
+		DefaultAuth:  AuthRequired,
+		DefaultRoles: []string{"admin", "instance_admin"},
 		Routes: []Route{
-			{Method: "POST", Path: "/functions/reload", Handler: deps.ReloadFunctions, Summary: "Reload functions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/functions/namespaces", Handler: deps.ListFunctionNamespaces, Summary: "List function namespaces", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/functions/executions", Handler: deps.ListAllExecutions, Summary: "List all function executions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "GET", Path: "/functions/executions/:id/logs", Handler: deps.GetExecutionLogs, Summary: "Get function execution logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "POST", Path: "/functions/reload", Handler: deps.ReloadFunctions, Summary: "Reload functions"},
+			{Method: "GET", Path: "/functions/namespaces", Handler: deps.ListFunctionNamespaces, Summary: "List function namespaces"},
+			// Executions - tenant admin can view (override roles)
+			{Method: "GET", Path: "/functions/executions", Handler: deps.ListAllExecutions, Summary: "List all function executions", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "GET", Path: "/functions/executions/:id/logs", Handler: deps.GetExecutionLogs, Summary: "Get function execution logs", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		},
 	}
 }

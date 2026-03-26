@@ -12,6 +12,7 @@ import {
   Lock,
   Globe,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -65,6 +66,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+// Type for feature disabled error response
+interface FeatureDisabledError {
+  error: string;
+  code: string;
+  feature_key?: string;
+}
+
 export const Route = createFileRoute("/_authenticated/knowledge-bases/")({
   component: KnowledgeBasesPage,
 });
@@ -75,6 +83,7 @@ function KnowledgeBasesPage() {
     [],
   );
   const [loading, setLoading] = useState(true);
+  const [featureDisabled, setFeatureDisabled] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [users, setUsers] = useState<EnrichedUser[]>([]);
@@ -99,11 +108,23 @@ function KnowledgeBasesPage() {
 
   const fetchKnowledgeBases = async () => {
     setLoading(true);
+    setFeatureDisabled(false);
     try {
       const data = await knowledgeBasesApi.list();
       setKnowledgeBases(data || []);
-    } catch {
-      toast.error("Failed to fetch knowledge bases");
+    } catch (error) {
+      // Check if it's a feature disabled error (503)
+      const axiosError = error as {
+        response?: { status?: number; data?: FeatureDisabledError };
+      };
+      if (
+        axiosError.response?.status === 503 &&
+        axiosError.response?.data?.code === "FEATURE_DISABLED"
+      ) {
+        setFeatureDisabled(true);
+      } else {
+        toast.error("Failed to fetch knowledge bases");
+      }
     } finally {
       setLoading(false);
     }
@@ -539,7 +560,27 @@ function KnowledgeBasesPage() {
           </div>
 
           <ScrollArea className="h-[calc(100vh-16rem)]">
-            {knowledgeBases.length === 0 ? (
+            {featureDisabled ? (
+              <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
+                <CardContent className="p-12 text-center">
+                  <AlertTriangle className="text-amber-600 mx-auto mb-4 h-12 w-12 dark:text-amber-400" />
+                  <p className="mb-2 text-lg font-medium text-amber-800 dark:text-amber-200">
+                    AI Features Not Enabled
+                  </p>
+                  <p className="text-amber-700 dark:text-amber-300 mb-4 text-sm">
+                    Knowledge bases require AI features to be enabled. Enable AI
+                    in your configuration to use this feature.
+                  </p>
+                  <p className="text-amber-600 dark:text-amber-400 text-xs">
+                    Set{" "}
+                    <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">
+                      FLUXBASE_AI_ENABLED=true
+                    </code>{" "}
+                    in your environment or configure it in instance settings.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : knowledgeBases.length === 0 ? (
               <Card>
                 <CardContent className="p-12 text-center">
                   <BookOpen className="text-muted-foreground mx-auto mb-4 h-12 w-12" />

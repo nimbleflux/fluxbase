@@ -39,6 +39,15 @@ export const useTenantStore = create<TenantState>()(
       setTenants: (tenants, isInstanceAdmin) =>
         set((state) => {
           const isAdmin = isInstanceAdmin ?? state.isInstanceAdmin;
+          // If there's only one tenant, auto-select it regardless of role
+          // This simplifies UX since all menu items are visible anyway
+          if (tenants.length === 1) {
+            return {
+              ...state,
+              tenants,
+              currentTenant: tenants[0],
+            };
+          }
           // If user is an instance admin and has no persisted tenant, keep them at instance level
           if (isAdmin && !state.currentTenant) {
             return {

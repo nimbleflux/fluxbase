@@ -30,6 +30,7 @@ import {
   HardDrive,
   Command,
   Building2,
+  Server,
 } from "lucide-react";
 import { type SidebarData } from "../types";
 
@@ -117,12 +118,6 @@ export const sidebarData: SidebarDataWithVisibility = {
           visibility: "all",
         },
         {
-          title: "Tenants",
-          url: "/tenants",
-          icon: Building2,
-          visibility: "instance-only",
-        },
-        {
           title: "Authentication",
           url: "/authentication",
           icon: Shield,
@@ -195,18 +190,6 @@ export const sidebarData: SidebarDataWithVisibility = {
           visibility: "tenant-only",
         },
         {
-          title: "Configuration",
-          url: "/features",
-          icon: Zap,
-          visibility: "instance-only",
-        },
-        {
-          title: "Extensions",
-          url: "/extensions",
-          icon: Puzzle,
-          visibility: "instance-only",
-        },
-        {
           title: "Email",
           url: "/email-settings",
           icon: Mail,
@@ -223,12 +206,6 @@ export const sidebarData: SidebarDataWithVisibility = {
           url: "/ai-providers",
           icon: Bot,
           visibility: "tenant-only",
-        },
-        {
-          title: "Database Config",
-          url: "/database-config",
-          icon: Database,
-          visibility: "instance-only",
         },
       ],
     },
@@ -288,6 +265,42 @@ export const sidebarData: SidebarDataWithVisibility = {
           title: "Monitoring",
           url: "/monitoring",
           icon: Activity,
+          visibility: "all",
+        },
+      ],
+    },
+    {
+      title: "Platform",
+      collapsible: true,
+      items: [
+        {
+          title: "Tenants",
+          url: "/tenants",
+          icon: Building2,
+          visibility: "instance-only",
+        },
+        {
+          title: "Configuration",
+          url: "/features",
+          icon: Zap,
+          visibility: "instance-only",
+        },
+        {
+          title: "Extensions",
+          url: "/extensions",
+          icon: Puzzle,
+          visibility: "instance-only",
+        },
+        {
+          title: "Database Config",
+          url: "/database-config",
+          icon: Database,
+          visibility: "instance-only",
+        },
+        {
+          title: "Instance Settings",
+          url: "/instance-settings",
+          icon: Server,
           visibility: "instance-only",
         },
       ],
@@ -308,12 +321,6 @@ export const sidebarData: SidebarDataWithVisibility = {
           icon: Palette,
           visibility: "all",
         },
-        {
-          title: "Instance Settings",
-          url: "/instance-settings",
-          icon: Settings,
-          visibility: "instance-only",
-        },
       ],
     },
   ],
@@ -330,12 +337,16 @@ export function filterSidebarForContext(
       const filteredItems = group.items.filter((item) => {
         const visibility = item.visibility || "all";
 
-        // Instance admin NOT acting as tenant: show instance-only + all, hide tenant-only
-        if (isInstanceAdmin && !actingAsTenantAdmin) {
-          return visibility !== "tenant-only";
+        // Instance admin: always show instance-only + all
+        // When acting as tenant, also show tenant-only items
+        if (isInstanceAdmin) {
+          if (actingAsTenantAdmin) {
+            return true; // Show everything to instance admins in tenant context
+          }
+          return visibility !== "tenant-only"; // Hide tenant-only when not in tenant context
         }
 
-        // Tenant admin or instance admin acting as tenant: show tenant-only + all, hide instance-only
+        // Tenant admin: show tenant-only + all, hide instance-only
         if (visibility === "instance-only") {
           return false;
         }

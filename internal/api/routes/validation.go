@@ -61,19 +61,34 @@ func ValidateMiddlewareDependencies(group *RouteGroup, route Route, fullpath str
 			}
 		}
 
+		// Determine effective auth: route.Auth > group.DefaultAuth
+		effectiveAuth := route.Auth
+		if effectiveAuth == "" {
+			effectiveAuth = group.DefaultAuth
+		}
+
 		// Check auto-injected auth middleware from AuthMiddlewares
-		if !hasAuth && group.AuthMiddlewares != nil && route.Auth != AuthNone {
-			if group.AuthMiddlewares.MiddlewareFor(route.Auth) != nil {
+		// Note: AuthMiddlewares may be inherited from parent at apply time,
+		// so we also check if DefaultAuth is set (indicating auth will be provided)
+		if !hasAuth && group.AuthMiddlewares != nil && effectiveAuth != AuthNone && effectiveAuth != "" {
+			if group.AuthMiddlewares.MiddlewareFor(effectiveAuth) != nil {
 				hasAuth = true
 			}
 		}
 
 		// Check auto-injected role middleware from RequireRole (role middleware includes auth check)
+		// Note: RequireRole may be inherited from parent at apply time
 		if !hasAuth && group.RequireRole != nil && len(route.Roles) > 0 {
 			hasAuth = true
 		}
 
-		if !hasAuth && route.Auth != AuthNone {
+		// If the group has DefaultAuth or DefaultRoles set, auth will be provided via inheritance
+		// even if AuthMiddlewares/RequireRole are not set on this group directly
+		if !hasAuth && (group.DefaultAuth != "" && group.DefaultAuth != AuthNone) {
+			hasAuth = true
+		}
+
+		if !hasAuth && effectiveAuth != AuthNone && effectiveAuth != "" {
 			return fmt.Errorf("route %s: has roles/scopes but no auth middleware detected (neither explicit nor via AuthMiddlewares or RequireRole)", fullpath)
 		}
 	}

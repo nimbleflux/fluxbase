@@ -32,25 +32,28 @@ func BuildUsersAdminRoutes(deps *UsersAdminDeps) *RouteGroup {
 	}
 
 	return &RouteGroup{
-		Name: "users_admin",
+		Name:         "users_admin",
+		DefaultAuth:  AuthRequired,
+		DefaultRoles: []string{"admin", "instance_admin", "tenant_admin"},
 		Routes: []Route{
-			// Users
-			{Method: "GET", Path: "/users", Handler: deps.ListUsers, Summary: "List users", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "POST", Path: "/users/invite", Handler: deps.InviteUser, Summary: "Invite user", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "GET", Path: "/users/:id", Handler: deps.ListUsers, Summary: "Get user by ID", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "PATCH", Path: "/users/:id", Handler: deps.UpdateUser, Summary: "Update user", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "DELETE", Path: "/users/:id", Handler: deps.DeleteUser, Summary: "Delete user", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "PATCH", Path: "/users/:id/role", Handler: deps.UpdateUserRole, Summary: "Update user role", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/users/:id/reset-password", Handler: deps.ResetUserPassword, Summary: "Reset user password", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			// Users (uses default roles)
+			{Method: "GET", Path: "/users", Handler: deps.ListUsers, Summary: "List users"},
+			{Method: "POST", Path: "/users/invite", Handler: deps.InviteUser, Summary: "Invite user"},
+			{Method: "GET", Path: "/users/:id", Handler: deps.ListUsers, Summary: "Get user by ID"},
+			{Method: "PATCH", Path: "/users/:id", Handler: deps.UpdateUser, Summary: "Update user"},
+			{Method: "POST", Path: "/users/:id/reset-password", Handler: deps.ResetUserPassword, Summary: "Reset user password"},
+			// Delete and role update are instance_admin only (override roles)
+			{Method: "DELETE", Path: "/users/:id", Handler: deps.DeleteUser, Summary: "Delete user", Roles: []string{"admin", "instance_admin"}},
+			{Method: "PATCH", Path: "/users/:id/role", Handler: deps.UpdateUserRole, Summary: "Update user role", Roles: []string{"admin", "instance_admin"}},
 			// TODO: Implement quota handlers
-			// {Method: "GET", Path: "/users/quotas", Handler: deps.ListUsersWithQuotas, Summary: "List users with quotas", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			// {Method: "GET", Path: "/users/:id/quota", Handler: deps.GetUserQuota, Summary: "Get user quota", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			// {Method: "PUT", Path: "/users/:id/quota", Handler: deps.SetUserQuota, Summary: "Set user quota", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+			// {Method: "GET", Path: "/users/quotas", Handler: deps.ListUsersWithQuotas, Summary: "List users with quotas"},
+			// {Method: "GET", Path: "/users/:id/quota", Handler: deps.GetUserQuota, Summary: "Get user quota"},
+			// {Method: "PUT", Path: "/users/:id/quota", Handler: deps.SetUserQuota, Summary: "Set user quota"},
 
-			// Invitations
-			{Method: "POST", Path: "/invitations", Handler: deps.CreateInvitation, Summary: "Create invitation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "GET", Path: "/invitations", Handler: deps.ListInvitations, Summary: "List invitations", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "DELETE", Path: "/invitations/:id", Handler: deps.RevokeInvitation, Summary: "Revoke invitation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			// Invitations (uses default roles)
+			{Method: "POST", Path: "/invitations", Handler: deps.CreateInvitation, Summary: "Create invitation"},
+			{Method: "GET", Path: "/invitations", Handler: deps.ListInvitations, Summary: "List invitations"},
+			{Method: "DELETE", Path: "/invitations/:id", Handler: deps.RevokeInvitation, Summary: "Revoke invitation"},
 		},
 	}
 }

@@ -249,7 +249,6 @@ export default defineConfig({
           items: [
             { label: "API Cookbook", link: "/api-cookbook/" },
             { label: "Supabase Comparison", link: "/supabase-comparison/" },
-            { label: "AI & Development Transparency", link: "/about/ai-transparency/" },
           ],
         },
         {
@@ -401,6 +400,7 @@ export default defineConfig({
           ],
         },
         { label: "Pricing", link: "/pricing/" },
+        { label: "AI & Development Transparency", link: "/about/ai-transparency/" },
       ],
     }),
   ],

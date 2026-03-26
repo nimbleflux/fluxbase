@@ -86,15 +86,15 @@ await client.auth.signOut();
 
 ## Core Authentication Methods
 
-| Method                   | Purpose                  | Parameters                            |
-| ------------------------ | ------------------------ | ------------------------------------- |
-| `signUp()`               | Create new account       | `email`, `password`, `options.data?`  |
-| `signIn()`               | Sign in with credentials | `email`, `password`                   |
-| `signOut()`              | End current session      | None                                  |
-| `getCurrentUser()`       | Get authenticated user   | None                                  |
-| `getSession()`           | Get session details      | None                                  |
-| `resetPassword()`        | Request password reset   | `email`                               |
-| `confirmPasswordReset()` | Confirm password reset   | `token`, `password`                   |
+| Method                   | Purpose                  | Parameters                           |
+| ------------------------ | ------------------------ | ------------------------------------ |
+| `signUp()`               | Create new account       | `email`, `password`, `options.data?` |
+| `signIn()`               | Sign in with credentials | `email`, `password`                  |
+| `signOut()`              | End current session      | None                                 |
+| `getCurrentUser()`       | Get authenticated user   | None                                 |
+| `getSession()`           | Get session details      | None                                 |
+| `resetPassword()`        | Request password reset   | `email`                              |
+| `confirmPasswordReset()` | Confirm password reset   | `token`, `password`                  |
 
 **Example:**
 
@@ -296,7 +296,7 @@ Service keys bypass Row-Level Security. Use only in backend services.
 ```typescript
 const adminClient = new FluxbaseClient({
   url: "http://localhost:8080",
-  serviceKey: process.env.FLUXBASE_SERVICE_KEY,
+  serviceKey: process.env.FLUXBASE_SERVICE_ROLE_KEY,
 });
 
 // Bypasses RLS
@@ -400,13 +400,13 @@ Protect your authentication flows from automated attacks with CAPTCHA verificati
 
 Fluxbase supports multiple CAPTCHA providers:
 
-| Provider | Description |
-|----------|-------------|
-| **Cloudflare Turnstile** | Invisible CAPTCHA, user-friendly |
-| **Google reCAPTCHA v2** | Classic "I'm not a robot" checkbox |
-| **Google reCAPTCHA v3** | Invisible CAPTCHA, score-based |
-| **hCaptcha** | Privacy-focused CAPTCHA |
-| **Cap (self-hosted)** | Self-hosted CAPTCHA solution |
+| Provider                 | Description                        |
+| ------------------------ | ---------------------------------- |
+| **Cloudflare Turnstile** | Invisible CAPTCHA, user-friendly   |
+| **Google reCAPTCHA v2**  | Classic "I'm not a robot" checkbox |
+| **Google reCAPTCHA v3**  | Invisible CAPTCHA, score-based     |
+| **hCaptcha**             | Privacy-focused CAPTCHA            |
+| **Cap (self-hosted)**    | Self-hosted CAPTCHA solution       |
 
 ### Configuration
 
@@ -414,7 +414,7 @@ Fluxbase supports multiple CAPTCHA providers:
 security:
   captcha:
     enabled: true
-    provider: turnstile            # recaptcha, hcaptcha, turnstile, captcha-v2, cap
+    provider: turnstile # recaptcha, hcaptcha, turnstile, captcha-v2, cap
     site_key: your-site-key
     secret_key: your-secret-key
 ```
@@ -446,11 +446,11 @@ auth:
 ```typescript
 // Start impersonation
 const { impersonation } = await client.auth.impersonateUser({
-  userId: 'target-user-id'
-})
+  userId: "target-user-id",
+});
 
 // Stop impersonation
-await client.auth.stopImpersonation()
+await client.auth.stopImpersonation();
 ```
 
 ### Security Notes

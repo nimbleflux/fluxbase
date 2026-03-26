@@ -1,0 +1,532 @@
+---
+interface Props {
+  showSecret?: boolean;
+}
+
+const { showSecret = true } = Astro.props;
+---
+
+<div class="keygen-wrapper">
+  <div class="keygen-header">
+    <h4>Generate Keys</h4>
+    <p class="keygen-description">
+      Generate secure JWT secrets and API keys for your Fluxbase configuration.
+    </p>
+  </div>
+
+  <div class="keygen-form">
+    <div class="keygen-form-row">
+      <label for="keygen-existing-secret">Existing JWT Secret (optional)</label>
+      <input
+        type="text"
+        id="keygen-existing-secret"
+        class="keygen-input"
+        placeholder="Leave empty to generate a new secret"
+      />
+      <p class="keygen-hint">Provide your existing secret to regenerate anon/service keys</p>
+    </div>
+
+    <div class="keygen-form-row">
+      <label>
+        <input type="checkbox" id="keygen-include-secret" checked />
+        <span>JWT Secret</span>
+      </label>
+      <p class="keygen-hint">Required for server configuration</p>
+    </div>
+
+    <div class="keygen-form-row">
+      <label>
+        <input type="checkbox" id="keygen-include-anon" checked />
+        <span>Anon Key (JWT)</span>
+      </label>
+      <p class="keygen-hint">For client-side SDK initialization</p>
+    </div>
+
+    <div class="keygen-form-row">
+      <label>
+        <input type="checkbox" id="keygen-include-service" checked />
+        <span>Service Role Key (JWT)</span>
+      </label>
+      <p class="keygen-hint">Bypasses RLS - admin/server use only</p>
+    </div>
+  </div>
+
+  <button id="keygen-generate-btn" class="keygen-button keygen-button-primary">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+    </svg>
+    <span>Generate Keys</span>
+  </button>
+
+  <div id="keygen-results" class="keygen-results" style="display: none;">
+    <div class="keygen-result" id="keygen-secret-result" style="display: none;">
+      <div class="keygen-result-header">
+        <span class="keygen-label">FLUXBASE_AUTH_JWT_SECRET</span>
+        <button class="keygen-copy-btn" data-target="keygen-secret-value">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span>Copy</span>
+        </button>
+      </div>
+      <div class="keygen-code-block">
+        <pre><code id="keygen-secret-value"></code></pre>
+      </div>
+      <p class="keygen-warning">Keep this secret! Never expose it to the client.</p>
+    </div>
+
+    <div class="keygen-result" id="keygen-anon-result" style="display: none;">
+      <div class="keygen-result-header">
+        <span class="keygen-label">FLUXBASE_ANON_KEY</span>
+        <button class="keygen-copy-btn" data-target="keygen-anon-value">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span>Copy</span>
+        </button>
+      </div>
+      <div class="keygen-code-block">
+        <pre><code id="keygen-anon-value"></code></pre>
+      </div>
+      <p class="keygen-hint">Use this with <code>createClient()</code> in your SDK.</p>
+    </div>
+
+    <div class="keygen-result" id="keygen-service-result" style="display: none;">
+      <div class="keygen-result-header">
+        <span class="keygen-label">FLUXBASE_SERVICE_ROLE_KEY</span>
+        <button class="keygen-copy-btn" data-target="keygen-service-value">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span>Copy</span>
+        </button>
+      </div>
+      <div class="keygen-code-block">
+        <pre><code id="keygen-service-value"></code></pre>
+      </div>
+      <p class="keygen-warning">Bypasses Row Level Security! Only use on trusted servers.</p>
+    </div>
+
+    <div class="keygen-env-preview">
+      <div class="keygen-result-header">
+        <span class="keygen-label">.env file</span>
+        <button class="keygen-copy-btn" data-target="keygen-env-value">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span>Copy All</span>
+        </button>
+      </div>
+      <div class="keygen-code-block">
+        <pre><code id="keygen-env-value"></code></pre>
+      </div>
+    </div>
+  </div>
+
+  <p class="keygen-security-note">
+    <strong>Security:</strong> Keys are generated entirely in your browser using the Web Crypto API.
+    Nothing is sent to any server.
+  </p>
+</div>
+
+<script>
+  function base64UrlEncode(array: Uint8Array): string {
+    const base64 = btoa(String.fromCharCode(...array));
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function generateRandomBytes(length: number): Uint8Array {
+    const array = new Uint8Array(length);
+    crypto.getRandomValues(array);
+    return array;
+  }
+
+  function generateSecret(): string {
+    // Generate 32 bytes of random data
+    const bytes = generateRandomBytes(32);
+    // Convert to base64
+    return btoa(String.fromCharCode(...bytes));
+  }
+
+  function createJWT(payload: object, secret: string): string {
+    // Header for HS256
+    const header = { alg: 'HS256', typ: 'JWT' };
+    const headerB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(header)));
+    const payloadB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+
+    // Create the message to sign
+    const message = `${headerB64}.${payloadB64}`;
+
+    // Decode the secret
+    const secretBytes = new TextEncoder().encode(secret);
+
+    // Import the key for HMAC
+    return crypto.subtle.importKey(
+      'raw',
+      secretBytes,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    ).then(key => {
+      return crypto.subtle.sign(
+        'HMAC',
+        key,
+        new TextEncoder().encode(message)
+      );
+    }).then(signature => {
+      const signatureB64 = base64UrlEncode(new Uint8Array(signature));
+      return `${message}.${signatureB64}`;
+    });
+  }
+
+  async function generateKeys() {
+    const existingSecret = (document.getElementById('keygen-existing-secret') as HTMLInputElement).value.trim();
+    const includeSecret = (document.getElementById('keygen-include-secret') as HTMLInputElement).checked;
+    const includeAnon = (document.getElementById('keygen-include-anon') as HTMLInputElement).checked;
+    const includeService = (document.getElementById('keygen-include-service') as HTMLInputElement).checked;
+    const resultsDiv = document.getElementById('keygen-results') as HTMLDivElement;
+    const secretResult = document.getElementById('keygen-secret-result') as HTMLDivElement;
+    const anonResult = document.getElementById('keygen-anon-result') as HTMLDivElement;
+    const serviceResult = document.getElementById('keygen-service-result') as HTMLDivElement;
+    const secretValue = document.getElementById('keygen-secret-value') as HTMLElement;
+    const anonValue = document.getElementById('keygen-anon-value') as HTMLElement;
+    const serviceValue = document.getElementById('keygen-service-value') as HTMLElement;
+    const envValue = document.getElementById('keygen-env-value') as HTMLElement;
+
+    if (!includeSecret && !includeAnon && !includeService) {
+      return;
+    }
+
+    // Use existing secret if provided, otherwise generate a new one
+    const secret = existingSecret || generateSecret();
+    const isUsingExistingSecret = !!existingSecret;
+
+    // Show results
+    resultsDiv.style.display = 'block';
+
+    let envContent = '';
+
+    if (includeSecret) {
+      secretResult.style.display = 'block';
+      secretValue.textContent = secret;
+      envContent += `FLUXBASE_AUTH_JWT_SECRET=${secret}\n`;
+    } else if (isUsingExistingSecret) {
+      // When using existing secret but not showing it, still include in env
+      envContent += `FLUXBASE_AUTH_JWT_SECRET=${secret}\n`;
+      secretResult.style.display = 'none';
+    } else {
+      secretResult.style.display = 'none';
+    }
+
+    if (includeAnon) {
+      anonResult.style.display = 'block';
+
+      // Create anon JWT payload
+      const now = Math.floor(Date.now() / 1000);
+      const payload = {
+        role: 'anon',
+        token_type: 'access',
+        iss: 'fluxbase',
+        iat: now,
+        exp: now + (365 * 24 * 60 * 60) // 1 year
+      };
+
+      try {
+        const jwt = await createJWT(payload, secret);
+        anonValue.textContent = jwt;
+        envContent += `FLUXBASE_ANON_KEY=${jwt}\n`;
+      } catch (err) {
+        console.error('Failed to create JWT:', err);
+        anonValue.textContent = 'Error: Could not generate JWT. Your browser may not support the Web Crypto API.';
+      }
+    } else {
+      anonResult.style.display = 'none';
+    }
+
+    if (includeService) {
+      serviceResult.style.display = 'block';
+
+      // Create service role JWT payload
+      const now = Math.floor(Date.now() / 1000);
+      const payload = {
+        role: 'service_role',
+        token_type: 'access',
+        iss: 'fluxbase',
+        iat: now,
+        exp: now + (365 * 24 * 60 * 60) // 1 year
+      };
+
+      try {
+        const jwt = await createJWT(payload, secret);
+        serviceValue.textContent = jwt;
+        envContent += `FLUXBASE_SERVICE_ROLE_KEY=${jwt}\n`;
+      } catch (err) {
+        console.error('Failed to create service JWT:', err);
+        serviceValue.textContent = 'Error: Could not generate JWT. Your browser may not support the Web Crypto API.';
+      }
+    } else {
+      serviceResult.style.display = 'none';
+    }
+
+    envValue.textContent = envContent.trim();
+  }
+
+  function initKeyGenerator() {
+    const generateBtn = document.getElementById('keygen-generate-btn') as HTMLButtonElement;
+    const copyBtns = document.querySelectorAll('.keygen-copy-btn');
+
+    if (!generateBtn) return;
+
+    generateBtn.addEventListener('click', generateKeys);
+
+    copyBtns.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const targetId = btn.getAttribute('data-target');
+        const target = document.getElementById(targetId!);
+        if (!target) return;
+
+        const text = target.textContent || '';
+        try {
+          await navigator.clipboard.writeText(text);
+          const span = btn.querySelector('span');
+          if (span) {
+            const originalText = span.textContent;
+            span.textContent = 'Copied!';
+            setTimeout(() => {
+              span.textContent = originalText;
+            }, 2000);
+          }
+        } catch (err) {
+          console.error('Failed to copy:', err);
+        }
+      });
+    });
+  }
+
+  // Run on page load
+  initKeyGenerator();
+
+  // Re-run on Astro page transitions
+  document.addEventListener('astro:page-load', initKeyGenerator);
+</script>
+
+<style>
+  .keygen-wrapper {
+    margin: 1.5rem 0;
+    padding: 1.5rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.75rem;
+    background: var(--sl-color-bg-nav);
+  }
+
+  .keygen-header h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .keygen-description {
+    margin: 0 0 1rem 0;
+    color: var(--sl-color-gray-2);
+    font-size: 0.9rem;
+  }
+
+  .keygen-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .keygen-form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .keygen-form-row label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--sl-color-white);
+    cursor: pointer;
+  }
+
+  .keygen-form-row input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+  }
+
+  .keygen-input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.375rem;
+    background: var(--sl-color-bg);
+    color: var(--sl-color-text);
+    font-family: var(--sl-font-mono);
+    font-size: 0.875rem;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .keygen-input:focus {
+    outline: none;
+    border-color: var(--sl-color-accent);
+    box-shadow: 0 0 0 2px var(--sl-color-accent-low);
+  }
+
+  .keygen-input::placeholder {
+    color: var(--sl-color-gray-3);
+  }
+
+  .keygen-hint {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--sl-color-gray-3);
+  }
+
+  .keygen-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    height: 42px;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid var(--sl-color-gray-5);
+    background: var(--sl-color-bg);
+    color: var(--sl-color-text);
+    transition: all 0.15s ease;
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .keygen-button:hover {
+    border-color: var(--sl-color-accent);
+    background: var(--sl-color-accent-low);
+  }
+
+  .keygen-button-primary {
+    background: var(--sl-color-accent);
+    color: var(--sl-color-bg);
+    border-color: var(--sl-color-accent);
+  }
+
+  .keygen-button-primary:hover {
+    background: var(--sl-color-accent-high);
+    border-color: var(--sl-color-accent-high);
+  }
+
+  .keygen-results {
+    margin-top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .keygen-result {
+    padding: 1rem;
+    background: var(--sl-color-bg);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+  }
+
+  .keygen-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .keygen-label {
+    font-family: var(--sl-font-mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--sl-color-accent);
+  }
+
+  .keygen-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    background: transparent;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.25rem;
+    color: var(--sl-color-gray-2);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .keygen-copy-btn:hover {
+    border-color: var(--sl-color-accent);
+    color: var(--sl-color-accent);
+  }
+
+  .keygen-code-block {
+    margin-bottom: 0.5rem;
+    overflow-x: auto;
+  }
+
+  .keygen-code-block pre {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    background: var(--sl-color-bg-inline-code);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.375rem;
+    overflow-x: auto;
+  }
+
+  .keygen-code-block code {
+    font-family: var(--sl-font-mono);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    word-break: break-all;
+    color: var(--sl-color-text);
+    white-space: pre-wrap;
+  }
+
+  .keygen-warning {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #f59e0b;
+    font-weight: 500;
+  }
+
+  .keygen-env-preview {
+    margin-top: 0.5rem;
+    padding: 1rem;
+    background: var(--sl-color-bg);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+  }
+
+  .keygen-security-note {
+    margin: 1rem 0 0 0;
+    padding: 0.75rem;
+    background: var(--sl-color-bg);
+    border-radius: 0.375rem;
+    font-size: 0.8rem;
+    color: var(--sl-color-gray-2);
+  }
+
+  .keygen-security-note code {
+    font-family: var(--sl-font-mono);
+    background: var(--sl-color-bg-nav);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+  }
+</style>

@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -430,4 +431,278 @@ func isValidSlug(s string) bool {
 		}
 	}
 	return true
+}
+
+// GetTenantSchemaStatus returns the status of a tenant's declarative schema
+func (h *TenantHandler) GetTenantSchemaStatus(c fiber.Ctx) error {
+	ctx := c.Context()
+	tenantID := c.Params("id")
+
+	// Check if tenant exists
+	t, err := h.Storage.GetTenant(ctx, tenantID)
+	if err != nil {
+		if errors.Is(err, tenantdb.ErrTenantNotFound) {
+			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+		}
+		log.Error().Err(err).Msg("Failed to get tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+	}
+
+	// Check if declarative service is configured
+	declarativeSvc := h.Manager.GetDeclarativeService()
+	if declarativeSvc == nil {
+		return c.JSON(fiber.Map{
+			"enabled":             false,
+			"message":             "Tenant declarative schemas are not enabled",
+			"has_schema_file":     false,
+			"has_pending_changes": false,
+		})
+	}
+
+	// Get schema status
+	status, err := h.Manager.GetTenantSchemaStatus(ctx, tenantID)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get tenant schema status")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant schema status")
+	}
+
+	return c.JSON(fiber.Map{
+		"enabled":                  true,
+		"tenant_id":                tenantID,
+		"tenant_slug":              t.Slug,
+		"schema_file":              status.SchemaFile,
+		"has_schema_file":          status.SchemaFingerprint != "",
+		"schema_fingerprint":       status.SchemaFingerprint,
+		"last_applied_fingerprint": status.LastAppliedFingerprint,
+		"last_applied_at":          status.LastAppliedAt,
+		"has_pending_changes":      status.HasPendingChanges,
+		"uses_main_database":       t.UsesMainDatabase(),
+	})
+}
+
+// ApplyTenantSchema applies the declarative schema for a tenant
+func (h *TenantHandler) ApplyTenantSchema(c fiber.Ctx) error {
+	ctx := c.Context()
+	tenantID := c.Params("id")
+
+	// Check if tenant exists
+	t, err := h.Storage.GetTenant(ctx, tenantID)
+	if err != nil {
+		if errors.Is(err, tenantdb.ErrTenantNotFound) {
+			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+		}
+		log.Error().Err(err).Msg("Failed to get tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+	}
+
+	// Check if tenant uses main database
+	if t.UsesMainDatabase() {
+		return fiber.NewError(fiber.StatusBadRequest, "Cannot apply declarative schema to tenant using main database")
+	}
+
+	// Check if declarative service is configured
+	declarativeSvc := h.Manager.GetDeclarativeService()
+	if declarativeSvc == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Tenant declarative schemas are not enabled")
+	}
+
+	// Apply the schema
+	if err := h.Manager.ApplyTenantDeclarativeSchema(ctx, tenantID); err != nil {
+		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to apply tenant schema")
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to apply schema: %v", err))
+	}
+
+	log.Info().Str("tenant_id", tenantID).Str("tenant_slug", t.Slug).Msg("Tenant schema applied")
+
+	return c.JSON(fiber.Map{
+		"status":      "applied",
+		"tenant_id":   tenantID,
+		"tenant_slug": t.Slug,
+	})
+}
+
+// UploadTenantSchemaRequest represents the request body for uploading a tenant schema
+type UploadTenantSchemaRequest struct {
+	Schema string `json:"schema" validate:"required"`
+}
+
+// GetStoredSchema retrieves the stored schema content for a tenant
+func (h *TenantHandler) GetStoredSchema(c fiber.Ctx) error {
+	ctx := c.Context()
+	tenantID := c.Params("id")
+
+	// Check if tenant exists
+	t, err := h.Storage.GetTenant(ctx, tenantID)
+	if err != nil {
+		if errors.Is(err, tenantdb.ErrTenantNotFound) {
+			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+		}
+		log.Error().Err(err).Msg("Failed to get tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+	}
+
+	// Check if declarative service is configured
+	declarativeSvc := h.Manager.GetDeclarativeService()
+	if declarativeSvc == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Tenant declarative schemas are not enabled")
+	}
+
+	// Get stored schema content
+	content, fingerprint, updatedAt, err := declarativeSvc.GetStoredSchemaContent(ctx, t.Slug)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get stored schema")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stored schema")
+	}
+
+	if content == "" {
+		return c.JSON(fiber.Map{
+			"has_schema":  false,
+			"tenant_id":   tenantID,
+			"tenant_slug": t.Slug,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"has_schema":  true,
+		"tenant_id":   tenantID,
+		"tenant_slug": t.Slug,
+		"schema":      content,
+		"fingerprint": fingerprint,
+		"updated_at":  updatedAt,
+	})
+}
+
+// UploadTenantSchema uploads and stores schema content for a tenant
+func (h *TenantHandler) UploadTenantSchema(c fiber.Ctx) error {
+	ctx := c.Context()
+	tenantID := c.Params("id")
+
+	// Check if tenant exists
+	t, err := h.Storage.GetTenant(ctx, tenantID)
+	if err != nil {
+		if errors.Is(err, tenantdb.ErrTenantNotFound) {
+			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+		}
+		log.Error().Err(err).Msg("Failed to get tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+	}
+
+	// Check if declarative service is configured
+	declarativeSvc := h.Manager.GetDeclarativeService()
+	if declarativeSvc == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Tenant declarative schemas are not enabled")
+	}
+
+	// Parse request body
+	var req UploadTenantSchemaRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if req.Schema == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "Schema content cannot be empty")
+	}
+
+	// Store the schema content
+	if err := declarativeSvc.StoreSchemaContent(ctx, t.Slug, req.Schema); err != nil {
+		log.Error().Err(err).Msg("Failed to store schema")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to store schema")
+	}
+
+	// Calculate fingerprint for response
+	_, fingerprint, _, _ := declarativeSvc.GetStoredSchemaContent(ctx, t.Slug)
+
+	log.Info().Str("tenant_id", tenantID).Str("tenant_slug", t.Slug).Msg("Tenant schema uploaded")
+
+	return c.JSON(fiber.Map{
+		"status":      "uploaded",
+		"tenant_id":   tenantID,
+		"tenant_slug": t.Slug,
+		"fingerprint": fingerprint,
+	})
+}
+
+// ApplyUploadedTenantSchema applies the previously uploaded schema for a tenant
+func (h *TenantHandler) ApplyUploadedTenantSchema(c fiber.Ctx) error {
+	ctx := c.Context()
+	tenantID := c.Params("id")
+
+	// Check if tenant exists
+	t, err := h.Storage.GetTenant(ctx, tenantID)
+	if err != nil {
+		if errors.Is(err, tenantdb.ErrTenantNotFound) {
+			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+		}
+		log.Error().Err(err).Msg("Failed to get tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+	}
+
+	// Check if tenant uses main database
+	if t.UsesMainDatabase() {
+		return fiber.NewError(fiber.StatusBadRequest, "Cannot apply declarative schema to tenant using main database")
+	}
+
+	// Check if declarative service is configured
+	declarativeSvc := h.Manager.GetDeclarativeService()
+	if declarativeSvc == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Tenant declarative schemas are not enabled")
+	}
+
+	// Get stored schema content
+	content, fingerprint, _, err := declarativeSvc.GetStoredSchemaContent(ctx, t.Slug)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get stored schema")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stored schema")
+	}
+
+	if content == "" {
+		return fiber.NewError(fiber.StatusNotFound, "No stored schema found for this tenant. Upload a schema first.")
+	}
+
+	// Apply the schema from stored content
+	if err := declarativeSvc.ApplyTenantSchemaFromContent(ctx, t, content); err != nil {
+		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to apply tenant schema")
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to apply schema: %v", err))
+	}
+
+	log.Info().Str("tenant_id", tenantID).Str("tenant_slug", t.Slug).Msg("Tenant stored schema applied")
+
+	return c.JSON(fiber.Map{
+		"status":      "applied",
+		"tenant_id":   tenantID,
+		"tenant_slug": t.Slug,
+		"fingerprint": fingerprint,
+	})
+}
+
+// DeleteStoredSchema deletes the stored schema content for a tenant
+func (h *TenantHandler) DeleteStoredSchema(c fiber.Ctx) error {
+	ctx := c.Context()
+	tenantID := c.Params("id")
+
+	// Check if tenant exists
+	t, err := h.Storage.GetTenant(ctx, tenantID)
+	if err != nil {
+		if errors.Is(err, tenantdb.ErrTenantNotFound) {
+			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+		}
+		log.Error().Err(err).Msg("Failed to get tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+	}
+
+	// Check if declarative service is configured
+	declarativeSvc := h.Manager.GetDeclarativeService()
+	if declarativeSvc == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Tenant declarative schemas are not enabled")
+	}
+
+	// Delete the stored schema
+	if err := declarativeSvc.DeleteStoredSchema(ctx, t.Slug); err != nil {
+		log.Error().Err(err).Msg("Failed to delete stored schema")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete stored schema")
+	}
+
+	log.Info().Str("tenant_id", tenantID).Str("tenant_slug", t.Slug).Msg("Tenant stored schema deleted")
+
+	return c.SendStatus(fiber.StatusNoContent)
 }

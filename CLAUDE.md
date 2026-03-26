@@ -289,15 +289,15 @@ golangci-lint run ./...  # Includes type checking
 
 ```bash
 # Admin UI
-cd admin && pnpm run type-check
-cd admin && pnpm run lint
+cd admin && bun run type-check
+cd admin && bun run lint
 
 # SDK
-cd sdk && pnpm run type-check
-cd sdk && pnpm run lint
+cd sdk && bun run type-check
+cd sdk && bun run lint
 
 # SDK React
-cd sdk-react && pnpm run type-check  # Uses tsc --noEmit
+cd sdk-react && bun run type-check  # Uses tsc --noEmit
 ```
 
 **What gets checked:**
@@ -348,11 +348,13 @@ Internal Fluxbase tables (auth, storage, functions, jobs, etc.) are managed decl
 Users can choose their preferred approach:
 
 **Option 1: Imperative Migrations**
+
 - SQL files in `internal/database/migrations/` numbered sequentially (001-113+)
 - Format: `NNN_description.up.sql` / `NNN_description.down.sql`
 - Commands: `make migrate-up`, `make migrate-down`, `make migrate-create`
 
 **Option 2: Declarative Schema**
+
 - Users can manage their `public` schema declaratively using pgschema
 - Schema files compared to actual database state
 - Changes applied as diffs

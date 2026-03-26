@@ -147,6 +147,15 @@ type RouteGroup struct {
 	// When set, routes with non-empty Scopes field will automatically have
 	// this middleware applied with the specified scopes.
 	RequireScope func(...string) fiber.Handler
+
+	// DefaultAuth is the default auth requirement for routes that don't specify
+	// their own Auth field. This is inherited by subgroups unless overridden.
+	DefaultAuth AuthRequirement
+
+	// DefaultRoles are the default roles for routes that don't specify their own
+	// Roles field. Routes with explicit Roles override this default (no merge).
+	// This is inherited by subgroups unless overridden.
+	DefaultRoles []string
 }
 
 func (r Route) MiddlewareNames() []string {

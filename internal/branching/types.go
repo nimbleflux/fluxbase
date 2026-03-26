@@ -47,6 +47,7 @@ type Branch struct {
 	DatabaseName   string         `json:"database_name" db:"database_name"`
 	Status         BranchStatus   `json:"status" db:"status"`
 	Type           BranchType     `json:"type" db:"type"`
+	TenantID       *uuid.UUID     `json:"tenant_id,omitempty" db:"tenant_id"`
 	ParentBranchID *uuid.UUID     `json:"parent_branch_id,omitempty" db:"parent_branch_id"`
 	DataCloneMode  DataCloneMode  `json:"data_clone_mode" db:"data_clone_mode"`
 	GitHubPRNumber *int           `json:"github_pr_number,omitempty" db:"github_pr_number"`
@@ -60,6 +61,19 @@ type Branch struct {
 	UpdatedAt      time.Time      `json:"updated_at" db:"updated_at"`
 	ExpiresAt      *time.Time     `json:"expires_at,omitempty" db:"expires_at"`
 	Access         []BranchAccess `json:"access,omitempty" db:"-"` // Not stored in DB, loaded separately
+}
+
+// BelongsToTenant returns true if the branch belongs to a specific tenant
+func (b *Branch) BelongsToTenant(tenantID uuid.UUID) bool {
+	if b.TenantID == nil {
+		return false
+	}
+	return *b.TenantID == tenantID
+}
+
+// IsInstanceLevel returns true if the branch is not scoped to any tenant
+func (b *Branch) IsInstanceLevel() bool {
+	return b.TenantID == nil
 }
 
 // IsMain returns true if this is the main branch
@@ -109,11 +123,12 @@ func (b *Branch) GetAccessLevel(userID uuid.UUID) *BranchAccessLevel {
 
 // MigrationHistory tracks which migrations have been applied to a branch
 type MigrationHistory struct {
-	ID               uuid.UUID `json:"id" db:"id"`
-	BranchID         uuid.UUID `json:"branch_id" db:"branch_id"`
-	MigrationVersion int64     `json:"migration_version" db:"migration_version"`
-	MigrationName    *string   `json:"migration_name,omitempty" db:"migration_name"`
-	AppliedAt        time.Time `json:"applied_at" db:"applied_at"`
+	ID               uuid.UUID  `json:"id" db:"id"`
+	BranchID         uuid.UUID  `json:"branch_id" db:"branch_id"`
+	TenantID         *uuid.UUID `json:"tenant_id,omitempty" db:"tenant_id"`
+	MigrationVersion int64      `json:"migration_version" db:"migration_version"`
+	MigrationName    *string    `json:"migration_name,omitempty" db:"migration_name"`
+	AppliedAt        time.Time  `json:"applied_at" db:"applied_at"`
 }
 
 // ActivityAction represents the type of activity performed on a branch
@@ -144,6 +159,7 @@ const (
 type ActivityLog struct {
 	ID           uuid.UUID      `json:"id" db:"id"`
 	BranchID     uuid.UUID      `json:"branch_id" db:"branch_id"`
+	TenantID     *uuid.UUID     `json:"tenant_id,omitempty" db:"tenant_id"`
 	Action       ActivityAction `json:"action" db:"action"`
 	Status       ActivityStatus `json:"status" db:"status"`
 	Details      any            `json:"details,omitempty" db:"details"`
@@ -157,6 +173,7 @@ type ActivityLog struct {
 type GitHubConfig struct {
 	ID                   uuid.UUID     `json:"id" db:"id"`
 	Repository           string        `json:"repository" db:"repository"`
+	TenantID             *uuid.UUID    `json:"tenant_id,omitempty" db:"tenant_id"`
 	AutoCreateOnPR       bool          `json:"auto_create_on_pr" db:"auto_create_on_pr"`
 	AutoDeleteOnMerge    bool          `json:"auto_delete_on_merge" db:"auto_delete_on_merge"`
 	DefaultDataCloneMode DataCloneMode `json:"default_data_clone_mode" db:"default_data_clone_mode"`
@@ -178,6 +195,7 @@ const (
 type BranchAccess struct {
 	ID          uuid.UUID         `json:"id" db:"id"`
 	BranchID    uuid.UUID         `json:"branch_id" db:"branch_id"`
+	TenantID    *uuid.UUID        `json:"tenant_id,omitempty" db:"tenant_id"`
 	UserID      uuid.UUID         `json:"user_id" db:"user_id"`
 	AccessLevel BranchAccessLevel `json:"access_level" db:"access_level"`
 	GrantedAt   time.Time         `json:"granted_at" db:"granted_at"`
@@ -187,6 +205,7 @@ type BranchAccess struct {
 // CreateBranchRequest is the request to create a new branch
 type CreateBranchRequest struct {
 	Name           string        `json:"name" validate:"required,min=1,max=100"`
+	TenantID       *uuid.UUID    `json:"tenant_id,omitempty"`
 	ParentBranchID *uuid.UUID    `json:"parent_branch_id,omitempty"`
 	DataCloneMode  DataCloneMode `json:"data_clone_mode,omitempty"`
 	Type           BranchType    `json:"type,omitempty"`
@@ -207,6 +226,7 @@ type UpdateBranchRequest struct {
 
 // ListBranchesFilter filters for listing branches
 type ListBranchesFilter struct {
+	TenantID      *uuid.UUID    `json:"tenant_id,omitempty"`
 	Status        *BranchStatus `json:"status,omitempty"`
 	Type          *BranchType   `json:"type,omitempty"`
 	CreatedBy     *uuid.UUID    `json:"created_by,omitempty"`

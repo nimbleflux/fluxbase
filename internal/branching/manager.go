@@ -77,8 +77,11 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 		return nil, ErrBranchingDisabled
 	}
 
-	// Check limits
-	if err := m.checkLimits(ctx, createdBy); err != nil {
+	// Resolve tenant_id - default to instance-level (nil) if not specified
+	tenantID := req.TenantID
+
+	// Check limits (tenant-scoped)
+	if err := m.checkLimits(ctx, tenantID, createdBy); err != nil {
 		return nil, err
 	}
 
@@ -88,13 +91,17 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 		return nil, fmt.Errorf("%w: %w", ErrInvalidSlug, err)
 	}
 
-	// Check if slug already exists
+	// Check if slug already exists for this tenant
 	existing, err := m.storage.GetBranchBySlug(ctx, slug)
 	if err != nil && !errors.Is(err, ErrBranchNotFound) {
 		return nil, fmt.Errorf("failed to check existing branch: %w", err)
 	}
+	// Check if existing branch belongs to the same tenant
 	if existing != nil {
-		return nil, ErrBranchExists
+		if (tenantID == nil && existing.TenantID == nil) ||
+			(tenantID != nil && existing.TenantID != nil && *tenantID == *existing.TenantID) {
+			return nil, ErrBranchExists
+		}
 	}
 
 	// Determine data clone mode
@@ -123,8 +130,19 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 		parentBranchID = &mainBranch.ID
 	}
 
-	// Generate database name
-	databaseName := GenerateDatabaseName(m.config.DatabasePrefix, slug)
+	// Generate database name with tenant prefix
+	var databaseName string
+	if tenantID != nil {
+		// Get tenant slug for database naming
+		tenantSlug, err := m.getTenantSlug(ctx, *tenantID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tenant info: %w", err)
+		}
+		databaseName = GenerateTenantBranchDatabaseName(m.config.DatabasePrefix, tenantSlug, slug)
+	} else {
+		// Instance-level branch (backward compatible)
+		databaseName = GenerateDatabaseName(m.config.DatabasePrefix, slug)
+	}
 
 	// Create branch record
 	branch := &Branch{
@@ -134,6 +152,7 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 		DatabaseName:   databaseName,
 		Status:         BranchStatusCreating,
 		Type:           branchType,
+		TenantID:       tenantID,
 		ParentBranchID: parentBranchID,
 		DataCloneMode:  dataCloneMode,
 		GitHubPRNumber: req.GitHubPRNumber,
@@ -382,10 +401,25 @@ func (m *Manager) ResetBranch(ctx context.Context, branchID uuid.UUID, resetBy *
 }
 
 // checkLimits verifies that branch limits have not been exceeded
-func (m *Manager) checkLimits(ctx context.Context, userID *uuid.UUID) error {
+func (m *Manager) checkLimits(ctx context.Context, tenantID *uuid.UUID, userID *uuid.UUID) error {
+	// Check tenant-specific branch limit first
+	if tenantID != nil && m.config.MaxBranchesPerTenant > 0 {
+		tenantCount, err := m.storage.CountBranchesByTenant(ctx, *tenantID)
+		if err != nil {
+			return fmt.Errorf("failed to count tenant branches: %w", err)
+		}
+		if tenantCount >= m.config.MaxBranchesPerTenant {
+			return ErrMaxTenantBranchesReached
+		}
+	}
+
 	// Check total branch limit
 	if m.config.MaxTotalBranches > 0 {
-		total, err := m.storage.CountBranches(ctx, ListBranchesFilter{})
+		filter := ListBranchesFilter{}
+		if tenantID != nil {
+			filter.TenantID = tenantID
+		}
+		total, err := m.storage.CountBranches(ctx, filter)
 		if err != nil {
 			return fmt.Errorf("failed to count branches: %w", err)
 		}
@@ -406,6 +440,18 @@ func (m *Manager) checkLimits(ctx context.Context, userID *uuid.UUID) error {
 	}
 
 	return nil
+}
+
+// getTenantSlug retrieves the tenant slug for database naming
+func (m *Manager) getTenantSlug(ctx context.Context, tenantID uuid.UUID) (string, error) {
+	// Query the platform.tenants table to get the slug
+	var slug string
+	query := `SELECT slug FROM platform.tenants WHERE id = $1`
+	err := m.storage.GetPool().QueryRow(ctx, query, tenantID).Scan(&slug)
+	if err != nil {
+		return "", fmt.Errorf("failed to get tenant slug: %w", err)
+	}
+	return slug, nil
 }
 
 // createDatabase creates a new database for a branch

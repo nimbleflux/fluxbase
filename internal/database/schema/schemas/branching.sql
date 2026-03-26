@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS branches (
     database_name text NOT NULL,
     status text DEFAULT 'creating',
     type text DEFAULT 'preview',
+    tenant_id uuid,
     parent_branch_id uuid,
     data_clone_mode text DEFAULT 'schema_only',
     github_pr_number integer,
@@ -29,13 +30,16 @@ CREATE TABLE IF NOT EXISTS branches (
     expires_at timestamptz,
     seeds_path text,
     CONSTRAINT branches_pkey PRIMARY KEY (id),
-    CONSTRAINT branches_name_unique UNIQUE (name),
-    CONSTRAINT branches_slug_key UNIQUE (slug),
+    CONSTRAINT branches_name_tenant_unique UNIQUE (name, tenant_id),
+    CONSTRAINT branches_slug_tenant_unique UNIQUE (slug, tenant_id),
     CONSTRAINT branches_parent_branch_id_fkey FOREIGN KEY (parent_branch_id) REFERENCES branches (id),
+    CONSTRAINT branches_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id),
     CONSTRAINT branches_data_clone_mode_check CHECK (data_clone_mode IN ('schema_only'::text, 'full_clone'::text, 'seed_data'::text)),
     CONSTRAINT branches_status_check CHECK (status IN ('creating'::text, 'ready'::text, 'migrating'::text, 'error'::text, 'deleting'::text, 'deleted'::text)),
     CONSTRAINT branches_type_check CHECK (type IN ('main'::text, 'preview'::text, 'persistent'::text))
 );
+
+COMMENT ON COLUMN branches.tenant_id IS 'Tenant this branch belongs to. NULL = instance-level branch (backward compatibility)';
 
 --
 -- Name: idx_branches_created_by; Type: INDEX; Schema: -; Owner: -
@@ -68,12 +72,19 @@ CREATE INDEX IF NOT EXISTS idx_branches_status ON branches (status);
 CREATE INDEX IF NOT EXISTS idx_branches_type ON branches (type);
 
 --
+-- Name: idx_branches_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_branches_tenant_id ON branches (tenant_id);
+
+--
 -- Name: activity_log; Type: TABLE; Schema: -; Owner: -
 --
 
 CREATE TABLE IF NOT EXISTS activity_log (
     id uuid DEFAULT gen_random_uuid(),
     branch_id uuid,
+    tenant_id uuid,
     action text NOT NULL,
     status text NOT NULL,
     details jsonb,
@@ -83,6 +94,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
     duration_ms integer,
     CONSTRAINT activity_log_pkey PRIMARY KEY (id),
     CONSTRAINT activity_log_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES branches (id) ON DELETE CASCADE,
+    CONSTRAINT activity_log_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id),
     CONSTRAINT activity_log_action_check CHECK (action IN ('created'::text, 'cloned'::text, 'migrated'::text, 'reset'::text, 'deleted'::text, 'status_changed'::text, 'access_granted'::text, 'access_revoked'::text, 'seeding'::text)),
     CONSTRAINT activity_log_status_check CHECK (status IN ('started'::text, 'success'::text, 'failed'::text))
 );
@@ -100,12 +112,19 @@ CREATE INDEX IF NOT EXISTS idx_activity_log_branch_id ON activity_log (branch_id
 CREATE INDEX IF NOT EXISTS idx_activity_log_executed_at ON activity_log (executed_at);
 
 --
+-- Name: idx_activity_log_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_activity_log_tenant_id ON activity_log (tenant_id);
+
+--
 -- Name: branch_access; Type: TABLE; Schema: -; Owner: -
 --
 
 CREATE TABLE IF NOT EXISTS branch_access (
     id uuid DEFAULT gen_random_uuid(),
     branch_id uuid,
+    tenant_id uuid,
     user_id uuid,
     access_level text DEFAULT 'read',
     granted_at timestamptz DEFAULT now(),
@@ -113,6 +132,7 @@ CREATE TABLE IF NOT EXISTS branch_access (
     CONSTRAINT branch_access_pkey PRIMARY KEY (id),
     CONSTRAINT branch_access_unique UNIQUE (branch_id, user_id),
     CONSTRAINT branch_access_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES branches (id) ON DELETE CASCADE,
+    CONSTRAINT branch_access_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id),
     CONSTRAINT branch_access_access_level_check CHECK (access_level IN ('read'::text, 'write'::text, 'admin'::text))
 );
 
@@ -123,12 +143,19 @@ CREATE TABLE IF NOT EXISTS branch_access (
 CREATE INDEX IF NOT EXISTS idx_branch_access_user_id ON branch_access (user_id);
 
 --
+-- Name: idx_branch_access_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_branch_access_tenant_id ON branch_access (tenant_id);
+
+--
 -- Name: github_config; Type: TABLE; Schema: -; Owner: -
 --
 
 CREATE TABLE IF NOT EXISTS github_config (
     id uuid DEFAULT gen_random_uuid(),
     repository text NOT NULL,
+    tenant_id uuid,
     auto_create_on_pr boolean DEFAULT true,
     auto_delete_on_merge boolean DEFAULT true,
     default_data_clone_mode text DEFAULT 'schema_only',
@@ -136,9 +163,12 @@ CREATE TABLE IF NOT EXISTS github_config (
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
     CONSTRAINT github_config_pkey PRIMARY KEY (id),
-    CONSTRAINT github_config_repository_key UNIQUE (repository),
+    CONSTRAINT github_config_repository_tenant_unique UNIQUE (repository, tenant_id),
+    CONSTRAINT github_config_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id),
     CONSTRAINT github_config_default_data_clone_mode_check CHECK (default_data_clone_mode IN ('schema_only'::text, 'full_clone'::text, 'seed_data'::text))
 );
+
+COMMENT ON COLUMN github_config.tenant_id IS 'Tenant this GitHub config belongs to. NULL = instance-level config (backward compatibility)';
 
 --
 -- Name: migration_history; Type: TABLE; Schema: -; Owner: -
@@ -147,12 +177,14 @@ CREATE TABLE IF NOT EXISTS github_config (
 CREATE TABLE IF NOT EXISTS migration_history (
     id uuid DEFAULT gen_random_uuid(),
     branch_id uuid,
+    tenant_id uuid,
     migration_version bigint NOT NULL,
     migration_name text,
     applied_at timestamptz DEFAULT now(),
     CONSTRAINT migration_history_pkey PRIMARY KEY (id),
     CONSTRAINT migration_history_unique UNIQUE (branch_id, migration_version),
-    CONSTRAINT migration_history_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES branches (id) ON DELETE CASCADE
+    CONSTRAINT migration_history_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES branches (id) ON DELETE CASCADE,
+    CONSTRAINT migration_history_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id)
 );
 
 --
@@ -162,6 +194,7 @@ CREATE TABLE IF NOT EXISTS migration_history (
 CREATE TABLE IF NOT EXISTS seed_execution_log (
     id uuid DEFAULT gen_random_uuid(),
     branch_id uuid,
+    tenant_id uuid,
     seed_file_name text NOT NULL,
     status text NOT NULL,
     error_message text,
@@ -170,6 +203,7 @@ CREATE TABLE IF NOT EXISTS seed_execution_log (
     CONSTRAINT seed_execution_log_pkey PRIMARY KEY (id),
     CONSTRAINT seed_execution_unique UNIQUE (branch_id, seed_file_name),
     CONSTRAINT seed_execution_log_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES branches (id) ON DELETE CASCADE,
+    CONSTRAINT seed_execution_log_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id),
     CONSTRAINT seed_execution_log_status_check CHECK (status IN ('started'::text, 'success'::text, 'failed'::text))
 );
 

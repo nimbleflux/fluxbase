@@ -9,6 +9,7 @@ import (
 //
 // Role Access:
 //   - instance_admin: Full access to all RPC management operations
+//   - tenant_admin: View/cancel tenant-scoped executions (RLS enforced)
 type RPCAdminDeps struct {
 	ListRPCNamespaces   fiber.Handler
 	ListProcedures      fiber.Handler
@@ -29,18 +30,23 @@ func BuildRPCAdminRoutes(deps *RPCAdminDeps) *RouteGroup {
 	}
 
 	return &RouteGroup{
-		Name: "rpc_admin",
+		Name:         "rpc_admin",
+		DefaultAuth:  AuthRequired,
+		DefaultRoles: []string{"admin", "instance_admin"},
 		Routes: []Route{
-			{Method: "GET", Path: "/rpc/namespaces", Handler: deps.ListRPCNamespaces, Summary: "List RPC namespaces", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/rpc/procedures", Handler: deps.ListProcedures, Summary: "List RPC procedures", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/rpc/procedures/:namespace/:name", Handler: deps.GetProcedure, Summary: "Get RPC procedure", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "PUT", Path: "/rpc/procedures/:namespace/:name", Handler: deps.UpdateProcedure, Summary: "Update RPC procedure", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "DELETE", Path: "/rpc/procedures/:namespace/:name", Handler: deps.DeleteProcedure, Summary: "Delete RPC procedure", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/rpc/sync", Handler: deps.SyncProcedures, Summary: "Sync RPC procedures", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/rpc/executions", Handler: deps.ListRPCExecutions, Summary: "List RPC executions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/rpc/executions/:id", Handler: deps.GetRPCExecution, Summary: "Get RPC execution", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/rpc/executions/:id/logs", Handler: deps.GetRPCExecutionLogs, Summary: "Get RPC execution logs", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/rpc/executions/:id/cancel", Handler: deps.CancelRPCExecution, Summary: "Cancel RPC execution", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+			// Procedure management (instance_admin only - uses default roles)
+			{Method: "GET", Path: "/rpc/namespaces", Handler: deps.ListRPCNamespaces, Summary: "List RPC namespaces"},
+			{Method: "GET", Path: "/rpc/procedures", Handler: deps.ListProcedures, Summary: "List RPC procedures"},
+			{Method: "GET", Path: "/rpc/procedures/:namespace/:name", Handler: deps.GetProcedure, Summary: "Get RPC procedure"},
+			{Method: "PUT", Path: "/rpc/procedures/:namespace/:name", Handler: deps.UpdateProcedure, Summary: "Update RPC procedure"},
+			{Method: "DELETE", Path: "/rpc/procedures/:namespace/:name", Handler: deps.DeleteProcedure, Summary: "Delete RPC procedure"},
+			{Method: "POST", Path: "/rpc/sync", Handler: deps.SyncProcedures, Summary: "Sync RPC procedures"},
+
+			// Executions (tenant_admin can access - override roles)
+			{Method: "GET", Path: "/rpc/executions", Handler: deps.ListRPCExecutions, Summary: "List RPC executions", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "GET", Path: "/rpc/executions/:id", Handler: deps.GetRPCExecution, Summary: "Get RPC execution", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "GET", Path: "/rpc/executions/:id/logs", Handler: deps.GetRPCExecutionLogs, Summary: "Get RPC execution logs", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "POST", Path: "/rpc/executions/:id/cancel", Handler: deps.CancelRPCExecution, Summary: "Cancel RPC execution", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		},
 	}
 }

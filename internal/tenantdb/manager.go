@@ -19,11 +19,13 @@ var (
 )
 
 type Manager struct {
-	storage   *Storage
-	config    Config
-	adminPool *pgxpool.Pool
-	router    *Router
-	dbURL     string
+	storage        *Storage
+	config         Config
+	adminPool      *pgxpool.Pool
+	router         *Router
+	dbURL          string
+	declarative    *DeclarativeService
+	declarativeCfg DeclarativeConfig
 }
 
 func NewManager(
@@ -38,6 +40,16 @@ func NewManager(
 		adminPool: adminPool,
 		dbURL:     dbURL,
 	}
+}
+
+// SetDeclarativeService sets the declarative schema service for tenant databases
+func (m *Manager) SetDeclarativeService(svc *DeclarativeService) {
+	m.declarative = svc
+}
+
+// SetDeclarativeConfig sets the declarative schema configuration
+func (m *Manager) SetDeclarativeConfig(cfg DeclarativeConfig) {
+	m.declarativeCfg = cfg
 }
 
 func (m *Manager) SetRouter(router *Router) {
@@ -102,6 +114,18 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 			return nil, fmt.Errorf("failed to run migrations: %w", err)
 		}
 		log.Info().Str("tenant", req.Slug).Msg("Completed system migrations")
+	}
+
+	// Apply tenant-specific declarative schema if configured
+	if m.declarative != nil && m.declarativeCfg.OnCreate {
+		if m.declarative.HasSchemaFile(req.Slug) {
+			if err := m.declarative.ApplyTenantSchema(ctx, tenant); err != nil {
+				log.Warn().Err(err).Str("tenant", req.Slug).Msg("Failed to apply tenant declarative schema")
+				// Don't fail the entire creation, just log the warning
+			} else {
+				log.Info().Str("tenant", req.Slug).Msg("Applied tenant declarative schema")
+			}
+		}
 	}
 
 	if err := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusActive); err != nil {
@@ -284,4 +308,64 @@ func (m *Manager) GetRouter() *Router {
 
 func (m *Manager) GetConfig() Config {
 	return m.config
+}
+
+func (m *Manager) GetDeclarativeService() *DeclarativeService {
+	return m.declarative
+}
+
+// ApplyDeclarativeSchemas applies declarative schemas to all tenants with schema files
+// This is called on startup if configured
+func (m *Manager) ApplyDeclarativeSchemas(ctx context.Context) error {
+	if m.declarative == nil {
+		return nil
+	}
+
+	tenants, err := m.storage.GetAllActiveTenants(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list tenants: %w", err)
+	}
+
+	for i := range tenants {
+		if m.declarative.HasSchemaFile(tenants[i].Slug) {
+			if err := m.declarative.ApplyTenantSchema(ctx, &tenants[i]); err != nil {
+				log.Error().Err(err).Str("tenant", tenants[i].Slug).Msg("Failed to apply declarative schema")
+				// Continue with other tenants
+			}
+		}
+	}
+
+	return nil
+}
+
+// ApplyTenantDeclarativeSchema applies the declarative schema for a specific tenant
+func (m *Manager) ApplyTenantDeclarativeSchema(ctx context.Context, tenantID string) error {
+	if m.declarative == nil {
+		return fmt.Errorf("declarative schema service not configured")
+	}
+
+	tenant, err := m.storage.GetTenant(ctx, tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to get tenant: %w", err)
+	}
+
+	if !m.declarative.HasSchemaFile(tenant.Slug) {
+		return fmt.Errorf("no declarative schema file found for tenant %s", tenant.Slug)
+	}
+
+	return m.declarative.ApplyTenantSchema(ctx, tenant)
+}
+
+// GetTenantSchemaStatus returns the schema status for a specific tenant
+func (m *Manager) GetTenantSchemaStatus(ctx context.Context, tenantID string) (*TenantSchemaStatus, error) {
+	if m.declarative == nil {
+		return nil, fmt.Errorf("declarative schema service not configured")
+	}
+
+	tenant, err := m.storage.GetTenant(ctx, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tenant: %w", err)
+	}
+
+	return m.declarative.GetTenantSchemaStatus(ctx, tenant)
 }

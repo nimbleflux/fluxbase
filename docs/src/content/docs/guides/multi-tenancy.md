@@ -607,6 +607,112 @@ Navigate to **Tenants > [Tenant Name] > Settings** tab to manage tenant-specific
 - Reset settings to instance defaults
 - Lock non-overridable settings
 
+## Tenant Declarative Schemas
+
+Fluxbase supports declarative schema management for tenant databases, This allows you to define your tenant's database schema in SQL files that are automatically applied when a tenant is created or on server startup.
+
+### Declarative Schema Configuration
+
+Enable tenant declarative schemas in your `fluxbase.yaml`:
+
+```yaml
+tenants:
+  declarative:
+    enabled: true
+    schema_dir: "./schemas" # Directory containing tenant schema files
+    on_create: true # Apply schemas when creating a new tenant database
+    on_startup: false # Apply schemas on server startup (for existing tenants)
+    allow_destructive: false # Allow destructive schema changes (DROP, ALTER)
+```
+
+### Schema File Structure
+
+Tenant schema files are organized by tenant slug:
+
+```text
+schemas/
+├── acme-corp/
+│   └── public.sql      # Schema for acme-corp tenant's public schema
+├── beta-corp/
+│   └── public.sql      # Schema for beta-corp tenant's public schema
+└── default/
+    └── public.sql      # Schema for default tenant (if using separate database)
+```
+
+### Example Schema File
+
+Create `schemas/acme-corp/public.sql`:
+
+```sql
+-- Create tables for the acme-corp tenant
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT NOT NULL UNIQUE,
+    name TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    content TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
+
+-- Enable RLS for tenant isolation
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies
+CREATE POLICY users_tenant_isolation ON users
+FOR ALL TO tenant_service
+USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE POLICY posts_tenant_isolation ON posts
+FOR ALL TO tenant_service
+USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+```
+
+### How It Works
+
+1. **On Tenant Creation**: When a new tenant with a separate database is created, Fluxbase checks for a schema file in `{schema_dir}/{tenant-slug}/public.sql`
+2. **Schema Application**: If a schema file exists, it's applied to the tenant's database
+3. **Fingerprint Tracking**: Applied schemas are tracked by fingerprint (SHA256 hash) in the `migrations.tenant_declarative_state` table
+4. **Idempotent Application**: Schemas are only re-applied if the fingerprint changes
+
+### API Endpoints
+
+Manage tenant schemas via the Admin API:
+
+```typescript
+// Get schema status for a tenant
+const status = await client.admin.getTenantSchemaStatus("tenant-uuid");
+// Returns: { has_schema_file, has_pending_changes, schema_fingerprint, ... }
+
+// Apply schema for a specific tenant
+await client.admin.applyTenantSchema("tenant-uuid");
+```
+
+### Declarative Schema Best Practices
+
+1. **Version Control Schema Files**: Store schema files in Git alongside your application code
+2. **Test Schema Changes**: Test schema changes in a development environment before production
+3. **Use Idempotent SQL**: Use `IF NOT EXISTS` and `IF EXISTS` clauses for safe re-application
+4. **Document Changes**: Comment schema files to explain the purpose of tables and policies
+
+### Declarative Schema Environment Variables
+
+```bash
+FLUXBASE_TENANTS_DECLARATIVE_ENABLED=true
+FLUXBASE_TENANTS_DECLARATIVE_SCHEMA_DIR=./schemas
+FLUXBASE_TENANTS_DECLARATIVE_ON_CREATE=true
+FLUXBASE_TENANTS_DECLARATIVE_ON_STARTUP=false
+FLUXBASE_TENANTS_DECLARATIVE_ALLOW_DESTRUCTIVE=false
+```
+
 ## Troubleshooting
 
 ### Empty Results with Tenant Key

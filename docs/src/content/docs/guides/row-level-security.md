@@ -52,36 +52,62 @@ Fluxbase sets up a comprehensive permission system out of the box. Understanding
 
 ```mermaid
 graph TD
-    subgraph "API Request"
+    subgraph "Application Roles"
         A[Request] --> B{Has JWT?}
+        B -->|No| C[anon]
+        B -->|Yes| D{Valid token?}
+        D -->|No| C
+        D -->|Yes| E{User Role?}
+        E -->|Regular User| F[authenticated]
+        E -->|Tenant Admin| G[tenant_admin]
+        E -->|Instance Admin| H[instance_admin]
     end
 
-    B -->|No| C[anon]
-    B -->|Yes| D{Valid token?}
-    D -->|No| C
-    D -->|Yes| E[authenticated]
+    subgraph "Database Roles"
+        C --> I[anon role]
+        F --> J[authenticated role]
+        G --> J
+        H --> K[service_role]
+    end
 
     subgraph "Backend Only"
-        F[service_role]
+        L[service_role] --> K
+        M[tenant_service] --> N[tenant_service role]
     end
 
-    C -->|"Minimal access"| G[RLS Policies Applied]
-    E -->|"User context set"| G
-    F -->|"BYPASSRLS"| H[Full Access]
+    subgraph "RLS Behavior"
+        I -->|"Minimal access"| O[RLS Policies Applied]
+        J -->|"User context set"| O
+        N -->|"Tenant context enforced"| O
+        K -->|"BYPASSRLS"| P[Full Access - ALL Tenants]
+    end
 
     style C fill:#ffcccc
-    style E fill:#ccffcc
-    style F fill:#ccccff
+    style F fill:#ccffcc
+    style G fill:#99ff99
+    style H fill:#66ff66
+    style K fill:#ccccff
+    style L fill:#ccccff
 ```
 
-**Three roles control all access:**
+**Application roles map to database roles:**
 
-| Role | Description | RLS Behavior |
-|------|-------------|--------------|
-| `anon` | Unauthenticated requests | Policies applied, minimal default access |
-| `authenticated` | Valid JWT token | Policies applied, user context available |
-| `service_role` | Backend services only | **Bypasses all RLS policies** |
-| `tenant_service` | Tenant-scoped backend | Policies applied, tenant context enforced |
+| Application Role | Database Role    | BYPASSRLS | Access Scope                   |
+| ---------------- | ---------------- | --------- | ------------------------------ |
+| `anon`           | `anon`           | No        | Public data only               |
+| `authenticated`  | `authenticated`  | No        | Own data + public data         |
+| `tenant_admin`   | `authenticated`  | No        | Data in assigned tenants       |
+| `instance_admin` | `service_role`   | **Yes**   | ALL data across ALL tenants    |
+| `service_role`   | `service_role`   | **Yes**   | ALL data across ALL tenants    |
+| `tenant_service` | `tenant_service` | No        | Data in current tenant context |
+
+:::note[Instance Admin Bypasses RLS]
+The `instance_admin` role maps to `service_role` which has PostgreSQL's `BYPASSRLS` privilege. This means instance admins can see ALL data across ALL tenants - use this role carefully and only for platform administrators who need full visibility.
+:::
+
+:::note[Tenant Admin Respects RLS]
+The `tenant_admin` role maps to `authenticated` and respects RLS policies. Tenant admins can only access data in tenants they are assigned to via `platform.tenant_admin_assignments`. This provides secure tenant isolation.
+:::
 
 :::note[Tenant Service Role]
 The `tenant_service` role is used for multi-tenant applications. It enforces RLS policies with tenant context, ensuring operations are automatically scoped to the tenant associated with the service key. This provides secure tenant isolation without bypassing RLS.
@@ -91,17 +117,35 @@ The `tenant_service` role is used for multi-tenant applications. It enforces RLS
 
 This table shows the default table-level permissions for each schema. Actual row access is further controlled by RLS policies.
 
-| Schema | anon | authenticated | service_role |
-|--------|------|---------------|--------------|
-| **auth** | None | Full CRUD (via RLS) | ALL |
-| **app** | SELECT (public settings) | Full CRUD (via RLS) | ALL |
-| **storage** | SELECT (public buckets) | Full CRUD (via RLS) | ALL |
-| **functions** | None | Full CRUD (via RLS) | ALL |
-| **realtime** | None | Full CRUD (via RLS) | ALL |
-| **platform** | None | Full CRUD (via RLS) | ALL |
-| **jobs** | None | SELECT (via RLS) | ALL |
-| **migrations** | None | None | ALL |
-| **public** | None | None | ALL |
+| Schema         | anon            | authenticated | tenant_admin     | instance_admin |
+| -------------- | --------------- | ------------- | ---------------- | -------------- |
+| **auth**       | None            | Own data      | Tenant users     | ALL            |
+| **app**        | Public settings | Own data      | Tenant settings  | ALL            |
+| **storage**    | Public buckets  | Own objects   | Tenant objects   | ALL            |
+| **functions**  | None            | Own functions | Tenant functions | ALL            |
+| **realtime**   | None            | Subscriptions | Tenant config    | ALL            |
+| **platform**   | None            | Own tenant    | Assigned tenants | ALL            |
+| **jobs**       | None            | Own jobs      | Tenant jobs      | ALL            |
+| **migrations** | None            | None          | None             | ALL            |
+| **public**     | None            | Via RLS       | Via RLS          | ALL            |
+
+### Multi-Tenancy Access Matrix
+
+For multi-tenant deployments, access is controlled by tenant context:
+
+| Resource             | anon | authenticated | tenant_admin | tenant_service | instance_admin |
+| -------------------- | ---- | ------------- | ------------ | -------------- | -------------- |
+| **All tenants**      | None | None          | None         | None           | Full Access    |
+| **Assigned tenants** | None | None          | Full CRUD    | Full CRUD      | Full Access    |
+| **Own records**      | None | Full CRUD     | Full CRUD    | Full CRUD      | Full Access    |
+| **Public data**      | Read | Read          | Read         | Read           | Full Access    |
+
+**Key Points:**
+
+- **instance_admin**: Maps to `service_role` with `BYPASSRLS` - sees ALL data across ALL tenants
+- **tenant_admin**: Maps to `authenticated` - can only access data in tenants they're assigned to
+- **tenant_service**: Used for tenant-scoped API operations - respects RLS with tenant context
+- **authenticated**: Regular users - can only access their own data
 
 ### Schema Details
 
@@ -145,13 +189,18 @@ User-defined tables. **No default access for anon or authenticated users.** Only
 
 Fluxbase provides helper functions for use in RLS policies:
 
-| Function | Returns | Description |
-|----------|---------|-------------|
-| `auth.current_user_id()` | `uuid` | Current user's ID from JWT |
-| `auth.uid()` | `uuid` | Alias for `current_user_id()` |
-| `auth.current_user_role()` | `text` | Current role from JWT |
-| `auth.role()` | `text` | Alias for `current_user_role()` |
-| `auth.is_admin()` | `boolean` | Whether current user is admin |
+| Function                               | Returns   | Description                      |
+| -------------------------------------- | --------- | -------------------------------- |
+| `auth.current_user_id()`               | `uuid`    | Current user's ID from JWT       |
+| `auth.uid()`                           | `uuid`    | Alias for `current_user_id()`    |
+| `auth.current_user_role()`             | `text`    | Current role from JWT            |
+| `auth.role()`                          | `text`    | Alias for `current_user_role()`  |
+| `auth.is_admin()`                      | `boolean` | Whether current user is admin    |
+| `auth.jwt()`                           | `jsonb`   | Full JWT claims                  |
+| `auth.is_authenticated()`              | `boolean` | Whether user is authenticated    |
+| `auth.has_tenant_access(tenant_id)`    | `boolean` | Check tenant context access      |
+| `platform.is_instance_admin(user_id)`  | `boolean` | Check if user is instance admin  |
+| `storage.has_tenant_access(tenant_id)` | `boolean` | Check tenant context for storage |
 
 ## Enable RLS on Tables
 
@@ -247,6 +296,60 @@ USING (
   OR (published = true AND visibility = 'public')
 );
 ```
+
+### Multi-Tenant Isolation
+
+Fluxbase uses a combination of session variables and helper functions for tenant isolation:
+
+```sql
+-- Service role bypasses all RLS (instance_admin)
+-- Tenant users can only access their tenant's data
+-- Regular users can access their own data
+CREATE POLICY "tenant_settings_select"
+ON platform.tenant_settings FOR SELECT TO PUBLIC
+USING (
+    CURRENT_USER = 'service_role'::name                    -- Instance admin bypass
+    OR CURRENT_USER = 'tenant_service'::name               -- Tenant service with context
+    OR auth.has_tenant_access(tenant_id)                   -- Tenant admin check
+);
+
+-- Tenant admin assignment check
+CREATE POLICY "tenant_admin_access"
+ON platform.tenants FOR SELECT TO PUBLIC
+USING (
+    CURRENT_USER = 'service_role'::name                    -- Instance admin bypass
+    OR EXISTS (
+        SELECT 1 FROM platform.tenant_admin_assignments
+        WHERE tenant_id = tenants.id
+        AND user_id = auth.uid()
+        AND is_active = true
+    )
+);
+```
+
+### How Tenant Context Works
+
+When a request comes in with tenant context, Fluxbase sets the `app.current_tenant_id` session variable:
+
+```sql
+-- The auth.has_tenant_access() function checks tenant context
+CREATE OR REPLACE FUNCTION auth.has_tenant_access(resource_tenant_id uuid)
+RETURNS boolean
+LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+    SELECT CASE
+        WHEN current_setting('app.current_tenant_id', TRUE) = '' THEN
+            resource_tenant_id IS NULL
+        ELSE
+            resource_tenant_id::text = current_setting('app.current_tenant_id', TRUE)
+    END;
+$$;
+```
+
+**Tenant context sources (in order of precedence):**
+
+1. `X-FB-Tenant` header - Explicit tenant override
+2. JWT `tenant_id` claim - From authentication
+3. Default tenant - Fallback for single-tenant deployments
 
 ## Helper Functions
 
@@ -466,7 +569,7 @@ Use service keys to bypass RLS for administrative operations:
 
 ```typescript
 const adminClient = createClient("http://localhost:8080", {
-  serviceKey: process.env.FLUXBASE_SERVICE_KEY,
+  serviceKey: process.env.FLUXBASE_SERVICE_ROLE_KEY,
 });
 
 // Bypasses all RLS policies

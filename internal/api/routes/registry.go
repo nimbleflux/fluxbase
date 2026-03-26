@@ -63,7 +63,7 @@ func (r *Registry) MustRegister(groups ...*RouteGroup) {
 
 func (r *Registry) Apply(app *fiber.App) error {
 	for _, group := range r.groups {
-		if err := r.applyGroup(app, group, nil, nil, nil, nil); err != nil {
+		if err := r.applyGroup(app, group, nil, nil, nil, nil, AuthNone, nil); err != nil {
 			return err
 		}
 	}
@@ -72,14 +72,14 @@ func (r *Registry) Apply(app *fiber.App) error {
 
 func (r *Registry) ApplyTo(router fiber.Router) error {
 	for _, group := range r.groups {
-		if err := r.applyGroup(router, group, nil, nil, nil, nil); err != nil {
+		if err := r.applyGroup(router, group, nil, nil, nil, nil, AuthNone, nil); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *Registry) applyGroup(router fiber.Router, group *RouteGroup, parentMiddlewares []Middleware, parentAuth *AuthMiddlewares, parentRequireRole func(...string) fiber.Handler, parentRequireScope func(...string) fiber.Handler) error {
+func (r *Registry) applyGroup(router fiber.Router, group *RouteGroup, parentMiddlewares []Middleware, parentAuth *AuthMiddlewares, parentRequireRole func(...string) fiber.Handler, parentRequireScope func(...string) fiber.Handler, parentDefaultAuth AuthRequirement, parentDefaultRoles []string) error {
 	if group == nil {
 		return nil
 	}
@@ -105,19 +105,31 @@ func (r *Registry) applyGroup(router fiber.Router, group *RouteGroup, parentMidd
 		requireScope = group.RequireScope
 	}
 
+	// Inherit DefaultAuth from parent if not overridden
+	defaultAuth := group.DefaultAuth
+	if defaultAuth == "" {
+		defaultAuth = parentDefaultAuth
+	}
+
+	// Inherit DefaultRoles from parent if not overridden
+	defaultRoles := group.DefaultRoles
+	if len(defaultRoles) == 0 {
+		defaultRoles = parentDefaultRoles
+	}
+
 	grp := router
 	if group.Prefix != "" {
 		grp = router.Group(group.Prefix)
 	}
 
 	for i := range group.Routes {
-		if err := r.applyRoute(grp, &group.Routes[i], combined, authMiddlewares, requireRole, requireScope); err != nil {
+		if err := r.applyRoute(grp, &group.Routes[i], combined, authMiddlewares, requireRole, requireScope, defaultAuth, defaultRoles); err != nil {
 			return err
 		}
 	}
 
 	for _, sub := range group.SubGroups {
-		if err := r.applyGroup(grp, sub, combined, authMiddlewares, requireRole, requireScope); err != nil {
+		if err := r.applyGroup(grp, sub, combined, authMiddlewares, requireRole, requireScope, defaultAuth, defaultRoles); err != nil {
 			return err
 		}
 	}
@@ -125,7 +137,7 @@ func (r *Registry) applyGroup(router fiber.Router, group *RouteGroup, parentMidd
 	return nil
 }
 
-func (r *Registry) applyRoute(router fiber.Router, route *Route, middlewares []Middleware, authMiddlewares *AuthMiddlewares, requireRole func(...string) fiber.Handler, requireScope func(...string) fiber.Handler) error {
+func (r *Registry) applyRoute(router fiber.Router, route *Route, middlewares []Middleware, authMiddlewares *AuthMiddlewares, requireRole func(...string) fiber.Handler, requireScope func(...string) fiber.Handler, defaultAuth AuthRequirement, defaultRoles []string) error {
 	if route.Handler == nil {
 		return fmt.Errorf("route %s %s has nil handler", route.Method, route.Path)
 	}
@@ -139,16 +151,28 @@ func (r *Registry) applyRoute(router fiber.Router, route *Route, middlewares []M
 		}
 	}
 
-	// Auto-inject auth middleware based on Auth field
-	if authMiddlewares != nil && route.Auth != AuthNone {
-		if authHandler := authMiddlewares.MiddlewareFor(route.Auth); authHandler != nil {
+	// Determine effective auth: route.Auth > defaultAuth > AuthNone
+	effectiveAuth := route.Auth
+	if effectiveAuth == "" {
+		effectiveAuth = defaultAuth
+	}
+
+	// Auto-inject auth middleware based on effective Auth field
+	if authMiddlewares != nil && effectiveAuth != AuthNone && effectiveAuth != "" {
+		if authHandler := authMiddlewares.MiddlewareFor(effectiveAuth); authHandler != nil {
 			handlers = append(handlers, authHandler)
 		}
 	}
 
-	// Auto-inject role middleware based on Roles field
-	if requireRole != nil && len(route.Roles) > 0 {
-		handlers = append(handlers, requireRole(route.Roles...))
+	// Determine effective roles: route.Roles overrides defaultRoles (no merge)
+	effectiveRoles := route.Roles
+	if len(effectiveRoles) == 0 && len(defaultRoles) > 0 {
+		effectiveRoles = defaultRoles
+	}
+
+	// Auto-inject role middleware based on effective Roles field
+	if requireRole != nil && len(effectiveRoles) > 0 {
+		handlers = append(handlers, requireRole(effectiveRoles...))
 	}
 
 	// Auto-inject scope middleware based on Scopes field

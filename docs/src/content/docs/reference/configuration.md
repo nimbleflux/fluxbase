@@ -340,6 +340,16 @@ Environment variables take precedence over configuration file values.
 | `FLUXBASE_AUTH_TOTP_ISSUER`            | 2FA TOTP issuer name                  | `Fluxbase`      | `MyApp`                   |
 | `FLUXBASE_AUTH_ALLOW_USER_CLIENT_KEYS` | Allow users to create API client keys | `true`          | `true`, `false`           |
 
+:::note[JWT Secret Entropy Requirements]
+The JWT secret is validated for entropy (minimum 4.5 bits per character). This means:
+
+- Repetitive patterns like `aaaaaaaaaaaaaaaa` will be rejected
+- The secret must have good character variety
+- Always use `openssl rand -base64 32 | head -c 32` to generate a secure secret
+
+If you see an error like `jwt_secret has insufficient entropy`, regenerate your secret using the command above.
+:::
+
 **OAuth/OIDC Providers:**
 
 OAuth providers are configured via YAML config file. For simple setups, use environment variables for well-known providers:
@@ -477,13 +487,13 @@ The migrations API requires both IP allowlist and service key authentication. Th
 
 ### Multi-Tenancy
 
-| Variable                                   | Description                        | Default | Example                    |
-| ------------------------------------------ | ---------------------------------- | ------- | -------------------------- |
-| `FLUXBASE_TENANTS_DEFAULT_NAME`            | Default tenant display name        | `""`    | `Default Tenant`           |
-| `FLUXBASE_TENANTS_DEFAULT_ANON_KEY`        | Pre-configured anonymous key       | `""`    | `fb_anon_...`              |
-| `FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY`     | Pre-configured service key         | `""`    | `fb_srv_...`               |
-| `FLUXBASE_TENANTS_DEFAULT_ANON_KEY_FILE`   | Path to anonymous key file         | `""`    | `/secrets/anon-key`        |
-| `FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY_FILE`| Path to service key file           | `""`    | `/secrets/service-key`     |
+| Variable                                    | Description                  | Default | Example                |
+| ------------------------------------------- | ---------------------------- | ------- | ---------------------- |
+| `FLUXBASE_TENANTS_DEFAULT_NAME`             | Default tenant display name  | `""`    | `Default Tenant`       |
+| `FLUXBASE_TENANTS_DEFAULT_ANON_KEY`         | Pre-configured anonymous key | `""`    | `fb_anon_...`          |
+| `FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY`      | Pre-configured service key   | `""`    | `fb_srv_...`           |
+| `FLUXBASE_TENANTS_DEFAULT_ANON_KEY_FILE`    | Path to anonymous key file   | `""`    | `/secrets/anon-key`    |
+| `FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY_FILE` | Path to service key file     | `""`    | `/secrets/service-key` |
 
 :::tip[Loading Keys from Files]
 In production environments, use `anon_key_file` and `service_key_file` to load keys from mounted secrets (Kubernetes Secrets, Docker Secrets, etc.) instead of hardcoding them in configuration.
@@ -491,84 +501,85 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 
 ### Logging
 
-| Variable                                    | Description                    | Default    | Example                                              |
-| ------------------------------------------- | ------------------------------ | ---------- | ---------------------------------------------------- |
-| `FLUXBASE_LOGGING_CONSOLE_ENABLED`          | Enable console logging         | `true`     | `true`, `false`                              |
-| `FLUXBASE_LOGGING_CONSOLE_LEVEL`            | Console log level              | `info`     | `debug`, `info`, `warn`, `error`               |
-| `FLUXBASE_LOGGING_CONSOLE_FORMAT`           | Console log format             | `console`  | `console`, `json`                            |
+| Variable                                    | Description                    | Default    | Example                                                                                                               |
+| ------------------------------------------- | ------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------- |
+| `FLUXBASE_LOGGING_CONSOLE_ENABLED`          | Enable console logging         | `true`     | `true`, `false`                                                                                                       |
+| `FLUXBASE_LOGGING_CONSOLE_LEVEL`            | Console log level              | `info`     | `debug`, `info`, `warn`, `error`                                                                                      |
+| `FLUXBASE_LOGGING_CONSOLE_FORMAT`           | Console log format             | `console`  | `console`, `json`                                                                                                     |
 | `FLUXBASE_LOGGING_BACKEND`                  | Log storage backend            | `postgres` | `postgres`, `postgres-timescaledb`, `timescaledb`, `elasticsearch`, `opensearch`, `clickhouse`, `loki`, `s3`, `local` |
-| `FLUXBASE_LOGGING_S3_BUCKET`               | S3 bucket for logs            | `""`       | `my-logs-bucket`                             |
-| `FLUXBASE_LOGGING_S3_PREFIX`               | S3 key prefix for logs        | `logs`     | `logs/prod`                                 |
-| `FLUXBASE_LOGGING_LOCAL_PATH`               | Local filesystem path for logs  | `./logs`   | `/var/log/fluxbase`                          |
-| `FLUXBASE_LOGGING_BATCH_SIZE`              | Batch size for log writes      | `100`      | `100`                                       |
-| `FLUXBASE_LOGGING_FLUSH_INTERVAL`           | Flush interval                | `1s`       | `1s`, `5s`                                   |
-| `FLUXBASE_LOGGING_BUFFER_SIZE`             | Buffer size for async writes  | `10000`    | `10000`                                     |
-| `FLUXBASE_LOGGING_PUBSUB_ENABLED`         | Enable PubSub for streaming   | `true`     | `true`, `false`                              |
-| `FLUXBASE_LOGGING_RETENTION_ENABLED`       | Enable automatic retention    | `true`     | `true`, `false`                              |
-| `FLUXBASE_LOGGING_RETENTION_CHECK_INTERVAL` | Retention check interval    | `24h`      | `24h`, `12h`                                 |
-| `FLUXBASE_LOGGING_SYSTEM_RETENTION_DAYS`    | System log retention          | `7`        | `7`                                         |
-| `FLUXBASE_LOGGING_HTTP_RETENTION_DAYS`      | HTTP log retention            | `30`       | `30`                                        |
-| `FLUXBASE_LOGGING_SECURITY_RETENTION_DAYS`  | Security log retention        | `90`       | `90`                                        |
-| `FLUXBASE_LOGGING_EXECUTION_RETENTION_DAYS` | Execution log retention       | `30`       | `30`                                        |
-| `FLUXBASE_LOGGING_AI_RETENTION_DAYS`       | AI log retention             | `30`       | `30`                                        |
+| `FLUXBASE_LOGGING_S3_BUCKET`                | S3 bucket for logs             | `""`       | `my-logs-bucket`                                                                                                      |
+| `FLUXBASE_LOGGING_S3_PREFIX`                | S3 key prefix for logs         | `logs`     | `logs/prod`                                                                                                           |
+| `FLUXBASE_LOGGING_LOCAL_PATH`               | Local filesystem path for logs | `./logs`   | `/var/log/fluxbase`                                                                                                   |
+| `FLUXBASE_LOGGING_BATCH_SIZE`               | Batch size for log writes      | `100`      | `100`                                                                                                                 |
+| `FLUXBASE_LOGGING_FLUSH_INTERVAL`           | Flush interval                 | `1s`       | `1s`, `5s`                                                                                                            |
+| `FLUXBASE_LOGGING_BUFFER_SIZE`              | Buffer size for async writes   | `10000`    | `10000`                                                                                                               |
+| `FLUXBASE_LOGGING_PUBSUB_ENABLED`           | Enable PubSub for streaming    | `true`     | `true`, `false`                                                                                                       |
+| `FLUXBASE_LOGGING_RETENTION_ENABLED`        | Enable automatic retention     | `true`     | `true`, `false`                                                                                                       |
+| `FLUXBASE_LOGGING_RETENTION_CHECK_INTERVAL` | Retention check interval       | `24h`      | `24h`, `12h`                                                                                                          |
+| `FLUXBASE_LOGGING_SYSTEM_RETENTION_DAYS`    | System log retention           | `7`        | `7`                                                                                                                   |
+| `FLUXBASE_LOGGING_HTTP_RETENTION_DAYS`      | HTTP log retention             | `30`       | `30`                                                                                                                  |
+| `FLUXBASE_LOGGING_SECURITY_RETENTION_DAYS`  | Security log retention         | `90`       | `90`                                                                                                                  |
+| `FLUXBASE_LOGGING_EXECUTION_RETENTION_DAYS` | Execution log retention        | `30`       | `30`                                                                                                                  |
+| `FLUXBASE_LOGGING_AI_RETENTION_DAYS`        | AI log retention               | `30`       | `30`                                                                                                                  |
 
 **Elasticsearch Configuration:**
 
-| Variable                                         | Description                       | Default                      | Example                              |
-| ------------------------------------------------ | --------------------------------- | ---------------------------- | ------------------------------------- |
-| `FLUXBASE_LOGGING_ELASTICSEARCH_URLS`             | Elasticsearch cluster URLs      | `["http://localhost:9200"]` | `["https://es.example.com:9200"]`   |
-| `FLUXBASE_LOGGING_ELASTICSEARCH_USERNAME`        | Elasticsearch username          | `""`                         | `elastic`                            |
-| `FLUXBASE_LOGGING_ELASTICSEARCH_PASSWORD`        | Elasticsearch password          | `""`                         | `${ES_PASSWORD}`                     |
-| `FLUXBASE_LOGGING_ELASTICSEARCH_INDEX`          | Index name                     | `fluxbase-logs`               | `fluxbase-logs-prod`                |
-| `FLUXBASE_LOGGING_ELASTICSEARCH_VERSION`        | Elasticsearch major version     | `8`                          | `8`, `9`                            |
+| Variable                                  | Description                 | Default                     | Example                           |
+| ----------------------------------------- | --------------------------- | --------------------------- | --------------------------------- |
+| `FLUXBASE_LOGGING_ELASTICSEARCH_URLS`     | Elasticsearch cluster URLs  | `["http://localhost:9200"]` | `["https://es.example.com:9200"]` |
+| `FLUXBASE_LOGGING_ELASTICSEARCH_USERNAME` | Elasticsearch username      | `""`                        | `elastic`                         |
+| `FLUXBASE_LOGGING_ELASTICSEARCH_PASSWORD` | Elasticsearch password      | `""`                        | `${ES_PASSWORD}`                  |
+| `FLUXBASE_LOGGING_ELASTICSEARCH_INDEX`    | Index name                  | `fluxbase-logs`             | `fluxbase-logs-prod`              |
+| `FLUXBASE_LOGGING_ELASTICSEARCH_VERSION`  | Elasticsearch major version | `8`                         | `8`, `9`                          |
 
 **OpenSearch Configuration:**
 
-| Variable                                       | Description                    | Default                      | Example                              |
-| ---------------------------------------------- | ------------------------------ | ---------------------------- | ------------------------------------- |
-| `FLUXBASE_LOGGING_OPENSEARCH_URLS`            | OpenSearch cluster URLs       | `["http://localhost:9200"]` | `["https://os.example.com:9200"]`   |
-| `FLUXBASE_LOGGING_OPENSEARCH_USERNAME`         | OpenSearch username           | `""`                         | `admin`                              |
-| `FLUXBASE_LOGGING_OPENSEARCH_PASSWORD`         | OpenSearch password           | `""`                         | `${OS_PASSWORD}`                     |
-| `FLUXBASE_LOGGING_OPENSEARCH_INDEX`            | Index name                    | `fluxbase-logs`               | `fluxbase-logs-prod`                |
-| `FLUXBASE_LOGGING_OPENSEARCH_VERSION`          | OpenSearch major version       | `2`                          | `2`                                  |
+| Variable                               | Description              | Default                     | Example                           |
+| -------------------------------------- | ------------------------ | --------------------------- | --------------------------------- |
+| `FLUXBASE_LOGGING_OPENSEARCH_URLS`     | OpenSearch cluster URLs  | `["http://localhost:9200"]` | `["https://os.example.com:9200"]` |
+| `FLUXBASE_LOGGING_OPENSEARCH_USERNAME` | OpenSearch username      | `""`                        | `admin`                           |
+| `FLUXBASE_LOGGING_OPENSEARCH_PASSWORD` | OpenSearch password      | `""`                        | `${OS_PASSWORD}`                  |
+| `FLUXBASE_LOGGING_OPENSEARCH_INDEX`    | Index name               | `fluxbase-logs`             | `fluxbase-logs-prod`              |
+| `FLUXBASE_LOGGING_OPENSEARCH_VERSION`  | OpenSearch major version | `2`                         | `2`                               |
 
 **ClickHouse Configuration:**
 
-| Variable                                         | Description                      | Default                  | Example                       |
-| ------------------------------------------------ | -------------------------------- | ------------------------ | ------------------------------ |
-| `FLUXBASE_LOGGING_CLICKHOUSE_ADDRESSES`           | ClickHouse server addresses   | `["localhost:9000"]`      | `["clickhouse:9000"]`         |
-| `FLUXBASE_LOGGING_CLICKHOUSE_USERNAME`            | ClickHouse username            | `default`                | `fluxbase`                     |
-| `FLUXBASE_LOGGING_CLICKHOUSE_PASSWORD`            | ClickHouse password            | `""`                      | `${CH_PASSWORD}`               |
-| `FLUXBASE_LOGGING_CLICKHOUSE_DATABASE`           | ClickHouse database            | `fluxbase`                | `fluxbase_logs`                |
-| `FLUXBASE_LOGGING_CLICKHOUSE_TABLE`              | Table name                     | `logs`                    | `execution_logs`              |
-| `FLUXBASE_LOGGING_CLICKHOUSE_TTL_DAYS`           | Data retention in days          | `30`                      | `90`                          |
+| Variable                                | Description                 | Default              | Example               |
+| --------------------------------------- | --------------------------- | -------------------- | --------------------- |
+| `FLUXBASE_LOGGING_CLICKHOUSE_ADDRESSES` | ClickHouse server addresses | `["localhost:9000"]` | `["clickhouse:9000"]` |
+| `FLUXBASE_LOGGING_CLICKHOUSE_USERNAME`  | ClickHouse username         | `default`            | `fluxbase`            |
+| `FLUXBASE_LOGGING_CLICKHOUSE_PASSWORD`  | ClickHouse password         | `""`                 | `${CH_PASSWORD}`      |
+| `FLUXBASE_LOGGING_CLICKHOUSE_DATABASE`  | ClickHouse database         | `fluxbase`           | `fluxbase_logs`       |
+| `FLUXBASE_LOGGING_CLICKHOUSE_TABLE`     | Table name                  | `logs`               | `execution_logs`      |
+| `FLUXBASE_LOGGING_CLICKHOUSE_TTL_DAYS`  | Data retention in days      | `30`                 | `90`                  |
 
 **TimescaleDB Configuration:**
 
-| Variable                                         | Description                              | Default     | Example                   |
-| ------------------------------------------------ | ---------------------------------------- | ---------- | ------------------------ |
-| `FLUXBASE_LOGGING_TIMESCALEDB_ENABLED`           | Enable TimescaleDB extension         | `true`      | `true`, `false`           |
-| `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESS`          | Enable compression                 | `true`      | `true`, `false`           |
-| `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESS_AFTER`     | Compression delay                 | `168h`      | `168h`, `72h`            |
+| Variable                                      | Description                  | Default | Example         |
+| --------------------------------------------- | ---------------------------- | ------- | --------------- |
+| `FLUXBASE_LOGGING_TIMESCALEDB_ENABLED`        | Enable TimescaleDB extension | `true`  | `true`, `false` |
+| `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESS`       | Enable compression           | `true`  | `true`, `false` |
+| `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESS_AFTER` | Compression delay            | `168h`  | `168h`, `72h`   |
 
 **Loki Configuration:**
 
-| Variable                                    | Description                    | Default                               | Example                              |
-| ------------------------------------------- | ------------------------------ | -------------------------------------- | ------------------------------------- |
-| `FLUXBASE_LOGGING_LOKI_URL`                | Loki push endpoint            | `""` (required)                        | `http://loki:3100`                   |
-| `FLUXBASE_LOGGING_LOKI_USERNAME`            | Loki username                 | `""`                                   | `loki`                               |
-| `FLUXBASE_LOGGING_LOKI_PASSWORD`            | Loki password                 | `""`                                   | `${LOKI_PASSWORD}`                     |
-| `FLUXBASE_LOGGING_LOKI_TENANT_ID`           | Loki tenant ID               | `""`                                   | `fluxbase-tenant`                     |
-| `FLUXBASE_LOGGING_LOKI_STATIC_LABELS`       | Static label names            | `["app", "env"]`                       | `["app", "env", "region"]`           |
+| Variable                              | Description        | Default          | Example                    |
+| ------------------------------------- | ------------------ | ---------------- | -------------------------- |
+| `FLUXBASE_LOGGING_LOKI_URL`           | Loki push endpoint | `""` (required)  | `http://loki:3100`         |
+| `FLUXBASE_LOGGING_LOKI_USERNAME`      | Loki username      | `""`             | `loki`                     |
+| `FLUXBASE_LOGGING_LOKI_PASSWORD`      | Loki password      | `""`             | `${LOKI_PASSWORD}`         |
+| `FLUXBASE_LOGGING_LOKI_TENANT_ID`     | Loki tenant ID     | `""`             | `fluxbase-tenant`          |
+| `FLUXBASE_LOGGING_LOKI_STATIC_LABELS` | Static label names | `["app", "env"]` | `["app", "env", "region"]` |
 
 :::tip[Choosing a Logging Backend]
+
 - **PostgreSQL** (default): Best for general use, includes TimescaleDB auto-enable for time-series optimization
 - **Elasticsearch/OpenSearch**: Best for full-text search and Kibana integration
 - **ClickHouse**: Best for high-volume analytics and excellent compression
 - **Loki**: Best for Grafana integration and label-based queries
 - **S3**: Best for archival and cost-effective long-term storage
 - **Local**: Best for development and testing
-:::
+  :::
 
 ### CORS
 

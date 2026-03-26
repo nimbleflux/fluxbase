@@ -530,9 +530,35 @@ func (s *Server) buildMigrationsRouteDeps() *routes.MigrationsDeps {
 	}
 }
 
+// knowledgeBaseDisabledHandler returns a handler that responds with "AI not enabled" error
+func knowledgeBaseDisabledHandler(c fiber.Ctx) error {
+	return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+		"error": "AI features are not enabled. Enable AI in configuration to use knowledge bases.",
+	})
+}
+
 func (s *Server) buildKnowledgeBaseRouteDeps() *routes.KnowledgeBaseDeps {
+	deps := &routes.KnowledgeBaseDeps{
+		RequireAIEnabled: middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
+		RequireAuth:      middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
+	}
+
+	// If AI/knowledge base storage is not available, use stub handlers
+	// This ensures routes return a proper error instead of 404
 	if s.kbStorage == nil {
-		return nil
+		deps.ListKBs = knowledgeBaseDisabledHandler
+		deps.CreateKB = knowledgeBaseDisabledHandler
+		deps.GetKB = knowledgeBaseDisabledHandler
+		deps.ShareKB = knowledgeBaseDisabledHandler
+		deps.ListPermissions = knowledgeBaseDisabledHandler
+		deps.RevokePermission = knowledgeBaseDisabledHandler
+		deps.ListDocuments = knowledgeBaseDisabledHandler
+		deps.GetDocument = knowledgeBaseDisabledHandler
+		deps.AddDocument = knowledgeBaseDisabledHandler
+		deps.UploadDocument = knowledgeBaseDisabledHandler
+		deps.DeleteDocument = knowledgeBaseDisabledHandler
+		deps.SearchKB = knowledgeBaseDisabledHandler
+		return deps
 	}
 
 	handler := ai.NewUserKnowledgeBaseHandler(s.kbStorage)
@@ -540,16 +566,12 @@ func (s *Server) buildKnowledgeBaseRouteDeps() *routes.KnowledgeBaseDeps {
 		handler = ai.NewUserKnowledgeBaseHandlerWithProcessor(s.kbStorage, s.docProcessor)
 	}
 
-	deps := &routes.KnowledgeBaseDeps{
-		RequireAIEnabled: middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-		RequireAuth:      middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		ListKBs:          handler.ListMyKnowledgeBases,
-		CreateKB:         handler.CreateMyKnowledgeBase,
-		GetKB:            handler.GetMyKnowledgeBase,
-		ShareKB:          handler.ShareKnowledgeBase,
-		ListPermissions:  handler.ListPermissions,
-		RevokePermission: handler.RevokePermission,
-	}
+	deps.ListKBs = handler.ListMyKnowledgeBases
+	deps.CreateKB = handler.CreateMyKnowledgeBase
+	deps.GetKB = handler.GetMyKnowledgeBase
+	deps.ShareKB = handler.ShareKnowledgeBase
+	deps.ListPermissions = handler.ListPermissions
+	deps.RevokePermission = handler.RevokePermission
 
 	if s.docProcessor != nil {
 		deps.ListDocuments = handler.ListMyDocuments
@@ -644,20 +666,26 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			RevokeInvitation:    s.invitationHandler.RevokeInvitation,
 		},
 		Tenants: &routes.TenantsAdminDeps{
-			ListMyTenants:        s.tenantHandler.ListMyTenants,
-			ListTenants:          s.tenantHandler.ListTenants,
-			CreateTenant:         s.tenantHandler.CreateTenant,
-			GetTenant:            s.tenantHandler.GetTenant,
-			UpdateTenant:         s.tenantHandler.UpdateTenant,
-			DeleteTenant:         s.tenantHandler.DeleteTenant,
-			MigrateTenant:        s.tenantHandler.MigrateTenant,
-			ListAdmins:           s.tenantHandler.ListAdmins,
-			AssignAdmin:          s.tenantHandler.AssignAdmin,
-			RemoveAdmin:          s.tenantHandler.RemoveAdmin,
-			GetTenantSettings:    s.tenantSettingsHandler.GetTenantSettings,
-			UpdateTenantSettings: s.tenantSettingsHandler.UpdateTenantSettings,
-			DeleteTenantSetting:  s.tenantSettingsHandler.DeleteTenantSetting,
-			GetTenantSetting:     s.tenantSettingsHandler.GetTenantSetting,
+			ListMyTenants:             s.tenantHandler.ListMyTenants,
+			ListTenants:               s.tenantHandler.ListTenants,
+			CreateTenant:              s.tenantHandler.CreateTenant,
+			GetTenant:                 s.tenantHandler.GetTenant,
+			UpdateTenant:              s.tenantHandler.UpdateTenant,
+			DeleteTenant:              s.tenantHandler.DeleteTenant,
+			MigrateTenant:             s.tenantHandler.MigrateTenant,
+			ListAdmins:                s.tenantHandler.ListAdmins,
+			AssignAdmin:               s.tenantHandler.AssignAdmin,
+			RemoveAdmin:               s.tenantHandler.RemoveAdmin,
+			GetTenantSettings:         s.tenantSettingsHandler.GetTenantSettings,
+			UpdateTenantSettings:      s.tenantSettingsHandler.UpdateTenantSettings,
+			DeleteTenantSetting:       s.tenantSettingsHandler.DeleteTenantSetting,
+			GetTenantSetting:          s.tenantSettingsHandler.GetTenantSetting,
+			GetTenantSchemaStatus:     s.tenantHandler.GetTenantSchemaStatus,
+			ApplyTenantSchema:         s.tenantHandler.ApplyTenantSchema,
+			GetStoredSchema:           s.tenantHandler.GetStoredSchema,
+			UploadTenantSchema:        s.tenantHandler.UploadTenantSchema,
+			ApplyUploadedTenantSchema: s.tenantHandler.ApplyUploadedTenantSchema,
+			DeleteStoredSchema:        s.tenantHandler.DeleteStoredSchema,
 		},
 		ServiceKeys: &routes.ServiceKeysAdminDeps{
 			ListServiceKeys:      s.serviceKeyHandler.ListServiceKeys,

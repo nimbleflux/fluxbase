@@ -24,13 +24,15 @@ func BuildExtensionsAdminRoutes(deps *ExtensionsAdminDeps) *RouteGroup {
 	}
 
 	return &RouteGroup{
-		Name: "extensions_admin",
+		Name:         "extensions_admin",
+		DefaultAuth:  AuthRequired,
+		DefaultRoles: []string{"admin", "instance_admin"},
 		Routes: []Route{
-			{Method: "GET", Path: "/extensions", Handler: deps.ListExtensions, Summary: "List extensions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/extensions/:name", Handler: deps.GetExtension, Summary: "Get extension status", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/extensions/:name/enable", Handler: deps.EnableExtension, Summary: "Enable extension", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/extensions/:name/disable", Handler: deps.DisableExtension, Summary: "Disable extension", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/extensions/sync", Handler: deps.SyncExtensions, Summary: "Sync extensions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+			{Method: "GET", Path: "/extensions", Handler: deps.ListExtensions, Summary: "List extensions"},
+			{Method: "GET", Path: "/extensions/:name", Handler: deps.GetExtension, Summary: "Get extension status"},
+			{Method: "POST", Path: "/extensions/:name/enable", Handler: deps.EnableExtension, Summary: "Enable extension"},
+			{Method: "POST", Path: "/extensions/:name/disable", Handler: deps.DisableExtension, Summary: "Disable extension"},
+			{Method: "POST", Path: "/extensions/sync", Handler: deps.SyncExtensions, Summary: "Sync extensions"},
 		},
 	}
 }

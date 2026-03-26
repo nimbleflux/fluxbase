@@ -63,51 +63,53 @@ func BuildSettingsAdminRoutes(deps *SettingsAdminDeps) *RouteGroup {
 	}
 
 	return &RouteGroup{
-		Name: "settings_admin",
+		Name:         "settings_admin",
+		DefaultAuth:  AuthRequired,
+		DefaultRoles: []string{"admin", "instance_admin"},
 		Routes: []Route{
-			// System Settings - instance admin only
-			{Method: "GET", Path: "/system/settings", Handler: deps.ListSystemSettings, Summary: "List system settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/system/settings/*", Handler: deps.GetSystemSetting, Summary: "Get system setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "PUT", Path: "/system/settings/*", Handler: deps.UpdateSystemSetting, Summary: "Update system setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "DELETE", Path: "/system/settings/*", Handler: deps.DeleteSystemSetting, Summary: "Delete system setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+			// System Settings (uses default roles)
+			{Method: "GET", Path: "/system/settings", Handler: deps.ListSystemSettings, Summary: "List system settings"},
+			{Method: "GET", Path: "/system/settings/*", Handler: deps.GetSystemSetting, Summary: "Get system setting"},
+			{Method: "PUT", Path: "/system/settings/*", Handler: deps.UpdateSystemSetting, Summary: "Update system setting"},
+			{Method: "DELETE", Path: "/system/settings/*", Handler: deps.DeleteSystemSetting, Summary: "Delete system setting"},
 
-			// Custom Settings - tenant accessible
-			{Method: "POST", Path: "/settings/custom", Handler: deps.CreateCustomSetting, Summary: "Create custom setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
-			{Method: "GET", Path: "/settings/custom", Handler: deps.ListCustomSettings, Summary: "List custom settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
-			{Method: "POST", Path: "/settings/custom/secret", Handler: deps.CreateSecretSetting, Summary: "Create secret setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
-			{Method: "GET", Path: "/settings/custom/secrets", Handler: deps.ListSecretSettings, Summary: "List secret settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
-			{Method: "GET", Path: "/settings/custom/secret/*", Handler: deps.GetSecretSetting, Summary: "Get secret setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
-			{Method: "PUT", Path: "/settings/custom/secret/*", Handler: deps.UpdateSecretSetting, Summary: "Update secret setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
-			{Method: "DELETE", Path: "/settings/custom/secret/*", Handler: deps.DeleteSecretSetting, Summary: "Delete secret setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
-			{Method: "GET", Path: "/settings/user/:user_id/secret/:key/decrypt", Handler: deps.GetUserSecretValue, Summary: "Decrypt user secret (service_role only)", Auth: AuthRequired, Roles: []string{"service_role"}},
-			{Method: "GET", Path: "/settings/custom/*", Handler: deps.GetCustomSetting, Summary: "Get custom setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
-			{Method: "PUT", Path: "/settings/custom/*", Handler: deps.UpdateCustomSetting, Summary: "Update custom setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
-			{Method: "DELETE", Path: "/settings/custom/*", Handler: deps.DeleteCustomSetting, Summary: "Delete custom setting", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+			// Custom Settings - tenant accessible (override roles)
+			{Method: "POST", Path: "/settings/custom", Handler: deps.CreateCustomSetting, Summary: "Create custom setting", Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+			{Method: "GET", Path: "/settings/custom", Handler: deps.ListCustomSettings, Summary: "List custom settings", Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+			{Method: "POST", Path: "/settings/custom/secret", Handler: deps.CreateSecretSetting, Summary: "Create secret setting", Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+			{Method: "GET", Path: "/settings/custom/secrets", Handler: deps.ListSecretSettings, Summary: "List secret settings", Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+			{Method: "GET", Path: "/settings/custom/secret/*", Handler: deps.GetSecretSetting, Summary: "Get secret setting", Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+			{Method: "PUT", Path: "/settings/custom/secret/*", Handler: deps.UpdateSecretSetting, Summary: "Update secret setting", Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+			{Method: "DELETE", Path: "/settings/custom/secret/*", Handler: deps.DeleteSecretSetting, Summary: "Delete secret setting", Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+			{Method: "GET", Path: "/settings/user/:user_id/secret/:key/decrypt", Handler: deps.GetUserSecretValue, Summary: "Decrypt user secret (service_role only)", Roles: []string{"service_role"}},
+			{Method: "GET", Path: "/settings/custom/*", Handler: deps.GetCustomSetting, Summary: "Get custom setting", Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+			{Method: "PUT", Path: "/settings/custom/*", Handler: deps.UpdateCustomSetting, Summary: "Update custom setting", Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
+			{Method: "DELETE", Path: "/settings/custom/*", Handler: deps.DeleteCustomSetting, Summary: "Delete custom setting", Roles: []string{"admin", "instance_admin", "tenant_admin", "service_role"}},
 
-			// App Settings
-			{Method: "GET", Path: "/app/settings", Handler: deps.GetAppSettings, Summary: "Get app settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "PUT", Path: "/app/settings", Handler: deps.UpdateAppSettings, Summary: "Update app settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			// App Settings - tenant accessible (override roles)
+			{Method: "GET", Path: "/app/settings", Handler: deps.GetAppSettings, Summary: "Get app settings", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "PUT", Path: "/app/settings", Handler: deps.UpdateAppSettings, Summary: "Update app settings", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 
-			// Email Settings - instance admin only
-			{Method: "GET", Path: "/email/settings", Handler: deps.ListEmailSettings, Summary: "List email settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/email/settings/:provider", Handler: deps.GetEmailSetting, Summary: "Get email settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "PUT", Path: "/email/settings/:provider", Handler: deps.UpdateEmailSetting, Summary: "Update email settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/email/settings/:provider/test", Handler: deps.TestEmailSettings, Summary: "Test email settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/email/templates", Handler: deps.ListEmailTemplates, Summary: "List email templates", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/email/templates/:name", Handler: deps.GetEmailTemplate, Summary: "Get email template", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "PUT", Path: "/email/templates/:name", Handler: deps.UpdateEmailTemplate, Summary: "Update email template", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/email/templates/:name/test", Handler: deps.TestEmailTemplate, Summary: "Test email template", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "POST", Path: "/email/templates/:name/reset", Handler: deps.ResetEmailTemplate, Summary: "Reset email template", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+			// Email Settings (uses default roles)
+			{Method: "GET", Path: "/email/settings", Handler: deps.ListEmailSettings, Summary: "List email settings"},
+			{Method: "GET", Path: "/email/settings/:provider", Handler: deps.GetEmailSetting, Summary: "Get email settings"},
+			{Method: "PUT", Path: "/email/settings/:provider", Handler: deps.UpdateEmailSetting, Summary: "Update email settings"},
+			{Method: "POST", Path: "/email/settings/:provider/test", Handler: deps.TestEmailSettings, Summary: "Test email settings"},
+			{Method: "GET", Path: "/email/templates", Handler: deps.ListEmailTemplates, Summary: "List email templates"},
+			{Method: "GET", Path: "/email/templates/:name", Handler: deps.GetEmailTemplate, Summary: "Get email template"},
+			{Method: "PUT", Path: "/email/templates/:name", Handler: deps.UpdateEmailTemplate, Summary: "Update email template"},
+			{Method: "POST", Path: "/email/templates/:name/test", Handler: deps.TestEmailTemplate, Summary: "Test email template"},
+			{Method: "POST", Path: "/email/templates/:name/reset", Handler: deps.ResetEmailTemplate, Summary: "Reset email template"},
 
-			// Captcha Settings - instance admin only
-			{Method: "GET", Path: "/settings/captcha", Handler: deps.GetCaptchaSettings, Summary: "Get captcha settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "PUT", Path: "/settings/captcha", Handler: deps.UpdateCaptchaSettings, Summary: "Update captcha settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+			// Captcha Settings (uses default roles)
+			{Method: "GET", Path: "/settings/captcha", Handler: deps.GetCaptchaSettings, Summary: "Get captcha settings"},
+			{Method: "PUT", Path: "/settings/captcha", Handler: deps.UpdateCaptchaSettings, Summary: "Update captcha settings"},
 
-			// Instance Settings - instance admin only
-			{Method: "GET", Path: "/instance/settings", Handler: deps.GetInstanceSettings, Summary: "Get instance settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "PATCH", Path: "/instance/settings", Handler: deps.UpdateInstanceSettings, Summary: "Update instance settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "GET", Path: "/instance/settings/overridable", Handler: deps.GetOverridableSettings, Summary: "Get overridable settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-			{Method: "PUT", Path: "/instance/settings/overridable", Handler: deps.UpdateOverridableSettings, Summary: "Update overridable settings", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+			// Instance Settings (uses default roles)
+			{Method: "GET", Path: "/instance/settings", Handler: deps.GetInstanceSettings, Summary: "Get instance settings"},
+			{Method: "PATCH", Path: "/instance/settings", Handler: deps.UpdateInstanceSettings, Summary: "Update instance settings"},
+			{Method: "GET", Path: "/instance/settings/overridable", Handler: deps.GetOverridableSettings, Summary: "Get overridable settings"},
+			{Method: "PUT", Path: "/instance/settings/overridable", Handler: deps.UpdateOverridableSettings, Summary: "Update overridable settings"},
 		},
 	}
 }
