@@ -29,9 +29,9 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, int32(100), cfg.Pool.MaxTotalConnections)
 	assert.Equal(t, 30*time.Minute, cfg.Pool.EvictionAge)
 	assert.Equal(t, 5*time.Minute, cfg.Migrations.CheckInterval)
-	assert.True(t, cfg.Migrations.OnCreate)
-	assert.True(t, cfg.Migrations.OnAccess)
-	assert.True(t, cfg.Migrations.Background)
+	assert.False(t, cfg.Migrations.OnCreate) // Disabled by default - use declarative schemas
+	assert.False(t, cfg.Migrations.OnAccess)
+	assert.False(t, cfg.Migrations.Background)
 }
 
 func TestConfig_Validation(t *testing.T) {
