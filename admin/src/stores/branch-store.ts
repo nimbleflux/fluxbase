@@ -55,28 +55,30 @@ export const useBranchStore = create<BranchState>()(
         })),
       setBranches: (branches) =>
         set((state) => {
+          // Ensure branches is always an array
+          const safeBranches = branches ?? [];
           // If no persisted branch, default to main or first ready branch
           if (!state.currentBranch) {
-            const mainBranch = branches.find(
+            const mainBranch = safeBranches.find(
               (b) => b.type === "main" && b.status === "ready",
             );
-            const firstReady = branches.find((b) => b.status === "ready");
+            const firstReady = safeBranches.find((b) => b.status === "ready");
             return {
               ...state,
-              branches,
+              branches: safeBranches,
               currentBranch: mainBranch || firstReady || null,
             };
           }
           // Restore previously selected branch if it still exists and is ready
-          const existingBranch = branches.find(
+          const existingBranch = safeBranches.find(
             (b) => b.id === state.currentBranch?.id && b.status === "ready",
           );
           return {
             ...state,
-            branches,
+            branches: safeBranches,
             currentBranch:
               existingBranch ||
-              branches.find((b) => b.status === "ready") ||
+              safeBranches.find((b) => b.status === "ready") ||
               null,
           };
         }),

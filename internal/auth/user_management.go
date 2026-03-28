@@ -65,7 +65,8 @@ func NewUserManagementService(
 
 // ListEnrichedUsers returns a list of users with enriched metadata
 // userType can be "app" for auth.users or "platform" for platform.users
-func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType string) ([]*EnrichedUser, error) {
+// tenantID is optional and filters app users by tenant membership
+func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType string, tenantID string) ([]*EnrichedUser, error) {
 	// Default to app users if not specified
 	if userType == "" {
 		userType = "app"
@@ -100,6 +101,24 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 		tenantAssignmentsSelect = ", ta.assignments as tenant_assignments"
 	}
 
+	// Build GROUP BY clause - include tenant assignments for platform users
+	groupByClause := "u.id, u.email, u.email_verified, u.role, u.user_metadata, u.app_metadata, u.created_at, u.updated_at, u.password_hash, u.is_locked"
+	if userType == "platform" {
+		groupByClause += ", ta.assignments"
+	}
+
+	// Build WHERE clause for tenant filtering (app users only)
+	var whereClause string
+	var args []interface{}
+	if userType == "app" && tenantID != "" {
+		whereClause = `
+			WHERE u.id IN (
+				SELECT tm.user_id FROM platform.tenant_memberships tm
+				WHERE tm.tenant_id = $1
+			)`
+		args = append(args, tenantID)
+	}
+
 	query := fmt.Sprintf(`
 		SELECT
 			u.id,
@@ -122,13 +141,14 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 		FROM %s u
 		LEFT JOIN %s s ON u.id = s.user_id
 		%s
-		GROUP BY u.id, u.email, u.email_verified, u.role, u.user_metadata, u.app_metadata, u.created_at, u.updated_at, u.password_hash, u.is_locked
+		%s
+		GROUP BY %s
 		ORDER BY u.created_at DESC
-	`, tenantAssignmentsSelect, usersTable, sessionsTable, tenantAssignmentsJoin)
+	`, tenantAssignmentsSelect, usersTable, sessionsTable, tenantAssignmentsJoin, whereClause, groupByClause)
 
 	var users []*EnrichedUser
 	err := database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query)
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("failed to query enriched users: %w", err)
 		}
@@ -268,6 +288,7 @@ type InviteUserRequest struct {
 	Role      string `json:"role"`
 	Password  string `json:"password,omitempty"`   // Optional: if provided, use this instead of generating
 	SkipEmail bool   `json:"skip_email,omitempty"` // Optional: if true, don't send invitation email
+	TenantID  string `json:"tenant_id,omitempty"`  // Optional: tenant to add the user to (for app users)
 }
 
 // InviteUserResponse represents the response after inviting a user
@@ -280,9 +301,9 @@ type InviteUserResponse struct {
 
 // InviteUser creates a new user and either sends them an invite email or returns a temp password
 func (s *UserManagementService) InviteUser(ctx context.Context, req InviteUserRequest, userType string) (*InviteUserResponse, error) {
-	// Validate role - for dashboard users, default to instance_admin
+	// Validate role - for platform/dashboard users, default to instance_admin
 	if req.Role == "" {
-		if userType == "dashboard" {
+		if userType == "platform" {
 			req.Role = "instance_admin"
 		} else {
 			req.Role = "user"
@@ -318,6 +339,20 @@ func (s *UserManagementService) InviteUser(ctx context.Context, req InviteUserRe
 	user, err := s.userRepo.CreateInTable(ctx, createReq, hashedPassword, userType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Add user to tenant if tenant_id is provided (for app users only)
+	if userType == "app" && req.TenantID != "" && s.userRepo.db != nil {
+		_, err := s.userRepo.db.Pool().Exec(ctx,
+			`INSERT INTO platform.tenant_memberships (tenant_id, user_id, role)
+			 VALUES ($1::uuid, $2::uuid, 'tenant_member')
+			 ON CONFLICT (tenant_id, user_id) DO NOTHING`,
+			req.TenantID, user.ID,
+		)
+		if err != nil {
+			// Log error but don't fail - user was created successfully
+			// The admin can manually add them to the tenant later
+		}
 	}
 
 	// Try to send invitation email if email service is available and not skipped

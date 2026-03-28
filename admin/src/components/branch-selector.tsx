@@ -41,7 +41,7 @@ export function BranchSelector() {
 
         // Try to fetch branches - if it fails with 403/503, branching is not available
         const data = await branchesApi.list({ status: "ready" });
-        setBranches(data.branches);
+        setBranches(data.branches ?? []);
         setIsBranchingEnabled(true);
       } catch (err: unknown) {
         // If branching is disabled, not authorized, or endpoint not found, hide the selector

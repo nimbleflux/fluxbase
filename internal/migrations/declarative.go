@@ -184,8 +184,6 @@ func (s *DeclarativeService) Plan(ctx context.Context) (*Plan, error) {
 
 // ApplyForSchema applies the migration plan for a single schema
 func (s *DeclarativeService) ApplyForSchema(ctx context.Context, schema string, autoApprove bool) (*ApplyResult, error) {
-	schemaFile := filepath.Join(s.config.SchemaDir, schema+".sql")
-
 	// First, generate plan
 	plan, err := s.PlanForSchema(ctx, schema)
 	if err != nil {
@@ -209,7 +207,6 @@ func (s *DeclarativeService) ApplyForSchema(ctx context.Context, schema string, 
 		"--port", fmt.Sprintf("%d", s.dbPort),
 		"--user", s.dbUser,
 		"--db", s.dbName,
-		"--file", schemaFile,
 		"--schema", schema,
 		"--plan", planFile,
 	}
@@ -484,7 +481,21 @@ func (s *DeclarativeService) ApplyDeclarativeWithSource(ctx context.Context, sou
 			}
 			log.Info().Str("schema", schema).Int("changes", len(plan.Changes)).Msg("Schema changes applied via plan execution")
 		} else if len(result.Applied) > 0 {
-			log.Info().Str("schema", schema).Int("changes", len(result.Applied)).Msg("Schema changes applied via pgschema")
+			// Log each applied change
+			for i, change := range result.Applied {
+				sqlPreview := change.SQL
+				if len(sqlPreview) > 200 {
+					sqlPreview = sqlPreview[:197] + "..."
+				}
+				log.Info().
+					Str("schema", schema).
+					Int("change_num", i+1).
+					Int("total_changes", len(result.Applied)).
+					Str("type", string(change.Type)).
+					Str("object", change.Name).
+					Str("sql", sqlPreview).
+					Msg("Applied schema change via pgschema")
+			}
 		}
 	}
 
@@ -575,13 +586,18 @@ func (s *DeclarativeService) applyPlanDirectly(ctx context.Context, schema strin
 			continue
 		}
 
-		// Log the change being applied
-		log.Debug().
+		// Log the change being applied (truncate SQL if too long)
+		sqlPreview := change.SQL
+		if len(sqlPreview) > 200 {
+			sqlPreview = sqlPreview[:197] + "..."
+		}
+		log.Info().
 			Str("schema", schema).
 			Int("change_num", i+1).
 			Int("total_changes", len(plan.Changes)).
 			Str("type", string(change.Type)).
 			Str("object", change.Name).
+			Str("sql", sqlPreview).
 			Msg("Applying schema change")
 
 		_, err := pool.Exec(ctx, change.SQL)

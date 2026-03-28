@@ -59,9 +59,9 @@ func DefaultConfig() Config {
 		},
 		Migrations: MigrationsConfig{
 			CheckInterval: 5 * time.Minute,
-			OnCreate:      true,
-			OnAccess:      true,
-			Background:    true,
+			OnCreate:      false, // Disabled by default - use declarative schemas instead
+			OnAccess:      false,
+			Background:    false,
 		},
 	}
 }

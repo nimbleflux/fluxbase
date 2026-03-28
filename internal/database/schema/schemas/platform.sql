@@ -1273,19 +1273,19 @@ RETURNS boolean
 LANGUAGE sql
 VOLATILE
 SECURITY DEFINER
-SET search_path = public
+SET search_path = platform
 AS $$
     SELECT
         CASE
             -- If overridable_settings is NULL, all settings can be overridden
-            WHEN (SELECT overridable_settings FROM platform.instance_settings LIMIT 1) IS NULL THEN
+            WHEN (SELECT overridable_settings FROM instance_settings LIMIT 1) IS NULL THEN
                 TRUE
             -- Otherwise, check if the path is in the overridable list
             ELSE
-                (SELECT overridable_settings FROM platform.instance_settings LIMIT 1) ? setting_path
+                (SELECT overridable_settings FROM instance_settings LIMIT 1) ? setting_path
                 OR EXISTS (
                     SELECT 1
-                    FROM platform.instance_settings,
+                    FROM instance_settings,
                          jsonb_array_elements_text(overridable_settings) AS allowed_path
                     WHERE setting_path LIKE (allowed_path || '%')
                     LIMIT 1
@@ -1310,7 +1310,7 @@ RETURNS TABLE(setting_path text, setting_value jsonb, source text, is_overridabl
 LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
-SET search_path = public
+SET search_path = platform
 AS $$
 DECLARE
     v_instance_settings JSONB;
@@ -1321,13 +1321,13 @@ BEGIN
     -- Get instance settings
     SELECT settings, overridable_settings
     INTO v_instance_settings, v_overridable
-    FROM platform.instance_settings
+    FROM instance_settings
     LIMIT 1;
 
     -- Get tenant settings
     SELECT settings
     INTO v_tenant_settings
-    FROM platform.tenant_settings
+    FROM tenant_settings
     WHERE tenant_id = p_tenant_id;
 
     v_tenant_settings := COALESCE(v_tenant_settings, '{}');
@@ -1381,7 +1381,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
-SET search_path = public
+SET search_path = platform
 AS $$
 DECLARE
     v_tenant_value JSONB;
@@ -1395,7 +1395,7 @@ BEGIN
     IF v_is_overridable AND p_tenant_id IS NOT NULL THEN
         SELECT get_jsonb_path(settings, p_setting_path)
         INTO v_tenant_value
-        FROM platform.tenant_settings
+        FROM tenant_settings
         WHERE tenant_id = p_tenant_id;
 
         IF v_tenant_value IS NOT NULL THEN
@@ -1406,7 +1406,7 @@ BEGIN
     -- Fall back to instance setting
     SELECT get_jsonb_path(settings, p_setting_path)
     INTO v_instance_value
-    FROM platform.instance_settings
+    FROM instance_settings
     LIMIT 1;
 
     IF v_instance_value IS NOT NULL THEN
@@ -1525,7 +1525,7 @@ RETURNS boolean
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
-SET search_path = public
+SET search_path = platform
 AS $$
 BEGIN
     IF p_user_id IS NULL THEN
@@ -1533,7 +1533,7 @@ BEGIN
     END IF;
 
     RETURN EXISTS (
-        SELECT 1 FROM platform.users
+        SELECT 1 FROM users
         WHERE id = p_user_id
         AND role = 'instance_admin'
         AND deleted_at IS NULL

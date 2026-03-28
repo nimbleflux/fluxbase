@@ -120,6 +120,38 @@ COMMENT ON TABLE fluxbase IS 'Tracks Fluxbase system migration versions (managed
 --
 
 --
+-- Name: declarative_state; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS declarative_state (
+    id SERIAL PRIMARY KEY,
+    schema_fingerprint TEXT NOT NULL,
+    applied_at TIMESTAMPTZ DEFAULT NOW(),
+    applied_by TEXT,
+    source TEXT CHECK (source IN ('fresh_install', 'transitioned', 'schema_apply'))
+);
+
+
+COMMENT ON TABLE declarative_state IS 'Tracks declarative schema application state with fingerprints';
+
+
+COMMENT ON COLUMN migrations.declarative_state.source IS 'Source of schema application: fresh_install (new DB), transitioned (migrated from imperative), schema_apply (normal startup)';
+
+--
+-- Name: bootstrap_state; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS bootstrap_state (
+    id SERIAL PRIMARY KEY,
+    bootstrapped_at TIMESTAMPTZ DEFAULT NOW(),
+    version TEXT NOT NULL,
+    checksum TEXT
+);
+
+
+COMMENT ON TABLE bootstrap_state IS 'Tracks bootstrap completion state';
+
+--
 -- Name: app; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
@@ -173,3 +205,20 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE fluxbase TO service_role;
 
+--
+-- Name: declarative_state; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT SELECT, INSERT, UPDATE ON TABLE declarative_state TO service_role;
+
+--
+-- Name: declarative_state_id_seq; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE, SELECT ON SEQUENCE declarative_state_id_seq TO service_role;
+
+--
+-- Name: bootstrap_state; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT SELECT, INSERT ON TABLE bootstrap_state TO service_role;

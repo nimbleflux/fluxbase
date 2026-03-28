@@ -625,6 +625,12 @@ export interface InviteUserResponse {
   message: string;
 }
 
+// Helper to map frontend user type to backend type
+// Frontend uses "dashboard" but backend expects "platform"
+const mapUserType = (userType: "app" | "dashboard"): "app" | "platform" => {
+  return userType === "dashboard" ? "platform" : userType;
+};
+
 // User Management API methods (admin only)
 export const userManagementApi = {
   listUsers: async (
@@ -633,7 +639,7 @@ export const userManagementApi = {
     const response = await api.get<{ users: EnrichedUser[]; total: number }>(
       "/api/v1/admin/users",
       {
-        params: { type: userType },
+        params: { type: mapUserType(userType) },
       },
     );
     return response.data;
@@ -646,7 +652,7 @@ export const userManagementApi = {
     const response = await api.post<InviteUserResponse>(
       "/api/v1/admin/users/invite",
       data,
-      { params: { type: userType } },
+      { params: { type: mapUserType(userType) } },
     );
     return response.data;
   },
@@ -657,7 +663,7 @@ export const userManagementApi = {
   ): Promise<{ message: string }> => {
     const response = await api.delete<{ message: string }>(
       `/api/v1/admin/users/${userId}`,
-      { params: { type: userType } },
+      { params: { type: mapUserType(userType) } },
     );
     return response.data;
   },
@@ -673,7 +679,7 @@ export const userManagementApi = {
         role,
       },
       {
-        params: { type: userType },
+        params: { type: mapUserType(userType) },
       },
     );
     return response.data;
@@ -686,7 +692,7 @@ export const userManagementApi = {
     const response = await api.post<{ message: string }>(
       `/api/v1/admin/users/${userId}/reset-password`,
       {},
-      { params: { type: userType } },
+      { params: { type: mapUserType(userType) } },
     );
     return response.data;
   },
@@ -704,7 +710,7 @@ export const userManagementApi = {
     const response = await api.patch<EnrichedUser>(
       `/api/v1/admin/users/${userId}`,
       data,
-      { params: { type: userType } },
+      { params: { type: mapUserType(userType) } },
     );
     return response.data;
   },

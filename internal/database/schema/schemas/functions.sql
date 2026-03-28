@@ -728,7 +728,7 @@ CREATE OR REPLACE TRIGGER update_function_dependencies_updated_at
 CREATE OR REPLACE TRIGGER update_functions_edge_functions_updated_at
     BEFORE UPDATE ON edge_functions
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: update_functions_edge_triggers_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -737,7 +737,7 @@ CREATE OR REPLACE TRIGGER update_functions_edge_functions_updated_at
 CREATE OR REPLACE TRIGGER update_functions_edge_triggers_updated_at
     BEFORE UPDATE ON edge_triggers
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: edge_executions; Type: PRIVILEGE; Schema: privileges; Owner: -

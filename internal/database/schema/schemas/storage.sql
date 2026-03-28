@@ -803,7 +803,7 @@ CREATE OR REPLACE TRIGGER storage_objects_set_tenant_id
 CREATE OR REPLACE TRIGGER update_storage_buckets_updated_at
     BEFORE UPDATE ON buckets
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: update_storage_objects_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -812,7 +812,7 @@ CREATE OR REPLACE TRIGGER update_storage_buckets_updated_at
 CREATE OR REPLACE TRIGGER update_storage_objects_updated_at
     BEFORE UPDATE ON objects
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: bucket_exists(bucket_name text); Type: PRIVILEGE; Schema: privileges; Owner: -

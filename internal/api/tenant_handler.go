@@ -216,7 +216,7 @@ func (h *TenantHandler) CreateTenant(c fiber.Ctx) error {
 			return fiber.NewError(fiber.StatusConflict, "Maximum number of tenants reached")
 		}
 		log.Error().Err(err).Msg("Failed to create tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to create tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to create tenant: %v", err))
 	}
 
 	log.Info().Str("tenant_id", t.ID).Str("slug", t.Slug).Msg("Tenant created")

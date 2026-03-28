@@ -632,6 +632,7 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			ValidateInternalSchema:  s.Schema.InternalSchema.ValidateSchema,
 			GetInternalSchemaStatus: s.Schema.InternalSchema.GetSchemaStatus,
 			MigrateInternalSchema:   s.Schema.InternalSchema.MigrateSchema,
+			TenantMiddleware:        s.Middleware.Tenant,
 		},
 		AuthProviders: &routes.AuthProvidersAdminDeps{
 			ListOAuthProviders:  s.Auth.OAuthProvider.ListOAuthProviders,
@@ -665,6 +666,7 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			CreateInvitation:    s.Auth.Invitation.CreateInvitation,
 			ListInvitations:     s.Auth.Invitation.ListInvitations,
 			RevokeInvitation:    s.Auth.Invitation.RevokeInvitation,
+			TenantMiddleware:    s.Middleware.Tenant,
 		},
 		Tenants: &routes.TenantsAdminDeps{
 			ListMyTenants:             s.Tenancy.Tenant.ListMyTenants,

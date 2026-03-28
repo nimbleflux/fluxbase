@@ -21,6 +21,7 @@ import (
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
@@ -1259,7 +1260,25 @@ func (s *SAMLService) LoadProvidersFromDB(ctx context.Context) error {
 		WHERE enabled = true AND COALESCE(source, 'database') = 'database'
 	`
 
-	rows, err := s.db.Query(ctx, query)
+	// Retry on transient connection errors during startup (e.g., pool still initializing)
+	var rows pgx.Rows
+	var err error
+	maxRetries := 3
+	for i := 0; i < maxRetries; i++ {
+		rows, err = s.db.Query(ctx, query)
+		if err == nil {
+			break
+		}
+		// Check if it's a transient connection error
+		if strings.Contains(err.Error(), "conn closed") || strings.Contains(err.Error(), "connection") {
+			if i < maxRetries-1 {
+				log.Debug().Err(err).Int("attempt", i+1).Msg("Retrying SAML provider query after connection error")
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+		}
+		break
+	}
 	if err != nil {
 		return fmt.Errorf("failed to query SAML providers: %w", err)
 	}

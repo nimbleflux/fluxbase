@@ -926,8 +926,12 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Handler: quotaHandler,
 		},
 
-		// Middleware components (initialized later)
-		Middleware: &MiddlewareComponents{},
+		// Middleware components
+		Middleware: &MiddlewareComponents{
+			Tenant: middleware.TenantMiddleware(middleware.TenantConfig{
+				DB: db,
+			}),
+		},
 
 		// Server-owned dependencies
 		rateLimiter:             rateLimitStore,

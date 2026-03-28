@@ -54,7 +54,7 @@ CREATE POLICY "Authenticated users can view realtime configuration" ON schema_re
 CREATE OR REPLACE TRIGGER update_realtime_schema_registry_updated_at
     BEFORE UPDATE ON schema_registry
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: schema_registry_id_seq; Type: PRIVILEGE; Schema: privileges; Owner: -

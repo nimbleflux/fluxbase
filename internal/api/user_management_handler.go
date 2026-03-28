@@ -41,10 +41,13 @@ func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
 	offset := fiber.Query[int](c, "offset", 0)
 	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
 
+	// Get tenant ID from context (set by TenantMiddleware when X-FB-Tenant header is present)
+	tenantID, _ := c.Locals("tenant_id").(string)
+
 	// Normalize pagination parameters
 	limit, offset = NormalizePaginationParams(limit, offset, defaultLimit, maxLimit)
 
-	users, err := h.userMgmtService.ListEnrichedUsers(c.RequestCtx(), userType)
+	users, err := h.userMgmtService.ListEnrichedUsers(c.RequestCtx(), userType, tenantID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -148,6 +151,12 @@ func (h *UserManagementHandler) InviteUser(c fiber.Ctx) error {
 	}
 
 	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
+
+	// Get tenant ID from context if not provided in request (set by TenantMiddleware)
+	if req.TenantID == "" {
+		tenantID, _ := c.Locals("tenant_id").(string)
+		req.TenantID = tenantID
+	}
 
 	resp, err := h.userMgmtService.InviteUser(c.RequestCtx(), req, userType)
 	if err != nil {

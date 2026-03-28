@@ -731,7 +731,7 @@ CREATE OR REPLACE TRIGGER trigger_update_sso_identities_updated_at
 CREATE OR REPLACE TRIGGER update_dashboard_email_templates_updated_at
     BEFORE UPDATE ON email_templates
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: update_dashboard_oauth_providers_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -740,7 +740,7 @@ CREATE OR REPLACE TRIGGER update_dashboard_email_templates_updated_at
 CREATE OR REPLACE TRIGGER update_dashboard_oauth_providers_updated_at
     BEFORE UPDATE ON oauth_providers
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: update_dashboard_sessions_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -749,7 +749,7 @@ CREATE OR REPLACE TRIGGER update_dashboard_oauth_providers_updated_at
 CREATE OR REPLACE TRIGGER update_dashboard_sessions_updated_at
     BEFORE UPDATE ON sessions
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: update_dashboard_users_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -758,7 +758,7 @@ CREATE OR REPLACE TRIGGER update_dashboard_sessions_updated_at
 CREATE OR REPLACE TRIGGER update_dashboard_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: validate_app_metadata_trigger; Type: TRIGGER; Schema: -; Owner: -

@@ -23,6 +23,9 @@ type UsersAdminDeps struct {
 	CreateInvitation    fiber.Handler
 	ListInvitations     fiber.Handler
 	RevokeInvitation    fiber.Handler
+
+	// Middleware for tenant context (extracts X-FB-Tenant header)
+	TenantMiddleware fiber.Handler
 }
 
 // BuildUsersAdminRoutes creates the users admin route group.
@@ -31,10 +34,20 @@ func BuildUsersAdminRoutes(deps *UsersAdminDeps) *RouteGroup {
 		return nil
 	}
 
+	// Build middlewares for tenant context
+	var middlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name:    "TenantContext",
+			Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
 		Name:         "users_admin",
 		DefaultAuth:  AuthRequired,
 		DefaultRoles: []string{"admin", "instance_admin", "tenant_admin"},
+		Middlewares:  middlewares,
 		Routes: []Route{
 			// Users (uses default roles)
 			{Method: "GET", Path: "/users", Handler: deps.ListUsers, Summary: "List users"},

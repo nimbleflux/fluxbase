@@ -77,6 +77,7 @@ function TenantsPage() {
   const [newTenant, setNewTenant] = useState({
     name: "",
     slug: "",
+    slugManuallyEdited: false,
     auto_generate_keys: true,
     admin_email: "",
     send_keys_to_email: false,
@@ -109,13 +110,11 @@ function TenantsPage() {
       setNewTenant({
         name: "",
         slug: "",
+        slugManuallyEdited: false,
         auto_generate_keys: true,
         admin_email: "",
         send_keys_to_email: false,
       });
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to create tenant: ${error.message}`);
     },
   });
 
@@ -470,7 +469,9 @@ function TenantsPage() {
                   setNewTenant({
                     ...newTenant,
                     name,
-                    slug: newTenant.slug || generateSlug(name),
+                    slug: newTenant.slugManuallyEdited
+                      ? newTenant.slug
+                      : generateSlug(name),
                   });
                 }}
               />
@@ -484,7 +485,11 @@ function TenantsPage() {
                 placeholder="acme-corporation"
                 value={newTenant.slug}
                 onChange={(e) =>
-                  setNewTenant({ ...newTenant, slug: e.target.value })
+                  setNewTenant({
+                    ...newTenant,
+                    slug: e.target.value,
+                    slugManuallyEdited: true,
+                  })
                 }
               />
               <p className="text-muted-foreground text-xs">

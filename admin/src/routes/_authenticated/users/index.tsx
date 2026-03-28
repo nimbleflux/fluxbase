@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Users, UserPlus, UserCheck, Clock, Shield } from "lucide-react";
 import { userManagementApi } from "@/lib/api";
+import { useTenantStore } from "@/stores/tenant-store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,10 +32,12 @@ function UsersPage() {
   const search = Route.useSearch();
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const activeTab = search.tab || "app";
+  const { currentTenant } = useTenantStore();
 
   // Fetch users from API based on active tab
+  // Include tenant ID in query key to trigger refetch when tenant changes
   const { data: usersResponse, isLoading } = useQuery({
-    queryKey: ["users", activeTab],
+    queryKey: ["users", activeTab, currentTenant?.id],
     queryFn: () => userManagementApi.listUsers(activeTab),
   });
 

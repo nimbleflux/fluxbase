@@ -85,7 +85,7 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 	}
 
 	_, err := m.adminPool.Exec(ctx, fmt.Sprintf(
-		"CREATE DATABASE %s OWNER postgres ENCODING 'UTF8'",
+		"CREATE DATABASE %s ENCODING 'UTF8'",
 		dbName,
 	))
 	if err != nil {
@@ -99,22 +99,6 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 	}
 
 	log.Info().Str("tenant", req.Slug).Str("db", dbName).Msg("Created tenant database")
-
-	if m.config.Migrations.OnCreate {
-		if err := m.runSystemMigrationsForDB(ctx, dbName); err != nil {
-			if _, dropErr := m.adminPool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName)); dropErr != nil {
-				log.Warn().Err(dropErr).Str("db", dbName).Msg("Failed to drop database after migration failure")
-			}
-			if statusErr := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusError); statusErr != nil {
-				log.Warn().Err(statusErr).Str("tenant_id", tenant.ID).Msg("Failed to update tenant status to error")
-			}
-			if deleteErr := m.storage.HardDeleteTenant(ctx, tenant.ID); deleteErr != nil {
-				log.Warn().Err(deleteErr).Str("tenant_id", tenant.ID).Msg("Failed to hard delete tenant record")
-			}
-			return nil, fmt.Errorf("failed to run migrations: %w", err)
-		}
-		log.Info().Str("tenant", req.Slug).Msg("Completed system migrations")
-	}
 
 	// Apply tenant-specific declarative schema if configured
 	if m.declarative != nil && m.declarativeCfg.OnCreate {

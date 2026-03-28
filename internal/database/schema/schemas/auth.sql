@@ -2921,7 +2921,7 @@ CREATE OR REPLACE TRIGGER auth_users_set_tenant_id
 CREATE OR REPLACE TRIGGER set_timestamp
     BEFORE UPDATE ON mfa_factors
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: trigger_mcp_oauth_clients_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -2957,7 +2957,7 @@ CREATE OR REPLACE TRIGGER trigger_update_trust_signals_updated_at
 CREATE OR REPLACE TRIGGER update_auth_client_keys_updated_at
     BEFORE UPDATE ON client_keys
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: update_auth_sessions_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -2966,7 +2966,7 @@ CREATE OR REPLACE TRIGGER update_auth_client_keys_updated_at
 CREATE OR REPLACE TRIGGER update_auth_sessions_updated_at
     BEFORE UPDATE ON sessions
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: update_auth_users_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -2975,7 +2975,7 @@ CREATE OR REPLACE TRIGGER update_auth_sessions_updated_at
 CREATE OR REPLACE TRIGGER update_auth_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: update_auth_webhooks_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -2993,7 +2993,7 @@ CREATE OR REPLACE TRIGGER update_auth_webhooks_updated_at
 CREATE OR REPLACE TRIGGER update_oauth_links_updated_at
     BEFORE UPDATE ON oauth_links
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: update_oauth_tokens_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -3002,7 +3002,7 @@ CREATE OR REPLACE TRIGGER update_oauth_links_updated_at
 CREATE OR REPLACE TRIGGER update_oauth_tokens_updated_at
     BEFORE UPDATE ON oauth_tokens
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at();
+    EXECUTE FUNCTION platform.update_updated_at();
 
 --
 -- Name: validate_app_metadata_trigger; Type: TRIGGER; Schema: -; Owner: -

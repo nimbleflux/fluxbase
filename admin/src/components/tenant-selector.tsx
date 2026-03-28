@@ -1,5 +1,6 @@
 import { Building2, Check, ChevronsUpDown, Shield } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTenantStore, type Tenant } from "@/stores/tenant-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -43,62 +44,54 @@ export function TenantSelector() {
     setActingAsTenantAdmin,
   } = useTenantStore();
   const [open, setOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const admin = checkIsInstanceAdmin();
-    setIsInstanceAdmin(admin);
+  // Use React Query to fetch tenants - this will auto-refresh when invalidated
+  const { data: fetchedTenants, isLoading } = useQuery({
+    queryKey: ["tenants"],
+    queryFn: async () => {
+      const admin = checkIsInstanceAdmin();
+      setIsInstanceAdmin(admin);
 
-    async function fetchTenants() {
-      try {
-        setIsLoading(true);
-        if (admin) {
-          const data = await tenantsApi.list();
-          setTenants(
-            data.map(
-              (t) =>
-                ({
-                  id: t.id,
-                  slug: t.slug,
-                  name: t.name,
-                  is_default: t.is_default,
-                  metadata: t.metadata || {},
-                  my_role: undefined,
-                  created_at: t.created_at,
-                  updated_at: t.updated_at,
-                }) as Tenant,
-            ),
-            admin, // Pass isInstanceAdmin flag
-          );
-        } else {
-          const data = await tenantsApi.listMine();
-          setTenants(
-            data.map(
-              (t) =>
-                ({
-                  id: t.id,
-                  slug: t.slug,
-                  name: t.name,
-                  is_default: t.is_default,
-                  metadata: t.metadata || {},
-                  my_role: t.my_role,
-                  created_at: t.created_at,
-                  updated_at: t.updated_at,
-                }) as Tenant,
-            ),
-            admin, // Pass isInstanceAdmin flag
-          );
-        }
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error("Failed to fetch tenants:", error);
-      } finally {
-        setIsLoading(false);
+      if (admin) {
+        const data = await tenantsApi.list();
+        return data.map(
+          (t) =>
+            ({
+              id: t.id,
+              slug: t.slug,
+              name: t.name,
+              is_default: t.is_default,
+              metadata: t.metadata || {},
+              my_role: undefined,
+              created_at: t.created_at,
+              updated_at: t.updated_at,
+            }) as Tenant,
+        );
+      } else {
+        const data = await tenantsApi.listMine();
+        return data.map(
+          (t) =>
+            ({
+              id: t.id,
+              slug: t.slug,
+              name: t.name,
+              is_default: t.is_default,
+              metadata: t.metadata || {},
+              my_role: t.my_role,
+              created_at: t.created_at,
+              updated_at: t.updated_at,
+            }) as Tenant,
+        );
       }
-    }
+    },
+  });
 
-    fetchTenants();
-  }, [setTenants, setIsInstanceAdmin]);
+  // Update store when query data changes
+  useEffect(() => {
+    if (fetchedTenants) {
+      setTenants(fetchedTenants, storeIsInstanceAdmin);
+    }
+  }, [fetchedTenants, storeIsInstanceAdmin, setTenants]);
 
   useEffect(() => {
     if (storeIsInstanceAdmin && currentTenant && !currentTenant.my_role) {
