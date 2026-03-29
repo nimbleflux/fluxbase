@@ -15,6 +15,7 @@ import (
 
 func TestNewSESService(t *testing.T) {
 	t.Run("returns error for missing region", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:    "ses",
 			SESRegion:   "",
@@ -30,6 +31,7 @@ func TestNewSESService(t *testing.T) {
 	})
 
 	t.Run("creates service with region only (uses default credentials)", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:    "ses",
 			SESRegion:   "us-east-1",
@@ -46,6 +48,7 @@ func TestNewSESService(t *testing.T) {
 	})
 
 	t.Run("creates service with static credentials", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:     "ses",
 			SESRegion:    "eu-west-1",
@@ -68,6 +71,7 @@ func TestNewSESService(t *testing.T) {
 
 func TestSESService_IsConfigured(t *testing.T) {
 	t.Run("returns false when disabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:     false,
 			Provider:    "ses",
@@ -80,6 +84,7 @@ func TestSESService_IsConfigured(t *testing.T) {
 	})
 
 	t.Run("returns true when enabled and configured", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:     true,
 			Provider:    "ses",
@@ -101,6 +106,7 @@ func TestSESService_IsConfigured(t *testing.T) {
 
 func TestSESService_Struct(t *testing.T) {
 	t.Run("stores config and client", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:    "ses",
 			SESRegion:   "us-east-1",
@@ -130,24 +136,29 @@ func TestSESService_EmailMethods(t *testing.T) {
 	service, _ := NewSESService(cfg)
 
 	t.Run("SendMagicLink method exists", func(t *testing.T) {
+		t.Parallel()
 		// Method exists and has correct signature
 		assert.NotNil(t, service)
 		// Can't actually send without real AWS credentials
 	})
 
 	t.Run("SendVerificationEmail method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("SendPasswordReset method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("SendInvitationEmail method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("Send method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 }
@@ -166,6 +177,7 @@ func TestSESService_RegionValidation(t *testing.T) {
 
 	for _, region := range validRegions {
 		t.Run("accepts region "+region, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.EmailConfig{
 				Provider:    "ses",
 				SESRegion:   region,

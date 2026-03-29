@@ -370,6 +370,26 @@ func TestDefaultFunctionPermissions(t *testing.T) {
 		assert.Equal(t, 512, perms.MemoryLimitMB) // Functions have 512MB default
 	})
 
+	t.Run("includes default blocked domains for SSRF protection", func(t *testing.T) {
+		perms := DefaultFunctionPermissions()
+
+		// Should include blocked domains
+		assert.NotEmpty(t, perms.BlockedDomains, "default permissions should include blocked domains")
+
+		// Check for specific blocked metadata endpoints
+		blockedMap := make(map[string]bool)
+		for _, d := range perms.BlockedDomains {
+			blockedMap[d] = true
+		}
+
+		assert.True(t, blockedMap["169.254.169.254"], "AWS metadata IP should be blocked")
+		assert.True(t, blockedMap["metadata.google.internal"], "GCP metadata hostname should be blocked")
+		assert.True(t, blockedMap["metadata"], "Generic metadata hostname should be blocked")
+		assert.True(t, blockedMap["instance-data"], "Azure metadata hostname should be blocked")
+		assert.True(t, blockedMap["kubernetes.default.svc"], "K8s API server should be blocked")
+		assert.True(t, blockedMap["kubernetes.default"], "K8s API server short name should be blocked")
+	})
+
 	t.Run("returns new instance each call", func(t *testing.T) {
 		perms1 := DefaultFunctionPermissions()
 		perms2 := DefaultFunctionPermissions()
@@ -533,6 +553,39 @@ func BenchmarkDefaultJobPermissions(b *testing.B) {
 	}
 }
 
+func TestDefaultBlockedDomains(t *testing.T) {
+	t.Run("returns expected blocked domains", func(t *testing.T) {
+		blocked := defaultBlockedDomains()
+
+		// Verify all critical SSRF targets are blocked
+		blockedMap := make(map[string]bool)
+		for _, d := range blocked {
+			blockedMap[d] = true
+		}
+
+		// Cloud metadata endpoints
+		assert.True(t, blockedMap["169.254.169.254"], "AWS metadata IP should be blocked")
+		assert.True(t, blockedMap["metadata.google.internal"], "GCP metadata hostname should be blocked")
+		assert.True(t, blockedMap["metadata"], "Generic metadata hostname should be blocked")
+		assert.True(t, blockedMap["instance-data"], "Azure metadata hostname should be blocked")
+
+		// Kubernetes API server
+		assert.True(t, blockedMap["kubernetes.default.svc"], "K8s API server FQDN should be blocked")
+		assert.True(t, blockedMap["kubernetes.default"], "K8s API server short name should be blocked")
+	})
+
+	t.Run("returns new instance each call", func(t *testing.T) {
+		blocked1 := defaultBlockedDomains()
+		blocked2 := defaultBlockedDomains()
+
+		// Modify first slice
+		blocked1 = append(blocked1, "test.blocked.com")
+
+		// Second should be unchanged
+		assert.NotEqual(t, len(blocked1), len(blocked2))
+	})
+}
+
 func BenchmarkExecutionRequest_Creation(b *testing.B) {
 	id := uuid.New()
 	b.ResetTimer()
@@ -560,4 +613,154 @@ func BenchmarkExecutionResult_Creation(b *testing.B) {
 			Body:       `{"data": "result"}`,
 		}
 	}
+}
+
+// =============================================================================
+// buildNetworkAllowList Tests (SSRF Protection)
+// =============================================================================
+
+func TestBuildNetworkAllowList(t *testing.T) {
+	t.Run("empty permissions and no self URL returns empty list", func(t *testing.T) {
+		perms := Permissions{}
+		result := buildNetworkAllowList(perms, "")
+
+		assert.Empty(t, result, "no domains should be allowed without explicit configuration")
+	})
+
+	t.Run("with self URL only returns self host", func(t *testing.T) {
+		perms := Permissions{}
+		result := buildNetworkAllowList(perms, "https://api.example.com")
+
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "api.example.com")
+	})
+
+	t.Run("with allowed domains includes them", func(t *testing.T) {
+		perms := Permissions{
+			AllowedDomains: []string{"api.example.com", "cdn.example.com"},
+		}
+		result := buildNetworkAllowList(perms, "")
+
+		assert.Len(t, result, 2)
+		assert.Contains(t, result, "api.example.com")
+		assert.Contains(t, result, "cdn.example.com")
+	})
+
+	t.Run("self URL is added to allowed domains", func(t *testing.T) {
+		perms := Permissions{
+			AllowedDomains: []string{"api.external.com"},
+		}
+		result := buildNetworkAllowList(perms, "https://api.example.com")
+
+		assert.Len(t, result, 2)
+		assert.Contains(t, result, "api.external.com")
+		assert.Contains(t, result, "api.example.com")
+	})
+
+	t.Run("blocked domains are removed from allowed list", func(t *testing.T) {
+		perms := Permissions{
+			AllowedDomains: []string{"api.example.com", "169.254.169.254", "metadata.google.internal"},
+			BlockedDomains: []string{"169.254.169.254", "metadata.google.internal"},
+		}
+		result := buildNetworkAllowList(perms, "")
+
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "api.example.com")
+		assert.NotContains(t, result, "169.254.169.254")
+		assert.NotContains(t, result, "metadata.google.internal")
+	})
+
+	t.Run("blocked domain in self URL is removed", func(t *testing.T) {
+		perms := Permissions{
+			BlockedDomains: []string{"metadata.google.internal"},
+		}
+		result := buildNetworkAllowList(perms, "https://metadata.google.internal")
+
+		assert.Empty(t, result, "blocked self URL should not be in allow list")
+	})
+
+	t.Run("default permissions include blocked metadata domains", func(t *testing.T) {
+		perms := DefaultFunctionPermissions()
+		result := buildNetworkAllowList(perms, "https://api.example.com")
+
+		// Self URL should be present
+		assert.Contains(t, result, "api.example.com")
+
+		// Check that blocked domains are not in the result
+		for _, blocked := range perms.BlockedDomains {
+			assert.NotContains(t, result, blocked, "blocked domain %s should not be in allow list", blocked)
+		}
+	})
+
+	t.Run("when allowed domains is empty but blocked exists, returns self host only if not blocked", func(t *testing.T) {
+		perms := Permissions{
+			BlockedDomains: []string{"169.254.169.254"},
+		}
+		result := buildNetworkAllowList(perms, "https://api.example.com")
+
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "api.example.com")
+	})
+
+	t.Run("when self URL is blocked, returns empty list", func(t *testing.T) {
+		perms := Permissions{
+			BlockedDomains: []string{"api.example.com"},
+		}
+		result := buildNetworkAllowList(perms, "https://api.example.com")
+
+		assert.Empty(t, result, "blocked self URL should result in empty allow list")
+	})
+
+	t.Run("complex scenario with mixed allowed and blocked domains", func(t *testing.T) {
+		perms := Permissions{
+			AllowedDomains: []string{
+				"api.good.com",
+				"cdn.good.com",
+				"metadata.google.internal", // This should be blocked
+				"169.254.169.254",          // This should be blocked
+			},
+			BlockedDomains: []string{
+				"metadata.google.internal",
+				"169.254.169.254",
+				"kubernetes.default.svc",
+			},
+		}
+		result := buildNetworkAllowList(perms, "https://self.api.com")
+
+		assert.Len(t, result, 3)
+		assert.Contains(t, result, "api.good.com")
+		assert.Contains(t, result, "cdn.good.com")
+		assert.Contains(t, result, "self.api.com")
+		assert.NotContains(t, result, "metadata.google.internal")
+		assert.NotContains(t, result, "169.254.169.254")
+	})
+}
+
+func TestExtractHost(t *testing.T) {
+	t.Run("extracts host from valid URL", func(t *testing.T) {
+		assert.Equal(t, "api.example.com", extractHost("https://api.example.com"))
+		assert.Equal(t, "api.example.com", extractHost("https://api.example.com/path"))
+		assert.Equal(t, "api.example.com", extractHost("https://api.example.com:443/path"))
+		assert.Equal(t, "localhost", extractHost("http://localhost:8080"))
+	})
+
+	t.Run("handles URLs with ports", func(t *testing.T) {
+		assert.Equal(t, "api.example.com", extractHost("https://api.example.com:8443"))
+		assert.Equal(t, "192.168.1.1", extractHost("http://192.168.1.1:3000"))
+	})
+
+	t.Run("handles invalid URLs gracefully", func(t *testing.T) {
+		assert.Empty(t, extractHost(""))
+		assert.Empty(t, extractHost("not-a-url"))
+		assert.Empty(t, extractHost("://missing-protocol"))
+	})
+
+	t.Run("handles URLs with authentication", func(t *testing.T) {
+		assert.Equal(t, "api.example.com", extractHost("https://user:pass@api.example.com"))
+	})
+
+	t.Run("handles IPv6 addresses", func(t *testing.T) {
+		assert.Equal(t, "::1", extractHost("http://[::1]:8080"))
+		assert.Equal(t, "2001:db8::1", extractHost("http://[2001:db8::1]"))
+	})
 }

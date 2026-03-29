@@ -49,6 +49,9 @@ func (h *RESTHandler) makeGetHandler(table database.TableInfo) fiber.Handler {
 		// Build SELECT query using fresh metadata
 		query, args := h.buildSelectQuery(table, params)
 
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
+
 		// Execute query with RLS context
 		var results []map[string]interface{}
 		err = middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -103,6 +106,9 @@ func (h *RESTHandler) makeGetByIdHandler(table database.TableInfo) fiber.Handler
 			`SELECT * FROM "%s"."%s" WHERE "%s" = $1`,
 			table.Schema, table.Name, pkColumn,
 		)
+
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
 
 		// Execute query with RLS context
 		var results []map[string]interface{}
@@ -277,6 +283,9 @@ func (h *RESTHandler) makePostHandler(table database.TableInfo) fiber.Handler {
 
 		query += buildReturningClause(table)
 
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
+
 		// Execute query with RLS context
 		var results []map[string]interface{}
 		if err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -369,6 +378,9 @@ func (h *RESTHandler) makePutHandler(table database.TableInfo) fiber.Handler {
 			quoteIdentifier(pkColumn), i,
 		) + buildReturningClause(table)
 
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
+
 		// Execute query with RLS context
 		var results []map[string]interface{}
 		err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -420,6 +432,9 @@ func (h *RESTHandler) makeDeleteHandler(table database.TableInfo) fiber.Handler 
 			`DELETE FROM "%s"."%s" WHERE "%s" = $1`,
 			table.Schema, table.Name, pkColumn,
 		) + buildReturningClause(table)
+
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
 
 		// Execute query with RLS context
 		var results []map[string]interface{}

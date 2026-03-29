@@ -214,7 +214,12 @@ func SetRLSContext(ctx context.Context, tx pgx.Tx, userID string, role string, c
 		log.Error().Err(err).Msg("Failed to set request.jwt.claims")
 		return fmt.Errorf("failed to set request.jwt.claims: %w", err)
 	}
-	log.Debug().Str("jwt_claims", string(jwtClaimsJSON)).Msg("Set request.jwt.claims using parameterized query")
+	// Log redacted claims (avoid leaking PII/metadata in debug logs)
+	log.Debug().
+		Str("user_id", userID).
+		Str("role", role).
+		Bool("has_tenant", claims != nil && claims.TenantID != nil).
+		Msg("Set request.jwt.claims using parameterized query")
 
 	// Set tenant context for multi-tenancy (app.current_tenant_id)
 	// This is used by RLS policies that check auth.has_tenant_access() and storage.has_tenant_access()
@@ -272,16 +277,12 @@ func WrapWithServiceRole(ctx context.Context, conn *database.Connection, fn func
 	return nil
 }
 
-// WrapWithRLS wraps a database operation with RLS context
-// This is a helper function for setting RLS context in queries
-// If a branch pool is set in context (by BranchContext middleware), it uses that pool instead
+// WrapWithRLS wraps a database operation with RLS context.
+// Pool selection priority: branch pool > tenant pool (for public schema) > main pool.
+// The target schema is determined by GetTargetSchema(c), which callers can set
+// via SetTargetSchema before calling this function.
 func WrapWithRLS(ctx context.Context, conn *database.Connection, c fiber.Ctx, fn func(tx pgx.Tx) error) error {
-	// Check for branch pool in context (set by BranchContext middleware)
-	pool := GetBranchPool(c)
-	if pool == nil {
-		// Fall back to main connection pool
-		pool = conn.Pool()
-	}
+	pool := GetPoolForSchema(c, GetTargetSchema(c), conn.Pool())
 
 	// Start transaction
 	tx, err := pool.Begin(ctx)

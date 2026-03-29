@@ -1,4 +1,4 @@
-.PHONY: help dev build clean fmt lint test migrate-up migrate-down migrate-create db-reset db-reset-full deps setup-dev install-hooks uninstall-hooks docs docs-build docs-check-links version docker-build docker-push release cli cli-install cli-completions viz-deps viz-deps-svg viz-internal viz-callgraph viz-callgraph-svg viz-uml viz-uml-api viz-uml-auth viz-module-deps viz-all test-cleanup
+.PHONY: help dev dev-full ensure-embed-placeholder ensure-embedded-sdk build clean fmt lint test migrate-up migrate-down migrate-create db-reset db-reset-full deps setup-dev install-hooks uninstall-hooks docs docs-build docs-check-links version docker-build docker-push release cli cli-install cli-completions viz-deps viz-deps-svg viz-internal viz-callgraph viz-callgraph-svg viz-uml viz-uml-api viz-uml-auth viz-module-deps viz-all test-cleanup
 
 # Variables
 BINARY_NAME=fluxbase-server
@@ -75,15 +75,62 @@ help: ## Show available commands
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "${GREEN}Quick Start:${NC}"
-	@echo "  make dev            # Build & run backend + frontend (all-in-one)"
+	@echo "  make dev            # Fast dev: backend + frontend (skips admin build)"
 	@echo "  make build          # Build production binary with embedded UI"
 	@echo "  make test-all       # Run ALL tests (backend + SDK + React + integration)"
 	@echo ""
 	@echo "${GREEN}All Commands:${NC}"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  ${GREEN}%-20s${NC} %s\\n", $$1, $$2}'
 
-dev: ## Build and run backend + frontend dev server (all-in-one)
-	@echo "${YELLOW}Starting Fluxbase development environment...${NC}"
+dev: ## Fast dev: backend + frontend (skips admin build, uses Vite HMR at :5050)
+	@echo "${YELLOW}Starting Fluxbase development environment (fast mode)...${NC}"
+	@lsof -ti:8080 | xargs -r kill -9 2>/dev/null || true
+	@lsof -ti:5050 | xargs -r kill -9 2>/dev/null || true
+	@if [ ! -d "sdk/node_modules" ]; then \
+		echo "${YELLOW}Installing SDK dependencies...${NC}"; \
+		cd sdk && unset NODE_OPTIONS && bun install; \
+	fi
+	@$(MAKE) ensure-embedded-sdk
+	@if [ ! -d "admin/node_modules" ]; then \
+		echo "${YELLOW}Installing admin UI dependencies...${NC}"; \
+		cd admin && unset NODE_OPTIONS && bun install; \
+	fi
+	@$(MAKE) ensure-embed-placeholder
+	@echo "${GREEN}Backend:${NC}     http://localhost:8080"
+	@echo "${GREEN}Frontend:${NC}    http://localhost:5050/admin/"
+	@echo "${GREEN}Admin Login:${NC} http://localhost:5050/admin/login"
+	@echo ""
+	@echo "${YELLOW}Press Ctrl+C to stop both servers${NC}"
+	@echo ""
+	@bash -c 'trap "kill 0" EXIT; ./run-server.sh & SERVER_PID=$$!; cd admin && unset NODE_OPTIONS && bun run dev & VITE_PID=$$!; wait -n 2>/dev/null || while kill -0 $$SERVER_PID 2>/dev/null && kill -0 $$VITE_PID 2>/dev/null; do sleep 1; done'
+
+ensure-embed-placeholder:
+	@if [ ! -f "internal/adminui/dist/index.html" ]; then \
+		echo "${YELLOW}Creating placeholder admin UI for embed...${NC}"; \
+		mkdir -p internal/adminui/dist/assets; \
+		echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fluxbase (dev mode)</title></head><body style="font-family:system-ui;padding:2rem;text-align:center"><h1>Dev Mode</h1><p>Use <a href="http://localhost:5050/admin/">localhost:5050</a> for the admin UI with HMR.</p></body></html>' > internal/adminui/dist/index.html; \
+		echo '/* placeholder */' > internal/adminui/dist/assets/placeholder.css; \
+	fi
+
+ensure-embedded-sdk:
+	@SDK_STALE=0; \
+	if [ ! -f "internal/jobs/embedded_sdk.js" ]; then \
+		SDK_STALE=1; \
+	else \
+		NEWER=$$(find sdk/src -newer internal/jobs/embedded_sdk.js -type f 2>/dev/null | head -1); \
+		if [ -n "$$NEWER" ]; then \
+			SDK_STALE=1; \
+		fi; \
+	fi; \
+	if [ "$$SDK_STALE" = "1" ]; then \
+		echo "${YELLOW}Generating embedded SDK for job runtime...${NC}"; \
+		cd sdk && unset NODE_OPTIONS && bun run generate:embedded-sdk; \
+	else \
+		echo "${GREEN}Embedded SDK up to date, skipping generation${NC}"; \
+	fi
+
+dev-full: ## Full build + run (builds admin UI with type-check, slower)
+	@echo "${YELLOW}Starting Fluxbase with full admin UI build...${NC}"
 	@lsof -ti:8080 | xargs -r kill -9 2>/dev/null || true
 	@lsof -ti:5050 | xargs -r kill -9 2>/dev/null || true
 	@if [ ! -d "sdk/node_modules" ]; then \
@@ -102,11 +149,10 @@ dev: ## Build and run backend + frontend dev server (all-in-one)
 	@cp -r admin/dist internal/adminui/dist
 	@echo "${GREEN}Backend:${NC}     http://localhost:8080"
 	@echo "${GREEN}Frontend:${NC}    http://localhost:5050/admin/"
-	@echo "${GREEN}Admin Login:${NC} http://localhost:5050/admin/login"
 	@echo ""
 	@echo "${YELLOW}Press Ctrl+C to stop both servers${NC}"
 	@echo ""
-	@bash -c 'trap "kill 0" EXIT; ./run-server.sh & SERVER_PID=$$!; cd admin && unset NODE_OPTIONS && bun run dev & PNPM_PID=$$!; wait -n 2>/dev/null || while kill -0 $$SERVER_PID 2>/dev/null && kill -0 $$PNPM_PID 2>/dev/null; do sleep 1; done'
+	@bash -c 'trap "kill 0" EXIT; ./run-server.sh & SERVER_PID=$$!; cd admin && unset NODE_OPTIONS && bun run dev & VITE_PID=$$!; wait -n 2>/dev/null || while kill -0 $$SERVER_PID 2>/dev/null && kill -0 $$VITE_PID 2>/dev/null; do sleep 1; done'
 
 version: ## Show version information
 	@echo "${GREEN}Version:${NC}    $(VERSION)"
@@ -130,6 +176,9 @@ clean: ## Clean build artifacts
 	@rm -f build/${BINARY_NAME}
 	@rm -f coverage.out coverage.html
 	@rm -rf internal/adminui/dist
+	@mkdir -p internal/adminui/dist/assets
+	@echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fluxbase (placeholder)</title></head><body style="font-family:system-ui;padding:2rem;text-align:center"><p>Run make dev or make build</p></body></html>' > internal/adminui/dist/index.html
+	@echo '/* placeholder */' > internal/adminui/dist/assets/placeholder.css
 	@echo "${GREEN}Clean complete!${NC}"
 
 fmt: ## Format Go code with gofumpt (stricter than gofmt)
@@ -160,7 +209,7 @@ test-coverage: ## Run ALL tests (unit + e2e) with combined coverage (requires po
 	@echo "${YELLOW}[1/5] Running Go unit tests with coverage for code metrics (~30-60 seconds)...${NC}"
 	@echo "${BLUE}Note: Integration tests with service goroutines are skipped for accurate coverage metrics${NC}"
 	@echo ""
-	@FLUXBASE_LOG_LEVEL=info FLUXBASE_PARALLEL_TEST=true NO_COLOR=1 go test -v -timeout 30m -short -coverprofile=coverage.out -covermode=atomic -p 1 $(shell go list ./... | grep -v "^github.com/nimbleflux/fluxbase/test/e2e$$") 2>&1 | tee /tmp/go-test-output.txt
+	@FLUXBASE_LOG_LEVEL=info FLUXBASE_PARALLEL_TEST=true NO_COLOR=1 go test -v -timeout 30m -short -coverprofile=coverage.out -covermode=set $(shell go list ./... | grep -v "^github.com/nimbleflux/fluxbase/test/e2e$$") 2>&1 | tee /tmp/go-test-output.txt
 	@echo ""
 	@echo "${BLUE}Full test output written to: ${YELLOW}/tmp/go-test-output.txt${NC}"
 	@echo ""

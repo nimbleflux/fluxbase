@@ -60,6 +60,9 @@ func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
 		if tenantID != "" && cfg.Storage != nil {
 			if tenant, err := cfg.Storage.GetTenant(c.Context(), tenantID); err == nil {
 				c.Locals("tenant_slug", tenant.Slug)
+				if !tenant.UsesMainDatabase() {
+					c.Locals("tenant_db_name", *tenant.DBName)
+				}
 			}
 		}
 
@@ -110,6 +113,43 @@ func resolveTenantID(c fiber.Ctx, userID string, isInstanceAdmin bool, claims *a
 func GetTenantPool(c fiber.Ctx) *pgxpool.Pool {
 	pool, _ := c.Locals("tenant_db").(*pgxpool.Pool)
 	return pool
+}
+
+// GetPoolForSchema returns the appropriate database pool based on the target schema.
+// Priority: branch pool > tenant pool (for public schema) > main pool.
+// This enables tenant-aware routing for REST, GraphQL, and other handlers.
+func GetPoolForSchema(c fiber.Ctx, schema string, mainPool *pgxpool.Pool) *pgxpool.Pool {
+	// 1. Branch pool takes highest priority (for database branching feature)
+	if pool := GetBranchPool(c); pool != nil {
+		return pool
+	}
+
+	// 2. For public schema (user data), route to tenant pool when available
+	if schema == "public" {
+		if tenantPool := GetTenantPool(c); tenantPool != nil {
+			return tenantPool
+		}
+	}
+
+	// 3. Fall back to main pool for internal schemas or when no tenant pool exists
+	return mainPool
+}
+
+// SetTargetSchema stores the target schema in fiber locals for pool routing.
+// Handlers should call this before WrapWithRLS to enable schema-aware pool selection.
+func SetTargetSchema(c fiber.Ctx, schema string) {
+	c.Locals("target_schema", schema)
+}
+
+// GetTargetSchema retrieves the target schema from fiber locals.
+// Returns empty string as default if not set. Handlers must explicitly call
+// SetTargetSchema to enable tenant-aware pool routing. This prevents internal
+// schema handlers (auth.*, app.*, etc.) from inadvertently routing to tenant pools.
+func GetTargetSchema(c fiber.Ctx) string {
+	if schema, ok := c.Locals("target_schema").(string); ok && schema != "" {
+		return schema
+	}
+	return ""
 }
 
 func SetTenantDBSessionContext(ctx context.Context, tx pgxpool.Tx, tenantID string) error {

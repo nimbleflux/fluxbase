@@ -23,7 +23,7 @@ import (
 // =============================================================================
 
 func TestAuthService_Signup_Success_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -61,7 +61,7 @@ func TestAuthService_Signup_Success_Integration(t *testing.T) {
 }
 
 func TestAuthService_Signup_DuplicateEmail_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -87,7 +87,7 @@ func TestAuthService_Signup_DuplicateEmail_Integration(t *testing.T) {
 }
 
 func TestAuthService_Signup_InvalidEmail_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -104,7 +104,7 @@ func TestAuthService_Signup_InvalidEmail_Integration(t *testing.T) {
 }
 
 func TestAuthService_Signup_WeakPassword_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -122,7 +122,7 @@ func TestAuthService_Signup_WeakPassword_Integration(t *testing.T) {
 }
 
 func TestAuthService_Signin_ValidCredentials_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -151,7 +151,7 @@ func TestAuthService_Signin_ValidCredentials_Integration(t *testing.T) {
 }
 
 func TestAuthService_Signin_InvalidPassword_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -177,7 +177,7 @@ func TestAuthService_Signin_InvalidPassword_Integration(t *testing.T) {
 }
 
 func TestAuthService_Signin_NonExistentUser_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -198,7 +198,7 @@ func TestAuthService_Signin_NonExistentUser_Integration(t *testing.T) {
 // =============================================================================
 
 func TestAuthService_RefreshToken_Valid_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -225,7 +225,7 @@ func TestAuthService_RefreshToken_Valid_Integration(t *testing.T) {
 }
 
 func TestAuthService_RefreshToken_Invalid_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -240,7 +240,7 @@ func TestAuthService_RefreshToken_Invalid_Integration(t *testing.T) {
 }
 
 func TestAuthService_SignOut_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -266,7 +266,7 @@ func TestAuthService_SignOut_Integration(t *testing.T) {
 }
 
 func TestAuthService_SignOut_InvalidToken_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -285,7 +285,7 @@ func TestAuthService_SignOut_InvalidToken_Integration(t *testing.T) {
 // =============================================================================
 
 func TestAuthService_RequestPasswordReset_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 	defer tc.CleanupTestData()
@@ -323,7 +323,7 @@ func TestAuthService_RequestPasswordReset_Integration(t *testing.T) {
 }
 
 func TestAuthService_ResetPassword_ValidToken_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 	defer tc.CleanupTestData()
@@ -387,7 +387,7 @@ func TestAuthService_ResetPassword_ValidToken_Integration(t *testing.T) {
 }
 
 func TestAuthService_ResetPassword_ExpiredToken_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 	defer tc.CleanupTestData()
@@ -430,7 +430,7 @@ func TestAuthService_ResetPassword_ExpiredToken_Integration(t *testing.T) {
 }
 
 func TestAuthService_ResetPassword_InvalidToken_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 	defer tc.CleanupTestData()
@@ -448,7 +448,7 @@ func TestAuthService_ResetPassword_InvalidToken_Integration(t *testing.T) {
 // =============================================================================
 
 func TestAuthService_GetUser_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -472,7 +472,7 @@ func TestAuthService_GetUser_Integration(t *testing.T) {
 }
 
 func TestAuthService_GetUser_InvalidToken_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -485,7 +485,7 @@ func TestAuthService_GetUser_InvalidToken_Integration(t *testing.T) {
 }
 
 func TestAuthService_UpdateUser_Email_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -516,7 +516,7 @@ func TestAuthService_UpdateUser_Email_Integration(t *testing.T) {
 }
 
 func TestAuthService_UpdateUser_UserMetadata_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -556,7 +556,7 @@ func TestAuthService_UpdateUser_UserMetadata_Integration(t *testing.T) {
 // =============================================================================
 
 func TestAuthService_SetupTOTP_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -581,7 +581,7 @@ func TestAuthService_SetupTOTP_Integration(t *testing.T) {
 }
 
 func TestAuthService_EnableTOTP_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -612,7 +612,7 @@ func TestAuthService_EnableTOTP_Integration(t *testing.T) {
 }
 
 func TestAuthService_IsTOTPEnabled_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -635,7 +635,7 @@ func TestAuthService_IsTOTPEnabled_Integration(t *testing.T) {
 }
 
 func TestAuthService_DisableTOTP_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -666,7 +666,7 @@ func TestAuthService_DisableTOTP_Integration(t *testing.T) {
 // =============================================================================
 
 func TestAuthService_ValidateToken_Valid_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -691,7 +691,7 @@ func TestAuthService_ValidateToken_Valid_Integration(t *testing.T) {
 }
 
 func TestAuthService_ValidateToken_Invalid_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -703,7 +703,7 @@ func TestAuthService_ValidateToken_Invalid_Integration(t *testing.T) {
 }
 
 func TestAuthService_ValidateToken_Revoked_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "auth")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 

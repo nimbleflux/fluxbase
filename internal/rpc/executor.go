@@ -172,8 +172,8 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecuteContext) (*Execu
 			validationResult.TablesAccessed, validationResult.OperationsUsed))
 	}
 
-	// Build SQL with parameter substitution
-	sql, err := e.buildSQL(execCtx.Procedure.SQLQuery, execCtx.Params, execCtx)
+	// Build SQL with parameter substitution (parameterized)
+	sql, args, err := e.buildParameterizedSQL(execCtx.Procedure.SQLQuery, execCtx.Params, execCtx)
 	if err != nil {
 		return e.failExecutionWithContext(ctx, exec, execCtx, start, fmt.Sprintf("Failed to build SQL: %s", err.Error()))
 	}
@@ -191,7 +191,7 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecuteContext) (*Execu
 	defer cancel()
 
 	// Execute with RLS context
-	result, rowCount, err := e.executeWithRLS(queryCtx, sql, execCtx)
+	result, rowCount, err := e.executeWithRLS(queryCtx, sql, args, execCtx)
 	if err != nil {
 		// Check for timeout
 		if ctx.Err() == context.DeadlineExceeded {
@@ -309,10 +309,14 @@ func (e *Executor) ExecuteAsync(ctx context.Context, execCtx *ExecuteContext) (*
 	}, nil
 }
 
-// buildSQL builds the SQL query with parameter substitution
-func (e *Executor) buildSQL(sqlTemplate string, params map[string]interface{}, execCtx *ExecuteContext) (string, error) {
-	sql := sqlTemplate
-
+// buildParameterizedSQL builds the SQL query with parameter substitution using pgx parameterized queries.
+// Returns (sqlWithPositionalParams, args, error).
+//
+// SECURITY: This method uses PostgreSQL's positional parameter syntax ($1, $2, etc.) and passes
+// values separately to pgx, which properly handles SQL injection prevention. Vector types are the
+// exception - they must be embedded as literals because pgx doesn't support the ::vector type
+// constructor with parameters.
+func (e *Executor) buildParameterizedSQL(sqlTemplate string, params map[string]interface{}, execCtx *ExecuteContext) (string, []interface{}, error) {
 	// Add caller context parameters
 	callerParams := map[string]interface{}{
 		"caller_id":    execCtx.UserID,
@@ -329,29 +333,136 @@ func (e *Executor) buildSQL(sqlTemplate string, params map[string]interface{}, e
 		allParams[k] = v
 	}
 
-	// Replace $param_name with actual values
-	// Use a regex to find all parameter placeholders
+	// Find all unique parameter placeholders in the SQL template
 	paramPattern := regexp.MustCompile(`\$([a-zA-Z_][a-zA-Z0-9_]*)`)
+	matches := paramPattern.FindAllStringSubmatch(sqlTemplate, -1)
 
+	// Track unique params in order of first appearance for deterministic output
+	seenParams := make(map[string]bool)
+	var orderedParamNames []string
 	var missingParams []string
-	sql = paramPattern.ReplaceAllStringFunc(sql, func(match string) string {
-		paramName := strings.TrimPrefix(match, "$")
-		value, exists := allParams[paramName]
-		if !exists {
-			missingParams = append(missingParams, paramName)
-			return match
-		}
-		return e.formatValue(value)
-	})
 
-	if len(missingParams) > 0 {
-		return "", fmt.Errorf("missing required parameters: %v", missingParams)
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		paramName := match[1]
+
+		// Check if parameter exists
+		if _, exists := allParams[paramName]; !exists {
+			missingParams = append(missingParams, paramName)
+			continue
+		}
+
+		// Track first occurrence order
+		if !seenParams[paramName] {
+			seenParams[paramName] = true
+			orderedParamNames = append(orderedParamNames, paramName)
+		}
 	}
 
-	return sql, nil
+	if len(missingParams) > 0 {
+		return "", nil, fmt.Errorf("missing required parameters: %v", missingParams)
+	}
+
+	// Build parameter slice and SQL with positional placeholders
+	// Vector types are embedded as literals (not parameterized) because pgx
+	// doesn't support the ::vector type constructor with query parameters.
+	args := make([]interface{}, 0, len(orderedParamNames))
+	paramNameToIndex := make(map[string]int)  // Maps $paramName -> $1, $2, etc. (vectors get 0)
+	vectorLiterals := make(map[string]string) // Maps vector param names to their literal representation
+
+	positionalIdx := 0
+	for _, paramName := range orderedParamNames {
+		value := allParams[paramName]
+
+		if e.isVectorType(value) {
+			// Vector types are embedded as literals, not positional params
+			paramNameToIndex[paramName] = 0 // 0 means "use literal"
+			vectorLiterals[paramName] = e.formatVectorLiteral(value)
+		} else {
+			// All other types use safe parameter binding
+			positionalIdx++
+			paramNameToIndex[paramName] = positionalIdx
+			args = append(args, value)
+		}
+	}
+
+	// Replace $param_name with $1, $2, etc. or vector literals
+	sql := paramPattern.ReplaceAllStringFunc(sqlTemplate, func(match string) string {
+		paramName := strings.TrimPrefix(match, "$")
+
+		if idx, exists := paramNameToIndex[paramName]; exists {
+			// Vector types embed the literal directly (not $N)
+			if idx == 0 {
+				return vectorLiterals[paramName]
+			}
+			// Return positional placeholder
+			return fmt.Sprintf("$%d", idx)
+		}
+
+		// Shouldn't reach here due to missing param check above
+		return match
+	})
+
+	return sql, args, nil
 }
 
-// formatValue formats a Go value for use in SQL
+// isVectorType checks if a value is a vector type that requires literal formatting.
+// Vector types ([]float32, []float64, numeric []interface{}) must use literal formatting
+// because pgx doesn't natively support the ::vector type constructor with parameters.
+func (e *Executor) isVectorType(value interface{}) bool {
+	if value == nil {
+		return false
+	}
+	switch v := value.(type) {
+	case []float32, []float64:
+		return true
+	case []interface{}:
+		return isNumericArray(v)
+	default:
+		return false
+	}
+}
+
+// formatVectorLiteral formats a vector type as a PostgreSQL vector literal.
+// This is the ONLY remaining use of string formatting for SQL values.
+// The validateAndFormatVector function in query_parser.go validates these values
+// character-by-character to ensure they contain only safe numeric content.
+func (e *Executor) formatVectorLiteral(value interface{}) string {
+	switch v := value.(type) {
+	case []float32:
+		return formatVectorLiteral32(v)
+	case []float64:
+		return formatVectorLiteral64(v)
+	case []interface{}:
+		return formatVectorLiteralInterface(v)
+	default:
+		// Fallback - shouldn't happen if isVectorType is used correctly
+		return "NULL"
+	}
+}
+
+// buildSQL builds the SQL query with parameter substitution.
+//
+// DEPRECATED: Use buildParameterizedSQL instead. This method is retained for backwards
+// compatibility but internally uses the parameterized version and returns the SQL only.
+// The caller is responsible for passing args to the database query.
+func (e *Executor) buildSQL(sqlTemplate string, params map[string]interface{}, execCtx *ExecuteContext) (string, error) {
+	sql, _, err := e.buildParameterizedSQL(sqlTemplate, params, execCtx)
+	return sql, err
+}
+
+// formatValue formats a Go value for use in SQL.
+//
+// DEPRECATED FOR NON-VECTOR USE: This method uses string interpolation which is vulnerable
+// to SQL injection if not carefully validated. Use buildParameterizedSQL instead, which uses
+// pgx parameterized queries.
+//
+// This method is still used for vector types ([]float32, []float64, numeric []interface{})
+// because pgx doesn't natively support the ::vector type constructor with parameters.
+// The validateAndFormatVector function in query_parser.go validates these values
+// character-by-character to ensure they contain only safe numeric content.
 func (e *Executor) formatValue(value interface{}) string {
 	if value == nil {
 		return "NULL"
@@ -459,8 +570,9 @@ func formatVectorLiteralInterface(v []interface{}) string {
 	return fmt.Sprintf("'[%s]'::vector", strings.Join(parts, ","))
 }
 
-// executeWithRLS executes the SQL query with RLS context set
-func (e *Executor) executeWithRLS(ctx context.Context, sql string, execCtx *ExecuteContext) (json.RawMessage, int, error) {
+// executeWithRLS executes the SQL query with RLS context set using parameterized queries.
+// The args slice contains parameter values that are safely bound by pgx.
+func (e *Executor) executeWithRLS(ctx context.Context, sql string, args []interface{}, execCtx *ExecuteContext) (json.RawMessage, int, error) {
 	// Start transaction with RLS
 	tx, err := e.db.Pool().Begin(ctx)
 	if err != nil {
@@ -473,8 +585,8 @@ func (e *Executor) executeWithRLS(ctx context.Context, sql string, execCtx *Exec
 		return nil, 0, fmt.Errorf("failed to set RLS context: %w", err)
 	}
 
-	// Execute the query
-	rows, err := tx.Query(ctx, sql)
+	// Execute the query with parameterized arguments
+	rows, err := tx.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query execution failed: %w", err)
 	}

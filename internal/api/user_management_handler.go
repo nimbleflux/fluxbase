@@ -43,6 +43,14 @@ func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
 
 	// Get tenant ID from context (set by TenantMiddleware when X-FB-Tenant header is present)
 	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantSource, _ := c.Locals("tenant_source").(string)
+	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
+
+	// Instance admins without explicit tenant context see all users across tenants.
+	// When a tenant IS selected via the selector, tenantSource is "header" and filtering applies normally.
+	if isInstanceAdmin && tenantSource == "default" {
+		tenantID = ""
+	}
 
 	// Normalize pagination parameters
 	limit, offset = NormalizePaginationParams(limit, offset, defaultLimit, maxLimit)

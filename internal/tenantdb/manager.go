@@ -10,6 +10,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database/bootstrap"
 )
 
 var (
@@ -18,8 +20,20 @@ var (
 	ErrTenantNotActive     = errors.New("tenant is not in active state")
 )
 
+// StorageQuerier covers the storage methods Manager calls.
+type StorageQuerier interface {
+	CountTenants(ctx context.Context) (int, error)
+	CreateTenant(ctx context.Context, tenant *Tenant) error
+	GetTenant(ctx context.Context, id string) (*Tenant, error)
+	GetAllActiveTenants(ctx context.Context) ([]Tenant, error)
+	UpdateTenantStatus(ctx context.Context, id string, status TenantStatus) error
+	UpdateTenantDBName(ctx context.Context, id string, dbName string) error
+	SoftDeleteTenant(ctx context.Context, id string) error
+	HardDeleteTenant(ctx context.Context, id string) error
+}
+
 type Manager struct {
-	storage        *Storage
+	storage        StorageQuerier
 	config         Config
 	adminPool      *pgxpool.Pool
 	router         *Router
@@ -99,6 +113,17 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 	}
 
 	log.Info().Str("tenant", req.Slug).Str("db", dbName).Msg("Created tenant database")
+
+	// Bootstrap tenant database (create schemas, roles, privileges)
+	tenantDBURL := fmt.Sprintf("%s%s", m.dbURL, dbName)
+	if err := bootstrap.RunBootstrapOnDB(ctx, tenantDBURL); err != nil {
+		log.Warn().Err(err).Str("tenant", req.Slug).Msg("Failed to bootstrap tenant database")
+		if statusErr := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusError); statusErr != nil {
+			log.Warn().Err(statusErr).Str("tenant_id", tenant.ID).Msg("Failed to update tenant status to error")
+		}
+		return nil, fmt.Errorf("failed to bootstrap tenant database: %w", err)
+	}
+	log.Info().Str("tenant", req.Slug).Msg("Bootstrapped tenant database")
 
 	// Apply tenant-specific declarative schema if configured
 	if m.declarative != nil && m.declarativeCfg.OnCreate {
@@ -283,7 +308,10 @@ func (m *Manager) runSystemMigrationsForDB(ctx context.Context, dbName string) e
 }
 
 func (m *Manager) GetStorage() *Storage {
-	return m.storage
+	if s, ok := m.storage.(*Storage); ok {
+		return s
+	}
+	return nil
 }
 
 func (m *Manager) GetRouter() *Router {

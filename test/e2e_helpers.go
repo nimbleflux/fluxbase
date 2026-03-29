@@ -77,6 +77,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -176,12 +177,14 @@ func E2ETestEmailWithSuffix(suffix string) string {
 //
 // Always close the context with defer tc.Close() to ensure proper cleanup.
 type TestContext struct {
-	DB       *database.Connection
-	Server   *api.Server
-	App      *fiber.App
-	Config   *config.Config
-	T        *testing.T
-	isShared bool // True if this is the shared test context (don't close DB)
+	DB            *database.Connection
+	Server        *api.Server
+	App           *fiber.App
+	Config        *config.Config
+	T             *testing.T
+	isShared      bool          // True if this is the shared test context (don't close DB)
+	superuserPool *pgxpool.Pool // Pooled connection as postgres superuser
+	rlsPool       *pgxpool.Pool // Pooled connection as fluxbase_rls_test user
 }
 
 // NewTestContext creates a test context using the fluxbase_app database user.
@@ -596,8 +599,8 @@ func IsSharedRLSTestContextInitialized() bool {
 func ResetRLSTestState(tc *TestContext) {
 	// Clean up test data from previous RLS test
 	tc.ExecuteSQLAsSuperuser(`
-		-- Delete test users
-		DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com';
+		-- Delete test users (only e2e-test- and test- prefixes, not integration test users)
+		DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com';
 
 		-- Delete ALL storage objects (safe since this is a test database)
 		DELETE FROM storage.objects;
@@ -642,6 +645,16 @@ func (tc *TestContext) Close() {
 		if pubsub.GlobalPubSub != nil {
 			_ = pubsub.GlobalPubSub.Close()
 			pubsub.GlobalPubSub = nil
+		}
+
+		// Close pooled superuser and RLS connections
+		if tc.superuserPool != nil {
+			tc.superuserPool.Close()
+			tc.superuserPool = nil
+		}
+		if tc.rlsPool != nil {
+			tc.rlsPool.Close()
+			tc.rlsPool = nil
 		}
 
 		// Then close the database connection
@@ -884,11 +897,11 @@ func (tc *TestContext) CleanupE2ETestUsers() {
 		log.Debug().Err(err).Msg("Failed to cleanup dashboard.users e2e test users")
 	}
 
-	// Also clean up any legacy test users with @example.com or @test.com patterns
-	// This handles tests that haven't been updated yet
-	_, _ = tc.DB.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
-	_, _ = tc.DB.Exec(ctx, "DELETE FROM dashboard.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
-	_, _ = tc.DB.Exec(ctx, "DELETE FROM auth.magic_links WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
+	// Clean up legacy test-* prefix emails (narrower than the old %@example.com pattern)
+	// Only targets test- prefix used by E2E tests, not integration test emails (itest-*)
+	_, _ = tc.DB.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
+	_, _ = tc.DB.Exec(ctx, "DELETE FROM dashboard.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
+	_, _ = tc.DB.Exec(ctx, "DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 }
 
 // CleanupE2ETestUsersGlobal is a standalone function to clean up e2e test users.
@@ -916,10 +929,10 @@ func CleanupE2ETestUsersGlobal(cfg *config.Config) {
 		log.Debug().Err(err).Msg("Failed to cleanup dashboard.users e2e test users")
 	}
 
-	// Also clean up any legacy test users with @example.com or @test.com patterns
-	_, _ = db.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
-	_, _ = db.Exec(ctx, "DELETE FROM dashboard.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
-	_, _ = db.Exec(ctx, "DELETE FROM auth.magic_links WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
+	// Clean up legacy test-* prefix emails (narrower than the old %@example.com pattern)
+	_, _ = db.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
+	_, _ = db.Exec(ctx, "DELETE FROM dashboard.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
+	_, _ = db.Exec(ctx, "DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 
 	log.Info().Msg("Cleaned up e2e test users")
 }
@@ -1463,18 +1476,72 @@ func (tc *TestContext) ExecuteSQL(sql string, args ...interface{}) {
 //	    INSERT INTO tasks (user_id, title, description)
 //	    VALUES ($1, 'Admin Created Task', 'Created by superuser')
 //	`, userID)
+
+// getSuperuserPool returns a pooled connection as the postgres superuser.
+// The pool is lazily initialized on first call and reused across subsequent calls.
+func (tc *TestContext) getSuperuserPool(ctx context.Context) (*pgxpool.Pool, error) {
+	if tc.superuserPool != nil {
+		return tc.superuserPool, nil
+	}
+
+	connStr := fmt.Sprintf("host=%s port=%d user=postgres password=postgres dbname=%s sslmode=disable pool_max_conns=2",
+		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
+
+	config, err := pgxpool.ParseConfig(connStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse superuser pool config: %w", err)
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create superuser pool: %w", err)
+	}
+
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to ping superuser pool: %w", err)
+	}
+
+	tc.superuserPool = pool
+	return pool, nil
+}
+
+// getRLSPool returns a pooled connection as the fluxbase_rls_test user.
+// The pool is lazily initialized on first call and reused across subsequent calls.
+func (tc *TestContext) getRLSPool(ctx context.Context) (*pgxpool.Pool, error) {
+	if tc.rlsPool != nil {
+		return tc.rlsPool, nil
+	}
+
+	connStr := fmt.Sprintf("host=%s port=%d user=fluxbase_rls_test password=fluxbase_rls_test_password dbname=%s sslmode=disable pool_max_conns=2",
+		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
+
+	config, err := pgxpool.ParseConfig(connStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse RLS pool config: %w", err)
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create RLS pool: %w", err)
+	}
+
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to ping RLS pool: %w", err)
+	}
+
+	tc.rlsPool = pool
+	return pool, nil
+}
+
 func (tc *TestContext) ExecuteSQLAsSuperuser(sql string, args ...interface{}) {
 	ctx := context.Background()
 
-	// Create a temporary connection as postgres superuser
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres password=postgres dbname=%s sslmode=disable",
-		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
+	pool, err := tc.getSuperuserPool(ctx)
+	require.NoError(tc.T, err, "Failed to get superuser pool")
 
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(tc.T, err, "Failed to connect as superuser")
-	defer func() { _ = conn.Close(ctx) }()
-
-	_, err = conn.Exec(ctx, sql, args...)
+	_, err = pool.Exec(ctx, sql, args...)
 	require.NoError(tc.T, err, "Failed to execute SQL as superuser")
 }
 
@@ -1691,15 +1758,10 @@ func convertPgTypeToGoType(v interface{}) interface{} {
 func (tc *TestContext) QuerySQLAsSuperuser(sql string, args ...interface{}) []map[string]interface{} {
 	ctx := context.Background()
 
-	// Create a temporary connection as postgres superuser
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres password=postgres dbname=%s sslmode=disable",
-		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
+	pool, err := tc.getSuperuserPool(ctx)
+	require.NoError(tc.T, err, "Failed to get superuser pool")
 
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(tc.T, err, "Failed to connect as superuser")
-	defer func() { _ = conn.Close(ctx) }()
-
-	rows, err := conn.Query(ctx, sql, args...)
+	rows, err := pool.Query(ctx, sql, args...)
 	require.NoError(tc.T, err, "Failed to query as superuser")
 	defer rows.Close()
 
@@ -1743,16 +1805,11 @@ func (tc *TestContext) QuerySQLAsSuperuser(sql string, args ...interface{}) []ma
 func (tc *TestContext) QuerySQLAsRLSUser(sql string, userID string, args ...interface{}) []map[string]interface{} {
 	ctx := context.Background()
 
-	// Create a temporary connection as fluxbase_rls_test user (no BYPASSRLS)
-	connStr := fmt.Sprintf("host=%s port=%d user=fluxbase_rls_test password=fluxbase_rls_test_password dbname=%s sslmode=disable",
-		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
-
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(tc.T, err, "Failed to connect as RLS test user")
-	defer func() { _ = conn.Close(ctx) }()
+	pool, err := tc.getRLSPool(ctx)
+	require.NoError(tc.T, err, "Failed to get RLS pool")
 
 	// Begin a transaction to set RLS context
-	tx, err := conn.Begin(ctx)
+	tx, err := pool.Begin(ctx)
 	require.NoError(tc.T, err, "Failed to begin transaction")
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -1965,17 +2022,12 @@ func (tc *TestContext) CreateDashboardAdminUser(email, password string) (userID,
 		require.NoError(tc.T, err, "Failed to hash password")
 	}
 
-	// Insert dashboard user with bcrypt hash using superuser connection
+	// Insert dashboard user with bcrypt hash using superuser pool
 	// This is necessary for RLS test contexts where the test user doesn't have BYPASSRLS
-	// Create a temporary connection as postgres superuser
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres password=postgres dbname=%s sslmode=disable",
-		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
+	pool, err := tc.getSuperuserPool(ctx)
+	require.NoError(tc.T, err, "Failed to get superuser pool for dashboard admin creation")
 
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(tc.T, err, "Failed to connect as superuser for dashboard admin creation")
-	defer func() { _ = conn.Close(ctx) }()
-
-	err = conn.QueryRow(ctx,
+	err = pool.QueryRow(ctx,
 		`INSERT INTO dashboard.users (email, password_hash, full_name, role, email_verified)
 		 VALUES ($1, $2, $3, 'instance_admin', true)
 		 ON CONFLICT (email) DO UPDATE
@@ -2291,17 +2343,13 @@ func (tc *TestContext) EnsureRLSTestTables() {
 		`GRANT ALL ON TABLE public.tasks TO authenticated`,
 	}
 
-	// Create a temporary connection as postgres superuser to create tables and policies
+	// Use pooled superuser connection to create tables and policies
 	// This is necessary because the RLS test user doesn't have table ownership permissions
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres password=postgres dbname=%s sslmode=disable",
-		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
-
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(tc.T, err, "Failed to connect as superuser for table creation")
-	defer func() { _ = conn.Close(ctx) }()
+	pool, err := tc.getSuperuserPool(ctx)
+	require.NoError(tc.T, err, "Failed to get superuser pool for table creation")
 
 	for _, query := range queries {
-		_, err := conn.Exec(ctx, query)
+		_, err := pool.Exec(ctx, query)
 		require.NoError(tc.T, err, "Failed to create RLS test tables: %v", err)
 	}
 

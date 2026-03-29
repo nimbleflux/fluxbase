@@ -13,7 +13,7 @@ import (
 
 // TestAuthHandler_SendMagicLink_Integration tests sending a magic link email
 func TestAuthHandler_SendMagicLink_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -36,7 +36,7 @@ func TestAuthHandler_SendMagicLink_Integration(t *testing.T) {
 
 // TestAuthHandler_SendMagicLink_InvalidEmail_Integration tests sending magic link with invalid email
 func TestAuthHandler_SendMagicLink_InvalidEmail_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -53,7 +53,7 @@ func TestAuthHandler_SendMagicLink_InvalidEmail_Integration(t *testing.T) {
 
 // TestAuthHandler_VerifyMagicLink_Integration tests verifying a magic link token
 func TestAuthHandler_VerifyMagicLink_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -77,7 +77,7 @@ func TestAuthHandler_VerifyMagicLink_Integration(t *testing.T) {
 
 // TestAuthHandler_VerifyMagicLink_InvalidToken_Integration tests verifying with invalid token
 func TestAuthHandler_VerifyMagicLink_InvalidToken_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 

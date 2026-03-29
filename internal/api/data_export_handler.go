@@ -97,6 +97,9 @@ func (h *DataExportHandler) HandleDataExport(c fiber.Ctx) error {
 	quotedPKColumn := quoteIdentifier(pkColumn)
 	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ANY($1) ORDER BY %s", quotedTableName, quotedPKColumn, quotedPKColumn)
 
+	// Set target schema for tenant-aware pool routing
+	middleware.SetTargetSchema(c, schema)
+
 	// Execute query with RLS
 	var results []map[string]interface{}
 	err = middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {

@@ -320,6 +320,9 @@ type OAuthProviderConfig struct {
 type SecurityConfig struct {
 	EnableGlobalRateLimit bool `mapstructure:"enable_global_rate_limit"` // Global API rate limiting (100 req/min per IP)
 
+	// Service role token revocation behavior
+	ServiceRoleFailOpen bool `mapstructure:"service_role_fail_open"` // If false (default), fail-closed when revocation check fails (503). If true, fail-open for backward compatibility.
+
 	// Admin setup security token
 	SetupToken string `mapstructure:"setup_token"` // Required token for admin setup. If empty, admin dashboard is disabled.
 

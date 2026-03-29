@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -904,6 +905,55 @@ func (c *Connection) ExecuteWithAdminRole(ctx context.Context, fn func(conn *pgx
 	}
 
 	log.Debug().Msg("Migration executed successfully with admin privileges")
+	return nil
+}
+
+// ExecuteWithAdminRoleForDB executes a function with admin privileges against
+// a specific database (for tenant DDL operations). It replaces the database name
+// in the admin connection string with the provided dbName.
+func (c *Connection) ExecuteWithAdminRoleForDB(ctx context.Context, dbName string, fn func(conn *pgx.Conn) error) error {
+	adminConnStr := c.config.AdminConnectionString()
+
+	adminUser := c.config.AdminUser
+	if adminUser == "" {
+		adminUser = c.config.User
+	}
+
+	// Replace database name in connection string
+	u, err := url.Parse(adminConnStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse admin connection string: %w", err)
+	}
+	u.Path = dbName
+	adminConnStrForDB := u.String()
+
+	log.Info().
+		Str("admin_user", adminUser).
+		Str("database", dbName).
+		Msg("Connecting as admin user for tenant DDL")
+
+	adminConn, err := pgx.Connect(ctx, adminConnStrForDB)
+	if err != nil {
+		log.Error().Err(err).Str("admin_user", adminUser).Str("database", dbName).Msg("Failed to connect as admin user for tenant DDL")
+		return fmt.Errorf("failed to connect as admin to database %s: %w", dbName, err)
+	}
+	defer func() { _ = adminConn.Close(ctx) }()
+
+	tx, err := adminConn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := fn(adminConn); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	log.Debug().Str("database", dbName).Msg("Tenant DDL executed successfully with admin privileges")
 	return nil
 }
 

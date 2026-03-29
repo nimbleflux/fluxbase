@@ -8,18 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestManager_CreateTenantDatabase(t *testing.T) {
-	t.Skip("Requires database setup - run with test database")
-}
-
-func TestManager_DeleteTenantDatabase(t *testing.T) {
-	t.Skip("Requires database setup - run with test database")
-}
-
-func TestManager_MigrateTenant(t *testing.T) {
-	t.Skip("Requires database setup - run with test database")
-}
-
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
@@ -29,7 +17,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, int32(100), cfg.Pool.MaxTotalConnections)
 	assert.Equal(t, 30*time.Minute, cfg.Pool.EvictionAge)
 	assert.Equal(t, 5*time.Minute, cfg.Migrations.CheckInterval)
-	assert.False(t, cfg.Migrations.OnCreate) // Disabled by default - use declarative schemas
+	assert.True(t, cfg.Migrations.OnCreate) // Run system migrations after bootstrap on tenant creation
 	assert.False(t, cfg.Migrations.OnAccess)
 	assert.False(t, cfg.Migrations.Background)
 }
@@ -53,7 +41,7 @@ func TestConfig_Validation(t *testing.T) {
 			},
 			Migrations: MigrationsConfig{
 				CheckInterval: 10 * time.Minute,
-				OnCreate:      false,
+				OnCreate:      true,
 				OnAccess:      false,
 				Background:    false,
 			},
@@ -63,7 +51,7 @@ func TestConfig_Validation(t *testing.T) {
 		assert.Equal(t, 50, cfg.MaxTenants)
 		assert.Equal(t, int32(50), cfg.Pool.MaxTotalConnections)
 		assert.Equal(t, 15*time.Minute, cfg.Pool.EvictionAge)
-		assert.False(t, cfg.Migrations.OnCreate)
+		assert.True(t, cfg.Migrations.OnCreate)
 	})
 }
 

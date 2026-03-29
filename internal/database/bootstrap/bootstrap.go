@@ -178,6 +178,23 @@ func (s *Service) EnsureBootstrap(ctx context.Context) error {
 	return s.RunBootstrap(ctx)
 }
 
+// RunBootstrapOnDB connects to a specific database and runs bootstrap SQL.
+// Used for bootstrapping newly created tenant databases.
+func RunBootstrapOnDB(ctx context.Context, dbURL string) error {
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer pool.Close()
+
+	_, err = pool.Exec(ctx, bootstrapSQL)
+	if err != nil {
+		return fmt.Errorf("failed to execute bootstrap SQL: %w", err)
+	}
+
+	return nil
+}
+
 // Close closes any admin pool resources
 func (s *Service) Close() {
 	if s.adminPool != nil {

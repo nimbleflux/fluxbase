@@ -219,9 +219,9 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 			Msg("Failed to insert file metadata into database")
 
 		if strings.Contains(errMsg, "permission denied") || strings.Contains(errMsg, "policy") {
+			log.Debug().Str("detail", errMsg).Msg("Upload blocked by RLS policy")
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":  "insufficient permissions to upload file",
-				"detail": errMsg,
+				"error": "insufficient permissions to upload file",
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

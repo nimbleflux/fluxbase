@@ -26,6 +26,7 @@ type AuthMiddlewareFactory struct {
 	jwtManager       *auth.JWTManager
 	settingsCache    *auth.SettingsCache
 	serverConfig     *config.ServerConfig
+	securityCfg      *config.SecurityConfig
 }
 
 // AuthMiddlewareFactoryOption is a functional option for configuring the factory.
@@ -49,6 +50,13 @@ func WithPool(pool *pgxpool.Pool) AuthMiddlewareFactoryOption {
 func WithServerConfig(cfg *config.ServerConfig) AuthMiddlewareFactoryOption {
 	return func(f *AuthMiddlewareFactory) {
 		f.serverConfig = cfg
+	}
+}
+
+// WithSecurityConfig sets the security configuration for fail-open/fail-closed behavior.
+func WithSecurityConfig(cfg *config.SecurityConfig) AuthMiddlewareFactoryOption {
+	return func(f *AuthMiddlewareFactory) {
+		f.securityCfg = cfg
 	}
 }
 
@@ -82,13 +90,13 @@ func NewAuthMiddlewareFactory(
 // Required returns middleware that requires authentication.
 // Accepts JWT tokens, client keys, or service keys.
 func (f *AuthMiddlewareFactory) Required() fiber.Handler {
-	return RequireAuthOrServiceKey(f.authService, f.clientKeyService, f.pool, f.jwtManager)
+	return RequireAuthOrServiceKey(f.authService, f.clientKeyService, f.pool, f.securityCfg, f.jwtManager)
 }
 
 // Optional returns middleware that optionally extracts auth context.
 // Sets user context if valid credentials are present, but allows anonymous access.
 func (f *AuthMiddlewareFactory) Optional() fiber.Handler {
-	return OptionalAuthOrServiceKey(f.authService, f.clientKeyService, f.pool, f.jwtManager)
+	return OptionalAuthOrServiceKey(f.authService, f.clientKeyService, f.pool, f.securityCfg, f.jwtManager)
 }
 
 // Internal returns middleware for internal-only endpoints.

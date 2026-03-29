@@ -27,7 +27,7 @@ import (
 
 // TestSecretsHandler_CreateSecret_Integration tests POST /secrets endpoint
 func TestSecretsHandler_CreateSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -184,7 +184,7 @@ func TestSecretsHandler_CreateSecret_Integration(t *testing.T) {
 
 // TestSecretsHandler_ListSecrets_Integration tests GET /secrets endpoint
 func TestSecretsHandler_ListSecrets_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -252,7 +252,7 @@ func TestSecretsHandler_ListSecrets_Integration(t *testing.T) {
 
 // TestSecretsHandler_GetSecret_Integration tests GET /secrets/:id
 func TestSecretsHandler_GetSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -296,7 +296,7 @@ func TestSecretsHandler_GetSecret_Integration(t *testing.T) {
 
 // TestSecretsHandler_UpdateSecret_Integration tests PUT /secrets/:id
 func TestSecretsHandler_UpdateSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -392,7 +392,7 @@ func TestSecretsHandler_UpdateSecret_Integration(t *testing.T) {
 
 // TestSecretsHandler_DeleteSecret_Integration tests DELETE /secrets/:id
 func TestSecretsHandler_DeleteSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -439,7 +439,7 @@ func TestSecretsHandler_DeleteSecret_Integration(t *testing.T) {
 
 // TestSecretsHandler_GetVersions_Integration tests GET /secrets/:id/versions
 func TestSecretsHandler_GetVersions_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -484,7 +484,7 @@ func TestSecretsHandler_GetVersions_Integration(t *testing.T) {
 
 // TestSecretsHandler_Rollback_Integration tests POST /secrets/:id/rollback/:version
 func TestSecretsHandler_Rollback_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -534,7 +534,7 @@ func TestSecretsHandler_Rollback_Integration(t *testing.T) {
 
 // TestSecretsHandler_GetStats_Integration tests GET /secrets/stats
 func TestSecretsHandler_GetStats_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -592,7 +592,7 @@ func TestSecretsHandler_GetStats_Integration(t *testing.T) {
 
 // TestSecretsHandler_Expiration_Integration tests expiration handling
 func TestSecretsHandler_Expiration_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)

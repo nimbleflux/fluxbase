@@ -112,7 +112,8 @@ type TokenBlacklistRepositoryInterface interface {
 	GetByJTI(ctx context.Context, jti string) (*TokenBlacklistEntry, error)
 
 	// RevokeAllUserTokens blacklists all tokens for a user
-	RevokeAllUserTokens(ctx context.Context, userID, reason string) error
+	// expiry is the duration for which the revocation marker should persist
+	RevokeAllUserTokens(ctx context.Context, userID, reason string, expiry time.Duration) error
 
 	// DeleteExpired removes expired blacklist entries (cleanup job)
 	DeleteExpired(ctx context.Context) (int64, error)

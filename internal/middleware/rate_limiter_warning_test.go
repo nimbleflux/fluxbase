@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"os"
 	"sync"
 	"testing"
 
@@ -13,12 +12,10 @@ func TestLogRateLimiterWarning_WithRedisURL(t *testing.T) {
 	resetRateLimiterWarning()
 
 	// Set Redis URL - warning should not be displayed
-	_ = os.Setenv("FLUXBASE_REDIS_URL", "redis://localhost:6379")
-	defer func() { _ = os.Unsetenv("FLUXBASE_REDIS_URL") }()
+	t.Setenv("FLUXBASE_REDIS_URL", "redis://localhost:6379")
 
 	// Set Kubernetes indicator
-	_ = os.Setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
-	defer func() { _ = os.Unsetenv("KUBERNETES_SERVICE_HOST") }()
+	t.Setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
 
 	logRateLimiterWarning()
 
@@ -31,12 +28,10 @@ func TestLogRateLimiterWarning_WithDragonflyURL(t *testing.T) {
 	resetRateLimiterWarning()
 
 	// Set Dragonfly URL - warning should not be displayed
-	_ = os.Setenv("FLUXBASE_DRAGONFLY_URL", "redis://localhost:6379")
-	defer func() { _ = os.Unsetenv("FLUXBASE_DRAGONFLY_URL") }()
+	t.Setenv("FLUXBASE_DRAGONFLY_URL", "redis://localhost:6379")
 
 	// Set Kubernetes indicator
-	_ = os.Setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
-	defer func() { _ = os.Unsetenv("KUBERNETES_SERVICE_HOST") }()
+	t.Setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
 
 	logRateLimiterWarning()
 
@@ -49,20 +44,14 @@ func TestLogRateLimiterWarning_NoMultiInstanceIndicators(t *testing.T) {
 	resetRateLimiterWarning()
 
 	// Clear all multi-instance indicators
-	_ = os.Unsetenv("KUBERNETES_SERVICE_HOST")
-	_ = os.Unsetenv("POD_NAME")
-	_ = os.Unsetenv("COMPOSE_PROJECT_NAME")
-	_ = os.Unsetenv("FLUXBASE_REDIS_URL")
-	_ = os.Unsetenv("FLUXBASE_DRAGONFLY_URL")
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	t.Setenv("POD_NAME", "")
+	t.Setenv("COMPOSE_PROJECT_NAME", "")
+	t.Setenv("FLUXBASE_REDIS_URL", "")
+	t.Setenv("FLUXBASE_DRAGONFLY_URL", "")
 
-	// Store original HOSTNAME and clear it for this test
-	originalHostname := os.Getenv("HOSTNAME")
-	_ = os.Unsetenv("HOSTNAME")
-	defer func() {
-		if originalHostname != "" {
-			_ = os.Setenv("HOSTNAME", originalHostname)
-		}
-	}()
+	// Clear HOSTNAME for this test (t.Setenv auto-restores original value)
+	t.Setenv("HOSTNAME", "")
 
 	logRateLimiterWarning()
 

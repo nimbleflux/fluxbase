@@ -263,12 +263,8 @@ func TestTenantConfigLoader_EmptyTenantConfigs(t *testing.T) {
 
 func TestTenantConfigLoader_EnvVarExpansion(t *testing.T) {
 	// Set test environment variables
-	os.Setenv("TEST_JWT_SECRET_123", "test-secret-from-env-at-least-32-chars!")
-	os.Setenv("TEST_S3_BUCKET_123", "test-bucket-from-env")
-	defer func() {
-		os.Unsetenv("TEST_JWT_SECRET_123")
-		os.Unsetenv("TEST_S3_BUCKET_123")
-	}()
+	t.Setenv("TEST_JWT_SECRET_123", "test-secret-from-env-at-least-32-chars!")
+	t.Setenv("TEST_S3_BUCKET_123", "test-bucket-from-env")
 
 	// Create a temp directory for tenant config files
 	tempDir := t.TempDir()
@@ -324,16 +320,10 @@ config:
 func TestTenantConfigLoader_EnvVarOverrides(t *testing.T) {
 	// Set tenant-specific environment variables
 	// Pattern: FLUXBASE_TENANTS__<SLUG>__<SECTION>__<KEY>
-	os.Setenv("FLUXBASE_TENANTS__ENV_TENANT__AUTH__JWT_SECRET", "env-tenant-secret-at-least-32-chars!")
-	os.Setenv("FLUXBASE_TENANTS__ENV_TENANT__STORAGE__S3_BUCKET", "env-tenant-bucket")
-	os.Setenv("FLUXBASE_TENANTS__ENV_TENANT__STORAGE__PROVIDER", "s3")
-	os.Setenv("FLUXBASE_TENANTS__ENV_TENANT__EMAIL__FROM_ADDRESS", "env@tenant.com")
-	defer func() {
-		os.Unsetenv("FLUXBASE_TENANTS__ENV_TENANT__AUTH__JWT_SECRET")
-		os.Unsetenv("FLUXBASE_TENANTS__ENV_TENANT__STORAGE__S3_BUCKET")
-		os.Unsetenv("FLUXBASE_TENANTS__ENV_TENANT__STORAGE__PROVIDER")
-		os.Unsetenv("FLUXBASE_TENANTS__ENV_TENANT__EMAIL__FROM_ADDRESS")
-	}()
+	t.Setenv("FLUXBASE_TENANTS__ENV_TENANT__AUTH__JWT_SECRET", "env-tenant-secret-at-least-32-chars!")
+	t.Setenv("FLUXBASE_TENANTS__ENV_TENANT__STORAGE__S3_BUCKET", "env-tenant-bucket")
+	t.Setenv("FLUXBASE_TENANTS__ENV_TENANT__STORAGE__PROVIDER", "s3")
+	t.Setenv("FLUXBASE_TENANTS__ENV_TENANT__EMAIL__FROM_ADDRESS", "env@tenant.com")
 
 	baseConfig := &Config{
 		Auth: AuthConfig{
@@ -372,8 +362,7 @@ func TestTenantConfigLoader_EnvVarOverrides(t *testing.T) {
 
 func TestTenantConfigLoader_EnvVarOverridesExistingConfig(t *testing.T) {
 	// Set env vars that should override inline config
-	os.Setenv("FLUXBASE_TENANTS__OVERRIDE_TENANT__AUTH__JWT_SECRET", "overridden-secret-at-least-32-chars!")
-	defer os.Unsetenv("FLUXBASE_TENANTS__OVERRIDE_TENANT__AUTH__JWT_SECRET")
+	t.Setenv("FLUXBASE_TENANTS__OVERRIDE_TENANT__AUTH__JWT_SECRET", "overridden-secret-at-least-32-chars!")
 
 	baseConfig := &Config{
 		Auth: AuthConfig{

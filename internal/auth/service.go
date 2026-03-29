@@ -135,6 +135,7 @@ func NewService(
 
 	impersonationRepo := NewImpersonationRepository(db)
 	impersonationService := NewImpersonationService(impersonationRepo, userRepo, jwtManager, db)
+	impersonationService.SetTokenBlacklistService(tokenBlacklistService)
 
 	// OTP service for passwordless authentication
 	otpExpiry := cfg.MagicLinkExpiry // Reuse magic link expiry for OTP (typically 10-15 minutes)
@@ -755,8 +756,17 @@ func (s *Service) RevokeToken(ctx context.Context, token, reason string) error {
 }
 
 // IsTokenRevoked checks if a JWT token has been revoked
+// This is a convenience wrapper that only checks exact JTI revocation
+// For full revocation checking including user-wide revocation, use IsTokenRevokedWithClaims
 func (s *Service) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
-	return s.tokenBlacklistService.IsTokenRevoked(ctx, jti)
+	return s.tokenBlacklistService.IsTokenRevoked(ctx, jti, "", time.Time{})
+}
+
+// IsTokenRevokedWithClaims checks if a JWT token has been revoked
+// It checks both exact JTI revocation and user-wide revocation
+// This is the preferred method for token revocation checking
+func (s *Service) IsTokenRevokedWithClaims(ctx context.Context, jti string, userID string, tokenIssuedAt time.Time) (bool, error) {
+	return s.tokenBlacklistService.IsTokenRevoked(ctx, jti, userID, tokenIssuedAt)
 }
 
 // RevokeAllUserTokens revokes all tokens for a specific user
@@ -1099,7 +1109,10 @@ func (s *Service) VerifyTOTPWithContext(ctx context.Context, userID, code, ipAdd
 		decrypted, err := crypto.Decrypt(storedSecret, s.encryptionKey)
 		if err != nil {
 			// Log but don't fail - might be a legacy unencrypted secret
-			log.Warn().Err(err).Str("user_id", userID).Msg("Failed to decrypt TOTP secret, trying as plaintext (legacy secret)")
+			log.Warn().
+				Err(err).
+				Str("user_id", userID).
+				Msg("TOTP secret decrypted via plaintext fallback - consider migrating to encrypted storage")
 		} else {
 			secret = decrypted
 		}

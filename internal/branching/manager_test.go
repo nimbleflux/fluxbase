@@ -687,22 +687,22 @@ func TestSanitizeIdentifier(t *testing.T) {
 		{
 			name:     "identifier with hyphen",
 			input:    "my-database",
-			expected: `"my-database"`,
+			expected: `""`, // rejected: hyphens not valid in SQL identifiers
 		},
 		{
 			name:     "identifier with spaces",
 			input:    "my database",
-			expected: `"my database"`,
+			expected: `""`, // rejected: spaces not valid in SQL identifiers
 		},
 		{
 			name:     "identifier with double quotes",
 			input:    `my"database`,
-			expected: `"my""database"`,
+			expected: `""`, // rejected: quotes not valid in SQL identifiers
 		},
 		{
 			name:     "identifier with multiple quotes",
 			input:    `"my"db"`,
-			expected: `"""my""db"""`,
+			expected: `""`, // rejected: quotes not valid in SQL identifiers
 		},
 		{
 			name:     "empty identifier",
@@ -712,12 +712,12 @@ func TestSanitizeIdentifier(t *testing.T) {
 		{
 			name:     "identifier with special characters",
 			input:    "db!@#$%",
-			expected: `"db!@#$%"`,
+			expected: `""`, // rejected: special chars not valid in SQL identifiers
 		},
 		{
 			name:     "numeric identifier",
 			input:    "123database",
-			expected: `"123database"`,
+			expected: `""`, // rejected: must start with letter or underscore
 		},
 	}
 

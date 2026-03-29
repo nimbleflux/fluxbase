@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
@@ -210,56 +211,157 @@ func (h *SQLHandler) getPoolForQuery(c fiber.Ctx, query string) *pgxpool.Pool {
 }
 
 // isQueryForPublicSchema determines if a query targets the public schema
-func isQueryForPublicSchema(queryLower string) bool {
-	// Check for explicit public schema references
-	if strings.Contains(queryLower, "public.") {
-		return true
+// using AST-based analysis for accurate schema detection across CTEs, subqueries,
+// and other complex SQL constructs.
+func isQueryForPublicSchema(query string) bool {
+	parseResult, err := pg_query.Parse(query)
+	if err != nil {
+		// If parsing fails, fall back to heuristic check for "public." prefix
+		return strings.Contains(strings.ToLower(query), "public.")
 	}
 
-	// Check for CREATE TABLE/INDEX/etc without schema prefix (defaults to public)
-	createPatterns := []string{
-		"create table ", "create index ", "create unique index ",
-		"create sequence ", "create view ", "create materialized view ",
-	}
-	for _, pattern := range createPatterns {
-		if strings.Contains(queryLower, pattern) {
-			// If it has a schema prefix that's not "public", it's not for public schema
-			if strings.Contains(queryLower, " auth.") ||
-				strings.Contains(queryLower, " storage.") ||
-				strings.Contains(queryLower, " ai.") ||
-				strings.Contains(queryLower, " platform.") ||
-				strings.Contains(queryLower, " branching.") ||
-				strings.Contains(queryLower, " jobs.") ||
-				strings.Contains(queryLower, " functions.") ||
-				strings.Contains(queryLower, " logging.") {
-				return false
-			}
-			return true // No explicit schema, defaults to public
+	for _, stmt := range parseResult.Stmts {
+		if stmt.Stmt == nil {
+			continue
 		}
-	}
-
-	// For SELECT/INSERT/UPDATE/DELETE, check if tables are qualified
-	// Unqualified table names default to public schema
-	dmlPatterns := []string{"select ", "insert ", "update ", "delete from ", "from "}
-	for _, pattern := range dmlPatterns {
-		if strings.Contains(queryLower, pattern) {
-			// Check if there's an explicit non-public schema qualifier
-			if strings.Contains(queryLower, " auth.") ||
-				strings.Contains(queryLower, " storage.") ||
-				strings.Contains(queryLower, " ai.") ||
-				strings.Contains(queryLower, " platform.") ||
-				strings.Contains(queryLower, " branching.") ||
-				strings.Contains(queryLower, " jobs.") ||
-				strings.Contains(queryLower, " functions.") ||
-				strings.Contains(queryLower, " logging.") {
-				return false
+		schemas := extractSchemasFromNode(stmt.Stmt)
+		for _, schema := range schemas {
+			if schema == "" || schema == "public" {
+				// Unqualified or explicitly public → targets public schema
+				return true
 			}
-			// No explicit schema qualifier - could be public schema
-			return true
 		}
 	}
 
 	return false
+}
+
+// extractSchemasFromNode walks the AST and returns all referenced schema names.
+// Empty string means unqualified (defaults to public in PostgreSQL).
+func extractSchemasFromNode(node *pg_query.Node) []string {
+	var schemas []string
+	seen := make(map[string]bool)
+
+	var walk func(*pg_query.Node)
+	walk = func(n *pg_query.Node) {
+		if n == nil {
+			return
+		}
+
+		switch nd := n.Node.(type) {
+		case *pg_query.Node_RangeVar:
+			rv := nd.RangeVar
+			schema := ""
+			if rv.Schemaname != "" {
+				schema = rv.Schemaname
+			}
+			if !seen[schema] {
+				seen[schema] = true
+				schemas = append(schemas, schema)
+			}
+
+		case *pg_query.Node_SelectStmt:
+			if nd.SelectStmt.FromClause != nil {
+				for _, from := range nd.SelectStmt.FromClause {
+					walk(from)
+				}
+			}
+			if nd.SelectStmt.WhereClause != nil {
+				walk(nd.SelectStmt.WhereClause)
+			}
+			for _, target := range nd.SelectStmt.TargetList {
+				walk(target)
+			}
+			if nd.SelectStmt.GroupClause != nil {
+				for _, g := range nd.SelectStmt.GroupClause {
+					walk(g)
+				}
+			}
+			if nd.SelectStmt.SortClause != nil {
+				for _, s := range nd.SelectStmt.SortClause {
+					walk(s)
+				}
+			}
+			if nd.SelectStmt.Larg != nil {
+				walk(&pg_query.Node{Node: &pg_query.Node_SelectStmt{SelectStmt: nd.SelectStmt.Larg}})
+			}
+			if nd.SelectStmt.Rarg != nil {
+				walk(&pg_query.Node{Node: &pg_query.Node_SelectStmt{SelectStmt: nd.SelectStmt.Rarg}})
+			}
+			if nd.SelectStmt.WithClause != nil {
+				for _, cte := range nd.SelectStmt.WithClause.Ctes {
+					walk(cte)
+				}
+			}
+
+		case *pg_query.Node_InsertStmt:
+			walk(&pg_query.Node{Node: &pg_query.Node_RangeVar{RangeVar: nd.InsertStmt.Relation}})
+			if nd.InsertStmt.SelectStmt != nil {
+				walk(nd.InsertStmt.SelectStmt)
+			}
+
+		case *pg_query.Node_UpdateStmt:
+			walk(&pg_query.Node{Node: &pg_query.Node_RangeVar{RangeVar: nd.UpdateStmt.Relation}})
+			if nd.UpdateStmt.FromClause != nil {
+				for _, from := range nd.UpdateStmt.FromClause {
+					walk(from)
+				}
+			}
+			if nd.UpdateStmt.WhereClause != nil {
+				walk(nd.UpdateStmt.WhereClause)
+			}
+
+		case *pg_query.Node_DeleteStmt:
+			walk(&pg_query.Node{Node: &pg_query.Node_RangeVar{RangeVar: nd.DeleteStmt.Relation}})
+			if nd.DeleteStmt.WhereClause != nil {
+				walk(nd.DeleteStmt.WhereClause)
+			}
+
+		case *pg_query.Node_JoinExpr:
+			walk(nd.JoinExpr.Larg)
+			walk(nd.JoinExpr.Rarg)
+			if nd.JoinExpr.Quals != nil {
+				walk(nd.JoinExpr.Quals)
+			}
+
+		case *pg_query.Node_SubLink:
+			if nd.SubLink.Subselect != nil {
+				walk(nd.SubLink.Subselect)
+			}
+
+		case *pg_query.Node_RangeSubselect:
+			if nd.RangeSubselect.Subquery != nil {
+				walk(nd.RangeSubselect.Subquery)
+			}
+
+		case *pg_query.Node_CommonTableExpr:
+			if nd.CommonTableExpr.Ctequery != nil {
+				walk(nd.CommonTableExpr.Ctequery)
+			}
+
+		case *pg_query.Node_FuncCall:
+			for _, arg := range nd.FuncCall.Args {
+				walk(arg)
+			}
+
+		case *pg_query.Node_AExpr:
+			walk(nd.AExpr.Lexpr)
+			walk(nd.AExpr.Rexpr)
+
+		case *pg_query.Node_BoolExpr:
+			for _, arg := range nd.BoolExpr.Args {
+				walk(arg)
+			}
+
+		case *pg_query.Node_ResTarget:
+			if nd.ResTarget.Val != nil {
+				walk(nd.ResTarget.Val)
+			}
+		}
+	}
+
+	walk(node)
+	return schemas
 }
 
 // executeWithRLSContext executes SQL statements with Row Level Security context
@@ -671,22 +773,31 @@ func (h *SQLHandler) executeStatementInTx(ctx context.Context, tx pgx.Tx, statem
 }
 
 // splitSQLStatements splits a SQL query string into individual statements
-// This is a simple implementation that splits by semicolons
+// using the PostgreSQL parser for correct handling of semicolons in
+// strings, comments, and other contexts.
 func splitSQLStatements(query string) []string {
-	// Simple split by semicolon
-	// Note: This doesn't handle semicolons inside strings or comments
-	// For production use, consider using a proper SQL parser
-	statements := strings.Split(query, ";")
-	result := make([]string, 0, len(statements))
-
-	for _, stmt := range statements {
-		stmt = strings.TrimSpace(stmt)
-		if stmt != "" {
-			result = append(result, stmt)
+	// Try parser-based splitting first for correct handling of
+	// semicolons inside strings, comments, and other contexts
+	stmts, err := pg_query.SplitWithParser(query, true)
+	if err != nil {
+		// Fall back to simple semicolon split if parser fails
+		// (e.g., for incomplete queries in the editor)
+		statements := strings.Split(query, ";")
+		result := make([]string, 0, len(statements))
+		for _, stmt := range statements {
+			stmt = strings.TrimSpace(stmt)
+			if stmt != "" {
+				result = append(result, stmt)
+			}
 		}
+		return result
 	}
 
-	return result
+	if len(stmts) == 0 {
+		return []string{}
+	}
+
+	return stmts
 }
 
 // truncateString truncates a string to a maximum length

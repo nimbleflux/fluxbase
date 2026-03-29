@@ -31,20 +31,19 @@ type AdminDeps struct {
 	RequireRole func(...string) fiber.Handler
 
 	// Subgroup dependencies
-	Branch              *BranchDeps
-	Schema              *SchemaAdminDeps
-	AuthProviders       *AuthProvidersAdminDeps
-	Users               *UsersAdminDeps
-	Tenants             *TenantsAdminDeps
-	ServiceKeys         *ServiceKeysAdminDeps
-	PlatformServiceKeys *PlatformServiceKeysAdminDeps
-	Functions           *FunctionsAdminDeps
-	Jobs                *JobsAdminDeps
-	AI                  *AIAdminDeps
-	RPC                 *RPCAdminDeps
-	Logs                *LogsAdminDeps
-	Settings            *SettingsAdminDeps
-	Extensions          *ExtensionsAdminDeps
+	Branch        *BranchDeps
+	Schema        *SchemaAdminDeps
+	AuthProviders *AuthProvidersAdminDeps
+	Users         *UsersAdminDeps
+	Tenants       *TenantsAdminDeps
+	ServiceKeys   *ServiceKeysAdminDeps
+	Functions     *FunctionsAdminDeps
+	Jobs          *JobsAdminDeps
+	AI            *AIAdminDeps
+	RPC           *RPCAdminDeps
+	Logs          *LogsAdminDeps
+	Settings      *SettingsAdminDeps
+	Extensions    *ExtensionsAdminDeps
 }
 
 // BuildAdminRoutes creates the admin route group with proper role-based access control.
@@ -115,15 +114,6 @@ func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
 	}
 	if serviceKeys := BuildServiceKeysAdminRoutes(deps.ServiceKeys); serviceKeys != nil {
 		subgroups = append(subgroups, serviceKeys)
-	}
-	if platformServiceKeys := BuildPlatformServiceKeysAdminRoutes(deps.PlatformServiceKeys); platformServiceKeys != nil {
-		subgroups = append(subgroups, &RouteGroup{
-			Name:         "platform_service_keys",
-			Prefix:       "/platform",
-			DefaultAuth:  AuthRequired,
-			DefaultRoles: []string{"admin", "instance_admin"},
-			SubGroups:    []*RouteGroup{platformServiceKeys},
-		})
 	}
 	if functions := BuildFunctionsAdminRoutes(deps.Functions); functions != nil {
 		subgroups = append(subgroups, functions)

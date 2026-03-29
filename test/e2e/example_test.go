@@ -160,7 +160,7 @@ func TestExampleAuthenticationFlow(t *testing.T) {
 
 	tc.EnsureAuthSchema()
 	// Clean only test-specific users to avoid affecting other parallel tests
-	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
+	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 
 	email := "example@test.com"
 	password := "SecurePassword123!"

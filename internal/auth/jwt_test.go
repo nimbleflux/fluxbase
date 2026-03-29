@@ -805,3 +805,156 @@ func TestAnonymousTokenValidation(t *testing.T) {
 		assert.Equal(t, expectedUserID, userID)
 	})
 }
+
+// =============================================================================
+// Impersonation Token Security Tests
+// =============================================================================
+
+func TestGenerateAccessToken_WithImpersonation(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	t.Run("token with impersonated_by claim", func(t *testing.T) {
+		userID := "user123"
+		email := "test@example.com"
+		role := "authenticated"
+		adminID := "admin-456"
+
+		token, claims, err := manager.GenerateAccessToken(userID, email, role, nil, nil, WithImpersonatedBy(adminID))
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, token)
+		assert.NotNil(t, claims)
+
+		// Verify standard claims
+		assert.Equal(t, userID, claims.UserID)
+		assert.Equal(t, email, claims.Email)
+		assert.Equal(t, role, claims.Role)
+		assert.Equal(t, "access", claims.TokenType)
+
+		// Verify impersonation claim
+		assert.Equal(t, adminID, claims.ImpersonatedBy)
+	})
+
+	t.Run("token without impersonated_by defaults to empty", func(t *testing.T) {
+		userID := "user123"
+		email := "test@example.com"
+		role := "authenticated"
+
+		token, claims, err := manager.GenerateAccessToken(userID, email, role, nil, nil)
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, token)
+		assert.NotNil(t, claims)
+
+		// ImpersonatedBy should be empty (not set)
+		assert.Empty(t, claims.ImpersonatedBy)
+	})
+}
+
+func TestGenerateRefreshToken_WithImpersonation(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	t.Run("refresh token with impersonated_by claim", func(t *testing.T) {
+		userID := "user123"
+		email := "test@example.com"
+		role := "authenticated"
+		sessionID := "session-abc"
+		adminID := "admin-789"
+
+		token, claims, err := manager.GenerateRefreshToken(userID, email, role, sessionID, nil, nil, WithImpersonatedBy(adminID))
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, token)
+		assert.NotNil(t, claims)
+
+		// Verify standard claims
+		assert.Equal(t, userID, claims.UserID)
+		assert.Equal(t, email, claims.Email)
+		assert.Equal(t, role, claims.Role)
+		assert.Equal(t, "refresh", claims.TokenType)
+		assert.Equal(t, sessionID, claims.SessionID)
+
+		// Verify impersonation claim
+		assert.Equal(t, adminID, claims.ImpersonatedBy)
+	})
+
+	t.Run("refresh token without impersonated_by defaults to empty", func(t *testing.T) {
+		userID := "user123"
+		email := "test@example.com"
+		role := "authenticated"
+		sessionID := "session-xyz"
+
+		token, claims, err := manager.GenerateRefreshToken(userID, email, role, sessionID, nil, nil)
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, token)
+		assert.NotNil(t, claims)
+
+		// ImpersonatedBy should be empty (not set)
+		assert.Empty(t, claims.ImpersonatedBy)
+	})
+}
+
+func TestValidateToken_ImpersonationBackwardCompatibility(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	t.Run("old tokens without impersonated_by claim still validate", func(t *testing.T) {
+		userID := "user-retro"
+		email := "retro@example.com"
+		role := "authenticated"
+
+		// Generate token without impersonation claim
+		token, _, err := manager.GenerateAccessToken(userID, email, role, nil, nil)
+		require.NoError(t, err)
+
+		// Token should still validate
+		claims, err := manager.ValidateToken(token)
+		require.NoError(t, err)
+		assert.NotNil(t, claims)
+		assert.Equal(t, userID, claims.UserID)
+		assert.Empty(t, claims.ImpersonatedBy, "Old tokens should have empty impersonated_by")
+	})
+}
+
+func TestTokenClaims_ImpersonatedByField(t *testing.T) {
+	t.Run("ImpersonatedBy field is present in claims struct", func(t *testing.T) {
+		claims := TokenClaims{
+			UserID:         "user-123",
+			Email:          "user@example.com",
+			Role:           "authenticated",
+			ImpersonatedBy: "admin-456",
+			TokenType:      "access",
+			RegisteredClaims: jwt.RegisteredClaims{
+				ID:        "jti-123",
+				Subject:   "user-123",
+				Issuer:    "fluxbase",
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
+				IssuedAt:  jwt.NewNumericDate(time.Now()),
+				NotBefore: jwt.NewNumericDate(time.Now()),
+			},
+		}
+
+		assert.Equal(t, "admin-456", claims.ImpersonatedBy)
+	})
+
+	t.Run("ImpersonatedBy defaults to empty string", func(t *testing.T) {
+		claims := TokenClaims{
+			UserID:    "user-789",
+			Role:      "authenticated",
+			TokenType: "access",
+			RegisteredClaims: jwt.RegisteredClaims{
+				ID:        "jti-456",
+				Subject:   "user-789",
+				Issuer:    "fluxbase",
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
+				IssuedAt:  jwt.NewNumericDate(time.Now()),
+				NotBefore: jwt.NewNumericDate(time.Now()),
+			},
+		}
+
+		assert.Empty(t, claims.ImpersonatedBy)
+	})
+}

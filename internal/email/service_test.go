@@ -16,6 +16,7 @@ import (
 
 func TestNewService(t *testing.T) {
 	t.Run("disabled email returns NoOpService", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled: false,
 		}
@@ -32,6 +33,7 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("unsupported provider returns error", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:  true,
 			Provider: "unsupported_provider",
@@ -45,6 +47,7 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("smtp provider not configured returns NoOpService", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:     true,
 			Provider:    "smtp",
@@ -59,6 +62,7 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("smtp provider fully configured returns SMTPService", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:     true,
 			Provider:    "smtp",
@@ -74,6 +78,7 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("empty provider defaults to smtp", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:     true,
 			Provider:    "", // Empty
@@ -89,6 +94,7 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("sendgrid not configured returns NoOpService", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:     true,
 			Provider:    "sendgrid",
@@ -103,6 +109,7 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("sendgrid fully configured returns SendGridService", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:        true,
 			Provider:       "sendgrid",
@@ -117,6 +124,7 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("mailgun not configured returns NoOpService", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:     true,
 			Provider:    "mailgun",
@@ -131,6 +139,7 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("mailgun fully configured returns MailgunService", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:       true,
 			Provider:      "mailgun",
@@ -146,6 +155,7 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("ses not configured returns NoOpService", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:     true,
 			Provider:    "ses",
@@ -160,6 +170,7 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("ses fully configured returns SESService", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:      true,
 			Provider:     "ses",
@@ -182,6 +193,7 @@ func TestNewService(t *testing.T) {
 
 func TestNoOpService(t *testing.T) {
 	t.Run("NewNoOpService creates service with reason", func(t *testing.T) {
+		t.Parallel()
 		service := NewNoOpService("test reason")
 
 		assert.NotNil(t, service)
@@ -189,12 +201,14 @@ func TestNoOpService(t *testing.T) {
 	})
 
 	t.Run("IsConfigured returns false", func(t *testing.T) {
+		t.Parallel()
 		service := NewNoOpService("not configured")
 
 		assert.False(t, service.IsConfigured())
 	})
 
 	t.Run("SendMagicLink returns error with reason", func(t *testing.T) {
+		t.Parallel()
 		service := NewNoOpService("email disabled")
 
 		err := service.SendMagicLink(context.Background(), "user@example.com", "token", "https://example.com")
@@ -205,6 +219,7 @@ func TestNoOpService(t *testing.T) {
 	})
 
 	t.Run("SendVerificationEmail returns error with reason", func(t *testing.T) {
+		t.Parallel()
 		service := NewNoOpService("not configured")
 
 		err := service.SendVerificationEmail(context.Background(), "user@example.com", "token", "https://example.com")
@@ -214,6 +229,7 @@ func TestNoOpService(t *testing.T) {
 	})
 
 	t.Run("SendPasswordReset returns error with reason", func(t *testing.T) {
+		t.Parallel()
 		service := NewNoOpService("provider not set")
 
 		err := service.SendPasswordReset(context.Background(), "user@example.com", "token", "https://example.com")
@@ -223,6 +239,7 @@ func TestNoOpService(t *testing.T) {
 	})
 
 	t.Run("SendInvitationEmail returns error with reason", func(t *testing.T) {
+		t.Parallel()
 		service := NewNoOpService("missing API key")
 
 		err := service.SendInvitationEmail(context.Background(), "user@example.com", "Inviter", "https://example.com")
@@ -232,6 +249,7 @@ func TestNoOpService(t *testing.T) {
 	})
 
 	t.Run("Send returns error with reason", func(t *testing.T) {
+		t.Parallel()
 		service := NewNoOpService("smtp server not reachable")
 
 		err := service.Send(context.Background(), "user@example.com", "Subject", "Body")
@@ -241,6 +259,7 @@ func TestNoOpService(t *testing.T) {
 	})
 
 	t.Run("empty reason still works", func(t *testing.T) {
+		t.Parallel()
 		service := NewNoOpService("")
 
 		err := service.Send(context.Background(), "user@example.com", "Subject", "Body")
@@ -256,6 +275,7 @@ func TestNoOpService(t *testing.T) {
 
 func TestServiceInterface(t *testing.T) {
 	t.Run("NoOpService implements Service interface", func(t *testing.T) {
+		t.Parallel()
 		var _ Service = (*NoOpService)(nil)
 	})
 }
@@ -303,6 +323,7 @@ func BenchmarkNoOpService_Send(b *testing.B) {
 
 func TestTestEmailService(t *testing.T) {
 	t.Run("NewTestEmailService creates service", func(t *testing.T) {
+		t.Parallel()
 		service := NewTestEmailService()
 
 		assert.NotNil(t, service)
@@ -310,6 +331,7 @@ func TestTestEmailService(t *testing.T) {
 	})
 
 	t.Run("SendMagicLink succeeds", func(t *testing.T) {
+		t.Parallel()
 		service := NewTestEmailService()
 
 		err := service.SendMagicLink(context.Background(), "user@example.com", "token", "https://example.com")
@@ -318,6 +340,7 @@ func TestTestEmailService(t *testing.T) {
 	})
 
 	t.Run("SendVerificationEmail succeeds", func(t *testing.T) {
+		t.Parallel()
 		service := NewTestEmailService()
 
 		err := service.SendVerificationEmail(context.Background(), "user@example.com", "token", "https://example.com")
@@ -326,6 +349,7 @@ func TestTestEmailService(t *testing.T) {
 	})
 
 	t.Run("SendPasswordReset succeeds", func(t *testing.T) {
+		t.Parallel()
 		service := NewTestEmailService()
 
 		err := service.SendPasswordReset(context.Background(), "user@example.com", "token", "https://example.com")
@@ -334,6 +358,7 @@ func TestTestEmailService(t *testing.T) {
 	})
 
 	t.Run("SendInvitationEmail succeeds", func(t *testing.T) {
+		t.Parallel()
 		service := NewTestEmailService()
 
 		err := service.SendInvitationEmail(context.Background(), "user@example.com", "Inviter Name", "https://example.com")
@@ -342,6 +367,7 @@ func TestTestEmailService(t *testing.T) {
 	})
 
 	t.Run("Send succeeds", func(t *testing.T) {
+		t.Parallel()
 		service := NewTestEmailService()
 
 		err := service.Send(context.Background(), "user@example.com", "Subject", "Body")
@@ -350,6 +376,7 @@ func TestTestEmailService(t *testing.T) {
 	})
 
 	t.Run("IsConfigured returns true", func(t *testing.T) {
+		t.Parallel()
 		service := NewTestEmailService()
 
 		assert.True(t, service.IsConfigured())
@@ -362,6 +389,7 @@ func TestTestEmailService(t *testing.T) {
 
 func TestNewService_EdgeCases(t *testing.T) {
 	t.Run("nil config returns NoOpService", func(t *testing.T) {
+		t.Parallel()
 		service, err := NewService(nil)
 
 		require.NoError(t, err)
@@ -380,10 +408,12 @@ func TestNewService_EdgeCases(t *testing.T) {
 
 func TestAllServicesImplementInterface(t *testing.T) {
 	t.Run("NoOpService implements Service", func(t *testing.T) {
+		t.Parallel()
 		var _ Service = &NoOpService{}
 	})
 
 	t.Run("TestEmailService implements Service", func(t *testing.T) {
+		t.Parallel()
 		var _ Service = &TestEmailService{}
 	})
 }
@@ -396,6 +426,7 @@ func TestNoOpService_ContextHandling(t *testing.T) {
 	service := NewNoOpService("test")
 
 	t.Run("handles context cancellation", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
@@ -404,6 +435,7 @@ func TestNoOpService_ContextHandling(t *testing.T) {
 	})
 
 	t.Run("handles cancelled context", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
@@ -416,12 +448,14 @@ func TestTestEmailService_ContextHandling(t *testing.T) {
 	service := NewTestEmailService()
 
 	t.Run("handles context.Background() correctly", func(t *testing.T) {
+		t.Parallel()
 		// Should work correctly
 		err := service.Send(context.Background(), "user@example.com", "Subject", "Body")
 		assert.NoError(t, err)
 	})
 
 	t.Run("handles cancelled context", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
@@ -438,6 +472,7 @@ func TestNoOpService_ErrorMessages(t *testing.T) {
 	service := NewNoOpService("email service not available")
 
 	t.Run("SendMagicLink error includes reason", func(t *testing.T) {
+		t.Parallel()
 		err := service.SendMagicLink(context.Background(), "user@example.com", "token", "link")
 
 		assert.Error(t, err)
@@ -445,6 +480,7 @@ func TestNoOpService_ErrorMessages(t *testing.T) {
 	})
 
 	t.Run("SendVerificationEmail error includes reason", func(t *testing.T) {
+		t.Parallel()
 		err := service.SendVerificationEmail(context.Background(), "user@example.com", "token", "link")
 
 		assert.Error(t, err)
@@ -452,6 +488,7 @@ func TestNoOpService_ErrorMessages(t *testing.T) {
 	})
 
 	t.Run("SendPasswordReset error includes reason", func(t *testing.T) {
+		t.Parallel()
 		err := service.SendPasswordReset(context.Background(), "user@example.com", "token", "link")
 
 		assert.Error(t, err)
@@ -459,6 +496,7 @@ func TestNoOpService_ErrorMessages(t *testing.T) {
 	})
 
 	t.Run("SendInvitationEmail error includes reason", func(t *testing.T) {
+		t.Parallel()
 		err := service.SendInvitationEmail(context.Background(), "user@example.com", "Inviter", "link")
 
 		assert.Error(t, err)
@@ -474,16 +512,19 @@ func TestNoOpService_EmptyInputs(t *testing.T) {
 	service := NewNoOpService("test")
 
 	t.Run("handles empty email address", func(t *testing.T) {
+		t.Parallel()
 		err := service.Send(context.Background(), "", "Subject", "Body")
 		assert.Error(t, err)
 	})
 
 	t.Run("handles empty subject", func(t *testing.T) {
+		t.Parallel()
 		err := service.Send(context.Background(), "user@example.com", "", "Body")
 		assert.Error(t, err)
 	})
 
 	t.Run("handles empty body", func(t *testing.T) {
+		t.Parallel()
 		err := service.Send(context.Background(), "user@example.com", "Subject", "")
 		assert.Error(t, err)
 	})
@@ -493,16 +534,19 @@ func TestTestEmailService_EmptyInputs(t *testing.T) {
 	service := NewTestEmailService()
 
 	t.Run("handles empty email address", func(t *testing.T) {
+		t.Parallel()
 		err := service.Send(context.Background(), "", "Subject", "Body")
 		assert.NoError(t, err)
 	})
 
 	t.Run("handles empty subject", func(t *testing.T) {
+		t.Parallel()
 		err := service.Send(context.Background(), "user@example.com", "", "Body")
 		assert.NoError(t, err)
 	})
 
 	t.Run("handles empty body", func(t *testing.T) {
+		t.Parallel()
 		err := service.Send(context.Background(), "user@example.com", "Subject", "")
 		assert.NoError(t, err)
 	})

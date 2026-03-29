@@ -140,6 +140,9 @@ func (h *BulkOperationsHandler) handleBulkDelete(c fiber.Ctx, ctx context.Contex
 	quotedPKColumn := quoteIdentifier(pkColumn)
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s = ANY($1)", quotedTableName, quotedPKColumn)
 
+	// Set target schema for tenant-aware pool routing
+	middleware.SetTargetSchema(c, schema)
+
 	// Execute with RLS context
 	var rowsAffected int64
 	err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -169,6 +172,9 @@ func (h *BulkOperationsHandler) handleBulkExport(c fiber.Ctx, ctx context.Contex
 	quotedTableName := quoteIdentifier(schema) + "." + quoteIdentifier(table)
 	quotedPKColumn := quoteIdentifier(pkColumn)
 	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ANY($1)", quotedTableName, quotedPKColumn)
+
+	// Set target schema for tenant-aware pool routing
+	middleware.SetTargetSchema(c, schema)
 
 	// Execute with RLS context
 	var results []map[string]interface{}

@@ -15,6 +15,7 @@ import (
 
 func TestNewMailgunService(t *testing.T) {
 	t.Run("returns error for missing API key", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:      "mailgun",
 			MailgunAPIKey: "",
@@ -30,6 +31,7 @@ func TestNewMailgunService(t *testing.T) {
 	})
 
 	t.Run("returns error for missing domain", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:      "mailgun",
 			MailgunAPIKey: "test-api-key",
@@ -45,6 +47,7 @@ func TestNewMailgunService(t *testing.T) {
 	})
 
 	t.Run("creates service with valid config", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:      "mailgun",
 			MailgunAPIKey: "test-api-key",
@@ -69,6 +72,7 @@ func TestNewMailgunService(t *testing.T) {
 
 func TestMailgunService_IsConfigured(t *testing.T) {
 	t.Run("returns false when disabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:       false,
 			Provider:      "mailgun",
@@ -82,6 +86,7 @@ func TestMailgunService_IsConfigured(t *testing.T) {
 	})
 
 	t.Run("returns true when enabled and configured", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:       true,
 			Provider:      "mailgun",
@@ -102,6 +107,7 @@ func TestMailgunService_IsConfigured(t *testing.T) {
 
 func TestMailgunService_Struct(t *testing.T) {
 	t.Run("stores config, client, and domain", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:      "mailgun",
 			MailgunAPIKey: "key-abc123",
@@ -134,22 +140,27 @@ func TestMailgunService_EmailMethods(t *testing.T) {
 	service, _ := NewMailgunService(cfg)
 
 	t.Run("SendMagicLink method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("SendVerificationEmail method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("SendPasswordReset method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("SendInvitationEmail method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("Send method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 }
@@ -167,6 +178,7 @@ func TestMailgunService_DomainHandling(t *testing.T) {
 
 	for _, domain := range validDomains {
 		t.Run("accepts domain "+domain, func(t *testing.T) {
+			t.Parallel()
 			cfg := &config.EmailConfig{
 				Provider:      "mailgun",
 				MailgunAPIKey: "test-key",
@@ -189,6 +201,7 @@ func TestMailgunService_DomainHandling(t *testing.T) {
 
 func TestMailgunService_TimeoutConfiguration(t *testing.T) {
 	t.Run("Send uses 10 second timeout", func(t *testing.T) {
+		t.Parallel()
 		// The Send method creates a context with 10 second timeout
 		// This is a unit test documenting the expected behavior
 

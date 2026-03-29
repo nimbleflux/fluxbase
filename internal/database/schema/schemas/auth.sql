@@ -798,6 +798,8 @@ CREATE TABLE IF NOT EXISTS impersonation_sessions (
     started_at timestamptz DEFAULT now(),
     ended_at timestamptz,
     is_active boolean DEFAULT true,
+    access_token_jti text,
+    refresh_token_jti text,
     CONSTRAINT impersonation_sessions_pkey PRIMARY KEY (id),
     CONSTRAINT impersonation_sessions_target_user_id_fkey FOREIGN KEY (target_user_id) REFERENCES users (id) ON DELETE CASCADE
 );

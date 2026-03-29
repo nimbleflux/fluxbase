@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // ClientKeyAuth creates middleware that authenticates requests using client keys
@@ -89,7 +90,7 @@ func OptionalClientKeyAuth(authService *auth.Service, clientKeyService *auth.Cli
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
+				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -159,7 +160,7 @@ func RequireEitherAuth(authService *auth.Service, clientKeyService *auth.ClientK
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
+				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -292,7 +293,7 @@ func RequireScope(requiredScopes ...string) fiber.Handler {
 
 // RequireAuthOrServiceKey requires either JWT, client key, OR service key authentication
 // This is the most comprehensive auth middleware that accepts all authentication methods
-func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager ...*auth.JWTManager) fiber.Handler {
+func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, securityCfg *config.SecurityConfig, jwtManager ...*auth.JWTManager) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Debug logging for service_role troubleshooting
 		log.Debug().
@@ -391,7 +392,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
+				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -417,6 +418,17 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 				// Set RLS context
 				c.Locals("rls_user_id", claims.UserID)
 				c.Locals("rls_role", claims.Role)
+
+				// SECURITY: Log audit entry for impersonation tokens
+				// Impersonation tokens have an impersonated_by claim indicating the admin who issued them
+				if claims.ImpersonatedBy != "" {
+					log.Info().
+						Str("user_id", claims.UserID).
+						Str("impersonated_by", claims.ImpersonatedBy).
+						Str("path", c.Path()).
+						Str("method", c.Method()).
+						Msg("Impersonated request")
+				}
 
 				return c.Next()
 			}
@@ -454,8 +466,16 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 							isRevoked, err := authService.IsServiceRoleTokenRevoked(c.RequestCtx(), claims.ID)
 							if err != nil {
 								log.Error().Err(err).Str("jti", claims.ID).Msg("Failed to check service_role token emergency revocation status")
-								// For service_role tokens, fail-open to avoid breaking production
-								// Emergency revocation is a secondary security measure
+								// Fail-closed by default: reject request when DB check fails
+								// Operators can opt into fail-open behavior via security.service_role_fail_open config
+								if securityCfg == nil || !securityCfg.ServiceRoleFailOpen {
+									return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+										"error":   "service_unavailable",
+										"message": "Unable to verify token status",
+									})
+								}
+								// Fail-open mode: log warning and continue (insecure, for backward compatibility)
+								log.Warn().Str("jti", claims.ID).Msg("Service role revocation check failed - allowing request due to fail-open configuration")
 							} else if isRevoked {
 								log.Warn().Str("jti", claims.ID).Msg("Service role token has been emergency revoked")
 								return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -539,7 +559,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 // - Authorization: Bearer <jwt> with role claim
 // - X-Service-Key header with hashed service key or service role JWT
 // - Dashboard admin JWT tokens (when jwtManager is provided)
-func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager ...*auth.JWTManager) fiber.Handler {
+func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, securityCfg *config.SecurityConfig, jwtManager ...*auth.JWTManager) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// First, try service key authentication (highest privilege)
 		serviceKey := c.Get("X-Service-Key")
@@ -602,7 +622,7 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
+				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -629,6 +649,17 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				// Set RLS context
 				c.Locals("rls_user_id", claims.UserID)
 				c.Locals("rls_role", claims.Role)
+
+				// SECURITY: Log audit entry for impersonation tokens
+				// Impersonation tokens have an impersonated_by claim indicating the admin who issued them
+				if claims.ImpersonatedBy != "" {
+					log.Info().
+						Str("user_id", claims.UserID).
+						Str("impersonated_by", claims.ImpersonatedBy).
+						Str("path", c.Path()).
+						Str("method", c.Method()).
+						Msg("Impersonated request")
+				}
 
 				return c.Next()
 			}
@@ -666,8 +697,32 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				if err == nil {
 					// Check if this is a service_role or anon token (not a user token)
 					if claims.Role == "service_role" || claims.Role == "anon" {
-						// Valid service role JWT - intentionally skip revocation check.
-						// Service role tokens are system-level credentials that should never be blacklisted.
+						// SECURITY: Check emergency revocation for service_role tokens
+						// This provides a mechanism to revoke compromised service_role tokens immediately
+						if claims.Role == "service_role" {
+							isRevoked, err := authService.IsServiceRoleTokenRevoked(c.RequestCtx(), claims.ID)
+							if err != nil {
+								log.Error().Err(err).Str("jti", claims.ID).Msg("Failed to check service_role token emergency revocation status")
+								// Fail-closed by default: reject request when DB check fails
+								// Operators can opt into fail-open behavior via security.service_role_fail_open config
+								if securityCfg == nil || !securityCfg.ServiceRoleFailOpen {
+									return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+										"error":   "service_unavailable",
+										"message": "Unable to verify token status",
+									})
+								}
+								// Fail-open mode: log warning and continue (insecure, for backward compatibility)
+								log.Warn().Str("jti", claims.ID).Msg("Service role revocation check failed - allowing request due to fail-open configuration")
+							} else if isRevoked {
+								log.Warn().Str("jti", claims.ID).Msg("Service role token has been emergency revoked")
+								return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+									"error":             "Service role token has been revoked",
+									"error_code":        "token_revoked",
+									"revocation_reason": "emergency_revocation",
+								})
+							}
+						}
+
 						c.Locals("user_role", claims.Role)
 						c.Locals("auth_type", "service_role_jwt")
 						c.Locals("jwt_claims", claims)
@@ -704,7 +759,7 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
+				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -738,6 +793,32 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 			// User JWT failed, try service role JWT
 			srClaims, err := authService.ValidateServiceRoleToken(fluxbaseClientKey)
 			if err == nil {
+				// SECURITY: Check emergency revocation for service_role tokens
+				// This provides a mechanism to revoke compromised service_role tokens immediately
+				if srClaims.Role == "service_role" {
+					isRevoked, err := authService.IsServiceRoleTokenRevoked(c.RequestCtx(), srClaims.ID)
+					if err != nil {
+						log.Error().Err(err).Str("jti", srClaims.ID).Msg("Failed to check service_role token emergency revocation status")
+						// Fail-closed by default: reject request when DB check fails
+						// Operators can opt into fail-open behavior via security.service_role_fail_open config
+						if securityCfg == nil || !securityCfg.ServiceRoleFailOpen {
+							return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+								"error":   "service_unavailable",
+								"message": "Unable to verify token status",
+							})
+						}
+						// Fail-open mode: log warning and continue (insecure, for backward compatibility)
+						log.Warn().Str("jti", srClaims.ID).Msg("Service role revocation check failed - allowing request due to fail-open configuration")
+					} else if isRevoked {
+						log.Warn().Str("jti", srClaims.ID).Msg("Service role token has been emergency revoked")
+						return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+							"error":             "Service role token has been revoked",
+							"error_code":        "token_revoked",
+							"revocation_reason": "emergency_revocation",
+						})
+					}
+				}
+
 				// Valid service role JWT
 				c.Locals("user_role", srClaims.Role)
 				c.Locals("auth_type", "service_role_jwt")

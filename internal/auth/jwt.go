@@ -36,6 +36,24 @@ type TokenClaims struct {
 	TenantID        *string `json:"tenant_id,omitempty"`         // Current tenant ID
 	TenantRole      string  `json:"tenant_role,omitempty"`       // User's role in current tenant (tenant_admin, tenant_member)
 	IsInstanceAdmin bool    `json:"is_instance_admin,omitempty"` // True for instance-level admins
+
+	// Impersonation tracking - for security audit and revocation
+	ImpersonatedBy string `json:"impersonated_by,omitempty"` // Admin user ID who issued this impersonation token
+}
+
+// TokenOption is a functional option for token generation
+type TokenOption func(*tokenOptions)
+
+// tokenOptions holds options for token generation
+type tokenOptions struct {
+	impersonatedBy string
+}
+
+// WithImpersonatedBy sets the admin user ID who is impersonating
+func WithImpersonatedBy(adminID string) TokenOption {
+	return func(o *tokenOptions) {
+		o.impersonatedBy = adminID
+	}
 }
 
 // JWTManager handles JWT token operations
@@ -93,20 +111,28 @@ func NewJWTManagerWithConfig(secretKey string, accessTTL, refreshTTL, serviceRol
 }
 
 // GenerateAccessToken generates a new access token
-func (m *JWTManager) GenerateAccessToken(userID, email, role string, userMetadata, appMetadata any) (string, *TokenClaims, error) {
+func (m *JWTManager) GenerateAccessToken(userID, email, role string, userMetadata, appMetadata any, opts ...TokenOption) (string, *TokenClaims, error) {
 	now := time.Now()
 	sessionID := uuid.New().String()
 
+	// Apply token options
+	options := &tokenOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	claims := &TokenClaims{
-		UserID:       userID,
-		Email:        email,
-		Role:         role,
-		SessionID:    sessionID,
-		TokenType:    "access",
-		UserMetadata: userMetadata,
-		AppMetadata:  appMetadata,
+		UserID:         userID,
+		Email:          email,
+		Role:           role,
+		SessionID:      sessionID,
+		TokenType:      "access",
+		UserMetadata:   userMetadata,
+		AppMetadata:    appMetadata,
+		ImpersonatedBy: options.impersonatedBy,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTokenTTL)),
@@ -125,19 +151,27 @@ func (m *JWTManager) GenerateAccessToken(userID, email, role string, userMetadat
 }
 
 // GenerateRefreshToken generates a new refresh token
-func (m *JWTManager) GenerateRefreshToken(userID, email, role, sessionID string, userMetadata, appMetadata any) (string, *TokenClaims, error) {
+func (m *JWTManager) GenerateRefreshToken(userID, email, role, sessionID string, userMetadata, appMetadata any, opts ...TokenOption) (string, *TokenClaims, error) {
 	now := time.Now()
 
+	// Apply token options
+	options := &tokenOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	claims := &TokenClaims{
-		UserID:       userID,
-		Email:        email,
-		Role:         role,
-		SessionID:    sessionID,
-		TokenType:    "refresh",
-		UserMetadata: userMetadata,
-		AppMetadata:  appMetadata,
+		UserID:         userID,
+		Email:          email,
+		Role:           role,
+		SessionID:      sessionID,
+		TokenType:      "refresh",
+		UserMetadata:   userMetadata,
+		AppMetadata:    appMetadata,
+		ImpersonatedBy: options.impersonatedBy,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshTokenTTL)),
@@ -199,6 +233,7 @@ func (m *JWTManager) GenerateAccessTokenWithTenant(userID, email, role string, u
 		IsInstanceAdmin: tenantOpts.IsInstanceAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTokenTTL)),
@@ -241,6 +276,7 @@ func (m *JWTManager) GenerateTokenPairWithTenant(userID, email, role string, use
 		IsInstanceAdmin: tenantOpts.IsInstanceAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshTokenTTL)),
@@ -451,6 +487,7 @@ func (m *JWTManager) GenerateAnonymousAccessToken(userID string) (string, error)
 		IsAnonymous: true,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTokenTTL)),
@@ -481,6 +518,7 @@ func (m *JWTManager) GenerateAnonymousRefreshToken(userID string) (string, error
 		IsAnonymous: true,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshTokenTTL)),
@@ -561,6 +599,7 @@ func (m *JWTManager) GenerateServiceRoleToken() (string, error) {
 		TokenType: "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.serviceRoleTTL)), // Configurable, default 24h
 			NotBefore: jwt.NewNumericDate(now),
@@ -583,6 +622,7 @@ func (m *JWTManager) GenerateServiceRoleTokenWithTenant(tenantID *string) (strin
 		TenantID:  tenantID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.serviceRoleTTL)),
 			NotBefore: jwt.NewNumericDate(now),
@@ -604,6 +644,7 @@ func (m *JWTManager) GenerateAnonToken() (string, error) {
 		TokenType: "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.anonTTL)), // Configurable, default 24h
 			NotBefore: jwt.NewNumericDate(now),
@@ -626,6 +667,7 @@ func (m *JWTManager) GenerateAnonTokenWithTenant(tenantID *string) (string, erro
 		TenantID:  tenantID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.anonTTL)),
 			NotBefore: jwt.NewNumericDate(now),
@@ -635,4 +677,30 @@ func (m *JWTManager) GenerateAnonTokenWithTenant(tenantID *string) (string, erro
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(m.secretKey)
+}
+
+// GetMaxTokenTTL returns the maximum TTL among all token types
+// This is used to determine how long a user-wide revocation marker should persist
+func (m *JWTManager) GetMaxTokenTTL() time.Duration {
+	maxTTL := m.accessTokenTTL
+	if m.refreshTokenTTL > maxTTL {
+		maxTTL = m.refreshTokenTTL
+	}
+	if m.serviceRoleTTL > maxTTL {
+		maxTTL = m.serviceRoleTTL
+	}
+	if m.anonTTL > maxTTL {
+		maxTTL = m.anonTTL
+	}
+	// Fallback to 7 days if all TTls are somehow zero or very small
+	if maxTTL < 7*24*time.Hour {
+		maxTTL = 7 * 24 * time.Hour
+	}
+	return maxTTL
+}
+
+// getMaxTokenTTL returns the maximum TTL among all token types
+// This is used to determine how long a user-wide revocation marker should persist
+func (m *JWTManager) getMaxTokenTTL() time.Duration {
+	return m.GetMaxTokenTTL()
 }

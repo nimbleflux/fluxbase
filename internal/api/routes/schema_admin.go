@@ -50,8 +50,9 @@ type SchemaAdminDeps struct {
 	MigrateInternalSchema   fiber.Handler
 
 	// Middleware for tenant and branch context
-	TenantMiddleware fiber.Handler
-	BranchMiddleware fiber.Handler
+	TenantMiddleware   fiber.Handler
+	TenantDBMiddleware fiber.Handler
+	BranchMiddleware   fiber.Handler
 }
 
 // BuildSchemaAdminRoutes creates the schema admin route group.
@@ -72,6 +73,12 @@ func BuildSchemaAdminRoutes(deps *SchemaAdminDeps) *RouteGroup {
 		middlewares = append(middlewares, Middleware{
 			Name:    "BranchContext",
 			Handler: deps.BranchMiddleware,
+		})
+	}
+	if deps.TenantDBMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name:    "TenantDBContext",
+			Handler: deps.TenantDBMiddleware,
 		})
 	}
 

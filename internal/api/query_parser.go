@@ -981,8 +981,18 @@ func (params *QueryParams) BuildSelectClause(tableName string) string {
 				continue
 			}
 			// Check if it's already a complex expression (contains operators or functions)
-			// In which case, assume it's been validated elsewhere
+			// In which case, validate it against SQL injection patterns
 			if strings.ContainsAny(field, "()+-*/ ") {
+				upper := strings.ToUpper(field)
+				for _, kw := range []string{"INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "EXECUTE", "GRANT", "REVOKE", "EXEC"} {
+					if strings.Contains(upper, kw) {
+						return "" // reject expression containing dangerous keyword
+					}
+				}
+				// Check for subquery patterns
+				if strings.Contains(upper, "SELECT") && strings.Count(field, "(") != strings.Count(field, ")") {
+					return "" // reject unbalanced parens (likely injection)
+				}
 				parts = append(parts, field)
 			} else {
 				// Simple column name - quote it for safety

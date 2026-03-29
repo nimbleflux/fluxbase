@@ -7,18 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRouter_GetPool(t *testing.T) {
-	t.Skip("Requires database setup - run with test database")
-}
-
-func TestRouter_RemovePool(t *testing.T) {
-	t.Skip("Requires database setup - run with test database")
-}
-
-func TestRouter_CloseAllPools(t *testing.T) {
-	t.Skip("Requires database setup - run with test database")
-}
-
 func TestPoolConfig_Defaults(t *testing.T) {
 	cfg := DefaultConfig()
 
@@ -30,7 +18,7 @@ func TestMigrationsConfig_Defaults(t *testing.T) {
 	cfg := DefaultConfig()
 
 	assert.Equal(t, 5*time.Minute, cfg.Migrations.CheckInterval)
-	assert.False(t, cfg.Migrations.OnCreate) // Disabled by default - use declarative schemas
+	assert.True(t, cfg.Migrations.OnCreate) // Run system migrations after bootstrap on tenant creation
 	assert.False(t, cfg.Migrations.OnAccess)
 	assert.False(t, cfg.Migrations.Background)
 }

@@ -63,6 +63,9 @@ func (h *SettingsHandler) GetSetting(c fiber.Ctx) error {
 	var value interface{}
 	var queryErr error
 
+	// Set target schema to ensure main pool (app schema is not tenant-routable)
+	middleware.SetTargetSchema(c, "app")
+
 	// Use WrapWithRLS to properly set database role + JWT claims
 	err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
 		// Query the setting (RLS policies will be applied)
@@ -141,6 +144,9 @@ func (h *SettingsHandler) GetSettings(c fiber.Ctx) error {
 	}
 
 	results := make(map[string]interface{})
+
+	// Set target schema to ensure main pool (app schema is not tenant-routable)
+	middleware.SetTargetSchema(c, "app")
 
 	// Use WrapWithRLS to properly set database role + JWT claims
 	err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {

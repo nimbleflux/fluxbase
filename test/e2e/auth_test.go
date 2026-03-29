@@ -18,7 +18,7 @@ func setupAuthTest(t *testing.T) *test.TestContext {
 
 	// Clean only test-specific users to avoid affecting other parallel tests
 	// Delete users created by auth tests (test@example.com pattern)
-	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
+	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 
 	// Enable signup for tests (default is now false for security)
 	tc.Config.Auth.SignupEnabled = true

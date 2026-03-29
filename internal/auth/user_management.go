@@ -99,13 +99,29 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 				WHERE taa.user_id = u.id
 			) ta ON true`
 		tenantAssignmentsSelect = ", ta.assignments as tenant_assignments"
+	} else {
+		// App users: join tenant memberships to populate tenant_assignments
+		tenantAssignmentsJoin = `
+			LEFT JOIN LATERAL (
+				SELECT COALESCE(
+					jsonb_agg(
+						jsonb_build_object(
+							'tenant_id', t.id,
+							'tenant_name', t.name,
+							'tenant_slug', t.slug
+						)
+					),
+					'[]'::jsonb
+				) as assignments
+				FROM platform.tenant_memberships tm
+				JOIN platform.tenants t ON t.id = tm.tenant_id
+				WHERE tm.user_id = u.id
+			) ta ON true`
+		tenantAssignmentsSelect = ", ta.assignments as tenant_assignments"
 	}
 
-	// Build GROUP BY clause - include tenant assignments for platform users
-	groupByClause := "u.id, u.email, u.email_verified, u.role, u.user_metadata, u.app_metadata, u.created_at, u.updated_at, u.password_hash, u.is_locked"
-	if userType == "platform" {
-		groupByClause += ", ta.assignments"
-	}
+	// Build GROUP BY clause - include tenant assignments for all user types
+	groupByClause := "u.id, u.email, u.email_verified, u.role, u.user_metadata, u.app_metadata, u.created_at, u.updated_at, u.password_hash, u.is_locked, ta.assignments"
 
 	// Build WHERE clause for tenant filtering (app users only)
 	var whereClause string
@@ -158,49 +174,28 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 			user := &EnrichedUser{}
 			var tenantAssignmentsJSON []byte
 
-			if userType == "platform" {
-				err := rows.Scan(
-					&user.ID,
-					&user.Email,
-					&user.EmailVerified,
-					&user.Role,
-					&user.UserMetadata,
-					&user.AppMetadata,
-					&user.CreatedAt,
-					&user.UpdatedAt,
-					&user.ActiveSessions,
-					&user.LastSignIn,
-					&user.Provider,
-					&user.IsLocked,
-					&tenantAssignmentsJSON,
-				)
-				if err != nil {
-					return fmt.Errorf("failed to scan enriched user: %w", err)
-				}
-				// Parse tenant assignments from JSON
-				if len(tenantAssignmentsJSON) > 0 && string(tenantAssignmentsJSON) != "null" {
-					if err := json.Unmarshal(tenantAssignmentsJSON, &user.TenantAssignments); err != nil {
-						// Log but don't fail - tenant assignments are optional
-						user.TenantAssignments = nil
-					}
-				}
-			} else {
-				err := rows.Scan(
-					&user.ID,
-					&user.Email,
-					&user.EmailVerified,
-					&user.Role,
-					&user.UserMetadata,
-					&user.AppMetadata,
-					&user.CreatedAt,
-					&user.UpdatedAt,
-					&user.ActiveSessions,
-					&user.LastSignIn,
-					&user.Provider,
-					&user.IsLocked,
-				)
-				if err != nil {
-					return fmt.Errorf("failed to scan enriched user: %w", err)
+			err := rows.Scan(
+				&user.ID,
+				&user.Email,
+				&user.EmailVerified,
+				&user.Role,
+				&user.UserMetadata,
+				&user.AppMetadata,
+				&user.CreatedAt,
+				&user.UpdatedAt,
+				&user.ActiveSessions,
+				&user.LastSignIn,
+				&user.Provider,
+				&user.IsLocked,
+				&tenantAssignmentsJSON,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to scan enriched user: %w", err)
+			}
+			// Parse tenant assignments from JSON
+			if len(tenantAssignmentsJSON) > 0 && string(tenantAssignmentsJSON) != "null" {
+				if err := json.Unmarshal(tenantAssignmentsJSON, &user.TenantAssignments); err != nil {
+					user.TenantAssignments = nil
 				}
 			}
 			users = append(users, user)

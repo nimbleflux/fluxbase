@@ -141,7 +141,7 @@ func TestRESTAuthenticationPriority(t *testing.T) {
 	}
 
 	// Clean up only test-specific data to avoid affecting other parallel tests
-	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
+	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 	tc.ExecuteSQL("DELETE FROM auth.client_keys WHERE name LIKE '%Test%' OR name LIKE '%test%'")
 	tc.ExecuteSQL("DELETE FROM auth.service_keys WHERE name LIKE '%Test%' OR name LIKE '%test%'")
 

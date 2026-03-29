@@ -21,7 +21,7 @@ import (
 
 func TestNewDDLHandler(t *testing.T) {
 	t.Run("creates handler with nil database", func(t *testing.T) {
-		handler := NewDDLHandler(nil)
+		handler := NewDDLHandler(nil, nil)
 		assert.NotNil(t, handler)
 		assert.Nil(t, handler.db)
 	})
@@ -314,7 +314,7 @@ func TestCreateColumnRequest_Struct(t *testing.T) {
 func TestCreateSchema_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewDDLHandler(nil)
+		handler := NewDDLHandler(nil, nil)
 
 		app.Post("/schemas", handler.CreateSchema)
 
@@ -339,7 +339,7 @@ func TestCreateSchema_Validation(t *testing.T) {
 
 	t.Run("empty schema name", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewDDLHandler(nil)
+		handler := NewDDLHandler(nil, nil)
 
 		app.Post("/schemas", handler.CreateSchema)
 
@@ -362,7 +362,7 @@ func TestCreateSchema_Validation(t *testing.T) {
 func TestCreateTable_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewDDLHandler(nil)
+		handler := NewDDLHandler(nil, nil)
 
 		app.Post("/tables", handler.CreateTable)
 
@@ -378,7 +378,7 @@ func TestCreateTable_Validation(t *testing.T) {
 
 	t.Run("missing columns", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewDDLHandler(nil)
+		handler := NewDDLHandler(nil, nil)
 
 		app.Post("/tables", handler.CreateTable)
 
@@ -404,7 +404,7 @@ func TestCreateTable_Validation(t *testing.T) {
 
 	t.Run("invalid schema name", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewDDLHandler(nil)
+		handler := NewDDLHandler(nil, nil)
 
 		app.Post("/tables", handler.CreateTable)
 
@@ -421,7 +421,7 @@ func TestCreateTable_Validation(t *testing.T) {
 
 	t.Run("invalid table name", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewDDLHandler(nil)
+		handler := NewDDLHandler(nil, nil)
 
 		app.Post("/tables", handler.CreateTable)
 
@@ -553,7 +553,7 @@ func TestCommonColumnDefinitions(t *testing.T) {
 // =============================================================================
 
 func TestDDLHandler_AddColumn_AllOptions(t *testing.T) {
-	handler := NewDDLHandler(nil)
+	handler := NewDDLHandler(nil, nil)
 
 	app := fiber.New()
 	app.Post("/ddl/tables/:schema/:table/columns", handler.AddColumn)
@@ -610,7 +610,7 @@ func TestDDLHandler_AddColumn_AllOptions(t *testing.T) {
 }
 
 func TestDDLHandler_DropColumn_Params(t *testing.T) {
-	handler := NewDDLHandler(nil)
+	handler := NewDDLHandler(nil, nil)
 
 	app := fiber.New()
 	app.Delete("/ddl/tables/:schema/:table/columns/:column", handler.DropColumn)
@@ -660,7 +660,7 @@ func TestDDLHandler_DropColumn_Params(t *testing.T) {
 }
 
 func TestDDLHandler_RenameTable_VariousNames(t *testing.T) {
-	handler := NewDDLHandler(nil)
+	handler := NewDDLHandler(nil, nil)
 
 	app := fiber.New()
 	app.Patch("/ddl/tables/:schema/:table", handler.RenameTable)
@@ -876,7 +876,7 @@ line2'`,
 }
 
 func TestDDLHandler_NilDatabase(t *testing.T) {
-	handler := NewDDLHandler(nil)
+	handler := NewDDLHandler(nil, nil)
 
 	app := fiber.New()
 

@@ -80,11 +80,13 @@ type Progress struct {
 
 // Permissions represents Deno security permissions
 type Permissions struct {
-	AllowNet      bool `json:"allow_net"`
-	AllowEnv      bool `json:"allow_env"`
-	AllowRead     bool `json:"allow_read"`
-	AllowWrite    bool `json:"allow_write"`
-	MemoryLimitMB int  `json:"memory_limit_mb,omitempty"` // V8 heap limit in MB
+	AllowNet       bool     `json:"allow_net"`
+	AllowEnv       bool     `json:"allow_env"`
+	AllowRead      bool     `json:"allow_read"`
+	AllowWrite     bool     `json:"allow_write"`
+	MemoryLimitMB  int      `json:"memory_limit_mb,omitempty"` // V8 heap limit in MB
+	BlockedDomains []string `json:"blocked_domains,omitempty"` // Domains always blocked (SSRF protection)
+	AllowedDomains []string `json:"allowed_domains,omitempty"` // If set, only these are allowed
 }
 
 // DefaultPermissions returns safe default permissions
@@ -100,21 +102,36 @@ func DefaultPermissions() Permissions {
 // DefaultFunctionPermissions returns default permissions for edge functions
 func DefaultFunctionPermissions() Permissions {
 	return Permissions{
-		AllowNet:      true,
-		AllowEnv:      true,
-		AllowRead:     false,
-		AllowWrite:    false,
-		MemoryLimitMB: 512,
+		AllowNet:       true,
+		AllowEnv:       true,
+		AllowRead:      false,
+		AllowWrite:     false,
+		MemoryLimitMB:  512,
+		BlockedDomains: defaultBlockedDomains(),
 	}
 }
 
 // DefaultJobPermissions returns default permissions for job functions
 func DefaultJobPermissions() Permissions {
 	return Permissions{
-		AllowNet:      true,
-		AllowEnv:      true,
-		AllowRead:     false,
-		AllowWrite:    false,
-		MemoryLimitMB: 512,
+		AllowNet:       true,
+		AllowEnv:       true,
+		AllowRead:      false,
+		AllowWrite:     false,
+		MemoryLimitMB:  512,
+		BlockedDomains: defaultBlockedDomains(),
+	}
+}
+
+// defaultBlockedDomains returns the default list of blocked domains for SSRF protection.
+// These are common cloud metadata endpoints and internal services that should be blocked to prevent SSRF attacks.
+func defaultBlockedDomains() []string {
+	return []string{
+		"169.254.169.254", // AWS/GCP/Azure metadata IP
+		"metadata.google.internal",
+		"metadata",
+		"instance-data",
+		"kubernetes.default.svc",
+		"kubernetes.default",
 	}
 }

@@ -22,7 +22,7 @@ import (
 func setupExtensionsTest(t *testing.T) (*testutil.IntegrationTestContext, *extensions.Service) {
 	t.Helper()
 
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "extensions")
 	service := extensions.NewService(tc.DB)
 
 	// Ensure the extensions tables exist

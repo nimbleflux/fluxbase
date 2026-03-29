@@ -4,19 +4,61 @@
 profile: coverage.out
 
 threshold:
-  file: 0       # Individual files (initially lenient, will increase over time)
-  package: 0    # Packages (initially lenient, will increase over time)
-  total: 25     # Overall project target (realistic starting point)
+  file: 0       # Individual files (not enforced yet)
+  package: 0    # Per-package minimum (enforced via overrides below)
+  total: 25     # Overall project target
 
-# Override rules for specific patterns (evaluated in order, from most to least specific)
+# Override rules for specific patterns (evaluated in order, most specific first)
 override:
-  # High-importance business logic - set future coverage goals
-  # Note: These are commented out initially to avoid CI failures
-  # Uncomment and increase thresholds incrementally as tests are added
-  # - path: ^internal/api/rest_crud\.go$
-  #   threshold: 50
-  # - path: ^internal/auth
-  #   threshold: 30
+  # Well-tested packages - enforce minimum coverage to prevent regression
+  - path: ^internal/crypto/
+    threshold: 75
+  - path: ^internal/logging/
+    threshold: 70
+  - path: ^internal/observability/
+    threshold: 50
+  - path: ^internal/ratelimit/
+    threshold: 50
+  - path: ^internal/storage/
+    threshold: 45
+  - path: ^internal/email/
+    threshold: 40
+  - path: ^internal/config/
+    threshold: 40
+  - path: ^internal/realtime/
+    threshold: 35
+  - path: ^internal/rpc/
+    threshold: 35
+  - path: ^internal/runtime/
+    threshold: 35
+  - path: ^internal/middleware/
+    threshold: 30
+  - path: ^internal/auth/
+    threshold: 25
+  - path: ^internal/webhook/
+    threshold: 25
+  - path: ^internal/ai/
+    threshold: 20
+  - path: ^internal/functions/
+    threshold: 20
+  - path: ^internal/mcp/
+    threshold: 20
+  - path: ^internal/api/
+    threshold: 15
+  - path: ^internal/pubsub/
+    threshold: 15
+  - path: ^internal/jobs/
+    threshold: 15
+  - path: ^internal/branching/
+    threshold: 10
+  - path: ^internal/database/
+    threshold: 1
+  - path: ^internal/settings/
+    threshold: 1
+  - path: ^internal/secrets/
+    threshold: 1
+  - path: ^internal/extensions/
+    threshold: 1
 
   # Test utilities don't need coverage themselves
   - path: ^internal/testutil

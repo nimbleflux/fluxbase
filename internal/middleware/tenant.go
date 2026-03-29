@@ -57,9 +57,24 @@ func TenantMiddleware(cfg TenantConfig) fiber.Handler {
 					tenantSource = "header"
 				}
 			} else {
-				// For anonymous/unauthenticated requests, accept header
-				tenantID = headerTenant
-				tenantSource = "header"
+				// For anonymous/unauthenticated requests, validate the tenant exists
+				if headerTenant != "" {
+					var exists bool
+					err := cfg.DB.Pool().QueryRow(c.Context(),
+						`SELECT EXISTS(SELECT 1 FROM platform.tenants WHERE (id::text = $1 OR slug = $1) AND deleted_at IS NULL)`,
+						headerTenant,
+					).Scan(&exists)
+					if err != nil {
+						log.Debug().Err(err).Str("tenant", headerTenant).Msg("Failed to validate tenant for anonymous request")
+					} else if exists {
+						tenantID = headerTenant
+						tenantSource = "header"
+					} else {
+						return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+							"error": "tenant not found",
+						})
+					}
+				}
 			}
 		}
 

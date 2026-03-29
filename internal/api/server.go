@@ -301,7 +301,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	userMgmtHandler := NewUserManagementHandler(userMgmtService, authService)
 	invitationService := auth.NewInvitationService(db)
 	invitationHandler := NewInvitationHandler(invitationService, dashboardAuthService, emailService, cfg.GetPublicBaseURL())
-	ddlHandler := NewDDLHandler(db)
+	ddlHandler := NewDDLHandler(db, nil) // schemaCache set after cache creation
 	realtimeAdminHandler := NewRealtimeAdminHandler(db)
 	serviceKeyHandler := NewServiceKeyHandler(db.Pool())
 
@@ -327,6 +327,12 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			},
 		}
 		tenantManager = tenantdb.NewManager(tenantStorage, tenantCfg, db.Pool(), dbURL)
+
+		// Create tenant pool router for per-tenant database connections
+		tenantRouter := tenantdb.NewRouter(tenantStorage, tenantCfg, db.Pool(), db.Pool(), dbURL)
+		tenantRouter.SetManager(tenantManager)
+		tenantManager.SetRouter(tenantRouter)
+
 		log.Info().Msg("Multi-tenancy enabled")
 
 		// Initialize tenant declarative schema service if configured
@@ -513,6 +519,9 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	}
 
 	migrationsHandler := migrations.NewHandler(db, schemaCache)
+
+	// Wire schema cache to DDL handler for invalidation after DDL operations
+	ddlHandler.SetSchemaCache(schemaCache)
 
 	if tenantManager != nil && tenantManager.GetRouter() != nil {
 		migrationsHandler.SetTenantPoolProvider(tenantManager.GetRouter())
@@ -931,6 +940,15 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Tenant: middleware.TenantMiddleware(middleware.TenantConfig{
 				DB: db,
 			}),
+			TenantDB: func() fiber.Handler {
+				if tenantManager != nil && tenantManager.GetRouter() != nil {
+					return middleware.TenantDBMiddleware(middleware.TenantDBConfig{
+						Router:  tenantManager.GetRouter(),
+						Storage: tenantStorage,
+					})
+				}
+				return nil
+			}(),
 		},
 
 		// Server-owned dependencies
@@ -1295,6 +1313,7 @@ func (s *Server) createMCPAuthMiddleware() fiber.Handler {
 			s.Auth.Handler.authService,
 			s.Auth.ClientKeyService,
 			s.DB(),
+			nil,
 			s.Auth.DashboardHandler.jwtManager,
 		)(c)
 	}
@@ -1741,24 +1760,27 @@ func (s *Server) handleGetTables(c fiber.Ctx) error {
 		}
 	}
 
-	// Check if schema query parameter is provided
-	schemaParam := c.Query("schema")
+	inspector := s.db.Inspector()
+	tenantPool := middleware.GetTenantPool(c)
 
 	var schemasToQuery []string
+	schemaParam := c.Query("schema")
 
 	if schemaParam != "" {
-		// If schema parameter provided, query only that schema
 		schemasToQuery = []string{schemaParam}
 	} else {
-		// Otherwise, get all schemas (backward compatible behavior)
-		schemas, err := s.db.Inspector().GetSchemas(ctx)
+		var schemas []string
+		var err error
+		if tenantPool != nil {
+			schemas, err = inspector.GetSchemasFromPool(ctx, tenantPool)
+		} else {
+			schemas, err = inspector.GetSchemas(ctx)
+		}
 		if err != nil {
 			return SendOperationFailed(c, "list schemas")
 		}
 
-		// Filter out system schemas
 		for _, schema := range schemas {
-			// Skip system schemas only
 			if schema == "information_schema" || schema == "pg_catalog" || schema == "pg_toast" {
 				continue
 			}
@@ -1766,27 +1788,38 @@ func (s *Server) handleGetTables(c fiber.Ctx) error {
 		}
 	}
 
-	// Collect tables, views, and materialized views from requested schema(s)
 	var allItems []database.TableInfo
 	for _, schema := range schemasToQuery {
-		// Get tables
-		tables, err := s.db.Inspector().GetAllTables(ctx, schema)
+		var tables, views, matviews []database.TableInfo
+		var err error
+
+		if tenantPool != nil {
+			tables, err = inspector.GetAllTablesFromPool(ctx, tenantPool, schema)
+		} else {
+			tables, err = inspector.GetAllTables(ctx, schema)
+		}
 		if err != nil {
 			log.Warn().Err(err).Str("schema", schema).Msg("Failed to get tables from schema")
 		} else {
 			allItems = append(allItems, tables...)
 		}
 
-		// Get views
-		views, err := s.db.Inspector().GetAllViews(ctx, schema)
+		if tenantPool != nil {
+			views, err = inspector.GetAllViewsFromPool(ctx, tenantPool, schema)
+		} else {
+			views, err = inspector.GetAllViews(ctx, schema)
+		}
 		if err != nil {
 			log.Warn().Err(err).Str("schema", schema).Msg("Failed to get views from schema")
 		} else {
 			allItems = append(allItems, views...)
 		}
 
-		// Get materialized views
-		matviews, err := s.db.Inspector().GetAllMaterializedViews(ctx, schema)
+		if tenantPool != nil {
+			matviews, err = inspector.GetAllMaterializedViewsFromPool(ctx, tenantPool, schema)
+		} else {
+			matviews, err = inspector.GetAllMaterializedViews(ctx, schema)
+		}
 		if err != nil {
 			log.Warn().Err(err).Str("schema", schema).Msg("Failed to get materialized views from schema")
 		} else {
@@ -1808,8 +1841,13 @@ func (s *Server) handleGetTableSchema(c fiber.Ctx) error {
 		})
 	}
 
-	// Get table information including column details
-	tableInfo, err := s.db.Inspector().GetTableInfo(ctx, schema, table)
+	var tableInfo *database.TableInfo
+	var err error
+	if pool := middleware.GetTenantPool(c); pool != nil {
+		tableInfo, err = s.db.Inspector().GetTableInfoFromPool(ctx, pool, schema, table)
+	} else {
+		tableInfo, err = s.db.Inspector().GetTableInfo(ctx, schema, table)
+	}
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": fmt.Sprintf("Table not found: %s.%s", schema, table),
@@ -1829,7 +1867,13 @@ func (s *Server) handleGetSchemas(c fiber.Ctx) error {
 		}
 	}
 
-	schemas, err := s.db.Inspector().GetSchemas(ctx)
+	var schemas []string
+	var err error
+	if pool := middleware.GetTenantPool(c); pool != nil {
+		schemas, err = s.db.Inspector().GetSchemasFromPool(ctx, pool)
+	} else {
+		schemas, err = s.db.Inspector().GetSchemas(ctx)
+	}
 	if err != nil {
 		return SendOperationFailed(c, "list schemas")
 	}

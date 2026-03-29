@@ -369,7 +369,7 @@ func TestIdentifierPatternRegex(t *testing.T) {
 
 func TestNewDDLHandler_NilDB(t *testing.T) {
 	t.Run("creates handler with nil db", func(t *testing.T) {
-		handler := NewDDLHandler(nil)
+		handler := NewDDLHandler(nil, nil)
 		assert.NotNil(t, handler)
 		assert.Nil(t, handler.db)
 	})

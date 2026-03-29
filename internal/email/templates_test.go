@@ -16,6 +16,7 @@ import (
 
 func TestRenderMagicLinkHTML(t *testing.T) {
 	t.Run("default template", func(t *testing.T) {
+		t.Parallel()
 		html := renderMagicLinkHTML("https://example.com/login?token=abc123", "abc123", "")
 
 		assert.Contains(t, html, "https://example.com/login?token=abc123")
@@ -25,6 +26,7 @@ func TestRenderMagicLinkHTML(t *testing.T) {
 	})
 
 	t.Run("with custom template", func(t *testing.T) {
+		t.Parallel()
 		// Create temp template file
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "magic-link.html")
@@ -40,6 +42,7 @@ func TestRenderMagicLinkHTML(t *testing.T) {
 	})
 
 	t.Run("nonexistent custom template falls back to default", func(t *testing.T) {
+		t.Parallel()
 		html := renderMagicLinkHTML("https://example.com/login", "token", "/nonexistent/path.html")
 
 		// Should use default template
@@ -48,6 +51,7 @@ func TestRenderMagicLinkHTML(t *testing.T) {
 	})
 
 	t.Run("empty link and token", func(t *testing.T) {
+		t.Parallel()
 		html := renderMagicLinkHTML("", "", "")
 
 		// Should still render without errors
@@ -55,6 +59,7 @@ func TestRenderMagicLinkHTML(t *testing.T) {
 	})
 
 	t.Run("link with special characters", func(t *testing.T) {
+		t.Parallel()
 		link := "https://example.com/login?token=abc&user=test@example.com"
 		html := renderMagicLinkHTML(link, "abc", "")
 
@@ -68,6 +73,7 @@ func TestRenderMagicLinkHTML(t *testing.T) {
 
 func TestRenderVerificationHTML(t *testing.T) {
 	t.Run("default template", func(t *testing.T) {
+		t.Parallel()
 		html := renderVerificationHTML("https://example.com/verify?token=xyz", "xyz", "")
 
 		assert.Contains(t, html, "https://example.com/verify?token=xyz")
@@ -77,6 +83,7 @@ func TestRenderVerificationHTML(t *testing.T) {
 	})
 
 	t.Run("with custom template", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "verify.html")
 		templateContent := `<html><body><h1>Custom Verification</h1><a href="{{.Link}}">Verify Now</a><p>Code: {{.Token}}</p></body></html>`
@@ -91,6 +98,7 @@ func TestRenderVerificationHTML(t *testing.T) {
 	})
 
 	t.Run("nonexistent custom template falls back to default", func(t *testing.T) {
+		t.Parallel()
 		html := renderVerificationHTML("https://example.com/verify", "token", "/bad/path.html")
 
 		assert.Contains(t, html, "https://example.com/verify")
@@ -104,6 +112,7 @@ func TestRenderVerificationHTML(t *testing.T) {
 
 func TestRenderPasswordResetHTML(t *testing.T) {
 	t.Run("default template", func(t *testing.T) {
+		t.Parallel()
 		html := renderPasswordResetHTML("https://example.com/reset?token=reset123", "reset123", "")
 
 		assert.Contains(t, html, "https://example.com/reset?token=reset123")
@@ -113,6 +122,7 @@ func TestRenderPasswordResetHTML(t *testing.T) {
 	})
 
 	t.Run("with custom template", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "reset.html")
 		templateContent := `<html><body><h1>Reset Password</h1><p>Click <a href="{{.Link}}">here</a> to reset. Token: {{.Token}}</p></body></html>`
@@ -127,6 +137,7 @@ func TestRenderPasswordResetHTML(t *testing.T) {
 	})
 
 	t.Run("invalid template syntax falls back to default", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "bad.html")
 		// Invalid template syntax
@@ -147,6 +158,7 @@ func TestRenderPasswordResetHTML(t *testing.T) {
 
 func TestRenderInvitationHTML(t *testing.T) {
 	t.Run("with inviter name", func(t *testing.T) {
+		t.Parallel()
 		html := renderInvitationHTML("John Doe", "https://example.com/invite/abc")
 
 		assert.Contains(t, html, "John Doe")
@@ -155,6 +167,7 @@ func TestRenderInvitationHTML(t *testing.T) {
 	})
 
 	t.Run("empty inviter name", func(t *testing.T) {
+		t.Parallel()
 		html := renderInvitationHTML("", "https://example.com/invite/xyz")
 
 		assert.Contains(t, html, "https://example.com/invite/xyz")
@@ -162,6 +175,7 @@ func TestRenderInvitationHTML(t *testing.T) {
 	})
 
 	t.Run("special characters in inviter name", func(t *testing.T) {
+		t.Parallel()
 		html := renderInvitationHTML("Test <User>", "https://example.com/invite")
 
 		// Should handle or escape special characters
@@ -175,6 +189,7 @@ func TestRenderInvitationHTML(t *testing.T) {
 
 func TestLoadAndRenderTemplate(t *testing.T) {
 	t.Run("valid template", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "test.html")
 		templateContent := `<html><body>Hello {{.Name}}!</body></html>`
@@ -188,6 +203,7 @@ func TestLoadAndRenderTemplate(t *testing.T) {
 	})
 
 	t.Run("nonexistent file returns empty", func(t *testing.T) {
+		t.Parallel()
 		data := map[string]string{"Key": "Value"}
 		html := loadAndRenderTemplate("/nonexistent/path/template.html", data)
 
@@ -195,6 +211,7 @@ func TestLoadAndRenderTemplate(t *testing.T) {
 	})
 
 	t.Run("invalid template syntax returns empty", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "invalid.html")
 		templateContent := `<html>{{.Broken`
@@ -208,6 +225,7 @@ func TestLoadAndRenderTemplate(t *testing.T) {
 	})
 
 	t.Run("template with missing variable", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "missing.html")
 		templateContent := `<html>{{.Missing}}</html>`
@@ -222,6 +240,7 @@ func TestLoadAndRenderTemplate(t *testing.T) {
 	})
 
 	t.Run("empty data map", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "nodata.html")
 		templateContent := `<html><body>Static content</body></html>`
@@ -234,6 +253,7 @@ func TestLoadAndRenderTemplate(t *testing.T) {
 	})
 
 	t.Run("nil data map", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		templatePath := filepath.Join(tmpDir, "nildata.html")
 		templateContent := `<html><body>No data needed</body></html>`
@@ -275,6 +295,7 @@ func TestFallbackMagicLinkHTML(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			html := fallbackMagicLinkHTML(tt.link)
 
 			for _, expected := range tt.contains {
@@ -304,6 +325,7 @@ func TestFallbackVerificationHTML(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			html := fallbackVerificationHTML(tt.link)
 
 			for _, expected := range tt.contains {
@@ -333,6 +355,7 @@ func TestFallbackPasswordResetHTML(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			html := fallbackPasswordResetHTML(tt.link)
 
 			for _, expected := range tt.contains {
@@ -362,6 +385,7 @@ func TestFallbackInvitationHTML(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			html := fallbackInvitationHTML(tt.link)
 
 			for _, expected := range tt.contains {
@@ -377,6 +401,7 @@ func TestFallbackInvitationHTML(t *testing.T) {
 
 func TestTemplateHTMLEscaping(t *testing.T) {
 	t.Run("magic link escapes HTML in token", func(t *testing.T) {
+		t.Parallel()
 		// Token with potential XSS payload
 		html := renderMagicLinkHTML("https://example.com", "<script>alert('xss')</script>", "")
 
@@ -385,6 +410,7 @@ func TestTemplateHTMLEscaping(t *testing.T) {
 	})
 
 	t.Run("invitation escapes HTML in inviter name", func(t *testing.T) {
+		t.Parallel()
 		// Inviter name with HTML
 		html := renderInvitationHTML("<script>alert('xss')</script>", "https://example.com")
 
@@ -414,6 +440,7 @@ func TestTemplateOutputsValidHTML(t *testing.T) {
 
 	for _, tt := range templates {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Check basic HTML structure
 			assert.True(t, strings.Contains(tt.html, "<html") || strings.Contains(tt.html, "<HTML"))
 			assert.True(t, strings.Contains(tt.html, "</html>") || strings.Contains(tt.html, "</HTML>"))

@@ -59,7 +59,7 @@ func DefaultConfig() Config {
 		},
 		Migrations: MigrationsConfig{
 			CheckInterval: 5 * time.Minute,
-			OnCreate:      false, // Disabled by default - use declarative schemas instead
+			OnCreate:      true, // Run system migrations after bootstrap on tenant creation
 			OnAccess:      false,
 			Background:    false,
 		},

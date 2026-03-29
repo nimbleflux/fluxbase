@@ -101,7 +101,7 @@ func (h *Handler) CreateSecret(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to create secret: %v", err),
+			"error": "failed to create secret",
 		})
 	}
 
@@ -124,7 +124,7 @@ func (h *Handler) ListSecrets(c fiber.Ctx) error {
 	secrets, err := h.storage.ListSecrets(c.RequestCtx(), scope, namespace)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to list secrets: %v", err),
+			"error": "failed to list secrets",
 		})
 	}
 
@@ -153,7 +153,7 @@ func (h *Handler) GetSecret(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get secret: %v", err),
+			"error": "failed to get secret",
 		})
 	}
 
@@ -193,7 +193,7 @@ func (h *Handler) UpdateSecret(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to update secret: %v", err),
+			"error": "failed to update secret",
 		})
 	}
 
@@ -225,7 +225,7 @@ func (h *Handler) DeleteSecret(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to delete secret: %v", err),
+			"error": "failed to delete secret",
 		})
 	}
 
@@ -247,7 +247,7 @@ func (h *Handler) GetVersions(c fiber.Ctx) error {
 	versions, err := h.storage.GetVersions(c.RequestCtx(), id)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get versions: %v", err),
+			"error": "failed to get versions",
 		})
 	}
 
@@ -285,7 +285,7 @@ func (h *Handler) RollbackToVersion(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to rollback: %v", err),
+			"error": "failed to rollback secret",
 		})
 	}
 
@@ -305,7 +305,7 @@ func (h *Handler) GetStats(c fiber.Ctx) error {
 	total, expiringSoon, expired, err := h.storage.GetStats(c.RequestCtx())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get stats: %v", err),
+			"error": "failed to get stats",
 		})
 	}
 
@@ -356,7 +356,7 @@ func (h *Handler) GetSecretByName(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get secret: %v", err),
+			"error": "failed to get secret",
 		})
 	}
 
@@ -397,13 +397,13 @@ func (h *Handler) UpdateSecretByName(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get secret: %v", err),
+			"error": "failed to get secret",
 		})
 	}
 
 	if err := h.storage.UpdateSecret(c.RequestCtx(), secret.ID, req.Value, req.Description, req.ExpiresAt, userID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to update secret: %v", err),
+			"error": "failed to update secret",
 		})
 	}
 
@@ -436,13 +436,13 @@ func (h *Handler) DeleteSecretByName(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get secret: %v", err),
+			"error": "failed to get secret",
 		})
 	}
 
 	if err := h.storage.DeleteSecret(c.RequestCtx(), secret.ID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to delete secret: %v", err),
+			"error": "failed to delete secret",
 		})
 	}
 
@@ -470,14 +470,14 @@ func (h *Handler) GetVersionsByName(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get secret: %v", err),
+			"error": "failed to get secret",
 		})
 	}
 
 	versions, err := h.storage.GetVersions(c.RequestCtx(), secret.ID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get versions: %v", err),
+			"error": "failed to get versions",
 		})
 	}
 
@@ -516,7 +516,7 @@ func (h *Handler) RollbackByName(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get secret: %v", err),
+			"error": "failed to get secret",
 		})
 	}
 
@@ -527,7 +527,7 @@ func (h *Handler) RollbackByName(c fiber.Ctx) error {
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to rollback: %v", err),
+			"error": "failed to rollback secret",
 		})
 	}
 

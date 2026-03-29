@@ -470,3 +470,120 @@ func BenchmarkNewImpersonationRepository(b *testing.B) {
 		_ = NewImpersonationRepository(nil)
 	}
 }
+
+// =============================================================================
+// Impersonation Token Security Tests
+// =============================================================================
+
+func TestImpersonationToken_Claims(t *testing.T) {
+	t.Run("impersonation session includes JTI fields", func(t *testing.T) {
+		accessJTI := "access-jti-123"
+		refreshJTI := "refresh-jti-456"
+		targetUserID := "user-123"
+		targetRole := "authenticated"
+
+		session := ImpersonationSession{
+			ID:                "session-123",
+			AdminUserID:       "admin-456",
+			TargetUserID:      &targetUserID,
+			ImpersonationType: ImpersonationTypeUser,
+			TargetRole:        &targetRole,
+			AccessTokenJTI:    accessJTI,
+			RefreshTokenJTI:   refreshJTI,
+			IsActive:          true,
+		}
+
+		assert.Equal(t, accessJTI, session.AccessTokenJTI)
+		assert.Equal(t, refreshJTI, session.RefreshTokenJTI)
+	})
+
+	t.Run("session without JTIs handles gracefully", func(t *testing.T) {
+		session := ImpersonationSession{
+			ID:              "session-456",
+			AdminUserID:     "admin-789",
+			AccessTokenJTI:  "",
+			RefreshTokenJTI: "",
+			IsActive:        true,
+		}
+
+		assert.Empty(t, session.AccessTokenJTI)
+		assert.Empty(t, session.RefreshTokenJTI)
+	})
+}
+
+func TestWithImpersonatedBy(t *testing.T) {
+	t.Run("WithImpersonatedBy creates option", func(t *testing.T) {
+		adminID := "admin-123"
+		option := WithImpersonatedBy(adminID)
+		assert.NotNil(t, option)
+	})
+
+	t.Run("options can be combined", func(t *testing.T) {
+		adminID := "admin-456"
+		option := WithImpersonatedBy(adminID)
+		opts := &tokenOptions{}
+		option(opts)
+		assert.Equal(t, adminID, opts.impersonatedBy)
+	})
+}
+
+func TestTokenOptions_ImpersonatedBy(t *testing.T) {
+	t.Run("empty options has no impersonated_by", func(t *testing.T) {
+		opts := &tokenOptions{}
+		assert.Empty(t, opts.impersonatedBy)
+	})
+
+	t.Run("WithImpersonatedBy sets admin ID", func(t *testing.T) {
+		adminID := "admin-789"
+		opts := &tokenOptions{}
+		WithImpersonatedBy(adminID)(opts)
+		assert.Equal(t, adminID, opts.impersonatedBy)
+	})
+}
+
+func TestImpersonationSession_JTIFields(t *testing.T) {
+	t.Run("session with JTIs for revocation", func(t *testing.T) {
+		accessJTI := "jti-access-xyz"
+		refreshJTI := "jti-refresh-abc"
+		targetUserID := "user-target"
+		targetRole := "authenticated"
+
+		session := ImpersonationSession{
+			ID:                "session-with-jti",
+			AdminUserID:       "admin-revoker",
+			TargetUserID:      &targetUserID,
+			ImpersonationType: ImpersonationTypeUser,
+			TargetRole:        &targetRole,
+			Reason:            "Testing token revocation",
+			AccessTokenJTI:    accessJTI,
+			RefreshTokenJTI:   refreshJTI,
+			IsActive:          true,
+		}
+
+		// Verify JTIs are set for revocation
+		assert.NotEmpty(t, session.AccessTokenJTI)
+		assert.NotEmpty(t, session.RefreshTokenJTI)
+		assert.Contains(t, session.AccessTokenJTI, "jti-")
+		assert.Contains(t, session.RefreshTokenJTI, "jti-")
+	})
+
+	t.Run("old sessions without JTIs are handled", func(t *testing.T) {
+		// Simulate an old session created before JTI tracking
+		targetUserID := "user-old"
+		targetRole := "authenticated"
+
+		session := ImpersonationSession{
+			ID:                "session-old-no-jti",
+			AdminUserID:       "admin-old",
+			TargetUserID:      &targetUserID,
+			ImpersonationType: ImpersonationTypeUser,
+			TargetRole:        &targetRole,
+			// AccessTokenJTI and RefreshTokenJTI are empty (default)
+			IsActive: true,
+		}
+
+		// Verify empty JTIs don't cause issues
+		assert.Empty(t, session.AccessTokenJTI)
+		assert.Empty(t, session.RefreshTokenJTI)
+	})
+}

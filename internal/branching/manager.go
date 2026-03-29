@@ -748,9 +748,34 @@ func (m *Manager) GetConfig() config.BranchingConfig {
 
 // sanitizeIdentifier sanitizes a SQL identifier to prevent injection
 func sanitizeIdentifier(name string) string {
+	// Defense in depth: validate the identifier is alphanumeric before quoting.
+	// All inputs should already be sanitized by GenerateDatabaseName/GenerateTenantBranchDatabaseName.
+	if !isValidIdentifier(name) {
+		log.Error().Str("identifier", name).Msg("sanitizeIdentifier: rejected invalid identifier")
+		return `""`
+	}
 	// Use double quotes and escape any existing quotes
 	escaped := strings.ReplaceAll(name, `"`, `""`)
 	return fmt.Sprintf(`"%s"`, escaped)
+}
+
+// isValidIdentifier checks if a string is a valid PostgreSQL identifier
+func isValidIdentifier(name string) bool {
+	if len(name) == 0 || len(name) > 63 {
+		return false
+	}
+	for i, r := range name {
+		if i == 0 {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_') {
+				return false
+			}
+		} else {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // CreateBranchFromGitHubPR creates a branch for a GitHub PR
