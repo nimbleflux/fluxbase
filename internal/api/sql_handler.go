@@ -181,8 +181,16 @@ func (h *SQLHandler) ExecuteSQL(c fiber.Ctx) error {
 	return h.executeWithTenantRLS(c, pool, statements, claims, tenantID, userID, isInstanceAdmin)
 }
 
-// getPoolForQuery determines the appropriate database pool for a query
-// Priority: Branch > Tenant (for public schema) > Main
+// getPoolForQuery determines the appropriate database pool for a query.
+// Priority: Branch > Tenant (when tenant has separate DB) > Main
+//
+// When a tenant has its own database (tenant_db_name is set), ALL queries route
+// to the tenant pool — not just public schema queries. The tenant DB uses FDW to
+// access shared tables (e.g., auth.users) from the main database, so cross-schema
+// joins work natively on the tenant pool.
+//
+// For tenants that use the main database (default tenant), tenant_db is nil and
+// we fall back to the main pool — preserving backward compatibility.
 func (h *SQLHandler) getPoolForQuery(c fiber.Ctx, query string) *pgxpool.Pool {
 	// 1. Check for branch pool (highest priority)
 	if pool := middleware.GetBranchPool(c); pool != nil {
@@ -190,178 +198,15 @@ func (h *SQLHandler) getPoolForQuery(c fiber.Ctx, query string) *pgxpool.Pool {
 		return pool
 	}
 
-	// 2. Check for tenant pool (for public schema queries)
-	queryLower := strings.ToLower(query)
-	isPublicSchemaQuery := isQueryForPublicSchema(queryLower)
-
-	if isPublicSchemaQuery {
-		if tenantPool := middleware.GetTenantPool(c); tenantPool != nil {
-			log.Debug().
-				Bool("is_public_schema", isPublicSchemaQuery).
-				Msg("Using tenant pool for public schema query")
-			return tenantPool
-		}
+	// 2. Check for tenant pool — route ALL queries when tenant has separate DB
+	if tenantPool := middleware.GetTenantPool(c); tenantPool != nil {
+		log.Debug().Msg("Using tenant pool for SQL execution")
+		return tenantPool
 	}
 
-	// 3. Fall back to main database (for non-public schemas with RLS)
-	log.Debug().
-		Bool("is_public_schema", isPublicSchemaQuery).
-		Msg("Using main pool for SQL execution")
+	// 3. Fall back to main database
+	log.Debug().Msg("Using main pool for SQL execution")
 	return h.db
-}
-
-// isQueryForPublicSchema determines if a query targets the public schema
-// using AST-based analysis for accurate schema detection across CTEs, subqueries,
-// and other complex SQL constructs.
-func isQueryForPublicSchema(query string) bool {
-	parseResult, err := pg_query.Parse(query)
-	if err != nil {
-		// If parsing fails, fall back to heuristic check for "public." prefix
-		return strings.Contains(strings.ToLower(query), "public.")
-	}
-
-	for _, stmt := range parseResult.Stmts {
-		if stmt.Stmt == nil {
-			continue
-		}
-		schemas := extractSchemasFromNode(stmt.Stmt)
-		for _, schema := range schemas {
-			if schema == "" || schema == "public" {
-				// Unqualified or explicitly public → targets public schema
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-// extractSchemasFromNode walks the AST and returns all referenced schema names.
-// Empty string means unqualified (defaults to public in PostgreSQL).
-func extractSchemasFromNode(node *pg_query.Node) []string {
-	var schemas []string
-	seen := make(map[string]bool)
-
-	var walk func(*pg_query.Node)
-	walk = func(n *pg_query.Node) {
-		if n == nil {
-			return
-		}
-
-		switch nd := n.Node.(type) {
-		case *pg_query.Node_RangeVar:
-			rv := nd.RangeVar
-			schema := ""
-			if rv.Schemaname != "" {
-				schema = rv.Schemaname
-			}
-			if !seen[schema] {
-				seen[schema] = true
-				schemas = append(schemas, schema)
-			}
-
-		case *pg_query.Node_SelectStmt:
-			if nd.SelectStmt.FromClause != nil {
-				for _, from := range nd.SelectStmt.FromClause {
-					walk(from)
-				}
-			}
-			if nd.SelectStmt.WhereClause != nil {
-				walk(nd.SelectStmt.WhereClause)
-			}
-			for _, target := range nd.SelectStmt.TargetList {
-				walk(target)
-			}
-			if nd.SelectStmt.GroupClause != nil {
-				for _, g := range nd.SelectStmt.GroupClause {
-					walk(g)
-				}
-			}
-			if nd.SelectStmt.SortClause != nil {
-				for _, s := range nd.SelectStmt.SortClause {
-					walk(s)
-				}
-			}
-			if nd.SelectStmt.Larg != nil {
-				walk(&pg_query.Node{Node: &pg_query.Node_SelectStmt{SelectStmt: nd.SelectStmt.Larg}})
-			}
-			if nd.SelectStmt.Rarg != nil {
-				walk(&pg_query.Node{Node: &pg_query.Node_SelectStmt{SelectStmt: nd.SelectStmt.Rarg}})
-			}
-			if nd.SelectStmt.WithClause != nil {
-				for _, cte := range nd.SelectStmt.WithClause.Ctes {
-					walk(cte)
-				}
-			}
-
-		case *pg_query.Node_InsertStmt:
-			walk(&pg_query.Node{Node: &pg_query.Node_RangeVar{RangeVar: nd.InsertStmt.Relation}})
-			if nd.InsertStmt.SelectStmt != nil {
-				walk(nd.InsertStmt.SelectStmt)
-			}
-
-		case *pg_query.Node_UpdateStmt:
-			walk(&pg_query.Node{Node: &pg_query.Node_RangeVar{RangeVar: nd.UpdateStmt.Relation}})
-			if nd.UpdateStmt.FromClause != nil {
-				for _, from := range nd.UpdateStmt.FromClause {
-					walk(from)
-				}
-			}
-			if nd.UpdateStmt.WhereClause != nil {
-				walk(nd.UpdateStmt.WhereClause)
-			}
-
-		case *pg_query.Node_DeleteStmt:
-			walk(&pg_query.Node{Node: &pg_query.Node_RangeVar{RangeVar: nd.DeleteStmt.Relation}})
-			if nd.DeleteStmt.WhereClause != nil {
-				walk(nd.DeleteStmt.WhereClause)
-			}
-
-		case *pg_query.Node_JoinExpr:
-			walk(nd.JoinExpr.Larg)
-			walk(nd.JoinExpr.Rarg)
-			if nd.JoinExpr.Quals != nil {
-				walk(nd.JoinExpr.Quals)
-			}
-
-		case *pg_query.Node_SubLink:
-			if nd.SubLink.Subselect != nil {
-				walk(nd.SubLink.Subselect)
-			}
-
-		case *pg_query.Node_RangeSubselect:
-			if nd.RangeSubselect.Subquery != nil {
-				walk(nd.RangeSubselect.Subquery)
-			}
-
-		case *pg_query.Node_CommonTableExpr:
-			if nd.CommonTableExpr.Ctequery != nil {
-				walk(nd.CommonTableExpr.Ctequery)
-			}
-
-		case *pg_query.Node_FuncCall:
-			for _, arg := range nd.FuncCall.Args {
-				walk(arg)
-			}
-
-		case *pg_query.Node_AExpr:
-			walk(nd.AExpr.Lexpr)
-			walk(nd.AExpr.Rexpr)
-
-		case *pg_query.Node_BoolExpr:
-			for _, arg := range nd.BoolExpr.Args {
-				walk(arg)
-			}
-
-		case *pg_query.Node_ResTarget:
-			if nd.ResTarget.Val != nil {
-				walk(nd.ResTarget.Val)
-			}
-		}
-	}
-
-	walk(node)
-	return schemas
 }
 
 // executeWithRLSContext executes SQL statements with Row Level Security context

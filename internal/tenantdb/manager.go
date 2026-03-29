@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -38,6 +39,8 @@ type Manager struct {
 	adminPool      *pgxpool.Pool
 	router         *Router
 	dbURL          string
+	adminDBURL     string
+	fdwConfig      *FDWConfig
 	declarative    *DeclarativeService
 	declarativeCfg DeclarativeConfig
 }
@@ -64,6 +67,17 @@ func (m *Manager) SetDeclarativeService(svc *DeclarativeService) {
 // SetDeclarativeConfig sets the declarative schema configuration
 func (m *Manager) SetDeclarativeConfig(cfg DeclarativeConfig) {
 	m.declarativeCfg = cfg
+}
+
+// SetFDWConfig sets the FDW configuration for tenant databases
+func (m *Manager) SetFDWConfig(cfg FDWConfig) {
+	m.fdwConfig = &cfg
+}
+
+// SetAdminDBURL sets the admin database URL used for bootstrap operations
+// that require elevated privileges (e.g., CREATE EXTENSION).
+func (m *Manager) SetAdminDBURL(url string) {
+	m.adminDBURL = url
 }
 
 func (m *Manager) SetRouter(router *Router) {
@@ -115,7 +129,12 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 	log.Info().Str("tenant", req.Slug).Str("db", dbName).Msg("Created tenant database")
 
 	// Bootstrap tenant database (create schemas, roles, privileges)
-	tenantDBURL := fmt.Sprintf("%s%s", m.dbURL, dbName)
+	// Use admin URL if available (required for CREATE EXTENSION), otherwise app URL
+	bootstrapBaseURL := m.adminDBURL
+	if bootstrapBaseURL == "" {
+		bootstrapBaseURL = m.dbURL
+	}
+	tenantDBURL := replaceDBName(bootstrapBaseURL, dbName)
 	if err := bootstrap.RunBootstrapOnDB(ctx, tenantDBURL); err != nil {
 		log.Warn().Err(err).Str("tenant", req.Slug).Msg("Failed to bootstrap tenant database")
 		if statusErr := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusError); statusErr != nil {
@@ -124,6 +143,38 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 		return nil, fmt.Errorf("failed to bootstrap tenant database: %w", err)
 	}
 	log.Info().Str("tenant", req.Slug).Msg("Bootstrapped tenant database")
+
+	// Set up FDW so tenant can access auth.users from the main database.
+	// FDW requires elevated privileges, so use admin connection if available.
+	if m.fdwConfig != nil && m.adminDBURL != "" {
+		fdwURL := replaceDBName(m.adminDBURL, dbName)
+		fdwPool, fdwPoolErr := pgxpool.New(ctx, fdwURL)
+		if fdwPoolErr != nil {
+			log.Warn().Err(fdwPoolErr).Str("tenant", req.Slug).Msg("Failed to create admin pool for FDW setup")
+		} else {
+			defer fdwPool.Close()
+			if fdwErr := SetupFDW(ctx, fdwPool, *m.fdwConfig, nil); fdwErr != nil {
+				log.Warn().Err(fdwErr).Str("tenant", req.Slug).Msg("Failed to set up FDW for tenant database")
+			} else {
+				// Also create user mapping for the app user so queries via
+				// the router pool (app credentials) can use the foreign server.
+				if appUser := extractDBUser(m.dbURL); appUser != "" {
+					userMappingSQL := fmt.Sprintf(
+						`CREATE USER MAPPING IF NOT EXISTS FOR %s SERVER %s OPTIONS (user '%s'`,
+						quoteIdent(appUser), quoteIdent(fdwServerName), escapeSQLString(m.fdwConfig.User),
+					)
+					if m.fdwConfig.Password != "" {
+						userMappingSQL += fmt.Sprintf(`, password '%s'`, escapeSQLString(m.fdwConfig.Password))
+					}
+					userMappingSQL += ")"
+					if _, mapErr := fdwPool.Exec(ctx, userMappingSQL); mapErr != nil {
+						log.Warn().Err(mapErr).Str("tenant", req.Slug).Msg("Failed to create app user mapping for FDW")
+					}
+				}
+				log.Info().Str("tenant", req.Slug).Msg("Set up FDW for tenant database")
+			}
+		}
+	}
 
 	// Apply tenant-specific declarative schema if configured
 	if m.declarative != nil && m.declarativeCfg.OnCreate {
@@ -288,7 +339,7 @@ func (m *Manager) hasPendingMigrations(ctx context.Context, pool *pgxpool.Pool) 
 }
 
 func (m *Manager) runSystemMigrationsForDB(ctx context.Context, dbName string) error {
-	dbURL := fmt.Sprintf("%s%s", m.dbURL, dbName)
+	dbURL := replaceDBName(m.dbURL, dbName)
 
 	migrator, err := migrate.New("file:///migrations", dbURL)
 	if err != nil {
@@ -380,4 +431,24 @@ func (m *Manager) GetTenantSchemaStatus(ctx context.Context, tenantID string) (*
 	}
 
 	return m.declarative.GetTenantSchemaStatus(ctx, tenant)
+}
+
+// replaceDBName constructs a database URL for a specific database name
+// by parsing the base URL and replacing the path component.
+func replaceDBName(baseDBURL, dbName string) string {
+	u, err := url.Parse(baseDBURL)
+	if err != nil {
+		return baseDBURL + dbName // fallback
+	}
+	u.Path = "/" + dbName
+	return u.String()
+}
+
+// extractDBUser returns the username from a database URL, or empty string on error.
+func extractDBUser(dbURL string) string {
+	u, err := url.Parse(dbURL)
+	if err != nil {
+		return ""
+	}
+	return u.User.Username()
 }

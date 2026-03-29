@@ -15,9 +15,30 @@ import (
 
 var ErrTenantDBUnavailable = errors.New("tenant database unavailable")
 
+// TenantStore provides the storage methods the tenant DB middleware needs.
+// Defined at the consumer side per Go convention. *tenantdb.Storage satisfies this.
+type TenantStore interface {
+	GetTenant(ctx context.Context, id string) (*tenantdb.Tenant, error)
+	GetTenantBySlug(ctx context.Context, slug string) (*tenantdb.Tenant, error)
+	GetDefaultTenant(ctx context.Context) (*tenantdb.Tenant, error)
+	IsUserAssignedToTenant(ctx context.Context, userID, tenantID string) (bool, error)
+}
+
+// UserTenantLister provides tenant membership lookups.
+// *tenantdb.Storage satisfies this.
+type UserTenantLister interface {
+	GetTenantsForUser(ctx context.Context, userID string) ([]tenantdb.Tenant, error)
+}
+
+// Compile-time interface satisfaction checks
+var (
+	_ TenantStore      = (*tenantdb.Storage)(nil)
+	_ UserTenantLister = (*tenantdb.Storage)(nil)
+)
+
 type TenantDBConfig struct {
 	Router  *tenantdb.Router
-	Storage *tenantdb.Storage
+	Storage TenantStore
 }
 
 func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
@@ -43,25 +64,23 @@ func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
 			}
 		}
 
-		var pool *pgxpool.Pool
-		if tenantID != "" {
-			var err error
-			pool, err = cfg.Router.GetPool(tenantID)
-			if err != nil {
-				log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant pool")
-				return fiber.NewError(fiber.StatusInternalServerError, "tenant database unavailable")
-			}
-		}
-
 		c.Locals("tenant_id", tenantID)
 		c.Locals("tenant_source", tenantSource)
-		c.Locals("tenant_db", pool)
 
+		// Fetch tenant record and set DB context only for tenants with separate databases.
+		// For default tenants (UsesMainDatabase), tenant_db stays nil so handlers fall back
+		// to their default main pool — preserving backward compatibility.
 		if tenantID != "" && cfg.Storage != nil {
 			if tenant, err := cfg.Storage.GetTenant(c.Context(), tenantID); err == nil {
 				c.Locals("tenant_slug", tenant.Slug)
 				if !tenant.UsesMainDatabase() {
 					c.Locals("tenant_db_name", *tenant.DBName)
+					pool, err := cfg.Router.GetPool(tenantID)
+					if err != nil {
+						log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant pool")
+						return fiber.NewError(fiber.StatusInternalServerError, "tenant database unavailable")
+					}
+					c.Locals("tenant_db", pool)
 				}
 			}
 		}
@@ -77,14 +96,14 @@ func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
 			Str("tenant_source", tenantSource).
 			Str("user_id", userID).
 			Str("path", c.Path()).
-			Bool("uses_main_db", pool == nil).
+			Bool("uses_main_db", c.Locals("tenant_db") == nil).
 			Msg("TenantDBMiddleware: Set tenant context")
 
 		return c.Next()
 	}
 }
 
-func resolveTenantID(c fiber.Ctx, userID string, isInstanceAdmin bool, claims *auth.TokenClaims, storage *tenantdb.Storage) (string, string) {
+func resolveTenantID(c fiber.Ctx, userID string, isInstanceAdmin bool, claims *auth.TokenClaims, storage TenantStore) (string, string) {
 	if headerTenant := c.Get("X-FB-Tenant"); headerTenant != "" {
 		if storage != nil {
 			if tenant, err := storage.GetTenantBySlug(c.Context(), headerTenant); err == nil {
@@ -116,22 +135,22 @@ func GetTenantPool(c fiber.Ctx) *pgxpool.Pool {
 }
 
 // GetPoolForSchema returns the appropriate database pool based on the target schema.
-// Priority: branch pool > tenant pool (for public schema) > main pool.
+// Priority: branch pool > tenant pool > main pool.
 // This enables tenant-aware routing for REST, GraphQL, and other handlers.
+// Tenant pools use FDW for cross-database joins (e.g., auth.users), so all schemas
+// can be served from the tenant pool.
 func GetPoolForSchema(c fiber.Ctx, schema string, mainPool *pgxpool.Pool) *pgxpool.Pool {
 	// 1. Branch pool takes highest priority (for database branching feature)
 	if pool := GetBranchPool(c); pool != nil {
 		return pool
 	}
 
-	// 2. For public schema (user data), route to tenant pool when available
-	if schema == "public" {
-		if tenantPool := GetTenantPool(c); tenantPool != nil {
-			return tenantPool
-		}
+	// 2. Tenant pool routes all queries (FDW handles cross-DB joins)
+	if tenantPool := GetTenantPool(c); tenantPool != nil {
+		return tenantPool
 	}
 
-	// 3. Fall back to main pool for internal schemas or when no tenant pool exists
+	// 3. Fall back to main pool when no tenant pool exists
 	return mainPool
 }
 
@@ -188,7 +207,7 @@ func RequireTenantAdmin() fiber.Handler {
 	}
 }
 
-func GetUserManagedTenantIDs(ctx context.Context, storage *tenantdb.Storage, userID string) ([]string, error) {
+func GetUserManagedTenantIDs(ctx context.Context, storage UserTenantLister, userID string) ([]string, error) {
 	if storage == nil {
 		return nil, errors.New("storage not initialized")
 	}

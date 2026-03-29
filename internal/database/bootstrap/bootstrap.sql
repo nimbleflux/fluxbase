@@ -23,6 +23,9 @@ CREATE EXTENSION IF NOT EXISTS "btree_gin";    -- GIN indexes for btree-indexabl
 -- Vector similarity search (pgvector)
 CREATE EXTENSION IF NOT EXISTS "vector";       -- Vector embeddings for AI/ML
 
+-- Foreign data wrapper for cross-database joins (tenant → main DB)
+CREATE EXTENSION IF NOT EXISTS "postgres_fdw";
+
 -- ============================================================================
 -- SCHEMAS
 -- ============================================================================

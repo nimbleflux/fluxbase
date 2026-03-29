@@ -1,8 +1,12 @@
 package api
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -304,4 +308,92 @@ func TestFormatUUID(t *testing.T) {
 		result := formatUUID(uuid)
 		assert.Equal(t, "ffffffff-ffff-ffff-ffff-ffffffffffff", result)
 	})
+}
+
+func TestGetPoolForQuery_TenantPoolUsed(t *testing.T) {
+	handler := &SQLHandler{db: &pgxpool.Pool{}}
+	tenantPool := &pgxpool.Pool{}
+
+	app := fiber.New()
+	app.Get("/test", func(c fiber.Ctx) error {
+		c.Locals("tenant_db", tenantPool)
+		pool := handler.getPoolForQuery(c, "SELECT * FROM public.foo")
+		assert.Equal(t, tenantPool, pool, "should use tenant pool when set")
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+}
+
+func TestGetPoolForQuery_BranchPoolOverridesTenantPool(t *testing.T) {
+	handler := &SQLHandler{db: &pgxpool.Pool{}}
+	branchPool := &pgxpool.Pool{}
+	tenantPool := &pgxpool.Pool{}
+
+	app := fiber.New()
+	app.Get("/test", func(c fiber.Ctx) error {
+		c.Locals("branch_pool", branchPool)
+		c.Locals("tenant_db", tenantPool)
+		pool := handler.getPoolForQuery(c, "SELECT * FROM auth.users")
+		assert.Equal(t, branchPool, pool, "branch pool should override tenant pool")
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+}
+
+func TestGetPoolForQuery_NoContext_ReturnsMainDB(t *testing.T) {
+	mainPool := &pgxpool.Pool{}
+	handler := &SQLHandler{db: mainPool}
+
+	app := fiber.New()
+	app.Get("/test", func(c fiber.Ctx) error {
+		pool := handler.getPoolForQuery(c, "SELECT 1")
+		assert.Equal(t, mainPool, pool, "should use main pool when no tenant context")
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+}
+
+func TestGetPoolForQuery_TenantPoolForAllSchemas(t *testing.T) {
+	handler := &SQLHandler{db: &pgxpool.Pool{}}
+	tenantPool := &pgxpool.Pool{}
+
+	queries := []string{
+		"SELECT * FROM public.users",
+		"SELECT * FROM auth.users WHERE id = 1",
+		"SELECT * FROM storage.objects",
+		"INSERT INTO app.settings (key, value) VALUES ('k', 'v')",
+		"SELECT u.*, p.name FROM public.profiles p JOIN auth.users u ON u.id = p.user_id",
+	}
+
+	for _, query := range queries {
+		name := query
+		if len(name) > 50 {
+			name = name[:50]
+		}
+		t.Run(name, func(t *testing.T) {
+			app := fiber.New()
+			app.Get("/test", func(c fiber.Ctx) error {
+				c.Locals("tenant_db", tenantPool)
+				pool := handler.getPoolForQuery(c, query)
+				assert.Equal(t, tenantPool, pool)
+				return c.SendString("OK")
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			_, err := app.Test(req)
+			require.NoError(t, err)
+		})
+	}
 }
