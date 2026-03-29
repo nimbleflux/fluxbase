@@ -13,7 +13,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-var ErrPoolNotFound = errors.New("pool not found")
+var (
+	ErrPoolNotFound   = errors.New("pool not found")
+	ErrTenantDeleting = errors.New("tenant is being deleted")
+)
 
 type Router struct {
 	storage   *Storage
@@ -63,6 +66,10 @@ func (r *Router) GetPool(tenantID string) (*pgxpool.Pool, error) {
 	tenant, err := r.storage.GetTenant(context.Background(), tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tenant: %w", err)
+	}
+
+	if tenant.Status == TenantStatusDeleting {
+		return nil, ErrTenantDeleting
 	}
 
 	if tenant.UsesMainDatabase() {

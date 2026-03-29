@@ -31,6 +31,7 @@ type StorageQuerier interface {
 	UpdateTenantDBName(ctx context.Context, id string, dbName string) error
 	SoftDeleteTenant(ctx context.Context, id string) error
 	HardDeleteTenant(ctx context.Context, id string) error
+	CleanupTenantData(ctx context.Context, tenantID string) error
 }
 
 type Manager struct {
@@ -215,20 +216,23 @@ func (m *Manager) DeleteTenantDatabase(ctx context.Context, tenantID string) err
 		return fmt.Errorf("failed to soft delete tenant: %w", err)
 	}
 
+	// Remove connection pool from cache so no new connections are created.
 	if m.router != nil {
 		m.router.RemovePool(tenantID)
 	}
 
-	_, err = m.adminPool.Exec(ctx, fmt.Sprintf(`
-		SELECT pg_terminate_backend(pid)
-		FROM pg_stat_activity
-		WHERE datname = '%s' AND pid <> pg_backend_pid()
-	`, *tenant.DBName))
-	if err != nil {
-		log.Warn().Err(err).Str("db", *tenant.DBName).Msg("Failed to terminate connections")
+	// Cleanup tenant-related data from the main database.
+	// Must happen before HardDeleteTenant because branching.branches has
+	// RESTRICT FK and would block the tenant row deletion.
+	if err := m.storage.CleanupTenantData(ctx, tenantID); err != nil {
+		if statusErr := m.storage.UpdateTenantStatus(ctx, tenantID, TenantStatusError); statusErr != nil {
+			log.Warn().Err(statusErr).Str("tenant_id", tenantID).Msg("Failed to update tenant status to error")
+		}
+		return fmt.Errorf("failed to cleanup tenant data: %w", err)
 	}
 
-	_, err = m.adminPool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", *tenant.DBName))
+	// Atomically terminate connections and drop the database (PostgreSQL 13+).
+	_, err = m.adminPool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", *tenant.DBName))
 	if err != nil {
 		if statusErr := m.storage.UpdateTenantStatus(ctx, tenantID, TenantStatusError); statusErr != nil {
 			log.Warn().Err(statusErr).Str("tenant_id", tenantID).Msg("Failed to update tenant status to error")

@@ -502,3 +502,44 @@ func (s *Storage) CountTenants(ctx context.Context) (int, error) {
 
 	return count, nil
 }
+
+// CleanupTenantData deletes tenant-related data from the main database.
+// This must be called before HardDeleteTenant because branching tables have
+// RESTRICT FK constraints that would block tenant row deletion.
+func (s *Storage) CleanupTenantData(ctx context.Context, tenantID string) error {
+	// Phase 1: Branching tables (RESTRICT FK — must delete before tenant row).
+	// Order matters: delete child tables before branches.
+	branchingTables := []string{
+		"branching.seed_execution_log",
+		"branching.migration_history",
+		"branching.branch_access",
+		"branching.activity_log",
+		"branching.github_config",
+		"branching.branches",
+	}
+	for _, table := range branchingTables {
+		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)
+		if err != nil {
+			return fmt.Errorf("failed to cleanup %s for tenant %s: %w", table, tenantID, err)
+		}
+	}
+
+	// Phase 2: Auth tables (no FK to tenants — best-effort cleanup).
+	// For tenants with separate databases, these users exist only for that tenant.
+	authTables := []string{
+		"auth.webhooks",
+		"auth.client_keys",
+		"auth.users",
+	}
+	for _, table := range authTables {
+		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)
+		if err != nil {
+			// Non-fatal: these tables may not have tenant_id or may have FK
+			// dependencies we can't resolve here.
+			log.Warn().Err(err).Str("table", table).Str("tenant_id", tenantID).
+				Msg("Failed to cleanup auth table for tenant (non-fatal)")
+		}
+	}
+
+	return nil
+}
