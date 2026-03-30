@@ -47,12 +47,6 @@ const useFormField = () => {
   const fieldState = getFieldState(fieldContext.name, formState);
 
   // Debug logging
-  console.log("[useFormField] Called:", {
-    hasFieldContext: !!fieldContext,
-    hasItemContext: !!itemContext,
-    itemId: itemContext?.id,
-    fieldName: fieldContext?.name,
-  });
 
   if (!fieldContext) {
     throw new Error("useFormField should be used within <FormField>");

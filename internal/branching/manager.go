@@ -92,7 +92,7 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 	}
 
 	// Check if slug already exists for this tenant
-	existing, err := m.storage.GetBranchBySlug(ctx, slug)
+	existing, err := m.storage.GetBranchBySlug(ctx, slug, tenantID)
 	if err != nil && !errors.Is(err, ErrBranchNotFound) {
 		return nil, fmt.Errorf("failed to check existing branch: %w", err)
 	}
@@ -242,8 +242,8 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 func (m *Manager) DeleteBranch(ctx context.Context, branchID uuid.UUID, deletedBy *uuid.UUID) error {
 	startTime := time.Now()
 
-	// Get the branch
-	branch, err := m.storage.GetBranch(ctx, branchID)
+	// Get the branch (no tenant filter — manager operates across tenants)
+	branch, err := m.storage.GetBranch(ctx, branchID, nil)
 	if err != nil {
 		return err
 	}
@@ -286,8 +286,8 @@ func (m *Manager) DeleteBranch(ctx context.Context, branchID uuid.UUID, deletedB
 		return fmt.Errorf("failed to drop database: %w", err)
 	}
 
-	// Mark as deleted
-	if err := m.storage.DeleteBranch(ctx, branchID); err != nil {
+	// Mark as deleted (no tenant filter — manager is the authority)
+	if err := m.storage.DeleteBranch(ctx, branchID, nil); err != nil {
 		return fmt.Errorf("failed to delete branch record: %w", err)
 	}
 
@@ -315,8 +315,8 @@ func (m *Manager) DeleteBranch(ctx context.Context, branchID uuid.UUID, deletedB
 func (m *Manager) ResetBranch(ctx context.Context, branchID uuid.UUID, resetBy *uuid.UUID) error {
 	startTime := time.Now()
 
-	// Get the branch
-	branch, err := m.storage.GetBranch(ctx, branchID)
+	// Get the branch (no tenant filter — manager operates across tenants)
+	branch, err := m.storage.GetBranch(ctx, branchID, nil)
 	if err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func (m *Manager) ResetBranch(ctx context.Context, branchID uuid.UUID, resetBy *
 	}
 
 	// Get parent branch
-	parent, err := m.storage.GetBranch(ctx, *branch.ParentBranchID)
+	parent, err := m.storage.GetBranch(ctx, *branch.ParentBranchID, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get parent branch: %w", err)
 	}
@@ -494,7 +494,7 @@ func (m *Manager) createDatabaseSchemaOnly(ctx context.Context, branch *Branch, 
 	}
 
 	// Get parent branch
-	parent, err := m.storage.GetBranch(ctx, *parentBranchID)
+	parent, err := m.storage.GetBranch(ctx, *parentBranchID, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get parent branch: %w", err)
 	}
@@ -543,7 +543,7 @@ func (m *Manager) createDatabaseFullClone(ctx context.Context, branch *Branch, p
 	}
 
 	// Get parent branch
-	parent, err := m.storage.GetBranch(ctx, *parentBranchID)
+	parent, err := m.storage.GetBranch(ctx, *parentBranchID, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get parent branch: %w", err)
 	}
@@ -796,8 +796,8 @@ func (m *Manager) CreateBranchFromGitHubPR(ctx context.Context, repo string, prN
 	name := fmt.Sprintf("PR #%d", prNumber)
 	slug := GeneratePRSlug(prNumber)
 
-	// Check if branch already exists
-	existing, err := m.storage.GetBranchBySlug(ctx, slug)
+	// Check if branch already exists (no tenant filter for GitHub PR branches)
+	existing, err := m.storage.GetBranchBySlug(ctx, slug, nil)
 	if err != nil && !errors.Is(err, ErrBranchNotFound) {
 		return nil, fmt.Errorf("failed to check existing branch: %w", err)
 	}

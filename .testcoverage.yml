@@ -50,7 +50,7 @@ override:
   - path: ^internal/jobs/
     threshold: 15
   - path: ^internal/branching/
-    threshold: 10
+    threshold: 25
   - path: ^internal/database/
     threshold: 1
   - path: ^internal/settings/

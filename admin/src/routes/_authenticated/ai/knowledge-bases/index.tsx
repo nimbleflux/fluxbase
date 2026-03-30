@@ -13,13 +13,13 @@ export const Route = createFileRoute("/_authenticated/ai/knowledge-bases/")({
 });
 
 function KnowledgeBasesPage() {
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">My Knowledge Bases</h1>
-        <Button onClick={() => setShowCreateDialog(true)}>
+        <Button onClick={() => setIsCreateDialogOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Create Knowledge Base
         </Button>
@@ -54,8 +54,10 @@ function KnowledgeBasesPage() {
         </TabsContent>
       </Tabs>
 
-      {showCreateDialog && (
-        <CreateKnowledgeBaseDialog onClose={() => setShowCreateDialog(false)} />
+      {isCreateDialogOpen && (
+        <CreateKnowledgeBaseDialog
+          onClose={() => setIsCreateDialogOpen(false)}
+        />
       )}
     </div>
   );

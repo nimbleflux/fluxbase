@@ -28,6 +28,25 @@ func NewBranchHandler(manager *branching.Manager, router *branching.Router, cfg 
 	}
 }
 
+// getTenantFilter returns a tenant ID filter for the current request.
+// Returns nil for instance admins (no filter) or when no tenant context is available.
+func getTenantFilter(c fiber.Ctx) *uuid.UUID {
+	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
+	if isInstanceAdmin {
+		return nil
+	}
+	authType, _ := c.Locals("auth_type").(string)
+	if authType == "service_key" {
+		return nil
+	}
+	if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
+		if id, err := uuid.Parse(tid); err == nil {
+			return &id
+		}
+	}
+	return nil
+}
+
 // CreateBranchRequest represents the request body for creating a branch
 type CreateBranchRequest struct {
 	Name           string                  `json:"name" validate:"required,min=1,max=100"`
@@ -98,6 +117,11 @@ func (h *BranchHandler) CreateBranch(c fiber.Ctx) error {
 		}
 		t := time.Now().Add(duration)
 		expiresAt = &t
+	}
+
+	// Normalize DataCloneModeFull alias ("full" -> "full_clone")
+	if req.DataCloneMode == branching.DataCloneModeFull {
+		req.DataCloneMode = branching.DataCloneModeFullClone
 	}
 
 	// Create branch request
@@ -245,12 +269,13 @@ func (h *BranchHandler) GetBranch(c fiber.Ctx) error {
 	// Try to parse as UUID first
 	var branch *branching.Branch
 	var err error
+	tenantFilter := getTenantFilter(c)
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
-		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id)
+		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id, tenantFilter)
 	} else {
 		// Try as slug
-		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam)
+		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam, tenantFilter)
 	}
 
 	if err != nil {
@@ -286,13 +311,14 @@ func (h *BranchHandler) DeleteBranch(c fiber.Ctx) error {
 	var branchID uuid.UUID
 	var branch *branching.Branch
 	var err error
+	tenantFilter := getTenantFilter(c)
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
 		branchID = id
-		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id)
+		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id, tenantFilter)
 	} else {
 		// Try as slug
-		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam)
+		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam, tenantFilter)
 		if err == nil {
 			branchID = branch.ID
 		}
@@ -383,13 +409,14 @@ func (h *BranchHandler) ResetBranch(c fiber.Ctx) error {
 	var branchID uuid.UUID
 	var branch *branching.Branch
 	var err error
+	tenantFilter := getTenantFilter(c)
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
 		branchID = id
-		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id)
+		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id, tenantFilter)
 	} else {
 		// Try as slug
-		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam)
+		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam, tenantFilter)
 		if err == nil {
 			branchID = branch.ID
 		}
@@ -469,7 +496,7 @@ func (h *BranchHandler) ResetBranch(c fiber.Ctx) error {
 	}
 
 	// Get updated branch
-	updatedBranch, _ := h.manager.GetStorage().GetBranch(c.RequestCtx(), branchID)
+	updatedBranch, _ := h.manager.GetStorage().GetBranch(c.RequestCtx(), branchID, nil)
 	if updatedBranch != nil {
 		return c.JSON(updatedBranch)
 	}
@@ -496,7 +523,7 @@ func (h *BranchHandler) GetBranchActivity(c fiber.Ctx) error {
 		branchID = id
 	} else {
 		// Try as slug
-		branch, err := h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam)
+		branch, err := h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam, getTenantFilter(c))
 		if err != nil {
 			if errors.Is(err, branching.ErrBranchNotFound) {
 				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -604,7 +631,7 @@ func (h *BranchHandler) SetActiveBranch(c fiber.Ctx) error {
 
 	// Verify the branch exists (unless it's "main")
 	if req.Branch != "main" {
-		_, err := h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), req.Branch)
+		_, err := h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), req.Branch, nil)
 		if err != nil {
 			if errors.Is(err, branching.ErrBranchNotFound) {
 				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -824,9 +851,9 @@ func (h *BranchHandler) ListBranchAccess(c fiber.Ctx) error {
 	var err error
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
-		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id)
+		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id, getTenantFilter(c))
 	} else {
-		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam)
+		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam, getTenantFilter(c))
 	}
 
 	if err != nil {
@@ -907,9 +934,9 @@ func (h *BranchHandler) GrantBranchAccess(c fiber.Ctx) error {
 	var err error
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
-		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id)
+		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id, getTenantFilter(c))
 	} else {
-		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam)
+		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam, getTenantFilter(c))
 	}
 
 	if err != nil {
@@ -1040,9 +1067,9 @@ func (h *BranchHandler) RevokeBranchAccess(c fiber.Ctx) error {
 	var err error
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
-		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id)
+		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id, getTenantFilter(c))
 	} else {
-		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam)
+		branch, err = h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam, getTenantFilter(c))
 	}
 
 	if err != nil {

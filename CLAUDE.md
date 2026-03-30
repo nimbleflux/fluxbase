@@ -40,7 +40,7 @@ test/e2e/                # End-to-end tests
 | `logutil/`       | Log utilities (sanitization, formatting)                                                                    |
 | `logging/`       | Structured logging with batching and retention policies                                                     |
 | `mcp/`           | Model Context Protocol server for AI assistant integration                                                  |
-| `middleware/`    | Auth, CORS, rate limiting, logging, branch context middlewares                                              |
+| `middleware/`    | Auth, CORS, rate limiting, logging, branch and tenant context middlewares                                   |
 | `migrations/`    | Database migration management                                                                               |
 | `observability/` | Prometheus metrics and OpenTelemetry tracing                                                                |
 | `pubsub/`        | Distributed pub/sub (local, PostgreSQL, Redis backends)                                                     |
@@ -53,6 +53,7 @@ test/e2e/                # End-to-end tests
 | `secrets/`       | Secret management for functions/jobs                                                                        |
 | `settings/`      | Application settings and custom configuration                                                               |
 | `storage/`       | File storage abstraction (local filesystem or S3/MinIO)                                                     |
+| `tenantdb/`      | Tenant database routing, FDW connections, separate tenant databases                                         |
 | `testcontext/`   | Test context utilities for E2E tests                                                                        |
 | `testutil/`      | Test utilities and helpers                                                                                  |
 | `webhook/`       | Webhook system for database events (INSERT, UPDATE, DELETE)                                                 |
@@ -165,7 +166,7 @@ test/e2e/                # End-to-end tests
 **Multi-Tenancy:**
 
 - `internal/api/tenant_handler.go` - Tenant CRUD HTTP handlers
-- `internal/api/service_key_handler.go` - Service key management API
+- `internal/api/servicekey_handler.go` - Service key management API
 - `internal/middleware/tenant.go` - Tenant context extraction middleware
 - `internal/database/schema/schemas/platform.sql` - Platform schema with tenants table (declarative)
 

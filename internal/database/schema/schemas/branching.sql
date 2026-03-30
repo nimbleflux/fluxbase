@@ -34,9 +34,9 @@ CREATE TABLE IF NOT EXISTS branches (
     CONSTRAINT branches_slug_tenant_unique UNIQUE (slug, tenant_id),
     CONSTRAINT branches_parent_branch_id_fkey FOREIGN KEY (parent_branch_id) REFERENCES branches (id),
     CONSTRAINT branches_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES platform.tenants (id),
-    CONSTRAINT branches_data_clone_mode_check CHECK (data_clone_mode IN ('schema_only'::text, 'full_clone'::text, 'seed_data'::text)),
+    CONSTRAINT branches_data_clone_mode_check CHECK (data_clone_mode IN ('schema_only'::text, 'full_clone'::text, 'seed_data'::text, 'full'::text)),
     CONSTRAINT branches_status_check CHECK (status IN ('creating'::text, 'ready'::text, 'migrating'::text, 'error'::text, 'deleting'::text, 'deleted'::text)),
-    CONSTRAINT branches_type_check CHECK (type IN ('main'::text, 'preview'::text, 'persistent'::text))
+    CONSTRAINT branches_type_check CHECK (type IN ('main'::text, 'preview'::text, 'production'::text, 'persistent'::text))
 );
 
 COMMENT ON COLUMN branches.tenant_id IS 'Tenant this branch belongs to. NULL = instance-level branch (backward compatibility)';

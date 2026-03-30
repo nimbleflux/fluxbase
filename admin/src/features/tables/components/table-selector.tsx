@@ -74,9 +74,9 @@ export function TableSelector({
 }: TableSelectorProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showCreateSchema, setShowCreateSchema] = useState(false);
+  const [isCreateSchemaOpen, setIsCreateSchemaOpen] = useState(false);
   const [newSchemaName, setNewSchemaName] = useState("");
-  const [showCreateTable, setShowCreateTable] = useState(false);
+  const [isCreateTableOpen, setIsCreateTableOpen] = useState(false);
   const [newTableName, setNewTableName] = useState("");
   const [newTableSchema, setNewTableSchema] = useState(selectedSchema);
   const [columns, setColumns] = useState<
@@ -98,18 +98,19 @@ export function TableSelector({
   ]);
 
   // Edit table state
-  const [showEditTable, setShowEditTable] = useState(false);
+  const [isEditTableOpen, setIsEditTableOpen] = useState(false);
   const [editingTable, setEditingTable] = useState<TableInfo | null>(null);
   const [newColumnName, setNewColumnName] = useState("");
   const [newColumnType, setNewColumnType] = useState("text");
   const [newColumnNullable, setNewColumnNullable] = useState(true);
   const [newColumnDefault, setNewColumnDefault] = useState("");
   const [editTableName, setEditTableName] = useState("");
-  const [showDeleteTableConfirm, setShowDeleteTableConfirm] = useState(false);
+  const [isDeleteTableConfirmOpen, setIsDeleteTableConfirmOpen] =
+    useState(false);
   const [deletingTableFull, setDeletingTableFull] = useState<string | null>(
     null,
   );
-  const [showDropColumnConfirm, setShowDropColumnConfirm] = useState(false);
+  const [isDropColumnConfirmOpen, setIsDropColumnConfirmOpen] = useState(false);
   const [droppingColumn, setDroppingColumn] = useState<{
     schema: string;
     table: string;
@@ -117,7 +118,7 @@ export function TableSelector({
   } | null>(null);
 
   // SQL Import state
-  const [showImportSQL, setShowImportSQL] = useState(false);
+  const [isImportSQLOpen, setIsImportSQLOpen] = useState(false);
   const [_, setSqlFile] = useState<File | null>(null);
   const [sqlContent, setSqlContent] = useState("");
   const [isImporting, setIsImporting] = useState(false);
@@ -140,7 +141,7 @@ export function TableSelector({
     onSuccess: (data) => {
       toast.success(data.message);
       queryClient.invalidateQueries({ queryKey: ["schemas"] });
-      setShowCreateSchema(false);
+      setIsCreateSchemaOpen(false);
       setNewSchemaName("");
       onSchemaChange(data.schema);
     },
@@ -171,7 +172,7 @@ export function TableSelector({
       toast.success(data.message);
       // Invalidate queries for the affected schema
       queryClient.invalidateQueries({ queryKey: ["tables", data.schema] });
-      setShowCreateTable(false);
+      setIsCreateTableOpen(false);
       setNewTableName("");
       setColumns([
         {
@@ -380,7 +381,7 @@ export function TableSelector({
           <Button
             variant="outline"
             size="icon"
-            onClick={() => setShowCreateSchema(true)}
+            onClick={() => setIsCreateSchemaOpen(true)}
             title="Create Schema"
           >
             <Plus className="h-4 w-4" />
@@ -394,7 +395,7 @@ export function TableSelector({
             className="mb-2 w-full"
             onClick={() => {
               setNewTableSchema(selectedSchema);
-              setShowCreateTable(true);
+              setIsCreateTableOpen(true);
             }}
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -454,7 +455,7 @@ export function TableSelector({
                               if (tableInfo) {
                                 setEditingTable(tableInfo);
                                 setEditTableName(tableInfo.name);
-                                setShowEditTable(true);
+                                setIsEditTableOpen(true);
                               }
                             }}
                           >
@@ -480,7 +481,7 @@ export function TableSelector({
                             onClick={(e) => {
                               e.stopPropagation();
                               setDeletingTableFull(full);
-                              setShowDeleteTableConfirm(true);
+                              setIsDeleteTableConfirmOpen(true);
                             }}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -498,7 +499,7 @@ export function TableSelector({
       </ScrollArea>
 
       {/* Create Schema Dialog */}
-      <Dialog open={showCreateSchema} onOpenChange={setShowCreateSchema}>
+      <Dialog open={isCreateSchemaOpen} onOpenChange={setIsCreateSchemaOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Schema</DialogTitle>
@@ -526,7 +527,7 @@ export function TableSelector({
             <Button
               variant="outline"
               onClick={() => {
-                setShowCreateSchema(false);
+                setIsCreateSchemaOpen(false);
                 setNewSchemaName("");
               }}
             >
@@ -549,7 +550,7 @@ export function TableSelector({
       </Dialog>
 
       {/* Create Table Sheet */}
-      <Sheet open={showCreateTable} onOpenChange={setShowCreateTable}>
+      <Sheet open={isCreateTableOpen} onOpenChange={setIsCreateTableOpen}>
         <SheetContent className="w-full overflow-y-auto px-8 sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle>Create New Table</SheetTitle>
@@ -799,7 +800,7 @@ export function TableSelector({
             <Button
               variant="outline"
               onClick={() => {
-                setShowCreateTable(false);
+                setIsCreateTableOpen(false);
                 setNewTableName("");
                 setColumns([
                   {
@@ -846,7 +847,7 @@ export function TableSelector({
       </Sheet>
 
       {/* Edit Table Sheet */}
-      <Sheet open={showEditTable} onOpenChange={setShowEditTable}>
+      <Sheet open={isEditTableOpen} onOpenChange={setIsEditTableOpen}>
         <SheetContent className="flex w-full flex-col sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>Edit Table</SheetTitle>
@@ -930,7 +931,7 @@ export function TableSelector({
                             table: editingTable.name,
                             column: col.name,
                           });
-                          setShowDropColumnConfirm(true);
+                          setIsDropColumnConfirmOpen(true);
                         }
                       }}
                       title={
@@ -1041,7 +1042,7 @@ export function TableSelector({
             <Button
               variant="outline"
               onClick={() => {
-                setShowEditTable(false);
+                setIsEditTableOpen(false);
                 setEditingTable(null);
                 setNewColumnName("");
                 setNewColumnType("text");
@@ -1059,8 +1060,8 @@ export function TableSelector({
 
       {/* Delete Table Confirmation */}
       <ConfirmDialog
-        open={showDeleteTableConfirm}
-        onOpenChange={setShowDeleteTableConfirm}
+        open={isDeleteTableConfirmOpen}
+        onOpenChange={setIsDeleteTableConfirmOpen}
         title="Delete Table"
         desc={`Are you sure you want to delete table "${deletingTableFull}"? This action cannot be undone.`}
         confirmText="Delete"
@@ -1073,7 +1074,7 @@ export function TableSelector({
               { schema, table },
               {
                 onSuccess: () => {
-                  setShowDeleteTableConfirm(false);
+                  setIsDeleteTableConfirmOpen(false);
                   setDeletingTableFull(null);
                 },
               },
@@ -1084,8 +1085,8 @@ export function TableSelector({
 
       {/* Drop Column Confirmation */}
       <ConfirmDialog
-        open={showDropColumnConfirm}
-        onOpenChange={setShowDropColumnConfirm}
+        open={isDropColumnConfirmOpen}
+        onOpenChange={setIsDropColumnConfirmOpen}
         title="Drop Column"
         desc={`Are you sure you want to drop column "${droppingColumn?.column}"? This will delete all data in this column.`}
         confirmText="Drop Column"
@@ -1095,7 +1096,7 @@ export function TableSelector({
           if (droppingColumn) {
             dropColumnMutation.mutate(droppingColumn, {
               onSuccess: () => {
-                setShowDropColumnConfirm(false);
+                setIsDropColumnConfirmOpen(false);
                 setDroppingColumn(null);
               },
             });
@@ -1104,7 +1105,7 @@ export function TableSelector({
       />
 
       {/* SQL Import Dialog */}
-      <Dialog open={showImportSQL} onOpenChange={setShowImportSQL}>
+      <Dialog open={isImportSQLOpen} onOpenChange={setIsImportSQLOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Import SQL</DialogTitle>
@@ -1150,7 +1151,7 @@ export function TableSelector({
             <Button
               variant="outline"
               onClick={() => {
-                setShowImportSQL(false);
+                setIsImportSQLOpen(false);
                 setSqlFile(null);
                 setSqlContent("");
               }}
@@ -1182,7 +1183,7 @@ export function TableSelector({
                     );
                   }
 
-                  setShowImportSQL(false);
+                  setIsImportSQLOpen(false);
                   setSqlFile(null);
                   setSqlContent("");
 

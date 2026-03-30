@@ -41,7 +41,7 @@ interface OverridableResponse {
 
 function InstanceSettingsPage() {
   const queryClient = useQueryClient();
-  const [showOverridableDialog, setShowOverridableDialog] = useState(false);
+  const [isOverridableDialogOpen, setIsOverridableDialogOpen] = useState(false);
   const [rateLimitValue, setRateLimitValue] = useState(100);
 
   // Fetch instance settings
@@ -92,7 +92,7 @@ function InstanceSettingsPage() {
         queryKey: ["instance-settings", "overridable"],
       });
       toast.success("Overridable settings updated");
-      setShowOverridableDialog(false);
+      setIsOverridableDialogOpen(false);
     },
     onError: (error: Error) => {
       toast.error(`Failed to update overridable settings: ${error.message}`);
@@ -140,7 +140,7 @@ function InstanceSettingsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowOverridableDialog(true)}
+            onClick={() => setIsOverridableDialogOpen(true)}
           >
             <Shield className="h-4 w-4 mr-2" />
             Manage Tenant Overrides
@@ -273,8 +273,8 @@ function InstanceSettingsPage() {
 
       {/* Overridable settings dialog */}
       <Dialog
-        open={showOverridableDialog}
-        onOpenChange={setShowOverridableDialog}
+        open={isOverridableDialogOpen}
+        onOpenChange={setIsOverridableDialogOpen}
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>Manage Tenant-Overridable Settings</DialogHeader>
@@ -349,7 +349,7 @@ function InstanceSettingsPage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setShowOverridableDialog(false)}
+              onClick={() => setIsOverridableDialogOpen(false)}
             >
               Done
             </Button>

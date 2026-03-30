@@ -713,6 +713,18 @@ FLUXBASE_TENANTS_DECLARATIVE_ON_STARTUP=false
 FLUXBASE_TENANTS_DECLARATIVE_ALLOW_DESTRUCTIVE=false
 ```
 
+## Tenant-Scoped Branching
+
+When database branching is enabled alongside multi-tenancy, branches can be scoped to individual tenants:
+
+- Each branch record stores a `tenant_id` linking it to a tenant in `platform.tenants`
+- Tenant-scoped branches get their own PostgreSQL database with a naming pattern of `{prefix}{tenant_slug}_{branch_slug}`
+- The `max_branches_per_tenant` config option (default: 10) controls how many branches each tenant can create, independent of the global `max_total_branches` limit
+- Deleting a tenant automatically cleans up all associated branches and their databases
+- Connection pool routing priority is: branch pool > tenant pool > main pool, meaning a branch request always routes to the branch database when present
+
+This allows each tenant to have isolated development and preview environments without affecting other tenants.
+
 ## Troubleshooting
 
 ### Empty Results with Tenant Key

@@ -26,18 +26,34 @@ curl -X POST http://localhost:8080/api/v1/admin/branches \
   }'
 ```
 
+**Create a tenant-scoped branch:**
+
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/branches \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-FB-Tenant: acme-corp" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "feature-login",
+    "data_clone_mode": "schema_only",
+    "type": "preview",
+    "expires_in": "24h"
+  }'
+```
+
 **Request Body:**
 
-| Field              | Type   | Required | Description                                 |
-| ------------------ | ------ | -------- | ------------------------------------------- |
-| `name`             | string | Yes      | Branch name (1-100 chars)                   |
-| `parent_branch_id` | uuid   | No       | Parent branch ID (defaults to main)         |
-| `data_clone_mode`  | string | No       | `schema_only`, `full_clone`, or `seed_data` |
-| `type`             | string | No       | `preview` or `persistent`                   |
-| `expires_in`       | string | No       | Duration like `24h`, `7d`                   |
-| `github_pr_number` | int    | No       | Associated GitHub PR number                 |
-| `github_pr_url`    | string | No       | GitHub PR URL                               |
-| `github_repo`      | string | No       | GitHub repository (owner/repo)              |
+| Field              | Type   | Required | Description                                                   |
+| ------------------ | ------ | -------- | ------------------------------------------------------------- |
+| `name`             | string | Yes      | Branch name (1-100 chars)                                     |
+| `parent_branch_id` | uuid   | No       | Parent branch ID (defaults to main)                           |
+| `data_clone_mode`  | string | No       | `schema_only`, `full_clone`, or `seed_data`                   |
+| `type`             | string | No       | `preview` or `persistent`                                     |
+| `expires_in`       | string | No       | Duration like `24h`, `7d`                                     |
+| `tenant_id`        | uuid   | No       | Tenant to scope the branch to (auto-filled from auth context) |
+| `github_pr_number` | int    | No       | Associated GitHub PR number                                   |
+| `github_pr_url`    | string | No       | GitHub PR URL                                                 |
+| `github_repo`      | string | No       | GitHub repository (owner/repo)                                |
 
 **Response:** `201 Created`
 
@@ -66,13 +82,14 @@ curl http://localhost:8080/api/v1/admin/branches \
 
 **Query Parameters:**
 
-| Param        | Type   | Description              |
-| ------------ | ------ | ------------------------ |
-| `status`     | string | Filter by status         |
-| `type`       | string | Filter by type           |
-| `created_by` | uuid   | Filter by creator        |
-| `limit`      | int    | Max results (default 50) |
-| `offset`     | int    | Pagination offset        |
+| Param        | Type   | Description                                     |
+| ------------ | ------ | ----------------------------------------------- |
+| `status`     | string | Filter by status                                |
+| `type`       | string | Filter by type                                  |
+| `created_by` | uuid   | Filter by creator                               |
+| `tenant_id`  | uuid   | Filter by tenant (auto-filtered for non-admins) |
+| `limit`      | int    | Max results (default 50)                        |
+| `offset`     | int    | Pagination offset                               |
 
 **Response:** `200 OK`
 

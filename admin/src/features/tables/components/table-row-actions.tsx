@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { type Row } from '@tanstack/react-table'
-import { MoreHorizontal, Pencil, Trash } from 'lucide-react'
+import { useState } from "react";
+import { type Row } from "@tanstack/react-table";
+import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,20 +10,20 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+} from "@/components/ui/dropdown-menu";
 
 interface TableRowActionsProps<TData> {
-  row: Row<TData>
-  onEdit: (row: TData) => void
-  onDelete: (row: TData) => void
+  row: Row<TData>;
+  onEdit: (row: TData) => void;
+  onDelete: (row: TData) => void;
 }
 
 export function TableRowActions<TData extends Record<string, unknown>>({
@@ -31,37 +31,40 @@ export function TableRowActions<TData extends Record<string, unknown>>({
   onEdit,
   onDelete,
 }: TableRowActionsProps<TData>) {
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
-            variant='ghost'
-            className='data-[state=open]:bg-muted flex size-8 p-0'
+            variant="ghost"
+            className="data-[state=open]:bg-muted flex size-8 p-0"
           >
-            <MoreHorizontal className='size-4' />
-            <span className='sr-only'>Open menu</span>
+            <MoreHorizontal className="size-4" />
+            <span className="sr-only">Open menu</span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align='end' className='w-[160px]'>
+        <DropdownMenuContent align="end" className="w-[160px]">
           <DropdownMenuItem onClick={() => onEdit(row.original)}>
-            <Pencil className='mr-2 size-4' />
+            <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => setShowDeleteDialog(true)}
-            className='text-red-600'
+            onClick={() => setIsDeleteDialogOpen(true)}
+            className="text-red-600"
           >
-            <Trash className='mr-2 size-4' />
+            <Trash className="mr-2 size-4" />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -74,10 +77,10 @@ export function TableRowActions<TData extends Record<string, unknown>>({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                onDelete(row.original)
-                setShowDeleteDialog(false)
+                onDelete(row.original);
+                setIsDeleteDialogOpen(false);
               }}
-              className='bg-red-600 hover:bg-red-700'
+              className="bg-red-600 hover:bg-red-700"
             >
               Delete
             </AlertDialogAction>
@@ -85,5 +88,5 @@ export function TableRowActions<TData extends Record<string, unknown>>({
         </AlertDialogContent>
       </AlertDialog>
     </>
-  )
+  );
 }

@@ -134,8 +134,8 @@ func (r *Router) createPoolForBranch(ctx context.Context, slug string) (*pgxpool
 		}
 	}
 
-	// Get branch from storage
-	branch, err := r.storage.GetBranchBySlug(ctx, slug)
+	// Get branch from storage (no tenant filter — router resolves by slug globally)
+	branch, err := r.storage.GetBranchBySlug(ctx, slug, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -3,16 +3,7 @@ import z from "zod";
 import { formatDistanceToNow } from "date-fns";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
-import {
-  Webhook,
-  Plus,
-  Trash2,
-  Send,
-  Check,
-  X,
-  Search,
-  Clock,
-} from "lucide-react";
+import { Webhook, Plus, Send, Check, X, Search, Clock } from "lucide-react";
 import { toast } from "sonner";
 import {
   webhooksApi,
@@ -21,17 +12,6 @@ import {
   type WebhookType,
   type EventConfig,
 } from "@/lib/api";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,11 +50,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 const webhooksSearchSchema = z.object({
   tab: z.string().optional().catch("webhooks"),
@@ -94,9 +69,7 @@ function WebhooksPage() {
   const navigate = route.useNavigate();
   const queryClient = useQueryClient();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [selectedWebhook, setSelectedWebhook] = useState<WebhookType | null>(
-    null,
-  );
+  const [selectedWebhook] = useState<WebhookType | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Form state
@@ -148,47 +121,6 @@ function WebhooksPage() {
     },
     onError: () => {
       toast.error("Failed to create webhook");
-    },
-  });
-
-  // Delete webhook
-  const deleteMutation = useMutation({
-    mutationFn: webhooksApi.delete,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["webhooks"] });
-      toast.success("Webhook deleted successfully");
-    },
-    onError: () => {
-      toast.error("Failed to delete webhook");
-    },
-  });
-
-  // Test webhook
-  const testMutation = useMutation({
-    mutationFn: webhooksApi.test,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["webhook-deliveries"] });
-      toast.success("Test webhook sent successfully");
-    },
-    onError: () => {
-      toast.error("Failed to send test webhook");
-    },
-  });
-
-  // Toggle webhook enabled
-  const toggleMutation = useMutation({
-    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
-      const webhook = webhooks?.find((w) => w.id === id);
-      if (!webhook) throw new Error("Webhook not found");
-
-      return webhooksApi.update(id, { ...webhook, enabled });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["webhooks"] });
-      toast.success("Webhook updated successfully");
-    },
-    onError: () => {
-      toast.error("Failed to update webhook");
     },
   });
 
@@ -254,12 +186,6 @@ function WebhooksPage() {
       headers: {},
     });
   };
-
-  const filteredWebhooks = webhooks?.filter(
-    (webhook) =>
-      webhook.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      webhook.url.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
 
   const getStatusVariant = (
     status: string,
@@ -373,195 +299,49 @@ function WebhooksPage() {
                 </div>
 
                 {isLoading ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>URL</TableHead>
-                        <TableHead>Events</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {Array(3)
-                        .fill(0)
-                        .map((_, i) => (
-                          <TableRow key={i}>
-                            <TableCell>
-                              <div className="space-y-1">
-                                <Skeleton className="h-4 w-32" />
-                                <Skeleton className="h-3 w-24" />
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="h-4 w-48" />
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="h-5 w-20" />
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="h-5 w-16" />
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-1">
-                                <Skeleton className="h-8 w-8" />
-                                <Skeleton className="h-8 w-8" />
-                                <Skeleton className="h-8 w-8" />
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                ) : filteredWebhooks && filteredWebhooks.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>URL</TableHead>
-                        <TableHead>Events</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredWebhooks.map((webhook) => (
-                        <TableRow key={webhook.id}>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{webhook.name}</div>
-                              {webhook.description && (
-                                <div className="text-muted-foreground text-xs">
-                                  {webhook.description}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <code className="text-xs">{webhook.url}</code>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {webhook.events.slice(0, 2).map((event, i) => (
-                                <Badge
-                                  key={i}
-                                  variant="outline"
-                                  className="text-xs"
-                                >
-                                  {event.table}: {event.operations.join(", ")}
-                                </Badge>
-                              ))}
-                              {webhook.events.length > 2 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{webhook.events.length - 2} more
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Switch
-                                checked={webhook.enabled}
-                                onCheckedChange={(checked) =>
-                                  toggleMutation.mutate({
-                                    id: webhook.id,
-                                    enabled: checked,
-                                  })
-                                }
-                              />
-                              <Badge
-                                variant={
-                                  webhook.enabled ? "default" : "secondary"
-                                }
-                              >
-                                {webhook.enabled ? "Enabled" : "Disabled"}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setSelectedWebhook(webhook)}
-                                  >
-                                    <Clock className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  View delivery history
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() =>
-                                      testMutation.mutate(webhook.id)
-                                    }
-                                    disabled={testMutation.isPending}
-                                  >
-                                    <Send className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  Send test webhook
-                                </TooltipContent>
-                              </Tooltip>
-                              <AlertDialog>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <AlertDialogTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        disabled={deleteMutation.isPending}
-                                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </AlertDialogTrigger>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    Delete webhook
-                                  </TooltipContent>
-                                </Tooltip>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>
-                                      Delete Webhook
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to delete "
-                                      {webhook.name}"? This action cannot be
-                                      undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>
-                                      Cancel
-                                    </AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() =>
-                                        deleteMutation.mutate(webhook.id)
-                                      }
-                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>URL</TableHead>
+                          <TableHead>Events</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {Array(3)
+                          .fill(0)
+                          .map((_, i) => (
+                            <TableRow key={i}>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <Skeleton className="h-4 w-32" />
+                                  <Skeleton className="h-3 w-24" />
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Skeleton className="h-4 w-48" />
+                              </TableCell>
+                              <TableCell>
+                                <Skeleton className="h-5 w-20" />
+                              </TableCell>
+                              <TableCell>
+                                <Skeleton className="h-5 w-16" />
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-1">
+                                  <Skeleton className="h-8 w-8" />
+                                  <Skeleton className="h-8 w-8" />
+                                  <Skeleton className="h-8 w-8" />
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Webhook className="text-muted-foreground mb-4 h-12 w-12" />

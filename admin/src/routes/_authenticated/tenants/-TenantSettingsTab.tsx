@@ -41,7 +41,7 @@ export function TenantSettingsTab({ tenantId }: TenantSettingsTabProps) {
   const queryClient = useQueryClient();
   const [editingPath, setEditingPath] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<unknown>(null);
-  const [showResetDialog, setShowResetDialog] = useState<string | null>(null);
+  const [isResetDialogOpen, setShowResetDialog] = useState<string | null>(null);
 
   // Fetch tenant settings
   const { data: settingsData, isLoading } = useQuery({
@@ -312,7 +312,7 @@ export function TenantSettingsTab({ tenantId }: TenantSettingsTabProps) {
 
       {/* Reset Confirmation Dialog */}
       <AlertDialog
-        open={!!showResetDialog}
+        open={!!isResetDialogOpen}
         onOpenChange={(open) => !open && setShowResetDialog(null)}
       >
         <AlertDialogContent>
@@ -327,7 +327,7 @@ export function TenantSettingsTab({ tenantId }: TenantSettingsTabProps) {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
-                showResetDialog && handleResetSetting(showResetDialog)
+                isResetDialogOpen && handleResetSetting(isResetDialogOpen)
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

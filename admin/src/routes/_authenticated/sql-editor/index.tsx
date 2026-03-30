@@ -5,16 +5,9 @@ import {
   Database,
   Play,
   Trash2,
-  Download,
-  AlertCircle,
-  CheckCircle,
-  Clock,
+  Braces,
   ChevronDown,
   ChevronRight,
-  ChevronLeft,
-  ChevronRight as ChevronRightIcon,
-  X,
-  Braces,
 } from "lucide-react";
 import type { editor, IDisposable } from "monaco-editor";
 import { Panel, Group, Separator } from "react-resizable-panels";
@@ -23,7 +16,6 @@ import { useImpersonationStore } from "@/stores/impersonation-store";
 import { BranchSelector } from "@/components/branch-selector";
 import api from "@/lib/api";
 import { useTheme } from "@/context/theme-provider";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -32,57 +24,26 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSchemaMetadata } from "@/features/sql-editor/hooks/use-schema-metadata";
 import { createGraphQLCompletionProvider } from "@/features/sql-editor/utils/graphql-completion-provider";
 import { createSqlCompletionProvider } from "@/features/sql-editor/utils/sql-completion-provider";
+import {
+  HistoryItem,
+  SQLResultView,
+  GraphQLResultView,
+} from "@/components/sql-editor";
+import type {
+  EditorMode,
+  SQLResult,
+  SQLExecutionResponse,
+  GraphQLResponse,
+  QueryHistory,
+} from "@/components/sql-editor";
 
 export const Route = createFileRoute("/_authenticated/sql-editor/")({
   component: SQLEditorPage,
 });
-
-type EditorMode = "sql" | "graphql";
-
-interface SQLResult {
-  columns?: string[];
-  rows?: Record<string, unknown>[];
-  row_count: number;
-  affected_rows?: number;
-  execution_time_ms: number;
-  error?: string;
-  statement: string;
-}
-
-interface SQLExecutionResponse {
-  results: SQLResult[];
-}
-
-interface GraphQLResponse {
-  data?: unknown;
-  errors?: Array<{
-    message: string;
-    locations?: Array<{ line: number; column: number }>;
-    path?: (string | number)[];
-  }>;
-}
-
-interface QueryHistory {
-  id: string;
-  timestamp: Date;
-  mode: EditorMode;
-  results?: SQLResult[];
-  graphqlResponse?: GraphQLResponse;
-  query: string;
-  executionTime?: number;
-}
 
 const ROWS_PER_PAGE = 100;
 
@@ -115,25 +76,19 @@ function SQLEditorPage() {
   const graphqlCompletionProviderRef = useRef<IDisposable | null>(null);
   const executeQueryRef = useRef<() => void>(() => {});
 
-  // Fetch schema metadata for autocompletion
   const { schemas, tables } = useSchemaMetadata();
 
-  // Update SQL completion provider when metadata changes
   useEffect(() => {
     if (monacoRef.current && (schemas.length > 0 || tables.length > 0)) {
-      // Dispose old SQL provider
       if (sqlCompletionProviderRef.current) {
         sqlCompletionProviderRef.current.dispose();
       }
-
-      // Register SQL provider with updated metadata
       sqlCompletionProviderRef.current =
         monacoRef.current.languages.registerCompletionItemProvider(
           "sql",
           createSqlCompletionProvider(monacoRef.current, { schemas, tables }),
         );
     }
-
     return () => {
       if (sqlCompletionProviderRef.current) {
         sqlCompletionProviderRef.current.dispose();
@@ -141,22 +96,17 @@ function SQLEditorPage() {
     };
   }, [schemas, tables]);
 
-  // Update GraphQL completion provider when metadata changes
   useEffect(() => {
     if (monacoRef.current && tables.length > 0) {
-      // Dispose old GraphQL provider
       if (graphqlCompletionProviderRef.current) {
         graphqlCompletionProviderRef.current.dispose();
       }
-
-      // Register GraphQL provider with updated metadata
       graphqlCompletionProviderRef.current =
         monacoRef.current.languages.registerCompletionItemProvider(
           "graphql",
           createGraphQLCompletionProvider(monacoRef.current, { tables }),
         );
     }
-
     return () => {
       if (graphqlCompletionProviderRef.current) {
         graphqlCompletionProviderRef.current.dispose();
@@ -164,7 +114,6 @@ function SQLEditorPage() {
     };
   }, [tables]);
 
-  // Update Monaco theme when app theme changes
   useEffect(() => {
     if (monacoRef.current) {
       monacoRef.current.editor.setTheme(
@@ -173,14 +122,11 @@ function SQLEditorPage() {
     }
   }, [resolvedTheme]);
 
-  // Get current history item (most recent or selected)
   const currentHistory = selectedHistoryId
     ? queryHistory.find((h) => h.id === selectedHistoryId)
     : queryHistory[0];
 
-  // Execute SQL or GraphQL query
   const executeQuery = async () => {
-    // Get current value from editor if available, otherwise use state
     const currentQuery = editorRef.current?.getValue() || query;
 
     if (!currentQuery.trim()) {
@@ -190,14 +136,11 @@ function SQLEditorPage() {
       return;
     }
 
-    // Update state to match editor
     setQuery(currentQuery);
-
     setIsExecuting(true);
     const startTime = performance.now();
 
     try {
-      // Build request config with optional impersonation context
       const {
         isImpersonating: isImpersonatingNow,
         impersonationToken: tokenNow,
@@ -210,7 +153,6 @@ function SQLEditorPage() {
       }
 
       if (editorMode === "sql") {
-        // Execute SQL query
         const response = await api.post<SQLExecutionResponse>(
           "/api/v1/admin/sql/execute",
           { query: currentQuery },
@@ -219,7 +161,6 @@ function SQLEditorPage() {
 
         const executionTime = performance.now() - startTime;
 
-        // Add to history
         const historyItem: QueryHistory = {
           id: Date.now().toString(),
           timestamp: new Date(),
@@ -232,14 +173,12 @@ function SQLEditorPage() {
         setSelectedHistoryId(historyItem.id);
         setHistoryOpen(false);
 
-        // Initialize pagination for each result
         const pages: Record<string, number> = {};
         response.data.results.forEach((_, idx) => {
           pages[`${historyItem.id}-${idx}`] = 1;
         });
         setCurrentPages((prev) => ({ ...prev, ...pages }));
 
-        // Show success toast
         const hasErrors = response.data.results.some((r) => r.error);
         if (hasErrors) {
           toast.warning("Query executed with errors");
@@ -247,7 +186,6 @@ function SQLEditorPage() {
           toast.success("Query executed successfully");
         }
       } else {
-        // Execute GraphQL query
         const response = await api.post<GraphQLResponse>(
           "/api/v1/graphql",
           { query: currentQuery },
@@ -256,7 +194,6 @@ function SQLEditorPage() {
 
         const executionTime = performance.now() - startTime;
 
-        // Add to history
         const historyItem: QueryHistory = {
           id: Date.now().toString(),
           timestamp: new Date(),
@@ -269,7 +206,6 @@ function SQLEditorPage() {
         setSelectedHistoryId(historyItem.id);
         setHistoryOpen(false);
 
-        // Show success/error toast
         if (response.data.errors && response.data.errors.length > 0) {
           toast.warning("GraphQL query returned errors");
         } else {
@@ -291,10 +227,8 @@ function SQLEditorPage() {
     }
   };
 
-  // Keep ref updated so keyboard shortcut always uses latest function
   executeQueryRef.current = executeQuery;
 
-  // Clear all history
   const clearHistory = () => {
     setQueryHistory([]);
     setSelectedHistoryId(null);
@@ -302,7 +236,6 @@ function SQLEditorPage() {
     toast.success("Query history cleared");
   };
 
-  // Remove single history item
   const removeHistoryItem = (id: string) => {
     setQueryHistory((prev) => prev.filter((h) => h.id !== id));
     if (selectedHistoryId === id) {
@@ -310,7 +243,6 @@ function SQLEditorPage() {
     }
   };
 
-  // Export result as CSV
   const exportAsCSV = (result: SQLResult) => {
     if (!result.rows || result.rows.length === 0) {
       toast.error("No data to export");
@@ -342,7 +274,6 @@ function SQLEditorPage() {
     toast.success("Exported as CSV");
   };
 
-  // Export result as JSON
   const exportAsJSON = (result: SQLResult) => {
     if (!result.rows || result.rows.length === 0) {
       toast.error("No data to export");
@@ -361,7 +292,6 @@ function SQLEditorPage() {
     toast.success("Exported as JSON");
   };
 
-  // Handle editor mount - register keyboard shortcut and completion providers
   const handleEditorDidMount = (
     editor: editor.IStandaloneCodeEditor,
     monaco: typeof import("monaco-editor"),
@@ -369,13 +299,11 @@ function SQLEditorPage() {
     editorRef.current = editor;
     monacoRef.current = monaco;
 
-    // Register GraphQL language if not already registered
     if (
       !monaco.languages.getLanguages().some((lang) => lang.id === "graphql")
     ) {
       monaco.languages.register({ id: "graphql" });
 
-      // GraphQL syntax highlighting
       monaco.languages.setMonarchTokensProvider("graphql", {
         keywords: [
           "query",
@@ -426,7 +354,6 @@ function SQLEditorPage() {
       });
     }
 
-    // Register initial SQL completion provider if metadata is already loaded
     if (schemas.length > 0 || tables.length > 0) {
       sqlCompletionProviderRef.current =
         monaco.languages.registerCompletionItemProvider(
@@ -435,7 +362,6 @@ function SQLEditorPage() {
         );
     }
 
-    // Register initial GraphQL completion provider if metadata is already loaded
     if (tables.length > 0) {
       graphqlCompletionProviderRef.current =
         monaco.languages.registerCompletionItemProvider(
@@ -444,7 +370,6 @@ function SQLEditorPage() {
         );
     }
 
-    // Define custom theme that matches dashboard
     monaco.editor.defineTheme("fluxbase-dark", {
       base: "vs-dark",
       inherit: true,
@@ -490,22 +415,17 @@ function SQLEditorPage() {
       },
     });
 
-    // Set the appropriate theme
     monaco.editor.setTheme(
       resolvedTheme === "dark" ? "fluxbase-dark" : "fluxbase-light",
     );
 
-    // Register Ctrl/Cmd + Enter to execute query
-    // Use ref to always call the latest version of executeQuery
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
       executeQueryRef.current();
     });
   };
 
-  // Handle mode switch
   const handleModeChange = (mode: EditorMode) => {
     setEditorMode(mode);
-    // Update editor language if mounted
     if (editorRef.current && monacoRef.current) {
       const model = editorRef.current.getModel();
       if (model) {
@@ -517,7 +437,6 @@ function SQLEditorPage() {
     }
   };
 
-  // Get paginated rows for a result
   const getPaginatedRows = (
     rows: Record<string, unknown>[],
     pageKey: string,
@@ -528,19 +447,16 @@ function SQLEditorPage() {
     return rows.slice(start, end);
   };
 
-  // Calculate total pages
   const getTotalPages = (rowCount: number) => {
     return Math.ceil(rowCount / ROWS_PER_PAGE);
   };
 
-  // Change page
   const setPage = (pageKey: string, page: number) => {
     setCurrentPages((prev) => ({ ...prev, [pageKey]: page }));
   };
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div className="bg-background flex items-center justify-between border-b px-6 py-4">
         <div className="flex items-center gap-3">
           <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
@@ -559,7 +475,6 @@ function SQLEditorPage() {
           </div>
         </div>
 
-        {/* Mode Toggle */}
         <Tabs
           value={editorMode}
           onValueChange={(v) => handleModeChange(v as EditorMode)}
@@ -591,10 +506,8 @@ function SQLEditorPage() {
         </div>
       </div>
 
-      {/* Editor and Results */}
       <div className="flex flex-1 overflow-hidden p-6">
         <Group orientation="vertical" id="sql-editor-group-v2">
-          {/* Query Editor */}
           <Panel id="query-editor" defaultSize="35" minSize="20" maxSize="80">
             <Card className="h-full overflow-hidden">
               <Editor
@@ -624,7 +537,6 @@ function SQLEditorPage() {
 
           <Separator className="bg-border hover:bg-primary my-2 h-2 cursor-row-resize transition-colors" />
 
-          {/* Results */}
           <Panel id="query-results" defaultSize="65" minSize="20">
             <Card className="flex h-full flex-col overflow-hidden">
               {queryHistory.length === 0 ? (
@@ -641,7 +553,6 @@ function SQLEditorPage() {
                 </div>
               ) : (
                 <div className="flex h-full flex-col">
-                  {/* History Panel */}
                   <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
                     <div className="flex items-center justify-between border-b px-4 py-2">
                       <CollapsibleTrigger asChild>
@@ -656,7 +567,6 @@ function SQLEditorPage() {
                       </CollapsibleTrigger>
                       {currentHistory && (
                         <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                          <Clock className="h-3 w-3" />
                           {currentHistory.timestamp.toLocaleString()}
                         </div>
                       )}
@@ -665,87 +575,25 @@ function SQLEditorPage() {
                       <ScrollArea className="max-h-48 border-b">
                         <div className="space-y-1 p-2">
                           {queryHistory.map((history) => (
-                            <div
+                            <HistoryItem
                               key={history.id}
-                              className={`hover:bg-accent flex cursor-pointer items-center justify-between rounded-md p-2 ${
-                                selectedHistoryId === history.id
-                                  ? "bg-accent"
-                                  : ""
-                              }`}
-                              onClick={() => {
+                              history={history}
+                              isSelected={selectedHistoryId === history.id}
+                              onSelect={() => {
                                 setSelectedHistoryId(history.id);
                                 setHistoryOpen(false);
                               }}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  {history.mode === "sql" ? (
-                                    <Database className="text-muted-foreground h-3 w-3 flex-shrink-0" />
-                                  ) : (
-                                    <Braces className="text-muted-foreground h-3 w-3 flex-shrink-0" />
-                                  )}
-                                  <Badge variant="outline" className="text-xs">
-                                    {history.mode.toUpperCase()}
-                                  </Badge>
-                                  <span className="text-muted-foreground text-xs">
-                                    {history.timestamp.toLocaleString()}
-                                  </span>
-                                  {history.mode === "sql" &&
-                                    history.results && (
-                                      <Badge
-                                        variant="secondary"
-                                        className="text-xs"
-                                      >
-                                        {history.results.length} result(s)
-                                      </Badge>
-                                    )}
-                                  {history.executionTime && (
-                                    <Badge
-                                      variant="secondary"
-                                      className="text-xs"
-                                    >
-                                      {history.executionTime.toFixed(0)}ms
-                                    </Badge>
-                                  )}
-                                </div>
-                                <code className="text-muted-foreground mt-1 block truncate text-xs">
-                                  {history.query
-                                    .split("\n")
-                                    .find(
-                                      (l) =>
-                                        l.trim() &&
-                                        !l.trim().startsWith("--") &&
-                                        !l.trim().startsWith("#"),
-                                    )
-                                    ?.substring(0, 80) ||
-                                    history.query
-                                      .split("\n")[0]
-                                      .substring(0, 80)}
-                                </code>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="ml-2 h-6 w-6 p-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removeHistoryItem(history.id);
-                                }}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
+                              onRemove={() => removeHistoryItem(history.id)}
+                            />
                           ))}
                         </div>
                       </ScrollArea>
                     </CollapsibleContent>
                   </Collapsible>
 
-                  {/* Current Result */}
                   {currentHistory && (
                     <div className="flex-1 overflow-auto">
                       <div className="space-y-4 p-4">
-                        {/* SQL Results */}
                         {currentHistory.mode === "sql" &&
                           currentHistory.results?.map((result, idx) => {
                             const pageKey = `${currentHistory.id}-${idx}`;
@@ -758,273 +606,30 @@ function SQLEditorPage() {
                               : [];
 
                             return (
-                              <div key={idx} className="space-y-2">
-                                {/* Statement Header */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    {result.error ? (
-                                      <AlertCircle className="text-destructive h-4 w-4" />
-                                    ) : (
-                                      <CheckCircle className="h-4 w-4 text-green-500" />
-                                    )}
-                                    <code className="text-muted-foreground text-xs">
-                                      {result.statement.length > 60
-                                        ? result.statement.substring(0, 60) +
-                                          "..."
-                                        : result.statement}
-                                    </code>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="outline">
-                                      {result.execution_time_ms.toFixed(2)}ms
-                                    </Badge>
-                                    {result.rows && result.rows.length > 0 && (
-                                      <>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => exportAsCSV(result)}
-                                        >
-                                          <Download className="mr-1 h-3 w-3" />
-                                          CSV
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => exportAsJSON(result)}
-                                        >
-                                          <Download className="mr-1 h-3 w-3" />
-                                          JSON
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Error Message */}
-                                {result.error && (
-                                  <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
-                                    {result.error}
-                                  </div>
-                                )}
-
-                                {/* Results Table */}
-                                {result.rows && result.rows.length > 0 && (
-                                  <>
-                                    <div className="max-w-full overflow-auto rounded-md border">
-                                      <Table className="w-max min-w-full">
-                                        <TableHeader>
-                                          <TableRow>
-                                            {result.columns!.map((col) => (
-                                              <TableHead
-                                                key={col}
-                                                className="font-mono text-xs whitespace-nowrap"
-                                              >
-                                                {col}
-                                              </TableHead>
-                                            ))}
-                                          </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                          {paginatedRows.map((row, rowIdx) => (
-                                            <TableRow key={rowIdx}>
-                                              {result.columns!.map((col) => (
-                                                <TableCell
-                                                  key={col}
-                                                  className="font-mono text-xs whitespace-nowrap"
-                                                >
-                                                  {row[col] === null ? (
-                                                    <span className="text-muted-foreground italic">
-                                                      null
-                                                    </span>
-                                                  ) : typeof row[col] ===
-                                                    "object" ? (
-                                                    JSON.stringify(row[col])
-                                                  ) : (
-                                                    String(row[col])
-                                                  )}
-                                                </TableCell>
-                                              ))}
-                                            </TableRow>
-                                          ))}
-                                        </TableBody>
-                                      </Table>
-                                    </div>
-
-                                    {/* Pagination */}
-                                    {totalPages > 1 && (
-                                      <div className="flex items-center justify-between">
-                                        <p className="text-muted-foreground text-xs">
-                                          Page {currentPage} of {totalPages} (
-                                          {result.rows.length} total rows)
-                                        </p>
-                                        <div className="flex items-center gap-2">
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                              setPage(pageKey, currentPage - 1)
-                                            }
-                                            disabled={currentPage === 1}
-                                          >
-                                            <ChevronLeft className="h-4 w-4" />
-                                            Previous
-                                          </Button>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                              setPage(pageKey, currentPage + 1)
-                                            }
-                                            disabled={
-                                              currentPage === totalPages
-                                            }
-                                          >
-                                            Next
-                                            <ChevronRightIcon className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {totalPages <= 1 && (
-                                      <p className="text-muted-foreground text-xs">
-                                        Showing {result.rows.length} row(s)
-                                      </p>
-                                    )}
-                                  </>
-                                )}
-
-                                {/* Success message for non-SELECT queries */}
-                                {!result.rows && !result.error && (
-                                  <div className="rounded-md bg-green-500/10 p-3 text-sm text-green-600">
-                                    {result.affected_rows !== undefined
-                                      ? `Success: ${result.affected_rows} row(s) affected`
-                                      : "Query executed successfully"}
-                                  </div>
-                                )}
-                              </div>
+                              <SQLResultView
+                                key={idx}
+                                result={result}
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                paginatedRows={paginatedRows}
+                                onExportCSV={() => exportAsCSV(result)}
+                                onExportJSON={() => exportAsJSON(result)}
+                                onPrevPage={() =>
+                                  setPage(pageKey, currentPage - 1)
+                                }
+                                onNextPage={() =>
+                                  setPage(pageKey, currentPage + 1)
+                                }
+                              />
                             );
                           })}
 
-                        {/* GraphQL Results */}
                         {currentHistory.mode === "graphql" &&
                           currentHistory.graphqlResponse && (
-                            <div className="space-y-4">
-                              {/* Header */}
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  {currentHistory.graphqlResponse.errors &&
-                                  currentHistory.graphqlResponse.errors.length >
-                                    0 ? (
-                                    <AlertCircle className="text-destructive h-4 w-4" />
-                                  ) : (
-                                    <CheckCircle className="h-4 w-4 text-green-500" />
-                                  )}
-                                  <span className="text-sm font-medium">
-                                    GraphQL Response
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {currentHistory.executionTime && (
-                                    <Badge variant="outline">
-                                      {currentHistory.executionTime.toFixed(0)}
-                                      ms
-                                    </Badge>
-                                  )}
-                                  {currentHistory.graphqlResponse.data !==
-                                    undefined &&
-                                  currentHistory.graphqlResponse.data !==
-                                    null ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        const json = JSON.stringify(
-                                          currentHistory.graphqlResponse,
-                                          null,
-                                          2,
-                                        );
-                                        const blob = new Blob([json], {
-                                          type: "application/json",
-                                        });
-                                        const url = URL.createObjectURL(blob);
-                                        const a = document.createElement("a");
-                                        a.href = url;
-                                        a.download = `graphql-result-${Date.now()}.json`;
-                                        a.click();
-                                        URL.revokeObjectURL(url);
-                                        toast.success("Exported as JSON");
-                                      }}
-                                    >
-                                      <Download className="mr-1 h-3 w-3" />
-                                      JSON
-                                    </Button>
-                                  ) : null}
-                                </div>
-                              </div>
-
-                              {/* GraphQL Errors */}
-                              {currentHistory.graphqlResponse.errors &&
-                              currentHistory.graphqlResponse.errors.length >
-                                0 ? (
-                                <div className="space-y-2">
-                                  {currentHistory.graphqlResponse.errors.map(
-                                    (error, idx) => (
-                                      <div
-                                        key={idx}
-                                        className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
-                                      >
-                                        <div className="font-medium">
-                                          {error.message}
-                                        </div>
-                                        {error.locations &&
-                                          error.locations.length > 0 && (
-                                            <div className="text-destructive/80 mt-1 text-xs">
-                                              Location: Line{" "}
-                                              {error.locations[0].line}, Column{" "}
-                                              {error.locations[0].column}
-                                            </div>
-                                          )}
-                                        {error.path &&
-                                          error.path.length > 0 && (
-                                            <div className="text-destructive/80 mt-1 text-xs">
-                                              Path: {error.path.join(" → ")}
-                                            </div>
-                                          )}
-                                      </div>
-                                    ),
-                                  )}
-                                </div>
-                              ) : null}
-
-                              {/* GraphQL Data */}
-                              {currentHistory.graphqlResponse.data !==
-                                undefined &&
-                              currentHistory.graphqlResponse.data !== null ? (
-                                <div className="bg-muted/30 max-h-[500px] overflow-auto rounded-md border p-4">
-                                  <pre className="font-mono text-xs whitespace-pre-wrap">
-                                    {JSON.stringify(
-                                      currentHistory.graphqlResponse.data,
-                                      null,
-                                      2,
-                                    )}
-                                  </pre>
-                                </div>
-                              ) : null}
-
-                              {/* Success with no data */}
-                              {currentHistory.graphqlResponse.data ===
-                                undefined &&
-                              (!currentHistory.graphqlResponse.errors ||
-                                currentHistory.graphqlResponse.errors.length ===
-                                  0) ? (
-                                <div className="rounded-md bg-green-500/10 p-3 text-sm text-green-600">
-                                  GraphQL query executed successfully (no data
-                                  returned)
-                                </div>
-                              ) : null}
-                            </div>
+                            <GraphQLResultView
+                              response={currentHistory.graphqlResponse}
+                              executionTime={currentHistory.executionTime}
+                            />
                           )}
                       </div>
                     </div>

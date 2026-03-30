@@ -91,7 +91,7 @@ const RestAPIExplorer = () => {
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<RequestHistory[]>([]);
   const [savedRequests, setSavedRequests] = useState<SavedRequest[]>([]);
-  const [showQueryBuilder, setShowQueryBuilder] = useState(false);
+  const [isQueryBuilderOpen, setShowQueryBuilder] = useState(false);
   const [activeTab, setActiveTab] = useState("request");
   const [includeAuthToken, setIncludeAuthToken] = useState(true);
 
@@ -100,8 +100,8 @@ const RestAPIExplorer = () => {
   const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointInfo | null>(
     null,
   );
-  const [showEndpointBrowser, setShowEndpointBrowser] = useState(true);
-  const [showDocumentation, setShowDocumentation] = useState(false);
+  const [isEndpointBrowserOpen, setShowEndpointBrowser] = useState(true);
+  const [isDocumentationOpen, setShowDocumentation] = useState(false);
 
   // Dialog state
   const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
@@ -115,7 +115,7 @@ const RestAPIExplorer = () => {
     "name",
   );
   const [pendingParamName, setPendingParamName] = useState("");
-  const [showSaveRequestPrompt, setShowSaveRequestPrompt] = useState(false);
+  const [isSaveRequestPromptOpen, setIsSaveRequestPromptOpen] = useState(false);
 
   // Impersonation state
   const { isImpersonating, impersonationToken } = useImpersonationStore();
@@ -419,7 +419,7 @@ const RestAPIExplorer = () => {
   };
 
   const saveRequest = () => {
-    setShowSaveRequestPrompt(true);
+    setIsSaveRequestPromptOpen(true);
   };
 
   const handleSaveRequestConfirm = (name: string) => {
@@ -437,7 +437,7 @@ const RestAPIExplorer = () => {
     setSavedRequests(newSaved);
     localStorage.setItem("fluxbase-saved-requests", JSON.stringify(newSaved));
     toast.success("Request saved");
-    setShowSaveRequestPrompt(false);
+    setIsSaveRequestPromptOpen(false);
   };
 
   const loadSavedRequest = (request: SavedRequest) => {
@@ -573,7 +573,7 @@ print(data)`;
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden p-6">
         {/* Left Sidebar - Endpoint Browser or Saved/History */}
-        {showEndpointBrowser ? (
+        {isEndpointBrowserOpen ? (
           <div className="bg-muted/10 w-80 border-r">
             <div className="flex items-center justify-between border-b p-4">
               <h3 className="flex items-center gap-2 font-semibold">
@@ -700,7 +700,7 @@ print(data)`;
           <div className="flex-1 space-y-6 p-6">
             {/* Toolbar */}
             <div className="flex items-center gap-2">
-              {!showEndpointBrowser && (
+              {!isEndpointBrowserOpen && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -711,12 +711,12 @@ print(data)`;
                 </Button>
               )}
               <Button
-                variant={showDocumentation ? "default" : "outline"}
+                variant={isDocumentationOpen ? "default" : "outline"}
                 size="sm"
-                onClick={() => setShowDocumentation(!showDocumentation)}
+                onClick={() => setShowDocumentation(!isDocumentationOpen)}
               >
                 <BookOpen className="mr-2 h-4 w-4" />
-                {showDocumentation ? "Hide" : "Show"} Documentation
+                {isDocumentationOpen ? "Hide" : "Show"} Documentation
               </Button>
               <div className="flex-1" />
               <ImpersonationPopover
@@ -859,9 +859,9 @@ print(data)`;
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowQueryBuilder(!showQueryBuilder)}
+                    onClick={() => setShowQueryBuilder(!isQueryBuilderOpen)}
                   >
-                    {showQueryBuilder ? (
+                    {isQueryBuilderOpen ? (
                       <ChevronDown className="mr-2 h-4 w-4" />
                     ) : (
                       <ChevronRight className="mr-2 h-4 w-4" />
@@ -901,7 +901,7 @@ print(data)`;
                 </div>
 
                 {/* Query Builder */}
-                {showQueryBuilder && (
+                {isQueryBuilderOpen && (
                   <Card className="bg-muted/20 space-y-4 p-4">
                     <div className="space-y-2">
                       <h4 className="text-sm font-semibold">
@@ -1180,7 +1180,7 @@ print(data)`;
             )}
 
             {/* Documentation Panel */}
-            {showDocumentation && (
+            {isDocumentationOpen && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1268,8 +1268,8 @@ print(data)`;
 
         {/* Save Request Prompt */}
         <PromptDialog
-          open={showSaveRequestPrompt}
-          onOpenChange={setShowSaveRequestPrompt}
+          open={isSaveRequestPromptOpen}
+          onOpenChange={setIsSaveRequestPromptOpen}
           title="Save Request"
           description="Enter a name for this request"
           placeholder="e.g., Get all users"

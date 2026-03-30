@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { formatDistanceToNow } from 'date-fns'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from "react";
+import { formatDistanceToNow } from "date-fns";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   KeyRound,
   Plus,
@@ -12,13 +12,13 @@ import {
   MoreHorizontal,
   Copy,
   ShieldAlert,
-} from 'lucide-react'
-import { toast } from 'sonner'
+} from "lucide-react";
+import { toast } from "sonner";
 import {
   platformServiceKeysApi,
   type PlatformServiceKey,
   type PlatformServiceKeyWithPlaintext,
-} from '@/lib/api'
+} from "@/lib/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,18 +29,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -48,109 +48,125 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import { ConfigManagedBadge } from './config-managed-badge'
-import { CreateKeyDialog } from './create-key-dialog'
-import { RotateKeyDialog } from './rotate-key-dialog'
+} from "@/components/ui/table";
+import { ConfigManagedBadge } from "./config-managed-badge";
+import { CreateKeyDialog } from "./create-key-dialog";
+import { RotateKeyDialog } from "./rotate-key-dialog";
 
-const KEY_TYPE_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  anon: { label: 'Anonymous', variant: 'secondary' },
-  publishable: { label: 'Publishable', variant: 'default' },
-  tenant_service: { label: 'Tenant Service', variant: 'outline' },
-  global_service: { label: 'Global Service', variant: 'default' },
-}
+const KEY_TYPE_CONFIG: Record<
+  string,
+  {
+    label: string;
+    variant: "default" | "secondary" | "outline" | "destructive";
+  }
+> = {
+  anon: { label: "Anonymous", variant: "secondary" },
+  publishable: { label: "Publishable", variant: "default" },
+  tenant_service: { label: "Tenant Service", variant: "outline" },
+  global_service: { label: "Global Service", variant: "default" },
+};
 
 interface ServiceKeyListProps {
-  onCreateSuccess?: (key: PlatformServiceKeyWithPlaintext) => void
+  onCreateSuccess?: (key: PlatformServiceKeyWithPlaintext) => void;
 }
 
 export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
-  const queryClient = useQueryClient()
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [showRotateDialog, setShowRotateDialog] = useState(false)
-  const [showKeyDialog, setShowKeyDialog] = useState(false)
-  const [selectedKey, setSelectedKey] = useState<PlatformServiceKey | null>(null)
-  const [createdKey, setCreatedKey] = useState<PlatformServiceKeyWithPlaintext | null>(null)
+  const queryClient = useQueryClient();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isRotateDialogOpen, setIsRotateDialogOpen] = useState(false);
+  const [isKeyDialogOpen, setIsKeyDialogOpen] = useState(false);
+  const [selectedKey, setSelectedKey] = useState<PlatformServiceKey | null>(
+    null,
+  );
+  const [createdKey, setCreatedKey] =
+    useState<PlatformServiceKeyWithPlaintext | null>(null);
 
   const { data: serviceKeys, isLoading } = useQuery<PlatformServiceKey[]>({
-    queryKey: ['platform-service-keys'],
+    queryKey: ["platform-service-keys"],
     queryFn: platformServiceKeysApi.list,
-  })
+  });
 
   const enableMutation = useMutation({
     mutationFn: platformServiceKeysApi.enable,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['platform-service-keys'] })
-      toast.success('Service key enabled')
+      queryClient.invalidateQueries({ queryKey: ["platform-service-keys"] });
+      toast.success("Service key enabled");
     },
-    onError: () => toast.error('Failed to enable service key'),
-  })
+    onError: () => toast.error("Failed to enable service key"),
+  });
 
   const disableMutation = useMutation({
     mutationFn: platformServiceKeysApi.disable,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['platform-service-keys'] })
-      toast.success('Service key disabled')
+      queryClient.invalidateQueries({ queryKey: ["platform-service-keys"] });
+      toast.success("Service key disabled");
     },
-    onError: () => toast.error('Failed to disable service key'),
-  })
+    onError: () => toast.error("Failed to disable service key"),
+  });
 
   const deleteMutation = useMutation({
     mutationFn: platformServiceKeysApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['platform-service-keys'] })
-      toast.success('Service key deleted')
+      queryClient.invalidateQueries({ queryKey: ["platform-service-keys"] });
+      toast.success("Service key deleted");
     },
-    onError: () => toast.error('Failed to delete service key'),
-  })
+    onError: () => toast.error("Failed to delete service key"),
+  });
 
   const handleCreateSuccess = (key: PlatformServiceKeyWithPlaintext) => {
-    setCreatedKey(key)
-    setShowKeyDialog(true)
-    onCreateSuccess?.(key)
-  }
+    setCreatedKey(key);
+    setIsKeyDialogOpen(true);
+    onCreateSuccess?.(key);
+  };
 
   const handleRotateSuccess = () => {
-    setSelectedKey(null)
-  }
+    setSelectedKey(null);
+  };
 
   const openRotateDialog = (key: PlatformServiceKey) => {
-    setSelectedKey(key)
-    setShowRotateDialog(true)
-  }
+    setSelectedKey(key);
+    setIsRotateDialogOpen(true);
+  };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success('Copied to clipboard')
-  }
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
+  };
 
   const isExpired = (expiresAt?: string) => {
-    if (!expiresAt) return false
-    return new Date(expiresAt) < new Date()
-  }
+    if (!expiresAt) return false;
+    return new Date(expiresAt) < new Date();
+  };
 
   const getKeyStatus = (key: PlatformServiceKey) => {
-    if (key.revoked_at) return { label: 'Revoked', variant: 'destructive' as const }
+    if (key.revoked_at)
+      return { label: "Revoked", variant: "destructive" as const };
     if (key.deprecated_at) {
-      if (key.grace_period_ends_at && new Date(key.grace_period_ends_at) > new Date()) {
-        return { label: 'Deprecated', variant: 'outline' as const }
+      if (
+        key.grace_period_ends_at &&
+        new Date(key.grace_period_ends_at) > new Date()
+      ) {
+        return { label: "Deprecated", variant: "outline" as const };
       }
-      return { label: 'Expired', variant: 'destructive' as const }
+      return { label: "Expired", variant: "destructive" as const };
     }
-    if (!key.is_active) return { label: 'Disabled', variant: 'secondary' as const }
-    if (isExpired(key.expires_at)) return { label: 'Expired', variant: 'destructive' as const }
-    return { label: 'Active', variant: 'default' as const }
-  }
+    if (!key.is_active)
+      return { label: "Disabled", variant: "secondary" as const };
+    if (isExpired(key.expires_at))
+      return { label: "Expired", variant: "destructive" as const };
+    return { label: "Active", variant: "default" as const };
+  };
 
-  const canModify = (key: PlatformServiceKey) => !key.revoked_at && !key.is_config_managed
+  const canModify = (key: PlatformServiceKey) =>
+    !key.revoked_at && !key.is_config_managed;
 
   const filteredKeys = serviceKeys?.filter(
     (key) =>
       key.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       key.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      key.key_prefix.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+      key.key_prefix.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
   return (
     <div className="space-y-4">
@@ -164,7 +180,7 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
             className="pl-8"
           />
         </div>
-        <Button onClick={() => setShowCreateDialog(true)}>
+        <Button onClick={() => setIsCreateDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Create Key
         </Button>
@@ -187,12 +203,24 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
               .fill(0)
               .map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-28" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-5 w-20" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-16" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-5 w-16" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-24" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-8 w-8 ml-auto" />
+                  </TableCell>
                 </TableRow>
               ))}
           </TableBody>
@@ -211,8 +239,11 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
           </TableHeader>
           <TableBody>
             {filteredKeys.map((key) => {
-              const status = getKeyStatus(key)
-              const keyTypeConfig = KEY_TYPE_CONFIG[key.key_type] || { label: key.key_type, variant: 'outline' as const }
+              const status = getKeyStatus(key);
+              const keyTypeConfig = KEY_TYPE_CONFIG[key.key_type] || {
+                label: key.key_type,
+                variant: "outline" as const,
+              };
 
               return (
                 <TableRow key={key.id}>
@@ -220,25 +251,35 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{key.name}</span>
-                        <ConfigManagedBadge isConfigManaged={key.is_config_managed} />
+                        <ConfigManagedBadge
+                          isConfigManaged={key.is_config_managed}
+                        />
                       </div>
                       {key.description && (
-                        <span className="text-muted-foreground text-xs">{key.description}</span>
+                        <span className="text-muted-foreground text-xs">
+                          {key.description}
+                        </span>
                       )}
-                      <code className="text-xs text-muted-foreground">{key.key_prefix}...</code>
+                      <code className="text-xs text-muted-foreground">
+                        {key.key_prefix}...
+                      </code>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={keyTypeConfig.variant}>{keyTypeConfig.label}</Badge>
+                    <Badge variant={keyTypeConfig.variant}>
+                      {keyTypeConfig.label}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
-                    {key.tenant_id || '—'}
+                    {key.tenant_id || "—"}
                   </TableCell>
                   <TableCell>
                     <Badge variant={status.variant}>{status.label}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
-                    {formatDistanceToNow(new Date(key.created_at), { addSuffix: true })}
+                    {formatDistanceToNow(new Date(key.created_at), {
+                      addSuffix: true,
+                    })}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -248,17 +289,22 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {canModify(key) && key.is_active && !key.deprecated_at && (
-                          <>
-                            <DropdownMenuItem onClick={() => openRotateDialog(key)}>
-                              <RefreshCw className="mr-2 h-4 w-4" />
-                              Rotate Key
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                          </>
-                        )}
-                        {canModify(key) && !key.deprecated_at && (
-                          key.is_active ? (
+                        {canModify(key) &&
+                          key.is_active &&
+                          !key.deprecated_at && (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => openRotateDialog(key)}
+                              >
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Rotate Key
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
+                        {canModify(key) &&
+                          !key.deprecated_at &&
+                          (key.is_active ? (
                             <DropdownMenuItem
                               onClick={() => disableMutation.mutate(key.id)}
                               disabled={disableMutation.isPending}
@@ -274,8 +320,7 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
                               <Power className="mr-2 h-4 w-4" />
                               Enable
                             </DropdownMenuItem>
-                          )
-                        )}
+                          ))}
                         {canModify(key) && <DropdownMenuSeparator />}
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
@@ -289,11 +334,14 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Service Key</AlertDialogTitle>
+                              <AlertDialogTitle>
+                                Delete Service Key
+                              </AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete "{key.name}"? This action
-                                cannot be undone and any applications using this key will
-                                lose access immediately.
+                                Are you sure you want to delete "{key.name}"?
+                                This action cannot be undone and any
+                                applications using this key will lose access
+                                immediately.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -311,7 +359,7 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              )
+              );
             })}
           </TableBody>
         </Table>
@@ -319,10 +367,16 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <KeyRound className="mb-4 h-12 w-12 text-muted-foreground" />
           <p className="text-muted-foreground">
-            {searchQuery ? 'No service keys match your search' : 'No service keys yet'}
+            {searchQuery
+              ? "No service keys match your search"
+              : "No service keys yet"}
           </p>
           {!searchQuery && (
-            <Button onClick={() => setShowCreateDialog(true)} variant="outline" className="mt-4">
+            <Button
+              onClick={() => setIsCreateDialogOpen(true)}
+              variant="outline"
+              className="mt-4"
+            >
               Create Your First Service Key
             </Button>
           )}
@@ -330,20 +384,20 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
       )}
 
       <CreateKeyDialog
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
         onSuccess={handleCreateSuccess}
       />
 
       <RotateKeyDialog
-        open={showRotateDialog}
-        onOpenChange={setShowRotateDialog}
+        open={isRotateDialogOpen}
+        onOpenChange={setIsRotateDialogOpen}
         serviceKey={selectedKey}
         onSuccess={handleRotateSuccess}
       />
 
       {createdKey && createdKey.key && (
-        <AlertDialog open={showKeyDialog} onOpenChange={setShowKeyDialog}>
+        <AlertDialog open={isKeyDialogOpen} onOpenChange={setIsKeyDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Service Key Created</AlertDialogTitle>
@@ -360,7 +414,8 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
                       Important: Save this key
                     </h3>
                     <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-300">
-                      This is the only time you'll see the full key. Store it securely.
+                      This is the only time you'll see the full key. Store it
+                      securely.
                     </p>
                   </div>
                 </div>
@@ -387,5 +442,5 @@ export function ServiceKeyList({ onCreateSuccess }: ServiceKeyListProps) {
         </AlertDialog>
       )}
     </div>
-  )
+  );
 }

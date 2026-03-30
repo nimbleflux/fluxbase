@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Loader2, RefreshCw } from 'lucide-react'
-import { toast } from 'sonner'
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -9,33 +9,33 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { platformServiceKeysApi, type PlatformServiceKey } from '@/lib/api'
+} from "@/components/ui/select";
+import { platformServiceKeysApi, type PlatformServiceKey } from "@/lib/api";
 
 interface RotateKeyDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  serviceKey: PlatformServiceKey | null
-  onSuccess?: (newKey: PlatformServiceKey & { key?: string; grace_period_ends_at: string }) => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  serviceKey: PlatformServiceKey | null;
+  onSuccess?: () => void;
 }
 
 const GRACE_PERIOD_OPTIONS = [
-  { value: '1', label: '1 hour' },
-  { value: '6', label: '6 hours' },
-  { value: '24', label: '24 hours (default)' },
-  { value: '72', label: '3 days' },
-  { value: '168', label: '1 week' },
-]
+  { value: "1", label: "1 hour" },
+  { value: "6", label: "6 hours" },
+  { value: "24", label: "24 hours (default)" },
+  { value: "72", label: "3 days" },
+  { value: "168", label: "1 week" },
+];
 
 export function RotateKeyDialog({
   open,
@@ -43,36 +43,36 @@ export function RotateKeyDialog({
   serviceKey,
   onSuccess,
 }: RotateKeyDialogProps) {
-  const queryClient = useQueryClient()
-  const [gracePeriodHours, setGracePeriodHours] = useState('24')
-  const [newKeyName, setNewKeyName] = useState('')
+  const queryClient = useQueryClient();
+  const [gracePeriodHours, setGracePeriodHours] = useState("24");
+  const [newKeyName, setNewKeyName] = useState("");
 
   const rotateMutation = useMutation({
     mutationFn: () => {
-      if (!serviceKey) throw new Error('No service key selected')
+      if (!serviceKey) throw new Error("No service key selected");
       return platformServiceKeysApi.rotate(serviceKey.id, {
         grace_period_hours: parseInt(gracePeriodHours, 10),
         new_key_name: newKeyName.trim() || undefined,
-      })
+      });
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['platform-service-keys'] })
-      toast.success('Service key rotated successfully')
-      setGracePeriodHours('24')
-      setNewKeyName('')
-      onSuccess?.(data)
-      onOpenChange(false)
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["platform-service-keys"] });
+      toast.success("Service key rotated successfully");
+      setGracePeriodHours("24");
+      setNewKeyName("");
+      onSuccess?.();
+      onOpenChange(false);
     },
     onError: (error: Error) => {
-      toast.error(`Failed to rotate service key: ${error.message}`)
+      toast.error(`Failed to rotate service key: ${error.message}`);
     },
-  })
+  });
 
   const handleRotate = () => {
-    rotateMutation.mutate()
-  }
+    rotateMutation.mutate();
+  };
 
-  if (!serviceKey) return null
+  if (!serviceKey) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -83,8 +83,8 @@ export function RotateKeyDialog({
             Rotate Service Key
           </DialogTitle>
           <DialogDescription>
-            Create a new key to replace "{serviceKey.name}". The old key will remain
-            active during the grace period.
+            Create a new key to replace "{serviceKey.name}". The old key will
+            remain active during the grace period.
           </DialogDescription>
         </DialogHeader>
 
@@ -98,9 +98,9 @@ export function RotateKeyDialog({
                 </h3>
                 <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
                   <p>
-                    A new key will be generated. After the grace period ends, the old
-                    key will stop working. Make sure to update your applications before
-                    then.
+                    A new key will be generated. After the grace period ends,
+                    the old key will stop working. Make sure to update your
+                    applications before then.
                   </p>
                 </div>
               </div>
@@ -111,7 +111,7 @@ export function RotateKeyDialog({
             <Label htmlFor="currentKey">Current Key</Label>
             <Input
               id="currentKey"
-              value={serviceKey.key_prefix + '...'}
+              value={serviceKey.key_prefix + "..."}
               readOnly
               className="bg-muted"
             />
@@ -119,7 +119,10 @@ export function RotateKeyDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="gracePeriod">Grace Period</Label>
-            <Select value={gracePeriodHours} onValueChange={setGracePeriodHours}>
+            <Select
+              value={gracePeriodHours}
+              onValueChange={setGracePeriodHours}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select grace period" />
               </SelectTrigger>
@@ -132,8 +135,8 @@ export function RotateKeyDialog({
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">
-              The old key will work during this period, giving you time to update your
-              applications.
+              The old key will work during this period, giving you time to
+              update your applications.
             </p>
           </div>
 
@@ -165,5 +168,5 @@ export function RotateKeyDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

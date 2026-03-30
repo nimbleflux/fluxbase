@@ -87,7 +87,7 @@ func TestStorage_GetBranch_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("retrieves existing branch", func(t *testing.T) {
-		retrieved, err := storage.GetBranch(context.Background(), branchID)
+		retrieved, err := storage.GetBranch(context.Background(), branchID, nil)
 		require.NoError(t, err)
 
 		assert.Equal(t, branch.ID, retrieved.ID)
@@ -98,7 +98,7 @@ func TestStorage_GetBranch_Integration(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent branch", func(t *testing.T) {
-		_, err := storage.GetBranch(context.Background(), uuid.New())
+		_, err := storage.GetBranch(context.Background(), uuid.New(), nil)
 		assert.Error(t, err)
 		assert.Equal(t, ErrBranchNotFound, err)
 	})
@@ -129,7 +129,7 @@ func TestStorage_GetBranchBySlug_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("retrieves branch by slug", func(t *testing.T) {
-		retrieved, err := storage.GetBranchBySlug(context.Background(), slug)
+		retrieved, err := storage.GetBranchBySlug(context.Background(), slug, nil)
 		require.NoError(t, err)
 
 		assert.Equal(t, branch.Name, retrieved.Name)
@@ -137,7 +137,7 @@ func TestStorage_GetBranchBySlug_Integration(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent slug", func(t *testing.T) {
-		_, err := storage.GetBranchBySlug(context.Background(), "nonexistent-slug")
+		_, err := storage.GetBranchBySlug(context.Background(), "nonexistent-slug", nil)
 		assert.Error(t, err)
 		assert.Equal(t, ErrBranchNotFound, err)
 	})
@@ -171,7 +171,7 @@ func TestStorage_UpdateBranchStatus_Integration(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify update
-		updated, err := storage.GetBranch(context.Background(), branch.ID)
+		updated, err := storage.GetBranch(context.Background(), branch.ID, nil)
 		require.NoError(t, err)
 		assert.Equal(t, BranchStatusReady, updated.Status)
 	})
@@ -182,7 +182,7 @@ func TestStorage_UpdateBranchStatus_Integration(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify update
-		updated, err := storage.GetBranch(context.Background(), branch.ID)
+		updated, err := storage.GetBranch(context.Background(), branch.ID, nil)
 		require.NoError(t, err)
 		assert.Equal(t, BranchStatusError, updated.Status)
 		assert.Equal(t, &errorMsg, updated.ErrorMessage)
@@ -213,11 +213,11 @@ func TestStorage_DeleteBranch_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("deletes branch successfully", func(t *testing.T) {
-		err := storage.DeleteBranch(context.Background(), branch.ID)
+		err := storage.DeleteBranch(context.Background(), branch.ID, nil)
 		require.NoError(t, err)
 
 		// Verify deletion
-		_, err = storage.GetBranch(context.Background(), branch.ID)
+		_, err = storage.GetBranch(context.Background(), branch.ID, nil)
 		assert.Error(t, err)
 		assert.Equal(t, ErrBranchNotFound, err)
 	})
@@ -318,7 +318,7 @@ func TestStorage_SetBranchExpiresAt_Integration(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify update
-		updated, err := storage.GetBranch(context.Background(), branch.ID)
+		updated, err := storage.GetBranch(context.Background(), branch.ID, nil)
 		require.NoError(t, err)
 		assert.NotNil(t, updated.ExpiresAt)
 		assert.WithinDuration(t, expiresAt, *updated.ExpiresAt, time.Second)
@@ -329,7 +329,7 @@ func TestStorage_SetBranchExpiresAt_Integration(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify update
-		updated, err := storage.GetBranch(context.Background(), branch.ID)
+		updated, err := storage.GetBranch(context.Background(), branch.ID, nil)
 		require.NoError(t, err)
 		assert.Nil(t, updated.ExpiresAt)
 	})

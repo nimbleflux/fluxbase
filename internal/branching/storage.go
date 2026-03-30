@@ -61,8 +61,9 @@ func (s *Storage) CreateBranch(ctx context.Context, branch *Branch) error {
 	).Scan(&branch.CreatedAt, &branch.UpdatedAt)
 }
 
-// GetBranch retrieves a branch by ID
-func (s *Storage) GetBranch(ctx context.Context, id uuid.UUID) (*Branch, error) {
+// GetBranch retrieves a branch by ID.
+// tenantID filters to a specific tenant when non-nil; nil means no tenant filter (admin/system access).
+func (s *Storage) GetBranch(ctx context.Context, id uuid.UUID, tenantID *uuid.UUID) (*Branch, error) {
 	query := `
 		SELECT id, name, slug, database_name, status, type, tenant_id, parent_branch_id,
 			data_clone_mode, github_pr_number, github_pr_url, github_repo,
@@ -70,8 +71,14 @@ func (s *Storage) GetBranch(ctx context.Context, id uuid.UUID) (*Branch, error) 
 		FROM branching.branches
 		WHERE id = $1 AND status != 'deleted'`
 
+	args := []any{id}
+	if tenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, *tenantID)
+	}
+
 	branch := &Branch{}
-	err := s.pool.QueryRow(ctx, query, id).Scan(
+	err := s.pool.QueryRow(ctx, query, args...).Scan(
 		&branch.ID,
 		&branch.Name,
 		&branch.Slug,
@@ -99,8 +106,9 @@ func (s *Storage) GetBranch(ctx context.Context, id uuid.UUID) (*Branch, error) 
 	return branch, nil
 }
 
-// GetBranchBySlug retrieves a branch by slug
-func (s *Storage) GetBranchBySlug(ctx context.Context, slug string) (*Branch, error) {
+// GetBranchBySlug retrieves a branch by slug.
+// tenantID filters to a specific tenant when non-nil; nil means no tenant filter (admin/system access).
+func (s *Storage) GetBranchBySlug(ctx context.Context, slug string, tenantID *uuid.UUID) (*Branch, error) {
 	query := `
 		SELECT id, name, slug, database_name, status, type, tenant_id, parent_branch_id,
 			data_clone_mode, github_pr_number, github_pr_url, github_repo,
@@ -108,8 +116,14 @@ func (s *Storage) GetBranchBySlug(ctx context.Context, slug string) (*Branch, er
 		FROM branching.branches
 		WHERE slug = $1 AND status != 'deleted'`
 
+	args := []any{slug}
+	if tenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, *tenantID)
+	}
+
 	branch := &Branch{}
-	err := s.pool.QueryRow(ctx, query, slug).Scan(
+	err := s.pool.QueryRow(ctx, query, args...).Scan(
 		&branch.ID,
 		&branch.Name,
 		&branch.Slug,
@@ -327,14 +341,21 @@ func (s *Storage) UpdateBranchStatus(ctx context.Context, id uuid.UUID, status B
 	return nil
 }
 
-// DeleteBranch marks a branch as deleted (soft delete)
-func (s *Storage) DeleteBranch(ctx context.Context, id uuid.UUID) error {
+// DeleteBranch marks a branch as deleted (soft delete).
+// tenantID scopes the delete to a specific tenant when non-nil; nil means no tenant filter.
+func (s *Storage) DeleteBranch(ctx context.Context, id uuid.UUID, tenantID *uuid.UUID) error {
 	query := `
 		UPDATE branching.branches
 		SET status = 'deleted', updated_at = NOW()
 		WHERE id = $1 AND type != 'main'`
 
-	result, err := s.pool.Exec(ctx, query, id)
+	args := []any{id}
+	if tenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, *tenantID)
+	}
+
+	result, err := s.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete branch: %w", err)
 	}
@@ -869,8 +890,8 @@ func isAccessSufficient(granted, required BranchAccessLevel) bool {
 
 // UserHasAccess checks if a user has access to a branch (any level)
 func (s *Storage) UserHasAccess(ctx context.Context, slug string, userID uuid.UUID) (bool, error) {
-	// Get the branch first
-	branch, err := s.GetBranchBySlug(ctx, slug)
+	// Get the branch first (no tenant filter — access check is cross-tenant for admin users)
+	branch, err := s.GetBranchBySlug(ctx, slug, nil)
 	if err != nil {
 		if errors.Is(err, ErrBranchNotFound) {
 			return false, nil
