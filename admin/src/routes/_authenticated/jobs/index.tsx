@@ -187,7 +187,9 @@ function JobsPage() {
                 }
               }
             }
-          } catch {}
+          } catch {
+            /* Intentionally empty: namespace probe failed */
+          }
         }
 
         if (!validNamespaces.includes(selectedNamespace)) {
@@ -366,7 +368,9 @@ function JobsPage() {
     try {
       const data = await jobsApi.listWorkers();
       setWorkers(data || []);
-    } catch {}
+    } catch {
+      /* Intentionally empty: workers fetch failed */
+    }
   }, []);
 
   const refreshAllData = useCallback(async () => {

@@ -28,11 +28,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import type { Job, LogLevel, CollapsedLog, ExecutionLogLevel } from "./types";
 import {
   LOG_LEVEL_COLORS,
   LOG_LEVEL_BADGE_COLORS,
   LOG_LEVEL_PRIORITY_MAP,
+  type Job,
+  type LogLevel,
+  type CollapsedLog,
+  type ExecutionLogLevel,
 } from "./types";
 import type { ExecutionLog } from "@/hooks/use-execution-logs";
 

@@ -245,6 +245,11 @@ jobs:
         with:
           deno-version: 2.7.5
 
+      - name: Create dist directory with placeholder for embed directive
+        run: |
+          mkdir -p internal/adminui/dist
+          echo '<!DOCTYPE html><html><head><title>Placeholder</title></head><body></body></html>' > internal/adminui/dist/index.html
+
       - name: Setup database users
         env:
           PGPASSWORD: postgres
@@ -322,11 +327,6 @@ jobs:
           # Create test bucket
           ./mc mb minio/fluxbase-test || true
           ./mc anonymous set public minio/fluxbase-test
-
-      - name: Create dist directory with placeholder for embed directive
-        run: |
-          mkdir -p internal/adminui/dist
-          echo '<!DOCTYPE html><html><head><title>Placeholder</title></head><body></body></html>' > internal/adminui/dist/index.html
 
       - name: Run unit tests with coverage
         timeout-minutes: 20

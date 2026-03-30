@@ -32,13 +32,11 @@ import {
   HistoryItem,
   SQLResultView,
   GraphQLResultView,
-} from "@/components/sql-editor";
-import type {
-  EditorMode,
-  SQLResult,
-  SQLExecutionResponse,
-  GraphQLResponse,
-  QueryHistory,
+  type EditorMode,
+  type SQLResult,
+  type SQLExecutionResponse,
+  type GraphQLResponse,
+  type QueryHistory,
 } from "@/components/sql-editor";
 
 export const Route = createFileRoute("/_authenticated/sql-editor/")({

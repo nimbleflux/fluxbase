@@ -31,11 +31,9 @@ import {
   CommonFields,
   TemplateCard,
   TemplateEditor,
-} from "@/components/email-settings";
-import type {
-  EmailTemplate,
-  ProviderFormState,
-  ProviderType,
+  type EmailTemplate,
+  type ProviderFormState,
+  type ProviderType,
 } from "@/components/email-settings";
 
 const emailSettingsSearchSchema = z.object({

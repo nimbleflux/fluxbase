@@ -1,5 +1,15 @@
-import { FolderPlus, Home, RefreshCw, Upload, Trash2 } from "lucide-react";
-import { ChevronRight } from "lucide-react";
+import {
+  FolderPlus,
+  Home,
+  RefreshCw,
+  Upload,
+  Trash2,
+  ChevronRight,
+  Image as ImageIcon,
+  FileCode,
+  FileText,
+  FileCog,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,7 +22,6 @@ import {
 } from "@/components/ui/select";
 import { ImpersonationPopover } from "@/features/impersonation/components/impersonation-popover";
 import { Badge } from "@/components/ui/badge";
-import { Image as ImageIcon, FileCode, FileText, FileCog } from "lucide-react";
 import type { ToolbarProps, FileTypeFilterChipsProps } from "./types";
 
 function FileTypeFilterChips({

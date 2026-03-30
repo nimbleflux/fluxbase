@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
+  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -330,8 +331,6 @@ function EmptyState({
     </div>
   );
 }
-
-import { TableCell } from "@/components/ui/table";
 
 export const Route = createFileRoute("/_authenticated/client-keys/")({
   component: ClientKeysPage,

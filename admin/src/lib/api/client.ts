@@ -76,14 +76,18 @@ api.interceptors.request.use(
       if (currentTenant?.id) {
         config.headers["X-FB-Tenant"] = currentTenant.id;
       }
-    } catch {}
+    } catch {
+      /* Intentionally empty: tenant store may not be available */
+    }
 
     try {
       const currentBranch = useBranchStore.getState().currentBranch;
       if (currentBranch?.slug && currentBranch.type !== "main") {
         config.headers["X-Fluxbase-Branch"] = currentBranch.slug;
       }
-    } catch {}
+    } catch {
+      /* Intentionally empty: branch store may not be available */
+    }
 
     return config;
   },

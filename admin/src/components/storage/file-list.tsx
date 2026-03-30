@@ -7,12 +7,12 @@ import {
   FolderOpen,
   Info,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Upload } from "lucide-react";
 import type { FileListProps } from "./types";
 
 export function FileList({

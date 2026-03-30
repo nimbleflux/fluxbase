@@ -43,17 +43,6 @@ export const SelectDropdown = React.forwardRef<
   },
   ref,
 ) {
-  // Debug logging
-  console.log("[SelectDropdown] Render:", {
-    defaultValue,
-    isControlled,
-    itemsCount: items?.length,
-    disabled,
-    id,
-    ariaDescribedBy,
-    ariaInvalid,
-  });
-
   const defaultState = isControlled
     ? { value: defaultValue, onValueChange }
     : { defaultValue, onValueChange };
