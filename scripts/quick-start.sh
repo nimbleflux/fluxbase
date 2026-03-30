@@ -61,7 +61,7 @@ if [ ! -f "$ENV_FILE" ]; then
     echo -e "${BLUE}Generating secrets...${NC}"
 
     # Generate secrets
-    JWT_SECRET=$(openssl rand -base64 32 | tr -d '\n')
+    JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')
     ENCRYPTION_KEY=$(openssl rand -base64 32 | head -c 32)
     SETUP_TOKEN=$(openssl rand -base64 32 | tr -d '\n')
     POSTGRES_PASSWORD=$(openssl rand -base64 16 | tr -d '\n')

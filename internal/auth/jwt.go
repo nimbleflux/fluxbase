@@ -2,12 +2,15 @@ package auth
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
+
+var jwtLengthWarnOnce sync.Once
 
 var (
 	// ErrInvalidToken is returned when a token is invalid
@@ -73,9 +76,11 @@ func NewJWTManager(secretKey string, accessTTL, refreshTTL time.Duration) (*JWTM
 	}
 
 	if len(secretKey) < 64 {
-		log.Warn().
-			Int("length", len(secretKey)).
-			Msg("JWT secret key is shorter than recommended 64 characters")
+		jwtLengthWarnOnce.Do(func() {
+			log.Warn().
+				Int("length", len(secretKey)).
+				Msg("JWT secret key is shorter than recommended 64 characters")
+		})
 	}
 
 	return &JWTManager{
@@ -95,9 +100,11 @@ func NewJWTManagerWithConfig(secretKey string, accessTTL, refreshTTL, serviceRol
 	}
 
 	if len(secretKey) < 64 {
-		log.Warn().
-			Int("length", len(secretKey)).
-			Msg("JWT secret key is shorter than recommended 64 characters")
+		jwtLengthWarnOnce.Do(func() {
+			log.Warn().
+				Int("length", len(secretKey)).
+				Msg("JWT secret key is shorter than recommended 64 characters")
+		})
 	}
 
 	return &JWTManager{

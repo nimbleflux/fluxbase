@@ -100,7 +100,7 @@ const { showSecret = true } = Astro.props;
     if (useExisting && existingSecret) {
       jwtSecret = existingSecret;
     } else {
-      jwtSecret = generateRandomBase64(32);
+      jwtSecret = generateRandomBase64(48);
     }
 
     const postgresPassword = generateRandomBase64(18).replace(/[+/=]/g, '').substring(0, 32);

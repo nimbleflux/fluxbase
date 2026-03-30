@@ -324,21 +324,21 @@ Environment variables take precedence over configuration file values.
 
 ### Authentication
 
-| Variable                               | Description                           | Default         | Example                   |
-| -------------------------------------- | ------------------------------------- | --------------- | ------------------------- |
-| `FLUXBASE_AUTH_JWT_SECRET`             | JWT signing key (min 32 chars)        | **(required)**  | `openssl rand -base64 32` |
-| `FLUXBASE_AUTH_JWT_EXPIRY`             | Access token expiration               | `15m`           | `15m`, `1h`               |
-| `FLUXBASE_AUTH_REFRESH_EXPIRY`         | Refresh token expiration              | `168h` (7 days) | `168h`, `720h`            |
-| `FLUXBASE_AUTH_SERVICE_ROLE_TTL`       | Service role token TTL                | `24h`           | `24h`, `48h`              |
-| `FLUXBASE_AUTH_ANON_TTL`               | Anonymous token TTL                   | `24h`           | `24h`, `48h`              |
-| `FLUXBASE_AUTH_MAGIC_LINK_EXPIRY`      | Magic link expiration                 | `15m`           | `15m`                     |
-| `FLUXBASE_AUTH_PASSWORD_RESET_EXPIRY`  | Password reset expiration             | `1h`            | `1h`                      |
-| `FLUXBASE_AUTH_PASSWORD_MIN_LENGTH`    | Minimum password length               | `12`            | `8`, `16`                 |
-| `FLUXBASE_AUTH_BCRYPT_COST`            | Bcrypt cost factor (4-31)             | `10`            | `10`, `12`                |
-| `FLUXBASE_AUTH_SIGNUP_ENABLED`         | Enable user registration              | `true`          | `true`, `false`           |
-| `FLUXBASE_AUTH_MAGIC_LINK_ENABLED`     | Enable magic link auth                | `true`          | `true`, `false`           |
-| `FLUXBASE_AUTH_TOTP_ISSUER`            | 2FA TOTP issuer name                  | `Fluxbase`      | `MyApp`                   |
-| `FLUXBASE_AUTH_ALLOW_USER_CLIENT_KEYS` | Allow users to create API client keys | `true`          | `true`, `false`           |
+| Variable                               | Description                            | Default         | Example                   |
+| -------------------------------------- | -------------------------------------- | --------------- | ------------------------- |
+| `FLUXBASE_AUTH_JWT_SECRET`             | JWT signing key (64 chars recommended) | **(required)**  | `openssl rand -base64 48` |
+| `FLUXBASE_AUTH_JWT_EXPIRY`             | Access token expiration                | `15m`           | `15m`, `1h`               |
+| `FLUXBASE_AUTH_REFRESH_EXPIRY`         | Refresh token expiration               | `168h` (7 days) | `168h`, `720h`            |
+| `FLUXBASE_AUTH_SERVICE_ROLE_TTL`       | Service role token TTL                 | `24h`           | `24h`, `48h`              |
+| `FLUXBASE_AUTH_ANON_TTL`               | Anonymous token TTL                    | `24h`           | `24h`, `48h`              |
+| `FLUXBASE_AUTH_MAGIC_LINK_EXPIRY`      | Magic link expiration                  | `15m`           | `15m`                     |
+| `FLUXBASE_AUTH_PASSWORD_RESET_EXPIRY`  | Password reset expiration              | `1h`            | `1h`                      |
+| `FLUXBASE_AUTH_PASSWORD_MIN_LENGTH`    | Minimum password length                | `12`            | `8`, `16`                 |
+| `FLUXBASE_AUTH_BCRYPT_COST`            | Bcrypt cost factor (4-31)              | `10`            | `10`, `12`                |
+| `FLUXBASE_AUTH_SIGNUP_ENABLED`         | Enable user registration               | `true`          | `true`, `false`           |
+| `FLUXBASE_AUTH_MAGIC_LINK_ENABLED`     | Enable magic link auth                 | `true`          | `true`, `false`           |
+| `FLUXBASE_AUTH_TOTP_ISSUER`            | 2FA TOTP issuer name                   | `Fluxbase`      | `MyApp`                   |
+| `FLUXBASE_AUTH_ALLOW_USER_CLIENT_KEYS` | Allow users to create API client keys  | `true`          | `true`, `false`           |
 
 :::note[JWT Secret Entropy Requirements]
 The JWT secret is validated for entropy (minimum 4.5 bits per character). This means:
@@ -391,7 +391,7 @@ auth:
 
 **Security Best Practices:**
 
-- Use a strong, random JWT secret (min 32 characters): `openssl rand -base64 32`
+- Use a strong, random JWT secret (64 characters recommended): `openssl rand -base64 48`
 - Rotate JWT secrets periodically
 - Use short access token expiry (15-30 minutes)
 - Use longer refresh token expiry (7-30 days)

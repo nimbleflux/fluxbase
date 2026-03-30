@@ -1260,25 +1260,16 @@ func (s *SAMLService) LoadProvidersFromDB(ctx context.Context) error {
 		WHERE enabled = true AND COALESCE(source, 'database') = 'database'
 	`
 
-	// Retry on transient connection errors during startup (e.g., pool still initializing)
+	// Ping the pool first to ensure at least one healthy connection is available.
+	// This prevents "conn closed" errors when the pool was recently recreated
+	// (e.g., after migrations) and connections haven't been fully established yet.
+	if pingErr := s.db.Ping(ctx); pingErr != nil {
+		return fmt.Errorf("failed to ping database before loading SAML providers: %w", pingErr)
+	}
+
 	var rows pgx.Rows
 	var err error
-	maxRetries := 3
-	for i := 0; i < maxRetries; i++ {
-		rows, err = s.db.Query(ctx, query)
-		if err == nil {
-			break
-		}
-		// Check if it's a transient connection error
-		if strings.Contains(err.Error(), "conn closed") || strings.Contains(err.Error(), "connection") {
-			if i < maxRetries-1 {
-				log.Debug().Err(err).Int("attempt", i+1).Msg("Retrying SAML provider query after connection error")
-				time.Sleep(100 * time.Millisecond)
-				continue
-			}
-		}
-		break
-	}
+	rows, err = s.db.Query(ctx, query)
 	if err != nil {
 		return fmt.Errorf("failed to query SAML providers: %w", err)
 	}

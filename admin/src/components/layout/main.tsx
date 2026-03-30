@@ -1,11 +1,11 @@
-import { cn } from '@/lib/utils'
-import { ThemeProvider } from '@/contexts/theme-context'
+import { cn } from "@/lib/utils";
+import { ThemeProvider } from "@/context/theme-provider";
 
 interface MainProps {
-  fixed?: boolean
-  fluid?: boolean
-  className?: string
-  children?: React.ReactNode
+  fixed?: boolean;
+  fluid?: boolean;
+  className?: string;
+  children?: React.ReactNode;
 }
 
 export function Main({ fixed, className, fluid, children }: MainProps) {
@@ -13,14 +13,14 @@ export function Main({ fixed, className, fluid, children }: MainProps) {
     <ThemeProvider>
       <main
         className={cn(
-          'flex-1',
-          fixed && 'fixed inset-0 overflow-auto',
-          fluid ? 'w-full' : 'container mx-auto px-4',
-          className
+          "flex-1",
+          fixed && "fixed inset-0 overflow-auto",
+          fluid ? "w-full" : "container mx-auto px-4",
+          className,
         )}
       >
         {children}
       </main>
     </ThemeProvider>
-  )
+  );
 }

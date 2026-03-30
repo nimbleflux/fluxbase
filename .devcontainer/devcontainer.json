@@ -97,7 +97,7 @@
       ]
     }
   },
-  "forwardPorts": [8080, 4321, 6379, 8025, 1025, 9000, 9001],
+  "forwardPorts": [8080, 5050, 4321, 6379, 8025, 1025, 9000, 9001],
   "portsAttributes": {
     "4000": {
       "label": "External Service",
@@ -105,6 +105,11 @@
     },
     "8080": {
       "label": "Fluxbase API",
+      "onAutoForward": "notify",
+      "requireLocalPort": false
+    },
+    "5050": {
+      "label": "Admin UI (Dev)",
       "onAutoForward": "notify",
       "requireLocalPort": false
     },

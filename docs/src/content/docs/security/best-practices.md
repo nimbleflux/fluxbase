@@ -714,8 +714,8 @@ const jwtSecret = await getSecret("fluxbase/jwt-secret");
 #!/bin/bash
 # rotate-secrets.sh
 
-# Generate new JWT secret
-NEW_SECRET=$(openssl rand -base64 32)
+# Generate new JWT secret (64 chars recommended)
+NEW_SECRET=$(openssl rand -base64 48)
 
 # Update in secrets manager
 kubectl patch secret fluxbase-secrets \
