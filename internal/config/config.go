@@ -38,6 +38,7 @@ type Config struct {
 	Scaling       ScalingConfig    `mapstructure:"scaling"`
 	Logging       LoggingConfig    `mapstructure:"logging"`
 	Admin         AdminConfig      `mapstructure:"admin"`
+	Tenants       TenantsConfig    `mapstructure:"tenants"`
 	BaseURL       string           `mapstructure:"base_url"`        // Internal base URL (for server-to-server communication)
 	PublicBaseURL string           `mapstructure:"public_base_url"` // Public base URL (for user-facing links, OAuth callbacks, etc.)
 	Debug         bool             `mapstructure:"debug"`
@@ -51,6 +52,74 @@ type Config struct {
 // AdminConfig contains admin dashboard settings
 type AdminConfig struct {
 	Enabled bool `mapstructure:"enabled"` // Enable admin dashboard UI (React app). API routes are always available when setup_token is set.
+}
+
+// TenantsConfig contains tenant configuration settings
+type TenantsConfig struct {
+	Enabled        bool                       `mapstructure:"enabled"`
+	DatabasePrefix string                     `mapstructure:"database_prefix"`
+	MaxTenants     int                        `mapstructure:"max_tenants"`
+	Pool           TenantPoolConfig           `mapstructure:"pool"`
+	Migrations     TenantMigrationsConfig     `mapstructure:"migrations"`
+	Declarative    TenantDeclarativeConfig    `mapstructure:"declarative"`
+	Default        DefaultTenantConfig        `mapstructure:"default"`
+	Configs        map[string]TenantOverrides `mapstructure:"configs"`
+	ConfigDir      string                     `mapstructure:"config_dir"`
+}
+
+// TenantPoolConfig contains connection pool settings for tenant databases
+type TenantPoolConfig struct {
+	MaxTotalConnections int32         `mapstructure:"max_total_connections"`
+	EvictionAge         time.Duration `mapstructure:"eviction_age"`
+}
+
+// TenantMigrationsConfig contains migration settings for tenant databases
+type TenantMigrationsConfig struct {
+	CheckInterval time.Duration `mapstructure:"check_interval"`
+	OnCreate      bool          `mapstructure:"on_create"`
+	OnAccess      bool          `mapstructure:"on_access"`
+	Background    bool          `mapstructure:"background"`
+}
+
+// TenantDeclarativeConfig contains declarative schema settings for tenant databases
+// This allows tenants to define their own schemas declaratively using SQL files
+type TenantDeclarativeConfig struct {
+	// Enabled controls whether tenant-specific declarative schemas are applied
+	Enabled bool `mapstructure:"enabled"`
+	// SchemaDir is the directory containing tenant schema files
+	// Structure: {SchemaDir}/{tenant-slug}/public.sql
+	// Example: schemas/acme-corp/public.sql
+	SchemaDir string `mapstructure:"schema_dir"`
+	// OnCreate applies declarative schemas when a tenant database is created
+	OnCreate bool `mapstructure:"on_create"`
+	// OnStartup applies declarative schemas on server startup (for existing tenants)
+	OnStartup bool `mapstructure:"on_startup"`
+	// AllowDestructive allows destructive schema changes (DROP, ALTER)
+	AllowDestructive bool `mapstructure:"allow_destructive"`
+}
+
+// TenantOverrides holds configuration overrides for a specific tenant
+// Only user-facing sections can be overridden; infrastructure sections remain global
+type TenantOverrides struct {
+	Auth      *AuthConfig      `mapstructure:"auth"`
+	Storage   *StorageConfig   `mapstructure:"storage"`
+	Email     *EmailConfig     `mapstructure:"email"`
+	Functions *FunctionsConfig `mapstructure:"functions"`
+	Jobs      *JobsConfig      `mapstructure:"jobs"`
+	AI        *AIConfig        `mapstructure:"ai"`
+	Realtime  *RealtimeConfig  `mapstructure:"realtime"`
+	API       *APIConfig       `mapstructure:"api"`
+	GraphQL   *GraphQLConfig   `mapstructure:"graphql"`
+	RPC       *RPCConfig       `mapstructure:"rpc"`
+}
+
+// DefaultTenantConfig contains default tenant settings
+type DefaultTenantConfig struct {
+	Name           string `mapstructure:"name"`
+	AnonKey        string `mapstructure:"anon_key"`
+	ServiceKey     string `mapstructure:"service_key"`
+	AnonKeyFile    string `mapstructure:"anon_key_file"`
+	ServiceKeyFile string `mapstructure:"service_key_file"`
 }
 
 // DenoConfig contains Deno runtime settings for edge functions and background jobs
@@ -183,7 +252,7 @@ type AuthConfig struct {
 	SAMLProviders []SAMLProviderConfig `mapstructure:"saml_providers"`
 
 	// AllowUserClientKeys controls whether regular users can create their own client keys.
-	// When false, only admins (service_role or dashboard_admin) can create/manage client keys,
+	// When false, only admins (service_role or instance_admin) can create/manage client keys,
 	// and existing user-created keys are blocked from authenticating.
 	// Default: true
 	AllowUserClientKeys bool `mapstructure:"allow_user_client_keys"`
@@ -250,6 +319,9 @@ type OAuthProviderConfig struct {
 // SecurityConfig contains security-related settings
 type SecurityConfig struct {
 	EnableGlobalRateLimit bool `mapstructure:"enable_global_rate_limit"` // Global API rate limiting (100 req/min per IP)
+
+	// Service role token revocation behavior
+	ServiceRoleFailOpen bool `mapstructure:"service_role_fail_open"` // If false (default), fail-closed when revocation check fails (503). If true, fail-open for backward compatibility.
 
 	// Admin setup security token
 	SetupToken string `mapstructure:"setup_token"` // Required token for admin setup. If empty, admin dashboard is disabled.
@@ -804,6 +876,22 @@ func setDefaults() {
 
 	// Admin defaults
 	viper.SetDefault("admin.enabled", false) // Admin dashboard disabled by default
+
+	// Tenants defaults
+	viper.SetDefault("tenants.enabled", true)
+	viper.SetDefault("tenants.database_prefix", "tenant_")
+	viper.SetDefault("tenants.max_tenants", 100)
+	viper.SetDefault("tenants.pool.max_total_connections", 100)
+	viper.SetDefault("tenants.pool.eviction_age", "30m")
+	viper.SetDefault("tenants.migrations.check_interval", "5m")
+	viper.SetDefault("tenants.migrations.on_create", true)
+	viper.SetDefault("tenants.migrations.on_access", true)
+	viper.SetDefault("tenants.migrations.background", true)
+	viper.SetDefault("tenants.default.name", "default")
+	viper.SetDefault("tenants.default.anon_key", "")
+	viper.SetDefault("tenants.default.service_key", "")
+	viper.SetDefault("tenants.default.anon_key_file", "")
+	viper.SetDefault("tenants.default.service_key_file", "")
 
 	// CORS defaults
 	viper.SetDefault("cors.allowed_origins", "http://localhost:5173,http://localhost:8080")

@@ -4,8 +4,9 @@ package e2e
 import (
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/ai"
 )
 
 // TestSQLValidatorAllowsValidSelect tests that valid SELECT queries pass validation

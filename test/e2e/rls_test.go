@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // setupRLSTest prepares the test context for RLS tests
@@ -20,13 +21,13 @@ func setupRLSTest(t *testing.T) *test.TestContext {
 	// Must use superuser because RLS test user doesn't have DELETE permission on some tables
 	tc.ExecuteSQLAsSuperuser(`
 		-- Delete only test users (those with test email patterns)
-		DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com';
+		DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com';
 		-- Clean test-specific client_keys
 		DELETE FROM auth.client_keys WHERE name LIKE '%Test%' OR name LIKE '%test%';
 		-- Clean impersonation sessions for deleted users (will cascade)
 		DELETE FROM auth.impersonation_sessions WHERE admin_user_id NOT IN (SELECT id FROM auth.users);
 		-- Clean magic_links for deleted users
-		DELETE FROM auth.magic_links WHERE email LIKE '%@example.com' OR email LIKE '%@test.com';
+		DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com';
 		-- Clean password_reset_tokens for deleted users (will cascade)
 		DELETE FROM auth.password_reset_tokens WHERE user_id NOT IN (SELECT id FROM auth.users);
 		-- Clean tasks table used for RLS tests
@@ -761,7 +762,7 @@ func TestRLSDashboardAdminTablesProtected(t *testing.T) {
 
 	require.Len(t, activityLog, 0, "Regular user should NOT see activity_log (dashboard admin only)")
 
-	t.Log("Dashboard admin tables correctly restricted to dashboard_admin role")
+	t.Log("Dashboard admin tables correctly restricted to instance_admin role")
 }
 
 // TestRLSImpersonationSessionsAdminOnly tests that impersonation sessions are admin-only
@@ -803,7 +804,7 @@ func TestRLSImpersonationSessionsAdminOnly(t *testing.T) {
 	`, userID)
 	require.Len(t, sessionsSuper, 1, "Dashboard admin/service role should see impersonation_sessions")
 
-	t.Log("Impersonation sessions correctly restricted to dashboard_admin only")
+	t.Log("Impersonation sessions correctly restricted to instance_admin only")
 }
 
 // TestRLSAPIKeyUsageRestriction tests that users can only see usage for their own client keys
@@ -969,8 +970,8 @@ func TestRLSRoleMapping(t *testing.T) {
 			expectedDBRole: "authenticated",
 		},
 		{
-			name:           "dashboard_admin maps to authenticated",
-			appRole:        "dashboard_admin",
+			name:           "instance_admin maps to authenticated",
+			appRole:        "instance_admin",
 			expectedDBRole: "authenticated",
 		},
 		{

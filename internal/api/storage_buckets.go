@@ -20,6 +20,14 @@ func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
 		})
 	}
 
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	// Parse request body for bucket configuration
 	var req struct {
 		Public           bool     `json:"public"`
@@ -78,7 +86,7 @@ func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
 	}
 
 	// Create the bucket in storage provider
-	if err := h.storage.Provider.CreateBucket(ctx, bucket); err != nil {
+	if err := svc.Provider.CreateBucket(ctx, bucket); err != nil {
 		// Rollback will happen via defer
 		if strings.Contains(err.Error(), "already exists") {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
@@ -253,15 +261,16 @@ func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
 		})
 	}
 
-	// Check if storage service is available
-	if h.storage == nil || h.storage.Provider == nil {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "storage service not initialized",
+			"error": "failed to get storage service",
 		})
 	}
 
 	// Delete the bucket
-	if err := h.storage.Provider.DeleteBucket(c.RequestCtx(), bucket); err != nil {
+	if err := svc.Provider.DeleteBucket(c.RequestCtx(), bucket); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "bucket not found",
@@ -292,7 +301,7 @@ func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
 func (h *StorageHandler) ListBuckets(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to list buckets",
 		})

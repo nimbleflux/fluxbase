@@ -5,12 +5,13 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/logging"
 	"github.com/nimbleflux/fluxbase/internal/observability"
-	"github.com/rs/zerolog/log"
 )
 
 // Handler handles RPC-related HTTP endpoints
@@ -20,6 +21,7 @@ type Handler struct {
 	executor       *Executor
 	validator      *Validator
 	config         *config.RPCConfig
+	baseConfig     *config.Config
 	authService    *auth.Service
 	scheduler      *Scheduler
 	loggingService *logging.Service
@@ -36,16 +38,28 @@ func (h *Handler) GetExecutor() *Executor {
 }
 
 // NewHandler creates a new RPC handler
-func NewHandler(db *database.Connection, storage *Storage, loader *Loader, metrics *observability.Metrics, cfg *config.RPCConfig, authService *auth.Service, loggingService *logging.Service) *Handler {
+func NewHandler(db *database.Connection, storage *Storage, loader *Loader, metrics *observability.Metrics, cfg *config.RPCConfig, authService *auth.Service, loggingService *logging.Service, baseConfig *config.Config) *Handler {
 	return &Handler{
 		storage:        storage,
 		loader:         loader,
 		executor:       NewExecutor(db, storage, metrics, cfg),
 		validator:      NewValidator(),
 		config:         cfg,
+		baseConfig:     baseConfig,
 		authService:    authService,
 		loggingService: loggingService,
 	}
+}
+
+// getConfig returns the RPC config to use for the current request.
+// It checks for tenant-specific config in fiber context locals and falls back to base config.
+//
+//nolint:unused // Kept for future tenant-specific config support
+func (h *Handler) getConfig(c fiber.Ctx) *config.RPCConfig {
+	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
+		return &tc.RPC
+	}
+	return h.config
 }
 
 // ============================================================================
@@ -818,7 +832,7 @@ func (h *Handler) GetPublicExecution(c fiber.Ctx) error {
 
 	// Check ownership (unless service role)
 	role, _ := c.Locals("user_role").(string)
-	if role != "service_role" && role != "dashboard_admin" {
+	if role != "service_role" && role != "instance_admin" {
 		if execution.UserID == nil || *execution.UserID != userID {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "Execution not found",
@@ -856,9 +870,9 @@ func (h *Handler) GetPublicExecutionLogs(c fiber.Ctx) error {
 		})
 	}
 
-	// Check ownership (unless service_role or dashboard_admin)
+	// Check ownership (unless service_role or instance_admin)
 	role, _ := c.Locals("user_role").(string)
-	if role != "service_role" && role != "dashboard_admin" {
+	if role != "service_role" && role != "instance_admin" {
 		if execution.UserID == nil || *execution.UserID != userID {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "Execution not found",

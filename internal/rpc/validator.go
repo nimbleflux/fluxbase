@@ -243,7 +243,7 @@ func (v *Validator) ValidateSQL(sql string, allowedTables, allowedSchemas []stri
 //
 // SECURITY IMPLICATIONS:
 //
-// Service role (service_role and dashboard_admin) bypass all access checks:
+// Service role (service_role and instance_admin) bypass all access checks:
 // - These roles have unrestricted access to ALL procedures
 // - If service role credentials are compromised, an attacker gains full database access
 // - Service role tokens should NEVER be exposed to client-side code
@@ -263,7 +263,7 @@ func (v *Validator) ValidateAccess(proc *Procedure, userRole string, isAuthentic
 	// Service roles bypass all checks (check first, before authentication)
 	// This is important because service_role tokens don't have a user_id,
 	// so isAuthenticated will be false even though service_role should have full access
-	if userRole == "service_role" || userRole == "dashboard_admin" {
+	if userRole == "service_role" || userRole == "instance_admin" {
 		return nil
 	}
 

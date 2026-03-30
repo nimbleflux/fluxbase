@@ -9,7 +9,7 @@ import type {
   SignUpCredentials,
   User,
   AuthSession,
-} from "@fluxbase/sdk";
+} from "@nimbleflux/fluxbase-sdk";
 
 /**
  * Hook to get the current user

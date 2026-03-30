@@ -8,12 +8,14 @@ The Admin SDK provides programmatic access to Fluxbase instance management, incl
 ## Overview
 
 The Admin SDK is designed for:
+
 - Building admin dashboards
 - Automating user management
 - Managing Fluxbase instances programmatically
 - Server-side administration tasks
 
 **Key Features**:
+
 - Admin authentication (setup, login, logout)
 - User management (CRUD operations)
 - Role management
@@ -33,15 +35,15 @@ npm install @nimbleflux/fluxbase-sdk
 ### Initialize Admin Client
 
 ```typescript
-import { createClient } from '@nimbleflux/fluxbase-sdk'
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient(
-  'http://localhost:8080',
-  'your-service-role-key' // Use service role key for admin operations
-)
+  "http://localhost:8080",
+  "your-service-role-key", // Use service role key for admin operations
+);
 
 // Access admin module
-const admin = client.admin
+const admin = client.admin;
 ```
 
 ### Initial Setup
@@ -50,18 +52,18 @@ Perform the initial admin setup (first-time only):
 
 ```typescript
 // Check if setup is needed
-const status = await client.admin.getSetupStatus()
+const status = await client.admin.getSetupStatus();
 
 if (status.needs_setup) {
   // Perform initial setup
   const response = await client.admin.setup({
-    email: 'admin@example.com',
-    password: 'SecurePassword123!',
-    name: 'Admin User'
-  })
+    email: "admin@example.com",
+    password: "SecurePassword123!",
+    name: "Admin User",
+  });
 
-  console.log('Setup complete:', response.user.email)
-  console.log('Access token:', response.access_token)
+  console.log("Setup complete:", response.user.email);
+  console.log("Access token:", response.access_token);
 
   // Token is automatically set in the client
 }
@@ -71,17 +73,18 @@ if (status.needs_setup) {
 
 ```typescript
 const response = await client.admin.login({
-  email: 'admin@example.com',
-  password: 'password123'
-})
+  email: "admin@example.com",
+  password: "password123",
+});
 
-console.log('Logged in as:', response.user.email)
-console.log('Token expires in:', response.expires_in, 'seconds')
+console.log("Logged in as:", response.user.email);
+console.log("Token expires in:", response.expires_in, "seconds");
 
 // Token is automatically set for subsequent requests
 ```
 
 ---
+
 ## Admin Authentication
 
 ### Check Setup Status
@@ -89,20 +92,21 @@ console.log('Token expires in:', response.expires_in, 'seconds')
 Check if initial admin setup is required:
 
 ```typescript
-const status = await client.admin.getSetupStatus()
+const status = await client.admin.getSetupStatus();
 
 if (status.needs_setup) {
-  console.log('Initial setup required')
+  console.log("Initial setup required");
 } else {
-  console.log('Admin user already exists')
+  console.log("Admin user already exists");
 }
 ```
 
 **Response**:
+
 ```typescript
 {
-  needs_setup: boolean
-  has_admin: boolean
+  needs_setup: boolean;
+  has_admin: boolean;
 }
 ```
 
@@ -112,34 +116,36 @@ Create the first admin user (can only be called once):
 
 ```typescript
 const response = await client.admin.setup({
-  email: 'admin@example.com',
-  password: 'SecurePassword123!',
-  name: 'Admin User'
-})
+  email: "admin@example.com",
+  password: "SecurePassword123!",
+  name: "Admin User",
+});
 
-console.log('Admin created:', response.user)
+console.log("Admin created:", response.user);
 ```
 
 **Requirements**:
+
 - Password must be at least 12 characters
 - Valid email address
 - Can only be called when `needs_setup` is `true`
 
 **Response**:
+
 ```typescript
 {
   user: {
-    id: string
-    email: string
-    name: string
-    role: 'dashboard_admin'
-    email_verified: boolean
-    created_at: string
-    updated_at: string
+    id: string;
+    email: string;
+    name: string;
+    role: "instance_admin" | "tenant_admin";
+    email_verified: boolean;
+    created_at: string;
+    updated_at: string;
   }
-  access_token: string
-  refresh_token: string
-  expires_in: number
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
 }
 ```
 
@@ -149,15 +155,15 @@ Authenticate as an admin user:
 
 ```typescript
 const response = await client.admin.login({
-  email: 'admin@example.com',
-  password: 'password123'
-})
+  email: "admin@example.com",
+  password: "password123",
+});
 
 // Access token is automatically set
-console.log('Access token:', response.access_token)
+console.log("Access token:", response.access_token);
 
 // Store refresh token for later
-localStorage.setItem('admin_refresh_token', response.refresh_token)
+localStorage.setItem("admin_refresh_token", response.refresh_token);
 ```
 
 ### Refresh Token
@@ -165,15 +171,15 @@ localStorage.setItem('admin_refresh_token', response.refresh_token)
 Refresh an expired access token:
 
 ```typescript
-const refreshToken = localStorage.getItem('admin_refresh_token')
+const refreshToken = localStorage.getItem("admin_refresh_token");
 
 const response = await client.admin.refreshToken({
-  refresh_token: refreshToken
-})
+  refresh_token: refreshToken,
+});
 
 // New tokens
-console.log('New access token:', response.access_token)
-localStorage.setItem('admin_refresh_token', response.refresh_token)
+console.log("New access token:", response.access_token);
+localStorage.setItem("admin_refresh_token", response.refresh_token);
 ```
 
 ### Logout
@@ -181,13 +187,13 @@ localStorage.setItem('admin_refresh_token', response.refresh_token)
 Invalidate the current admin session:
 
 ```typescript
-await client.admin.logout()
+await client.admin.logout();
 
 // Clear stored tokens
-localStorage.removeItem('admin_access_token')
-localStorage.removeItem('admin_refresh_token')
+localStorage.removeItem("admin_access_token");
+localStorage.removeItem("admin_refresh_token");
 
-console.log('Logged out successfully')
+console.log("Logged out successfully");
 ```
 
 ### Get Current Admin
@@ -195,22 +201,24 @@ console.log('Logged out successfully')
 Get the currently authenticated admin user:
 
 ```typescript
-const { user } = await client.admin.me()
+const { user } = await client.admin.me();
 
-console.log('Current admin:', user.email)
-console.log('Role:', user.role)
+console.log("Current admin:", user.email);
+console.log("Role:", user.role);
 ```
 
 **Response**:
+
 ```typescript
 {
   user: {
-    id: string
-    email: string
-    role: string
+    id: string;
+    email: string;
+    role: string;
   }
 }
 ```
+
 ---
 
 ## User Management
@@ -221,48 +229,52 @@ List all users with optional filters:
 
 ```typescript
 // List all users
-const { users, total } = await client.admin.listUsers()
-console.log(`Total users: ${total}`)
+const { users, total } = await client.admin.listUsers();
+console.log(`Total users: ${total}`);
 
 // List with filters
 const result = await client.admin.listUsers({
-  exclude_admins: true,      // Exclude admin users
-  search: 'john',            // Search by email
-  limit: 50,                 // Limit results
-  type: 'app'                // User type: 'app' or 'dashboard'
-})
+  exclude_admins: true, // Exclude admin users
+  search: "john", // Search by email
+  limit: 50, // Limit results
+  type: "app", // User type: 'app' or 'dashboard'
+});
 
-result.users.forEach(user => {
-  console.log(`${user.email} - ${user.role} - Last login: ${user.last_login_at}`)
-})
+result.users.forEach((user) => {
+  console.log(
+    `${user.email} - ${user.role} - Last login: ${user.last_login_at}`,
+  );
+});
 ```
 
 **Options**:
+
 ```typescript
 interface ListUsersOptions {
-  exclude_admins?: boolean    // Exclude admin users
-  search?: string             // Search by email
-  limit?: number              // Maximum results
-  type?: 'app' | 'dashboard'  // User type
+  exclude_admins?: boolean; // Exclude admin users
+  search?: string; // Search by email
+  limit?: number; // Maximum results
+  type?: "app" | "dashboard"; // User type
 }
 ```
 
 **Response**:
+
 ```typescript
 {
   users: Array<{
-    id: string
-    email: string
-    role?: string
-    created_at: string
-    updated_at?: string
-    email_verified?: boolean
-    last_login_at?: string
-    session_count?: number
-    is_anonymous?: boolean
-    metadata?: Record<string, any>
-  }>
-  total: number
+    id: string;
+    email: string;
+    role?: string;
+    created_at: string;
+    updated_at?: string;
+    email_verified?: boolean;
+    last_login_at?: string;
+    session_count?: number;
+    is_anonymous?: boolean;
+    metadata?: Record<string, any>;
+  }>;
+  total: number;
 }
 ```
 
@@ -272,25 +284,27 @@ Create a new user and send an invitation email:
 
 ```typescript
 const response = await client.admin.inviteUser({
-  email: 'newuser@example.com',
-  role: 'user',
-  send_email: true
-})
+  email: "newuser@example.com",
+  role: "user",
+  send_email: true,
+});
 
-console.log('User invited:', response.user.email)
-console.log('Invitation link:', response.invitation_link)
+console.log("User invited:", response.user.email);
+console.log("Invitation link:", response.invitation_link);
 ```
 
 **Request**:
+
 ```typescript
 interface InviteUserRequest {
-  email: string
-  role?: string
-  send_email?: boolean
+  email: string;
+  role?: string;
+  send_email?: boolean;
 }
 ```
 
 **Response**:
+
 ```typescript
 {
   user: EnrichedUser
@@ -304,8 +318,8 @@ interface InviteUserRequest {
 Permanently delete a user:
 
 ```typescript
-const response = await client.admin.deleteUser('user-uuid')
-console.log(response.message) // "User deleted successfully"
+const response = await client.admin.deleteUser("user-uuid");
+console.log(response.message); // "User deleted successfully"
 ```
 
 **Warning**: This permanently deletes the user and all associated data.
@@ -315,18 +329,17 @@ console.log(response.message) // "User deleted successfully"
 Change a user's role:
 
 ```typescript
-const user = await client.admin.updateUserRole(
-  'user-uuid',
-  'admin'
-)
+const user = await client.admin.updateUserRole("user-uuid", "admin");
 
-console.log('User role updated:', user.role)
+console.log("User role updated:", user.role);
 ```
 
 **Common Roles**:
+
 - `user` - Regular user
 - `admin` - Admin user
-- `dashboard_admin` - Dashboard administrator
+- `instance_admin` - Instance-level administrator (full platform access)
+- `tenant_admin` - Tenant-level administrator (limited to assigned tenants)
 - Custom roles as defined in your application
 
 ### Reset User Password
@@ -334,11 +347,189 @@ console.log('User role updated:', user.role)
 Generate a new password for a user:
 
 ```typescript
-const response = await client.admin.resetUserPassword('user-uuid')
-console.log(response.message) // "Password reset email sent"
+const response = await client.admin.resetUserPassword("user-uuid");
+console.log(response.message); // "Password reset email sent"
 ```
 
 This sends a password reset email to the user or returns the new password.
+
+---
+
+## Tenant Management
+
+Tenant management requires `instance_admin` role.
+
+### List Tenants
+
+```typescript
+const { tenants, total } = await client.admin.listTenants({
+  limit: 50,
+  offset: 0,
+  include_deleted: false,
+});
+
+tenants.forEach((tenant) => {
+  console.log(
+    `${tenant.name} (${tenant.slug}) - Default: ${tenant.is_default}`,
+  );
+});
+```
+
+**Response**:
+
+```typescript
+{
+  tenants: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    is_default: boolean;
+    metadata: Record<string, any> | null;
+    created_at: string;
+    updated_at: string;
+    deleted_at: string | null;
+  }>;
+  total: number;
+}
+```
+
+### Create Tenant
+
+```typescript
+const tenant = await client.admin.createTenant({
+  slug: "acme-corp",
+  name: "Acme Corporation",
+  metadata: {
+    plan: "enterprise",
+    billing_email: "billing@acme.com",
+  },
+});
+
+console.log("Created tenant:", tenant.id);
+```
+
+**Request**:
+
+```typescript
+interface CreateTenantRequest {
+  slug: string;
+  name: string;
+  is_default?: boolean;
+  metadata?: Record<string, any>;
+}
+```
+
+### Update Tenant
+
+```typescript
+const tenant = await client.admin.updateTenant("tenant-uuid", {
+  name: "Acme Corp Inc.",
+  metadata: { plan: "pro" },
+});
+```
+
+### Delete Tenant
+
+```typescript
+// Soft delete (sets deleted_at)
+await client.admin.deleteTenant("tenant-uuid");
+```
+
+---
+
+## Service Key Management
+
+Service key management requires `instance_admin` or `tenant_admin` role.
+
+### List Service Keys
+
+```typescript
+// List all keys (instance_admin only)
+const { keys, total } = await client.admin.listServiceKeys();
+
+// List keys for specific tenant
+const { keys, total } = await client.admin.listServiceKeys({
+  tenant_id: "tenant-uuid",
+  key_type: "tenant_service",
+  is_active: true,
+});
+```
+
+**Options**:
+
+```typescript
+interface ListServiceKeysOptions {
+  tenant_id?: string;
+  key_type?: "anon" | "publishable" | "tenant_service" | "global_service";
+  is_active?: boolean;
+  user_id?: string;
+  limit?: number;
+  offset?: number;
+}
+```
+
+### Create Service Key
+
+```typescript
+const key = await client.admin.createServiceKey({
+  name: "Production API Key",
+  key_type: "tenant_service",
+  tenant_id: "tenant-uuid",
+  scopes: ["rest:read", "rest:write", "storage:read"],
+  allowed_namespaces: ["public", "app"],
+});
+
+console.log("Key prefix:", key.key_prefix);
+console.log("Full key (store securely):", key.key);
+```
+
+**Request**:
+
+```typescript
+interface CreateServiceKeyRequest {
+  name: string;
+  key_type: "anon" | "publishable" | "tenant_service" | "global_service";
+  tenant_id?: string; // Required for tenant_service keys
+  user_id?: string; // For publishable keys
+  scopes?: string[];
+  allowed_namespaces?: string[];
+}
+```
+
+**Key Types**:
+
+- `anon` - Anonymous access, no tenant context
+- `publishable` - User-scoped key
+- `tenant_service` - Tenant-scoped backend key
+- `global_service` - Platform-wide key (instance_admin only)
+
+### Rotate Service Key
+
+```typescript
+// Rotate with grace period
+const newKey = await client.admin.rotateServiceKey("old-key-id", {
+  grace_period_hours: 24,
+});
+
+console.log("New key:", newKey.key);
+console.log("Old key works until:", newKey.grace_period_ends_at);
+```
+
+### Revoke Service Key
+
+```typescript
+await client.admin.revokeServiceKey("key-id", "Security incident");
+```
+
+### Deprecate Service Key
+
+```typescript
+// Mark for deprecation with grace period
+await client.admin.deprecateServiceKey("key-id", {
+  grace_period_hours: 48,
+  replacement_key_id: "new-key-id",
+});
+```
 
 ---
 
@@ -347,27 +538,24 @@ This sends a password reset email to the user or returns the new password.
 ### Admin Dashboard
 
 ```typescript
-import { createClient } from '@nimbleflux/fluxbase-sdk'
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 // Initialize client
-const client = createClient(
-  'http://localhost:8080',
-  'your-service-role-key'
-)
+const client = createClient("http://localhost:8080", "your-service-role-key");
 
 // Admin login
 async function adminLogin(email: string, password: string) {
   try {
-    const response = await client.admin.login({ email, password })
+    const response = await client.admin.login({ email, password });
 
     // Store tokens
-    localStorage.setItem('admin_access_token', response.access_token)
-    localStorage.setItem('admin_refresh_token', response.refresh_token)
+    localStorage.setItem("admin_access_token", response.access_token);
+    localStorage.setItem("admin_refresh_token", response.refresh_token);
 
-    return response.user
+    return response.user;
   } catch (error) {
-    console.error('Login failed:', error)
-    throw error
+    console.error("Login failed:", error);
+    throw error;
   }
 }
 
@@ -376,82 +564,82 @@ async function loadUsers(page: number = 1, pageSize: number = 50) {
   const { users, total } = await client.admin.listUsers({
     exclude_admins: false,
     limit: pageSize,
-    type: 'app'
-  })
+    type: "app",
+  });
 
   return {
     users,
     total,
     pages: Math.ceil(total / pageSize),
-    currentPage: page
-  }
+    currentPage: page,
+  };
 }
 
 // Search users
 async function searchUsers(query: string) {
   const { users } = await client.admin.listUsers({
     search: query,
-    limit: 20
-  })
+    limit: 20,
+  });
 
-  return users
+  return users;
 }
 
 // Create new user
-async function createUser(email: string, role: string = 'user') {
+async function createUser(email: string, role: string = "user") {
   const response = await client.admin.inviteUser({
     email,
     role,
-    send_email: true
-  })
+    send_email: true,
+  });
 
-  console.log('Invitation sent to:', email)
-  return response.user
+  console.log("Invitation sent to:", email);
+  return response.user;
 }
 
 // Make user admin
 async function promoteToAdmin(userId: string) {
-  const user = await client.admin.updateUserRole(userId, 'admin')
-  console.log(`${user.email} is now an admin`)
-  return user
+  const user = await client.admin.updateUserRole(userId, "admin");
+  console.log(`${user.email} is now an admin`);
+  return user;
 }
 
 // Remove user
 async function removeUser(userId: string) {
-  if (!confirm('Are you sure you want to delete this user?')) {
-    return
+  if (!confirm("Are you sure you want to delete this user?")) {
+    return;
   }
 
-  await client.admin.deleteUser(userId)
-  console.log('User deleted')
+  await client.admin.deleteUser(userId);
+  console.log("User deleted");
 }
 
 // Usage
 async function main() {
   // Login
-  const admin = await adminLogin('admin@example.com', 'password123')
-  console.log('Logged in as:', admin.email)
+  const admin = await adminLogin("admin@example.com", "password123");
+  console.log("Logged in as:", admin.email);
 
   // Load users
-  const { users, total, pages } = await loadUsers(1, 50)
-  console.log(`Showing ${users.length} of ${total} users (${pages} pages)`)
+  const { users, total, pages } = await loadUsers(1, 50);
+  console.log(`Showing ${users.length} of ${total} users (${pages} pages)`);
 
   // Search
-  const results = await searchUsers('john')
-  console.log(`Found ${results.length} users matching "john"`)
+  const results = await searchUsers("john");
+  console.log(`Found ${results.length} users matching "john"`);
 
   // Create user
-  const newUser = await createUser('newuser@example.com', 'user')
-  console.log('Created user:', newUser.id)
+  const newUser = await createUser("newuser@example.com", "user");
+  console.log("Created user:", newUser.id);
 
   // Promote to admin
-  await promoteToAdmin(newUser.id)
+  await promoteToAdmin(newUser.id);
 
   // Cleanup
   // await removeUser(newUser.id)
 }
 
-main().catch(console.error)
+main().catch(console.error);
 ```
 
 ### React Admin Hook
@@ -550,85 +738,78 @@ function AdminDashboard() {
 ### Bulk Operations
 
 ```typescript
-import { createClient } from '@nimbleflux/fluxbase-sdk'
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = createClient(
-  'http://localhost:8080',
-  'your-service-role-key'
-)
+const client = createClient("http://localhost:8080", "your-service-role-key");
 
 // Bulk invite users
-async function bulkInviteUsers(emails: string[], role: string = 'user') {
+async function bulkInviteUsers(emails: string[], role: string = "user") {
   const results = {
     success: [],
-    failed: []
-  }
+    failed: [],
+  };
 
   for (const email of emails) {
     try {
       const response = await client.admin.inviteUser({
         email,
         role,
-        send_email: true
-      })
+        send_email: true,
+      });
 
       results.success.push({
         email,
-        userId: response.user.id
-      })
+        userId: response.user.id,
+      });
     } catch (error) {
       results.failed.push({
         email,
-        error: error.message
-      })
+        error: error.message,
+      });
     }
   }
 
-  return results
+  return results;
 }
 
 // Bulk delete inactive users
 async function deleteInactiveUsers(daysSinceLastLogin: number = 90) {
-  const { users } = await client.admin.listUsers({ type: 'app' })
+  const { users } = await client.admin.listUsers({ type: "app" });
 
-  const cutoffDate = new Date()
-  cutoffDate.setDate(cutoffDate.getDate() - daysSinceLastLogin)
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - daysSinceLastLogin);
 
-  const inactiveUsers = users.filter(user => {
-    if (!user.last_login_at) return true
-    const lastLogin = new Date(user.last_login_at)
-    return lastLogin < cutoffDate
-  })
+  const inactiveUsers = users.filter((user) => {
+    if (!user.last_login_at) return true;
+    const lastLogin = new Date(user.last_login_at);
+    return lastLogin < cutoffDate;
+  });
 
-  console.log(`Found ${inactiveUsers.length} inactive users`)
+  console.log(`Found ${inactiveUsers.length} inactive users`);
 
   for (const user of inactiveUsers) {
     try {
-      await client.admin.deleteUser(user.id)
-      console.log(`Deleted: ${user.email}`)
+      await client.admin.deleteUser(user.id);
+      console.log(`Deleted: ${user.email}`);
     } catch (error) {
-      console.error(`Failed to delete ${user.email}:`, error)
+      console.error(`Failed to delete ${user.email}:`, error);
     }
   }
 
-  return inactiveUsers.length
+  return inactiveUsers.length;
 }
 
 // Usage
-const emails = [
-  'user1@example.com',
-  'user2@example.com',
-  'user3@example.com'
-]
+const emails = ["user1@example.com", "user2@example.com", "user3@example.com"];
 
-const results = await bulkInviteUsers(emails, 'user')
-console.log(`Invited: ${results.success.length}`)
-console.log(`Failed: ${results.failed.length}`)
+const results = await bulkInviteUsers(emails, "user");
+console.log(`Invited: ${results.success.length}`);
+console.log(`Failed: ${results.failed.length}`);
 
 // Delete inactive users (with confirmation)
-if (confirm('Delete all users inactive for 90+ days?')) {
-  const deleted = await deleteInactiveUsers(90)
-  console.log(`Deleted ${deleted} inactive users`)
+if (confirm("Delete all users inactive for 90+ days?")) {
+  const deleted = await deleteInactiveUsers(90);
+  console.log(`Deleted ${deleted} inactive users`);
 }
 ```
 
@@ -637,52 +818,53 @@ if (confirm('Delete all users inactive for 90+ days?')) {
 ## Error Handling
 
 ```typescript
-import { createClient } from '@nimbleflux/fluxbase-sdk'
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = createClient(
-  'http://localhost:8080',
-  'your-service-role-key'
-)
+const client = createClient("http://localhost:8080", "your-service-role-key");
 
 try {
   await client.admin.login({
-    email: 'admin@example.com',
-    password: 'wrong-password'
-  })
+    email: "admin@example.com",
+    password: "wrong-password",
+  });
 } catch (error) {
   if (error.status === 401) {
-    console.error('Invalid credentials')
+    console.error("Invalid credentials");
   } else if (error.status === 429) {
-    console.error('Too many login attempts. Please try again later.')
+    console.error("Too many login attempts. Please try again later.");
   } else {
-    console.error('Login failed:', error.message)
+    console.error("Login failed:", error.message);
   }
 }
 
 // Retry logic with exponential backoff
-async function loginWithRetry(email: string, password: string, maxRetries: number = 3) {
-  let lastError
+async function loginWithRetry(
+  email: string,
+  password: string,
+  maxRetries: number = 3,
+) {
+  let lastError;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return await client.admin.login({ email, password })
+      return await client.admin.login({ email, password });
     } catch (error) {
-      lastError = error
+      lastError = error;
 
       if (error.status === 401) {
         // Don't retry on invalid credentials
-        throw error
+        throw error;
       }
 
       if (i < maxRetries - 1) {
         // Exponential backoff: 1s, 2s, 4s
-        const delay = Math.pow(2, i) * 1000
-        await new Promise(resolve => setTimeout(resolve, delay))
+        const delay = Math.pow(2, i) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
 
-  throw lastError
+  throw lastError;
 }
 ```
 
@@ -697,7 +879,7 @@ async function loginWithRetry(email: string, password: string, maxRetries: numbe
 // Use secure, httpOnly cookies instead
 
 // Bad (development only)
-localStorage.setItem('admin_token', token)
+localStorage.setItem("admin_token", token);
 
 // Good (production)
 // Let your backend set httpOnly cookies
@@ -709,69 +891,78 @@ localStorage.setItem('admin_token', token)
 ```typescript
 // Implement automatic token refresh
 async function refreshTokenIfNeeded() {
-  const expiresAt = localStorage.getItem('admin_token_expires_at')
+  const expiresAt = localStorage.getItem("admin_token_expires_at");
 
   if (!expiresAt || Date.now() >= parseInt(expiresAt)) {
-    const refreshToken = localStorage.getItem('admin_refresh_token')
+    const refreshToken = localStorage.getItem("admin_refresh_token");
 
     const response = await client.admin.refreshToken({
-      refresh_token: refreshToken
-    })
+      refresh_token: refreshToken,
+    });
 
-    localStorage.setItem('admin_access_token', response.access_token)
-    localStorage.setItem('admin_refresh_token', response.refresh_token)
-    localStorage.setItem('admin_token_expires_at', String(Date.now() + response.expires_in * 1000))
+    localStorage.setItem("admin_access_token", response.access_token);
+    localStorage.setItem("admin_refresh_token", response.refresh_token);
+    localStorage.setItem(
+      "admin_token_expires_at",
+      String(Date.now() + response.expires_in * 1000),
+    );
 
-    client.admin.setToken(response.access_token)
+    client.admin.setToken(response.access_token);
   }
 }
 
 // Call before admin operations
-await refreshTokenIfNeeded()
-await client.admin.listUsers()
+await refreshTokenIfNeeded();
+await client.admin.listUsers();
 ```
 
 ### 3. Role Verification
 
 ```typescript
 async function requireAdminRole() {
-  const { user } = await client.admin.me()
+  const { user } = await client.admin.me();
 
-  if (user.role !== 'admin' && user.role !== 'dashboard_admin') {
-    throw new Error('Admin role required')
+  if (
+    user.role !== "admin" &&
+    user.role !== "instance_admin" &&
+    user.role !== "tenant_admin"
+  ) {
+    throw new Error("Admin role required");
   }
 
-  return user
+  return user;
 }
 
 // Use in operations
-await requireAdminRole()
-await client.admin.deleteUser('user-id')
+await requireAdminRole();
+await client.admin.deleteUser("user-id");
 ```
 
 ### 4. Audit Logging
 
 ```typescript
 async function deleteUserWithAudit(userId: string, reason: string) {
-  const admin = await client.admin.me()
+  const admin = await client.admin.me();
 
   // Log the action
-  console.log(`[AUDIT] ${admin.user.email} deleted user ${userId}. Reason: ${reason}`)
+  console.log(
+    `[AUDIT] ${admin.user.email} deleted user ${userId}. Reason: ${reason}`,
+  );
 
   // Or send to audit service
-  await fetch('/api/audit', {
-    method: 'POST',
+  await fetch("/api/audit", {
+    method: "POST",
     body: JSON.stringify({
-      action: 'DELETE_USER',
+      action: "DELETE_USER",
       admin_id: admin.user.id,
       target_user_id: userId,
       reason,
-      timestamp: new Date().toISOString()
-    })
-  })
+      timestamp: new Date().toISOString(),
+    }),
+  });
 
   // Perform deletion
-  await client.admin.deleteUser(userId)
+  await client.admin.deleteUser(userId);
 }
 ```
 
@@ -800,7 +991,7 @@ import type {
   UpdateUserRoleRequest,
   ResetUserPasswordResponse,
   DeleteUserResponse,
-} from '@nimbleflux/fluxbase-sdk'
+} from "@nimbleflux/fluxbase-sdk";
 ```
 
 ---

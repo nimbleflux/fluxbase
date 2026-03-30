@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	test "github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	test "github.com/nimbleflux/fluxbase/test"
 )
 
 // TestAIChatbotsListEndpoint tests the public chatbot listing endpoint

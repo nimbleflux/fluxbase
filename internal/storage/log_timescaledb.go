@@ -86,7 +86,8 @@ func (s *TimescaleDBLogStorage) enableTimescaleDB(ctx context.Context, cfg Times
 	if !extensionExists {
 		// Try to create the TimescaleDB extension
 		// This will fail if TimescaleDB is not installed on the PostgreSQL server
-		_, err = s.db.Pool().Exec(ctx, `CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE`)
+		// Note: We intentionally do NOT use CASCADE to avoid potential connection issues
+		_, err = s.db.Pool().Exec(ctx, `CREATE EXTENSION IF NOT EXISTS timescaledb`)
 		if err != nil {
 			return fmt.Errorf("TimescaleDB extension is not available in this PostgreSQL instance: %w", err)
 		}

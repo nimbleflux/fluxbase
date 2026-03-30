@@ -136,6 +136,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=deno-bin /deno /usr/local/bin/deno
 
+# Install pgschema for declarative schema management
+ARG PGSCHEMA_VERSION=1.7.4
+RUN ARCH=$(dpkg --print-architecture) \
+    && if [ "$ARCH" = "amd64" ]; then PGSCHEMA_ARCH="linux-amd64"; \
+    elif [ "$ARCH" = "arm64" ]; then PGSCHEMA_ARCH="linux-arm64"; \
+    else echo "Unsupported architecture: $ARCH" && exit 1; fi \
+    && curl -fsSL "https://github.com/pgplex/pgschema/releases/download/v${PGSCHEMA_VERSION}/pgschema-${PGSCHEMA_VERSION}-${PGSCHEMA_ARCH}" -o /usr/local/bin/pgschema \
+    && chmod +x /usr/local/bin/pgschema
+
 # Create non-root user
 RUN groupadd -g 1000 fluxbase \
     && useradd -u 1000 -g fluxbase -s /usr/sbin/nologin fluxbase

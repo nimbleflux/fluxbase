@@ -120,6 +120,16 @@ export {
   useSystemSettings,
 } from "./use-admin-hooks";
 
+// Multi-tenancy hooks
+export {
+  useTenants,
+  useTenant,
+  type UseTenantsOptions,
+  type UseTenantsReturn,
+  type UseTenantOptions,
+  type UseTenantReturn,
+} from "./use-tenant";
+
 // Table export hooks
 export {
   useTableDetails,
@@ -172,4 +182,9 @@ export type {
   GraphQLError,
   GraphQLErrorLocation,
   GraphQLRequestOptions,
+  // Multi-tenancy types
+  Tenant,
+  TenantWithRole,
+  CreateTenantOptions,
+  UpdateTenantOptions,
 } from "@nimbleflux/fluxbase-sdk";

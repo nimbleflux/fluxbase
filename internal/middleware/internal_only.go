@@ -6,8 +6,9 @@ import (
 	"sync"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // trustedProxyNets caches parsed trusted proxy networks

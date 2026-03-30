@@ -8,8 +8,9 @@ import (
 	"sync"
 
 	"github.com/graphql-go/graphql"
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // GraphQLSchemaGenerator generates GraphQL schema from database tables

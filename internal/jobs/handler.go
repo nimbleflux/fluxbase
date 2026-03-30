@@ -10,13 +10,12 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/logging"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
-	"github.com/rs/zerolog/log"
 )
 
 /*
@@ -186,7 +185,7 @@ func (h *Handler) GetStorage() *Storage {
 }
 
 // roleSatisfiesRequirements checks if the user's role satisfies ANY of the required roles (OR semantics)
-// using a hierarchy where: service_role/dashboard_admin > admin > authenticated > anon
+// using a hierarchy where: service_role/instance_admin > admin > authenticated > anon
 func roleSatisfiesRequirements(userRole string, requiredRoles []string) bool {
 	// If no roles required, allow all
 	if len(requiredRoles) == 0 {
@@ -194,17 +193,17 @@ func roleSatisfiesRequirements(userRole string, requiredRoles []string) bool {
 	}
 
 	// Service roles bypass all checks
-	if userRole == "service_role" || userRole == "dashboard_admin" {
+	if userRole == "service_role" || userRole == "instance_admin" {
 		return true
 	}
 
 	// Define role hierarchy levels (higher number = more privileged)
 	roleLevel := map[string]int{
-		"anon":            0,
-		"authenticated":   1,
-		"admin":           2,
-		"dashboard_admin": 3,
-		"service_role":    3,
+		"anon":           0,
+		"authenticated":  1,
+		"admin":          2,
+		"instance_admin": 3,
+		"service_role":   3,
 	}
 
 	userLevel, userOk := roleLevel[userRole]
@@ -252,25 +251,6 @@ func NewHandler(db *database.Connection, cfg *config.JobsConfig, manager *Manage
 		authService:    authService,
 		loggingService: loggingService,
 	}, nil
-}
-
-// RegisterRoutes registers all job routes
-func (h *Handler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Apply authentication middleware
-	authMiddleware := middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager)
-
-	// Apply feature flag middleware to all jobs routes
-	jobs := app.Group("/api/v1/jobs",
-		middleware.RequireJobsEnabled(authService.GetSettingsCache()),
-	)
-
-	// User endpoints - require authentication, RLS enforced
-	jobs.Post("/submit", authMiddleware, h.SubmitJob)
-	jobs.Get("/:id/logs", authMiddleware, h.GetJobLogsUser) // More specific route first
-	jobs.Get("/:id", authMiddleware, h.GetJob)
-	jobs.Get("/", authMiddleware, h.ListJobs)
-	jobs.Post("/:id/cancel", authMiddleware, h.CancelJob)
-	jobs.Post("/:id/retry", authMiddleware, h.RetryJob)
 }
 
 // RegisterAdminRoutes registers admin-only routes

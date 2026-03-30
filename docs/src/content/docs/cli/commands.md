@@ -1958,13 +1958,13 @@ Invite a new admin user via email.
 
 ```bash
 fluxbase admin users invite --email admin@example.com
-fluxbase admin users invite --email admin@example.com --role dashboard_admin
+fluxbase admin users invite --email admin@example.com --role instance_admin
 ```
 
 **Flags:**
 
 - `--email` - Email address to invite (required)
-- `--role` - Role for the new user: `dashboard_user` (default) or `dashboard_admin`
+- `--role` - Role for the new user: `tenant_admin` (default) or `instance_admin`
 
 #### `fluxbase admin users delete`
 
@@ -2154,25 +2154,25 @@ After installation, restart your shell or source the completion file to enable a
 
 Many commands have shorter aliases for convenience:
 
-| Command           | Aliases                                |
-| ----------------- | -------------------------------------- |
-| `admin`           | `adm`                                  |
-| `branch`          | `branches`, `br`                       |
-| `chatbots`        | `chatbot`, `cb`                        |
-| `clientkeys`      | `clientkey`, `keys`                    |
-| `extensions`      | `extension`, `ext`                     |
-| `functions`       | `fn`, `function`                       |
-| `graphql`         | `gql`                                  |
-| `jobs`            | `job`                                  |
-| `kb`              | `knowledge-bases`, `knowledge-base`    |
-| `logs`            | `log`                                  |
-| `migrations`      | `migration`, `migrate`                 |
-| `realtime`        | `rt`                                   |
-| `secrets`         | `secret`                               |
-| `servicekeys`     | `servicekey`, `sk`                     |
-| `tables`          | `table`, `db`                          |
-| `users`           | `user`                                 |
-| `webhooks`        | `webhook`, `wh`                        |
+| Command       | Aliases                             |
+| ------------- | ----------------------------------- |
+| `admin`       | `adm`                               |
+| `branch`      | `branches`, `br`                    |
+| `chatbots`    | `chatbot`, `cb`                     |
+| `clientkeys`  | `clientkey`, `keys`                 |
+| `extensions`  | `extension`, `ext`                  |
+| `functions`   | `fn`, `function`                    |
+| `graphql`     | `gql`                               |
+| `jobs`        | `job`                               |
+| `kb`          | `knowledge-bases`, `knowledge-base` |
+| `logs`        | `log`                               |
+| `migrations`  | `migration`, `migrate`              |
+| `realtime`    | `rt`                                |
+| `secrets`     | `secret`                            |
+| `servicekeys` | `servicekey`, `sk`                  |
+| `tables`      | `table`, `db`                       |
+| `users`       | `user`                              |
+| `webhooks`    | `webhook`, `wh`                     |
 
 Examples:
 

@@ -10,9 +10,10 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/email"
-	"github.com/rs/zerolog/log"
 )
 
 // EmailTemplateHandler handles email template management
@@ -170,7 +171,7 @@ func (h *EmailTemplateHandler) ListTemplates(c fiber.Ctx) error {
 
 	rows, err := h.db.Query(ctx, `
 		SELECT id, template_type, subject, html_body, text_body, is_custom, created_at, updated_at
-		FROM dashboard.email_templates
+		FROM platform.email_templates
 		ORDER BY template_type
 	`)
 	if err != nil {
@@ -237,7 +238,7 @@ func (h *EmailTemplateHandler) GetTemplate(c fiber.Ctx) error {
 	var template EmailTemplate
 	err := h.db.QueryRow(ctx, `
 		SELECT id, template_type, subject, html_body, text_body, is_custom, created_at, updated_at
-		FROM dashboard.email_templates
+		FROM platform.email_templates
 		WHERE template_type = $1
 	`, templateType).Scan(
 		&template.ID,
@@ -353,7 +354,7 @@ func (h *EmailTemplateHandler) ResetTemplate(c fiber.Ctx) error {
 
 	// Delete custom template to fall back to default
 	_, err := h.db.Exec(ctx, `
-		DELETE FROM dashboard.email_templates
+		DELETE FROM platform.email_templates
 		WHERE template_type = $1
 	`, templateType)
 	if err != nil {
@@ -414,7 +415,7 @@ func (h *EmailTemplateHandler) TestTemplate(c fiber.Ctx) error {
 	var emailTemplate EmailTemplate
 	err := h.db.QueryRow(ctx, `
 		SELECT id, template_type, subject, html_body, text_body, is_custom, created_at, updated_at
-		FROM dashboard.email_templates
+		FROM platform.email_templates
 		WHERE template_type = $1
 	`, templateType).Scan(
 		&emailTemplate.ID,

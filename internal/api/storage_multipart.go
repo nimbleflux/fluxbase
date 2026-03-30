@@ -8,13 +8,22 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
-	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
 // MultipartUpload handles multipart upload
 // POST /api/v1/storage/:bucket/multipart
 func (h *StorageHandler) MultipartUpload(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 
 	if bucket == "" {
@@ -26,7 +35,7 @@ func (h *StorageHandler) MultipartUpload(c fiber.Ctx) error {
 	// H-19: Check if bucket exists before upload
 	// Use SECURITY DEFINER function to bypass RLS when checking bucket existence
 	var bucketExists bool
-	err := h.db.Pool().QueryRow(c.RequestCtx(),
+	err = h.db.Pool().QueryRow(c.RequestCtx(),
 		`SELECT storage.bucket_exists($1)`,
 		bucket,
 	).Scan(&bucketExists)
@@ -86,7 +95,7 @@ func (h *StorageHandler) MultipartUpload(c fiber.Ctx) error {
 		}
 
 		// Validate file size
-		if err := h.storage.ValidateUploadSize(file.Size); err != nil {
+		if err := svc.ValidateUploadSize(file.Size); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %s", file.Filename, err.Error()))
 			continue
 		}
@@ -121,7 +130,7 @@ func (h *StorageHandler) MultipartUpload(c fiber.Ctx) error {
 		}
 
 		// Upload file
-		if err := uploadMultipartFile(c, h.storage, bucket, key, file, contentType); err != nil {
+		if err := uploadMultipartFile(c, svc, bucket, key, file, contentType); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %s", file.Filename, err.Error()))
 			continue
 		}

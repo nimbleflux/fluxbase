@@ -9,9 +9,9 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/auth"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 
 // Cookie names for authentication tokens
@@ -999,82 +999,6 @@ func (h *AuthHandler) ResendVerificationEmail(c fiber.Ctx) error {
 	})
 }
 
-// RegisterRoutes registers all authentication routes with rate limiting
-func (h *AuthHandler) RegisterRoutes(router fiber.Router, rateLimiters map[string]fiber.Handler) {
-	// Register routes directly on the provided router (which should already be /api/v1/auth or similar)
-
-	// CSRF token endpoint - clients should call this first to get a CSRF token
-	// The CSRF middleware will set the csrf_token cookie on this request
-	router.Get("/csrf", h.GetCSRFToken)
-
-	// CAPTCHA configuration endpoint - returns public config (provider, site key)
-	router.Get("/captcha/config", h.GetCaptchaConfig)
-
-	// CAPTCHA pre-flight check endpoint - determines if CAPTCHA is required based on trust signals
-	router.Post("/captcha/check", h.CheckCaptcha)
-
-	// Auth configuration endpoint - returns all public auth config (signup, OAuth, SAML, CAPTCHA, password requirements)
-	router.Get("/config", h.GetAuthConfig)
-
-	// Public routes with rate limiting
-	router.Post("/signup", rateLimiters["signup"], h.SignUp)
-	router.Post("/signin", rateLimiters["login"], h.SignIn)
-	// NOTE: Anonymous sign-in endpoint removed for security - reduces attack surface
-	router.Post("/refresh", rateLimiters["refresh"], h.RefreshToken)
-	router.Post("/magiclink", rateLimiters["magiclink"], h.SendMagicLink)
-	router.Post("/magiclink/verify", h.VerifyMagicLink) // No rate limit on verification
-	router.Post("/password/reset", rateLimiters["password_reset"], h.RequestPasswordReset)
-	router.Post("/password/reset/confirm", h.ResetPassword)           // No rate limit on actual reset (token is single-use)
-	router.Post("/password/reset/verify", h.VerifyPasswordResetToken) // No rate limit on verification
-
-	// Email verification routes (public)
-	router.Post("/verify-email", h.VerifyEmail)                                               // No rate limit on verification (token is single-use)
-	router.Post("/verify-email/resend", rateLimiters["magiclink"], h.ResendVerificationEmail) // Use magiclink rate limiter
-
-	// 2FA verification (public - used during login) with rate limiting
-	// Rate limited to prevent brute-force attacks on 6-digit TOTP codes
-	router.Post("/2fa/verify", rateLimiters["2fa"], h.VerifyTOTP)
-
-	// OTP routes (public)
-	router.Post("/otp/signin", rateLimiters["otp"], h.SendOTP)
-	router.Post("/otp/verify", rateLimiters["2fa"], h.VerifyOTP) // Use 2FA rate limiter to prevent brute-force
-	router.Post("/otp/resend", rateLimiters["otp"], h.ResendOTP)
-
-	// ID token signin (public - for mobile OAuth)
-	router.Post("/signin/idtoken", h.SignInWithIDToken)
-
-	// Protected routes (authentication required) - lighter rate limits
-	// Apply auth middleware to all routes below
-	authMiddleware := AuthMiddleware(h.authService)
-	router.Post("/signout", authMiddleware, h.SignOut)
-
-	// User profile routes with scope enforcement
-	router.Get("/user", authMiddleware, middleware.RequireScope(auth.ScopeAuthRead), h.GetUser)
-	router.Patch("/user", authMiddleware, middleware.RequireScope(auth.ScopeAuthWrite), h.UpdateUser)
-
-	// Admin impersonation routes (admin only) - no API key scope enforcement (admin-only feature)
-	router.Post("/impersonate", authMiddleware, h.StartImpersonation)
-	router.Post("/impersonate/anon", authMiddleware, h.StartAnonImpersonation)
-	router.Post("/impersonate/service", authMiddleware, h.StartServiceImpersonation)
-	router.Delete("/impersonate", authMiddleware, h.StopImpersonation)
-	router.Get("/impersonate", authMiddleware, h.GetActiveImpersonation)
-	router.Get("/impersonate/sessions", authMiddleware, h.ListImpersonationSessions)
-
-	// 2FA routes (protected - authentication required) with scope enforcement
-	router.Post("/2fa/setup", authMiddleware, middleware.RequireScope(auth.ScopeAuthWrite), h.SetupTOTP)
-	router.Post("/2fa/enable", authMiddleware, middleware.RequireScope(auth.ScopeAuthWrite), h.EnableTOTP)
-	router.Post("/2fa/disable", authMiddleware, middleware.RequireScope(auth.ScopeAuthWrite), h.DisableTOTP)
-	router.Get("/2fa/status", authMiddleware, middleware.RequireScope(auth.ScopeAuthRead), h.GetTOTPStatus)
-
-	// Identity linking routes (protected - authentication required) with scope enforcement
-	router.Get("/user/identities", authMiddleware, middleware.RequireScope(auth.ScopeAuthRead), h.GetUserIdentities)
-	router.Post("/user/identities", authMiddleware, middleware.RequireScope(auth.ScopeAuthWrite), h.LinkIdentity)
-	router.Delete("/user/identities/:id", authMiddleware, middleware.RequireScope(auth.ScopeAuthWrite), h.UnlinkIdentity)
-
-	// Reauthentication route (protected - authentication required)
-	router.Post("/reauthenticate", authMiddleware, middleware.RequireScope(auth.ScopeAuthWrite), h.Reauthenticate)
-}
-
 // SignInAnonymous is deprecated and disabled for security reasons
 // Anonymous sign-in reduces security by allowing anyone to get tokens
 // Use regular signup/signin flow instead
@@ -1939,7 +1863,7 @@ func (h *AuthHandler) GetAuthConfig(c fiber.Ctx) error {
 	// Fetch OAuth providers
 	oauthQuery := `
 		SELECT provider_name, display_name, redirect_url
-		FROM dashboard.oauth_providers
+		FROM platform.oauth_providers
 		WHERE enabled = TRUE AND allow_app_login = TRUE
 		ORDER BY display_name
 	`

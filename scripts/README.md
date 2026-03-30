@@ -15,15 +15,17 @@ The `fluxbase_app` user is a regular (non-superuser) user that:
 
 ### When to run this script
 
-Run this script after setting up your local development database and running migrations:
+Run this script after setting up your local development database:
 
 ```bash
-# Run migrations first
-migrate -path internal/database/migrations -database "postgres://postgres:postgres@localhost:5432/fluxbase_dev?sslmode=disable" up
+# Run bootstrap (server will apply declarative schema on startup)
+PGPASSWORD=postgres psql -h localhost -U postgres -d fluxbase_dev -f internal/database/bootstrap/bootstrap.sql
 
 # Then grant permissions to fluxbase_app
 PGPASSWORD=postgres psql -h localhost -U postgres -d fluxbase_dev -f scripts/setup-dev-user.sql
 ```
+
+**Note:** Internal Fluxbase schema (auth, storage, functions, etc.) is managed declaratively and applied automatically when the server starts. For user-provided migrations in the `public` schema, you can still use imperative migrations with `make migrate-up`.
 
 ### What it does
 

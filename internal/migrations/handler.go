@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -8,50 +9,37 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
-// Handler manages HTTP endpoints for migrations
-type Handler struct {
-	storage     *Storage
-	executor    *Executor
-	schemaCache *database.SchemaCache
+type TenantPoolProvider interface {
+	GetPool(tenantID string) (*pgxpool.Pool, error)
 }
 
-// NewHandler creates a new migrations handler
+type Handler struct {
+	storage            *Storage
+	executor           *Executor
+	schemaCache        *database.SchemaCache
+	tenantPoolProvider TenantPoolProvider
+	db                 *database.Connection
+}
+
 func NewHandler(db *database.Connection, schemaCache *database.SchemaCache) *Handler {
 	return &Handler{
 		storage:     NewStorage(db),
 		executor:    NewExecutor(db),
 		schemaCache: schemaCache,
+		db:          db,
 	}
 }
 
-// RegisterRoutes registers all migration routes (admin only)
-func (h *Handler) RegisterRoutes(app *fiber.App, authMiddleware ...any) {
-	migrations := app.Group("/api/v1/admin/migrations", authMiddleware...)
-
-	// CRUD operations
-	migrations.Post("/", h.CreateMigration)
-	migrations.Get("/", h.ListMigrations)
-	migrations.Get("/:name", h.GetMigration)
-	migrations.Put("/:name", h.UpdateMigration)
-	migrations.Delete("/:name", h.DeleteMigration)
-
-	// Execution operations
-	migrations.Post("/:name/apply", h.ApplyMigration)
-	migrations.Post("/:name/rollback", h.RollbackMigration)
-	migrations.Post("/apply-pending", h.ApplyPending)
-
-	// Bulk operations
-	migrations.Post("/sync", h.SyncMigrations)
-
-	// Execution history
-	migrations.Get("/:name/executions", h.GetExecutions)
+func (h *Handler) SetTenantPoolProvider(provider TenantPoolProvider) {
+	h.tenantPoolProvider = provider
 }
 
-// CreateMigration creates a new migration
 func (h *Handler) CreateMigration(c fiber.Ctx) error {
 	var req struct {
 		Namespace   string  `json:"namespace"`
@@ -65,7 +53,6 @@ func (h *Handler) CreateMigration(c fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
-	// Validation
 	if req.Namespace == "" {
 		req.Namespace = "default"
 	}
@@ -76,7 +63,6 @@ func (h *Handler) CreateMigration(c fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Up SQL is required"})
 	}
 
-	// Get user ID from context
 	var createdBy *uuid.UUID
 	if userID := c.Locals("user_id"); userID != nil {
 		if uid, ok := userID.(string); ok {
@@ -108,7 +94,6 @@ func (h *Handler) CreateMigration(c fiber.Ctx) error {
 	return c.Status(201).JSON(migration)
 }
 
-// GetMigration retrieves a migration by name
 func (h *Handler) GetMigration(c fiber.Ctx) error {
 	name := c.Params("name")
 	namespace := c.Query("namespace", "default")
@@ -121,7 +106,6 @@ func (h *Handler) GetMigration(c fiber.Ctx) error {
 	return c.JSON(migration)
 }
 
-// ListMigrations lists all migrations in a namespace
 func (h *Handler) ListMigrations(c fiber.Ctx) error {
 	namespace := c.Query("namespace", "default")
 	status := c.Query("status")
@@ -139,7 +123,6 @@ func (h *Handler) ListMigrations(c fiber.Ctx) error {
 	return c.JSON(migrations)
 }
 
-// UpdateMigration updates a migration (only if pending)
 func (h *Handler) UpdateMigration(c fiber.Ctx) error {
 	name := c.Params("name")
 	namespace := c.Query("namespace", "default")
@@ -156,7 +139,6 @@ func (h *Handler) UpdateMigration(c fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to update migration", "details": err.Error()})
 	}
 
-	// Return updated migration
 	migration, err := h.storage.GetMigration(c.RequestCtx(), namespace, name)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Migration updated but failed to retrieve"})
@@ -165,7 +147,6 @@ func (h *Handler) UpdateMigration(c fiber.Ctx) error {
 	return c.JSON(migration)
 }
 
-// DeleteMigration deletes a migration (only if pending)
 func (h *Handler) DeleteMigration(c fiber.Ctx) error {
 	name := c.Params("name")
 	namespace := c.Query("namespace", "default")
@@ -180,7 +161,6 @@ func (h *Handler) DeleteMigration(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Migration deleted successfully"})
 }
 
-// ApplyMigration applies a single migration
 func (h *Handler) ApplyMigration(c fiber.Ctx) error {
 	name := c.Params("name")
 
@@ -194,7 +174,6 @@ func (h *Handler) ApplyMigration(c fiber.Ctx) error {
 		req.Namespace = "default"
 	}
 
-	// Get user ID
 	var executedBy *uuid.UUID
 	if userID := c.Locals("user_id"); userID != nil {
 		if uid, ok := userID.(string); ok {
@@ -205,11 +184,20 @@ func (h *Handler) ApplyMigration(c fiber.Ctx) error {
 		}
 	}
 
-	if err := h.executor.ApplyMigration(c.RequestCtx(), req.Namespace, name, executedBy); err != nil {
+	isTenantMigration, _ := c.Locals("is_tenant_migration").(bool)
+	tenantID, _ := c.Locals("tenant_id").(string)
+
+	var err error
+	if isTenantMigration && h.tenantPoolProvider != nil && tenantID != "" {
+		err = h.applyTenantMigration(c.RequestCtx(), req.Namespace, name, tenantID, executedBy)
+	} else {
+		err = h.executor.ApplyMigration(c.RequestCtx(), req.Namespace, name, executedBy)
+	}
+
+	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to apply migration", "details": err.Error()})
 	}
 
-	// Invalidate schema cache so REST API reflects changes immediately (across all instances)
 	if h.schemaCache != nil {
 		h.schemaCache.InvalidateAll(c.RequestCtx())
 		log.Debug().Str("migration", name).Msg("Schema cache invalidated after applying migration")
@@ -218,7 +206,6 @@ func (h *Handler) ApplyMigration(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Migration applied successfully"})
 }
 
-// RollbackMigration rolls back a migration
 func (h *Handler) RollbackMigration(c fiber.Ctx) error {
 	name := c.Params("name")
 
@@ -232,7 +219,6 @@ func (h *Handler) RollbackMigration(c fiber.Ctx) error {
 		req.Namespace = "default"
 	}
 
-	// Get user ID
 	var executedBy *uuid.UUID
 	if userID := c.Locals("user_id"); userID != nil {
 		if uid, ok := userID.(string); ok {
@@ -243,11 +229,20 @@ func (h *Handler) RollbackMigration(c fiber.Ctx) error {
 		}
 	}
 
-	if err := h.executor.RollbackMigration(c.RequestCtx(), req.Namespace, name, executedBy); err != nil {
+	isTenantMigration, _ := c.Locals("is_tenant_migration").(bool)
+	tenantID, _ := c.Locals("tenant_id").(string)
+
+	var err error
+	if isTenantMigration && h.tenantPoolProvider != nil && tenantID != "" {
+		err = h.rollbackTenantMigration(c.RequestCtx(), req.Namespace, name, tenantID, executedBy)
+	} else {
+		err = h.executor.RollbackMigration(c.RequestCtx(), req.Namespace, name, executedBy)
+	}
+
+	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to rollback migration", "details": err.Error()})
 	}
 
-	// Invalidate schema cache so REST API reflects changes immediately (across all instances)
 	if h.schemaCache != nil {
 		h.schemaCache.InvalidateAll(c.RequestCtx())
 		log.Debug().Str("migration", name).Msg("Schema cache invalidated after rolling back migration")
@@ -256,7 +251,26 @@ func (h *Handler) RollbackMigration(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Migration rolled back successfully"})
 }
 
-// ApplyPending applies all pending migrations in order
+func (h *Handler) applyTenantMigration(ctx context.Context, namespace, name, tenantID string, executedBy *uuid.UUID) error {
+	pool, err := h.tenantPoolProvider.GetPool(tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to get tenant pool: %w", err)
+	}
+
+	tenantExec := NewTenantExecutor(h.db, pool)
+	return tenantExec.ApplyMigration(ctx, namespace, name, tenantID, executedBy)
+}
+
+func (h *Handler) rollbackTenantMigration(ctx context.Context, namespace, name, tenantID string, executedBy *uuid.UUID) error {
+	pool, err := h.tenantPoolProvider.GetPool(tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to get tenant pool: %w", err)
+	}
+
+	tenantExec := NewTenantExecutor(h.db, pool)
+	return tenantExec.RollbackMigration(ctx, namespace, name, tenantID, executedBy)
+}
+
 func (h *Handler) ApplyPending(c fiber.Ctx) error {
 	var req struct {
 		Namespace string `json:"namespace"`
@@ -268,7 +282,6 @@ func (h *Handler) ApplyPending(c fiber.Ctx) error {
 		req.Namespace = "default"
 	}
 
-	// Get user ID
 	var executedBy *uuid.UUID
 	if userID := c.Locals("user_id"); userID != nil {
 		if uid, ok := userID.(string); ok {
@@ -289,7 +302,6 @@ func (h *Handler) ApplyPending(c fiber.Ctx) error {
 		})
 	}
 
-	// Invalidate schema cache if any migrations were applied (across all instances)
 	if len(applied) > 0 && h.schemaCache != nil {
 		h.schemaCache.InvalidateAll(c.RequestCtx())
 		log.Debug().Int("count", len(applied)).Msg("Schema cache invalidated after applying pending migrations")
@@ -302,7 +314,6 @@ func (h *Handler) ApplyPending(c fiber.Ctx) error {
 	})
 }
 
-// GetExecutions returns execution history for a migration
 func (h *Handler) GetExecutions(c fiber.Ctx) error {
 	name := c.Params("name")
 	namespace := c.Query("namespace", "default")
@@ -325,7 +336,6 @@ func (h *Handler) GetExecutions(c fiber.Ctx) error {
 	return c.JSON(logs)
 }
 
-// SyncMigrations performs bulk sync with smart diffing
 func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 	var req struct {
 		Namespace  string `json:"namespace"`
@@ -350,7 +360,6 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 		req.Namespace = "default"
 	}
 
-	// Get user ID
 	var createdBy *uuid.UUID
 	if userID := c.Locals("user_id"); userID != nil {
 		if uid, ok := userID.(string); ok {
@@ -361,19 +370,16 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 		}
 	}
 
-	// Get existing migrations
 	existing, err := h.storage.ListMigrations(c.RequestCtx(), req.Namespace, nil)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to list existing migrations"})
 	}
 
-	// Build lookup map
 	existingMap := make(map[string]*Migration)
 	for i := range existing {
 		existingMap[existing[i].Name] = &existing[i]
 	}
 
-	// Track results
 	summary := struct {
 		Created   int `json:"created"`
 		Updated   int `json:"updated"`
@@ -393,14 +399,9 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 	}{}
 
 	warnings := []string{}
-
-	// Track if any migration failed during auto-apply
-	// Migrations must be applied sequentially - stop on first failure
 	autoApplyFailed := false
 
-	// Process each migration
 	for _, reqMig := range req.Migrations {
-		// Stop processing if a previous migration failed during auto-apply
 		if autoApplyFailed {
 			summary.Skipped++
 			details.Skipped = append(details.Skipped, reqMig.Name)
@@ -408,13 +409,11 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 			continue
 		}
 
-		// Calculate content hash
 		contentHash := calculateHash(reqMig.UpSQL + valueOrEmpty(reqMig.DownSQL))
 
 		existingMig, exists := existingMap[reqMig.Name]
 
 		if !exists {
-			// New migration - create it
 			if !req.Options.DryRun {
 				newMig := &Migration{
 					Namespace:   req.Namespace,
@@ -433,13 +432,12 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 			summary.Created++
 			details.Created = append(details.Created, reqMig.Name)
 
-			// Auto-apply if requested
 			if req.Options.AutoApply && !req.Options.DryRun {
 				if err := h.executor.ApplyMigration(c.RequestCtx(), req.Namespace, reqMig.Name, createdBy); err != nil {
 					log.Error().Err(err).Str("name", reqMig.Name).Msg("Failed to auto-apply migration")
 					summary.Errors++
 					details.Errors = append(details.Errors, fmt.Sprintf("%s: failed to apply - %v", reqMig.Name, err))
-					autoApplyFailed = true // Stop processing subsequent migrations
+					autoApplyFailed = true
 				} else {
 					summary.Applied++
 					details.Applied = append(details.Applied, reqMig.Name)
@@ -448,13 +446,10 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 			continue
 		}
 
-		// Migration exists - check if content changed
 		existingHash := calculateHash(existingMig.UpSQL + valueOrEmpty(existingMig.DownSQL))
 
 		if existingHash == contentHash {
-			// Content unchanged - check if we should apply pending or retry failed migrations
 			if (existingMig.Status == "pending" || existingMig.Status == "failed") && req.Options.AutoApply && !req.Options.DryRun {
-				// Apply pending or retry failed migration
 				action := "Applying"
 				if existingMig.Status == "failed" {
 					action = "Retrying"
@@ -464,7 +459,7 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 					log.Error().Err(err).Str("name", reqMig.Name).Msg("Failed to apply migration")
 					summary.Errors++
 					details.Errors = append(details.Errors, fmt.Sprintf("%s: failed to apply - %v", reqMig.Name, err))
-					autoApplyFailed = true // Stop processing subsequent migrations
+					autoApplyFailed = true
 				} else {
 					summary.Applied++
 					details.Applied = append(details.Applied, reqMig.Name)
@@ -472,15 +467,12 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 				continue
 			}
 
-			// Content unchanged and already applied - no action needed
 			summary.Unchanged++
 			details.Unchanged = append(details.Unchanged, reqMig.Name)
 			continue
 		}
 
-		// Content changed
 		if existingMig.Status == "pending" && req.Options.UpdateIfChanged {
-			// Update pending migration
 			if !req.Options.DryRun {
 				updates := map[string]interface{}{
 					"up_sql":   reqMig.UpSQL,
@@ -500,7 +492,6 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 			continue
 		}
 
-		// Already applied with different content - skip and warn
 		if existingMig.Status == "applied" {
 			summary.Skipped++
 			details.Skipped = append(details.Skipped, reqMig.Name)
@@ -508,14 +499,12 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 			continue
 		}
 
-		// Failed migration with changed content - update and retry if autoApply
 		if existingMig.Status == "failed" && req.Options.UpdateIfChanged {
-			// Update failed migration with new content
 			if !req.Options.DryRun {
 				updates := map[string]interface{}{
 					"up_sql":   reqMig.UpSQL,
 					"down_sql": reqMig.DownSQL,
-					"status":   "pending", // Reset to pending for retry
+					"status":   "pending",
 				}
 				if reqMig.Description != nil {
 					updates["description"] = *reqMig.Description
@@ -529,14 +518,13 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 			summary.Updated++
 			details.Updated = append(details.Updated, reqMig.Name)
 
-			// Auto-apply if requested
 			if req.Options.AutoApply && !req.Options.DryRun {
 				log.Info().Str("name", reqMig.Name).Msg("Retrying updated failed migration")
 				if err := h.executor.ApplyMigration(c.RequestCtx(), req.Namespace, reqMig.Name, createdBy); err != nil {
 					log.Error().Err(err).Str("name", reqMig.Name).Msg("Failed to apply updated migration")
 					summary.Errors++
 					details.Errors = append(details.Errors, fmt.Sprintf("%s: failed to apply after update - %v", reqMig.Name, err))
-					autoApplyFailed = true // Stop processing subsequent migrations
+					autoApplyFailed = true
 				} else {
 					summary.Applied++
 					details.Applied = append(details.Applied, reqMig.Name)
@@ -545,19 +533,16 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 			continue
 		}
 
-		// Rolled back status or failed without updateIfChanged - skip
 		summary.Skipped++
 		details.Skipped = append(details.Skipped, reqMig.Name)
 		warnings = append(warnings, fmt.Sprintf("Migration '%s' has status '%s' (skipped)", reqMig.Name, existingMig.Status))
 	}
 
-	// Invalidate schema cache if any migrations were applied (across all instances)
 	if summary.Applied > 0 && h.schemaCache != nil {
 		h.schemaCache.InvalidateAll(c.RequestCtx())
 		log.Info().Int("applied", summary.Applied).Msg("Schema cache invalidated after sync")
 	}
 
-	// Build response message
 	message := fmt.Sprintf("Sync complete: %d created, %d updated, %d unchanged", summary.Created, summary.Updated, summary.Unchanged)
 	if summary.Errors > 0 {
 		message = fmt.Sprintf("Sync completed with errors: %d created, %d updated, %d unchanged, %d errors", summary.Created, summary.Updated, summary.Unchanged, summary.Errors)
@@ -575,16 +560,12 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 		response["warnings"] = warnings
 	}
 
-	// Return appropriate status code
-	// 422 Unprocessable Entity if there were errors (partial failure in batch operation)
 	if summary.Errors > 0 {
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(response)
 	}
 
 	return c.JSON(response)
 }
-
-// Helper functions
 
 func calculateHash(content string) string {
 	hash := sha256.Sum256([]byte(content))
@@ -597,5 +578,3 @@ func valueOrEmpty(s *string) string {
 	}
 	return *s
 }
-
-// fiber:context-methods migrated

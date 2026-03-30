@@ -11,12 +11,11 @@ import (
 	"github.com/graphql-go/graphql/gqlerrors"
 	"github.com/graphql-go/graphql/language/ast"
 	"github.com/graphql-go/graphql/language/parser"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
-	"github.com/rs/zerolog/log"
 )
 
 // GraphQLHandler handles GraphQL HTTP requests
@@ -24,6 +23,7 @@ type GraphQLHandler struct {
 	schemaGenerator *GraphQLSchemaGenerator
 	db              *database.Connection
 	config          *config.GraphQLConfig
+	baseConfig      *config.Config
 	resolverFactory *GraphQLResolverFactory
 }
 
@@ -55,7 +55,7 @@ type GraphQLErrorLocation struct {
 }
 
 // NewGraphQLHandler creates a new GraphQL handler
-func NewGraphQLHandler(db *database.Connection, schemaCache *database.SchemaCache, cfg *config.GraphQLConfig) *GraphQLHandler {
+func NewGraphQLHandler(db *database.Connection, schemaCache *database.SchemaCache, cfg *config.GraphQLConfig, baseConfig *config.Config) *GraphQLHandler {
 	// Create resolver factory
 	resolverFactory := NewGraphQLResolverFactory(db.Pool(), schemaCache)
 
@@ -67,8 +67,20 @@ func NewGraphQLHandler(db *database.Connection, schemaCache *database.SchemaCach
 		schemaGenerator: schemaGenerator,
 		db:              db,
 		config:          cfg,
+		baseConfig:      baseConfig,
 		resolverFactory: resolverFactory,
 	}
+}
+
+// getConfig returns the GraphQL config to use for the current request.
+// It checks for tenant-specific config in fiber context locals and falls back to base config.
+//
+//nolint:unused // Kept for future tenant-specific config support
+func (h *GraphQLHandler) getConfig(c fiber.Ctx) *config.GraphQLConfig {
+	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
+		return &tc.GraphQL
+	}
+	return h.config
 }
 
 // HandleGraphQL handles POST /api/v1/graphql requests
@@ -320,19 +332,6 @@ func (h *GraphQLHandler) HandleIntrospection(c fiber.Ctx) error {
 		Data:   result.Data,
 		Errors: convertErrors(result.Errors),
 	})
-}
-
-// RegisterRoutes registers GraphQL routes with the Fiber app
-func (h *GraphQLHandler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Import middleware package
-	// GraphQL endpoint - requires authentication with RLS support
-	graphqlGroup := app.Group("/api/v1/graphql")
-
-	// POST /api/v1/graphql - execute queries/mutations (requires auth)
-	graphqlGroup.Post("/", middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager), h.HandleGraphQL)
-
-	// GET /api/v1/graphql - introspection (if enabled, requires auth)
-	graphqlGroup.Get("/", middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager), h.HandleIntrospection)
 }
 
 // InvalidateSchema invalidates the cached GraphQL schema

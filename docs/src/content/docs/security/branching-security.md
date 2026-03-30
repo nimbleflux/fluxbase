@@ -31,7 +31,7 @@ Service keys have full access to all branches, including:
 
 ### Dashboard Admins
 
-Users with `dashboard_admin` or `admin` role have full access to all branches.
+Users with `instance_admin` or `admin` role have full access to all branches.
 
 ## Database Isolation
 

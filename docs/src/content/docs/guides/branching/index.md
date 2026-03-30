@@ -313,6 +313,28 @@ fluxbase branch get my-feature --output json | jq -r .connection_url
 | `deleting`  | Branch is being deleted     |
 | `deleted`   | Branch has been deleted     |
 
+## Branches and Multi-Tenancy
+
+When multi-tenancy is enabled, branches can be scoped to specific tenants:
+
+- Each branch record has a `tenant_id` foreign key referencing `platform.tenants`
+- Branch slug uniqueness is enforced per tenant via a `(slug, tenant_id)` unique constraint
+- Per-tenant branch limits are controlled by the `max_branches_per_tenant` config option (default: 10)
+- Tenant-scoped branches use prefixed database names: `{prefix}{tenant_slug}_{branch_slug}`
+- Connection pool routing follows this priority: branch pool > tenant pool > main pool
+- Instance admins can see and manage all branches across tenants
+- Non-admin users only see branches within their own tenant
+
+To create a tenant-scoped branch, include the `X-FB-Tenant` header or rely on the tenant context from your service key:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/branches \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-FB-Tenant: acme-corp" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "feature-x", "data_clone_mode": "schema_only"}'
+```
+
 ## Access Control
 
 Branch access is controlled by:

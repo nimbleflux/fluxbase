@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // setupAuthTestServer creates a test server with auth routes
@@ -112,18 +113,16 @@ func setupAuthTestServer(t *testing.T) (*fiber.App, *auth.Service, *database.Con
 	// Create auth handler (no captcha service in tests)
 	authHandler := NewAuthHandler(db.Pool(), authService, nil, "http://localhost:3000")
 
-	// Setup auth routes
-	auth := app.Group("/api/v1/auth")
-	rateLimiters := map[string]fiber.Handler{
-		"signup":         func(c fiber.Ctx) error { return c.Next() }, // No-op for tests
-		"login":          func(c fiber.Ctx) error { return c.Next() },
-		"refresh":        func(c fiber.Ctx) error { return c.Next() },
-		"magiclink":      func(c fiber.Ctx) error { return c.Next() },
-		"password_reset": func(c fiber.Ctx) error { return c.Next() },
-		"otp":            func(c fiber.Ctx) error { return c.Next() },
-		"2fa":            func(c fiber.Ctx) error { return c.Next() },
-	}
-	authHandler.RegisterRoutes(auth, rateLimiters)
+	// Setup auth routes manually (RegisterRoutes was removed)
+	authGroup := app.Group("/api/v1/auth")
+	authGroup.Post("/signup", authHandler.SignUp)
+	authGroup.Post("/signin", authHandler.SignIn)
+	authGroup.Post("/otp/signin", authHandler.SendOTP)
+	authGroup.Post("/otp/verify", authHandler.VerifyOTP)
+	authGroup.Post("/otp/resend", authHandler.ResendOTP)
+	authGroup.Post("/reauthenticate", authHandler.Reauthenticate)
+	authGroup.Get("/user/identities", authHandler.GetUserIdentities)
+	authGroup.Post("/user/identities", authHandler.LinkIdentity)
 
 	return app, authService, db
 }

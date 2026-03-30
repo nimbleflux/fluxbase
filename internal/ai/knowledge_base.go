@@ -39,6 +39,9 @@ type KnowledgeBase struct {
 	TransformationFunction *string                `json:"transformation_function,omitempty"`
 	CreatedAt              time.Time              `json:"created_at"`
 	UpdatedAt              time.Time              `json:"updated_at"`
+	// Tenant info (populated for instance admin cross-tenant queries)
+	TenantID   *string `json:"tenant_id,omitempty"`
+	TenantName *string `json:"tenant_name,omitempty"`
 }
 
 // KnowledgeBaseSummary is a lightweight version for listing
@@ -54,6 +57,9 @@ type KnowledgeBaseSummary struct {
 	Visibility     string  `json:"visibility,omitempty"`
 	UserPermission string  `json:"user_permission,omitempty"`
 	OwnerID        *string `json:"owner_id,omitempty"`
+	// Tenant info (populated for instance admin cross-tenant queries)
+	TenantID   *string `json:"tenant_id,omitempty"`
+	TenantName *string `json:"tenant_name,omitempty"`
 }
 
 // ToSummary converts a KnowledgeBase to a summary
@@ -75,6 +81,8 @@ func (kb *KnowledgeBase) ToSummary() KnowledgeBaseSummary {
 			}
 			return nil
 		}(),
+		TenantID:   kb.TenantID,
+		TenantName: kb.TenantName,
 	}
 }
 

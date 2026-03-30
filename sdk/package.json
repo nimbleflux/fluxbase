@@ -1,6 +1,6 @@
 {
   "name": "@nimbleflux/fluxbase-sdk",
-  "version": "2026.3.6",
+  "version": "2026.3.6-rc.2",
   "description": "Official TypeScript SDK for Fluxbase - Backend as a Service",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -60,7 +60,7 @@
     "cross-fetch": "^4.1.0"
   },
   "peerDependencies": {
-    "esbuild": ">=0.27.4"
+    "esbuild": ">=0.27.3"
   },
   "peerDependenciesMeta": {
     "esbuild": {
@@ -68,16 +68,16 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^25.5.0",
-    "@vitest/coverage-v8": "^4.1.0",
+    "@types/node": "^25.4.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "docusaurus-plugin-typedoc": "^1.4.2",
-    "esbuild": "^0.27.4",
+    "esbuild": "^0.27.3",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.1",
     "typedoc": "^0.28.17",
     "typedoc-plugin-markdown": "^4.10.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=24.14.0"

@@ -123,5 +123,7 @@ values.tmp.yml
 .mcp.json
 
 .lycheecache
-.claude/settings.local.json
+.claude/
 .husky/
+docs/plans/
+.opencode/

@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // =============================================================================
@@ -607,7 +608,7 @@ func TestHandleGetCapabilities_RoleBasedResponse(t *testing.T) {
 
 		app.Get("/capabilities/vector", func(c fiber.Ctx) error {
 			role, _ := c.Locals("user_role").(string)
-			isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+			isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 			if !isAdmin {
 				return c.JSON(fiber.Map{
@@ -657,7 +658,7 @@ func TestHandleGetCapabilities_RoleBasedResponse(t *testing.T) {
 
 		app.Get("/capabilities/vector", func(c fiber.Ctx) error {
 			role, _ := c.Locals("user_role").(string)
-			isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+			isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 			if !isAdmin {
 				return c.JSON(fiber.Map{
@@ -694,19 +695,19 @@ func TestHandleGetCapabilities_RoleBasedResponse(t *testing.T) {
 // =============================================================================
 
 func TestVectorAdminRoles(t *testing.T) {
-	adminRoles := []string{"admin", "dashboard_admin", "service_role"}
+	adminRoles := []string{"admin", "instance_admin", "service_role"}
 	nonAdminRoles := []string{"user", "authenticated", "anon", ""}
 
 	t.Run("admin roles should have full access", func(t *testing.T) {
 		for _, role := range adminRoles {
-			isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+			isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 			assert.True(t, isAdmin, "Role %q should be admin", role)
 		}
 	})
 
 	t.Run("non-admin roles should have limited access", func(t *testing.T) {
 		for _, role := range nonAdminRoles {
-			isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+			isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 			assert.False(t, isAdmin, "Role %q should not be admin", role)
 		}
 	})

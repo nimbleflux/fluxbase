@@ -22,10 +22,7 @@ npm install @nimbleflux/fluxbase-sdk
 ```typescript
 import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = createClient(
-  "http://localhost:8080",
-  "your-api-key"
-);
+const client = createClient("http://localhost:8080", "your-api-key");
 
 // Authenticate first
 await client.auth.login({
@@ -54,7 +51,7 @@ await client.admin.login({
 
 const invitation = await client.management.invitations.create({
   email: "newuser@example.com",
-  role: "dashboard_user",
+  role: "tenant_admin",
 });
 ```
 
@@ -411,7 +408,7 @@ await client.admin.login({
 
 const invitation = await client.management.invitations.create({
   email: "newuser@example.com",
-  role: "dashboard_user", // or 'dashboard_admin'
+  role: "tenant_admin", // or 'instance_admin'
   expiry_duration: 604800, // 7 days in seconds (default)
 });
 
@@ -426,13 +423,13 @@ console.log("Email Sent:", invitation.email_sent);
 **Parameters:**
 
 - `email` (required): Email address to invite
-- `role` (required): Either `'dashboard_user'` or `'dashboard_admin'`
+- `role` (required): Either `'tenant_admin'` or `'instance_admin'`
 - `expiry_duration` (optional): Duration in seconds (default: 604800 = 7 days)
 
 **Roles:**
 
-- `dashboard_user`: Can access the dashboard with limited permissions
-- `dashboard_admin`: Full admin access to instance management
+- `tenant_admin`: Admin of assigned tenant(s) with dashboard access
+- `instance_admin`: Full admin access to all tenants and instance management
 
 ### List Invitations
 
@@ -548,10 +545,7 @@ console.log("Invitation revoked");
 ```typescript
 import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = createClient(
-  "http://localhost:8080",
-  "your-client-key"
-);
+const client = createClient("http://localhost:8080", "your-client-key");
 
 async function setupClientKeyDashboard() {
   // Authenticate
@@ -609,10 +603,7 @@ import crypto from "crypto";
 import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const app = express();
-const client = createClient(
-  "http://localhost:8080",
-  "your-api-key"
-);
+const client = createClient("http://localhost:8080", "your-api-key");
 const WEBHOOK_SECRET = "your-webhook-secret";
 
 // Verify webhook signature
@@ -702,10 +693,7 @@ app.listen(3000, () => {
 ```typescript
 import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = createClient(
-  "http://localhost:8080",
-  "your-api-key"
-);
+const client = createClient("http://localhost:8080", "your-api-key");
 
 async function manageInvitations() {
   // Admin login
@@ -718,7 +706,7 @@ async function manageInvitations() {
   const usersToInvite = [
     { email: "user1@example.com", role: "dashboard_user" as const },
     { email: "user2@example.com", role: "dashboard_user" as const },
-    { email: "admin2@example.com", role: "dashboard_admin" as const },
+    { email: "admin2@example.com", role: "instance_admin" as const },
   ];
 
   console.log("Creating invitations...");

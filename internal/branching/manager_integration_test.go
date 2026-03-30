@@ -9,10 +9,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/nimbleflux/fluxbase/test/dbhelpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/test/dbhelpers"
 )
 
 const testEncryptionKey = "test-encryption-key-must-be-32-chars!"
@@ -39,7 +40,7 @@ func TestManager_checkLimits_Integration(t *testing.T) {
 
 	t.Run("passes when under limits", func(t *testing.T) {
 		userID := uuid.New()
-		err := manager.checkLimits(context.Background(), &userID)
+		err := manager.checkLimits(context.Background(), nil, &userID)
 		assert.NoError(t, err)
 	})
 
@@ -56,7 +57,7 @@ func TestManager_checkLimits_Integration(t *testing.T) {
 		defer manager.Close()
 
 		userID := uuid.New()
-		err = manager.checkLimits(context.Background(), &userID)
+		err = manager.checkLimits(context.Background(), nil, &userID)
 		assert.NoError(t, err)
 	})
 
@@ -73,7 +74,7 @@ func TestManager_checkLimits_Integration(t *testing.T) {
 		defer manager.Close()
 
 		userID := uuid.New()
-		err = manager.checkLimits(context.Background(), &userID)
+		err = manager.checkLimits(context.Background(), nil, &userID)
 		assert.NoError(t, err)
 	})
 }
@@ -424,7 +425,7 @@ func TestManager_ErrorHandling_Integration(t *testing.T) {
 		defer manager.Close()
 
 		// Nil userID should skip per-user limit check
-		err = manager.checkLimits(context.Background(), nil)
+		err = manager.checkLimits(context.Background(), nil, nil)
 		assert.NoError(t, err)
 	})
 }

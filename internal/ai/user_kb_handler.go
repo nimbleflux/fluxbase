@@ -3,15 +3,19 @@ package ai
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
 // UserKnowledgeBaseHandler handles user-facing KB endpoints
 type UserKnowledgeBaseHandler struct {
 	storage        *KnowledgeBaseStorage
+	knowledgeGraph *KnowledgeGraph
 	processor      *DocumentProcessor
 	storageService *storage.Service
 	textExtractor  *TextExtractor
@@ -34,6 +38,25 @@ func NewUserKnowledgeBaseHandlerWithProcessor(storage *KnowledgeBaseStorage, pro
 	}
 }
 
+// NewUserKnowledgeBaseHandlerWithGraph creates a handler with knowledge graph support
+func NewUserKnowledgeBaseHandlerWithGraph(storage *KnowledgeBaseStorage, kg *KnowledgeGraph) *UserKnowledgeBaseHandler {
+	return &UserKnowledgeBaseHandler{
+		storage:        storage,
+		knowledgeGraph: kg,
+		textExtractor:  NewTextExtractor(),
+	}
+}
+
+// NewUserKnowledgeBaseHandlerWithProcessorAndGraph creates a handler with both processor and graph support
+func NewUserKnowledgeBaseHandlerWithProcessorAndGraph(storage *KnowledgeBaseStorage, processor *DocumentProcessor, kg *KnowledgeGraph) *UserKnowledgeBaseHandler {
+	return &UserKnowledgeBaseHandler{
+		storage:        storage,
+		knowledgeGraph: kg,
+		processor:      processor,
+		textExtractor:  NewTextExtractor(),
+	}
+}
+
 // SetStorageService sets the storage service for file uploads
 func (h *UserKnowledgeBaseHandler) SetStorageService(svc *storage.Service) {
 	h.storageService = svc
@@ -43,7 +66,32 @@ func (h *UserKnowledgeBaseHandler) SetStorageService(svc *storage.Service) {
 // GET /api/v1/ai/knowledge-bases
 func (h *UserKnowledgeBaseHandler) ListMyKnowledgeBases(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
-	userID := c.Locals("user_id").(string)
+
+	// Safely check if user_id exists in context
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		// Check if user is instance admin (service role or instance_admin role)
+		userRole := c.Locals("user_role")
+		if userRole == "instance_admin" || userRole == "service_role" {
+			// Instance admin without tenant context - return empty list
+			// A complete solution would fetch all KBs across tenants with tenant info
+			return c.JSON(fiber.Map{
+				"knowledge_bases": []interface{}{},
+				"count":           0,
+				"message":         "Select a tenant to view knowledge bases",
+			})
+		}
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User not authenticated",
+		})
+	}
+
+	userID, ok := userIDRaw.(string)
+	if !ok || userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Invalid user context",
+		})
+	}
 
 	kbs, err := h.storage.ListUserKnowledgeBases(ctx, userID)
 	if err != nil {
@@ -590,6 +638,440 @@ func (h *UserKnowledgeBaseHandler) SearchMyKB(c fiber.Ctx) error {
 	})
 }
 
+// UpdateMyDocument updates a document's metadata
+// PATCH /api/v1/ai/knowledge-bases/:id/documents/:doc_id
+func (h *UserKnowledgeBaseHandler) UpdateMyDocument(c fiber.Ctx) error {
+	ctx := c.RequestCtx()
+	userID := c.Locals("user_id").(string)
+	kbID := c.Params("id")
+	docID := c.Params("doc_id")
+
+	// Check editor permission
+	hasPermission, err := h.storage.CheckKBPermission(ctx, kbID, userID, string(KBPermissionEditor))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to check permission",
+		})
+	}
+	if !hasPermission {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Editor permission required",
+		})
+	}
+
+	var req struct {
+		Title    *string           `json:"title,omitempty"`
+		Metadata map[string]string `json:"metadata,omitempty"`
+		Tags     []string          `json:"tags,omitempty"`
+	}
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// Get existing document
+	doc, err := h.storage.GetDocument(ctx, docID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Document not found",
+		})
+	}
+
+	// Verify document belongs to KB
+	if doc.KnowledgeBaseID != kbID {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Document not found",
+		})
+	}
+
+	// Use UpdateDocumentMetadata for updating
+	updatedDoc, err := h.storage.UpdateDocumentMetadata(ctx, docID, req.Title, req.Metadata, req.Tags)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update document",
+		})
+	}
+
+	return c.JSON(updatedDoc)
+}
+
+// DeleteMyDocumentsByFilter deletes documents matching a filter
+// POST /api/v1/ai/knowledge-bases/:id/documents/delete-by-filter
+func (h *UserKnowledgeBaseHandler) DeleteMyDocumentsByFilter(c fiber.Ctx) error {
+	ctx := c.RequestCtx()
+	userID := c.Locals("user_id").(string)
+	kbID := c.Params("id")
+
+	// Check editor permission
+	hasPermission, err := h.storage.CheckKBPermission(ctx, kbID, userID, string(KBPermissionEditor))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to check permission",
+		})
+	}
+	if !hasPermission {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Editor permission required",
+		})
+	}
+
+	var req struct {
+		Tags     []string          `json:"tags,omitempty"`
+		Metadata map[string]string `json:"metadata,omitempty"`
+	}
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	filter := &MetadataFilter{
+		Tags:     req.Tags,
+		Metadata: req.Metadata,
+	}
+
+	deletedCount, err := h.storage.DeleteDocumentsByFilter(ctx, kbID, filter)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to delete documents",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"deleted_count": deletedCount,
+	})
+}
+
+// DebugSearchMyKB performs a debug search with detailed diagnostic information
+// POST /api/v1/ai/knowledge-bases/:id/debug-search
+func (h *UserKnowledgeBaseHandler) DebugSearchMyKB(c fiber.Ctx) error {
+	ctx := c.RequestCtx()
+	userID := c.Locals("user_id").(string)
+	kbID := c.Params("id")
+
+	// Check viewer permission
+	hasPermission, err := h.storage.CheckKBPermission(ctx, kbID, userID, string(KBPermissionViewer))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to check permission",
+		})
+	}
+	if !hasPermission {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Viewer permission required",
+		})
+	}
+
+	var req struct {
+		Query string `json:"query"`
+	}
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if req.Query == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Query is required",
+		})
+	}
+
+	// Perform search with debug info
+	opts := HybridSearchOptions{
+		Query:          req.Query,
+		Limit:          10,
+		SemanticWeight: 0.7,
+	}
+
+	results, err := h.storage.SearchChunksHybrid(ctx, kbID, opts)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Search failed",
+		})
+	}
+
+	// Get KB info for context
+	kb, _ := h.storage.GetKnowledgeBase(ctx, kbID)
+
+	return c.JSON(fiber.Map{
+		"query":          req.Query,
+		"results":        results,
+		"result_count":   len(results),
+		"search_options": opts,
+		"knowledge_base": fiber.Map{
+			"id":   kbID,
+			"name": kb.Name,
+		},
+		"debug_info": fiber.Map{
+			"search_type":      "hybrid",
+			"semantic_weight":  opts.SemanticWeight,
+			"keyword_weight":   1 - opts.SemanticWeight,
+			"embedding_status": "available",
+		},
+	})
+}
+
+// ListMyEntities lists entities in a knowledge base
+// GET /api/v1/ai/knowledge-bases/:id/entities
+func (h *UserKnowledgeBaseHandler) ListMyEntities(c fiber.Ctx) error {
+	ctx := c.RequestCtx()
+	userID := c.Locals("user_id").(string)
+	kbID := c.Params("id")
+
+	// Check viewer permission
+	hasPermission, err := h.storage.CheckKBPermission(ctx, kbID, userID, string(KBPermissionViewer))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to check permission",
+		})
+	}
+	if !hasPermission {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Viewer permission required",
+		})
+	}
+
+	// Check if knowledge graph is available
+	if h.knowledgeGraph == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": "Knowledge graph features are not available",
+		})
+	}
+
+	// Parse optional entity_type filter
+	entityTypeStr := c.Query("entity_type")
+	var entityType *EntityType
+	if entityTypeStr != "" {
+		et := EntityType(entityTypeStr)
+		entityType = &et
+	}
+
+	// Get entities
+	entities, err := h.knowledgeGraph.ListEntities(ctx, kbID, entityType)
+	if err != nil {
+		log.Error().Err(err).Str("kb_id", kbID).Msg("Failed to list entities")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to list entities",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"entities": entities,
+		"count":    len(entities),
+	})
+}
+
+// SearchMyEntities searches entities in a knowledge base
+// GET /api/v1/ai/knowledge-bases/:id/entities/search
+func (h *UserKnowledgeBaseHandler) SearchMyEntities(c fiber.Ctx) error {
+	ctx := c.RequestCtx()
+	userID := c.Locals("user_id").(string)
+	kbID := c.Params("id")
+
+	// Check viewer permission
+	hasPermission, err := h.storage.CheckKBPermission(ctx, kbID, userID, string(KBPermissionViewer))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to check permission",
+		})
+	}
+	if !hasPermission {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Viewer permission required",
+		})
+	}
+
+	// Check if knowledge graph is available
+	if h.knowledgeGraph == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": "Knowledge graph features are not available",
+		})
+	}
+
+	// Get query from URL param
+	query := c.Query("q")
+	if query == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Query parameter 'q' is required",
+		})
+	}
+
+	// Parse optional entity types filter
+	var entityTypes []EntityType
+	if typeStr := c.Query("entity_types"); typeStr != "" {
+		for _, t := range splitCommaSeparated(typeStr) {
+			entityTypes = append(entityTypes, EntityType(t))
+		}
+	}
+
+	// Parse limit
+	limit := 20
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := parseIntParam(limitStr, 1, 100); err == nil {
+			limit = l
+		}
+	}
+
+	// Search entities
+	entities, err := h.knowledgeGraph.SearchEntities(ctx, kbID, query, entityTypes, limit)
+	if err != nil {
+		log.Error().Err(err).Str("kb_id", kbID).Str("query", query).Msg("Failed to search entities")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to search entities",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"entities": entities,
+		"query":    query,
+		"count":    len(entities),
+	})
+}
+
+// GetMyEntityRelationships gets relationships for an entity
+// GET /api/v1/ai/knowledge-bases/:id/entities/:entity_id/relationships
+func (h *UserKnowledgeBaseHandler) GetMyEntityRelationships(c fiber.Ctx) error {
+	ctx := c.RequestCtx()
+	userID := c.Locals("user_id").(string)
+	kbID := c.Params("id")
+	entityID := c.Params("entity_id")
+
+	// Check viewer permission
+	hasPermission, err := h.storage.CheckKBPermission(ctx, kbID, userID, string(KBPermissionViewer))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to check permission",
+		})
+	}
+	if !hasPermission {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Viewer permission required",
+		})
+	}
+
+	// Check if knowledge graph is available
+	if h.knowledgeGraph == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": "Knowledge graph features are not available",
+		})
+	}
+
+	// Get relationships for the entity
+	relationships, err := h.knowledgeGraph.GetRelationships(ctx, kbID, entityID)
+	if err != nil {
+		log.Error().Err(err).Str("kb_id", kbID).Str("entity_id", entityID).Msg("Failed to get entity relationships")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to get entity relationships",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"relationships": relationships,
+		"entity_id":     entityID,
+		"count":         len(relationships),
+	})
+}
+
+// GetMyKnowledgeGraph gets the full knowledge graph
+// GET /api/v1/ai/knowledge-bases/:id/graph
+func (h *UserKnowledgeBaseHandler) GetMyKnowledgeGraph(c fiber.Ctx) error {
+	ctx := c.RequestCtx()
+	userID := c.Locals("user_id").(string)
+	kbID := c.Params("id")
+
+	// Check viewer permission
+	hasPermission, err := h.storage.CheckKBPermission(ctx, kbID, userID, string(KBPermissionViewer))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to check permission",
+		})
+	}
+	if !hasPermission {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Viewer permission required",
+		})
+	}
+
+	// Check if knowledge graph is available
+	if h.knowledgeGraph == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": "Knowledge graph features are not available",
+		})
+	}
+
+	// Get all entities
+	entities, err := h.knowledgeGraph.ListEntities(ctx, kbID, nil)
+	if err != nil {
+		log.Error().Err(err).Str("kb_id", kbID).Msg("Failed to list entities for graph")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to get knowledge graph",
+		})
+	}
+
+	// Get relationships for each entity and collect unique ones
+	allRelationships := make(map[string]EntityRelationship)
+	for _, entity := range entities {
+		relationships, err := h.knowledgeGraph.GetRelationships(ctx, kbID, entity.ID)
+		if err != nil {
+			log.Warn().Err(err).Str("entity_id", entity.ID).Msg("Failed to get relationships for entity")
+			continue
+		}
+		for _, rel := range relationships {
+			allRelationships[rel.ID] = rel
+		}
+	}
+
+	// Convert map to slice
+	relationships := make([]EntityRelationship, 0, len(allRelationships))
+	for _, rel := range allRelationships {
+		relationships = append(relationships, rel)
+	}
+
+	return c.JSON(fiber.Map{
+		"knowledge_base_id":  kbID,
+		"entities":           entities,
+		"relationships":      relationships,
+		"entity_count":       len(entities),
+		"relationship_count": len(relationships),
+	})
+}
+
+// ListMyLinkedChatbots lists chatbots linked to a knowledge base
+// GET /api/v1/ai/knowledge-bases/:id/chatbots
+func (h *UserKnowledgeBaseHandler) ListMyLinkedChatbots(c fiber.Ctx) error {
+	ctx := c.RequestCtx()
+	userID := c.Locals("user_id").(string)
+	kbID := c.Params("id")
+
+	// Check viewer permission
+	hasPermission, err := h.storage.CheckKBPermission(ctx, kbID, userID, string(KBPermissionViewer))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to check permission",
+		})
+	}
+	if !hasPermission {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Viewer permission required",
+		})
+	}
+
+	// Get linked chatbots
+	links, err := h.storage.GetKnowledgeBaseChatbots(ctx, kbID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to get linked chatbots",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"chatbots": links,
+		"count":    len(links),
+	})
+}
+
 // readFileContent reads file content from reader with size limit
 func readFileContent(reader interface{ Read([]byte) (int, error) }, maxSize int) ([]byte, error) {
 	size := maxSize
@@ -611,38 +1093,34 @@ func readFileContent(reader interface{ Read([]byte) (int, error) }, maxSize int)
 	return buf, nil
 }
 
-// RegisterUserKnowledgeBaseRoutes registers user-facing routes
-func RegisterUserKnowledgeBaseRoutes(router fiber.Router, storage *KnowledgeBaseStorage) {
-	handler := NewUserKnowledgeBaseHandler(storage)
-	router.Get("/knowledge-bases", handler.ListMyKnowledgeBases)
-	router.Post("/knowledge-bases", handler.CreateMyKnowledgeBase)
-	router.Get("/knowledge-bases/:id", handler.GetMyKnowledgeBase)
-	router.Post("/knowledge-bases/:id/share", handler.ShareKnowledgeBase)
-	router.Get("/knowledge-bases/:id/permissions", handler.ListPermissions)
-	router.Delete("/knowledge-bases/:id/permissions/:user_id", handler.RevokePermission)
+// splitCommaSeparated splits a comma-separated string into trimmed parts
+func splitCommaSeparated(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
-// RegisterUserKnowledgeBaseRoutesWithDocuments registers user-facing routes including document operations
-func RegisterUserKnowledgeBaseRoutesWithDocuments(router fiber.Router, storage *KnowledgeBaseStorage, processor *DocumentProcessor) {
-	handler := NewUserKnowledgeBaseHandlerWithProcessor(storage, processor)
-
-	// KB management routes
-	router.Get("/knowledge-bases", handler.ListMyKnowledgeBases)
-	router.Post("/knowledge-bases", handler.CreateMyKnowledgeBase)
-	router.Get("/knowledge-bases/:id", handler.GetMyKnowledgeBase)
-	router.Post("/knowledge-bases/:id/share", handler.ShareKnowledgeBase)
-	router.Get("/knowledge-bases/:id/permissions", handler.ListPermissions)
-	router.Delete("/knowledge-bases/:id/permissions/:user_id", handler.RevokePermission)
-
-	// Document routes (permission checks are in handlers)
-	router.Get("/knowledge-bases/:id/documents", handler.ListMyDocuments)
-	router.Get("/knowledge-bases/:id/documents/:doc_id", handler.GetMyDocument)
-	router.Post("/knowledge-bases/:id/documents", handler.AddMyDocument)
-	router.Post("/knowledge-bases/:id/documents/upload", handler.UploadMyDocument)
-	router.Delete("/knowledge-bases/:id/documents/:doc_id", handler.DeleteMyDocument)
-
-	// Search route
-	router.Post("/knowledge-bases/:id/search", handler.SearchMyKB)
+// parseIntParam parses an integer parameter with min/max bounds
+func parseIntParam(s string, min, max int) (int, error) {
+	val, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, err
+	}
+	if val < min {
+		return min, nil
+	}
+	if val > max {
+		return max, nil
+	}
+	return val, nil
 }
 
 // SearchRequest represents a search request

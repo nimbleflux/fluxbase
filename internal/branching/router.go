@@ -10,8 +10,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // poolEntry represents a connection pool with its last access time for LRU eviction
@@ -133,8 +134,8 @@ func (r *Router) createPoolForBranch(ctx context.Context, slug string) (*pgxpool
 		}
 	}
 
-	// Get branch from storage
-	branch, err := r.storage.GetBranchBySlug(ctx, slug)
+	// Get branch from storage (no tenant filter — router resolves by slug globally)
+	branch, err := r.storage.GetBranchBySlug(ctx, slug, nil)
 	if err != nil {
 		return nil, err
 	}

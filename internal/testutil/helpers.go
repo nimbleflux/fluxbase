@@ -143,21 +143,6 @@ func TruncateTable(t *testing.T, db *pgxpool.Pool, schema, table string) {
 }
 
 // =============================================================================
-// Coverage Helpers
-// =============================================================================
-
-// AssertCoverage asserts that the coverage for a package meets the minimum percentage.
-//
-// Deprecated: Coverage is now enforced globally via .testcoverage.yml and the go-test-coverage tool.
-// Use `make test-coverage` to verify coverage thresholds.
-//
-// For programmatic coverage assertions in specific tests, use the testing/cover package directly.
-func AssertCoverage(t *testing.T, packagePath string, minPercent float64) {
-	t.Helper()
-	t.Log("AssertCoverage is deprecated. Use make test-coverage or the testing/cover package directly.")
-}
-
-// =============================================================================
 // Async/Condition Helpers
 // =============================================================================
 
@@ -188,25 +173,6 @@ func WaitForCondition(t *testing.T, condition func() bool, timeout time.Duration
 // =============================================================================
 // Fiber HTTP Helpers
 // =============================================================================
-
-// MockFiberContext creates a mock Fiber context for testing handlers.
-//
-// Deprecated: Creating a Fiber context directly requires fasthttp internals and is complex.
-// Instead, use SetupTestServer() and make actual HTTP requests using httptest.
-//
-// For integration tests with full HTTP handling, use test/e2e_helpers.go helpers.
-//
-// Example (recommended approach):
-//
-//	app := testutil.SetupTestServer(t)
-//	req := httptest.NewRequest("GET", "/api/v1/users", nil)
-//	resp, err := app.Test(req)
-//	require.NoError(t, err)
-func MockFiberContext(method, path string, body io.Reader) *fiber.Ctx {
-	// Deprecated: This function returns nil as it cannot create a valid Fiber context.
-	// Use SetupTestServer() and make actual HTTP requests instead.
-	return nil
-}
 
 // SetupTestServer creates a test Fiber server with common middleware.
 //

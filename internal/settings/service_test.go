@@ -20,9 +20,9 @@ func TestCanEditSetting_Unit(t *testing.T) {
 		expected   bool
 	}{
 		{
-			name:       "dashboard_admin can always edit",
+			name:       "instance_admin can always edit",
 			editableBy: []string{},
-			userRole:   "dashboard_admin",
+			userRole:   "instance_admin",
 			expected:   true,
 		},
 		{

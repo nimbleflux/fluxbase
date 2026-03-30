@@ -551,12 +551,13 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 
 	// Check 3: Overly permissive policies (USING true for non-SELECT)
 	// Excludes service_role which intentionally bypasses RLS for system operations
+	// Excludes tenant_service which is an internal role for tenant-scoped operations
 	rows3, err := s.db.Query(ctx, `
 		SELECT schemaname, tablename, policyname, cmd
 		FROM pg_policies
 		WHERE qual = 'true'
 		AND cmd != 'SELECT'
-		AND NOT ('service_role' = ANY(roles))
+		AND NOT ('service_role' = ANY(roles) OR 'tenant_service' = ANY(roles))
 	`)
 	if err == nil {
 		defer rows3.Close()
@@ -615,7 +616,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 		AND with_check IS NULL
 		AND permissive = 'PERMISSIVE'
 		AND NOT ('service_role' = ANY(roles))
-		AND schemaname NOT IN ('auth', 'storage', 'jobs', 'functions', 'branching', 'realtime', 'dashboard', 'ai', 'rpc', 'app')
+		AND schemaname NOT IN ('auth', 'storage', 'jobs', 'functions', 'branching', 'realtime', 'dashboard', 'ai', 'rpc', 'app', 'platform', 'logging')
 	`)
 	if err == nil {
 		defer rows5.Close()
@@ -677,7 +678,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 		SELECT schemaname, tablename, policyname, cmd
 		FROM pg_policies
 		WHERE 'public' = ANY(roles)
-		AND schemaname NOT IN ('pg_catalog', 'information_schema', 'auth', 'storage', 'jobs', 'functions', 'branching', 'realtime', 'dashboard', 'ai', 'rpc', 'app')
+		AND schemaname NOT IN ('pg_catalog', 'information_schema', 'auth', 'storage', 'jobs', 'functions', 'branching', 'realtime', 'dashboard', 'ai', 'rpc', 'app', 'platform', 'logging')
 	`)
 	if err == nil {
 		defer rows7.Close()

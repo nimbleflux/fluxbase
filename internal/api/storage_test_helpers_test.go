@@ -12,10 +12,11 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/stretchr/testify/require"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/storage"
-	"github.com/stretchr/testify/require"
 )
 
 // setupStorageTestServer creates a test server with storage routes
@@ -37,8 +38,8 @@ func setupStorageTestServer(t *testing.T) (*fiber.App, string, *database.Connect
 		MaxUploadSize: 10 * 1024 * 1024, // 10MB
 	}
 
-	// Initialize storage service
-	storageService, err := storage.NewService(cfg, "http://localhost:8080", "test-signing-secret")
+	// Initialize storage manager
+	storageManager, err := storage.NewManager(cfg, "http://localhost:8080", "test-signing-secret")
 	require.NoError(t, err)
 
 	// Get database configuration from environment variables
@@ -112,7 +113,7 @@ func setupStorageTestServer(t *testing.T) (*fiber.App, string, *database.Connect
 	})
 
 	// Setup storage routes
-	storageHandler := NewStorageHandler(storageService, db, nil)
+	storageHandler := NewStorageHandler(storageManager, db, nil, nil)
 	api := app.Group("/api/v1")
 	storageRoutes := api.Group("/storage")
 

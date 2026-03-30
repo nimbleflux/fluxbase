@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/runtime"
 	"github.com/nimbleflux/fluxbase/internal/secrets"
 	"github.com/nimbleflux/fluxbase/internal/settings"
-	"github.com/rs/zerolog/log"
 )
 
 // Worker executes jobs from the queue
@@ -23,6 +25,8 @@ type Worker struct {
 	ID                     uuid.UUID
 	Name                   string
 	Config                 *config.JobsConfig
+	BaseConfig             *config.Config
+	db                     *database.Connection
 	Storage                *Storage
 	Runtime                *runtime.DenoRuntime
 	SecretsStorage         *secrets.Storage
@@ -42,7 +46,7 @@ type Worker struct {
 }
 
 // NewWorker creates a new worker
-func NewWorker(cfg *config.JobsConfig, storage *Storage, jwtSecret, publicURL string, secretsStorage *secrets.Storage) *Worker {
+func NewWorker(cfg *config.JobsConfig, storage *Storage, jwtSecret, publicURL string, secretsStorage *secrets.Storage, baseConfig *config.Config, db *database.Connection) *Worker {
 	workerID := uuid.New()
 	hostname, _ := os.Hostname()
 
@@ -70,6 +74,8 @@ func NewWorker(cfg *config.JobsConfig, storage *Storage, jwtSecret, publicURL st
 		ID:               workerID,
 		Name:             fmt.Sprintf("worker-%s@%s", workerID.String()[:8], hostname),
 		Config:           cfg,
+		BaseConfig:       baseConfig,
+		db:               db,
 		Storage:          storage,
 		Runtime:          jobRuntime,
 		SecretsStorage:   secretsStorage,

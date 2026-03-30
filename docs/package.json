@@ -13,7 +13,7 @@
   "dependencies": {
     "@astrojs/sitemap": "^3.7.1",
     "@astrojs/starlight": "^0.38.1",
-    "astro": "^6.0.4",
+    "astro": "^6.0.3",
     "sharp": "^0.34.5",
     "starlight-typedoc": "0.21.5",
     "zod": "^4.3.6"

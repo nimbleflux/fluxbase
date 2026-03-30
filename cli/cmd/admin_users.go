@@ -57,7 +57,7 @@ The invited user will receive an email with a link to set up their account.
 
 Examples:
   fluxbase admin users invite --email admin@example.com
-  fluxbase admin users invite --email admin@example.com --role dashboard_admin`,
+  fluxbase admin users invite --email admin@example.com --role instance_admin`,
 	PreRunE: requireAuth,
 	RunE:    runAdminUsersInvite,
 }
@@ -81,7 +81,7 @@ Examples:
 func init() {
 	// Invite flags
 	adminUsersInviteCmd.Flags().StringVar(&adminUserEmail, "email", "", "Email address to invite")
-	adminUsersInviteCmd.Flags().StringVar(&adminUserRole, "role", "dashboard_user", "Role for the new user (dashboard_user or dashboard_admin)")
+	adminUsersInviteCmd.Flags().StringVar(&adminUserRole, "role", "tenant_admin", "Role for the new user (instance_admin or tenant_admin)")
 	_ = adminUsersInviteCmd.MarkFlagRequired("email")
 
 	// Delete flags

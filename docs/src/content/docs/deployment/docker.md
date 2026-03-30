@@ -104,16 +104,6 @@ docker compose logs -f fluxbase
 curl http://localhost:8080/health
 ```
 
-You should see:
-
-```json
-{
-  "status": "healthy",
-  "database": "connected",
-  "version": "0.1.0"
-}
-```
-
 ---
 
 ## Production Docker Compose

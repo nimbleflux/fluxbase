@@ -7,9 +7,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
-	"github.com/rs/zerolog/log"
 )
 
 // SettingsHandler handles public settings operations with RLS support
@@ -61,6 +62,9 @@ func (h *SettingsHandler) GetSetting(c fiber.Ctx) error {
 
 	var value interface{}
 	var queryErr error
+
+	// Set target schema to ensure main pool (app schema is not tenant-routable)
+	middleware.SetTargetSchema(c, "app")
 
 	// Use WrapWithRLS to properly set database role + JWT claims
 	err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -140,6 +144,9 @@ func (h *SettingsHandler) GetSettings(c fiber.Ctx) error {
 	}
 
 	results := make(map[string]interface{})
+
+	// Set target schema to ensure main pool (app schema is not tenant-routable)
+	middleware.SetTargetSchema(c, "app")
 
 	// Use WrapWithRLS to properly set database role + JWT claims
 	err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {

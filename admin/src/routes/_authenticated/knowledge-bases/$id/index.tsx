@@ -15,6 +15,7 @@ import {
   Pencil,
   X,
   Bot,
+  Type,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -452,8 +453,14 @@ function KnowledgeBaseDetailPage() {
             className='w-full'
           >
             <TabsList className='grid w-full grid-cols-2'>
-              <TabsTrigger value='paste'>Paste Text</TabsTrigger>
-              <TabsTrigger value='upload'>Upload File</TabsTrigger>
+              <TabsTrigger value='paste' className='flex items-center gap-2'>
+                <Type className='h-4 w-4' />
+                Paste Text
+              </TabsTrigger>
+              <TabsTrigger value='upload' className='flex items-center gap-2'>
+                <Upload className='h-4 w-4' />
+                Upload File
+              </TabsTrigger>
             </TabsList>
             <TabsContent value='paste' className='mt-4'>
               <div className='grid gap-4'>

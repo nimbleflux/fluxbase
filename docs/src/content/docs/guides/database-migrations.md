@@ -1,106 +1,83 @@
 ---
 title: Database Migrations
-description: Manage database schema changes in Fluxbase with automatic migrations. Use the dual migration system for platform and custom application migrations.
+description: Manage database schema changes in Fluxbase with declarative schema management for platform tables and optional imperative migrations for your application.
 ---
 
-Fluxbase supports automatic database migrations that run on startup. The platform includes a dual migration system:
-
-1. **System Migrations** - Built-in migrations embedded in the Fluxbase binary
-2. **User Migrations** - Custom migrations you can provide via the filesystem
+Fluxbase uses a **declarative schema management** approach for internal platform tables, combined with optional **imperative migrations** for your application schema.
 
 ## Overview
 
-Migrations are powered by [golang-migrate](https://github.com/golang-migrate/migrate) and use PostgreSQL as the database backend. Fluxbase automatically tracks migration state in separate tables:
+Fluxbase provides two ways to manage database schema:
 
-- `migrations.fluxbase` - Tracks system migrations
-- `migrations.app` - Tracks your custom migrations
-
-This separation ensures that system and user migrations don't conflict with each other.
-
-## Dual Migration System
-
-Fluxbase maintains two independent migration tracks to separate platform updates from application changes:
+1. **Declarative Schema (Internal)** - Fluxbase platform tables managed automatically via bootstrap + pgschema
+2. **User Migrations (Optional)** - Your custom application tables via imperative SQL migration files
 
 ```mermaid
 graph LR
-    subgraph "System Migrations"
-        S1[Embedded in Binary] --> S2[migrations.fluxbase]
-        S2 --> S3[Platform Tables & RLS]
+    subgraph "Internal Schema (Declarative)"
+        B1[bootstrap.sql] --> B2[pgschema]
+        B2 --> B3[Platform Tables]
     end
 
-    subgraph "User Migrations"
-        U1[Filesystem Directory] --> U2[migrations.app]
-        U2 --> U3[Application Schema]
+    subgraph "User Schema (Imperative)"
+        U1[Migration Files] --> U2[migrations.app]
+        U2 --> U3[Application Tables]
     end
 
-    S3 -.-> DB[(PostgreSQL)]
+    B3 -.-> DB[(PostgreSQL)]
     U3 -.-> DB
 ```
 
-### System Migrations
+## Declarative Schema (Internal)
 
-**Purpose:** Platform infrastructure managed by Fluxbase
+**Purpose:** Platform infrastructure managed automatically by Fluxbase
 
-System migrations are embedded into the Fluxbase binary at compile time and include:
+The internal Fluxbase schema (auth, storage, functions, jobs, etc.) is managed declaratively:
 
-- Core authentication tables
-- OAuth provider tables
-- Row-level security policies
-- Webhook configuration
-- Storage metadata tables
-- Jobs and functions infrastructure
+- **bootstrap.sql** - Creates schemas, extensions, roles, and default privileges (idempotent)
+- **pgschema** - Compares desired schema files to actual database state and applies diffs
 
-**Tracking:** `migrations.fluxbase` table
+**Tracking:** `migrations.declarative_state` table stores schema fingerprint
 
-**Execution:** Automatically run on every startup (idempotent - only new migrations applied)
+**Execution:** Automatically applied on server startup
 
-**Management:** Controlled by Fluxbase releases, not user-modifiable
+**Schema files location:** `internal/database/schema/schemas/`
 
-### User Migrations
+### How It Works
 
-**Purpose:** Application-specific schema managed by developers
+1. On startup, Fluxbase runs `bootstrap.sql` to ensure schemas and roles exist
+2. The pgschema tool compares schema files to the actual database
+3. Any differences are applied automatically
+4. The schema fingerprint is stored for drift detection
 
-User migrations allow you to add your own custom database schema and data migrations without modifying Fluxbase source code.
+### Benefits
+
+- **No version numbers** - Schema is the source of truth
+- **Automatic drift detection** - Can detect if database was modified outside Fluxbase
+- **Safe by default** - Destructive changes require explicit approval
+- **Works with CI/CD** - Schema is applied automatically, no migration commands needed
+
+## User Migrations (Optional)
+
+**Purpose:** Application-specific schema managed by you
+
+User migrations allow you to add your own custom database schema using traditional imperative migration files.
 
 **Tracking:** `migrations.app` table
 
-**Execution:** Run after system migrations if `DB_USER_MIGRATIONS_PATH` is configured
+**Execution:** Run on startup if `DB_USER_MIGRATIONS_PATH` is configured
 
-**Management:** You create and maintain these files
+**File format:** Standard golang-migrate format with `.up.sql` and `.down.sql` files
 
-### When to Use Each
+### When to Use User Migrations
 
-| Use System Migrations       | Use User Migrations               |
+| Use Declarative (Internal)  | Use User Migrations               |
 | --------------------------- | --------------------------------- |
 | Never (managed by Fluxbase) | Application tables                |
 |                             | Custom indexes                    |
 |                             | Data transformations              |
 |                             | Business logic triggers           |
 |                             | Application-specific RLS policies |
-
-### Migration State Machine
-
-```mermaid
-stateDiagram-v2
-    [*] --> Pending: Migration file created
-    Pending --> Running: Execution starts
-    Running --> Applied: Success
-    Running --> Failed: Error
-    Failed --> Pending: Fix and retry
-    Applied --> RolledBack: Rollback executed
-    RolledBack --> Pending: Can reapply
-    Applied --> [*]
-
-    note right of Failed: Migration marked as "dirty"<br/>Must be manually fixed
-```
-
-**Migration States:**
-
-- **Pending**: Not yet executed
-- **Running**: Currently executing (rare to see)
-- **Applied**: Successfully completed
-- **Failed**: Error occurred (database in "dirty" state)
-- **RolledBack**: Reverted via down migration
 
 ### Migration File Format
 
@@ -264,82 +241,61 @@ You can configure user migrations via environment variables:
 
 When `DB_USER_MIGRATIONS_PATH` is empty or not set, user migrations are skipped.
 
-## CLI Commands
+## Startup Flow
 
-For local development, Fluxbase provides Make commands for migration management:
+When Fluxbase starts, schema is applied in this order:
 
-```bash
-# Run all pending migrations
-make migrate-up
-
-# Rollback the last migration
-make migrate-down
-
-# Create a new migration file pair
-make migrate-create NAME=add_users_table
-# Creates: migrations/XXX_add_users_table.up.sql and .down.sql
-
-# Check current migration version
-make migrate-version
-
-# Force set migration version (use with caution)
-make migrate-force VERSION=5
-```
-
-**Common workflow:**
-
-```bash
-# 1. Create new migration
-make migrate-create NAME=add_products
-
-# 2. Edit the generated files
-#    migrations/001_add_products.up.sql
-#    migrations/001_add_products.down.sql
-
-# 3. Apply migration
-make migrate-up
-
-# 4. Test rollback
-make migrate-down
-
-# 5. Reapply
-make migrate-up
-```
-
-**Prerequisites:** These commands require:
-
-- Local PostgreSQL running
-- Database connection configured in `.env` or `fluxbase.yaml`
-- `migrate` CLI installed (automatically available in DevContainer)
-
-## Migration Execution
-
-When Fluxbase starts, migrations are executed in this order:
-
-1. **System migrations** are applied first from the embedded filesystem
-2. **User migrations** are applied second from the configured directory (if enabled)
-
-Both migration sets maintain their own version tracking, so they can be at different versions.
+1. **Bootstrap SQL** - Creates schemas, extensions, roles (idempotent)
+2. **Declarative Schema** - Applies internal Fluxbase schema via pgschema
+3. **User Migrations** - Applies your custom migrations (if configured)
 
 ### Logs
 
 Migration progress is logged during startup:
 
 ```
-INFO Running database migrations...
-INFO Running system migrations...
-INFO Migrations applied successfully source=system version=6
+INFO Running bootstrap SQL...
+INFO Bootstrap completed successfully
+INFO Applying declarative schema...
+INFO Schema applied successfully
 INFO Running user migrations... path=/migrations/user
 INFO Migrations applied successfully source=user version=3
-INFO Database migrations completed successfully
+INFO Database schema management completed
 ```
 
-If no new migrations are found:
+## Local Development
 
+For local development, Fluxbase provides Make commands:
+
+### Database Reset Commands
+
+```bash
+# Partial reset - preserves user data in public schema
+make db-reset
+
+# Full reset - drops ALL schemas (WARNING: destroys all data)
+make db-reset-full
 ```
-INFO No new migrations to apply source=system
-INFO No new migrations to apply source=user
+
+After a reset, the bootstrap and declarative schema are applied automatically on the next server startup with `make dev`.
+
+### User Migration Commands
+
+If you have user migrations configured:
+
+```bash
+# Create new user migration
+make migrate-create name=add_products
+# Creates: migrations/XXX_add_products.up.sql and .down.sql
+
+# Apply migrations
+make migrate-up
+
+# Rollback last migration
+make migrate-down
 ```
+
+**Note:** These commands are for user-provided migrations only. The internal Fluxbase schema is managed declaratively and applied automatically.
 
 ## Best Practices
 
@@ -416,82 +372,21 @@ CREATE INDEX IF NOT EXISTS idx_products_search
   USING gin(search_vector);
 ```
 
-## Common Migration Tasks
-
-### Adding a New Table
-
-```sql
--- 002_create_orders_table.up.sql
-CREATE TABLE public.orders (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.app_users(id) ON DELETE CASCADE,
-    total DECIMAL(10,2) NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
-CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
-
-ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
-```
-
-### Adding a Column
-
-```sql
--- 003_add_product_sku.up.sql
-ALTER TABLE public.products
-  ADD COLUMN IF NOT EXISTS sku TEXT UNIQUE;
-
--- Add index for lookups
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_products_sku
-  ON products(sku);
-```
-
-### Modifying a Column
-
-```sql
--- 004_change_price_precision.up.sql
--- Increase price precision from DECIMAL(10,2) to DECIMAL(12,4)
-ALTER TABLE public.products
-  ALTER COLUMN price TYPE DECIMAL(12,4);
-```
-
-### Adding an Enum Type
-
-```sql
--- 005_add_order_status_enum.up.sql
--- Create enum type
-CREATE TYPE order_status AS ENUM ('pending', 'processing', 'shipped', 'delivered', 'cancelled');
-
--- Migrate existing data
-ALTER TABLE orders
-  ALTER COLUMN status TYPE order_status
-  USING status::order_status;
-```
-
 ## Troubleshooting
 
-### Migration Failed - Dirty State
+### Migration Failed
 
-If a migration fails partway through, the database may be in a "dirty" state:
-
-```
-ERROR failed to run user migrations: Dirty database version X. Fix and force version.
-```
-
-Fluxbase will automatically attempt to recover from dirty state by forcing the version. If this fails, you can manually fix it:
+If a migration fails partway through, check the logs and fix the issue:
 
 ```sql
 -- Connect to database
 psql -h localhost -U fluxbase -d fluxbase
 
 -- Check migration state
-SELECT * FROM migrations.app;
+SELECT * FROM migrations.app WHERE status = 'failed';
 
--- Force version if needed (replace X with the correct version)
-DELETE FROM migrations.app;
-INSERT INTO migrations.app (version, dirty) VALUES (X, false);
+-- After fixing the issue, mark as pending to retry
+UPDATE migrations.app SET status = 'pending', error_message = '' WHERE name = 'failed_migration';
 ```
 
 ### Migration Not Running
@@ -499,50 +394,74 @@ INSERT INTO migrations.app (version, dirty) VALUES (X, false);
 If your migration isn't being applied:
 
 1. **Check file naming**: Ensure files follow the format `NNN_name.up.sql`
-2. **Check file location**: Verify files are in the correct directory
+2. **Check file location**: Verify files are in the configured directory
 3. **Check permissions**: Ensure Fluxbase can read the migration files
 4. **Check logs**: Look for migration errors in Fluxbase logs
-5. **Check version**: Verify the migration version is newer than the current version
+5. **Check configuration**: Verify `DB_USER_MIGRATIONS_PATH` is set correctly
 
 ### Checking Migration Status
 
-To see which migrations have been applied:
+To see which user migrations have been applied:
 
 ```sql
--- Check system migrations
-SELECT * FROM migrations.fluxbase ORDER BY version;
-
 -- Check user migrations
-SELECT * FROM migrations.app ORDER BY version;
+SELECT * FROM migrations.app ORDER BY applied_at DESC;
+```
+
+### Checking Declarative Schema Status
+
+To check the internal declarative schema status:
+
+```sql
+-- Check declarative state
+SELECT * FROM migrations.declarative_state;
+```
+
+Or use the admin API:
+
+```bash
+curl http://localhost:8080/api/v1/admin/internal-schema/status
 ```
 
 ## Advanced Topics
 
+### Declarative Schema Management API
+
+Fluxbase provides internal API endpoints for schema management:
+
+| Endpoint                                     | Description                  |
+| -------------------------------------------- | ---------------------------- |
+| `GET /api/v1/admin/internal-schema/status`   | Check schema status          |
+| `POST /api/v1/admin/internal-schema/plan`    | Preview pending changes      |
+| `POST /api/v1/admin/internal-schema/apply`   | Apply schema changes         |
+| `GET /api/v1/admin/internal-schema/validate` | Validate schema for drift    |
+| `POST /api/v1/admin/internal-schema/dump`    | Dump current schema to files |
+
+These endpoints are useful for CI/CD pipelines and manual schema inspection.
+
+### Schema Drift Detection
+
+Fluxbase can detect if the database schema has drifted from the expected state:
+
+```bash
+# Check for drift via API
+curl http://localhost:8080/api/v1/admin/internal-schema/validate
+```
+
+If drift is detected, you can either:
+
+1. Apply the declarative schema to update the database
+2. Dump the current schema to update the schema files
+
 ### Running Migrations Separately
 
-In some cases, you may want to run migrations separately from application startup (e.g., during CI/CD).
+In production, you may want to run migrations separately from application startup:
 
-Fluxbase currently runs migrations automatically on startup. For manual migration control, you can:
-
-1. Use the golang-migrate CLI directly
-2. Use a separate init container in Kubernetes
-3. Run migrations in a CI/CD pipeline before deploying
-
-### Migration Locking
-
-Fluxbase uses advisory locks to prevent concurrent migrations. This is handled automatically by golang-migrate.
-
-### Schema Versioning
-
-Each migration source (system and user) maintains its own version number independently. This allows:
-
-- System migrations to be updated without affecting user migrations
-- User migrations to be rolled back without affecting system migrations
-- Clear separation of concerns
+1. Use the internal schema API to apply changes before deploying
+2. Or use a separate init container in Kubernetes
 
 ## Related Resources
 
 - [Row-Level Security Guide](/guides/row-level-security/)
 - [Configuration Reference](/reference/configuration/)
 - [Deployment Guides](/deployment/overview/)
-- [golang-migrate Documentation](https://github.com/golang-migrate/migrate)

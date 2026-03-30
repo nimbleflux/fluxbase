@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 )
@@ -31,8 +32,8 @@ func (h *QuotaHandler) ListUsersWithQuotas(c fiber.Ctx) error {
 		})
 	}
 
-	// Get all users
-	users, err := h.userMgmtService.ListEnrichedUsers(c.RequestCtx(), "app")
+	// Get all users (no tenant filtering for quota listing)
+	users, err := h.userMgmtService.ListEnrichedUsers(c.RequestCtx(), "app", "")
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch users",

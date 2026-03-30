@@ -84,7 +84,7 @@ FLUXBASE_SECURITY_ENABLE_GLOBAL_RATE_LIMIT=true
 
 **Default**: 100 requests per minute per IP (when enabled)
 
-**Admin Exemption**: Admin users (`admin`, `dashboard_admin`, and `service_role`) are automatically exempt from global rate limiting. This ensures that dashboard administrators can use the admin interface without being rate-limited.
+**Admin Exemption**: Admin users (`admin`, `instance_admin`, `tenant_admin`, and `service_role`) are automatically exempt from global rate limiting. This ensures that dashboard administrators can use the admin interface without being rate-limited.
 
 ### Authentication Endpoint Rate Limits
 
@@ -265,7 +265,7 @@ Fluxbase implements tiered rate limiting based on authentication level:
 
 **Limit**: No rate limit
 
-**Roles**: `admin`, `dashboard_admin`, `service_role`
+**Roles**: `admin`, `instance_admin`, `tenant_admin`, `service_role`
 
 **Use case**: Dashboard administrators, trusted service keys
 

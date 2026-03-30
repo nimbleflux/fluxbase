@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/jobs"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
-	"github.com/rs/zerolog/log"
 )
 
 // SubmitJobTool implements the submit_job MCP tool
@@ -277,7 +278,7 @@ func (t *GetJobStatusTool) Execute(ctx context.Context, args map[string]any, aut
 		userUUID, parseErr := uuid.Parse(*authCtx.UserID)
 		if parseErr == nil {
 			// Check if user is admin or service role
-			isAdmin := authCtx.UserRole == "admin" || authCtx.UserRole == "dashboard_admin" || authCtx.UserRole == "service_role"
+			isAdmin := authCtx.UserRole == "admin" || authCtx.UserRole == "instance_admin" || authCtx.UserRole == "service_role"
 
 			// If not admin, verify ownership
 			if !isAdmin && job.CreatedBy != nil {

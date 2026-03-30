@@ -9,9 +9,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/rs/zerolog/log"
 )
 
 // Storage handles database operations for AI entities
@@ -49,7 +51,13 @@ func (s *Storage) UserExists(ctx context.Context, userID string) (bool, error) {
 // ============================================================================
 
 // CreateChatbot creates a new chatbot in the database
+// Deprecated: Use CreateChatbotWithTenant for tenant-scoped operations
 func (s *Storage) CreateChatbot(ctx context.Context, chatbot *Chatbot) error {
+	return s.CreateChatbotWithTenant(ctx, "", chatbot)
+}
+
+// CreateChatbotWithTenant creates a new chatbot in the database with tenant context
+func (s *Storage) CreateChatbotWithTenant(ctx context.Context, tenantID string, chatbot *Chatbot) error {
 	query := `
 		INSERT INTO ai.chatbots (
 			id, name, namespace, description, code, original_code, is_bundled, bundle_error,
@@ -98,19 +106,22 @@ func (s *Storage) CreateChatbot(ctx context.Context, chatbot *Chatbot) error {
 		}
 	}
 
-	_, err = s.db.Exec(ctx, query,
-		chatbot.ID, chatbot.Name, chatbot.Namespace, chatbot.Description,
-		chatbot.Code, chatbot.OriginalCode, chatbot.IsBundled, chatbot.BundleError,
-		chatbot.AllowedTables, chatbot.AllowedOperations, chatbot.AllowedSchemas, chatbot.HTTPAllowedDomains,
-		intentRulesJSON, requiredColumnsJSON, chatbot.DefaultTable,
-		chatbot.Enabled, chatbot.MaxTokens, chatbot.Temperature, chatbot.ProviderID,
-		chatbot.PersistConversations, chatbot.ConversationTTLHours, chatbot.MaxConversationTurns,
-		chatbot.RateLimitPerMinute, chatbot.DailyRequestLimit, chatbot.DailyTokenBudget,
-		chatbot.AllowUnauthenticated, chatbot.IsPublic, chatbot.RequireRoles, chatbot.ResponseLanguage, chatbot.DisableExecutionLogs,
-		chatbot.MCPTools, chatbot.UseMCPSchema,
-		chatbot.Version, chatbot.Source,
-		chatbot.CreatedBy, chatbot.CreatedAt, chatbot.UpdatedAt,
-	)
+	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query,
+			chatbot.ID, chatbot.Name, chatbot.Namespace, chatbot.Description,
+			chatbot.Code, chatbot.OriginalCode, chatbot.IsBundled, chatbot.BundleError,
+			chatbot.AllowedTables, chatbot.AllowedOperations, chatbot.AllowedSchemas, chatbot.HTTPAllowedDomains,
+			intentRulesJSON, requiredColumnsJSON, chatbot.DefaultTable,
+			chatbot.Enabled, chatbot.MaxTokens, chatbot.Temperature, chatbot.ProviderID,
+			chatbot.PersistConversations, chatbot.ConversationTTLHours, chatbot.MaxConversationTurns,
+			chatbot.RateLimitPerMinute, chatbot.DailyRequestLimit, chatbot.DailyTokenBudget,
+			chatbot.AllowUnauthenticated, chatbot.IsPublic, chatbot.RequireRoles, chatbot.ResponseLanguage, chatbot.DisableExecutionLogs,
+			chatbot.MCPTools, chatbot.UseMCPSchema,
+			chatbot.Version, chatbot.Source,
+			chatbot.CreatedBy, chatbot.CreatedAt, chatbot.UpdatedAt,
+		)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create chatbot: %w", err)
 	}
@@ -119,6 +130,7 @@ func (s *Storage) CreateChatbot(ctx context.Context, chatbot *Chatbot) error {
 		Str("id", chatbot.ID).
 		Str("name", chatbot.Name).
 		Str("namespace", chatbot.Namespace).
+		Str("tenant_id", tenantID).
 		Msg("Created chatbot")
 
 	return nil
@@ -126,6 +138,13 @@ func (s *Storage) CreateChatbot(ctx context.Context, chatbot *Chatbot) error {
 
 // UpdateChatbot updates an existing chatbot in the database
 func (s *Storage) UpdateChatbot(ctx context.Context, chatbot *Chatbot) error {
+	// Get tenant ID from context for backward compatibility
+	tenantID := database.TenantFromContext(ctx)
+	return s.UpdateChatbotWithTenant(ctx, tenantID, chatbot)
+}
+
+// UpdateChatbotWithTenant updates an existing chatbot in the database with explicit tenant context
+func (s *Storage) UpdateChatbotWithTenant(ctx context.Context, tenantID string, chatbot *Chatbot) error {
 	query := `
 		UPDATE ai.chatbots SET
 			description = $2,
@@ -180,39 +199,44 @@ func (s *Storage) UpdateChatbot(ctx context.Context, chatbot *Chatbot) error {
 		}
 	}
 
-	result, err := s.db.Exec(ctx, query,
-		chatbot.ID,
-		chatbot.Description,
-		chatbot.Code,
-		chatbot.OriginalCode,
-		chatbot.IsBundled,
-		chatbot.BundleError,
-		chatbot.AllowedTables,
-		chatbot.AllowedOperations,
-		chatbot.AllowedSchemas,
-		chatbot.HTTPAllowedDomains,
-		intentRulesJSON,
-		requiredColumnsJSON,
-		chatbot.DefaultTable,
-		chatbot.Enabled,
-		chatbot.MaxTokens,
-		chatbot.Temperature,
-		chatbot.ProviderID,
-		chatbot.PersistConversations,
-		chatbot.ConversationTTLHours,
-		chatbot.MaxConversationTurns,
-		chatbot.RateLimitPerMinute,
-		chatbot.DailyRequestLimit,
-		chatbot.DailyTokenBudget,
-		chatbot.AllowUnauthenticated,
-		chatbot.IsPublic,
-		chatbot.RequireRoles,
-		chatbot.ResponseLanguage,
-		chatbot.DisableExecutionLogs,
-		chatbot.MCPTools,
-		chatbot.UseMCPSchema,
-		chatbot.UpdatedAt,
-	)
+	var result pgconn.CommandTag
+	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query,
+			chatbot.ID,
+			chatbot.Description,
+			chatbot.Code,
+			chatbot.OriginalCode,
+			chatbot.IsBundled,
+			chatbot.BundleError,
+			chatbot.AllowedTables,
+			chatbot.AllowedOperations,
+			chatbot.AllowedSchemas,
+			chatbot.HTTPAllowedDomains,
+			intentRulesJSON,
+			requiredColumnsJSON,
+			chatbot.DefaultTable,
+			chatbot.Enabled,
+			chatbot.MaxTokens,
+			chatbot.Temperature,
+			chatbot.ProviderID,
+			chatbot.PersistConversations,
+			chatbot.ConversationTTLHours,
+			chatbot.MaxConversationTurns,
+			chatbot.RateLimitPerMinute,
+			chatbot.DailyRequestLimit,
+			chatbot.DailyTokenBudget,
+			chatbot.AllowUnauthenticated,
+			chatbot.IsPublic,
+			chatbot.RequireRoles,
+			chatbot.ResponseLanguage,
+			chatbot.DisableExecutionLogs,
+			chatbot.MCPTools,
+			chatbot.UseMCPSchema,
+			chatbot.UpdatedAt,
+		)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to update chatbot: %w", err)
 	}
@@ -224,6 +248,7 @@ func (s *Storage) UpdateChatbot(ctx context.Context, chatbot *Chatbot) error {
 	log.Info().
 		Str("id", chatbot.ID).
 		Str("name", chatbot.Name).
+		Str("tenant_id", tenantID).
 		Msg("Updated chatbot")
 
 	return nil
@@ -573,10 +598,22 @@ func (s *Storage) FindChatbotsByName(ctx context.Context, name string, enabledOn
 }
 
 // DeleteChatbot deletes a chatbot by ID
+// Deprecated: Use DeleteChatbotWithTenant for tenant-scoped operations
 func (s *Storage) DeleteChatbot(ctx context.Context, id string) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.DeleteChatbotWithTenant(ctx, tenantID, id)
+}
+
+// DeleteChatbotWithTenant deletes a chatbot by ID with explicit tenant context
+func (s *Storage) DeleteChatbotWithTenant(ctx context.Context, tenantID string, id string) error {
 	query := `DELETE FROM ai.chatbots WHERE id = $1`
 
-	result, err := s.db.Exec(ctx, query, id)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, id)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to delete chatbot: %w", err)
 	}
@@ -585,13 +622,19 @@ func (s *Storage) DeleteChatbot(ctx context.Context, id string) error {
 		return fmt.Errorf("chatbot not found: %s", id)
 	}
 
-	log.Info().Str("id", id).Msg("Deleted chatbot")
+	log.Info().Str("id", id).Str("tenant_id", tenantID).Msg("Deleted chatbot")
 
 	return nil
 }
 
 // UpsertChatbot creates or updates a chatbot based on namespace and name
 func (s *Storage) UpsertChatbot(ctx context.Context, chatbot *Chatbot) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.UpsertChatbotWithTenant(ctx, tenantID, chatbot)
+}
+
+// UpsertChatbotWithTenant creates or updates a chatbot based on namespace and name with tenant context
+func (s *Storage) UpsertChatbotWithTenant(ctx context.Context, tenantID string, chatbot *Chatbot) error {
 	// Check if chatbot exists
 	existing, err := s.GetChatbotByName(ctx, chatbot.Namespace, chatbot.Name)
 	if err != nil {
@@ -603,11 +646,11 @@ func (s *Storage) UpsertChatbot(ctx context.Context, chatbot *Chatbot) error {
 		chatbot.ID = existing.ID
 		chatbot.CreatedAt = existing.CreatedAt
 		chatbot.CreatedBy = existing.CreatedBy
-		return s.UpdateChatbot(ctx, chatbot)
+		return s.UpdateChatbotWithTenant(ctx, tenantID, chatbot)
 	}
 
 	// Create new
-	return s.CreateChatbot(ctx, chatbot)
+	return s.CreateChatbotWithTenant(ctx, tenantID, chatbot)
 }
 
 // ============================================================================
@@ -632,7 +675,14 @@ type ProviderRecord struct {
 }
 
 // CreateProvider creates a new AI provider
+// Deprecated: Use CreateProviderWithTenant for tenant-scoped operations
 func (s *Storage) CreateProvider(ctx context.Context, provider *ProviderRecord) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.CreateProviderWithTenant(ctx, tenantID, provider)
+}
+
+// CreateProviderWithTenant creates a new AI provider with tenant context
+func (s *Storage) CreateProviderWithTenant(ctx context.Context, tenantID string, provider *ProviderRecord) error {
 	query := `
 		INSERT INTO ai.providers (
 			id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
@@ -649,11 +699,14 @@ func (s *Storage) CreateProvider(ctx context.Context, provider *ProviderRecord) 
 	}
 	provider.UpdatedAt = time.Now()
 
-	_, err := s.db.Exec(ctx, query,
-		provider.ID, provider.Name, provider.DisplayName, provider.ProviderType,
-		provider.IsDefault, provider.UseForEmbeddings, provider.EmbeddingModel, provider.Config, provider.Enabled, provider.CreatedBy,
-		provider.CreatedAt, provider.UpdatedAt,
-	)
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query,
+			provider.ID, provider.Name, provider.DisplayName, provider.ProviderType,
+			provider.IsDefault, provider.UseForEmbeddings, provider.EmbeddingModel, provider.Config, provider.Enabled, provider.CreatedBy,
+			provider.CreatedAt, provider.UpdatedAt,
+		)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create provider: %w", err)
 	}
@@ -662,13 +715,21 @@ func (s *Storage) CreateProvider(ctx context.Context, provider *ProviderRecord) 
 		Str("id", provider.ID).
 		Str("name", provider.Name).
 		Str("type", provider.ProviderType).
+		Str("tenant_id", tenantID).
 		Msg("Created AI provider")
 
 	return nil
 }
 
 // UpdateProvider updates an existing AI provider
+// Deprecated: Use UpdateProviderWithTenant for tenant-scoped operations
 func (s *Storage) UpdateProvider(ctx context.Context, provider *ProviderRecord) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.UpdateProviderWithTenant(ctx, tenantID, provider)
+}
+
+// UpdateProviderWithTenant updates an existing AI provider with tenant context
+func (s *Storage) UpdateProviderWithTenant(ctx context.Context, tenantID string, provider *ProviderRecord) error {
 	query := `
 		UPDATE ai.providers SET
 			display_name = $2,
@@ -682,15 +743,20 @@ func (s *Storage) UpdateProvider(ctx context.Context, provider *ProviderRecord) 
 
 	provider.UpdatedAt = time.Now()
 
-	result, err := s.db.Exec(ctx, query,
-		provider.ID,
-		provider.DisplayName,
-		provider.Config,
-		provider.Enabled,
-		provider.UseForEmbeddings,
-		provider.EmbeddingModel,
-		provider.UpdatedAt,
-	)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query,
+			provider.ID,
+			provider.DisplayName,
+			provider.Config,
+			provider.Enabled,
+			provider.UseForEmbeddings,
+			provider.EmbeddingModel,
+			provider.UpdatedAt,
+		)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to update provider: %w", err)
 	}
@@ -702,6 +768,7 @@ func (s *Storage) UpdateProvider(ctx context.Context, provider *ProviderRecord) 
 	log.Info().
 		Str("id", provider.ID).
 		Str("display_name", provider.DisplayName).
+		Str("tenant_id", tenantID).
 		Msg("Updated AI provider")
 
 	return nil
@@ -1022,10 +1089,22 @@ func (s *Storage) SetDefaultProvider(ctx context.Context, id string) error {
 }
 
 // DeleteProvider deletes a provider by ID
+// Deprecated: Use DeleteProviderWithTenant for tenant-scoped operations
 func (s *Storage) DeleteProvider(ctx context.Context, id string) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.DeleteProviderWithTenant(ctx, tenantID, id)
+}
+
+// DeleteProviderWithTenant deletes a provider by ID with tenant context
+func (s *Storage) DeleteProviderWithTenant(ctx context.Context, tenantID string, id string) error {
 	query := `DELETE FROM ai.providers WHERE id = $1`
 
-	result, err := s.db.Exec(ctx, query, id)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, id)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to delete provider: %w", err)
 	}
@@ -1034,7 +1113,7 @@ func (s *Storage) DeleteProvider(ctx context.Context, id string) error {
 		return fmt.Errorf("provider not found: %s", id)
 	}
 
-	log.Info().Str("id", id).Msg("Deleted AI provider")
+	log.Info().Str("id", id).Str("tenant_id", tenantID).Msg("Deleted AI provider")
 
 	return nil
 }

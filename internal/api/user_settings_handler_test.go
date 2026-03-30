@@ -38,7 +38,7 @@ func TestNewUserSettingsHandler(t *testing.T) {
 
 func TestCreateSecret_Validation(t *testing.T) {
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Post("/settings/secret", handler.CreateSecret)
@@ -60,7 +60,7 @@ func TestCreateSecret_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid user ID returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Post("/settings/secret", func(c fiber.Ctx) error {
@@ -85,7 +85,7 @@ func TestCreateSecret_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Post("/settings/secret", func(c fiber.Ctx) error {
@@ -109,7 +109,7 @@ func TestCreateSecret_Validation(t *testing.T) {
 	})
 
 	t.Run("missing key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Post("/settings/secret", func(c fiber.Ctx) error {
@@ -134,7 +134,7 @@ func TestCreateSecret_Validation(t *testing.T) {
 	})
 
 	t.Run("missing value returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Post("/settings/secret", func(c fiber.Ctx) error {
@@ -165,7 +165,7 @@ func TestCreateSecret_Validation(t *testing.T) {
 
 func TestGetSecret_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/secret/*", handler.GetSecret)
@@ -185,7 +185,7 @@ func TestGetSecret_Validation(t *testing.T) {
 	})
 
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/secret/*", handler.GetSecret)
@@ -200,7 +200,7 @@ func TestGetSecret_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid user ID returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/secret/*", func(c fiber.Ctx) error {
@@ -224,7 +224,7 @@ func TestGetSecret_Validation(t *testing.T) {
 
 func TestUpdateSecret_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Put("/settings/secret/*", handler.UpdateSecret)
@@ -246,7 +246,7 @@ func TestUpdateSecret_Validation(t *testing.T) {
 	})
 
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Put("/settings/secret/*", handler.UpdateSecret)
@@ -263,7 +263,7 @@ func TestUpdateSecret_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Put("/settings/secret/*", func(c fiber.Ctx) error {
@@ -288,7 +288,7 @@ func TestUpdateSecret_Validation(t *testing.T) {
 
 func TestDeleteSecret_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Delete("/settings/secret/*", handler.DeleteSecret)
@@ -308,7 +308,7 @@ func TestDeleteSecret_Validation(t *testing.T) {
 	})
 
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Delete("/settings/secret/*", handler.DeleteSecret)
@@ -329,7 +329,7 @@ func TestDeleteSecret_Validation(t *testing.T) {
 
 func TestListSecrets_Validation(t *testing.T) {
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/secrets", handler.ListSecrets)
@@ -344,7 +344,7 @@ func TestListSecrets_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid user ID returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/secrets", func(c fiber.Ctx) error {
@@ -368,7 +368,7 @@ func TestListSecrets_Validation(t *testing.T) {
 
 func TestGetUserSecretValue_Validation(t *testing.T) {
 	t.Run("non-service_role returns forbidden", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/admin/settings/user/:user_id/secret/:key/decrypt", func(c fiber.Ctx) error {
@@ -391,7 +391,7 @@ func TestGetUserSecretValue_Validation(t *testing.T) {
 	})
 
 	t.Run("no role returns forbidden", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/admin/settings/user/:user_id/secret/:key/decrypt", handler.GetUserSecretValue)
@@ -406,7 +406,7 @@ func TestGetUserSecretValue_Validation(t *testing.T) {
 	})
 
 	t.Run("service_role with no secrets service returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/admin/settings/user/:user_id/secret/:key/decrypt", func(c fiber.Ctx) error {
@@ -429,7 +429,7 @@ func TestGetUserSecretValue_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid user_id format returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 		handler.secretsService = nil // Will be caught by role check first anyway
 
@@ -456,7 +456,7 @@ func TestGetUserSecretValue_Validation(t *testing.T) {
 
 func TestGetSetting_UserSettings_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/user/:key", func(c fiber.Ctx) error {
@@ -475,7 +475,7 @@ func TestGetSetting_UserSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/user/:key", handler.GetSetting)
@@ -496,7 +496,7 @@ func TestGetSetting_UserSettings_Validation(t *testing.T) {
 
 func TestGetUserOwnSetting_Validation(t *testing.T) {
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/user/own/:key", handler.GetUserOwnSetting)
@@ -517,7 +517,7 @@ func TestGetUserOwnSetting_Validation(t *testing.T) {
 
 func TestGetSystemSettingPublic_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/user/system/:key", func(c fiber.Ctx) error {
@@ -542,7 +542,7 @@ func TestGetSystemSettingPublic_Validation(t *testing.T) {
 
 func TestSetSetting_Validation(t *testing.T) {
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Put("/settings/user/:key", handler.SetSetting)
@@ -559,7 +559,7 @@ func TestSetSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid user ID returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Put("/settings/user/:key", func(c fiber.Ctx) error {
@@ -579,7 +579,7 @@ func TestSetSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Put("/settings/user/:key", func(c fiber.Ctx) error {
@@ -598,7 +598,7 @@ func TestSetSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("missing value returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Put("/settings/user/:key", func(c fiber.Ctx) error {
@@ -629,7 +629,7 @@ func TestSetSetting_Validation(t *testing.T) {
 
 func TestDeleteSetting_UserSettings_Validation(t *testing.T) {
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Delete("/settings/user/:key", handler.DeleteSetting)
@@ -650,7 +650,7 @@ func TestDeleteSetting_UserSettings_Validation(t *testing.T) {
 
 func TestListSettings_Validation(t *testing.T) {
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/user/list", handler.ListSettings)
@@ -665,7 +665,7 @@ func TestListSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid user ID returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserSettingsHandler(nil, nil)
 
 		app.Get("/settings/user/list", func(c fiber.Ctx) error {

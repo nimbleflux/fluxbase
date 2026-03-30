@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
@@ -302,4 +303,184 @@ func (s *SystemSettingsService) ListSettings(ctx context.Context) ([]SystemSetti
 	}
 
 	return settings, rows.Err()
+}
+
+// ErrInstanceSettingNotFound is returned when an instance-level setting is not found
+var ErrInstanceSettingNotFound = errors.New("instance-level setting not found")
+
+// ErrTenantSettingNotFound is returned when a tenant-level setting is not found
+var ErrTenantSettingNotFound = errors.New("tenant-level setting not found")
+
+// InstanceSetting represents an instance-level (platform-wide) configuration setting
+type InstanceSetting struct {
+	ID          uuid.UUID              `json:"id"`
+	Key         string                 `json:"key"`
+	Value       map[string]interface{} `json:"value"`
+	Description *string                `json:"description,omitempty"`
+	IsPublic    bool                   `json:"is_public"`
+	Category    string                 `json:"category"`
+	CreatedAt   time.Time              `json:"created_at"`
+	UpdatedAt   time.Time              `json:"updated_at"`
+}
+
+// GetInstanceSetting retrieves an instance-level setting from app.instance_settings
+func (s *SystemSettingsService) GetInstanceSetting(ctx context.Context, key string) (*InstanceSetting, error) {
+	var setting InstanceSetting
+	var valueJSON []byte
+	err := s.db.QueryRow(ctx, `
+        SELECT id, key, value, description, is_public, category, created_at, updated_at
+        FROM app.instance_settings
+        WHERE key = $1
+    `, key).Scan(
+		&setting.ID,
+		&setting.Key,
+		&valueJSON,
+		&setting.Description,
+		&setting.IsPublic,
+		&setting.Category,
+		&setting.CreatedAt,
+		&setting.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInstanceSettingNotFound
+		}
+		return nil, err
+	}
+	if err := json.Unmarshal(valueJSON, &setting.Value); err != nil {
+		return nil, err
+	}
+	return &setting, nil
+}
+
+// SetInstanceSetting creates or updates an instance-level setting
+func (s *SystemSettingsService) SetInstanceSetting(ctx context.Context, key string, value map[string]interface{}, description string) error {
+	valueJSON, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(ctx, `
+        INSERT INTO app.instance_settings (key, value, description, category)
+        VALUES ($1, $2, $3, 'system')
+        ON CONFLICT (key) DO UPDATE
+        SET value = EXCLUDED.value,
+            description = EXCLUDED.description,
+            updated_at = NOW()
+    `, key, valueJSON, description)
+	if err != nil {
+		return err
+	}
+	// Invalidate cache for this key
+	if s.cache != nil {
+		s.cache.Invalidate(key)
+	}
+	return nil
+}
+
+// DeleteInstanceSetting removes an instance-level setting
+func (s *SystemSettingsService) DeleteInstanceSetting(ctx context.Context, key string) error {
+	result, err := s.db.Exec(ctx, `
+        DELETE FROM app.instance_settings WHERE key = $1
+    `, key)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return ErrInstanceSettingNotFound
+	}
+	// Invalidate cache for this key
+	if s.cache != nil {
+		s.cache.Invalidate(key)
+	}
+	return nil
+}
+
+// GetSettingWithInheritance retrieves a setting with inheritance logic
+// Priority: tenant settings > instance settings > error
+func (s *SystemSettingsService) GetSettingWithInheritance(ctx context.Context, key string, tenantID string) (*SystemSetting, error) {
+	// First try tenant settings if tenant context is provided
+	if tenantID != "" {
+		setting, err := s.GetTenantSetting(ctx, key, tenantID)
+		if err == nil {
+			return setting, nil
+		}
+		// If tenant setting not found, fall through to instance settings
+		if !errors.Is(err, ErrTenantSettingNotFound) {
+			return nil, err
+		}
+	}
+
+	// Fall back to instance settings (no tenant context)
+	instanceSetting, err := s.GetInstanceSetting(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert InstanceSetting to SystemSetting
+	return &SystemSetting{
+		ID:          instanceSetting.ID,
+		Key:         instanceSetting.Key,
+		Value:       instanceSetting.Value,
+		Description: instanceSetting.Description,
+		CreatedAt:   instanceSetting.CreatedAt,
+		UpdatedAt:   instanceSetting.UpdatedAt,
+	}, nil
+}
+
+// GetTenantSetting retrieves a tenant-level setting from app.settings
+func (s *SystemSettingsService) GetTenantSetting(ctx context.Context, key string, tenantID string) (*SystemSetting, error) {
+	var setting SystemSetting
+	var valueJSON []byte
+	err := s.db.QueryRow(ctx, `
+        SELECT id, key, value, description, created_at, updated_at
+        FROM app.settings
+        WHERE key = $1 AND tenant_id = $2
+    `, key, tenantID).Scan(
+		&setting.ID,
+		&setting.Key,
+		&valueJSON,
+		&setting.Description,
+		&setting.CreatedAt,
+		&setting.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrTenantSettingNotFound
+		}
+		return nil, err
+	}
+	if err := json.Unmarshal(valueJSON, &setting.Value); err != nil {
+		// Handle legacy format where value is stored as raw primitive
+		var rawValue interface{}
+		if rawErr := json.Unmarshal(valueJSON, &rawValue); rawErr == nil {
+			setting.Value = map[string]interface{}{"value": rawValue}
+		} else {
+			return nil, err
+		}
+	}
+	return &setting, nil
+}
+
+// SetTenantSetting creates or updates a tenant-level setting
+func (s *SystemSettingsService) SetTenantSetting(ctx context.Context, key string, tenantID string, value map[string]interface{}, description string) error {
+	valueJSON, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(ctx, `
+        INSERT INTO app.settings (key, value, description, category, tenant_id)
+        VALUES ($1, $2, $3, 'custom', $4)
+        ON CONFLICT (key, tenant_id) DO UPDATE
+        SET value = EXCLUDED.value,
+            description = EXCLUDED.description,
+            updated_at = NOW()
+    `, key, valueJSON, description, tenantID)
+	if err != nil {
+		return err
+	}
+	// Invalidate cache for this key
+	if s.cache != nil {
+		s.cache.Invalidate(key)
+	}
+	return nil
 }

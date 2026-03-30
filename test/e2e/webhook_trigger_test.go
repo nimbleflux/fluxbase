@@ -11,8 +11,9 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // setupWebhookTriggerTest prepares the test context for webhook trigger tests
@@ -26,7 +27,7 @@ func setupWebhookTriggerTest(t *testing.T) *test.TestContext {
 	tc.ExecuteSQL("DELETE FROM auth.webhook_deliveries WHERE webhook_id IN (SELECT id FROM auth.webhooks WHERE name LIKE '%Test%' OR name LIKE '%test%' OR name LIKE '%Webhook%' OR name LIKE '%Debug%' OR name LIKE '%Auto%' OR name LIKE '%Global%' OR name LIKE '%User%' OR name LIKE '%Update%')")
 	tc.ExecuteSQL("DELETE FROM auth.webhooks WHERE name LIKE '%Test%' OR name LIKE '%test%' OR name LIKE '%Webhook%' OR name LIKE '%Debug%' OR name LIKE '%Auto%' OR name LIKE '%Global%' OR name LIKE '%User%' OR name LIKE '%Update%'")
 	// Delete only test users (those with test email patterns)
-	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
+	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 
 	// Note: Triggers are now automatically created when webhooks are created
 	// No need to manually call auth.create_webhook_trigger

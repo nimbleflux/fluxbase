@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/secrets"
 	"github.com/nimbleflux/fluxbase/internal/settings"
-	"github.com/rs/zerolog/log"
 )
 
 // workerError represents an error from a worker
@@ -23,6 +24,8 @@ type workerError struct {
 // Manager manages multiple workers with automatic restart on failure
 type Manager struct {
 	Config                 *config.JobsConfig
+	BaseConfig             *config.Config
+	db                     *database.Connection
 	Storage                *Storage
 	SecretsStorage         *secrets.Storage
 	SettingsSecretsService *settings.SecretsService
@@ -44,9 +47,11 @@ type Manager struct {
 }
 
 // NewManager creates a new worker manager
-func NewManager(cfg *config.JobsConfig, conn *database.Connection, jwtSecret, publicURL string, secretsStorage *secrets.Storage) *Manager {
+func NewManager(cfg *config.JobsConfig, conn *database.Connection, jwtSecret, publicURL string, secretsStorage *secrets.Storage, baseConfig *config.Config) *Manager {
 	return &Manager{
 		Config:         cfg,
+		BaseConfig:     baseConfig,
+		db:             conn,
 		Storage:        NewStorage(conn),
 		SecretsStorage: secretsStorage,
 		Workers:        make([]*Worker, 0),
@@ -90,7 +95,7 @@ func (m *Manager) Start(ctx context.Context, workerCount int) error {
 
 // startWorker creates and starts a single worker
 func (m *Manager) startWorker(ctx context.Context) *Worker {
-	worker := NewWorker(m.Config, m.Storage, m.jwtSecret, m.publicURL, m.SecretsStorage)
+	worker := NewWorker(m.Config, m.Storage, m.jwtSecret, m.publicURL, m.SecretsStorage, m.BaseConfig, m.db)
 	worker.SettingsSecretsService = m.SettingsSecretsService
 
 	m.workersMutex.Lock()

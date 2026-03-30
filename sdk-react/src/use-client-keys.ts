@@ -1,55 +1,63 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useFluxbaseClient } from './context'
-import type { ClientKey, CreateClientKeyRequest } from '@fluxbase/sdk'
+import { useState, useEffect, useCallback } from "react";
+import { useFluxbaseClient } from "./context";
+import type {
+  ClientKey,
+  CreateClientKeyRequest,
+} from "@nimbleflux/fluxbase-sdk";
 
 export interface UseClientKeysOptions {
   /**
    * Whether to automatically fetch client keys on mount
    * @default true
    */
-  autoFetch?: boolean
+  autoFetch?: boolean;
 }
 
 export interface UseClientKeysReturn {
   /**
    * Array of client keys
    */
-  keys: ClientKey[]
+  keys: ClientKey[];
 
   /**
    * Whether keys are being fetched
    */
-  isLoading: boolean
+  isLoading: boolean;
 
   /**
    * Any error that occurred
    */
-  error: Error | null
+  error: Error | null;
 
   /**
    * Refetch client keys
    */
-  refetch: () => Promise<void>
+  refetch: () => Promise<void>;
 
   /**
    * Create a new client key
    */
-  createKey: (request: CreateClientKeyRequest) => Promise<{ key: string; keyData: ClientKey }>
+  createKey: (
+    request: CreateClientKeyRequest,
+  ) => Promise<{ key: string; keyData: ClientKey }>;
 
   /**
    * Update a client key
    */
-  updateKey: (keyId: string, update: { name?: string; description?: string }) => Promise<void>
+  updateKey: (
+    keyId: string,
+    update: { name?: string; description?: string },
+  ) => Promise<void>;
 
   /**
    * Revoke a client key
    */
-  revokeKey: (keyId: string) => Promise<void>
+  revokeKey: (keyId: string) => Promise<void>;
 
   /**
    * Delete a client key
    */
-  deleteKey: (keyId: string) => Promise<void>
+  deleteKey: (keyId: string) => Promise<void>;
 }
 
 /**
@@ -85,81 +93,88 @@ export interface UseClientKeysReturn {
  * }
  * ```
  */
-export function useClientKeys(options: UseClientKeysOptions = {}): UseClientKeysReturn {
-  const { autoFetch = true } = options
-  const client = useFluxbaseClient()
+export function useClientKeys(
+  options: UseClientKeysOptions = {},
+): UseClientKeysReturn {
+  const { autoFetch = true } = options;
+  const client = useFluxbaseClient();
 
-  const [keys, setKeys] = useState<ClientKey[]>([])
-  const [isLoading, setIsLoading] = useState(autoFetch)
-  const [error, setError] = useState<Error | null>(null)
+  const [keys, setKeys] = useState<ClientKey[]>([]);
+  const [isLoading, setIsLoading] = useState(autoFetch);
+  const [error, setError] = useState<Error | null>(null);
 
   /**
    * Fetch client keys from API
    */
   const fetchKeys = useCallback(async () => {
     try {
-      setIsLoading(true)
-      setError(null)
-      const response = await client.admin.management.clientKeys.list()
-      setKeys(response.client_keys)
+      setIsLoading(true);
+      setError(null);
+      const response = await client.admin.management.clientKeys.list();
+      setKeys(response.client_keys);
     } catch (err) {
-      setError(err as Error)
+      setError(err as Error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [client])
+  }, [client]);
 
   /**
    * Create a new client key
    */
   const createKey = useCallback(
-    async (request: CreateClientKeyRequest): Promise<{ key: string; keyData: ClientKey }> => {
-      const response = await client.admin.management.clientKeys.create(request)
-      await fetchKeys() // Refresh list
-      return { key: response.key, keyData: response.client_key }
+    async (
+      request: CreateClientKeyRequest,
+    ): Promise<{ key: string; keyData: ClientKey }> => {
+      const response = await client.admin.management.clientKeys.create(request);
+      await fetchKeys(); // Refresh list
+      return { key: response.key, keyData: response.client_key };
     },
-    [client, fetchKeys]
-  )
+    [client, fetchKeys],
+  );
 
   /**
    * Update a client key
    */
   const updateKey = useCallback(
-    async (keyId: string, update: { name?: string; description?: string }): Promise<void> => {
-      await client.admin.management.clientKeys.update(keyId, update)
-      await fetchKeys() // Refresh list
+    async (
+      keyId: string,
+      update: { name?: string; description?: string },
+    ): Promise<void> => {
+      await client.admin.management.clientKeys.update(keyId, update);
+      await fetchKeys(); // Refresh list
     },
-    [client, fetchKeys]
-  )
+    [client, fetchKeys],
+  );
 
   /**
    * Revoke a client key
    */
   const revokeKey = useCallback(
     async (keyId: string): Promise<void> => {
-      await client.admin.management.clientKeys.revoke(keyId)
-      await fetchKeys() // Refresh list
+      await client.admin.management.clientKeys.revoke(keyId);
+      await fetchKeys(); // Refresh list
     },
-    [client, fetchKeys]
-  )
+    [client, fetchKeys],
+  );
 
   /**
    * Delete a client key
    */
   const deleteKey = useCallback(
     async (keyId: string): Promise<void> => {
-      await client.admin.management.clientKeys.delete(keyId)
-      await fetchKeys() // Refresh list
+      await client.admin.management.clientKeys.delete(keyId);
+      await fetchKeys(); // Refresh list
     },
-    [client, fetchKeys]
-  )
+    [client, fetchKeys],
+  );
 
   // Auto-fetch on mount
   useEffect(() => {
     if (autoFetch) {
-      fetchKeys()
+      fetchKeys();
     }
-  }, [autoFetch, fetchKeys])
+  }, [autoFetch, fetchKeys]);
 
   return {
     keys,
@@ -169,17 +184,17 @@ export function useClientKeys(options: UseClientKeysOptions = {}): UseClientKeys
     createKey,
     updateKey,
     revokeKey,
-    deleteKey
-  }
+    deleteKey,
+  };
 }
 
 /**
  * @deprecated Use useClientKeys instead
  */
-export const useAPIKeys = useClientKeys
+export const useAPIKeys = useClientKeys;
 
 /** @deprecated Use UseClientKeysOptions instead */
-export type UseAPIKeysOptions = UseClientKeysOptions
+export type UseAPIKeysOptions = UseClientKeysOptions;
 
 /** @deprecated Use UseClientKeysReturn instead */
-export type UseAPIKeysReturn = UseClientKeysReturn
+export type UseAPIKeysReturn = UseClientKeysReturn;

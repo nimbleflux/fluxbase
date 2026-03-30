@@ -10,11 +10,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/nimbleflux/fluxbase/internal/settings"
 	"github.com/nimbleflux/fluxbase/internal/testutil"
 	test "github.com/nimbleflux/fluxbase/test"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -48,7 +49,7 @@ func createTestUserForCustomSettings(t *testing.T, tc *testutil.IntegrationTestC
 // =============================================================================
 
 func TestCustomSettingsService_CreateSetting_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -60,7 +61,7 @@ func TestCustomSettingsService_CreateSetting_Success(t *testing.T) {
 		Value:       map[string]interface{}{"enabled": true, "count": 42},
 		ValueType:   "json",
 		Description: "Test setting",
-		EditableBy:  []string{"dashboard_admin", "admin"},
+		EditableBy:  []string{"instance_admin", "admin"},
 		Metadata:    map[string]interface{}{"category": "test"},
 	}
 
@@ -76,7 +77,7 @@ func TestCustomSettingsService_CreateSetting_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_CreateSetting_DefaultValues(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -92,11 +93,11 @@ func TestCustomSettingsService_CreateSetting_DefaultValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "string", setting.ValueType) // Default value type
 	assert.Len(t, setting.EditableBy, 1)
-	assert.Contains(t, setting.EditableBy, "dashboard_admin")
+	assert.Contains(t, setting.EditableBy, "instance_admin")
 }
 
 func TestCustomSettingsService_CreateSetting_DuplicateKey(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -119,7 +120,7 @@ func TestCustomSettingsService_CreateSetting_DuplicateKey(t *testing.T) {
 }
 
 func TestCustomSettingsService_CreateSetting_InvalidKey(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -137,7 +138,7 @@ func TestCustomSettingsService_CreateSetting_InvalidKey(t *testing.T) {
 }
 
 func TestCustomSettingsService_CreateSetting_InvalidValueType(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -156,7 +157,7 @@ func TestCustomSettingsService_CreateSetting_InvalidValueType(t *testing.T) {
 }
 
 func TestCustomSettingsService_GetSetting_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -184,7 +185,7 @@ func TestCustomSettingsService_GetSetting_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_GetSetting_NotFound(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -196,7 +197,7 @@ func TestCustomSettingsService_GetSetting_NotFound(t *testing.T) {
 }
 
 func TestCustomSettingsService_UpdateSetting_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -219,10 +220,10 @@ func TestCustomSettingsService_UpdateSetting_Success(t *testing.T) {
 	updateReq := settings.UpdateCustomSettingRequest{
 		Value:       map[string]interface{}{"enabled": true},
 		Description: &newDesc,
-		EditableBy:  []string{"admin", "dashboard_admin"},
+		EditableBy:  []string{"admin", "instance_admin"},
 	}
 
-	updated, err := svc.UpdateSetting(ctx, "custom.update.test", updateReq, createdBy, "dashboard_admin")
+	updated, err := svc.UpdateSetting(ctx, "custom.update.test", updateReq, createdBy, "instance_admin")
 	require.NoError(t, err)
 	assert.Equal(t, true, updated.Value["enabled"])
 	assert.Equal(t, "Updated description", updated.Description)
@@ -230,7 +231,7 @@ func TestCustomSettingsService_UpdateSetting_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_UpdateSetting_PermissionDenied(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -257,7 +258,7 @@ func TestCustomSettingsService_UpdateSetting_PermissionDenied(t *testing.T) {
 }
 
 func TestCustomSettingsService_UpdateSetting_AdminCanEdit(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -284,7 +285,7 @@ func TestCustomSettingsService_UpdateSetting_AdminCanEdit(t *testing.T) {
 }
 
 func TestCustomSettingsService_DeleteSetting_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -301,7 +302,7 @@ func TestCustomSettingsService_DeleteSetting_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete setting
-	err = svc.DeleteSetting(ctx, "custom.delete.test", "dashboard_admin")
+	err = svc.DeleteSetting(ctx, "custom.delete.test", "instance_admin")
 	require.NoError(t, err)
 
 	// Verify it's deleted
@@ -311,7 +312,7 @@ func TestCustomSettingsService_DeleteSetting_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_DeleteSetting_PermissionDenied(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -334,7 +335,7 @@ func TestCustomSettingsService_DeleteSetting_PermissionDenied(t *testing.T) {
 }
 
 func TestCustomSettingsService_ListSettings_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -354,7 +355,7 @@ func TestCustomSettingsService_ListSettings_Success(t *testing.T) {
 	}
 
 	// List all settings
-	list, err := svc.ListSettings(ctx, "dashboard_admin")
+	list, err := svc.ListSettings(ctx, "instance_admin")
 	require.NoError(t, err)
 	assert.Len(t, list, 3)
 
@@ -369,7 +370,7 @@ func TestCustomSettingsService_ListSettings_Success(t *testing.T) {
 // =============================================================================
 
 func TestCustomSettingsService_CreateSecretSetting_System(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -401,7 +402,7 @@ func TestCustomSettingsService_CreateSecretSetting_System(t *testing.T) {
 }
 
 func TestCustomSettingsService_CreateSecretSetting_User(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -423,7 +424,7 @@ func TestCustomSettingsService_CreateSecretSetting_User(t *testing.T) {
 }
 
 func TestCustomSettingsService_CreateSecretSetting_Duplicate(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -446,7 +447,7 @@ func TestCustomSettingsService_CreateSecretSetting_Duplicate(t *testing.T) {
 }
 
 func TestCustomSettingsService_GetSecretSettingMetadata_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -471,7 +472,7 @@ func TestCustomSettingsService_GetSecretSettingMetadata_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_GetSecretSettingMetadata_NotFound(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -483,7 +484,7 @@ func TestCustomSettingsService_GetSecretSettingMetadata_NotFound(t *testing.T) {
 }
 
 func TestCustomSettingsService_UpdateSecretSetting_Value(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -518,7 +519,7 @@ func TestCustomSettingsService_UpdateSecretSetting_Value(t *testing.T) {
 }
 
 func TestCustomSettingsService_UpdateSecretSetting_Description(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -545,7 +546,7 @@ func TestCustomSettingsService_UpdateSecretSetting_Description(t *testing.T) {
 }
 
 func TestCustomSettingsService_DeleteSecretSetting_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -570,7 +571,7 @@ func TestCustomSettingsService_DeleteSecretSetting_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_DeleteSecretSetting_NotFound(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -582,7 +583,7 @@ func TestCustomSettingsService_DeleteSecretSetting_NotFound(t *testing.T) {
 }
 
 func TestCustomSettingsService_ListSecretSettings_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -616,7 +617,7 @@ func TestCustomSettingsService_ListSecretSettings_Success(t *testing.T) {
 // =============================================================================
 
 func TestCustomSettingsService_CreateUserSetting_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -639,7 +640,7 @@ func TestCustomSettingsService_CreateUserSetting_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_CreateUserSetting_Duplicate(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -662,7 +663,7 @@ func TestCustomSettingsService_CreateUserSetting_Duplicate(t *testing.T) {
 }
 
 func TestCustomSettingsService_GetUserOwnSetting_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -686,7 +687,7 @@ func TestCustomSettingsService_GetUserOwnSetting_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_GetUserOwnSetting_NotFound(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -699,7 +700,7 @@ func TestCustomSettingsService_GetUserOwnSetting_NotFound(t *testing.T) {
 }
 
 func TestCustomSettingsService_GetSystemSetting_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -723,7 +724,7 @@ func TestCustomSettingsService_GetSystemSetting_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_GetUserSettingWithFallback_UserSource(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -746,7 +747,7 @@ func TestCustomSettingsService_GetUserSettingWithFallback_UserSource(t *testing.
 }
 
 func TestCustomSettingsService_GetUserSettingWithFallback_SystemSource(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -770,7 +771,7 @@ func TestCustomSettingsService_GetUserSettingWithFallback_SystemSource(t *testin
 }
 
 func TestCustomSettingsService_UpdateUserSetting_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -799,7 +800,7 @@ func TestCustomSettingsService_UpdateUserSetting_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_UpsertUserSetting_Create(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -818,7 +819,7 @@ func TestCustomSettingsService_UpsertUserSetting_Create(t *testing.T) {
 }
 
 func TestCustomSettingsService_UpsertUserSetting_Update(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -842,7 +843,7 @@ func TestCustomSettingsService_UpsertUserSetting_Update(t *testing.T) {
 }
 
 func TestCustomSettingsService_DeleteUserSetting_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -867,7 +868,7 @@ func TestCustomSettingsService_DeleteUserSetting_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_DeleteUserSetting_NotFound(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -880,7 +881,7 @@ func TestCustomSettingsService_DeleteUserSetting_NotFound(t *testing.T) {
 }
 
 func TestCustomSettingsService_ListUserOwnSettings_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -915,7 +916,7 @@ func TestCustomSettingsService_ListUserOwnSettings_Success(t *testing.T) {
 // =============================================================================
 
 func TestCustomSettingsService_CreateSecretSettingWithTx_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -940,7 +941,7 @@ func TestCustomSettingsService_CreateSecretSettingWithTx_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_GetSecretSettingMetadataWithTx_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -967,7 +968,7 @@ func TestCustomSettingsService_GetSecretSettingMetadataWithTx_Success(t *testing
 }
 
 func TestCustomSettingsService_UpdateSecretSettingWithTx_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -1000,7 +1001,7 @@ func TestCustomSettingsService_UpdateSecretSettingWithTx_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_DeleteSecretSettingWithTx_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -1032,7 +1033,7 @@ func TestCustomSettingsService_DeleteSecretSettingWithTx_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_ListSecretSettingsWithTx_Success(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -1068,7 +1069,7 @@ func TestCustomSettingsService_ListSecretSettingsWithTx_Success(t *testing.T) {
 }
 
 func TestCustomSettingsService_UpsertUserSettingWithTx_Create(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)
@@ -1091,7 +1092,7 @@ func TestCustomSettingsService_UpsertUserSettingWithTx_Create(t *testing.T) {
 }
 
 func TestCustomSettingsService_GetUserSettingWithFallbackWithTx_UserSource(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "settings")
 	defer tc.CleanupTestData()
 
 	svc := createCustomSettingsService(t, tc)

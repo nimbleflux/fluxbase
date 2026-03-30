@@ -22,7 +22,7 @@ The easiest way to install the Fluxbase CLI:
 curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash
 
 # Install specific version
-curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash -s -- v2026.3.6
+curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash -s -- v2026.3.6-rc.2
 ```
 
 The script automatically detects your OS and architecture, downloads the appropriate binary, and installs it to `/usr/local/bin`.
@@ -190,6 +190,7 @@ fluxbase completion powershell | Out-String | Invoke-Expression
 The binary isn't in your PATH. Either:
 
 1. Move the binary to a directory in your PATH:
+
    ```bash
    sudo mv fluxbase /usr/local/bin/
    ```
@@ -226,11 +227,13 @@ xattr -d com.apple.quarantine /usr/local/bin/fluxbase
 If commands fail with connection errors:
 
 1. Check your server URL:
+
    ```bash
    fluxbase config view
    ```
 
 2. Test connectivity:
+
    ```bash
    curl -v https://your-server.com/health
    ```

@@ -15,9 +15,9 @@ Admin client for managing Fluxbase instance
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `fetch` | [`FluxbaseFetch`](/api/sdk/classes/fluxbasefetch/) |
+| Parameter | Type                                               |
+| --------- | -------------------------------------------------- |
+| `fetch`   | [`FluxbaseFetch`](/api/sdk/classes/fluxbasefetch/) |
 
 #### Returns
 
@@ -25,21 +25,22 @@ Admin client for managing Fluxbase instance
 
 ## Properties
 
-| Property | Modifier | Type | Description |
-| ------ | ------ | ------ | ------ |
-| <a id="ai"></a> `ai` | `public` | [`FluxbaseAdminAI`](/api/sdk/classes/fluxbaseadminai/) | AI manager for chatbot and provider management (create, update, delete, sync) |
-| <a id="ddl"></a> `ddl` | `public` | [`DDLManager`](/api/sdk/classes/ddlmanager/) | DDL manager for database schema and table operations |
-| <a id="emailtemplates"></a> `emailTemplates` | `public` | [`EmailTemplateManager`](/api/sdk/classes/emailtemplatemanager/) | Email template manager for customizing authentication and notification emails |
-| <a id="functions"></a> `functions` | `public` | [`FluxbaseAdminFunctions`](/api/sdk/classes/fluxbaseadminfunctions/) | Functions manager for edge function management (create, update, delete, sync) |
-| <a id="impersonation"></a> `impersonation` | `public` | [`ImpersonationManager`](/api/sdk/classes/impersonationmanager/) | Impersonation manager for user impersonation and audit trail |
-| <a id="jobs"></a> `jobs` | `public` | [`FluxbaseAdminJobs`](/api/sdk/classes/fluxbaseadminjobs/) | Jobs manager for background job management (create, update, delete, sync, monitoring) |
-| <a id="management"></a> `management` | `public` | [`FluxbaseManagement`](/api/sdk/classes/fluxbasemanagement/) | Management namespace for client keys, webhooks, and invitations |
-| <a id="migrations"></a> `migrations` | `public` | [`FluxbaseAdminMigrations`](/api/sdk/classes/fluxbaseadminmigrations/) | Migrations manager for database migration operations (create, apply, rollback, sync) |
-| <a id="oauth"></a> `oauth` | `public` | [`FluxbaseOAuth`](/api/sdk/classes/fluxbaseoauth/) | OAuth configuration manager for provider and auth settings |
-| <a id="realtime"></a> `realtime` | `public` | [`FluxbaseAdminRealtime`](/api/sdk/classes/fluxbaseadminrealtime/) | Realtime manager for enabling/disabling realtime on tables |
-| <a id="rpc"></a> `rpc` | `public` | [`FluxbaseAdminRPC`](/api/sdk/classes/fluxbaseadminrpc/) | RPC manager for procedure management (create, update, delete, sync, execution monitoring) |
-| <a id="settings"></a> `settings` | `public` | [`FluxbaseSettings`](/api/sdk/classes/fluxbasesettings/) | Settings manager for system and application settings |
-| <a id="storage"></a> `storage` | `public` | [`FluxbaseAdminStorage`](/api/sdk/classes/fluxbaseadminstorage/) | Storage manager for bucket and object management (list, create, delete, signed URLs) |
+| Property                                     | Modifier | Type                                                                   | Description                                                                               |
+| -------------------------------------------- | -------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| <a id="ai"></a> `ai`                         | `public` | [`FluxbaseAdminAI`](/api/sdk/classes/fluxbaseadminai/)                 | AI manager for chatbot and provider management (create, update, delete, sync)             |
+| <a id="ddl"></a> `ddl`                       | `public` | [`DDLManager`](/api/sdk/classes/ddlmanager/)                           | DDL manager for database schema and table operations                                      |
+| <a id="emailtemplates"></a> `emailTemplates` | `public` | [`EmailTemplateManager`](/api/sdk/classes/emailtemplatemanager/)       | Email template manager for customizing authentication and notification emails             |
+| <a id="functions"></a> `functions`           | `public` | [`FluxbaseAdminFunctions`](/api/sdk/classes/fluxbaseadminfunctions/)   | Functions manager for edge function management (create, update, delete, sync)             |
+| <a id="impersonation"></a> `impersonation`   | `public` | [`ImpersonationManager`](/api/sdk/classes/impersonationmanager/)       | Impersonation manager for user impersonation and audit trail                              |
+| <a id="jobs"></a> `jobs`                     | `public` | [`FluxbaseAdminJobs`](/api/sdk/classes/fluxbaseadminjobs/)             | Jobs manager for background job management (create, update, delete, sync, monitoring)     |
+| <a id="management"></a> `management`         | `public` | [`FluxbaseManagement`](/api/sdk/classes/fluxbasemanagement/)           | Management namespace for client keys, webhooks, and invitations                           |
+| <a id="migrations"></a> `migrations`         | `public` | [`FluxbaseAdminMigrations`](/api/sdk/classes/fluxbaseadminmigrations/) | Migrations manager for database migration operations (create, apply, rollback, sync)      |
+| <a id="oauth"></a> `oauth`                   | `public` | [`FluxbaseOAuth`](/api/sdk/classes/fluxbaseoauth/)                     | OAuth configuration manager for provider and auth settings                                |
+| <a id="realtime"></a> `realtime`             | `public` | [`FluxbaseAdminRealtime`](/api/sdk/classes/fluxbaseadminrealtime/)     | Realtime manager for enabling/disabling realtime on tables                                |
+| <a id="rpc"></a> `rpc`                       | `public` | [`FluxbaseAdminRPC`](/api/sdk/classes/fluxbaseadminrpc/)               | RPC manager for procedure management (create, update, delete, sync, execution monitoring) |
+| <a id="servicekeys"></a> `serviceKeys`       | `public` | [`ServiceKeysManager`](/api/sdk/classes/servicekeysmanager/)           | Service keys manager for API key management (list, create, rotate, revoke)                |
+| <a id="settings"></a> `settings`             | `public` | [`FluxbaseSettings`](/api/sdk/classes/fluxbasesettings/)               | Settings manager for system and application settings                                      |
+| <a id="storage"></a> `storage`               | `public` | [`FluxbaseAdminStorage`](/api/sdk/classes/fluxbaseadminstorage/)       | Storage manager for bucket and object management (list, create, delete, signed URLs)      |
 
 ## Methods
 
@@ -53,7 +54,7 @@ Clear admin token
 
 `void`
 
-***
+---
 
 ### deleteUser()
 
@@ -65,10 +66,10 @@ Permanently deletes a user and all associated data
 
 #### Parameters
 
-| Parameter | Type | Default value | Description |
-| ------ | ------ | ------ | ------ |
-| `userId` | `string` | `undefined` | User ID to delete |
-| `type` | `"app"` \| `"dashboard"` | `"app"` | User type ('app' or 'dashboard') |
+| Parameter | Type                     | Default value | Description                      |
+| --------- | ------------------------ | ------------- | -------------------------------- |
+| `userId`  | `string`                 | `undefined`   | User ID to delete                |
+| `type`    | `"app"` \| `"dashboard"` | `"app"`       | User type ('app' or 'dashboard') |
 
 #### Returns
 
@@ -79,11 +80,11 @@ Deletion confirmation
 #### Example
 
 ```typescript
-await admin.deleteUser('user-uuid');
-console.log('User deleted');
+await admin.deleteUser("user-uuid");
+console.log("User deleted");
 ```
 
-***
+---
 
 ### getHealth()
 
@@ -102,13 +103,13 @@ Health status including database and realtime service status
 ```typescript
 const { data, error } = await admin.getHealth();
 if (data) {
-  console.log('Status:', data.status);
-  console.log('Database:', data.services.database);
-  console.log('Realtime:', data.services.realtime);
+  console.log("Status:", data.status);
+  console.log("Database:", data.services.database);
+  console.log("Realtime:", data.services.realtime);
 }
 ```
 
-***
+---
 
 ### getSetupStatus()
 
@@ -127,11 +128,11 @@ Setup status indicating if initial setup is required
 ```typescript
 const status = await admin.getSetupStatus();
 if (status.needs_setup) {
-  console.log('Initial setup required');
+  console.log("Initial setup required");
 }
 ```
 
-***
+---
 
 ### getToken()
 
@@ -143,7 +144,7 @@ Get current admin token
 
 `string` \| `null`
 
-***
+---
 
 ### getUserById()
 
@@ -155,10 +156,10 @@ Fetch a single user's details by their user ID
 
 #### Parameters
 
-| Parameter | Type | Default value | Description |
-| ------ | ------ | ------ | ------ |
-| `userId` | `string` | `undefined` | User ID to fetch |
-| `type` | `"app"` \| `"dashboard"` | `"app"` | User type ('app' or 'dashboard') |
+| Parameter | Type                     | Default value | Description                      |
+| --------- | ------------------------ | ------------- | -------------------------------- |
+| `userId`  | `string`                 | `undefined`   | User ID to fetch                 |
+| `type`    | `"app"` \| `"dashboard"` | `"app"`       | User type ('app' or 'dashboard') |
 
 #### Returns
 
@@ -170,15 +171,15 @@ User details with metadata
 
 ```typescript
 // Get an app user
-const user = await admin.getUserById('user-123');
+const user = await admin.getUserById("user-123");
 
 // Get a dashboard user
-const dashboardUser = await admin.getUserById('admin-456', 'dashboard');
-console.log('User email:', dashboardUser.email);
-console.log('Last login:', dashboardUser.last_login_at);
+const dashboardUser = await admin.getUserById("admin-456", "dashboard");
+console.log("User email:", dashboardUser.email);
+console.log("Last login:", dashboardUser.last_login_at);
 ```
 
-***
+---
 
 ### inviteUser()
 
@@ -190,10 +191,10 @@ Creates a new user and optionally sends an invitation email
 
 #### Parameters
 
-| Parameter | Type | Default value | Description |
-| ------ | ------ | ------ | ------ |
-| `request` | [`InviteUserRequest`](/api/sdk/interfaces/inviteuserrequest/) | `undefined` | User invitation details |
-| `type` | `"app"` \| `"dashboard"` | `"app"` | User type ('app' or 'dashboard') |
+| Parameter | Type                                                          | Default value | Description                      |
+| --------- | ------------------------------------------------------------- | ------------- | -------------------------------- |
+| `request` | [`InviteUserRequest`](/api/sdk/interfaces/inviteuserrequest/) | `undefined`   | User invitation details          |
+| `type`    | `"app"` \| `"dashboard"`                                      | `"app"`       | User type ('app' or 'dashboard') |
 
 #### Returns
 
@@ -205,16 +206,16 @@ Created user and invitation details
 
 ```typescript
 const response = await admin.inviteUser({
-  email: 'newuser@example.com',
-  role: 'user',
-  send_email: true
+  email: "newuser@example.com",
+  role: "user",
+  send_email: true,
 });
 
-console.log('User invited:', response.user.email);
-console.log('Invitation link:', response.invitation_link);
+console.log("User invited:", response.user.email);
+console.log("Invitation link:", response.invitation_link);
 ```
 
-***
+---
 
 ### listUsers()
 
@@ -224,8 +225,8 @@ List all users
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
+| Parameter | Type                                                        | Description                   |
+| --------- | ----------------------------------------------------------- | ----------------------------- |
 | `options` | [`ListUsersOptions`](/api/sdk/interfaces/listusersoptions/) | Filter and pagination options |
 
 #### Returns
@@ -243,13 +244,13 @@ const { users, total } = await admin.listUsers();
 // List with filters
 const result = await admin.listUsers({
   exclude_admins: true,
-  search: 'john',
+  search: "john",
   limit: 50,
-  type: 'app'
+  type: "app",
 });
 ```
 
-***
+---
 
 ### login()
 
@@ -261,8 +262,8 @@ Authenticate as an admin user
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
+| Parameter | Type                                                          | Description                                 |
+| --------- | ------------------------------------------------------------- | ------------------------------------------- |
 | `request` | [`AdminLoginRequest`](/api/sdk/interfaces/adminloginrequest/) | Login request containing email and password |
 
 #### Returns
@@ -275,15 +276,15 @@ Authentication response with tokens
 
 ```typescript
 const response = await admin.login({
-  email: 'admin@example.com',
-  password: 'password123'
+  email: "admin@example.com",
+  password: "password123",
 });
 
 // Token is automatically set in the client
-console.log('Logged in as:', response.user.email);
+console.log("Logged in as:", response.user.email);
 ```
 
-***
+---
 
 ### logout()
 
@@ -301,10 +302,10 @@ Invalidates the current admin session
 
 ```typescript
 await admin.logout();
-localStorage.removeItem('admin_token');
+localStorage.removeItem("admin_token");
 ```
 
-***
+---
 
 ### me()
 
@@ -322,11 +323,11 @@ Current admin user details
 
 ```typescript
 const { user } = await admin.me();
-console.log('Logged in as:', user.email);
-console.log('Role:', user.role);
+console.log("Logged in as:", user.email);
+console.log("Role:", user.role);
 ```
 
-***
+---
 
 ### refreshToken()
 
@@ -336,8 +337,8 @@ Refresh admin access token
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
+| Parameter | Type                                                              | Description                                  |
+| --------- | ----------------------------------------------------------------- | -------------------------------------------- |
 | `request` | [`AdminRefreshRequest`](/api/sdk/interfaces/adminrefreshrequest/) | Refresh request containing the refresh token |
 
 #### Returns
@@ -349,15 +350,15 @@ New access and refresh tokens
 #### Example
 
 ```typescript
-const refreshToken = localStorage.getItem('admin_refresh_token');
+const refreshToken = localStorage.getItem("admin_refresh_token");
 const response = await admin.refreshToken({ refresh_token: refreshToken });
 
 // Update stored tokens
-localStorage.setItem('admin_token', response.access_token);
-localStorage.setItem('admin_refresh_token', response.refresh_token);
+localStorage.setItem("admin_token", response.access_token);
+localStorage.setItem("admin_refresh_token", response.refresh_token);
 ```
 
-***
+---
 
 ### resetUserPassword()
 
@@ -369,10 +370,10 @@ Generates a new password for the user and optionally sends it via email
 
 #### Parameters
 
-| Parameter | Type | Default value | Description |
-| ------ | ------ | ------ | ------ |
-| `userId` | `string` | `undefined` | User ID |
-| `type` | `"app"` \| `"dashboard"` | `"app"` | User type ('app' or 'dashboard') |
+| Parameter | Type                     | Default value | Description                      |
+| --------- | ------------------------ | ------------- | -------------------------------- |
+| `userId`  | `string`                 | `undefined`   | User ID                          |
+| `type`    | `"app"` \| `"dashboard"` | `"app"`       | User type ('app' or 'dashboard') |
 
 #### Returns
 
@@ -383,11 +384,11 @@ Reset confirmation message
 #### Example
 
 ```typescript
-const response = await admin.resetUserPassword('user-uuid');
+const response = await admin.resetUserPassword("user-uuid");
 console.log(response.message);
 ```
 
-***
+---
 
 ### sendEmail()
 
@@ -397,8 +398,8 @@ Send an email
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
+| Parameter | Type                                                        | Description                            |
+| --------- | ----------------------------------------------------------- | -------------------------------------- |
 | `request` | [`SendEmailRequest`](/api/sdk/interfaces/sendemailrequest/) | Email details (to, subject, html/text) |
 
 #### Returns
@@ -409,16 +410,16 @@ Send an email
 
 ```typescript
 const { error } = await admin.sendEmail({
-  to: 'user@example.com',
-  subject: 'Hello',
-  html: '<p>Your message here</p>'
+  to: "user@example.com",
+  subject: "Hello",
+  html: "<p>Your message here</p>",
 });
 if (!error) {
-  console.log('Email sent');
+  console.log("Email sent");
 }
 ```
 
-***
+---
 
 ### setToken()
 
@@ -428,15 +429,15 @@ Set admin authentication token
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `token` | `string` |
+| Parameter | Type     |
+| --------- | -------- |
+| `token`   | `string` |
 
 #### Returns
 
 `void`
 
-***
+---
 
 ### setup()
 
@@ -449,8 +450,8 @@ This endpoint can only be called once.
 
 #### Parameters
 
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
+| Parameter | Type                                                          | Description                                        |
+| --------- | ------------------------------------------------------------- | -------------------------------------------------- |
 | `request` | [`AdminSetupRequest`](/api/sdk/interfaces/adminsetuprequest/) | Setup request containing email, password, and name |
 
 #### Returns
@@ -463,16 +464,16 @@ Authentication response with tokens
 
 ```typescript
 const response = await admin.setup({
-  email: 'admin@example.com',
-  password: 'SecurePassword123!',
-  name: 'Admin User'
+  email: "admin@example.com",
+  password: "SecurePassword123!",
+  name: "Admin User",
 });
 
 // Store tokens
-localStorage.setItem('admin_token', response.access_token);
+localStorage.setItem("admin_token", response.access_token);
 ```
 
-***
+---
 
 ### updateUserRole()
 
@@ -484,11 +485,11 @@ Changes a user's role
 
 #### Parameters
 
-| Parameter | Type | Default value | Description |
-| ------ | ------ | ------ | ------ |
-| `userId` | `string` | `undefined` | User ID |
-| `role` | `string` | `undefined` | New role |
-| `type` | `"app"` \| `"dashboard"` | `"app"` | User type ('app' or 'dashboard') |
+| Parameter | Type                     | Default value | Description                      |
+| --------- | ------------------------ | ------------- | -------------------------------- |
+| `userId`  | `string`                 | `undefined`   | User ID                          |
+| `role`    | `string`                 | `undefined`   | New role                         |
+| `type`    | `"app"` \| `"dashboard"` | `"app"`       | User type ('app' or 'dashboard') |
 
 #### Returns
 
@@ -499,6 +500,6 @@ Updated user
 #### Example
 
 ```typescript
-const user = await admin.updateUserRole('user-uuid', 'admin');
-console.log('User role updated:', user.role);
+const user = await admin.updateUserRole("user-uuid", "admin");
+console.log("User role updated:", user.role);
 ```

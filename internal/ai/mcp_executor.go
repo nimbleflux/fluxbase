@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 // MCPToolExecutor executes MCP tools on behalf of chatbots

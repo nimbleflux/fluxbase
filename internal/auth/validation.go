@@ -50,7 +50,7 @@ var (
 	// ErrOTPContactRequired is returned when neither email nor phone is provided for OTP
 	ErrOTPContactRequired = errors.New("either email or phone must be provided")
 	// ErrInvalidDashboardRole is returned when an invalid dashboard role is provided
-	ErrInvalidDashboardRole = errors.New("invalid role. Must be 'dashboard_admin' or 'dashboard_user'")
+	ErrInvalidDashboardRole = errors.New("invalid role. Must be 'instance_admin' or 'tenant_admin'")
 )
 
 // emailRegex provides a basic email format validation
@@ -146,7 +146,7 @@ func ValidateOTPContact(email, phone *string) error {
 }
 
 // ValidDashboardRoles contains the valid roles for dashboard users
-var ValidDashboardRoles = []string{"dashboard_admin", "dashboard_user"}
+var ValidDashboardRoles = []string{"instance_admin", "tenant_admin"}
 
 // ValidateDashboardRole validates that a role is valid for dashboard users
 func ValidateDashboardRole(role string) error {

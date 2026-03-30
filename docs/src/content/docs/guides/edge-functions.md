@@ -379,6 +379,7 @@ Common bundling errors:
 ### Air-Gapped / Private Registry Environments
 
 By default, Deno downloads packages from public registries:
+
 - **npm packages** (`npm:zod`) from `registry.npmjs.org`
 - **JSR packages** (`jsr:@std/path`) from `jsr.io`
 
@@ -519,7 +520,7 @@ jobs:
           fluxbase functions sync --namespace production
         env:
           FLUXBASE_URL: ${{ secrets.FLUXBASE_URL }}
-          FLUXBASE_SERVICE_KEY: ${{ secrets.FLUXBASE_SERVICE_KEY }}
+          FLUXBASE_SERVICE_ROLE_KEY: ${{ secrets.FLUXBASE_SERVICE_ROLE_KEY }}
 ```
 
 **Option 5: Avoid npm packages entirely**
@@ -1458,26 +1459,26 @@ export default async function handler(req: Request): Promise<Response> {
     }),
     {
       headers: { "Content-Type": "application/json" },
-    }
+    },
   );
 }
 ```
 
 ### Secrets API Reference
 
-| Method                        | Description                                                 |
-| ----------------------------- | ----------------------------------------------------------- |
-| `secrets.get(key)`            | Get secret with fallback: user → system. Returns undefined. |
-| `secrets.getRequired(key)`    | Same as `get()` but throws if not found.                    |
-| `secrets.getUser(key)`        | Get user-specific secret only (no fallback).                |
-| `secrets.getSystem(key)`      | Get system-level secret only (no fallback).                 |
+| Method                     | Description                                                 |
+| -------------------------- | ----------------------------------------------------------- |
+| `secrets.get(key)`         | Get secret with fallback: user → system. Returns undefined. |
+| `secrets.getRequired(key)` | Same as `get()` but throws if not found.                    |
+| `secrets.getUser(key)`     | Get user-specific secret only (no fallback).                |
+| `secrets.getSystem(key)`   | Get system-level secret only (no fallback).                 |
 
 ### User vs System Secrets
 
-| Type   | Set by        | Scope                 | Use case                                    |
-| ------ | ------------- | --------------------- | ------------------------------------------- |
-| System | Admin (CLI)   | All functions, shared | Shared client keys (Stripe, SendGrid)          |
-| User   | User (SDK)    | Per-user, private     | User's own client keys (OpenAI, custom tokens) |
+| Type   | Set by      | Scope                 | Use case                                       |
+| ------ | ----------- | --------------------- | ---------------------------------------------- |
+| System | Admin (CLI) | All functions, shared | Shared client keys (Stripe, SendGrid)          |
+| User   | User (SDK)  | Per-user, private     | User's own client keys (OpenAI, custom tokens) |
 
 When a function calls `secrets.get("openai_api_key")`:
 
@@ -1531,17 +1532,17 @@ Functions support a unified handler signature with SDK clients and utilities:
 
 ```typescript
 async function handler(
-  request: Request,        // Web Request object
-  fluxbase: FluxbaseClient,       // User-scoped client (respects RLS)
+  request: Request, // Web Request object
+  fluxbase: FluxbaseClient, // User-scoped client (respects RLS)
   fluxbaseService: FluxbaseClient, // Service client (bypasses RLS)
-  utils: FunctionUtils            // Utilities including AI
+  utils: FunctionUtils, // Utilities including AI
 ) {
   // Use AI for intelligent processing
   const response = await utils.ai.chat({
     messages: [
       { role: "system", content: "You are a helpful assistant." },
-      { role: "user", content: "Summarize this data..." }
-    ]
+      { role: "user", content: "Summarize this data..." },
+    ],
   });
 
   return {
@@ -1561,11 +1562,14 @@ async function handler(req, fluxbase, fluxbaseService, utils) {
   // Use AI to analyze text
   const response = await utils.ai.chat({
     messages: [
-      { role: "system", content: "Analyze the sentiment of the following text." },
-      { role: "user", content: text }
+      {
+        role: "system",
+        content: "Analyze the sentiment of the following text.",
+      },
+      { role: "user", content: text },
     ],
     maxTokens: 200,
-    temperature: 0.3
+    temperature: 0.3,
   });
 
   return {
@@ -1573,7 +1577,7 @@ async function handler(req, fluxbase, fluxbaseService, utils) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       analysis: response.content,
-      model: response.model
+      model: response.model,
     }),
   };
 }
@@ -1592,7 +1596,7 @@ async function handler(req, fluxbase, fluxbaseService, utils) {
   const { data: results } = await fluxbaseService.rpc("match_documents", {
     query_embedding: embedding,
     match_threshold: 0.7,
-    match_count: 5
+    match_count: 5,
   });
 
   return {
@@ -1626,29 +1630,35 @@ interface FunctionUtils {
     // Chat completion
     chat(options: {
       messages: Array<{ role: string; content: string }>;
-      provider?: string;  // AI provider name
-      model?: string;     // Model override
+      provider?: string; // AI provider name
+      model?: string; // Model override
       maxTokens?: number; // Default: 1024
       temperature?: number; // 0-1, default: 0.7
     }): Promise<{
       content: string;
       model: string;
       finish_reason?: string;
-      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      usage?: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+      };
     }>;
 
     // Generate embeddings
-    embed(options: {
-      text: string;
-      provider?: string;
-    }): Promise<{
+    embed(options: { text: string; provider?: string }): Promise<{
       embedding: number[];
       model: string;
     }>;
 
     // List available providers
     listProviders(): Promise<{
-      providers: Array<{ name: string; type: string; model: string; enabled: boolean }>;
+      providers: Array<{
+        name: string;
+        type: string;
+        model: string;
+        enabled: boolean;
+      }>;
       default: string;
     }>;
   };

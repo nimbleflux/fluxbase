@@ -8,9 +8,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // ClientKeyAuth creates middleware that authenticates requests using client keys
@@ -88,7 +90,7 @@ func OptionalClientKeyAuth(authService *auth.Service, clientKeyService *auth.Cli
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
+				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -158,7 +160,7 @@ func RequireEitherAuth(authService *auth.Service, clientKeyService *auth.ClientK
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
+				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -291,7 +293,7 @@ func RequireScope(requiredScopes ...string) fiber.Handler {
 
 // RequireAuthOrServiceKey requires either JWT, client key, OR service key authentication
 // This is the most comprehensive auth middleware that accepts all authentication methods
-func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager ...*auth.JWTManager) fiber.Handler {
+func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, securityCfg *config.SecurityConfig, jwtManager ...*auth.JWTManager) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Debug logging for service_role troubleshooting
 		log.Debug().
@@ -365,14 +367,14 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 					Str("subject", claims.Subject).
 					Msg("RequireAuthOrServiceKey: JWT validated, checking role")
 
-				// Check if this is a dashboard admin token (dashboard.users)
-				// Dashboard tokens use the same JWT secret but have role="dashboard_admin"
+				// Check if this is a platform admin token (platform.users)
+				// Platform tokens use the same JWT secret but have role="instance_admin"
 				// and store the user ID in Subject instead of UserID
-				if claims.Role == "dashboard_admin" {
+				if claims.Role == "instance_admin" {
 					log.Debug().
 						Str("user_id", claims.Subject).
 						Str("role", claims.Role).
-						Msg("RequireAuthOrServiceKey: Detected dashboard_admin token")
+						Msg("RequireAuthOrServiceKey: Detected instance_admin token")
 
 					c.Locals("user_id", claims.Subject)
 					c.Locals("user_email", claims.Email)
@@ -381,7 +383,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 					c.Locals("auth_type", "jwt")
 					c.Locals("is_anonymous", false)
 
-					// Set RLS context for dashboard admin
+					// Set RLS context for platform admin
 					c.Locals("rls_user_id", claims.Subject)
 					c.Locals("rls_role", claims.Role)
 
@@ -390,7 +392,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
+				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -417,14 +419,25 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 				c.Locals("rls_user_id", claims.UserID)
 				c.Locals("rls_role", claims.Role)
 
+				// SECURITY: Log audit entry for impersonation tokens
+				// Impersonation tokens have an impersonated_by claim indicating the admin who issued them
+				if claims.ImpersonatedBy != "" {
+					log.Info().
+						Str("user_id", claims.UserID).
+						Str("impersonated_by", claims.ImpersonatedBy).
+						Str("path", c.Path()).
+						Str("method", c.Method()).
+						Msg("Impersonated request")
+				}
+
 				return c.Next()
 			}
 
-			// If auth.users validation failed and jwtManager is provided, try dashboard.users token
+			// If auth.users validation failed and jwtManager is provided, try platform.users token
 			if len(jwtManager) > 0 && jwtManager[0] != nil {
 				dashboardClaims, err := jwtManager[0].ValidateAccessToken(token)
 				if err == nil {
-					// Successfully validated as dashboard.users token
+					// Successfully validated as platform.users token
 					c.Locals("user_id", dashboardClaims.Subject)
 					c.Locals("user_email", dashboardClaims.Email)
 					c.Locals("user_name", dashboardClaims.Name)
@@ -432,7 +445,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 					c.Locals("auth_type", "jwt")
 					c.Locals("is_anonymous", false)
 
-					// Set RLS context for dashboard admin
+					// Set RLS context for platform admin
 					c.Locals("rls_user_id", dashboardClaims.Subject)
 					c.Locals("rls_role", dashboardClaims.Role)
 
@@ -440,7 +453,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 				}
 			}
 
-			// User JWT and dashboard JWT validation failed, try service role JWT (anon/service_role)
+			// User JWT and platform JWT validation failed, try service role JWT (anon/service_role)
 			// This handles the Supabase pattern where JWTs have role claims instead of user claims
 			if strings.HasPrefix(token, "eyJ") {
 				claims, err := authService.ValidateServiceRoleToken(token)
@@ -453,8 +466,16 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 							isRevoked, err := authService.IsServiceRoleTokenRevoked(c.RequestCtx(), claims.ID)
 							if err != nil {
 								log.Error().Err(err).Str("jti", claims.ID).Msg("Failed to check service_role token emergency revocation status")
-								// For service_role tokens, fail-open to avoid breaking production
-								// Emergency revocation is a secondary security measure
+								// Fail-closed by default: reject request when DB check fails
+								// Operators can opt into fail-open behavior via security.service_role_fail_open config
+								if securityCfg == nil || !securityCfg.ServiceRoleFailOpen {
+									return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+										"error":   "service_unavailable",
+										"message": "Unable to verify token status",
+									})
+								}
+								// Fail-open mode: log warning and continue (insecure, for backward compatibility)
+								log.Warn().Str("jti", claims.ID).Msg("Service role revocation check failed - allowing request due to fail-open configuration")
 							} else if isRevoked {
 								log.Warn().Str("jti", claims.ID).Msg("Service role token has been emergency revoked")
 								return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -538,7 +559,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 // - Authorization: Bearer <jwt> with role claim
 // - X-Service-Key header with hashed service key or service role JWT
 // - Dashboard admin JWT tokens (when jwtManager is provided)
-func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager ...*auth.JWTManager) fiber.Handler {
+func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, securityCfg *config.SecurityConfig, jwtManager ...*auth.JWTManager) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// First, try service key authentication (highest privilege)
 		serviceKey := c.Get("X-Service-Key")
@@ -601,7 +622,7 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
+				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -629,14 +650,25 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				c.Locals("rls_user_id", claims.UserID)
 				c.Locals("rls_role", claims.Role)
 
+				// SECURITY: Log audit entry for impersonation tokens
+				// Impersonation tokens have an impersonated_by claim indicating the admin who issued them
+				if claims.ImpersonatedBy != "" {
+					log.Info().
+						Str("user_id", claims.UserID).
+						Str("impersonated_by", claims.ImpersonatedBy).
+						Str("path", c.Path()).
+						Str("method", c.Method()).
+						Msg("Impersonated request")
+				}
+
 				return c.Next()
 			}
 
-			// If auth.users validation failed and jwtManager is provided, try dashboard.users token
+			// If auth.users validation failed and jwtManager is provided, try platform.users token
 			if len(jwtManager) > 0 && jwtManager[0] != nil {
 				dashboardClaims, err := jwtManager[0].ValidateAccessToken(token)
 				if err == nil {
-					// Successfully validated as dashboard.users token
+					// Successfully validated as platform.users token
 					c.Locals("user_id", dashboardClaims.Subject)
 					c.Locals("user_email", dashboardClaims.Email)
 					c.Locals("user_name", dashboardClaims.Name)
@@ -645,14 +677,14 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 					c.Locals("is_anonymous", false)
 					c.Locals("jwt_claims", dashboardClaims)
 
-					// Set RLS context for dashboard admin (maps to service_role in RLS middleware)
+					// Set RLS context for platform admin (maps to service_role in RLS middleware)
 					c.Locals("rls_user_id", dashboardClaims.Subject)
 					c.Locals("rls_role", dashboardClaims.Role)
 
 					log.Debug().
 						Str("user_id", dashboardClaims.Subject).
 						Str("role", dashboardClaims.Role).
-						Msg("Authenticated as dashboard.users via Bearer header")
+						Msg("Authenticated as platform.users via Bearer header")
 
 					return c.Next()
 				}
@@ -665,8 +697,32 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				if err == nil {
 					// Check if this is a service_role or anon token (not a user token)
 					if claims.Role == "service_role" || claims.Role == "anon" {
-						// Valid service role JWT - intentionally skip revocation check.
-						// Service role tokens are system-level credentials that should never be blacklisted.
+						// SECURITY: Check emergency revocation for service_role tokens
+						// This provides a mechanism to revoke compromised service_role tokens immediately
+						if claims.Role == "service_role" {
+							isRevoked, err := authService.IsServiceRoleTokenRevoked(c.RequestCtx(), claims.ID)
+							if err != nil {
+								log.Error().Err(err).Str("jti", claims.ID).Msg("Failed to check service_role token emergency revocation status")
+								// Fail-closed by default: reject request when DB check fails
+								// Operators can opt into fail-open behavior via security.service_role_fail_open config
+								if securityCfg == nil || !securityCfg.ServiceRoleFailOpen {
+									return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+										"error":   "service_unavailable",
+										"message": "Unable to verify token status",
+									})
+								}
+								// Fail-open mode: log warning and continue (insecure, for backward compatibility)
+								log.Warn().Str("jti", claims.ID).Msg("Service role revocation check failed - allowing request due to fail-open configuration")
+							} else if isRevoked {
+								log.Warn().Str("jti", claims.ID).Msg("Service role token has been emergency revoked")
+								return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+									"error":             "Service role token has been revoked",
+									"error_code":        "token_revoked",
+									"revocation_reason": "emergency_revocation",
+								})
+							}
+						}
+
 						c.Locals("user_role", claims.Role)
 						c.Locals("auth_type", "service_role_jwt")
 						c.Locals("jwt_claims", claims)
@@ -703,7 +759,7 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevoked(c.RequestCtx(), claims.ID)
+				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -737,6 +793,32 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 			// User JWT failed, try service role JWT
 			srClaims, err := authService.ValidateServiceRoleToken(fluxbaseClientKey)
 			if err == nil {
+				// SECURITY: Check emergency revocation for service_role tokens
+				// This provides a mechanism to revoke compromised service_role tokens immediately
+				if srClaims.Role == "service_role" {
+					isRevoked, err := authService.IsServiceRoleTokenRevoked(c.RequestCtx(), srClaims.ID)
+					if err != nil {
+						log.Error().Err(err).Str("jti", srClaims.ID).Msg("Failed to check service_role token emergency revocation status")
+						// Fail-closed by default: reject request when DB check fails
+						// Operators can opt into fail-open behavior via security.service_role_fail_open config
+						if securityCfg == nil || !securityCfg.ServiceRoleFailOpen {
+							return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+								"error":   "service_unavailable",
+								"message": "Unable to verify token status",
+							})
+						}
+						// Fail-open mode: log warning and continue (insecure, for backward compatibility)
+						log.Warn().Str("jti", srClaims.ID).Msg("Service role revocation check failed - allowing request due to fail-open configuration")
+					} else if isRevoked {
+						log.Warn().Str("jti", srClaims.ID).Msg("Service role token has been emergency revoked")
+						return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+							"error":             "Service role token has been revoked",
+							"error_code":        "token_revoked",
+							"revocation_reason": "emergency_revocation",
+						})
+					}
+				}
+
 				// Valid service role JWT
 				c.Locals("user_role", srClaims.Role)
 				c.Locals("auth_type", "service_role_jwt")
@@ -813,7 +895,8 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 	}
 }
 
-// validateServiceKey validates a service key and sets context if valid
+// validateServiceKey validates a service key against auth.service_keys in the tenant's database
+// For database-per-tenant multi-tenancy, each tenant has their own service_keys table
 // Returns true if valid, false otherwise
 func validateServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) bool {
 	// Extract key prefix (first 16 chars for identification)
@@ -823,24 +906,34 @@ func validateServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) bool {
 	}
 	keyPrefix := serviceKey[:16]
 
-	// Look up service key in database by prefix
+	// Use tenant pool if available (database-per-tenant), otherwise use main pool
+	pool := GetTenantPool(c)
+	if pool == nil {
+		pool = db
+	}
+
+	// Look up service key in auth.service_keys table by prefix
 	var keyHash string
 	var keyID string
 	var keyName string
+	var keyType string
 	var scopes []string
+	var allowedNamespaces *[]string
 	var enabled bool
 	var expiresAt *time.Time
 	var rateLimitPerMinute *int
 	var rateLimitPerHour *int
+	var revokedAt *time.Time
 
-	err := db.QueryRow(c.RequestCtx(),
-		`SELECT id, name, key_hash, scopes, enabled, expires_at,
-		        rate_limit_per_minute, rate_limit_per_hour
+	err := pool.QueryRow(c.RequestCtx(),
+		`SELECT id, name, key_hash, COALESCE(key_type, 'service'), scopes, allowed_namespaces,
+		        enabled, expires_at, rate_limit_per_minute, rate_limit_per_hour,
+		        revoked_at
 		 FROM auth.service_keys
 		 WHERE key_prefix = $1`,
 		keyPrefix,
-	).Scan(&keyID, &keyName, &keyHash, &scopes, &enabled, &expiresAt,
-		&rateLimitPerMinute, &rateLimitPerHour)
+	).Scan(&keyID, &keyName, &keyHash, &keyType, &scopes, &allowedNamespaces,
+		&enabled, &expiresAt, &rateLimitPerMinute, &rateLimitPerHour, &revokedAt)
 	if err != nil {
 		log.Debug().Err(err).Str("prefix", keyPrefix).Msg("Service key not found")
 		return false
@@ -849,6 +942,12 @@ func validateServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) bool {
 	// Check if key is enabled
 	if !enabled {
 		log.Debug().Str("key_id", keyID).Msg("Service key is disabled")
+		return false
+	}
+
+	// Check if key has been revoked
+	if revokedAt != nil {
+		log.Debug().Str("key_id", keyID).Time("revoked_at", *revokedAt).Msg("Service key has been revoked")
 		return false
 	}
 
@@ -865,11 +964,22 @@ func validateServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) bool {
 		return false
 	}
 
+	// Determine role based on key_type
+	var role string
+	switch keyType {
+	case "anon":
+		role = "anon"
+	case "service":
+		role = "service_role"
+	default:
+		role = "service_role"
+	}
+
 	// Update last_used_at timestamp (fire and forget)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, _ = db.Exec(ctx,
+		_, _ = pool.Exec(ctx,
 			`UPDATE auth.service_keys SET last_used_at = NOW() WHERE id = $1`,
 			keyID,
 		)
@@ -879,29 +989,36 @@ func validateServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) bool {
 	c.Locals("service_key_id", keyID)
 	c.Locals("service_key_name", keyName)
 	c.Locals("service_key_scopes", scopes)
+	c.Locals("service_key_type", keyType)
 	c.Locals("auth_type", "service_key")
-	c.Locals("user_role", "service_role") // Elevated role
+	c.Locals("user_role", role)
 
-	// Store rate limits in context (nil means unlimited)
+	// Store rate limits in context
 	c.Locals("service_key_rate_limit_per_minute", rateLimitPerMinute)
-	c.Locals("service_key_rate_limit_per_hour", rateLimitPerHour)
+
+	// Store allowed namespaces if present
+	if allowedNamespaces != nil {
+		c.Locals("allowed_namespaces", *allowedNamespaces)
+	}
 
 	// For RLS context
-	c.Locals("rls_role", "service_role")
-	c.Locals("rls_user_id", nil) // Service keys don't have user IDs
+	c.Locals("rls_role", role)
+	c.Locals("rls_user_id", nil)
 
 	log.Debug().
 		Str("key_id", keyID).
 		Str("key_name", keyName).
+		Str("key_type", keyType).
+		Str("role", role).
 		Interface("rate_limit_per_minute", rateLimitPerMinute).
-		Interface("rate_limit_per_hour", rateLimitPerHour).
+		Bool("uses_tenant_db", pool != db).
 		Msg("Authenticated with service key")
 
 	return true
 }
 
 // RequireAdmin middleware restricts access to admin users only
-// Allows: service_role (from service keys or service_role JWT) and dashboard_admin users
+// Allows: service_role (from service keys or service_role JWT) and instance_admin users
 // This should be used after authentication middleware (RequireAuthOrServiceKey)
 func RequireAdmin() fiber.Handler {
 	return func(c fiber.Ctx) error {
@@ -917,7 +1034,7 @@ func RequireAdmin() fiber.Handler {
 		}
 
 		// Check for admin roles
-		if role == "service_role" || role == "dashboard_admin" {
+		if role == "service_role" || role == "instance_admin" {
 			log.Debug().
 				Str("auth_type", authType).
 				Str("role", role).
@@ -929,10 +1046,10 @@ func RequireAdmin() fiber.Handler {
 			Str("auth_type", authType).
 			Str("role", role).
 			Str("path", c.Path()).
-			Msg("Admin access denied - requires service_role or dashboard_admin")
+			Msg("Admin access denied - requires service_role or instance_admin")
 
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Admin access required. Only service_role and dashboard_admin can access this endpoint.",
+			"error": "Admin access required. Only service_role and instance_admin can access this endpoint.",
 		})
 	}
 }
@@ -940,7 +1057,7 @@ func RequireAdmin() fiber.Handler {
 // RequireAdminIfClientKeysDisabled middleware conditionally requires admin access
 // when the 'app.auth.allow_user_client_keys' setting is disabled.
 // If the setting is enabled (default), allows regular users through.
-// If the setting is disabled, requires admin access (service_role or dashboard_admin).
+// If the setting is disabled, requires admin access (service_role or instance_admin).
 func RequireAdminIfClientKeysDisabled(settingsCache *auth.SettingsCache) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Check if user client keys are allowed

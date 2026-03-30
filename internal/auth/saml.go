@@ -21,9 +21,11 @@ import (
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 var (
@@ -1258,7 +1260,25 @@ func (s *SAMLService) LoadProvidersFromDB(ctx context.Context) error {
 		WHERE enabled = true AND COALESCE(source, 'database') = 'database'
 	`
 
-	rows, err := s.db.Query(ctx, query)
+	// Retry on transient connection errors during startup (e.g., pool still initializing)
+	var rows pgx.Rows
+	var err error
+	maxRetries := 3
+	for i := 0; i < maxRetries; i++ {
+		rows, err = s.db.Query(ctx, query)
+		if err == nil {
+			break
+		}
+		// Check if it's a transient connection error
+		if strings.Contains(err.Error(), "conn closed") || strings.Contains(err.Error(), "connection") {
+			if i < maxRetries-1 {
+				log.Debug().Err(err).Int("attempt", i+1).Msg("Retrying SAML provider query after connection error")
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+		}
+		break
+	}
 	if err != nil {
 		return fmt.Errorf("failed to query SAML providers: %w", err)
 	}
@@ -1457,4 +1477,211 @@ func (s *SAMLService) GetProvidersForApp() []*SAMLProvider {
 	}
 
 	return providers
+}
+
+// GetProviderForTenant returns a SAML provider by name with tenant context
+// It first checks for tenant-specific providers, then falls back to platform-level providers
+func (s *SAMLService) GetProviderForTenant(ctx context.Context, name string, tenantID string) (*SAMLProvider, error) {
+	// If tenant context is provided, try to get tenant-specific provider from DB first
+	if tenantID != "" && s.db != nil {
+		var provider SAMLProvider
+		var metadataCached *string
+		var metadataURL *string
+		var metadataXML *string
+		var attrMapping map[string]string
+		var allowedRedirectHosts []string
+
+		query := `
+			SELECT id, name, enabled, entity_id, acs_url,
+				   idp_metadata_url, idp_metadata_xml, idp_metadata_cached,
+				   attribute_mapping, auto_create_users, default_role,
+				   COALESCE(allow_dashboard_login, false), COALESCE(allow_app_login, true),
+				   COALESCE(allow_idp_initiated, false), COALESCE(allowed_redirect_hosts, ARRAY[]::TEXT[]),
+				   created_at, updated_at
+			FROM auth.saml_providers
+			WHERE name = $1 AND tenant_id = $2::uuid AND enabled = true
+		`
+		err := s.db.QueryRow(ctx, query, name, tenantID).Scan(
+			&provider.ID, &provider.Name, &provider.Enabled, &provider.EntityID, &provider.AcsURL,
+			&metadataURL, &metadataXML, &metadataCached,
+			&attrMapping, &provider.AutoCreateUsers, &provider.DefaultRole,
+			&provider.AllowDashboardLogin, &provider.AllowAppLogin,
+			&provider.AllowIDPInitiated, &allowedRedirectHosts,
+			&provider.CreatedAt, &provider.UpdatedAt,
+		)
+		if err == nil {
+			// Found tenant-specific provider
+			provider.AttributeMapping = attrMapping
+			provider.AllowedRedirectHosts = allowedRedirectHosts
+			provider.GroupAttribute = "groups" // default
+
+			// Load metadata if needed
+			if err := s.loadProviderMetadata(&provider, metadataCached, metadataXML, metadataURL); err != nil {
+				log.Warn().Err(err).Str("provider", name).Msg("Failed to load tenant SAML metadata")
+			}
+
+			return &provider, nil
+		}
+	}
+
+	// Fallback to platform-level provider (from memory or DB)
+	return s.GetProvider(name)
+}
+
+// GetProvidersForAppWithTenant returns providers that allow app login, filtered by tenant context
+func (s *SAMLService) GetProvidersForAppWithTenant(ctx context.Context, tenantID string) []*SAMLProvider {
+	providers := make([]*SAMLProvider, 0)
+
+	// If tenant context is provided, get tenant-specific providers from DB
+	if tenantID != "" && s.db != nil {
+		query := `
+			SELECT id, name, enabled, entity_id, acs_url,
+				   COALESCE(allow_app_login, true) as allow_app_login
+			FROM auth.saml_providers
+			WHERE tenant_id = $1::uuid AND enabled = true AND COALESCE(allow_app_login, true) = true
+		`
+		rows, err := s.db.Query(ctx, query, tenantID)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var p SAMLProvider
+				if err := rows.Scan(&p.ID, &p.Name, &p.Enabled, &p.EntityID, &p.AcsURL, &p.AllowAppLogin); err == nil {
+					providers = append(providers, &p)
+				}
+			}
+		}
+	}
+
+	// Also include platform-level providers (tenant_id IS NULL)
+	s.mu.RLock()
+	for _, p := range s.providers {
+		if p.Enabled && p.AllowAppLogin {
+			// Check if provider with same name already added from tenant query
+			found := false
+			for _, tp := range providers {
+				if tp.Name == p.Name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				providers = append(providers, p)
+			}
+		}
+	}
+	s.mu.RUnlock()
+
+	return providers
+}
+
+// GetProvidersForDashboardWithTenant returns providers that allow dashboard login, filtered by tenant context
+func (s *SAMLService) GetProvidersForDashboardWithTenant(ctx context.Context, tenantID string) []*SAMLProvider {
+	providers := make([]*SAMLProvider, 0)
+
+	// If tenant context is provided, get tenant-specific providers from DB
+	if tenantID != "" && s.db != nil {
+		query := `
+			SELECT id, name, enabled, entity_id, acs_url,
+				   COALESCE(allow_dashboard_login, false) as allow_dashboard_login
+			FROM auth.saml_providers
+			WHERE tenant_id = $1::uuid AND enabled = true AND COALESCE(allow_dashboard_login, false) = true
+		`
+		rows, err := s.db.Query(ctx, query, tenantID)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var p SAMLProvider
+				if err := rows.Scan(&p.ID, &p.Name, &p.Enabled, &p.EntityID, &p.AcsURL, &p.AllowDashboardLogin); err == nil {
+					providers = append(providers, &p)
+				}
+			}
+		}
+	}
+
+	// Also include platform-level providers (tenant_id IS NULL)
+	s.mu.RLock()
+	for _, p := range s.providers {
+		if p.Enabled && p.AllowDashboardLogin {
+			// Check if provider with same name already added from tenant query
+			found := false
+			for _, tp := range providers {
+				if tp.Name == p.Name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				providers = append(providers, p)
+			}
+		}
+	}
+	s.mu.RUnlock()
+
+	return providers
+}
+
+// loadProviderMetadata loads metadata for a provider from various sources
+func (s *SAMLService) loadProviderMetadata(provider *SAMLProvider, metadataCached *string, metadataXML *string, metadataURL *string) error {
+	var metadataToUse string
+
+	if metadataCached != nil && *metadataCached != "" {
+		metadataToUse = *metadataCached
+	} else if metadataXML != nil && *metadataXML != "" {
+		metadataToUse = *metadataXML
+	} else if metadataURL != nil && *metadataURL != "" {
+		xmlData, err := s.fetchMetadata(*metadataURL)
+		if err != nil {
+			return err
+		}
+		metadataToUse = string(xmlData)
+	} else {
+		return errors.New("no metadata available")
+	}
+
+	metadata, err := samlsp.ParseMetadata([]byte(metadataToUse))
+	if err != nil {
+		return err
+	}
+
+	// Find IdP descriptor
+	for i := range metadata.IDPSSODescriptors {
+		desc := &metadata.IDPSSODescriptors[i]
+		for _, sso := range desc.SingleSignOnServices {
+			if sso.Binding == saml.HTTPPostBinding || sso.Binding == saml.HTTPRedirectBinding {
+				provider.idpDescriptor = desc
+				provider.metadata = metadata
+
+				// Extract SSO URL
+				for _, sso := range desc.SingleSignOnServices {
+					if sso.Binding == saml.HTTPPostBinding || sso.Binding == saml.HTTPRedirectBinding {
+						provider.SsoURL = sso.Location
+						break
+					}
+				}
+
+				// Extract SLO URL
+				for _, slo := range desc.SingleLogoutServices {
+					if slo.Binding == saml.HTTPPostBinding || slo.Binding == saml.HTTPRedirectBinding {
+						provider.IdPSloURL = slo.Location
+						break
+					}
+				}
+
+				// Extract certificate
+				for _, kd := range desc.KeyDescriptors {
+					if kd.Use == "signing" || kd.Use == "" {
+						for _, cert := range kd.KeyInfo.X509Data.X509Certificates {
+							provider.Certificate = cert.Data
+							break
+						}
+						break
+					}
+				}
+
+				return nil
+			}
+		}
+	}
+
+	return errors.New("no suitable IdP SSO descriptor found")
 }

@@ -5,9 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/storage"
-	"github.com/rs/zerolog/log"
 )
 
 // RetentionService handles automatic cleanup of old log entries.

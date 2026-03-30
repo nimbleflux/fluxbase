@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // =============================================================================
@@ -21,7 +22,7 @@ func TestManager_Start_MultipleWorkers(t *testing.T) {
 			DefaultMaxDuration:      time.Hour,
 			GracefulShutdownTimeout: 5 * time.Minute,
 		}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		assert.Equal(t, cfg, manager.Config)
 		assert.Equal(t, "deno", manager.Config.WorkerMode)
@@ -32,7 +33,7 @@ func TestManager_Start_MultipleWorkers(t *testing.T) {
 		cfg := &config.JobsConfig{
 			WorkerMode: "deno",
 		}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		assert.NotNil(t, manager)
 		assert.Empty(t, manager.Workers)
@@ -47,7 +48,7 @@ func TestManager_Start_MultipleWorkers(t *testing.T) {
 func TestManager_Stop(t *testing.T) {
 	t.Run("stop without start does not panic", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Should not panic
 		manager.Stop()
@@ -55,7 +56,7 @@ func TestManager_Stop(t *testing.T) {
 
 	t.Run("stop with empty workers slice", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		manager.Stop()
 		assert.Empty(t, manager.Workers)
@@ -71,11 +72,11 @@ func TestManager_CancelJob_WithWorkers(t *testing.T) {
 		cfg := &config.JobsConfig{
 			WorkerMode: "deno",
 		}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Manually add workers for testing
-		worker1 := NewWorker(cfg, nil, "secret", "http://localhost", nil)
-		worker2 := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker1 := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
+		worker2 := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		manager.Workers = append(manager.Workers, worker1, worker2)
 
 		jobID := uuid.New()
@@ -98,7 +99,7 @@ func TestManager_CancelJob_WithWorkers(t *testing.T) {
 func TestManager_SettingsSecretsService_Propagation(t *testing.T) {
 	t.Run("service is set on manager", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Initially nil
 		assert.Nil(t, manager.SettingsSecretsService)
@@ -118,7 +119,7 @@ func TestManager_WorkerLifecycle(t *testing.T) {
 		cfg := &config.JobsConfig{
 			WorkerMode: "deno",
 		}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		assert.NotNil(t, manager.stopCh)
 		assert.Equal(t, 0, manager.GetWorkerCount())
@@ -139,7 +140,7 @@ func TestManager_WorkerLifecycle(t *testing.T) {
 			WorkerTimeout:           5 * time.Minute,
 			DefaultProgressTimeout:  2 * time.Minute,
 		}
-		manager := NewManager(cfg, nil, "jwt", "http://api.example.com", nil)
+		manager := NewManager(cfg, nil, "jwt", "http://api.example.com", nil, nil)
 
 		assert.Equal(t, cfg, manager.Config)
 		assert.Equal(t, "jwt", manager.jwtSecret)
@@ -154,7 +155,7 @@ func TestManager_WorkerLifecycle(t *testing.T) {
 func TestManager_StopChannel(t *testing.T) {
 	t.Run("stop channel is buffered", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Verify stopCh exists
 		assert.NotNil(t, manager.stopCh)
@@ -176,17 +177,17 @@ func TestManager_StopChannel(t *testing.T) {
 func TestManager_Storage(t *testing.T) {
 	t.Run("storage is initialized", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		assert.NotNil(t, manager.Storage)
 	})
 
 	t.Run("storage is shared across workers", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Workers would share the same storage instance
-		worker := NewWorker(cfg, manager.Storage, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, manager.Storage, "secret", "http://localhost", nil, nil, nil)
 
 		assert.Equal(t, manager.Storage, worker.Storage)
 	})
@@ -199,7 +200,7 @@ func TestManager_Storage(t *testing.T) {
 func TestManager_SecretsStorage(t *testing.T) {
 	t.Run("secrets storage is nil by default", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		assert.Nil(t, manager.SecretsStorage)
 	})
@@ -208,7 +209,7 @@ func TestManager_SecretsStorage(t *testing.T) {
 		// This tests that SecretsStorage is passed through NewManager
 		// even though we can't test the actual worker without a real database
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 		secretsStorage := manager.SecretsStorage // Will be nil
 
 		assert.NotNil(t, cfg) // Just to use the variable
@@ -226,7 +227,7 @@ func TestManager_EdgeCases(t *testing.T) {
 		// In Go, calling a method on nil pointer causes panic
 		// But we can't actually test that without causing a panic
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// This should not panic
 		manager.CancelJob(uuid.New())
@@ -234,7 +235,7 @@ func TestManager_EdgeCases(t *testing.T) {
 
 	t.Run("get worker count on nil workers slice", func(t *testing.T) {
 		cfg := &config.JobsConfig{}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Workers slice is initialized but empty
 		count := manager.GetWorkerCount()
@@ -251,11 +252,11 @@ func TestManager_ConcurrentOperations(t *testing.T) {
 		cfg := &config.JobsConfig{
 			WorkerMode: "deno",
 		}
-		manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+		manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 		// Add some workers
 		for i := 0; i < 5; i++ {
-			worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+			worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 			manager.Workers = append(manager.Workers, worker)
 		}
 
@@ -293,7 +294,7 @@ func BenchmarkManager_NewManager(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		NewManager(cfg, nil, "secret", "http://localhost", nil)
+		NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 	}
 }
 
@@ -301,11 +302,11 @@ func BenchmarkManager_CancelJob(b *testing.B) {
 	cfg := &config.JobsConfig{
 		WorkerMode: "deno",
 	}
-	manager := NewManager(cfg, nil, "secret", "http://localhost", nil)
+	manager := NewManager(cfg, nil, "secret", "http://localhost", nil, nil)
 
 	// Add workers
 	for i := 0; i < 10; i++ {
-		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil)
+		worker := NewWorker(cfg, nil, "secret", "http://localhost", nil, nil, nil)
 		manager.Workers = append(manager.Workers, worker)
 	}
 

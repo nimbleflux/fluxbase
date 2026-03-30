@@ -9,9 +9,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 )
 
 // randomEmail generates a unique email address for testing
@@ -62,7 +63,7 @@ func grantTablePermissions(tc *testutil.IntegrationTestContext, schema, table st
 // =============================================================================
 
 func TestRESTHandler_Create_SingleRecord_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -115,7 +116,7 @@ func TestRESTHandler_Create_SingleRecord_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_Create_BatchRecords_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -163,7 +164,7 @@ func TestRESTHandler_Create_BatchRecords_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_List_AllRecords_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -213,7 +214,7 @@ func TestRESTHandler_List_AllRecords_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_List_WithFilter_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -266,7 +267,7 @@ func TestRESTHandler_List_WithFilter_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_List_WithPagination_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -313,7 +314,7 @@ func TestRESTHandler_List_WithPagination_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_GetSingleRecord_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -359,7 +360,7 @@ func TestRESTHandler_GetSingleRecord_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_GetSingleRecord_NotFound_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -392,7 +393,7 @@ func TestRESTHandler_GetSingleRecord_NotFound_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_UpdateSingleRecord_Patch_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -450,7 +451,7 @@ func TestRESTHandler_UpdateSingleRecord_Patch_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_UpdateSingleRecord_Put_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -503,7 +504,7 @@ func TestRESTHandler_UpdateSingleRecord_Put_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_DeleteSingleRecord_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -554,7 +555,7 @@ func TestRESTHandler_DeleteSingleRecord_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_BatchDelete_WithFilter_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -603,7 +604,7 @@ func TestRESTHandler_BatchDelete_WithFilter_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_BatchUpdate_WithFilter_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -660,7 +661,7 @@ func TestRESTHandler_BatchUpdate_WithFilter_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_OrderBy_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -712,7 +713,7 @@ func TestRESTHandler_OrderBy_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_Selection_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -781,7 +782,7 @@ func TestRESTHandler_Selection_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_Aggregation_Count_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -829,7 +830,7 @@ func TestRESTHandler_Aggregation_Count_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_InvalidTable_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -845,7 +846,7 @@ func TestRESTHandler_InvalidTable_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_Unauthenticated_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 

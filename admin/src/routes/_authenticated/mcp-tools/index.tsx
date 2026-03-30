@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { useState, useEffect, useCallback } from "react";
+import { createFileRoute } from "@tanstack/react-router";
 import {
   Plus,
   Edit,
@@ -11,9 +11,9 @@ import {
   XCircle,
   Loader2,
   Wrench,
-} from 'lucide-react'
-import { toast } from 'sonner'
-import { mcpToolsApi, type MCPTool } from '@/lib/api'
+} from "lucide-react";
+import { toast } from "sonner";
+import { mcpToolsApi, type MCPTool } from "@/lib/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,10 +23,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardContent } from '@/components/ui/card'
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -34,168 +34,168 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from '@/components/ui/tooltip'
+} from "@/components/ui/tooltip";
 
-export const Route = createFileRoute('/_authenticated/mcp-tools/')({
+export const Route = createFileRoute("/_authenticated/mcp-tools/")({
   component: MCPToolsPage,
-})
+});
 
 function MCPToolsPage() {
   return (
-    <div className='flex h-full flex-col'>
+    <div className="flex h-full flex-col">
       {/* Header */}
-      <div className='bg-background flex items-center justify-between border-b px-6 py-4'>
-        <div className='flex items-center gap-3'>
-          <div className='bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg'>
-            <Wrench className='text-primary h-5 w-5' />
+      <div className="bg-background flex items-center justify-between border-b px-6 py-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+            <Wrench className="text-primary h-5 w-5" />
           </div>
           <div>
-            <h1 className='text-xl font-semibold'>Custom MCP Tools</h1>
-            <p className='text-muted-foreground text-sm'>
+            <h1 className="text-xl font-semibold">Custom MCP Tools</h1>
+            <p className="text-muted-foreground text-sm">
               Create and manage custom MCP tools for AI assistants
             </p>
           </div>
         </div>
       </div>
 
-      <div className='flex-1 overflow-auto p-6'>
+      <div className="flex-1 overflow-auto p-6">
         <ToolsTab />
       </div>
     </div>
-  )
+  );
 }
 
 // Tools Tab Component
 function ToolsTab() {
-  const [tools, setTools] = useState<MCPTool[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [showEditDialog, setShowEditDialog] = useState(false)
-  const [showTestDialog, setShowTestDialog] = useState(false)
-  const [selectedTool, setSelectedTool] = useState<MCPTool | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [tools, setTools] = useState<MCPTool[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isTestDialogOpen, setIsTestDialogOpen] = useState(false);
+  const [selectedTool, setSelectedTool] = useState<MCPTool | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const fetchTools = useCallback(async () => {
     try {
-      setLoading(true)
-      const data = await mcpToolsApi.list()
-      setTools(data)
+      setLoading(true);
+      const data = await mcpToolsApi.list();
+      setTools(data);
     } catch {
-      toast.error('Failed to load MCP tools')
+      toast.error("Failed to load MCP tools");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    fetchTools()
-  }, [fetchTools])
+    fetchTools();
+  }, [fetchTools]);
 
   const handleDelete = async (id: string) => {
     try {
-      await mcpToolsApi.delete(id)
-      toast.success('Tool deleted')
-      fetchTools()
+      await mcpToolsApi.delete(id);
+      toast.success("Tool deleted");
+      fetchTools();
     } catch {
-      toast.error('Failed to delete tool')
+      toast.error("Failed to delete tool");
     }
-    setDeleteConfirm(null)
-  }
+    setDeleteConfirm(null);
+  };
 
   const handleToggleEnabled = async (tool: MCPTool) => {
     try {
-      await mcpToolsApi.update(tool.id, { enabled: !tool.enabled })
-      toast.success(tool.enabled ? 'Tool disabled' : 'Tool enabled')
-      fetchTools()
+      await mcpToolsApi.update(tool.id, { enabled: !tool.enabled });
+      toast.success(tool.enabled ? "Tool disabled" : "Tool enabled");
+      fetchTools();
     } catch {
-      toast.error('Failed to update tool')
+      toast.error("Failed to update tool");
     }
-  }
+  };
 
   const filteredTools = tools.filter(
     (tool) =>
       tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tool.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+      tool.description?.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
   return (
     <Card>
-      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-4'>
-        <div className='flex items-center gap-4'>
-          <div className='relative'>
-            <Search className='text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
             <Input
-              placeholder='Search tools...'
+              placeholder="Search tools..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className='w-64 pl-9'
+              className="w-64 pl-9"
             />
           </div>
         </div>
-        <div className='flex items-center gap-2'>
-          <Button variant='outline' size='sm' onClick={fetchTools}>
-            <RefreshCw className='mr-2 h-4 w-4' />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={fetchTools}>
+            <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
-          <Button size='sm' onClick={() => setShowCreateDialog(true)}>
-            <Plus className='mr-2 h-4 w-4' />
+          <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
             New Tool
           </Button>
         </div>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className='flex items-center justify-center py-8'>
-            <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
           </div>
         ) : filteredTools.length === 0 ? (
-          <div className='text-muted-foreground flex flex-col items-center justify-center py-8'>
-            <Wrench className='mb-2 h-12 w-12' />
+          <div className="text-muted-foreground flex flex-col items-center justify-center py-8">
+            <Wrench className="mb-2 h-12 w-12" />
             <p>No custom MCP tools found</p>
-            <p className='text-sm'>Create your first tool to get started</p>
+            <p className="text-sm">Create your first tool to get started</p>
           </div>
         ) : (
-          <div className='space-y-2'>
+          <div className="space-y-2">
             {filteredTools.map((tool) => (
               <div
                 key={tool.id}
-                className='flex items-center justify-between rounded-lg border p-4'
+                className="flex items-center justify-between rounded-lg border p-4"
               >
-                <div className='flex-1'>
-                  <div className='flex items-center gap-2'>
-                    <span className='font-medium'>{tool.name}</span>
-                    {tool.namespace !== 'default' && (
-                      <Badge variant='outline'>{tool.namespace}</Badge>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{tool.name}</span>
+                    {tool.namespace !== "default" && (
+                      <Badge variant="outline">{tool.namespace}</Badge>
                     )}
                     {tool.enabled ? (
-                      <Badge variant='default' className='bg-green-600'>
-                        <CheckCircle className='mr-1 h-3 w-3' />
+                      <Badge variant="default" className="bg-green-600">
+                        <CheckCircle className="mr-1 h-3 w-3" />
                         Enabled
                       </Badge>
                     ) : (
-                      <Badge variant='secondary'>
-                        <XCircle className='mr-1 h-3 w-3' />
+                      <Badge variant="secondary">
+                        <XCircle className="mr-1 h-3 w-3" />
                         Disabled
                       </Badge>
                     )}
                   </div>
                   {tool.description && (
-                    <p className='text-muted-foreground mt-1 text-sm'>
+                    <p className="text-muted-foreground mt-1 text-sm">
                       {tool.description}
                     </p>
                   )}
-                  <div className='text-muted-foreground mt-2 flex gap-2 text-xs'>
+                  <div className="text-muted-foreground mt-2 flex gap-2 text-xs">
                     <span>Timeout: {tool.timeout_seconds}s</span>
                     <span>•</span>
                     <span>Memory: {tool.memory_limit_mb}MB</span>
@@ -207,18 +207,18 @@ function ToolsTab() {
                     )}
                   </div>
                 </div>
-                <div className='flex items-center gap-2'>
+                <div className="flex items-center gap-2">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant='ghost'
-                        size='sm'
+                        variant="ghost"
+                        size="sm"
                         onClick={() => {
-                          setSelectedTool(tool)
-                          setShowTestDialog(true)
+                          setSelectedTool(tool);
+                          setIsTestDialogOpen(true);
                         }}
                       >
-                        <Play className='h-4 w-4' />
+                        <Play className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Test Tool</TooltipContent>
@@ -226,14 +226,14 @@ function ToolsTab() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant='ghost'
-                        size='sm'
+                        variant="ghost"
+                        size="sm"
                         onClick={() => {
-                          setSelectedTool(tool)
-                          setShowEditDialog(true)
+                          setSelectedTool(tool);
+                          setIsEditDialogOpen(true);
                         }}
                       >
-                        <Edit className='h-4 w-4' />
+                        <Edit className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Edit</TooltipContent>
@@ -241,25 +241,25 @@ function ToolsTab() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant='ghost'
-                        size='sm'
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleToggleEnabled(tool)}
                       >
                         <Switch checked={tool.enabled} />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {tool.enabled ? 'Disable' : 'Enable'}
+                      {tool.enabled ? "Disable" : "Enable"}
                     </TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant='ghost'
-                        size='sm'
+                        variant="ghost"
+                        size="sm"
                         onClick={() => setDeleteConfirm(tool.id)}
                       >
-                        <Trash2 className='text-destructive h-4 w-4' />
+                        <Trash2 className="text-destructive h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Delete</TooltipContent>
@@ -273,27 +273,27 @@ function ToolsTab() {
 
       {/* Create Dialog */}
       <ToolDialog
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
         onSave={async (data) => {
-          await mcpToolsApi.create(data)
-          toast.success('Tool created')
-          fetchTools()
-          setShowCreateDialog(false)
+          await mcpToolsApi.create(data);
+          toast.success("Tool created");
+          fetchTools();
+          setIsCreateDialogOpen(false);
         }}
       />
 
       {/* Edit Dialog */}
       {selectedTool && (
         <ToolDialog
-          open={showEditDialog}
-          onOpenChange={setShowEditDialog}
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
           tool={selectedTool}
           onSave={async (data) => {
-            await mcpToolsApi.update(selectedTool.id, data)
-            toast.success('Tool updated')
-            fetchTools()
-            setShowEditDialog(false)
+            await mcpToolsApi.update(selectedTool.id, data);
+            toast.success("Tool updated");
+            fetchTools();
+            setIsEditDialogOpen(false);
           }}
         />
       )}
@@ -301,8 +301,8 @@ function ToolsTab() {
       {/* Test Dialog */}
       {selectedTool && (
         <TestToolDialog
-          open={showTestDialog}
-          onOpenChange={setShowTestDialog}
+          open={isTestDialogOpen}
+          onOpenChange={setIsTestDialogOpen}
           tool={selectedTool}
         />
       )}
@@ -324,7 +324,7 @@ function ToolsTab() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
-              className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>
@@ -332,31 +332,31 @@ function ToolsTab() {
         </AlertDialogContent>
       </AlertDialog>
     </Card>
-  )
+  );
 }
 
 // Tool Dialog Component
 interface ToolDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  tool?: MCPTool
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tool?: MCPTool;
   onSave: (data: {
-    name: string
-    namespace: string
-    description: string
-    code: string
-    timeout_seconds: number
-    memory_limit_mb: number
-    allow_net: boolean
-    allow_env: boolean
-    enabled: boolean
-  }) => Promise<void>
+    name: string;
+    namespace: string;
+    description: string;
+    code: string;
+    timeout_seconds: number;
+    memory_limit_mb: number;
+    allow_net: boolean;
+    allow_env: boolean;
+    enabled: boolean;
+  }) => Promise<void>;
 }
 
 function ToolDialog({ open, onOpenChange, tool, onSave }: ToolDialogProps) {
-  const [name, setName] = useState(tool?.name || '')
-  const [namespace, setNamespace] = useState(tool?.namespace || 'default')
-  const [description, setDescription] = useState(tool?.description || '')
+  const [name, setName] = useState(tool?.name || "");
+  const [namespace, setNamespace] = useState(tool?.namespace || "default");
+  const [description, setDescription] = useState(tool?.description || "");
   const [code, setCode] = useState(
     tool?.code ||
       `// @fluxbase:description Your tool description here
@@ -371,45 +371,45 @@ export async function handler(
   return {
     content: [{ type: "text", text: "Result: " + args.param1 }]
   };
-}`
-  )
+}`,
+  );
   const [timeoutSeconds, setTimeoutSeconds] = useState(
-    tool?.timeout_seconds || 30
-  )
+    tool?.timeout_seconds || 30,
+  );
   const [memoryLimitMb, setMemoryLimitMb] = useState(
-    tool?.memory_limit_mb || 128
-  )
-  const [allowNet, setAllowNet] = useState(tool?.allow_net || false)
-  const [allowEnv, setAllowEnv] = useState(tool?.allow_env || false)
-  const [enabled, setEnabled] = useState(tool?.enabled ?? true)
-  const [saving, setSaving] = useState(false)
+    tool?.memory_limit_mb || 128,
+  );
+  const [allowNet, setAllowNet] = useState(tool?.allow_net || false);
+  const [allowEnv, setAllowEnv] = useState(tool?.allow_env || false);
+  const [enabled, setEnabled] = useState(tool?.enabled ?? true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (tool) {
-      setName(tool.name)
-      setNamespace(tool.namespace)
-      setDescription(tool.description || '')
-      setCode(tool.code)
-      setTimeoutSeconds(tool.timeout_seconds)
-      setMemoryLimitMb(tool.memory_limit_mb)
-      setAllowNet(tool.allow_net)
-      setAllowEnv(tool.allow_env)
-      setEnabled(tool.enabled)
+      setName(tool.name);
+      setNamespace(tool.namespace);
+      setDescription(tool.description || "");
+      setCode(tool.code);
+      setTimeoutSeconds(tool.timeout_seconds);
+      setMemoryLimitMb(tool.memory_limit_mb);
+      setAllowNet(tool.allow_net);
+      setAllowEnv(tool.allow_env);
+      setEnabled(tool.enabled);
     }
-  }, [tool])
+  }, [tool]);
 
   const handleSave = async () => {
     if (!name.trim()) {
-      toast.error('Name is required')
-      return
+      toast.error("Name is required");
+      return;
     }
     if (!code.trim()) {
-      toast.error('Code is required')
-      return
+      toast.error("Code is required");
+      return;
     }
 
     try {
-      setSaving(true)
+      setSaving(true);
       await onSave({
         name,
         namespace,
@@ -420,77 +420,77 @@ export async function handler(
         allow_net: allowNet,
         allow_env: allowEnv,
         enabled,
-      })
+      });
     } catch {
-      toast.error('Failed to save tool')
+      toast.error("Failed to save tool");
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='flex max-h-[90vh] max-w-4xl flex-col overflow-hidden'>
+      <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle>{tool ? 'Edit Tool' : 'Create Tool'}</DialogTitle>
+          <DialogTitle>{tool ? "Edit Tool" : "Create Tool"}</DialogTitle>
           <DialogDescription>
             {tool
-              ? 'Update your custom MCP tool'
-              : 'Create a new custom MCP tool for AI assistants'}
+              ? "Update your custom MCP tool"
+              : "Create a new custom MCP tool for AI assistants"}
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className='flex-1 pr-4'>
-          <div className='space-y-4 py-4'>
-            <div className='grid grid-cols-2 gap-4'>
-              <div className='space-y-2'>
-                <Label htmlFor='name'>Name</Label>
+        <ScrollArea className="flex-1 pr-4">
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name</Label>
                 <Input
-                  id='name'
+                  id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder='my_tool'
+                  placeholder="my_tool"
                   disabled={!!tool}
                 />
               </div>
-              <div className='space-y-2'>
-                <Label htmlFor='namespace'>Namespace</Label>
+              <div className="space-y-2">
+                <Label htmlFor="namespace">Namespace</Label>
                 <Input
-                  id='namespace'
+                  id="namespace"
                   value={namespace}
                   onChange={(e) => setNamespace(e.target.value)}
-                  placeholder='default'
+                  placeholder="default"
                 />
               </div>
             </div>
 
-            <div className='space-y-2'>
-              <Label htmlFor='description'>Description</Label>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
               <Input
-                id='description'
+                id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder='What does this tool do?'
+                placeholder="What does this tool do?"
               />
             </div>
 
-            <div className='space-y-2'>
-              <Label htmlFor='code'>Code</Label>
+            <div className="space-y-2">
+              <Label htmlFor="code">Code</Label>
               <Textarea
-                id='code'
+                id="code"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className='min-h-[300px] font-mono text-sm'
-                placeholder='export async function handler(args, fluxbase, fluxbaseService, utils) { ... }'
+                className="min-h-[300px] font-mono text-sm"
+                placeholder="export async function handler(args, fluxbase, fluxbaseService, utils) { ... }"
               />
             </div>
 
-            <div className='grid grid-cols-2 gap-4'>
-              <div className='space-y-2'>
-                <Label htmlFor='timeout'>Timeout (seconds)</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="timeout">Timeout (seconds)</Label>
                 <Input
-                  id='timeout'
-                  type='number'
+                  id="timeout"
+                  type="number"
                   value={timeoutSeconds}
                   onChange={(e) =>
                     setTimeoutSeconds(parseInt(e.target.value) || 30)
@@ -499,11 +499,11 @@ export async function handler(
                   max={300}
                 />
               </div>
-              <div className='space-y-2'>
-                <Label htmlFor='memory'>Memory Limit (MB)</Label>
+              <div className="space-y-2">
+                <Label htmlFor="memory">Memory Limit (MB)</Label>
                 <Input
-                  id='memory'
-                  type='number'
+                  id="memory"
+                  type="number"
                   value={memoryLimitMb}
                   onChange={(e) =>
                     setMemoryLimitMb(parseInt(e.target.value) || 128)
@@ -514,87 +514,87 @@ export async function handler(
               </div>
             </div>
 
-            <div className='flex flex-wrap gap-6'>
-              <div className='flex items-center gap-2'>
+            <div className="flex flex-wrap gap-6">
+              <div className="flex items-center gap-2">
                 <Switch
-                  id='allow_net'
+                  id="allow_net"
                   checked={allowNet}
                   onCheckedChange={setAllowNet}
                 />
-                <Label htmlFor='allow_net'>Allow Network</Label>
+                <Label htmlFor="allow_net">Allow Network</Label>
               </div>
-              <div className='flex items-center gap-2'>
+              <div className="flex items-center gap-2">
                 <Switch
-                  id='allow_env'
+                  id="allow_env"
                   checked={allowEnv}
                   onCheckedChange={setAllowEnv}
                 />
-                <Label htmlFor='allow_env'>Allow Environment</Label>
+                <Label htmlFor="allow_env">Allow Environment</Label>
               </div>
-              <div className='flex items-center gap-2'>
+              <div className="flex items-center gap-2">
                 <Switch
-                  id='enabled'
+                  id="enabled"
                   checked={enabled}
                   onCheckedChange={setEnabled}
                 />
-                <Label htmlFor='enabled'>Enabled</Label>
+                <Label htmlFor="enabled">Enabled</Label>
               </div>
             </div>
           </div>
         </ScrollArea>
 
         <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-            {tool ? 'Update' : 'Create'}
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {tool ? "Update" : "Create"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 // Test Tool Dialog
 interface TestToolDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  tool: MCPTool
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tool: MCPTool;
 }
 
 function TestToolDialog({ open, onOpenChange, tool }: TestToolDialogProps) {
-  const [args, setArgs] = useState('{}')
-  const [testing, setTesting] = useState(false)
+  const [args, setArgs] = useState("{}");
+  const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<{
-    success: boolean
+    success: boolean;
     result: {
-      content: Array<{ type: string; text: string }>
-      isError?: boolean
-    }
-  } | null>(null)
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+  } | null>(null);
 
   const handleTest = async () => {
     try {
-      setTesting(true)
-      const parsedArgs = JSON.parse(args)
-      const testResult = await mcpToolsApi.test(tool.id, parsedArgs)
-      setResult(testResult)
+      setTesting(true);
+      const parsedArgs = JSON.parse(args);
+      const testResult = await mcpToolsApi.test(tool.id, parsedArgs);
+      setResult(testResult);
     } catch (error) {
       if (error instanceof SyntaxError) {
-        toast.error('Invalid JSON arguments')
+        toast.error("Invalid JSON arguments");
       } else {
-        toast.error('Test failed')
+        toast.error("Test failed");
       }
     } finally {
-      setTesting(false)
+      setTesting(false);
     }
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-2xl'>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Test Tool: {tool.name}</DialogTitle>
           <DialogDescription>
@@ -602,30 +602,30 @@ function TestToolDialog({ open, onOpenChange, tool }: TestToolDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className='space-y-4'>
-          <div className='space-y-2'>
-            <Label htmlFor='args'>Arguments (JSON)</Label>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="args">Arguments (JSON)</Label>
             <Textarea
-              id='args'
+              id="args"
               value={args}
               onChange={(e) => setArgs(e.target.value)}
-              className='min-h-[100px] font-mono text-sm'
+              className="min-h-[100px] font-mono text-sm"
               placeholder='{"param1": "value1"}'
             />
           </div>
 
           {result && (
-            <div className='space-y-2'>
+            <div className="space-y-2">
               <Label>Result</Label>
               <div
                 className={`rounded-lg border p-4 ${
                   result.success && !result.result.isError
-                    ? 'border-green-500 bg-green-50 dark:bg-green-950'
-                    : 'border-red-500 bg-red-50 dark:bg-red-950'
+                    ? "border-green-500 bg-green-50 dark:bg-green-950"
+                    : "border-red-500 bg-red-50 dark:bg-red-950"
                 }`}
               >
-                <pre className='text-sm whitespace-pre-wrap'>
-                  {result.result.content.map((c) => c.text).join('\n')}
+                <pre className="text-sm whitespace-pre-wrap">
+                  {result.result.content.map((c) => c.text).join("\n")}
                 </pre>
               </div>
             </div>
@@ -633,16 +633,16 @@ function TestToolDialog({ open, onOpenChange, tool }: TestToolDialogProps) {
         </div>
 
         <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
           <Button onClick={handleTest} disabled={testing}>
-            {testing && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-            <Play className='mr-2 h-4 w-4' />
+            {testing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Play className="mr-2 h-4 w-4" />
             Test
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

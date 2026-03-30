@@ -31,6 +31,29 @@ type TokenClaims struct {
 	AppMetadata  any                    `json:"app_metadata,omitempty"`  // Application/admin-only metadata
 	RawClaims    map[string]interface{} `json:"-"`                       // Full claims map for RLS (not serialized)
 	jwt.RegisteredClaims
+
+	// Multi-tenancy fields
+	TenantID        *string `json:"tenant_id,omitempty"`         // Current tenant ID
+	TenantRole      string  `json:"tenant_role,omitempty"`       // User's role in current tenant (tenant_admin, tenant_member)
+	IsInstanceAdmin bool    `json:"is_instance_admin,omitempty"` // True for instance-level admins
+
+	// Impersonation tracking - for security audit and revocation
+	ImpersonatedBy string `json:"impersonated_by,omitempty"` // Admin user ID who issued this impersonation token
+}
+
+// TokenOption is a functional option for token generation
+type TokenOption func(*tokenOptions)
+
+// tokenOptions holds options for token generation
+type tokenOptions struct {
+	impersonatedBy string
+}
+
+// WithImpersonatedBy sets the admin user ID who is impersonating
+func WithImpersonatedBy(adminID string) TokenOption {
+	return func(o *tokenOptions) {
+		o.impersonatedBy = adminID
+	}
 }
 
 // JWTManager handles JWT token operations
@@ -88,20 +111,28 @@ func NewJWTManagerWithConfig(secretKey string, accessTTL, refreshTTL, serviceRol
 }
 
 // GenerateAccessToken generates a new access token
-func (m *JWTManager) GenerateAccessToken(userID, email, role string, userMetadata, appMetadata any) (string, *TokenClaims, error) {
+func (m *JWTManager) GenerateAccessToken(userID, email, role string, userMetadata, appMetadata any, opts ...TokenOption) (string, *TokenClaims, error) {
 	now := time.Now()
 	sessionID := uuid.New().String()
 
+	// Apply token options
+	options := &tokenOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	claims := &TokenClaims{
-		UserID:       userID,
-		Email:        email,
-		Role:         role,
-		SessionID:    sessionID,
-		TokenType:    "access",
-		UserMetadata: userMetadata,
-		AppMetadata:  appMetadata,
+		UserID:         userID,
+		Email:          email,
+		Role:           role,
+		SessionID:      sessionID,
+		TokenType:      "access",
+		UserMetadata:   userMetadata,
+		AppMetadata:    appMetadata,
+		ImpersonatedBy: options.impersonatedBy,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTokenTTL)),
@@ -120,19 +151,27 @@ func (m *JWTManager) GenerateAccessToken(userID, email, role string, userMetadat
 }
 
 // GenerateRefreshToken generates a new refresh token
-func (m *JWTManager) GenerateRefreshToken(userID, email, role, sessionID string, userMetadata, appMetadata any) (string, *TokenClaims, error) {
+func (m *JWTManager) GenerateRefreshToken(userID, email, role, sessionID string, userMetadata, appMetadata any, opts ...TokenOption) (string, *TokenClaims, error) {
 	now := time.Now()
 
+	// Apply token options
+	options := &tokenOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	claims := &TokenClaims{
-		UserID:       userID,
-		Email:        email,
-		Role:         role,
-		SessionID:    sessionID,
-		TokenType:    "refresh",
-		UserMetadata: userMetadata,
-		AppMetadata:  appMetadata,
+		UserID:         userID,
+		Email:          email,
+		Role:           role,
+		SessionID:      sessionID,
+		TokenType:      "refresh",
+		UserMetadata:   userMetadata,
+		AppMetadata:    appMetadata,
+		ImpersonatedBy: options.impersonatedBy,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshTokenTTL)),
@@ -169,6 +208,127 @@ func (m *JWTManager) GenerateTokenPair(userID, email, role string, userMetadata,
 	return accessToken, refreshToken, sessionID, nil
 }
 
+// TenantTokenOptions contains options for generating tenant-aware tokens
+type TenantTokenOptions struct {
+	TenantID        *string
+	TenantRole      string
+	IsInstanceAdmin bool
+}
+
+// GenerateAccessTokenWithTenant generates a new access token with tenant context
+func (m *JWTManager) GenerateAccessTokenWithTenant(userID, email, role string, userMetadata, appMetadata any, tenantOpts TenantTokenOptions) (string, *TokenClaims, error) {
+	now := time.Now()
+	sessionID := uuid.New().String()
+
+	claims := &TokenClaims{
+		UserID:          userID,
+		Email:           email,
+		Role:            role,
+		SessionID:       sessionID,
+		TokenType:       "access",
+		UserMetadata:    userMetadata,
+		AppMetadata:     appMetadata,
+		TenantID:        tenantOpts.TenantID,
+		TenantRole:      tenantOpts.TenantRole,
+		IsInstanceAdmin: tenantOpts.IsInstanceAdmin,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTokenTTL)),
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(m.secretKey)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return tokenString, claims, nil
+}
+
+// GenerateTokenPairWithTenant generates both access and refresh tokens with tenant context
+func (m *JWTManager) GenerateTokenPairWithTenant(userID, email, role string, userMetadata, appMetadata any, tenantOpts TenantTokenOptions) (accessToken, refreshToken string, sessionID string, err error) {
+	// Generate access token with tenant context
+	accessToken, claims, err := m.GenerateAccessTokenWithTenant(userID, email, role, userMetadata, appMetadata, tenantOpts)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	sessionID = claims.SessionID
+
+	// Generate refresh token with the same session ID, role, and tenant context
+	now := time.Now()
+	refreshClaims := &TokenClaims{
+		UserID:          userID,
+		Email:           email,
+		Role:            role,
+		SessionID:       sessionID,
+		TokenType:       "refresh",
+		UserMetadata:    userMetadata,
+		AppMetadata:     appMetadata,
+		TenantID:        tenantOpts.TenantID,
+		TenantRole:      tenantOpts.TenantRole,
+		IsInstanceAdmin: tenantOpts.IsInstanceAdmin,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshTokenTTL)),
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshToken, err = token.SignedString(m.secretKey)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	return accessToken, refreshToken, sessionID, nil
+}
+
+// RefreshAccessTokenWithTenant generates a new access token from a refresh token, preserving tenant context
+func (m *JWTManager) RefreshAccessTokenWithTenant(refreshTokenString string, tenantOpts *TenantTokenOptions) (string, error) {
+	// Validate refresh token
+	claims, err := m.ValidateRefreshToken(refreshTokenString)
+	if err != nil {
+		return "", err
+	}
+
+	// Use provided tenant options or preserve existing from refresh token
+	opts := TenantTokenOptions{
+		TenantID:        claims.TenantID,
+		TenantRole:      claims.TenantRole,
+		IsInstanceAdmin: claims.IsInstanceAdmin,
+	}
+	if tenantOpts != nil {
+		if tenantOpts.TenantID != nil {
+			opts.TenantID = tenantOpts.TenantID
+		}
+		if tenantOpts.TenantRole != "" {
+			opts.TenantRole = tenantOpts.TenantRole
+		}
+		if tenantOpts.IsInstanceAdmin {
+			opts.IsInstanceAdmin = true
+		}
+	}
+
+	// Generate new access token with tenant context
+	accessToken, _, err := m.GenerateAccessTokenWithTenant(claims.UserID, claims.Email, claims.Role, claims.UserMetadata, claims.AppMetadata, opts)
+	if err != nil {
+		return "", err
+	}
+
+	return accessToken, nil
+}
+
 // ValidateToken validates and parses a JWT token
 func (m *JWTManager) ValidateToken(tokenString string) (*TokenClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
@@ -194,6 +354,50 @@ func (m *JWTManager) ValidateToken(tokenString string) (*TokenClaims, error) {
 	// This is needed for RLS policies that use custom claims (e.g., meeting_id, player_id)
 	rawToken, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return m.secretKey, nil
+	})
+	if rawToken != nil {
+		if mapClaims, ok := rawToken.Claims.(jwt.MapClaims); ok {
+			claims.RawClaims = make(map[string]interface{})
+			for k, v := range mapClaims {
+				claims.RawClaims[k] = v
+			}
+		}
+	}
+
+	return claims, nil
+}
+
+// ValidateTokenWithSecret validates and parses a JWT token using a specific secret key
+// This is used for multi-tenant scenarios where each tenant may have a different JWT secret
+func (m *JWTManager) ValidateTokenWithSecret(tokenString, secretKey string) (*TokenClaims, error) {
+	if len(secretKey) < 32 {
+		return nil, errors.New("JWT secret key must be at least 32 characters")
+	}
+
+	secret := []byte(secretKey)
+	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+		// Verify signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidSignature
+		}
+		return secret, nil
+	})
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredToken
+		}
+		return nil, ErrInvalidToken
+	}
+
+	claims, ok := token.Claims.(*TokenClaims)
+	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	// Also parse the raw claims to capture custom claims not in TokenClaims struct
+	// This is needed for RLS policies that use custom claims (e.g., meeting_id, player_id)
+	rawToken, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return secret, nil
 	})
 	if rawToken != nil {
 		if mapClaims, ok := rawToken.Claims.(jwt.MapClaims); ok {
@@ -283,6 +487,7 @@ func (m *JWTManager) GenerateAnonymousAccessToken(userID string) (string, error)
 		IsAnonymous: true,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTokenTTL)),
@@ -313,6 +518,7 @@ func (m *JWTManager) GenerateAnonymousRefreshToken(userID string) (string, error
 		IsAnonymous: true,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshTokenTTL)),
@@ -393,8 +599,32 @@ func (m *JWTManager) GenerateServiceRoleToken() (string, error) {
 		TokenType: "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.serviceRoleTTL)), // Configurable, default 24h
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(m.secretKey)
+}
+
+// GenerateServiceRoleTokenWithTenant generates a JWT with service_role and tenant context
+func (m *JWTManager) GenerateServiceRoleTokenWithTenant(tenantID *string) (string, error) {
+	now := time.Now()
+
+	claims := &TokenClaims{
+		UserID:    "",             // No user for service role
+		Role:      "service_role", // Service role bypasses RLS
+		TokenType: "access",
+		TenantID:  tenantID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.serviceRoleTTL)),
 			NotBefore: jwt.NewNumericDate(now),
 			ID:        uuid.New().String(),
 		},
@@ -414,6 +644,7 @@ func (m *JWTManager) GenerateAnonToken() (string, error) {
 		TokenType: "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.anonTTL)), // Configurable, default 24h
 			NotBefore: jwt.NewNumericDate(now),
@@ -423,4 +654,53 @@ func (m *JWTManager) GenerateAnonToken() (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(m.secretKey)
+}
+
+// GenerateAnonTokenWithTenant generates a JWT with anon role and tenant context
+func (m *JWTManager) GenerateAnonTokenWithTenant(tenantID *string) (string, error) {
+	now := time.Now()
+
+	claims := &TokenClaims{
+		UserID:    "",     // No user for anon
+		Role:      "anon", // Anonymous role
+		TokenType: "access",
+		TenantID:  tenantID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			Audience:  []string{"fluxbase"},
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.anonTTL)),
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(m.secretKey)
+}
+
+// GetMaxTokenTTL returns the maximum TTL among all token types
+// This is used to determine how long a user-wide revocation marker should persist
+func (m *JWTManager) GetMaxTokenTTL() time.Duration {
+	maxTTL := m.accessTokenTTL
+	if m.refreshTokenTTL > maxTTL {
+		maxTTL = m.refreshTokenTTL
+	}
+	if m.serviceRoleTTL > maxTTL {
+		maxTTL = m.serviceRoleTTL
+	}
+	if m.anonTTL > maxTTL {
+		maxTTL = m.anonTTL
+	}
+	// Fallback to 7 days if all TTls are somehow zero or very small
+	if maxTTL < 7*24*time.Hour {
+		maxTTL = 7 * 24 * time.Hour
+	}
+	return maxTTL
+}
+
+// getMaxTokenTTL returns the maximum TTL among all token types
+// This is used to determine how long a user-wide revocation marker should persist
+func (m *JWTManager) getMaxTokenTTL() time.Duration {
+	return m.GetMaxTokenTTL()
 }

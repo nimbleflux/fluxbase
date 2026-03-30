@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -254,8 +255,17 @@ func (r *DenoRuntime) Execute(
 	}
 
 	// Apply permissions - always allow net for SDK API calls
+	// Use SSRF-protected domain filtering
 	if permissions.AllowNet || (userToken != "" || serviceToken != "") {
-		args = append(args, "--allow-net")
+		allowedDomains := buildNetworkAllowList(permissions, r.publicURL)
+		if len(allowedDomains) > 0 {
+			// Specific domain list: --allow-net=domain1,domain2,...
+			args = append(args, fmt.Sprintf("--allow-net=%s", strings.Join(allowedDomains, ",")))
+		} else {
+			// No explicit allowlist and no blocked domains (or empty allowlist + no self URL)
+			// Use unrestricted --allow-net (but blocked domains still apply via Deno's filtering)
+			args = append(args, "--allow-net")
+		}
 	}
 	if permissions.AllowEnv {
 		args = append(args, "--allow-env")
@@ -739,6 +749,57 @@ func classifyStderrLine(line string) string {
 
 	// Default to error for other stderr content
 	return "error"
+}
+
+// buildNetworkAllowList constructs the list of allowed domains for Deno's --allow-net flag.
+// It combines explicitly allowed domains (if any) with the self-host for SDK calls,
+// then removes blocked domains. Returns an empty slice to indicate unrestricted net access
+// (Deno default with --allow-net without domains), or a specific domain list for --allow-net=domain1,domain2,...
+func buildNetworkAllowList(permissions Permissions, selfURL string) []string {
+	var domains []string
+
+	// If explicit allowlist is provided, use only those domains
+	if len(permissions.AllowedDomains) > 0 {
+		domains = append(domains, permissions.AllowedDomains...)
+	}
+
+	// Add self-host for SDK calls (essential for internal communication)
+	if selfURL != "" {
+		if host := extractHost(selfURL); host != "" {
+			domains = append(domains, host)
+		}
+	}
+
+	// If no explicit allowlist and no blocked domains, return empty for unrestricted access
+	// Deno handles this via plain --allow-net flag
+	if len(permissions.BlockedDomains) == 0 {
+		return domains
+	}
+
+	// Build blocked domain set for efficient lookup
+	blocked := make(map[string]bool, len(permissions.BlockedDomains))
+	for _, d := range permissions.BlockedDomains {
+		blocked[d] = true
+	}
+
+	// Filter out blocked domains
+	filtered := make([]string, 0, len(domains))
+	for _, d := range domains {
+		if !blocked[d] {
+			filtered = append(filtered, d)
+		}
+	}
+
+	return filtered
+}
+
+// extractHost extracts the hostname from a URL, returning empty string if parsing fails
+func extractHost(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
 }
 
 // stripAnsiCodes removes ANSI escape sequences from a string

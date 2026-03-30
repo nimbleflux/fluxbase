@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/pubsub"
 	"github.com/nimbleflux/fluxbase/internal/ratelimit"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -225,7 +226,7 @@ func TestAdminRoleChecking(t *testing.T) {
 		isAdmin bool
 	}{
 		{"admin role", "admin", true},
-		{"dashboard_admin role", "dashboard_admin", true},
+		{"instance_admin role", "instance_admin", true},
 		{"service_role role", "service_role", true},
 		{"authenticated role", "authenticated", false},
 		{"anon role", "anon", false},
@@ -235,7 +236,7 @@ func TestAdminRoleChecking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			isAdmin := tt.role == "admin" || tt.role == "dashboard_admin" || tt.role == "service_role"
+			isAdmin := tt.role == "admin" || tt.role == "instance_admin" || tt.role == "service_role"
 			assert.Equal(t, tt.isAdmin, isAdmin)
 		})
 	}
@@ -249,7 +250,7 @@ func TestAdminRoleCheckingInFiberContext(t *testing.T) {
 		expectedStatus int
 	}{
 		{"admin access granted", "admin", 200},
-		{"dashboard_admin access granted", "dashboard_admin", 200},
+		{"instance_admin access granted", "instance_admin", 200},
 		{"service_role access granted", "service_role", 200},
 		{"authenticated denied", "authenticated", 403},
 		{"anon denied", "anon", 403},
@@ -267,7 +268,7 @@ func TestAdminRoleCheckingInFiberContext(t *testing.T) {
 			})
 			app.Get("/admin-only", func(c fiber.Ctx) error {
 				role, _ := c.Locals("user_role").(string)
-				if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+				if role != "admin" && role != "instance_admin" && role != "service_role" {
 					return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 						"error": "Admin access required",
 					})
@@ -392,45 +393,45 @@ func TestServer_App(t *testing.T) {
 
 func TestServer_GetStorageService(t *testing.T) {
 	t.Run("returns nil when storage handler is nil", func(t *testing.T) {
-		s := &Server{storageHandler: nil}
+		s := &Server{Storage: &StorageHandlers{Handler: nil}}
 		assert.Nil(t, s.GetStorageService())
 	})
 
 	t.Run("returns nil when storage handler has nil service", func(t *testing.T) {
-		s := &Server{storageHandler: &StorageHandler{storage: nil}}
+		s := &Server{Storage: &StorageHandlers{Handler: &StorageHandler{storageManager: nil}}}
 		assert.Nil(t, s.GetStorageService())
 	})
 }
 
 func TestServer_GetWebhookTriggerService(t *testing.T) {
 	t.Run("returns nil when webhook trigger service is nil", func(t *testing.T) {
-		s := &Server{webhookTriggerService: nil}
+		s := &Server{Webhook: &WebhookHandlers{Trigger: nil}}
 		assert.Nil(t, s.GetWebhookTriggerService())
 	})
 }
 
 func TestServer_GetAuthService(t *testing.T) {
 	t.Run("returns nil when auth handler is nil", func(t *testing.T) {
-		s := &Server{authHandler: nil}
+		s := &Server{Auth: &AuthHandlers{Handler: nil}}
 		assert.Nil(t, s.GetAuthService())
 	})
 
 	t.Run("returns nil when auth handler has nil service", func(t *testing.T) {
-		s := &Server{authHandler: &AuthHandler{authService: nil}}
+		s := &Server{Auth: &AuthHandlers{Handler: &AuthHandler{authService: nil}}}
 		assert.Nil(t, s.GetAuthService())
 	})
 }
 
 func TestServer_GetLoggingService(t *testing.T) {
 	t.Run("returns nil when logging service is nil", func(t *testing.T) {
-		s := &Server{loggingService: nil}
+		s := &Server{Logging: &LoggingHandlers{Service: nil}}
 		assert.Nil(t, s.GetLoggingService())
 	})
 }
 
 func TestServer_LoadFunctionsFromFilesystem(t *testing.T) {
 	t.Run("returns error when functions handler is nil", func(t *testing.T) {
-		s := &Server{functionsHandler: nil}
+		s := &Server{Functions: &FunctionsHandlers{Handler: nil}}
 		err := s.LoadFunctionsFromFilesystem(context.TODO())
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "functions handler not initialized")
@@ -439,7 +440,7 @@ func TestServer_LoadFunctionsFromFilesystem(t *testing.T) {
 
 func TestServer_LoadJobsFromFilesystem(t *testing.T) {
 	t.Run("returns error when jobs handler is nil", func(t *testing.T) {
-		s := &Server{jobsHandler: nil}
+		s := &Server{Jobs: &JobsHandlers{Handler: nil}}
 		err := s.LoadJobsFromFilesystem(context.TODO())
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "jobs handler not initialized")
@@ -448,7 +449,7 @@ func TestServer_LoadJobsFromFilesystem(t *testing.T) {
 
 func TestServer_LoadAIChatbotsFromFilesystem(t *testing.T) {
 	t.Run("returns error when ai handler is nil", func(t *testing.T) {
-		s := &Server{aiHandler: nil}
+		s := &Server{AI: &AIHandlers{Handler: nil}}
 		err := s.LoadAIChatbotsFromFilesystem(context.TODO())
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "AI handler not initialized")
@@ -475,7 +476,7 @@ func BenchmarkAdminRoleCheck(b *testing.B) {
 	role := "authenticated"
 
 	for i := 0; i < b.N; i++ {
-		_ = (role == "admin" || role == "dashboard_admin" || role == "service_role")
+		_ = (role == "admin" || role == "instance_admin" || role == "service_role")
 	}
 }
 

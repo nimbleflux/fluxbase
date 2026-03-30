@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 
@@ -295,7 +296,7 @@ func ExtractAuthContext(c fiber.Ctx) *AuthContext {
 // This provides baseline access for JWT-authenticated users without explicit scopes
 func inferScopesFromRole(role string) []string {
 	switch role {
-	case "admin", "dashboard_admin":
+	case "admin", "instance_admin":
 		// Admins get full access including DDL operations
 		return []string{"*"}
 	case "authenticated":

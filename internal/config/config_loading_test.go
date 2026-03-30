@@ -43,8 +43,7 @@ auth:
 	require.NoError(t, err)
 
 	// Set config path environment variable
-	_ = os.Setenv("FLUXBASE_CONFIG", configPath)
-	defer func() { _ = os.Unsetenv("FLUXBASE_CONFIG") }()
+	t.Setenv("FLUXBASE_CONFIG", configPath)
 
 	// Note: This test would require actual Load() to respect FLUXBASE_CONFIG
 	// For now, we test the validation logic
@@ -142,12 +141,8 @@ server:
 
 func TestLoad_EnvVarOverride_Success(t *testing.T) {
 	// Set environment variable
-	_ = os.Setenv("FLUXBASE_SERVER_ADDRESS", ":9090")
-	_ = os.Setenv("FLUXBASE_SERVER_READ_TIMEOUT", "60s")
-	defer func() {
-		_ = os.Unsetenv("FLUXBASE_SERVER_ADDRESS")
-		_ = os.Unsetenv("FLUXBASE_SERVER_READ_TIMEOUT")
-	}()
+	t.Setenv("FLUXBASE_SERVER_ADDRESS", ":9090")
+	t.Setenv("FLUXBASE_SERVER_READ_TIMEOUT", "60s")
 
 	// In actual implementation, env vars would override config file values
 	// For now we test the string parsing

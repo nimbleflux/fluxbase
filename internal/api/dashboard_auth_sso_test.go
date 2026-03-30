@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // setupDashboardAuthTestServer creates a test server with dashboard auth routes
@@ -181,8 +182,7 @@ func TestDashboardPasswordLoginDisabled(t *testing.T) {
 		require.NoError(t, err)
 
 		// Set environment variable to force password login
-		_ = os.Setenv("FLUXBASE_DASHBOARD_FORCE_PASSWORD_LOGIN", "true")
-		defer func() { _ = os.Unsetenv("FLUXBASE_DASHBOARD_FORCE_PASSWORD_LOGIN") }()
+		t.Setenv("FLUXBASE_DASHBOARD_FORCE_PASSWORD_LOGIN", "true")
 
 		loginReq := map[string]interface{}{
 			"email":    testEmail,

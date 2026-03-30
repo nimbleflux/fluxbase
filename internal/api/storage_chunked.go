@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
 // InitChunkedUploadRequest represents the request body for initializing a chunked upload
@@ -57,6 +58,14 @@ type CompleteChunkedUploadResponse struct {
 // InitChunkedUpload initializes a new chunked upload session
 // POST /api/v1/storage/:bucket/chunked/init
 func (h *StorageHandler) InitChunkedUpload(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 	if bucket == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -96,7 +105,7 @@ func (h *StorageHandler) InitChunkedUpload(c fiber.Ctx) error {
 	}
 
 	// Validate total size
-	if err := h.storage.ValidateUploadSize(req.TotalSize); err != nil {
+	if err := svc.ValidateUploadSize(req.TotalSize); err != nil {
 		return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -116,10 +125,10 @@ func (h *StorageHandler) InitChunkedUpload(c fiber.Ctx) error {
 
 	// Initialize chunked upload with the storage provider
 	var session *storage.ChunkedUploadSession
-	var err error
+	err = nil
 
 	// Check provider type and call appropriate method
-	switch provider := h.storage.Provider.(type) {
+	switch provider := svc.Provider.(type) {
 	case *storage.LocalStorage:
 		session, err = provider.InitChunkedUpload(ctx, bucket, req.Path, req.TotalSize, chunkSize, opts)
 	case *storage.S3Storage:
@@ -169,6 +178,14 @@ func (h *StorageHandler) InitChunkedUpload(c fiber.Ctx) error {
 // UploadChunk uploads a single chunk of a file
 // PUT /api/v1/storage/:bucket/chunked/:uploadId/:chunkIndex
 func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 	uploadID := c.Params("uploadId")
 	chunkIndexStr := c.Params("chunkIndex")
@@ -197,7 +214,7 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Retrieve session
-	session, err := h.getChunkedUploadSession(ctx, uploadID)
+	session, err := h.getChunkedUploadSessionFromProvider(svc.Provider, uploadID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "upload session not found: " + err.Error(),
@@ -244,7 +261,7 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 	// Upload the chunk
 	var result *storage.ChunkResult
 
-	switch provider := h.storage.Provider.(type) {
+	switch provider := svc.Provider.(type) {
 	case *storage.LocalStorage:
 		result, err = provider.UploadChunk(ctx, session, chunkIndex, body, size)
 	case *storage.S3Storage:
@@ -270,7 +287,7 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 	session.S3PartETags[chunkIndex] = result.ETag
 
 	// Store updated session
-	if err := h.updateChunkedUploadSession(ctx, session); err != nil {
+	if err := h.updateChunkedUploadSessionInProvider(svc.Provider, session); err != nil {
 		log.Warn().Err(err).Str("uploadID", uploadID).Msg("Failed to update session in database")
 	}
 
@@ -302,6 +319,14 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 // CompleteChunkedUpload finalizes a chunked upload
 // POST /api/v1/storage/:bucket/chunked/:uploadId/complete
 func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 	uploadID := c.Params("uploadId")
 
@@ -314,7 +339,7 @@ func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Retrieve session
-	session, err := h.getChunkedUploadSession(ctx, uploadID)
+	session, err := h.getChunkedUploadSessionFromProvider(svc.Provider, uploadID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "upload session not found: " + err.Error(),
@@ -350,12 +375,12 @@ func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
 
 	// Mark session as completing
 	session.Status = "completing"
-	_ = h.updateChunkedUploadSession(ctx, session)
+	_ = h.updateChunkedUploadSessionInProvider(svc.Provider, session)
 
 	// Complete the upload
 	var object *storage.Object
 
-	switch provider := h.storage.Provider.(type) {
+	switch provider := svc.Provider.(type) {
 	case *storage.LocalStorage:
 		object, err = provider.CompleteChunkedUpload(ctx, session)
 	case *storage.S3Storage:
@@ -368,7 +393,7 @@ func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
 
 	if err != nil {
 		session.Status = "active" // Revert status on failure
-		_ = h.updateChunkedUploadSession(ctx, session)
+		_ = h.updateChunkedUploadSessionInProvider(svc.Provider, session)
 		log.Error().Err(err).Str("uploadID", uploadID).Msg("Failed to complete chunked upload")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to complete chunked upload: " + err.Error(),
@@ -403,6 +428,14 @@ func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
 // GetChunkedUploadStatus retrieves the status of a chunked upload session
 // GET /api/v1/storage/:bucket/chunked/:uploadId/status
 func (h *StorageHandler) GetChunkedUploadStatus(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 	uploadID := c.Params("uploadId")
 
@@ -412,10 +445,8 @@ func (h *StorageHandler) GetChunkedUploadStatus(c fiber.Ctx) error {
 		})
 	}
 
-	ctx := c.RequestCtx()
-
 	// Retrieve session
-	session, err := h.getChunkedUploadSession(ctx, uploadID)
+	session, err := h.getChunkedUploadSessionFromProvider(svc.Provider, uploadID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "upload session not found: " + err.Error(),
@@ -461,6 +492,14 @@ func (h *StorageHandler) GetChunkedUploadStatus(c fiber.Ctx) error {
 // AbortChunkedUpload aborts a chunked upload and cleans up
 // DELETE /api/v1/storage/:bucket/chunked/:uploadId
 func (h *StorageHandler) AbortChunkedUpload(c fiber.Ctx) error {
+	// Get tenant-specific storage service
+	svc, err := h.getService(c)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to get storage service",
+		})
+	}
+
 	bucket := c.Params("bucket")
 	uploadID := c.Params("uploadId")
 
@@ -473,7 +512,7 @@ func (h *StorageHandler) AbortChunkedUpload(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Retrieve session
-	session, err := h.getChunkedUploadSession(ctx, uploadID)
+	session, err := h.getChunkedUploadSessionFromProvider(svc.Provider, uploadID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "upload session not found: " + err.Error(),
@@ -488,7 +527,7 @@ func (h *StorageHandler) AbortChunkedUpload(c fiber.Ctx) error {
 	}
 
 	// Abort the upload
-	switch provider := h.storage.Provider.(type) {
+	switch provider := svc.Provider.(type) {
 	case *storage.LocalStorage:
 		err = provider.AbortChunkedUpload(ctx, session)
 	case *storage.S3Storage:
@@ -525,11 +564,11 @@ func (h *StorageHandler) storeChunkedUploadSession(ctx interface{}, session *sto
 	return nil
 }
 
-func (h *StorageHandler) getChunkedUploadSession(ctx interface{}, uploadID string) (*storage.ChunkedUploadSession, error) {
+func (h *StorageHandler) getChunkedUploadSessionFromProvider(provider storage.Provider, uploadID string) (*storage.ChunkedUploadSession, error) {
 	// Try to get session from storage provider
-	switch provider := h.storage.Provider.(type) {
+	switch p := provider.(type) {
 	case *storage.LocalStorage:
-		return provider.GetChunkedUploadSession(uploadID)
+		return p.GetChunkedUploadSession(uploadID)
 	case *storage.S3Storage:
 		// S3 doesn't have local session storage, we need to query the database
 		// For now, return an error - this would need database session storage
@@ -539,10 +578,10 @@ func (h *StorageHandler) getChunkedUploadSession(ctx interface{}, uploadID strin
 	}
 }
 
-func (h *StorageHandler) updateChunkedUploadSession(ctx interface{}, session *storage.ChunkedUploadSession) error {
-	switch provider := h.storage.Provider.(type) {
+func (h *StorageHandler) updateChunkedUploadSessionInProvider(provider storage.Provider, session *storage.ChunkedUploadSession) error {
+	switch p := provider.(type) {
 	case *storage.LocalStorage:
-		return provider.UpdateChunkedUploadSession(session)
+		return p.UpdateChunkedUploadSession(session)
 	case *storage.S3Storage:
 		// S3 sessions would be stored in database
 		return nil
@@ -566,10 +605,23 @@ func (h *StorageHandler) storeUploadedObject(fiberCtx interface{}, session *stor
 		return fmt.Errorf("invalid context type")
 	}
 
-	db := h.db.Pool()
+	ctx := c.RequestCtx()
+
+	// Start a transaction to set RLS context
+	tx, err := h.db.Pool().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Set RLS context (includes tenant context for multi-tenancy)
+	if err := h.setRLSContext(ctx, tx, c); err != nil {
+		return fmt.Errorf("failed to set RLS context: %w", err)
+	}
 
 	// Insert object record into storage.objects table
 	// Note: 'name' column is auto-generated from 'path', so we don't insert it directly
+	// tenant_id is auto-populated by trigger from session context
 	query := `
 		INSERT INTO storage.objects (bucket_id, path, size, mime_type, metadata, owner_id, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
@@ -588,7 +640,7 @@ func (h *StorageHandler) storeUploadedObject(fiberCtx interface{}, session *stor
 		ownerID = session.OwnerID
 	}
 
-	_, err := db.Exec(c.RequestCtx(), query,
+	_, err = tx.Exec(ctx, query,
 		object.Bucket,
 		object.Key,
 		object.Size,
@@ -596,8 +648,16 @@ func (h *StorageHandler) storeUploadedObject(fiberCtx interface{}, session *stor
 		metadataJSON,
 		ownerID,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to insert object: %w", err)
+	}
 
-	return err
+	// Commit the transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 // fiber:context-methods migrated

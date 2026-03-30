@@ -7,9 +7,10 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // =============================================================================
@@ -332,28 +333,28 @@ func TestOpenAPIHandler_GetOpenAPISpec(t *testing.T) {
 func TestOpenAPIHandler_AdminRoleDetection(t *testing.T) {
 	t.Run("admin role is detected", func(t *testing.T) {
 		role := "admin"
-		isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+		isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 		assert.True(t, isAdmin)
 	})
 
-	t.Run("dashboard_admin role is detected", func(t *testing.T) {
-		role := "dashboard_admin"
-		isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+	t.Run("instance_admin role is detected", func(t *testing.T) {
+		role := "instance_admin"
+		isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 		assert.True(t, isAdmin)
 	})
 
 	t.Run("service_role is detected", func(t *testing.T) {
 		role := "service_role"
-		isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+		isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 		assert.True(t, isAdmin)
 	})
 
 	t.Run("authenticated role is not admin", func(t *testing.T) {
 		role := "authenticated"
-		isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+		isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 		assert.False(t, isAdmin)
 	})

@@ -4,8 +4,8 @@
  * Hooks for managing application settings, system settings, and webhooks.
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import { useFluxbaseClient } from './context'
+import { useState, useEffect, useCallback } from "react";
+import { useFluxbaseClient } from "./context";
 import type {
   AppSettings,
   UpdateAppSettingsRequest,
@@ -13,23 +13,23 @@ import type {
   UpdateSystemSettingRequest,
   Webhook,
   CreateWebhookRequest,
-  UpdateWebhookRequest
-} from '@fluxbase/sdk'
+  UpdateWebhookRequest,
+} from "@nimbleflux/fluxbase-sdk";
 
 // ============================================================================
 // useAppSettings Hook
 // ============================================================================
 
 export interface UseAppSettingsOptions {
-  autoFetch?: boolean
+  autoFetch?: boolean;
 }
 
 export interface UseAppSettingsReturn {
-  settings: AppSettings | null
-  isLoading: boolean
-  error: Error | null
-  refetch: () => Promise<void>
-  updateSettings: (update: UpdateAppSettingsRequest) => Promise<void>
+  settings: AppSettings | null;
+  isLoading: boolean;
+  error: Error | null;
+  refetch: () => Promise<void>;
+  updateSettings: (update: UpdateAppSettingsRequest) => Promise<void>;
 }
 
 /**
@@ -50,48 +50,50 @@ export interface UseAppSettingsReturn {
  * }
  * ```
  */
-export function useAppSettings(options: UseAppSettingsOptions = {}): UseAppSettingsReturn {
-  const { autoFetch = true } = options
-  const client = useFluxbaseClient()
+export function useAppSettings(
+  options: UseAppSettingsOptions = {},
+): UseAppSettingsReturn {
+  const { autoFetch = true } = options;
+  const client = useFluxbaseClient();
 
-  const [settings, setSettings] = useState<AppSettings | null>(null)
-  const [isLoading, setIsLoading] = useState(autoFetch)
-  const [error, setError] = useState<Error | null>(null)
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [isLoading, setIsLoading] = useState(autoFetch);
+  const [error, setError] = useState<Error | null>(null);
 
   const fetchSettings = useCallback(async () => {
     try {
-      setIsLoading(true)
-      setError(null)
-      const appSettings = await client.admin.settings.app.get()
-      setSettings(appSettings)
+      setIsLoading(true);
+      setError(null);
+      const appSettings = await client.admin.settings.app.get();
+      setSettings(appSettings);
     } catch (err) {
-      setError(err as Error)
+      setError(err as Error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [client])
+  }, [client]);
 
   const updateSettings = useCallback(
     async (update: UpdateAppSettingsRequest): Promise<void> => {
-      await client.admin.settings.app.update(update)
-      await fetchSettings()
+      await client.admin.settings.app.update(update);
+      await fetchSettings();
     },
-    [client, fetchSettings]
-  )
+    [client, fetchSettings],
+  );
 
   useEffect(() => {
     if (autoFetch) {
-      fetchSettings()
+      fetchSettings();
     }
-  }, [autoFetch, fetchSettings])
+  }, [autoFetch, fetchSettings]);
 
   return {
     settings,
     isLoading,
     error,
     refetch: fetchSettings,
-    updateSettings
-  }
+    updateSettings,
+  };
 }
 
 // ============================================================================
@@ -99,17 +101,20 @@ export function useAppSettings(options: UseAppSettingsOptions = {}): UseAppSetti
 // ============================================================================
 
 export interface UseSystemSettingsOptions {
-  autoFetch?: boolean
+  autoFetch?: boolean;
 }
 
 export interface UseSystemSettingsReturn {
-  settings: SystemSetting[]
-  isLoading: boolean
-  error: Error | null
-  refetch: () => Promise<void>
-  getSetting: (key: string) => SystemSetting | undefined
-  updateSetting: (key: string, update: UpdateSystemSettingRequest) => Promise<void>
-  deleteSetting: (key: string) => Promise<void>
+  settings: SystemSetting[];
+  isLoading: boolean;
+  error: Error | null;
+  refetch: () => Promise<void>;
+  getSetting: (key: string) => SystemSetting | undefined;
+  updateSetting: (
+    key: string,
+    update: UpdateSystemSettingRequest,
+  ) => Promise<void>;
+  deleteSetting: (key: string) => Promise<void>;
 }
 
 /**
@@ -128,55 +133,57 @@ export interface UseSystemSettingsReturn {
  * }
  * ```
  */
-export function useSystemSettings(options: UseSystemSettingsOptions = {}): UseSystemSettingsReturn {
-  const { autoFetch = true } = options
-  const client = useFluxbaseClient()
+export function useSystemSettings(
+  options: UseSystemSettingsOptions = {},
+): UseSystemSettingsReturn {
+  const { autoFetch = true } = options;
+  const client = useFluxbaseClient();
 
-  const [settings, setSettings] = useState<SystemSetting[]>([])
-  const [isLoading, setIsLoading] = useState(autoFetch)
-  const [error, setError] = useState<Error | null>(null)
+  const [settings, setSettings] = useState<SystemSetting[]>([]);
+  const [isLoading, setIsLoading] = useState(autoFetch);
+  const [error, setError] = useState<Error | null>(null);
 
   const fetchSettings = useCallback(async () => {
     try {
-      setIsLoading(true)
-      setError(null)
-      const response = await client.admin.settings.system.list()
-      setSettings(response.settings)
+      setIsLoading(true);
+      setError(null);
+      const response = await client.admin.settings.system.list();
+      setSettings(response.settings);
     } catch (err) {
-      setError(err as Error)
+      setError(err as Error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [client])
+  }, [client]);
 
   const getSetting = useCallback(
     (key: string): SystemSetting | undefined => {
-      return settings.find((s) => s.key === key)
+      return settings.find((s) => s.key === key);
     },
-    [settings]
-  )
+    [settings],
+  );
 
   const updateSetting = useCallback(
     async (key: string, update: UpdateSystemSettingRequest): Promise<void> => {
-      await client.admin.settings.system.update(key, update)
-      await fetchSettings()
+      await client.admin.settings.system.update(key, update);
+      await fetchSettings();
     },
-    [client, fetchSettings]
-  )
+    [client, fetchSettings],
+  );
 
   const deleteSetting = useCallback(
     async (key: string): Promise<void> => {
-      await client.admin.settings.system.delete(key)
-      await fetchSettings()
+      await client.admin.settings.system.delete(key);
+      await fetchSettings();
     },
-    [client, fetchSettings]
-  )
+    [client, fetchSettings],
+  );
 
   useEffect(() => {
     if (autoFetch) {
-      fetchSettings()
+      fetchSettings();
     }
-  }, [autoFetch, fetchSettings])
+  }, [autoFetch, fetchSettings]);
 
   return {
     settings,
@@ -185,8 +192,8 @@ export function useSystemSettings(options: UseSystemSettingsOptions = {}): UseSy
     refetch: fetchSettings,
     getSetting,
     updateSetting,
-    deleteSetting
-  }
+    deleteSetting,
+  };
 }
 
 // ============================================================================
@@ -194,19 +201,19 @@ export function useSystemSettings(options: UseSystemSettingsOptions = {}): UseSy
 // ============================================================================
 
 export interface UseWebhooksOptions {
-  autoFetch?: boolean
-  refetchInterval?: number
+  autoFetch?: boolean;
+  refetchInterval?: number;
 }
 
 export interface UseWebhooksReturn {
-  webhooks: Webhook[]
-  isLoading: boolean
-  error: Error | null
-  refetch: () => Promise<void>
-  createWebhook: (webhook: CreateWebhookRequest) => Promise<Webhook>
-  updateWebhook: (id: string, update: UpdateWebhookRequest) => Promise<Webhook>
-  deleteWebhook: (id: string) => Promise<void>
-  testWebhook: (id: string) => Promise<void>
+  webhooks: Webhook[];
+  isLoading: boolean;
+  error: Error | null;
+  refetch: () => Promise<void>;
+  createWebhook: (webhook: CreateWebhookRequest) => Promise<Webhook>;
+  updateWebhook: (id: string, update: UpdateWebhookRequest) => Promise<Webhook>;
+  deleteWebhook: (id: string) => Promise<void>;
+  testWebhook: (id: string) => Promise<void>;
 }
 
 /**
@@ -231,70 +238,72 @@ export interface UseWebhooksReturn {
  * }
  * ```
  */
-export function useWebhooks(options: UseWebhooksOptions = {}): UseWebhooksReturn {
-  const { autoFetch = true, refetchInterval = 0 } = options
-  const client = useFluxbaseClient()
+export function useWebhooks(
+  options: UseWebhooksOptions = {},
+): UseWebhooksReturn {
+  const { autoFetch = true, refetchInterval = 0 } = options;
+  const client = useFluxbaseClient();
 
-  const [webhooks, setWebhooks] = useState<Webhook[]>([])
-  const [isLoading, setIsLoading] = useState(autoFetch)
-  const [error, setError] = useState<Error | null>(null)
+  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [isLoading, setIsLoading] = useState(autoFetch);
+  const [error, setError] = useState<Error | null>(null);
 
   const fetchWebhooks = useCallback(async () => {
     try {
-      setIsLoading(true)
-      setError(null)
-      const response = await client.admin.management.webhooks.list()
-      setWebhooks(response.webhooks)
+      setIsLoading(true);
+      setError(null);
+      const response = await client.admin.management.webhooks.list();
+      setWebhooks(response.webhooks);
     } catch (err) {
-      setError(err as Error)
+      setError(err as Error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [client])
+  }, [client]);
 
   const createWebhook = useCallback(
     async (webhook: CreateWebhookRequest): Promise<Webhook> => {
-      const created = await client.admin.management.webhooks.create(webhook)
-      await fetchWebhooks()
-      return created
+      const created = await client.admin.management.webhooks.create(webhook);
+      await fetchWebhooks();
+      return created;
     },
-    [client, fetchWebhooks]
-  )
+    [client, fetchWebhooks],
+  );
 
   const updateWebhook = useCallback(
     async (id: string, update: UpdateWebhookRequest): Promise<Webhook> => {
-      const updated = await client.admin.management.webhooks.update(id, update)
-      await fetchWebhooks()
-      return updated
+      const updated = await client.admin.management.webhooks.update(id, update);
+      await fetchWebhooks();
+      return updated;
     },
-    [client, fetchWebhooks]
-  )
+    [client, fetchWebhooks],
+  );
 
   const deleteWebhook = useCallback(
     async (id: string): Promise<void> => {
-      await client.admin.management.webhooks.delete(id)
-      await fetchWebhooks()
+      await client.admin.management.webhooks.delete(id);
+      await fetchWebhooks();
     },
-    [client, fetchWebhooks]
-  )
+    [client, fetchWebhooks],
+  );
 
   const testWebhook = useCallback(
     async (id: string): Promise<void> => {
-      await client.admin.management.webhooks.test(id)
+      await client.admin.management.webhooks.test(id);
     },
-    [client]
-  )
+    [client],
+  );
 
   useEffect(() => {
     if (autoFetch) {
-      fetchWebhooks()
+      fetchWebhooks();
     }
 
     if (refetchInterval > 0) {
-      const interval = setInterval(fetchWebhooks, refetchInterval)
-      return () => clearInterval(interval)
+      const interval = setInterval(fetchWebhooks, refetchInterval);
+      return () => clearInterval(interval);
     }
-  }, [autoFetch, refetchInterval, fetchWebhooks])
+  }, [autoFetch, refetchInterval, fetchWebhooks]);
 
   return {
     webhooks,
@@ -304,6 +313,6 @@ export function useWebhooks(options: UseWebhooksOptions = {}): UseWebhooksReturn
     createWebhook,
     updateWebhook,
     deleteWebhook,
-    testWebhook
-  }
+    testWebhook,
+  };
 }

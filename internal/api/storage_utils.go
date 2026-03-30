@@ -110,6 +110,15 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 		return fmt.Errorf("failed to set request.jwt.claims: %w", err)
 	}
 
+	// Set tenant context for multi-tenancy
+	tenantID := c.Locals("tenant_id")
+	if tid, ok := tenantID.(string); ok && tid != "" {
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tid); err != nil {
+			return fmt.Errorf("failed to set tenant context: %w", err)
+		}
+		log.Debug().Str("tenant_id", tid).Msg("Set tenant context for storage operation")
+	}
+
 	log.Debug().Str("user_id", userIDStr).Str("role", roleStr).Msg("Set RLS context for storage operation")
 	return nil
 }

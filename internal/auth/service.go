@@ -8,11 +8,12 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/observability"
-	"github.com/rs/zerolog/log"
 )
 
 // Service provides a high-level authentication API
@@ -134,6 +135,7 @@ func NewService(
 
 	impersonationRepo := NewImpersonationRepository(db)
 	impersonationService := NewImpersonationService(impersonationRepo, userRepo, jwtManager, db)
+	impersonationService.SetTokenBlacklistService(tokenBlacklistService)
 
 	// OTP service for passwordless authentication
 	otpExpiry := cfg.MagicLinkExpiry // Reuse magic link expiry for OTP (typically 10-15 minutes)
@@ -714,6 +716,12 @@ func (s *Service) ValidateToken(token string) (*TokenClaims, error) {
 	return s.jwtManager.ValidateToken(token)
 }
 
+// ValidateTokenWithSecret validates an access token using a specific secret key
+// This is used for multi-tenant scenarios where each tenant may have a different JWT secret
+func (s *Service) ValidateTokenWithSecret(token, secretKey string) (*TokenClaims, error) {
+	return s.jwtManager.ValidateTokenWithSecret(token, secretKey)
+}
+
 // ValidateServiceRoleToken validates a JWT containing a role claim (anon, service_role, authenticated)
 // This is used for Supabase-compatible client keys which are JWTs with role claims.
 // Unlike user tokens, these don't require user lookup or revocation checks.
@@ -748,8 +756,17 @@ func (s *Service) RevokeToken(ctx context.Context, token, reason string) error {
 }
 
 // IsTokenRevoked checks if a JWT token has been revoked
+// This is a convenience wrapper that only checks exact JTI revocation
+// For full revocation checking including user-wide revocation, use IsTokenRevokedWithClaims
 func (s *Service) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
-	return s.tokenBlacklistService.IsTokenRevoked(ctx, jti)
+	return s.tokenBlacklistService.IsTokenRevoked(ctx, jti, "", time.Time{})
+}
+
+// IsTokenRevokedWithClaims checks if a JWT token has been revoked
+// It checks both exact JTI revocation and user-wide revocation
+// This is the preferred method for token revocation checking
+func (s *Service) IsTokenRevokedWithClaims(ctx context.Context, jti string, userID string, tokenIssuedAt time.Time) (bool, error) {
+	return s.tokenBlacklistService.IsTokenRevoked(ctx, jti, userID, tokenIssuedAt)
 }
 
 // RevokeAllUserTokens revokes all tokens for a specific user
@@ -1092,7 +1109,10 @@ func (s *Service) VerifyTOTPWithContext(ctx context.Context, userID, code, ipAdd
 		decrypted, err := crypto.Decrypt(storedSecret, s.encryptionKey)
 		if err != nil {
 			// Log but don't fail - might be a legacy unencrypted secret
-			log.Warn().Err(err).Str("user_id", userID).Msg("Failed to decrypt TOTP secret, trying as plaintext (legacy secret)")
+			log.Warn().
+				Err(err).
+				Str("user_id", userID).
+				Msg("TOTP secret decrypted via plaintext fallback - consider migrating to encrypted storage")
 		} else {
 			secret = decrypted
 		}

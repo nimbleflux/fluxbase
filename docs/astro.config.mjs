@@ -400,6 +400,7 @@ export default defineConfig({
           ],
         },
         { label: "Pricing", link: "/pricing/" },
+        { label: "AI & Development Transparency", link: "/about/ai-transparency/" },
       ],
     }),
   ],

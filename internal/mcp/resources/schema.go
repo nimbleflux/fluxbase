@@ -291,7 +291,7 @@ func canAccessInternalSchemas(authCtx *mcp.AuthContext) bool {
 		return true
 	}
 
-	// Check for admin:schemas scope (granted to dashboard_admin via wildcard)
+	// Check for admin:schemas scope (granted to instance_admin via wildcard)
 	// Wildcard scope (*) also grants access
 	return authCtx.HasScope(mcp.ScopeAdminSchemas) || authCtx.HasScope("*")
 }

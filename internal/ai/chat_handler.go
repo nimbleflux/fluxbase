@@ -11,13 +11,14 @@ import (
 	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/logging"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/nimbleflux/fluxbase/internal/observability"
-	"github.com/rs/zerolog/log"
 )
 
 // ChatHandler handles WebSocket chat connections
@@ -284,8 +285,8 @@ func (h *ChatHandler) handleStartChat(ctx context.Context, chatCtx *ChatContext,
 
 	// Handle admin impersonation
 	if msg.ImpersonateUserID != "" {
-		// Only dashboard_admin can impersonate
-		if chatCtx.Role != "dashboard_admin" {
+		// Only instance_admin can impersonate
+		if chatCtx.Role != "instance_admin" {
 			h.sendError(chatCtx, "", "FORBIDDEN", "Only admins can impersonate users")
 			return
 		}

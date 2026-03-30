@@ -9,9 +9,11 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/rs/zerolog/log"
 )
 
 // AdminAuthHandler handles admin-specific authentication
@@ -142,11 +144,9 @@ func (h *AdminAuthHandler) InitialSetup(c fiber.Ctx) error {
 		return SendInternalError(c, fmt.Sprintf("Failed to create admin user: %v", err))
 	}
 
-	// Update user to be dashboard_admin with email verified
-	// Direct database update since dashboard service doesn't have these methods yet
 	_, err = h.dashboardAuth.GetDB().Exec(ctx, `
-		UPDATE dashboard.users
-		SET role = 'dashboard_admin', email_verified = true
+		UPDATE platform.users
+		SET role = 'instance_admin', email_verified = true
 		WHERE id = $1
 	`, user.ID)
 	if err != nil {
@@ -182,7 +182,7 @@ func (h *AdminAuthHandler) AdminLogin(c fiber.Ctx) error {
 		return SendInvalidBody(c)
 	}
 
-	// Use the dashboard auth service to sign in (dashboard.users, not auth.users)
+	// Use the platform auth service to sign in (platform.users, not auth.users)
 	user, loginResp, err := h.dashboardAuth.Login(ctx, req.Email, req.Password, nil, c.Get("User-Agent"))
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
@@ -197,15 +197,15 @@ func (h *AdminAuthHandler) AdminLogin(c fiber.Ctx) error {
 	// Query user's role from database (DashboardUser struct doesn't include role)
 	var userRole string
 	err = h.dashboardAuth.GetDB().QueryRow(ctx,
-		"SELECT role FROM dashboard.users WHERE id = $1",
+		"SELECT role FROM platform.users WHERE id = $1",
 		user.ID,
 	).Scan(&userRole)
 	if err != nil {
 		return SendOperationFailed(c, "verify user role")
 	}
 
-	// Check if user has dashboard_admin role
-	if userRole != "dashboard_admin" {
+	// Check if user has instance_admin role
+	if userRole != "instance_admin" {
 		return SendForbidden(c, "Access denied. Admin role required.", ErrCodeAdminRequired)
 	}
 
@@ -230,29 +230,36 @@ func (h *AdminAuthHandler) AdminRefreshToken(c fiber.Ctx) error {
 		return SendInvalidBody(c)
 	}
 
-	refreshReq := auth.RefreshTokenRequest{
-		RefreshToken: req.RefreshToken,
-	}
-
-	refreshResp, err := h.authService.RefreshToken(ctx, refreshReq)
+	// Use DashboardAuthService which handles platform.sessions (not auth.sessions)
+	refreshResp, err := h.dashboardAuth.RefreshToken(ctx, req.RefreshToken)
 	if err != nil {
 		return SendUnauthorized(c, "Invalid or expired refresh token", ErrCodeInvalidToken)
 	}
 
-	// Get user from the new access token to verify admin role
-	claims, err := h.authService.ValidateToken(refreshResp.AccessToken)
+	// Validate the new access token to get user ID
+	claims, err := h.dashboardAuth.ValidateToken(refreshResp.AccessToken)
 	if err != nil {
 		return SendUnauthorized(c, "Failed to validate refreshed token", ErrCodeInvalidToken)
 	}
 
-	// Fetch user details
-	user, err := h.userRepo.GetByID(ctx, claims.UserID)
+	// Parse user ID from claims
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return SendUnauthorized(c, "Invalid user ID in token", ErrCodeInvalidToken)
+	}
+
+	// Fetch platform user details (not auth.users)
+	user, err := h.dashboardAuth.GetUserByID(ctx, userID)
 	if err != nil {
 		return SendOperationFailed(c, "fetch user")
 	}
 
-	// Verify user still has admin role
-	if user.Role != "admin" {
+	// Verify user still has a valid dashboard role
+	validRoles := map[string]bool{
+		"instance_admin": true,
+		"tenant_admin":   true,
+	}
+	if !validRoles[user.Role] {
 		return SendAdminRequired(c)
 	}
 

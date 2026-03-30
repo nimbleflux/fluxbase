@@ -616,13 +616,13 @@ func TestValidateDashboardRole(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name:    "valid - dashboard_admin",
-			role:    "dashboard_admin",
+			name:    "valid - instance_admin",
+			role:    "instance_admin",
 			wantErr: nil,
 		},
 		{
-			name:    "valid - dashboard_user",
-			role:    "dashboard_user",
+			name:    "valid - tenant_admin",
+			role:    "tenant_admin",
 			wantErr: nil,
 		},
 		{

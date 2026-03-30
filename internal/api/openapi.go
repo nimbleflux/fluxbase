@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
@@ -85,7 +86,7 @@ func NewOpenAPIHandler(db *database.Connection) *OpenAPIHandler {
 func (h *OpenAPIHandler) GetOpenAPISpec(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	isAdmin := role == "admin" || role == "dashboard_admin" || role == "service_role"
+	isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
 	// Non-admin users get minimal spec without database tables
 	if !isAdmin {

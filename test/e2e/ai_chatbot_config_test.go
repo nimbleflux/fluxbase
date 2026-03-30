@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/ai"
 )
 
 // TestParseChatbotConfigAllAnnotations tests parsing of all annotation types

@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/mailgun/mailgun-go/v5"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // MailgunService handles email sending via Mailgun

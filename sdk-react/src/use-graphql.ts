@@ -5,7 +5,7 @@
  *
  * @example
  * ```tsx
- * import { useGraphQLQuery, useGraphQLMutation } from '@fluxbase/sdk-react'
+ * import { useGraphQLQuery, useGraphQLMutation } from '@nimbleflux/fluxbase-sdk-react'
  *
  * function UsersList() {
  *   const { data, isLoading, error } = useGraphQLQuery<UsersQuery>(
@@ -33,7 +33,7 @@ import type {
   GraphQLResponse,
   GraphQLError,
   GraphQLRequestOptions,
-} from "@fluxbase/sdk";
+} from "@nimbleflux/fluxbase-sdk";
 
 /**
  * Options for useGraphQLQuery hook
@@ -152,7 +152,7 @@ export interface UseGraphQLMutationOptions<T, V> {
 export function useGraphQLQuery<T = unknown>(
   queryKey: string | readonly unknown[],
   query: string,
-  options?: UseGraphQLQueryOptions<T>
+  options?: UseGraphQLQueryOptions<T>,
 ) {
   const client = useFluxbaseClient();
   const normalizedKey = Array.isArray(queryKey)
@@ -166,7 +166,7 @@ export function useGraphQLQuery<T = unknown>(
         query,
         options?.variables,
         options?.operationName,
-        options?.requestOptions
+        options?.requestOptions,
       );
 
       if (response.errors && response.errors.length > 0) {
@@ -241,7 +241,7 @@ export function useGraphQLMutation<
         mutation,
         variables,
         options?.operationName,
-        options?.requestOptions
+        options?.requestOptions,
       );
 
       if (response.errors && response.errors.length > 0) {
@@ -354,7 +354,7 @@ export function useGraphQL() {
     executeQuery: <T = unknown>(
       query: string,
       variables?: Record<string, unknown>,
-      options?: GraphQLRequestOptions
+      options?: GraphQLRequestOptions,
     ): Promise<GraphQLResponse<T>> => {
       return client.graphql.query<T>(query, variables, options);
     },
@@ -365,7 +365,7 @@ export function useGraphQL() {
     executeMutation: <T = unknown>(
       mutation: string,
       variables?: Record<string, unknown>,
-      options?: GraphQLRequestOptions
+      options?: GraphQLRequestOptions,
     ): Promise<GraphQLResponse<T>> => {
       return client.graphql.mutation<T>(mutation, variables, options);
     },
@@ -377,9 +377,14 @@ export function useGraphQL() {
       document: string,
       variables?: Record<string, unknown>,
       operationName?: string,
-      options?: GraphQLRequestOptions
+      options?: GraphQLRequestOptions,
     ): Promise<GraphQLResponse<T>> => {
-      return client.graphql.execute<T>(document, variables, operationName, options);
+      return client.graphql.execute<T>(
+        document,
+        variables,
+        operationName,
+        options,
+      );
     },
 
     /**

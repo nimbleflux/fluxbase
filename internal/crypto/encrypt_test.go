@@ -26,6 +26,7 @@ func TestEncryptDecrypt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Skip empty string for regular encrypt/decrypt (use IfNotEmpty variants)
 			if tt.plaintext == "" {
 				return
@@ -116,6 +117,7 @@ func TestInvalidKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := Encrypt("test", tt.key)
 			if !errors.Is(err, ErrInvalidKey) {
 				t.Errorf("Expected ErrInvalidKey, got %v", err)
@@ -157,6 +159,7 @@ func TestInvalidCiphertext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := Decrypt(tt.ciphertext, key)
 			if err == nil {
 				t.Error("Expected error for invalid ciphertext")
@@ -179,6 +182,7 @@ func TestValidateKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateKey(tt.key)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateKey() error = %v, wantErr %v", err, tt.wantErr)
@@ -296,6 +300,7 @@ func TestDeriveUserKey_InvalidMasterKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := DeriveUserKey(tt.masterKey, userID)
 			if !errors.Is(err, ErrInvalidKey) {
 				t.Errorf("Expected ErrInvalidKey, got %v", err)
@@ -385,6 +390,7 @@ func TestErrorVariables_Messages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.err.Error(), func(t *testing.T) {
+			t.Parallel()
 			if !contains(tt.err.Error(), tt.contains) {
 				t.Errorf("Error message should contain %q", tt.contains)
 			}
@@ -571,6 +577,7 @@ func TestEncryptDecryptWithBytesKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			encrypted, err := EncryptWithBytesKey(tt.plaintext, key)
 			if err != nil {
 				t.Fatalf("EncryptWithBytesKey failed: %v", err)
@@ -647,6 +654,7 @@ func TestEncryptWithBytesKey_InvalidKeyLength(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := EncryptWithBytesKey(plaintext, tt.key)
 			if !errors.Is(err, ErrInvalidKey) {
 				t.Errorf("Expected ErrInvalidKey, got %v", err)
@@ -672,6 +680,7 @@ func TestDecryptWithBytesKey_InvalidKeyLength(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := DecryptWithBytesKey(encrypted, tt.key)
 			if !errors.Is(err, ErrInvalidKey) {
 				t.Errorf("Expected ErrInvalidKey, got %v", err)

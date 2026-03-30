@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 func TestNewSMTPService(t *testing.T) {
@@ -74,6 +75,7 @@ func TestSMTPService_buildMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			message := service.buildMessage(tt.to, tt.subject, tt.body)
 			messageStr := string(message)
 
@@ -153,12 +155,14 @@ func TestSMTPService_Send_InvalidConfig(t *testing.T) {
 
 func TestDefaultTemplates(t *testing.T) {
 	t.Run("magic link template is valid HTML", func(t *testing.T) {
+		t.Parallel()
 		assert.Contains(t, defaultMagicLinkTemplate, "<!DOCTYPE html>")
 		assert.Contains(t, defaultMagicLinkTemplate, "{{.Link}}")
 		assert.Contains(t, defaultMagicLinkTemplate, "Your Login Link")
 	})
 
 	t.Run("verification template is valid HTML", func(t *testing.T) {
+		t.Parallel()
 		assert.Contains(t, defaultVerificationTemplate, "<!DOCTYPE html>")
 		assert.Contains(t, defaultVerificationTemplate, "{{.Link}}")
 		assert.Contains(t, defaultVerificationTemplate, "Verify Your Email")
@@ -263,6 +267,7 @@ func TestNewService_SMTP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			svc, err := NewService(tt.cfg)
 
 			if tt.wantErr {
@@ -285,18 +290,21 @@ func TestNoOpService_SMTP(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("SendMagicLink returns error", func(t *testing.T) {
+		t.Parallel()
 		err := service.SendMagicLink(ctx, "user@example.com", "token", "link")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "email is disabled")
 	})
 
 	t.Run("SendVerificationEmail returns error", func(t *testing.T) {
+		t.Parallel()
 		err := service.SendVerificationEmail(ctx, "user@example.com", "token", "link")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "email is disabled")
 	})
 
 	t.Run("Send returns error", func(t *testing.T) {
+		t.Parallel()
 		err := service.Send(ctx, "user@example.com", "subject", "body")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "email is disabled")
@@ -347,6 +355,7 @@ func TestEmailConfig_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := tt.cfg.Validate()
 
 			if tt.wantErr {
@@ -484,6 +493,7 @@ func TestEmailConfig_IsConfigured(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := tt.cfg.IsConfigured()
 			assert.Equal(t, tt.configured, result)
 		})
@@ -554,6 +564,7 @@ func TestSanitizeHeaderValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := sanitizeHeaderValue(tt.input)
 			assert.Equal(t, tt.want, result)
 		})
@@ -566,6 +577,7 @@ func TestSanitizeHeaderValue(t *testing.T) {
 
 func TestSMTPService_buildMessage_Sanitization(t *testing.T) {
 	t.Run("sanitizes from name with CRLF", func(t *testing.T) {
+		t.Parallel()
 		// Create a service with malicious input
 		maliciousCfg := &config.EmailConfig{
 			FromAddress:    "noreply@example.com",
@@ -585,6 +597,7 @@ func TestSMTPService_buildMessage_Sanitization(t *testing.T) {
 	})
 
 	t.Run("sanitizes reply-to with CRLF injection", func(t *testing.T) {
+		t.Parallel()
 		maliciousCfg := &config.EmailConfig{
 			FromAddress:    "noreply@example.com",
 			FromName:       "Test Service",
@@ -608,6 +621,7 @@ func TestSMTPService_buildMessage_Sanitization(t *testing.T) {
 
 func TestSMTPService_Send_ErrorCases(t *testing.T) {
 	t.Run("returns error when service is disabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled: false,
 		}
@@ -620,6 +634,7 @@ func TestSMTPService_Send_ErrorCases(t *testing.T) {
 	})
 
 	t.Run("handles context cancellation", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:     true,
 			SMTPHost:    "nonexistent.smtp.server",
@@ -698,6 +713,7 @@ func TestSMTPService_IsConfigured(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			service := NewSMTPService(tt.cfg)
 			result := service.IsConfigured()
 			assert.Equal(t, tt.configured, result)
@@ -730,6 +746,7 @@ func TestSMTPService_RenderPasswordResetTemplate(t *testing.T) {
 
 func TestSMTPService_buildMessage_EdgeCases(t *testing.T) {
 	t.Run("handles empty reply-to", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			FromAddress: "noreply@example.com",
 			FromName:    "Test Service",
@@ -743,6 +760,7 @@ func TestSMTPService_buildMessage_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("handles special characters in subject", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			FromAddress: "noreply@example.com",
 		}
@@ -757,6 +775,7 @@ func TestSMTPService_buildMessage_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("handles unicode in body", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			FromAddress: "noreply@example.com",
 		}
@@ -777,6 +796,7 @@ func TestSMTPService_buildMessage_EdgeCases(t *testing.T) {
 
 func TestDefaultTemplates_Complete(t *testing.T) {
 	t.Run("password reset template contains all elements", func(t *testing.T) {
+		t.Parallel()
 		assert.Contains(t, defaultPasswordResetTemplate, "<!DOCTYPE html>")
 		assert.Contains(t, defaultPasswordResetTemplate, "{{.Link}}")
 		assert.Contains(t, defaultPasswordResetTemplate, "Reset Your Password")
@@ -784,6 +804,7 @@ func TestDefaultTemplates_Complete(t *testing.T) {
 	})
 
 	t.Run("invitation template contains all elements", func(t *testing.T) {
+		t.Parallel()
 		assert.Contains(t, defaultInvitationTemplate, "<!DOCTYPE html>")
 		assert.Contains(t, defaultInvitationTemplate, "{{.InviteLink}}")
 		assert.Contains(t, defaultInvitationTemplate, "You've Been Invited!")
@@ -803,6 +824,7 @@ func TestSMTPService_SendInvitationEmail(t *testing.T) {
 	service := NewSMTPService(cfg)
 
 	t.Run("renders invitation template", func(t *testing.T) {
+		t.Parallel()
 		// We can't actually send the email without a server, but we can check the template rendering
 		link := "https://example.com/invite?code=abc123"
 		inviter := "John Doe"
