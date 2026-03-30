@@ -1,4 +1,4 @@
-.PHONY: help dev dev-full ensure-embed-placeholder ensure-embedded-sdk build clean fmt lint test migrate-up migrate-down migrate-create db-reset db-reset-full deps setup-dev install-hooks uninstall-hooks docs docs-build docs-check-links version docker-build docker-push release cli cli-install cli-completions viz-deps viz-deps-svg viz-internal viz-callgraph viz-callgraph-svg viz-uml viz-uml-api viz-uml-auth viz-module-deps viz-all test-cleanup
+.PHONY: help dev dev-full ensure-embed-placeholder ensure-embedded-sdk build clean fmt lint test migrate-up migrate-down migrate-create db-reset db-reset-full deps setup-dev install-hooks uninstall-hooks docs docs-build docs-check-links version docker-build docker-push release cli cli-install cli-completions viz-deps viz-deps-svg viz-internal viz-callgraph viz-callgraph-svg viz-uml viz-uml-api viz-uml-auth viz-module-deps viz-all test-cleanup test-cli
 
 # Variables
 BINARY_NAME=fluxbase-server
@@ -288,6 +288,9 @@ test-rest: ## Run REST API tests only
 
 test-storage: ## Run storage tests only
 	@./scripts/test-runner.sh go test -v -race -timeout=5m -tags=integration ./test/e2e/ -run TestStorage
+
+test-cli: ## Run CLI tests (unit + mock server, no external dependencies)
+	@./scripts/test-runner.sh go test -v -race -timeout=2m ./cli/...
 
 test-sdk: ## Run SDK tests (TypeScript)
 	@echo "${YELLOW}Running SDK tests...${NC}"
