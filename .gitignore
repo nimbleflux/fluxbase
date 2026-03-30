@@ -126,3 +126,4 @@ values.tmp.yml
 .claude/
 .husky/
 docs/plans/
+.opencode/

@@ -3,256 +3,153 @@ title: "Admin Dashboard"
 description: Manage your Fluxbase instance with the built-in admin dashboard. Database explorer, user management, storage browser, and real-time monitoring.
 ---
 
-The Fluxbase Admin Dashboard provides powerful tools for managing your Fluxbase instance, debugging issues, and providing customer support.
-
-## Overview
-
-![Fluxbase Admin Dashboard Overview](../../../../assets/screenshot-dashboard.png)
-
-The dashboard provides at-a-glance status of your system including database health, user counts, table statistics, and API status.
-
-## Features
-
-### 🗄️ Database Explorer
-
-Browse, query, and edit your database tables directly from the web interface.
-
-![Table Editor](../../../../assets/screenshot-table-editor.png)
-
-**Key features:**
-
-- View all tables and schemas
-- Filter, sort, and search data
-- Inline editing with validation
-- Batch operations
-- Real-time updates
-
-### 🔍 Schema Viewer
-
-Visualize your database structure with an interactive ERD (Entity Relationship Diagram).
-
-![Schema Viewer with ERD](../../../../assets/screenshot-schema-viewer.png)
-
-**Features:**
-
-- Visual representation of tables and relationships
-- Toggle between ERD and list views
-- Search tables and columns
-- View column types and constraints
-- RLS policy indicators
-
-### 💻 SQL Editor
-
-Execute SQL and GraphQL queries directly against your database.
-
-![SQL Query Editor](../../../../assets/screenshot-query-editor.png)
-
-**Features:**
-
-- SQL syntax highlighting
-- GraphQL support
-- Query history
-- Export results
-- Keyboard shortcuts (Ctrl+Enter to execute)
-
-### 👥 User Management
-
-Manage users, roles, and permissions.
-
-**Capabilities:**
-
-- List all users with enriched metadata
-- Invite new users
-- Update user roles
-- Reset passwords
-- Delete users
-
-### 🎭 User Impersonation
-
-View the database as different users to debug issues and test RLS policies.
-
-**Learn more:** [User Impersonation Guide](./user-impersonation)
-
-### 📊 Analytics & Monitoring
-
-Monitor your Fluxbase instance health and usage.
-
-**Metrics available:**
-
-- Active sessions
-- Database connection pool status
-- Query performance
-- Storage usage
+The Fluxbase Admin Dashboard provides tools for managing your instance, debugging issues, and monitoring system health.
 
 ## Getting Started
 
-### Access the Admin Dashboard
-
-1. Navigate to `http://localhost:8080/admin` (or your configured admin URL)
-2. Log in with your admin credentials
-3. If this is first setup, create your admin account
-
-### Initial Setup
-
-On first launch, you'll be prompted to create an admin account:
-
-1. Enter your email address
-2. Choose a strong password
-3. Provide your name
-4. Click "Create Admin Account"
-
-Your admin credentials will be stored securely and you'll be logged in automatically.
+1. Navigate to `http://localhost:8080/admin`
+2. Log in with admin credentials (created on first launch)
 
 ## Navigation
 
-The admin dashboard is organized into main sections:
+### Data Management
 
-- **📋 Tables** - Database explorer with user impersonation
-- **👥 Users** - User management interface
-- **⚙️ Settings** - Instance configuration
-- **📊 Analytics** - Usage metrics and monitoring
+| Section        | Description                                                                      |
+| -------------- | -------------------------------------------------------------------------------- |
+| **Tables**     | Browse, edit, and query database tables with inline editing and batch operations |
+| **Schema**     | Visual ERD showing table relationships, columns, and constraints                 |
+| **SQL Editor** | Execute SQL and GraphQL queries with syntax highlighting and history             |
 
-## Security Considerations
+### Authentication & Access
 
-### Admin Access Control
+| Section            | Description                                                       |
+| ------------------ | ----------------------------------------------------------------- |
+| **Users**          | Manage application users - invite, update roles, reset passwords  |
+| **Client Keys**    | Generate API keys for client applications with scoped permissions |
+| **Service Keys**   | Manage server-to-server keys for CLI tools and migrations         |
+| **Authentication** | Configure OAuth providers, SAML SSO, and auth settings            |
 
-- Admin accounts are separate from regular user accounts
-- Admin credentials are stored in the `dashboard_users` table
-- Supports 2FA for enhanced security
-- Session management with configurable timeouts
+### Multi-Tenancy
+
+| Section               | Description                                                          |
+| --------------------- | -------------------------------------------------------------------- |
+| **Tenants**           | Create and manage tenants, assign members, configure per-tenant auth |
+| **Instance Settings** | Platform-wide configuration and tenant override permissions          |
+
+See: [Tenant Management](./tenants) | [Multi-Tenancy Guide](../multi-tenancy)
+
+### Compute
+
+| Section             | Description                                              | Guide                               |
+| ------------------- | -------------------------------------------------------- | ----------------------------------- |
+| **Edge Functions**  | Deploy serverless TypeScript/JavaScript functions        | [Edge Functions](../edge-functions) |
+| **Background Jobs** | Manage async tasks with scheduling and progress tracking | [Jobs](../jobs)                     |
+| **RPC**             | Execute database procedures via API                      | [RPC](../rpc)                       |
+
+### Storage
+
+| Section            | Description                                                                | Guide                 |
+| ------------------ | -------------------------------------------------------------------------- | --------------------- |
+| **Storage**        | File browser for buckets and objects with upload, preview, and signed URLs | [Storage](../storage) |
+| **Storage Config** | Configure storage providers (local/S3) and buckets                         |                       |
+
+### AI Features
+
+| Section             | Description                                       | Guide                                   |
+| ------------------- | ------------------------------------------------- | --------------------------------------- |
+| **Knowledge Bases** | RAG-powered document stores for AI applications   | [Knowledge Bases](../knowledge-bases)   |
+| **Chatbots**        | AI assistants that query your database            | [AI Chatbots](../ai-chatbots)           |
+| **MCP Tools**       | Custom tools for AI assistant integration         | [Custom MCP Tools](../custom-mcp-tools) |
+| **AI Providers**    | Configure LLM providers (OpenAI, Anthropic, etc.) |                                         |
+
+### Integrations
+
+| Section            | Description                                     | Guide                               |
+| ------------------ | ----------------------------------------------- | ----------------------------------- |
+| **Webhooks**       | Event-driven notifications for database changes | [Webhooks](../webhooks)             |
+| **Realtime**       | Monitor WebSocket connections and subscriptions | [Realtime](../realtime)             |
+| **Email Settings** | Configure SMTP, SendGrid, Mailgun, or SES       | [Email Services](../email-services) |
+
+### Security
+
+| Section               | Description                                             | Guide                                       |
+| --------------------- | ------------------------------------------------------- | ------------------------------------------- |
+| **Policies**          | Row Level Security management and vulnerability scanner | [Row Level Security](../row-level-security) |
+| **Security Settings** | CAPTCHA configuration for auth endpoints                | [CAPTCHA](../captcha)                       |
+| **Secrets**           | Manage secrets for functions and jobs                   | [Secrets Management](../secrets-management) |
+
+### Monitoring
+
+| Section        | Description                                      | Guide                                     |
+| -------------- | ------------------------------------------------ | ----------------------------------------- |
+| **Logs**       | Real-time application log viewer                 | [Logging](../logging)                     |
+| **Monitoring** | System health metrics and connection pool status | [Monitoring](../monitoring-observability) |
+| **Errors**     | View and manage application errors               |                                           |
+
+### Advanced
+
+| Section        | Description                          |
+| -------------- | ------------------------------------ |
+| **Extensions** | PostgreSQL extension management      |
+| **Features**   | Enable/disable platform features     |
+| **Quotas**     | User resource quotas for AI features |
+
+## User Impersonation
+
+View the database as different users to debug RLS policies and support users.
+
+**Enable impersonation:** Click the user icon in the Tables header and select a user. All queries will execute with that user's permissions.
+
+See: [User Impersonation Guide](./user-impersonation)
+
+## Security
+
+### Admin Access
+
+- Admin accounts are separate from application users
+- Stored in `dashboard_users` table
+- Supports 2FA and configurable session timeouts
 
 ### Audit Logging
 
-All administrative actions are logged for compliance:
-
-- User impersonation sessions
-- User management operations
-- Configuration changes
-- Login attempts
-
-Query the audit logs:
+All admin actions are logged:
 
 ```sql
--- View recent impersonation sessions
-SELECT * FROM auth.impersonation_sessions
-ORDER BY started_at DESC
-LIMIT 50;
-
--- View admin login history
-SELECT * FROM dashboard_auth.sessions
-ORDER BY created_at DESC;
+SELECT * FROM auth.impersonation_sessions ORDER BY started_at DESC LIMIT 50;
+SELECT * FROM dashboard_auth.sessions ORDER BY created_at DESC;
 ```
 
 ### Best Practices
 
-1. **Use strong passwords** - Require complex passwords for admin accounts
-2. **Enable 2FA** - Add an extra layer of security
-3. **Limit admin access** - Only create admin accounts for trusted personnel
-4. **Review audit logs** - Regularly check for suspicious activity
-5. **Keep sessions short** - Configure appropriate session timeouts
+1. Use strong passwords and enable 2FA
+2. Limit admin access to trusted personnel
+3. Review audit logs regularly
+4. Configure appropriate session timeouts
 
-## Common Tasks
+## CLI Reference
 
-### Managing Admin Users
-
-List all admin users:
+### Admin Users
 
 ```bash
 fluxbase admin users list
-```
-
-Invite a new admin user:
-
-```bash
-fluxbase admin users invite --email admin@example.com
 fluxbase admin users invite --email admin@example.com --role instance_admin
-```
-
-View admin user details:
-
-```bash
-fluxbase admin users get <user-id>
-```
-
-Delete an admin user:
-
-```bash
 fluxbase admin users delete <user-id>
 ```
 
-### Managing Admin Invitations
-
-List pending invitations:
-
-```bash
-fluxbase admin invitations list
-fluxbase admin invitations list --include-accepted --include-expired
-```
-
-Revoke a pending invitation:
-
-```bash
-fluxbase admin invitations revoke <token>
-```
-
-### Managing Admin Sessions
-
-List active admin sessions:
+### Admin Sessions
 
 ```bash
 fluxbase admin sessions list
-```
-
-Revoke a specific session:
-
-```bash
 fluxbase admin sessions revoke <session-id>
-```
-
-Revoke all sessions for a user:
-
-```bash
 fluxbase admin sessions revoke-all <user-id>
 ```
 
-### Resetting Admin Password
+### Application Users
 
 ```bash
-fluxbase admin password-reset --email admin@example.com
-```
-
-### Managing Application Users
-
-The `fluxbase users` command manages application end users (not admin users):
-
-```bash
-# List all app users
 fluxbase users list
-
-# Search users by email
 fluxbase users list --search john
-
-# View user details
 fluxbase users get <user-id>
-
-# Invite a new app user
 fluxbase users invite --email user@example.com
-
-# Delete an app user
 fluxbase users delete <user-id>
 ```
-
-## Guides
-
-Explore detailed guides for specific admin features:
-
-- [User Impersonation](./user-impersonation) - Debug issues by viewing data as different users
-- _More guides coming soon..._
-
-## Support
-
-Need help with the admin dashboard?
-
-- 📖 Check the [documentation](https://fluxbase.eu)
-- 💬 Join our [Discord community](https://discord.gg/BXPRHkQzkA)
-- 🐛 Report issues on [GitHub](https://github.com/nimbleflux/fluxbase/issues)
