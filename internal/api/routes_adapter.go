@@ -806,6 +806,12 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			DisableExtension: s.Extensions.Handler.DisableExtension,
 			SyncExtensions:   s.Extensions.Handler.SyncExtensions,
 		},
+		ExtensionsTenant: &routes.ExtensionsTenantDeps{
+			ListExtensions:   s.Extensions.Handler.ListExtensionsForTenant,
+			GetExtension:     s.Extensions.Handler.GetExtensionStatusForTenant,
+			EnableExtension:  s.Extensions.Handler.EnableExtensionForTenant,
+			DisableExtension: s.Extensions.Handler.DisableExtensionForTenant,
+		},
 	}
 }
 

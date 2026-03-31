@@ -1846,6 +1846,70 @@ func (tc *TestContext) QuerySQLAsRLSUser(sql string, userID string, args ...inte
 	return results
 }
 
+// QuerySQLAsTenant executes a query with tenant context set, using the fluxbase_rls_test user.
+// This simulates a tenant-scoped database query where RLS policies filter by tenant_id.
+//
+// Parameters:
+//   - tenantID: The tenant ID to set as app.current_tenant_id
+//   - sql: The SQL query to execute
+//   - args: Optional query arguments
+//
+// The RLS context is set with:
+//   - app.current_tenant_id = tenantID (for has_tenant_access checks)
+//   - request.jwt.claims = minimal claims with service_role (to pass authenticated checks)
+//
+// Use this to test that tenant-scoped RLS policies correctly isolate data between tenants.
+//
+// Example:
+//
+//	// Test that tenant1 cannot see tenant2's records
+//	records := tc.QuerySQLAsTenant(tenant1ID, `SELECT * FROM logging.entries`)
+//	for _, r := range records {
+//	    require.Equal(t, tenant1ID, r["tenant_id"])
+//	}
+func (tc *TestContext) QuerySQLAsTenant(tenantID, sql string, args ...interface{}) []map[string]interface{} {
+	ctx := context.Background()
+
+	pool, err := tc.getRLSPool(ctx)
+	require.NoError(tc.T, err, "Failed to get RLS pool")
+
+	// Begin a transaction to set tenant context
+	tx, err := pool.Begin(ctx)
+	require.NoError(tc.T, err, "Failed to begin transaction")
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Set tenant context variable
+	_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
+	require.NoError(tc.T, err, "Failed to set app.current_tenant_id")
+
+	// Set JWT claims with service_role so policies that check current_user_role() pass
+	jwtClaims := fmt.Sprintf(`{"sub":"00000000-0000-0000-0000-000000000000","role":"service_role"}`)
+	_, err = tx.Exec(ctx, "SELECT set_config('request.jwt.claims', $1, true)", jwtClaims)
+	require.NoError(tc.T, err, "Failed to set request.jwt.claims")
+
+	// Execute the query
+	rows, err := tx.Query(ctx, sql, args...)
+	require.NoError(tc.T, err, "Failed to query as tenant")
+	defer rows.Close()
+
+	results := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		values, err := rows.Values()
+		require.NoError(tc.T, err)
+
+		row := make(map[string]interface{})
+		for i, col := range rows.FieldDescriptions() {
+			row[string(col.Name)] = convertPgTypeToGoType(values[i])
+		}
+		results = append(results, row)
+	}
+
+	err = tx.Commit(ctx)
+	require.NoError(tc.T, err, "Failed to commit transaction")
+
+	return results
+}
+
 // RunMigrations runs database migrations
 func (tc *TestContext) RunMigrations() {
 	err := tc.DB.Migrate()

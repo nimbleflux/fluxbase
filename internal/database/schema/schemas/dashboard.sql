@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO dashboard;
+SET search_path TO dashboard, public;
 
 
 --
@@ -485,6 +485,7 @@ CREATE POLICY dashboard_email_verification_service_only ON email_verification_to
 CREATE TABLE IF NOT EXISTS enabled_extensions (
     id uuid DEFAULT gen_random_uuid(),
     extension_name text NOT NULL,
+    tenant_id uuid,
     enabled_at timestamptz DEFAULT now() NOT NULL,
     enabled_by uuid,
     disabled_at timestamptz,
@@ -500,7 +501,7 @@ CREATE TABLE IF NOT EXISTS enabled_extensions (
 );
 
 
-COMMENT ON TABLE enabled_extensions IS 'Tracks which extensions are currently enabled';
+COMMENT ON TABLE enabled_extensions IS 'Tracks which extensions are currently enabled, per tenant (NULL tenant_id = default tenant)';
 
 
 COMMENT ON COLUMN dashboard.enabled_extensions.is_active IS 'Whether this extension is currently enabled';
@@ -508,17 +509,26 @@ COMMENT ON COLUMN dashboard.enabled_extensions.is_active IS 'Whether this extens
 
 COMMENT ON COLUMN dashboard.enabled_extensions.error_message IS 'Error message if enabling/disabling failed';
 
+
+COMMENT ON COLUMN dashboard.enabled_extensions.tenant_id IS 'Tenant ID for per-tenant extension tracking; NULL means default tenant';
+
 --
 -- Name: idx_enabled_extensions_active; Type: INDEX; Schema: -; Owner: -
 --
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_enabled_extensions_active ON enabled_extensions (extension_name) WHERE (is_active = true);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_enabled_extensions_active ON enabled_extensions (extension_name, tenant_id) WHERE (is_active = true);
 
 --
 -- Name: idx_enabled_extensions_name; Type: INDEX; Schema: -; Owner: -
 --
 
 CREATE INDEX IF NOT EXISTS idx_enabled_extensions_name ON enabled_extensions (extension_name);
+
+--
+-- Name: idx_enabled_extensions_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_enabled_extensions_tenant_id ON enabled_extensions (tenant_id);
 
 --
 -- Name: password_reset_tokens; Type: TABLE; Schema: -; Owner: -

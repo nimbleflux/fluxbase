@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO logging;
+SET search_path TO logging, public;
 
 
 --
@@ -912,3 +912,168 @@ END $$;
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE execution_logs_migration_status TO service_role;
 
+-- ============================================================================
+-- ROW LEVEL SECURITY
+-- ============================================================================
+
+--
+-- Name: entries; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entries; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: logging_entries_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY logging_entries_tenant ON entries TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: logging_entries_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER logging_entries_set_tenant_id
+    BEFORE INSERT ON entries
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+--
+-- Name: entries_ai; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_ai ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entries_ai; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_ai FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: logging_entries_ai_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY logging_entries_ai_tenant ON entries_ai TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+-- Note: No separate trigger on entries_ai needed — triggers on partitioned
+-- parent (entries) automatically propagate to all partitions.
+
+--
+-- Name: entries_http; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_http ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entries_http; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_http FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: logging_entries_http_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY logging_entries_http_tenant ON entries_http TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+-- Note: No separate trigger on entries_http needed — inherited from parent.
+
+--
+-- Name: entries_security; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_security ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entries_security; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_security FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: logging_entries_security_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY logging_entries_security_tenant ON entries_security TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+-- Note: No separate trigger on entries_security needed — inherited from parent.
+
+--
+-- Name: entries_execution; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_execution ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entries_execution; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_execution FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: logging_entries_execution_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY logging_entries_execution_tenant ON entries_execution TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+-- Note: No separate trigger on entries_execution needed — inherited from parent.
+
+--
+-- Name: entries_custom; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_custom ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entries_custom; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_custom FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: logging_entries_custom_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY logging_entries_custom_tenant ON entries_custom TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+-- Note: No separate trigger on entries_custom needed — inherited from parent.
+
+--
+-- Name: entries_system; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_system ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: entries_system; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE entries_system FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: logging_entries_system_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY logging_entries_system_tenant ON entries_system TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+-- Note: No separate trigger on entries_system needed — inherited from parent.

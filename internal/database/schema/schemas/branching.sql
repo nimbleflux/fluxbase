@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO branching;
+SET search_path TO branching, public;
 
 
 --
@@ -258,6 +258,180 @@ CREATE OR REPLACE TRIGGER github_config_updated_at
     BEFORE UPDATE ON github_config
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
+
+--
+-- Name: branches; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE branches ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: branches; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE branches FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: branching_branches_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY branching_branches_tenant ON branches TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: branching_branches_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER branching_branches_set_tenant_id
+    BEFORE INSERT ON branches
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+--
+-- Name: activity_log; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: activity_log; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE activity_log FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: branching_activity_log_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY branching_activity_log_tenant ON activity_log TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: branching_activity_log_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER branching_activity_log_set_tenant_id
+    BEFORE INSERT ON activity_log
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+--
+-- Name: branch_access; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE branch_access ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: branch_access; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE branch_access FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: branching_branch_access_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY branching_branch_access_tenant ON branch_access TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: branching_branch_access_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER branching_branch_access_set_tenant_id
+    BEFORE INSERT ON branch_access
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+--
+-- Name: github_config; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE github_config ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: github_config; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE github_config FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: branching_github_config_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY branching_github_config_tenant ON github_config TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: branching_github_config_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER branching_github_config_set_tenant_id
+    BEFORE INSERT ON github_config
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+--
+-- Name: migration_history; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE migration_history ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: migration_history; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE migration_history FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: branching_migration_history_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY branching_migration_history_tenant ON migration_history TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: branching_migration_history_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER branching_migration_history_set_tenant_id
+    BEFORE INSERT ON migration_history
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+--
+-- Name: seed_execution_log; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE seed_execution_log ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: seed_execution_log; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE seed_execution_log FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: branching_seed_execution_log_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY branching_seed_execution_log_tenant ON seed_execution_log TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: branching_seed_execution_log_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER branching_seed_execution_log_set_tenant_id
+    BEFORE INSERT ON seed_execution_log
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
 
 --
 -- Name: activity_log; Type: PRIVILEGE; Schema: privileges; Owner: -

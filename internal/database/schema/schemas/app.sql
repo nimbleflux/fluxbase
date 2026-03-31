@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO app;
+SET search_path TO app, public;
 
 
 --
@@ -132,12 +132,6 @@ CREATE POLICY "Authenticated users can read non-secret settings" ON settings FOR
 --
 
 CREATE POLICY "Public settings are readable by anyone" ON settings FOR SELECT TO anon, authenticated USING ((is_public = true) AND (is_secret = false));
-
---
--- Name: Service role has full access to app settings; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY "Service role has full access to app settings" ON settings TO service_role USING (true) WITH CHECK (true);
 
 --
 -- Name: Settings can be created by authorized roles; Type: POLICY; Schema: -; Owner: -

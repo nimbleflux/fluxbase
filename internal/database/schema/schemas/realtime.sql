@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO realtime;
+SET search_path TO realtime, public;
 
 
 --
@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS schema_registry (
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
     excluded_columns text[] DEFAULT '{}',
+    tenant_id uuid,
     CONSTRAINT schema_registry_pkey PRIMARY KEY (id),
     CONSTRAINT schema_registry_schema_name_table_name_key UNIQUE (schema_name, table_name)
 );
@@ -47,7 +48,7 @@ CREATE POLICY "Admins can manage realtime configuration" ON schema_registry TO a
 -- Name: Authenticated users can view realtime configuration; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY "Authenticated users can view realtime configuration" ON schema_registry FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated users can view realtime configuration" ON schema_registry FOR SELECT TO authenticated USING (auth.has_tenant_access(tenant_id));
 
 --
 -- Name: update_realtime_schema_registry_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -57,6 +58,29 @@ CREATE OR REPLACE TRIGGER update_realtime_schema_registry_updated_at
     BEFORE UPDATE ON schema_registry
     FOR EACH ROW
     EXECUTE FUNCTION platform.update_updated_at();
+
+--
+-- Name: idx_realtime_schema_registry_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_realtime_schema_registry_tenant_id ON schema_registry (tenant_id);
+
+--
+-- Name: realtime_schema_registry_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY realtime_schema_registry_tenant ON schema_registry TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: realtime_schema_registry_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER realtime_schema_registry_set_tenant_id
+    BEFORE INSERT ON schema_registry
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
 
 --
 -- Name: schema_registry_id_seq; Type: PRIVILEGE; Schema: privileges; Owner: -

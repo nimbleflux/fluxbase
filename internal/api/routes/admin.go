@@ -31,19 +31,20 @@ type AdminDeps struct {
 	RequireRole func(...string) fiber.Handler
 
 	// Subgroup dependencies
-	Branch        *BranchDeps
-	Schema        *SchemaAdminDeps
-	AuthProviders *AuthProvidersAdminDeps
-	Users         *UsersAdminDeps
-	Tenants       *TenantsAdminDeps
-	ServiceKeys   *ServiceKeysAdminDeps
-	Functions     *FunctionsAdminDeps
-	Jobs          *JobsAdminDeps
-	AI            *AIAdminDeps
-	RPC           *RPCAdminDeps
-	Logs          *LogsAdminDeps
-	Settings      *SettingsAdminDeps
-	Extensions    *ExtensionsAdminDeps
+	Branch           *BranchDeps
+	Schema           *SchemaAdminDeps
+	AuthProviders    *AuthProvidersAdminDeps
+	Users            *UsersAdminDeps
+	Tenants          *TenantsAdminDeps
+	ServiceKeys      *ServiceKeysAdminDeps
+	Functions        *FunctionsAdminDeps
+	Jobs             *JobsAdminDeps
+	AI               *AIAdminDeps
+	RPC              *RPCAdminDeps
+	Logs             *LogsAdminDeps
+	Settings         *SettingsAdminDeps
+	Extensions       *ExtensionsAdminDeps
+	ExtensionsTenant *ExtensionsTenantDeps
 }
 
 // BuildAdminRoutes creates the admin route group with proper role-based access control.
@@ -135,6 +136,9 @@ func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
 	}
 	if extensions := BuildExtensionsAdminRoutes(deps.Extensions); extensions != nil {
 		subgroups = append(subgroups, extensions)
+	}
+	if extensionsTenant := BuildExtensionsTenantRoutes(deps.ExtensionsTenant); extensionsTenant != nil {
+		subgroups = append(subgroups, extensionsTenant)
 	}
 
 	return &RouteGroup{

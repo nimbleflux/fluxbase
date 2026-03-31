@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -465,38 +466,22 @@ func (s *DeclarativeService) ApplyDeclarativeWithSource(ctx context.Context, sou
 			continue
 		}
 
+		// Filter out FK drops for cross-schema constraints managed by post-schema-fks.sql.
+		// These are applied separately in Phase 2 and should not be dropped during per-schema apply.
+		plan.Changes = s.filterManagedFKDrops(plan.Changes)
+
 		if len(plan.Changes) == 0 {
 			log.Debug().Str("schema", schema).Msg("No schema changes needed")
 			continue
 		}
 
-		// Try pgschema apply first
-		result, err := s.ApplyForSchema(ctx, schema, true) // auto-approve
-		if err != nil {
-			// If pgschema apply fails (e.g., due to cross-schema FK validation),
-			// execute the plan SQL directly - we already have the plan with correct ALTER statements
-			log.Warn().Err(err).Str("schema", schema).Msg("pgschema apply failed, executing plan SQL directly")
-			if err := s.applyPlanDirectly(ctx, schema, plan); err != nil {
-				return fmt.Errorf("failed to apply schema %s: %w", schema, err)
-			}
-			log.Info().Str("schema", schema).Int("changes", len(plan.Changes)).Msg("Schema changes applied via plan execution")
-		} else if len(result.Applied) > 0 {
-			// Log each applied change
-			for i, change := range result.Applied {
-				sqlPreview := change.SQL
-				if len(sqlPreview) > 200 {
-					sqlPreview = sqlPreview[:197] + "..."
-				}
-				log.Info().
-					Str("schema", schema).
-					Int("change_num", i+1).
-					Int("total_changes", len(result.Applied)).
-					Str("type", string(change.Type)).
-					Str("object", change.Name).
-					Str("sql", sqlPreview).
-					Msg("Applied schema change via pgschema")
-			}
+		// Apply the filtered plan directly using SQL execution.
+		// We use applyPlanDirectly instead of ApplyForSchema because ApplyForSchema
+		// regenerates the plan internally, which would not include our FK filtering.
+		if err := s.applyPlanDirectly(ctx, schema, plan); err != nil {
+			return fmt.Errorf("failed to apply schema %s: %w", schema, err)
 		}
+		log.Info().Str("schema", schema).Int("changes", len(plan.Changes)).Msg("Schema changes applied via plan execution")
 	}
 
 	// Phase 2: Apply cross-schema FKs from post-schema-fks.sql
@@ -702,6 +687,54 @@ func hasDestructiveChanges(changes []Change) bool {
 		}
 	}
 	return false
+}
+
+// crossSchemaFKNames extracts FK constraint names from post-schema-fks.sql.
+// These constraints are managed outside per-schema SQL files, so pgschema should not
+// attempt to drop them during per-schema plan+apply.
+var crossSchemaFKNames map[string]bool
+
+// loadCrossSchemaFKNames parses post-schema-fks.sql and returns a set of FK constraint names.
+func (s *DeclarativeService) loadCrossSchemaFKNames() map[string]bool {
+	if crossSchemaFKNames != nil {
+		return crossSchemaFKNames
+	}
+
+	names := make(map[string]bool)
+	fksFile := filepath.Join(s.config.SchemaDir, "post-schema-fks.sql")
+	content, err := os.ReadFile(fksFile)
+	if err != nil {
+		return names
+	}
+
+	// Match: conname = 'constraint_name'
+	re := regexp.MustCompile(`conname\s*=\s*'([^']+)'`)
+	matches := re.FindAllStringSubmatch(string(content), -1)
+	for _, m := range matches {
+		if len(m) > 1 {
+			names[m[1]] = true
+		}
+	}
+
+	crossSchemaFKNames = names
+	return names
+}
+
+// filterManagedFKDrops removes DROP CONSTRAINT changes for FKs managed by post-schema-fks.sql.
+// These cross-schema FKs are applied separately in Phase 2, so pgschema must not drop them.
+func (s *DeclarativeService) filterManagedFKDrops(changes []Change) []Change {
+	managedFKs := s.loadCrossSchemaFKNames()
+	var filtered []Change
+	for _, change := range changes {
+		if change.Type == ChangeDrop && managedFKs[change.Name] {
+			log.Debug().
+				Str("constraint", change.Name).
+				Msg("Skipping FK drop - managed by post-schema-fks.sql")
+			continue
+		}
+		filtered = append(filtered, change)
+	}
+	return filtered
 }
 
 // makeSQLIdempotent transforms SQL to be idempotent by:

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -36,6 +37,13 @@ func parseInt(s string) int {
 }
 
 func TestMain(m *testing.M) {
+	flag.Parse()
+
+	// Skip database setup for short tests — individual tests will skip via testing.Short()
+	if testing.Short() {
+		os.Exit(m.Run())
+	}
+
 	// Get database config from environment variables (for CI/CD compatibility)
 	// Falls back to docker-compose defaults for local development
 	cfg := &config.DatabaseConfig{

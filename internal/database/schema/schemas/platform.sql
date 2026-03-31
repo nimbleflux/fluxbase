@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO platform;
+SET search_path TO platform, public;
 
 
 --
@@ -101,12 +101,6 @@ ALTER TABLE email_templates FORCE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY platform_email_templates_read ON email_templates FOR SELECT TO authenticated USING (true);
-
---
--- Name: platform_email_templates_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY platform_email_templates_service_all ON email_templates TO service_role USING (true) WITH CHECK (true);
 
 --
 -- Name: instance_settings; Type: TABLE; Schema: -; Owner: -
@@ -242,12 +236,6 @@ ALTER TABLE oauth_providers FORCE ROW LEVEL SECURITY;
 CREATE POLICY platform_oauth_providers_read ON oauth_providers FOR SELECT TO authenticated USING (enabled = true);
 
 --
--- Name: platform_oauth_providers_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY platform_oauth_providers_service_all ON oauth_providers TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: tenants; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -346,12 +334,6 @@ ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
-
---
--- Name: tenants_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY tenants_service_all ON tenants TO service_role USING (true) WITH CHECK (true);
 
 --
 -- Name: service_keys; Type: TABLE; Schema: -; Owner: -
@@ -587,10 +569,10 @@ CREATE INDEX IF NOT EXISTS idx_tenant_memberships_user_id ON tenant_memberships 
 ALTER TABLE tenant_memberships ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: tenant_memberships_service_all; Type: POLICY; Schema: -; Owner: -
+-- Name: tenant_memberships; Type: RLS; Schema: -; Owner: -
 --
 
-CREATE POLICY tenant_memberships_service_all ON tenant_memberships TO service_role USING (true) WITH CHECK (true);
+ALTER TABLE tenant_memberships FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: tenant_settings; Type: TABLE; Schema: -; Owner: -
@@ -624,6 +606,12 @@ CREATE INDEX IF NOT EXISTS idx_tenant_settings_tenant_id ON tenant_settings (ten
 --
 
 ALTER TABLE tenant_settings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: tenant_settings; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE tenant_settings FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: users; Type: TABLE; Schema: -; Owner: -
@@ -723,12 +711,6 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users FORCE ROW LEVEL SECURITY;
 
 --
--- Name: platform_users_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY platform_users_service_all ON users TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: activity_log; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -777,12 +759,6 @@ ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_log FORCE ROW LEVEL SECURITY;
 
 --
--- Name: platform_activity_log_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY platform_activity_log_service_all ON activity_log TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: email_verification_tokens; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -818,18 +794,13 @@ ALTER TABLE email_verification_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE email_verification_tokens FORCE ROW LEVEL SECURITY;
 
 --
--- Name: platform_email_verification_tokens_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY platform_email_verification_tokens_service_all ON email_verification_tokens TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: enabled_extensions; Type: TABLE; Schema: -; Owner: -
 --
 
 CREATE TABLE IF NOT EXISTS enabled_extensions (
     id uuid DEFAULT gen_random_uuid(),
     extension_name text NOT NULL,
+    tenant_id uuid,
     enabled_at timestamptz DEFAULT now() NOT NULL,
     enabled_by uuid,
     disabled_at timestamptz,
@@ -841,11 +812,12 @@ CREATE TABLE IF NOT EXISTS enabled_extensions (
     CONSTRAINT enabled_extensions_pkey PRIMARY KEY (id),
     CONSTRAINT enabled_extensions_disabled_by_fkey FOREIGN KEY (disabled_by) REFERENCES users (id) ON DELETE SET NULL,
     CONSTRAINT enabled_extensions_enabled_by_fkey FOREIGN KEY (enabled_by) REFERENCES users (id) ON DELETE SET NULL,
-    CONSTRAINT enabled_extensions_extension_name_fkey FOREIGN KEY (extension_name) REFERENCES available_extensions (name) ON DELETE CASCADE
+    CONSTRAINT enabled_extensions_extension_name_fkey FOREIGN KEY (extension_name) REFERENCES available_extensions (name) ON DELETE CASCADE,
+    CONSTRAINT enabled_extensions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE
 );
 
 
-COMMENT ON TABLE enabled_extensions IS 'Tracks which extensions are currently enabled';
+COMMENT ON TABLE enabled_extensions IS 'Tracks which extensions are currently enabled, per tenant (NULL tenant_id = default tenant)';
 
 
 COMMENT ON COLUMN platform.enabled_extensions.is_active IS 'Whether this extension is currently enabled';
@@ -853,17 +825,26 @@ COMMENT ON COLUMN platform.enabled_extensions.is_active IS 'Whether this extensi
 
 COMMENT ON COLUMN platform.enabled_extensions.error_message IS 'Error message if enabling/disabling failed';
 
+
+COMMENT ON COLUMN platform.enabled_extensions.tenant_id IS 'Tenant ID for per-tenant extension tracking; NULL means default tenant';
+
 --
 -- Name: idx_enabled_extensions_active; Type: INDEX; Schema: -; Owner: -
 --
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_enabled_extensions_active ON enabled_extensions (extension_name) WHERE (is_active = true);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_enabled_extensions_active ON enabled_extensions (extension_name, tenant_id) WHERE (is_active = true);
 
 --
 -- Name: idx_enabled_extensions_name; Type: INDEX; Schema: -; Owner: -
 --
 
 CREATE INDEX IF NOT EXISTS idx_enabled_extensions_name ON enabled_extensions (extension_name);
+
+--
+-- Name: idx_enabled_extensions_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_enabled_extensions_tenant_id ON enabled_extensions (tenant_id);
 
 --
 -- Name: invitation_tokens; Type: TABLE; Schema: -; Owner: -
@@ -929,12 +910,6 @@ ALTER TABLE invitation_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invitation_tokens FORCE ROW LEVEL SECURITY;
 
 --
--- Name: platform_invitation_tokens_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY platform_invitation_tokens_service_all ON invitation_tokens TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: password_reset_tokens; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -968,12 +943,6 @@ ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE password_reset_tokens FORCE ROW LEVEL SECURITY;
-
---
--- Name: platform_password_reset_tokens_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY platform_password_reset_tokens_service_all ON password_reset_tokens TO service_role USING (true) WITH CHECK (true);
 
 --
 -- Name: schema_migrations; Type: TABLE; Schema: -; Owner: -
@@ -1057,12 +1026,6 @@ ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions FORCE ROW LEVEL SECURITY;
 
 --
--- Name: platform_sessions_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY platform_sessions_service_all ON sessions TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: sso_identities; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1109,12 +1072,6 @@ ALTER TABLE sso_identities ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE sso_identities FORCE ROW LEVEL SECURITY;
-
---
--- Name: platform_sso_identities_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY platform_sso_identities_service_all ON sso_identities TO service_role USING (true) WITH CHECK (true);
 
 --
 -- Name: tenant_admin_assignments; Type: TABLE; Schema: -; Owner: -
@@ -1177,6 +1134,12 @@ CREATE INDEX IF NOT EXISTS idx_tenant_admin_assignments_user_id ON tenant_admin_
 --
 
 ALTER TABLE tenant_admin_assignments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: tenant_admin_assignments; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE tenant_admin_assignments FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: delete_jsonb_path(jsonb, text); Type: FUNCTION; Schema: -; Owner: -

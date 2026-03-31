@@ -80,6 +80,22 @@ func TestNewLogService(t *testing.T) {
 		assert.Contains(t, err.Error(), "unsupported log storage backend")
 	})
 
+	t.Run("creates elasticsearch storage with valid config", func(t *testing.T) {
+		cfg := LogStorageConfig{
+			Backend:              "elasticsearch",
+			ElasticsearchURLs:    []string{"http://localhost:9200"},
+			ElasticsearchVersion: 9,
+		}
+
+		svc, err := NewLogService(cfg, nil, nil)
+		require.NoError(t, err)
+		require.NotNil(t, svc)
+		defer func() { _ = svc.Close() }()
+
+		assert.Equal(t, "elasticsearch", svc.GetBackendName())
+		assert.True(t, svc.IsElasticsearch())
+	})
+
 	t.Run("defaults to postgres when backend is empty", func(t *testing.T) {
 		cfg := LogStorageConfig{
 			Backend: "",

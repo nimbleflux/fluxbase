@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO jobs;
+SET search_path TO jobs, public;
 
 
 --
@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS functions (
     updated_at timestamptz DEFAULT now() NOT NULL,
     disable_execution_logs boolean DEFAULT false NOT NULL,
     require_roles text[] DEFAULT ARRAY[]::text[],
+    tenant_id uuid,
     CONSTRAINT functions_pkey PRIMARY KEY (id),
     CONSTRAINT functions_name_namespace_key UNIQUE (name, namespace)
 );
@@ -94,12 +95,6 @@ ALTER TABLE functions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Dashboard admins can read all functions" ON functions FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
 
 --
--- Name: Service role can manage functions; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY "Service role can manage functions" ON functions TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: function_files; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -109,6 +104,7 @@ CREATE TABLE IF NOT EXISTS function_files (
     file_path text NOT NULL,
     content text,
     created_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT function_files_pkey PRIMARY KEY (id),
     CONSTRAINT function_files_function_id_file_path_key UNIQUE (function_id, file_path),
     CONSTRAINT function_files_function_id_fkey FOREIGN KEY (function_id) REFERENCES functions (id) ON DELETE CASCADE
@@ -136,12 +132,6 @@ ALTER TABLE function_files ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Dashboard admins can read all function files" ON function_files FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
 
 --
--- Name: Service role can manage function files; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY "Service role can manage function files" ON function_files TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: workers; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -155,6 +145,7 @@ CREATE TABLE IF NOT EXISTS workers (
     last_heartbeat_at timestamptz DEFAULT now() NOT NULL,
     started_at timestamptz DEFAULT now() NOT NULL,
     metadata jsonb,
+    tenant_id uuid,
     CONSTRAINT workers_pkey PRIMARY KEY (id),
     CONSTRAINT workers_status_check CHECK (status IN ('active'::text, 'draining'::text, 'stopped'::text))
 );
@@ -193,12 +184,6 @@ ALTER TABLE workers ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Dashboard admins can read all workers" ON workers FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
 
 --
--- Name: Service role can manage workers; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY "Service role can manage workers" ON workers TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: queue; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -227,6 +212,7 @@ CREATE TABLE IF NOT EXISTS queue (
     started_at timestamptz,
     last_progress_at timestamptz,
     completed_at timestamptz,
+    tenant_id uuid,
     CONSTRAINT queue_pkey PRIMARY KEY (id),
     CONSTRAINT fk_queue_worker FOREIGN KEY (worker_id) REFERENCES workers (id) ON DELETE SET NULL,
     CONSTRAINT queue_function_id_fkey FOREIGN KEY (function_id) REFERENCES functions (id) ON DELETE SET NULL,
@@ -301,12 +287,6 @@ ALTER TABLE queue ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY "Dashboard admins can read all jobs" ON queue FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
-
---
--- Name: Service role can manage all jobs; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY "Service role can manage all jobs" ON queue TO service_role USING (true) WITH CHECK (true);
 
 --
 -- Name: Users can cancel their own pending/running jobs; Type: POLICY; Schema: -; Owner: -
@@ -416,6 +396,66 @@ CREATE OR REPLACE TRIGGER workers_realtime_notify
     AFTER INSERT OR UPDATE OR DELETE ON workers
     FOR EACH ROW
     EXECUTE FUNCTION notify_realtime_change();
+
+--
+-- Multi-tenancy: tenant_id columns, FORCE RLS, tenant policies, auto-populate triggers
+--
+
+-- functions
+CREATE INDEX IF NOT EXISTS idx_jobs_functions_tenant_id ON functions (tenant_id);
+
+ALTER TABLE functions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY jobs_functions_tenant ON functions TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER jobs_functions_set_tenant_id
+    BEFORE INSERT ON functions
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- function_files
+CREATE INDEX IF NOT EXISTS idx_jobs_function_files_tenant_id ON function_files (tenant_id);
+
+ALTER TABLE function_files FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY jobs_function_files_tenant ON function_files TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER jobs_function_files_set_tenant_id
+    BEFORE INSERT ON function_files
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- workers
+CREATE INDEX IF NOT EXISTS idx_jobs_workers_tenant_id ON workers (tenant_id);
+
+ALTER TABLE workers FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY jobs_workers_tenant ON workers TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER jobs_workers_set_tenant_id
+    BEFORE INSERT ON workers
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- queue
+CREATE INDEX IF NOT EXISTS idx_jobs_queue_tenant_id ON queue (tenant_id);
+
+ALTER TABLE queue FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY jobs_queue_tenant ON queue TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER jobs_queue_set_tenant_id
+    BEFORE INSERT ON queue
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
 
 --
 -- Name: function_files; Type: PRIVILEGE; Schema: privileges; Owner: -

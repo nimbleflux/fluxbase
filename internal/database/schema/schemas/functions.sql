@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO functions;
+SET search_path TO functions, public;
 
 
 --
@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS edge_functions (
     rate_limit_per_minute integer,
     rate_limit_per_hour integer,
     rate_limit_per_day integer,
+    tenant_id uuid,
     CONSTRAINT edge_functions_pkey PRIMARY KEY (id),
     CONSTRAINT unique_function_name_namespace UNIQUE (name, namespace)
 );
@@ -189,6 +190,7 @@ CREATE TABLE IF NOT EXISTS edge_executions (
     duration_ms integer,
     started_at timestamptz DEFAULT now(),
     completed_at timestamptz,
+    tenant_id uuid,
     CONSTRAINT edge_executions_pkey PRIMARY KEY (id),
     CONSTRAINT edge_executions_function_id_fkey FOREIGN KEY (function_id) REFERENCES edge_functions (id) ON DELETE CASCADE
 );
@@ -252,6 +254,7 @@ CREATE TABLE IF NOT EXISTS edge_files (
     content text NOT NULL,
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT edge_files_pkey PRIMARY KEY (id),
     CONSTRAINT unique_edge_file_path UNIQUE (function_id, file_path),
     CONSTRAINT edge_files_function_id_fkey FOREIGN KEY (function_id) REFERENCES edge_functions (id) ON DELETE CASCADE,
@@ -311,6 +314,7 @@ CREATE TABLE IF NOT EXISTS edge_triggers (
     enabled boolean DEFAULT true,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT edge_triggers_pkey PRIMARY KEY (id),
     CONSTRAINT edge_triggers_function_id_fkey FOREIGN KEY (function_id) REFERENCES edge_functions (id) ON DELETE CASCADE
 );
@@ -386,15 +390,6 @@ CREATE TABLE IF NOT EXISTS secrets (
     -- Cross-schema FK secrets_tenant_id_fkey moved to post-schema-fks.sql
 );
 
--- Add tenant_id column if it doesn't exist (for existing databases)
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'functions' AND table_name = 'secrets' AND column_name = 'tenant_id') THEN
-        ALTER TABLE secrets ADD COLUMN tenant_id uuid;
-        -- FK added in post-schema-fks.sql
-    END IF;
-END $$;
-
 
 COMMENT ON TABLE secrets IS 'Encrypted secrets injected into edge functions at runtime';
 
@@ -462,10 +457,10 @@ ALTER TABLE secrets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE secrets FORCE ROW LEVEL SECURITY;
 
 --
--- Name: secrets_service_and_admin_policy; Type: POLICY; Schema: -; Owner: -
+-- Name: secrets_tenant; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY secrets_service_and_admin_policy ON secrets TO PUBLIC USING ((auth.current_user_role() = 'service_role') OR (auth.current_user_role() = 'dashboard_admin')) WITH CHECK ((auth.current_user_role() = 'service_role') OR (auth.current_user_role() = 'dashboard_admin'));
+CREATE POLICY secrets_tenant ON secrets TO PUBLIC USING (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'dashboard_admin');
 
 --
 -- Name: secret_versions; Type: TABLE; Schema: -; Owner: -
@@ -483,14 +478,6 @@ CREATE TABLE IF NOT EXISTS secret_versions (
     CONSTRAINT unique_secret_version UNIQUE (secret_id, version),
     CONSTRAINT secret_versions_secret_id_fkey FOREIGN KEY (secret_id) REFERENCES secrets (id) ON DELETE CASCADE
 );
-
--- Add tenant_id column if it doesn't exist (for existing databases)
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'functions' AND table_name = 'secret_versions' AND column_name = 'tenant_id') THEN
-        ALTER TABLE secret_versions ADD COLUMN tenant_id uuid;
-    END IF;
-END $$;
 
 
 COMMENT ON TABLE secret_versions IS 'Version history for secrets (audit trail and rollback capability)';
@@ -520,10 +507,10 @@ ALTER TABLE secret_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE secret_versions FORCE ROW LEVEL SECURITY;
 
 --
--- Name: secret_versions_service_and_admin_policy; Type: POLICY; Schema: -; Owner: -
+-- Name: secret_versions_tenant; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY secret_versions_service_and_admin_policy ON secret_versions TO PUBLIC USING ((auth.current_user_role() = 'service_role') OR (auth.current_user_role() = 'dashboard_admin')) WITH CHECK ((auth.current_user_role() = 'service_role') OR (auth.current_user_role() = 'dashboard_admin'));
+CREATE POLICY secret_versions_tenant ON secret_versions TO PUBLIC USING (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'dashboard_admin');
 
 --
 -- Name: shared_modules; Type: TABLE; Schema: -; Owner: -
@@ -538,6 +525,7 @@ CREATE TABLE IF NOT EXISTS shared_modules (
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
     created_by uuid,
+    tenant_id uuid,
     CONSTRAINT shared_modules_pkey PRIMARY KEY (id),
     CONSTRAINT shared_modules_module_path_key UNIQUE (module_path),
     CONSTRAINT valid_module_path CHECK (module_path ~ '^_shared/[a-zA-Z0-9_/-]+\.(ts|js|mts|mjs)$'::text AND module_path !~~ '%/../%'::text)
@@ -599,6 +587,7 @@ CREATE TABLE IF NOT EXISTS function_dependencies (
     shared_module_version integer NOT NULL,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT function_dependencies_pkey PRIMARY KEY (id),
     CONSTRAINT function_dependencies_function_id_shared_module_id_key UNIQUE (function_id, shared_module_id),
     CONSTRAINT function_dependencies_function_id_fkey FOREIGN KEY (function_id) REFERENCES edge_functions (id) ON DELETE CASCADE,
@@ -740,6 +729,101 @@ CREATE OR REPLACE TRIGGER update_functions_edge_triggers_updated_at
     BEFORE UPDATE ON edge_triggers
     FOR EACH ROW
     EXECUTE FUNCTION platform.update_updated_at();
+
+--
+-- Name: functions_secrets_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER functions_secrets_set_tenant_id
+    BEFORE INSERT ON secrets
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+--
+-- Name: functions_secret_versions_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER functions_secret_versions_set_tenant_id
+    BEFORE INSERT ON secret_versions
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+--
+-- Multi-tenancy: Add tenant_id column, tenant policy, and auto-populate trigger
+-- for all functions tables (secrets and secret_versions already handled above)
+--
+
+-- edge_functions
+CREATE INDEX IF NOT EXISTS idx_functions_edge_functions_tenant_id ON edge_functions (tenant_id);
+
+CREATE POLICY functions_edge_functions_tenant ON edge_functions TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER functions_edge_functions_set_tenant_id
+    BEFORE INSERT ON edge_functions
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- edge_executions
+CREATE INDEX IF NOT EXISTS idx_functions_edge_executions_tenant_id ON edge_executions (tenant_id);
+
+CREATE POLICY functions_edge_executions_tenant ON edge_executions TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER functions_edge_executions_set_tenant_id
+    BEFORE INSERT ON edge_executions
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- edge_files
+CREATE INDEX IF NOT EXISTS idx_functions_edge_files_tenant_id ON edge_files (tenant_id);
+
+CREATE POLICY functions_edge_files_tenant ON edge_files TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER functions_edge_files_set_tenant_id
+    BEFORE INSERT ON edge_files
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- edge_triggers
+CREATE INDEX IF NOT EXISTS idx_functions_edge_triggers_tenant_id ON edge_triggers (tenant_id);
+
+CREATE POLICY functions_edge_triggers_tenant ON edge_triggers TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER functions_edge_triggers_set_tenant_id
+    BEFORE INSERT ON edge_triggers
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- shared_modules
+CREATE INDEX IF NOT EXISTS idx_functions_shared_modules_tenant_id ON shared_modules (tenant_id);
+
+CREATE POLICY functions_shared_modules_tenant ON shared_modules TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER functions_shared_modules_set_tenant_id
+    BEFORE INSERT ON shared_modules
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- function_dependencies
+CREATE INDEX IF NOT EXISTS idx_functions_function_dependencies_tenant_id ON function_dependencies (tenant_id);
+
+CREATE POLICY functions_function_dependencies_tenant ON function_dependencies TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER functions_function_dependencies_set_tenant_id
+    BEFORE INSERT ON function_dependencies
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
 
 --
 -- Name: edge_executions; Type: PRIVILEGE; Schema: privileges; Owner: -

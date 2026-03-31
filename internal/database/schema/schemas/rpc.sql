@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO rpc;
+SET search_path TO rpc, public;
 
 
 --
@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS procedures (
     updated_at timestamptz DEFAULT now(),
     disable_execution_logs boolean DEFAULT false NOT NULL,
     require_roles text[] DEFAULT ARRAY[]::text[],
+    tenant_id uuid,
     CONSTRAINT procedures_pkey PRIMARY KEY (id),
     CONSTRAINT unique_rpc_procedure_name_namespace UNIQUE (name, namespace),
     CONSTRAINT procedures_source_check CHECK (source IN ('filesystem'::text, 'api'::text, 'sdk'::text))
@@ -124,12 +125,6 @@ CREATE POLICY rpc_procedures_read_anon ON procedures FOR SELECT TO anon USING ((
 CREATE POLICY rpc_procedures_read_public ON procedures FOR SELECT TO authenticated USING ((enabled = true) AND (is_public = true));
 
 --
--- Name: rpc_procedures_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY rpc_procedures_service_all ON procedures TO service_role USING (true);
-
---
 -- Name: executions; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -151,6 +146,7 @@ CREATE TABLE IF NOT EXISTS executions (
     created_at timestamptz DEFAULT now(),
     started_at timestamptz,
     completed_at timestamptz,
+    tenant_id uuid,
     CONSTRAINT executions_pkey PRIMARY KEY (id),
     CONSTRAINT executions_procedure_id_fkey FOREIGN KEY (procedure_id) REFERENCES procedures (id) ON DELETE SET NULL,
     CONSTRAINT executions_status_check CHECK (status IN ('pending'::text, 'running'::text, 'completed'::text, 'failed'::text, 'cancelled'::text, 'timeout'::text))
@@ -221,12 +217,6 @@ CREATE POLICY rpc_executions_dashboard_admin_read ON executions FOR SELECT TO au
 --
 
 CREATE POLICY rpc_executions_read_own ON executions FOR SELECT TO authenticated USING (user_id = auth.current_user_id());
-
---
--- Name: rpc_executions_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY rpc_executions_service_all ON executions TO service_role USING (true);
 
 --
 -- Name: notify_realtime_change(); Type: FUNCTION; Schema: -; Owner: -
@@ -309,6 +299,40 @@ CREATE OR REPLACE TRIGGER procedures_update_updated_at
     BEFORE UPDATE ON procedures
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
+
+--
+-- Multi-tenancy: procedures
+--
+
+CREATE INDEX IF NOT EXISTS idx_rpc_procedures_tenant_id ON procedures (tenant_id);
+
+ALTER TABLE procedures FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY rpc_procedures_tenant ON procedures TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER rpc_procedures_set_tenant_id
+    BEFORE INSERT ON procedures
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+--
+-- Multi-tenancy: executions
+--
+
+CREATE INDEX IF NOT EXISTS idx_rpc_executions_tenant_id ON executions (tenant_id);
+
+ALTER TABLE executions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY rpc_executions_tenant ON executions TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER rpc_executions_set_tenant_id
+    BEFORE INSERT ON executions
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
 
 --
 -- Name: notify_realtime_change(); Type: PRIVILEGE; Schema: privileges; Owner: -

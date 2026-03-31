@@ -511,7 +511,7 @@ func TestRLSRoleValidation(t *testing.T) {
 // TestRLSAuthUsersSelectRestriction tests that users can only see their own user record
 // This verifies that auth.users SELECT policy is properly tightened
 func TestRLSAuthUsersSelectRestriction(t *testing.T) {
-	t.Skip("RLS is disabled on auth.users - auth infrastructure tables don't use RLS because signup/signin happen before user context is established. Access control is enforced at the application level instead.")
+	t.Skip("auth.users uses tenant-scoped RLS (has_tenant_access) rather than per-user isolation. RLS is now ENABLE+FORCE, but the policy allows all rows within the same tenant (NULL tenant_id with no context). Per-user isolation is enforced at the application level instead. See TestTenantIsolation_AuthUsers for tenant-scoped isolation tests.")
 
 	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
@@ -560,7 +560,7 @@ func TestRLSAuthUsersSelectRestriction(t *testing.T) {
 
 // TestRLSAuthSessionsGranularPolicies tests the granular session policies
 func TestRLSAuthSessionsGranularPolicies(t *testing.T) {
-	t.Skip("RLS is disabled on auth.sessions - auth infrastructure tables don't use RLS because signup/signin happen before user context is established. Access control is enforced at the application level instead.")
+	t.Skip("RLS is disabled on auth.sessions - auth infrastructure tables use tenant-scoped RLS (has_tenant_access) rather than per-user isolation. Sessions for NULL tenant_id are visible to any tenant (NULL tenant_id with no context). Per-user isolation is enforced at the application level instead. See TestTenantIsolation_AuthUsers for tenant-scoped isolation tests.")
 
 	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
@@ -871,45 +871,66 @@ func TestRLSAPIKeyUsageRestriction(t *testing.T) {
 	t.Log("Client key usage correctly restricted to own keys only")
 }
 
-// TestRLSForceRowLevelSecurity tests that FORCE RLS prevents table owner bypass
+// TestRLSForceRowLevelSecurity tests that FORCE RLS is enabled on tenant-scoped tables
+// across all schemas. FORCE RLS prevents even the table owner from bypassing RLS policies.
 func TestRLSForceRowLevelSecurity(t *testing.T) {
-	t.Skip("FORCE RLS is not used - RLS is disabled on auth infrastructure tables (users, sessions) because auth operations happen before user context is established. Other tables use regular RLS with SET LOCAL ROLE for access control.")
-
 	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
 	// NO defer tc.Close() - shared context is managed by TestMain
 
-	// This test verifies that FORCE ROW LEVEL SECURITY is enabled
-	// We check a few critical tables to ensure they have FORCE RLS
+	// Tables that should have both ENABLE and FORCE ROW LEVEL SECURITY.
+	// These are tenant-scoped tables where data isolation is critical.
+	expectedTables := []struct {
+		schema string
+		table  string
+	}{
+		// auth schema
+		{"auth", "users"},
+		{"auth", "sessions"},
+		{"auth", "service_keys"},
+		// logging schema
+		{"logging", "entries"},
+		// branching schema
+		{"branching", "branches"},
+		// functions schema
+		{"functions", "edge_functions"},
+		{"functions", "secrets"},
+		{"functions", "secret_versions"},
+		// jobs schema
+		{"jobs", "queue"},
+		// rpc schema
+		{"rpc", "procedures"},
+		// realtime schema
+		{"realtime", "schema_registry"},
+		// storage schema (reference implementation)
+		{"storage", "buckets"},
+		{"storage", "objects"},
+	}
 
-	// Query pg_class to check if FORCE RLS is enabled
-	result := tc.QuerySQLAsSuperuser(`
-		SELECT
-			c.relname as table_name,
-			c.relrowsecurity as rls_enabled,
-			c.relforcerowsecurity as force_rls_enabled
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE n.nspname = 'auth'
-		AND c.relname IN ('users', 'sessions', 'magic_links', 'password_reset_tokens', 'webhooks')
-		ORDER BY c.relname
-	`)
+	for _, expected := range expectedTables {
+		result := tc.QuerySQLAsSuperuser(`
+			SELECT
+				c.relname as table_name,
+				c.relrowsecurity as rls_enabled,
+				c.relforcerowsecurity as force_rls_enabled
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE n.nspname = $1 AND c.relname = $2
+		`, expected.schema, expected.table)
 
-	require.GreaterOrEqual(t, len(result), 5, "Should find at least 5 auth tables")
+		require.Len(t, result, 1, "Should find table %s.%s", expected.schema, expected.table)
 
-	// Verify each table has both RLS and FORCE RLS enabled
-	for _, row := range result {
-		tableName := row["table_name"]
+		row := result[0]
 		rlsEnabled := row["rls_enabled"]
 		forceRLSEnabled := row["force_rls_enabled"]
 
-		require.Equal(t, true, rlsEnabled, "Table %s should have RLS enabled", tableName)
-		require.Equal(t, true, forceRLSEnabled, "Table %s should have FORCE RLS enabled", tableName)
+		require.Equal(t, true, rlsEnabled, "Table %s.%s should have RLS enabled", expected.schema, expected.table)
+		require.Equal(t, true, forceRLSEnabled, "Table %s.%s should have FORCE RLS enabled", expected.schema, expected.table)
 
-		t.Logf("✓ Table auth.%s has FORCE ROW LEVEL SECURITY enabled", tableName)
+		t.Logf("Table %s.%s has FORCE ROW LEVEL SECURITY enabled", expected.schema, expected.table)
 	}
 
-	t.Log("FORCE ROW LEVEL SECURITY correctly enabled on critical tables")
+	t.Log("FORCE ROW LEVEL SECURITY correctly enabled on all tenant-scoped tables")
 }
 
 // TestRLSPerformanceIndexes tests that performance indexes for RLS policies exist

@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO auth;
+SET search_path TO auth, public;
 
 
 --
@@ -396,12 +396,6 @@ CREATE INDEX IF NOT EXISTS idx_saml_assertion_ids_expires ON saml_assertion_ids 
 ALTER TABLE saml_assertion_ids ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: Service role can manage saml_assertion_ids; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY "Service role can manage saml_assertion_ids" ON saml_assertion_ids TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: saml_providers; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -486,12 +480,6 @@ COMMENT ON COLUMN auth.saml_providers.group_attribute IS 'SAML attribute name co
 --
 
 ALTER TABLE saml_providers ENABLE ROW LEVEL SECURITY;
-
---
--- Name: Service role can manage saml_providers; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY "Service role can manage saml_providers" ON saml_providers TO service_role USING (true) WITH CHECK (true);
 
 --
 -- Name: users; Type: TABLE; Schema: -; Owner: -
@@ -587,10 +575,10 @@ CREATE INDEX IF NOT EXISTS idx_auth_users_user_metadata ON users USING gin (user
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: auth_users_service_role_all; Type: POLICY; Schema: -; Owner: -
+-- Name: users; Type: RLS; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_users_service_role_all ON users TO service_role USING (true) WITH CHECK (true);
+ALTER TABLE users FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: client_keys; Type: TABLE; Schema: -; Owner: -
@@ -1282,12 +1270,6 @@ CREATE INDEX IF NOT EXISTS idx_saml_sessions_user_id ON saml_sessions (user_id);
 ALTER TABLE saml_sessions ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: Service role can manage saml_sessions; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY "Service role can manage saml_sessions" ON saml_sessions TO service_role USING (true) WITH CHECK (true);
-
---
 -- Name: service_keys; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1424,6 +1406,12 @@ CREATE INDEX IF NOT EXISTS idx_service_keys_revoked_at ON service_keys (revoked_
 ALTER TABLE service_keys ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: service_keys; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE service_keys FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: service_key_revocations; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1509,10 +1497,10 @@ CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON sessions (user_id);
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: auth_sessions_service_role_all; Type: POLICY; Schema: -; Owner: -
+-- Name: sessions; Type: RLS; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_sessions_service_role_all ON sessions TO service_role USING (true) WITH CHECK (true);
+ALTER TABLE sessions FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: token_blacklist; Type: TABLE; Schema: -; Owner: -
@@ -2061,7 +2049,7 @@ SET search_path = public
 AS $$
     -- Get the current tenant from session context
     SELECT CASE
-        WHEN current_setting('app.current_tenant_id', TRUE) = '' THEN
+        WHEN coalesce(current_setting('app.current_tenant_id', TRUE), '') = '' THEN
             -- No tenant context set, check if resource is in default tenant (NULL)
             resource_tenant_id IS NULL
         ELSE
@@ -2084,6 +2072,7 @@ CREATE OR REPLACE FUNCTION is_admin()
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE
+SET search_path = auth
 AS $$
 BEGIN
     RETURN current_user_role() = 'admin';
@@ -2104,6 +2093,7 @@ CREATE OR REPLACE FUNCTION is_authenticated()
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE
+SET search_path = auth
 AS $$
 BEGIN
     RETURN current_user_id() IS NOT NULL;
@@ -2430,6 +2420,7 @@ CREATE OR REPLACE FUNCTION role()
 RETURNS text
 LANGUAGE plpgsql
 STABLE
+SET search_path = auth
 AS $$
 BEGIN
     RETURN current_user_role();
@@ -2475,6 +2466,7 @@ CREATE OR REPLACE FUNCTION uid()
 RETURNS uuid
 LANGUAGE plpgsql
 STABLE
+SET search_path = auth
 AS $$
 BEGIN
     RETURN current_user_id();

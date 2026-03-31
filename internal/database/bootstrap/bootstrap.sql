@@ -223,7 +223,12 @@ GRANT USAGE, CREATE ON SCHEMA public TO tenant_migration_role;
 
 -- ============================================================================
 -- ALTER DEFAULT PRIVILEGES
--- These ensure future tables automatically get correct permissions
+-- These ensure future tables automatically get correct permissions.
+--
+-- Note: Default privileges are only set for `authenticated` and `service_role`.
+-- Roles `fluxbase_app` and `fluxbase_rls_test` receive per-table GRANTs in the
+-- declarative schema SQL files (internal/database/schema/schemas/*.sql) rather
+-- than default privileges, so pgschema can track them correctly.
 -- ============================================================================
 
 -- Auth schema

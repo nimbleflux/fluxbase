@@ -5,7 +5,7 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
-SET search_path TO ai;
+SET search_path TO ai, public;
 
 
 --
@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     pipeline_type text DEFAULT 'none' NOT NULL,
     pipeline_config jsonb DEFAULT '{}' NOT NULL,
     transformation_function text,
+    tenant_id uuid,
     CONSTRAINT knowledge_bases_pkey PRIMARY KEY (id),
     CONSTRAINT unique_knowledge_base_name_namespace UNIQUE (name, namespace),
     CONSTRAINT knowledge_bases_pipeline_type_check CHECK (pipeline_type IN ('none'::text, 'sql'::text, 'edge_function'::text, 'webhook'::text)),
@@ -128,6 +129,7 @@ CREATE TABLE IF NOT EXISTS knowledge_base_permissions (
     permission text NOT NULL,
     granted_by uuid,
     granted_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT knowledge_base_permissions_pkey PRIMARY KEY (id),
     CONSTRAINT unique_kb_user_permission UNIQUE (knowledge_base_id, user_id),
     CONSTRAINT knowledge_base_permissions_knowledge_base_id_fkey FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_bases (id) ON DELETE CASCADE,
@@ -213,6 +215,7 @@ CREATE TABLE IF NOT EXISTS documents (
     storage_object_id uuid,
     original_filename text,
     owner_id uuid DEFAULT auth.uid(),
+    tenant_id uuid,
     CONSTRAINT documents_pkey PRIMARY KEY (id),
     CONSTRAINT documents_knowledge_base_id_fkey FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_bases (id) ON DELETE CASCADE,
     CONSTRAINT documents_status_check CHECK (status IN ('pending'::text, 'processing'::text, 'indexed'::text, 'failed'::text))
@@ -302,6 +305,7 @@ CREATE TABLE IF NOT EXISTS document_permissions (
     permission text NOT NULL,
     granted_by uuid NOT NULL,
     granted_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT document_permissions_pkey PRIMARY KEY (id),
     CONSTRAINT unique_document_user_permission UNIQUE (document_id, user_id),
     CONSTRAINT document_permissions_document_id_fkey FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE,
@@ -343,12 +347,6 @@ CREATE POLICY ai_doc_perms_dashboard_admin ON document_permissions TO authentica
 --
 
 CREATE POLICY ai_doc_perms_owner_manage ON document_permissions TO authenticated USING (EXISTS ( SELECT 1 FROM documents d WHERE ((d.id = document_permissions.document_id) AND (d.owner_id = auth.uid()))));
-
---
--- Name: ai_doc_perms_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_doc_perms_service_all ON document_permissions TO service_role USING (true);
 
 --
 -- Name: ai_doc_perms_user_read; Type: POLICY; Schema: -; Owner: -
@@ -411,12 +409,6 @@ CREATE POLICY ai_documents_read_shared ON documents FOR SELECT TO authenticated 
 CREATE POLICY ai_documents_read_via_kb ON documents FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1 FROM knowledge_bases kb WHERE ((kb.id = documents.knowledge_base_id) AND (kb.owner_id = auth.current_user_id())))) OR (EXISTS ( SELECT 1 FROM (knowledge_bases kb JOIN knowledge_base_permissions kbp ON ((kb.id = kbp.knowledge_base_id))) WHERE ((kb.id = documents.knowledge_base_id) AND (kbp.user_id = auth.current_user_id())))) OR (EXISTS ( SELECT 1 FROM knowledge_bases kb WHERE ((kb.id = documents.knowledge_base_id) AND (kb.visibility = 'public')))));
 
 --
--- Name: ai_documents_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_documents_service_all ON documents TO service_role USING (true);
-
---
 -- Name: ai_documents_update_own; Type: POLICY; Schema: -; Owner: -
 --
 
@@ -456,6 +448,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     embedding public.vector(1536),
     metadata jsonb DEFAULT '{}',
     created_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT chunks_pkey PRIMARY KEY (id),
     CONSTRAINT unique_chunk_document_index UNIQUE (document_id, chunk_index),
     CONSTRAINT chunks_document_id_fkey FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE,
@@ -526,12 +519,6 @@ CREATE POLICY ai_chunks_read_own_docs ON chunks FOR SELECT TO authenticated USIN
 CREATE POLICY ai_chunks_read_shared_docs ON chunks FOR SELECT TO authenticated USING (EXISTS ( SELECT 1 FROM (documents d JOIN document_permissions dp ON ((dp.document_id = d.id))) WHERE ((d.id = chunks.document_id) AND (dp.user_id = auth.uid()))));
 
 --
--- Name: ai_chunks_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_chunks_service_all ON chunks TO service_role USING (true);
-
---
 -- Name: ai_chunks_user_isolation; Type: POLICY; Schema: -; Owner: -
 --
 
@@ -551,6 +538,7 @@ CREATE TABLE IF NOT EXISTS entities (
     metadata jsonb DEFAULT '{}',
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT entities_pkey PRIMARY KEY (id),
     CONSTRAINT entity_unique UNIQUE (knowledge_base_id, entity_type, canonical_name),
     CONSTRAINT entities_knowledge_base_id_fkey FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_bases (id) ON DELETE CASCADE,
@@ -600,6 +588,7 @@ CREATE TABLE IF NOT EXISTS document_entities (
     salience double precision DEFAULT 0.0,
     context text,
     created_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT document_entities_pkey PRIMARY KEY (id),
     CONSTRAINT document_entity_unique UNIQUE (document_id, entity_id),
     CONSTRAINT document_entities_document_id_fkey FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE,
@@ -644,6 +633,7 @@ CREATE TABLE IF NOT EXISTS entity_relationships (
     confidence double precision,
     metadata jsonb DEFAULT '{}',
     created_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT entity_relationships_pkey PRIMARY KEY (id),
     CONSTRAINT relationship_unique UNIQUE (knowledge_base_id, source_entity_id, target_entity_id, relationship_type),
     CONSTRAINT entity_relationships_knowledge_base_id_fkey FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_bases (id) ON DELETE CASCADE,
@@ -703,6 +693,7 @@ CREATE TABLE IF NOT EXISTS providers (
     use_for_embeddings boolean,
     embedding_model text,
     read_only boolean DEFAULT false,
+    tenant_id uuid,
     CONSTRAINT providers_pkey PRIMARY KEY (id),
     CONSTRAINT providers_name_key UNIQUE (name),
     CONSTRAINT providers_provider_type_check CHECK (provider_type IN ('openai'::text, 'azure'::text, 'ollama'::text))
@@ -766,12 +757,6 @@ ALTER TABLE providers ENABLE ROW LEVEL SECURITY;
 CREATE POLICY ai_providers_read ON providers FOR SELECT TO authenticated USING (enabled = true);
 
 --
--- Name: ai_providers_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_providers_service_all ON providers TO service_role USING (true);
-
---
 -- Name: chatbots; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -813,6 +798,7 @@ CREATE TABLE IF NOT EXISTS chatbots (
     mcp_tools text[] DEFAULT ARRAY[]::text[],
     use_mcp_schema boolean DEFAULT false,
     require_roles text[] DEFAULT ARRAY[]::text[],
+    tenant_id uuid,
     CONSTRAINT chatbots_pkey PRIMARY KEY (id),
     CONSTRAINT unique_chatbot_name_namespace UNIQUE (name, namespace),
     CONSTRAINT chatbots_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES providers (id) ON DELETE SET NULL
@@ -912,12 +898,6 @@ ALTER TABLE chatbots ENABLE ROW LEVEL SECURITY;
 CREATE POLICY ai_chatbots_read ON chatbots FOR SELECT TO authenticated USING ((enabled = true) AND (is_public = true));
 
 --
--- Name: ai_chatbots_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_chatbots_service_all ON chatbots TO service_role USING (true);
-
---
 -- Name: chatbot_knowledge_bases; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -936,6 +916,7 @@ CREATE TABLE IF NOT EXISTS chatbot_knowledge_bases (
     metadata jsonb DEFAULT '{}',
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT chatbot_knowledge_bases_pkey PRIMARY KEY (id),
     CONSTRAINT chatbot_kb_unique UNIQUE (chatbot_id, knowledge_base_id),
     CONSTRAINT chatbot_knowledge_bases_chatbot_id_fkey FOREIGN KEY (chatbot_id) REFERENCES chatbots (id) ON DELETE CASCADE,
@@ -989,6 +970,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     updated_at timestamptz DEFAULT now(),
     last_message_at timestamptz DEFAULT now(),
     expires_at timestamptz,
+    tenant_id uuid,
     CONSTRAINT conversations_pkey PRIMARY KEY (id),
     CONSTRAINT conversations_chatbot_id_fkey FOREIGN KEY (chatbot_id) REFERENCES chatbots (id) ON DELETE CASCADE,
     CONSTRAINT conversations_status_check CHECK (status IN ('active'::text, 'archived'::text, 'deleted'::text))
@@ -1040,12 +1022,6 @@ ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 CREATE POLICY ai_conversations_own ON conversations TO authenticated USING (user_id = auth.current_user_id()) WITH CHECK (user_id = auth.current_user_id());
 
 --
--- Name: ai_conversations_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_conversations_service_all ON conversations TO service_role USING (true);
-
---
 -- Name: messages; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1068,6 +1044,7 @@ CREATE TABLE IF NOT EXISTS messages (
     query_results jsonb,
     created_at timestamptz DEFAULT now(),
     sequence_number integer NOT NULL,
+    tenant_id uuid,
     CONSTRAINT messages_pkey PRIMARY KEY (id),
     CONSTRAINT messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE,
     CONSTRAINT messages_role_check CHECK (role IN ('user'::text, 'assistant'::text, 'system'::text, 'tool'::text))
@@ -1116,12 +1093,6 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY ai_messages_own ON messages TO authenticated USING (conversation_id IN ( SELECT conversations.id FROM conversations WHERE (conversations.user_id = auth.current_user_id()))) WITH CHECK (conversation_id IN ( SELECT conversations.id FROM conversations WHERE (conversations.user_id = auth.current_user_id())));
 
 --
--- Name: ai_messages_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_messages_service_all ON messages TO service_role USING (true);
-
---
 -- Name: query_audit_log; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1147,6 +1118,7 @@ CREATE TABLE IF NOT EXISTS query_audit_log (
     ip_address inet,
     user_agent text,
     created_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT query_audit_log_pkey PRIMARY KEY (id),
     CONSTRAINT query_audit_log_chatbot_id_fkey FOREIGN KEY (chatbot_id) REFERENCES chatbots (id) ON DELETE SET NULL,
     CONSTRAINT query_audit_log_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE SET NULL,
@@ -1193,12 +1165,6 @@ CREATE INDEX IF NOT EXISTS idx_ai_query_audit_user ON query_audit_log (user_id);
 ALTER TABLE query_audit_log ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: ai_query_audit_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_query_audit_service_all ON query_audit_log TO service_role USING (true);
-
---
 -- Name: retrieval_log; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1215,6 +1181,7 @@ CREATE TABLE IF NOT EXISTS retrieval_log (
     similarity_scores double precision[],
     retrieval_duration_ms integer,
     created_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT retrieval_log_pkey PRIMARY KEY (id),
     CONSTRAINT retrieval_log_chatbot_id_fkey FOREIGN KEY (chatbot_id) REFERENCES chatbots (id) ON DELETE SET NULL,
     CONSTRAINT retrieval_log_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE SET NULL,
@@ -1255,12 +1222,6 @@ ALTER TABLE retrieval_log ENABLE ROW LEVEL SECURITY;
 CREATE POLICY ai_retrieval_log_dashboard_admin ON retrieval_log FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
 
 --
--- Name: ai_retrieval_log_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_retrieval_log_service_all ON retrieval_log TO service_role USING (true);
-
---
 -- Name: table_export_sync_configs; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1282,6 +1243,7 @@ CREATE TABLE IF NOT EXISTS table_export_sync_configs (
     last_sync_error text,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT table_export_sync_configs_pkey PRIMARY KEY (id),
     CONSTRAINT table_export_sync_configs_knowledge_base_id_schema_name_tab_key UNIQUE (knowledge_base_id, schema_name, table_name),
     CONSTRAINT table_export_sync_configs_knowledge_base_id_fkey FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_bases (id) ON DELETE CASCADE,
@@ -1311,12 +1273,6 @@ CREATE INDEX IF NOT EXISTS idx_table_export_sync_table ON table_export_sync_conf
 --
 
 ALTER TABLE table_export_sync_configs ENABLE ROW LEVEL SECURITY;
-
---
--- Name: Service role can manage all sync configs; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY "Service role can manage all sync configs" ON table_export_sync_configs TO service_role USING (true) WITH CHECK (true);
 
 --
 -- Name: Users can delete sync configs for their knowledge bases; Type: POLICY; Schema: -; Owner: -
@@ -1355,6 +1311,7 @@ CREATE TABLE IF NOT EXISTS user_chatbot_usage (
     tokens_used integer DEFAULT 0,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT user_chatbot_usage_pkey PRIMARY KEY (id),
     CONSTRAINT user_chatbot_usage_user_id_chatbot_id_date_key UNIQUE (user_id, chatbot_id, date),
     CONSTRAINT user_chatbot_usage_chatbot_id_fkey FOREIGN KEY (chatbot_id) REFERENCES chatbots (id) ON DELETE CASCADE
@@ -1388,12 +1345,6 @@ ALTER TABLE user_chatbot_usage ENABLE ROW LEVEL SECURITY;
 CREATE POLICY ai_usage_own_read ON user_chatbot_usage FOR SELECT TO authenticated USING (user_id = auth.current_user_id());
 
 --
--- Name: ai_usage_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_usage_service_all ON user_chatbot_usage TO service_role USING (true);
-
---
 -- Name: user_provider_preferences; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1405,6 +1356,7 @@ CREATE TABLE IF NOT EXISTS user_provider_preferences (
     model_override text,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT user_provider_preferences_pkey PRIMARY KEY (id),
     CONSTRAINT user_provider_preferences_user_id_key UNIQUE (user_id),
     CONSTRAINT user_provider_preferences_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES providers (id) ON DELETE SET NULL
@@ -1432,12 +1384,6 @@ ALTER TABLE user_provider_preferences ENABLE ROW LEVEL SECURITY;
 CREATE POLICY ai_user_prefs_own ON user_provider_preferences TO authenticated USING (user_id = auth.current_user_id()) WITH CHECK (user_id = auth.current_user_id());
 
 --
--- Name: ai_user_prefs_service_all; Type: POLICY; Schema: -; Owner: -
---
-
-CREATE POLICY ai_user_prefs_service_all ON user_provider_preferences TO service_role USING (true);
-
---
 -- Name: user_quotas; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1451,6 +1397,7 @@ CREATE TABLE IF NOT EXISTS user_quotas (
     used_storage_bytes bigint DEFAULT 0 NOT NULL,
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT user_quotas_pkey PRIMARY KEY (user_id),
     CONSTRAINT user_quotas_max_chunks_check CHECK (max_chunks >= 0),
     CONSTRAINT user_quotas_max_documents_check CHECK (max_documents >= 0),
@@ -1976,6 +1923,277 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+
+--
+-- Multi-tenancy: Add tenant_id column, FORCE ROW LEVEL SECURITY, tenant policy,
+-- and auto-populate trigger for all ai tables
+--
+
+-- knowledge_bases
+CREATE INDEX IF NOT EXISTS idx_ai_knowledge_bases_tenant_id ON knowledge_bases (tenant_id);
+
+ALTER TABLE knowledge_bases FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_knowledge_bases_tenant ON knowledge_bases TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_knowledge_bases_set_tenant_id
+    BEFORE INSERT ON knowledge_bases
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- knowledge_base_permissions
+CREATE INDEX IF NOT EXISTS idx_ai_knowledge_base_permissions_tenant_id ON knowledge_base_permissions (tenant_id);
+
+ALTER TABLE knowledge_base_permissions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_knowledge_base_permissions_tenant ON knowledge_base_permissions TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_knowledge_base_permissions_set_tenant_id
+    BEFORE INSERT ON knowledge_base_permissions
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- documents
+CREATE INDEX IF NOT EXISTS idx_ai_documents_tenant_id ON documents (tenant_id);
+
+ALTER TABLE documents FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_documents_tenant ON documents TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_documents_set_tenant_id
+    BEFORE INSERT ON documents
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- document_permissions
+CREATE INDEX IF NOT EXISTS idx_ai_document_permissions_tenant_id ON document_permissions (tenant_id);
+
+ALTER TABLE document_permissions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_document_permissions_tenant ON document_permissions TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_document_permissions_set_tenant_id
+    BEFORE INSERT ON document_permissions
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- chunks
+CREATE INDEX IF NOT EXISTS idx_ai_chunks_tenant_id ON chunks (tenant_id);
+
+ALTER TABLE chunks FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_chunks_tenant ON chunks TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_chunks_set_tenant_id
+    BEFORE INSERT ON chunks
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- entities
+CREATE INDEX IF NOT EXISTS idx_ai_entities_tenant_id ON entities (tenant_id);
+
+ALTER TABLE entities FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_entities_tenant ON entities TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_entities_set_tenant_id
+    BEFORE INSERT ON entities
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- document_entities
+CREATE INDEX IF NOT EXISTS idx_ai_document_entities_tenant_id ON document_entities (tenant_id);
+
+ALTER TABLE document_entities FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_document_entities_tenant ON document_entities TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_document_entities_set_tenant_id
+    BEFORE INSERT ON document_entities
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- entity_relationships
+CREATE INDEX IF NOT EXISTS idx_ai_entity_relationships_tenant_id ON entity_relationships (tenant_id);
+
+ALTER TABLE entity_relationships FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_entity_relationships_tenant ON entity_relationships TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_entity_relationships_set_tenant_id
+    BEFORE INSERT ON entity_relationships
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- providers
+CREATE INDEX IF NOT EXISTS idx_ai_providers_tenant_id ON providers (tenant_id);
+
+ALTER TABLE providers FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_providers_tenant ON providers TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_providers_set_tenant_id
+    BEFORE INSERT ON providers
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- chatbots
+CREATE INDEX IF NOT EXISTS idx_ai_chatbots_tenant_id ON chatbots (tenant_id);
+
+ALTER TABLE chatbots FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_chatbots_tenant ON chatbots TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_chatbots_set_tenant_id
+    BEFORE INSERT ON chatbots
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- chatbot_knowledge_bases
+CREATE INDEX IF NOT EXISTS idx_ai_chatbot_knowledge_bases_tenant_id ON chatbot_knowledge_bases (tenant_id);
+
+ALTER TABLE chatbot_knowledge_bases FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_chatbot_knowledge_bases_tenant ON chatbot_knowledge_bases TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_chatbot_knowledge_bases_set_tenant_id
+    BEFORE INSERT ON chatbot_knowledge_bases
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- conversations
+CREATE INDEX IF NOT EXISTS idx_ai_conversations_tenant_id ON conversations (tenant_id);
+
+ALTER TABLE conversations FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_conversations_tenant ON conversations TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_conversations_set_tenant_id
+    BEFORE INSERT ON conversations
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- messages
+CREATE INDEX IF NOT EXISTS idx_ai_messages_tenant_id ON messages (tenant_id);
+
+ALTER TABLE messages FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_messages_tenant ON messages TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_messages_set_tenant_id
+    BEFORE INSERT ON messages
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- query_audit_log
+CREATE INDEX IF NOT EXISTS idx_ai_query_audit_log_tenant_id ON query_audit_log (tenant_id);
+
+ALTER TABLE query_audit_log FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_query_audit_log_tenant ON query_audit_log TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_query_audit_log_set_tenant_id
+    BEFORE INSERT ON query_audit_log
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- retrieval_log
+CREATE INDEX IF NOT EXISTS idx_ai_retrieval_log_tenant_id ON retrieval_log (tenant_id);
+
+ALTER TABLE retrieval_log FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_retrieval_log_tenant ON retrieval_log TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_retrieval_log_set_tenant_id
+    BEFORE INSERT ON retrieval_log
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- table_export_sync_configs
+CREATE INDEX IF NOT EXISTS idx_ai_table_export_sync_configs_tenant_id ON table_export_sync_configs (tenant_id);
+
+ALTER TABLE table_export_sync_configs FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_table_export_sync_configs_tenant ON table_export_sync_configs TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_table_export_sync_configs_set_tenant_id
+    BEFORE INSERT ON table_export_sync_configs
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- user_chatbot_usage
+CREATE INDEX IF NOT EXISTS idx_ai_user_chatbot_usage_tenant_id ON user_chatbot_usage (tenant_id);
+
+ALTER TABLE user_chatbot_usage FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_user_chatbot_usage_tenant ON user_chatbot_usage TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_user_chatbot_usage_set_tenant_id
+    BEFORE INSERT ON user_chatbot_usage
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- user_provider_preferences
+CREATE INDEX IF NOT EXISTS idx_ai_user_provider_preferences_tenant_id ON user_provider_preferences (tenant_id);
+
+ALTER TABLE user_provider_preferences FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_user_provider_preferences_tenant ON user_provider_preferences TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_user_provider_preferences_set_tenant_id
+    BEFORE INSERT ON user_provider_preferences
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- user_quotas
+CREATE INDEX IF NOT EXISTS idx_ai_user_quotas_tenant_id ON user_quotas (tenant_id);
+
+ALTER TABLE user_quotas FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_user_quotas_tenant ON user_quotas TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_user_quotas_set_tenant_id
+    BEFORE INSERT ON user_quotas
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
 
 --
 -- Cross-schema FKs moved to post-schema-fks.sql
