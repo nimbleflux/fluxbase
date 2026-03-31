@@ -15,5 +15,8 @@
   },
   "devDependencies": {
     "picomatch": "^4.0.4"
+  },
+  "overrides": {
+    "picomatch": "^4.0.4"
   }
 }

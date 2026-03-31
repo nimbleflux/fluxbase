@@ -5,6 +5,8 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
+SET search_path TO rpc;
+
 
 --
 -- Name: procedures; Type: TABLE; Schema: -; Owner: -

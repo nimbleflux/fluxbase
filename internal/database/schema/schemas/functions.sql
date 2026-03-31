@@ -5,6 +5,8 @@
 -- Dumped from database version PostgreSQL 18.3
 -- Dumped by pgschema version 1.7.4
 
+SET search_path TO functions;
+
 
 --
 -- Name: edge_functions; Type: TABLE; Schema: -; Owner: -
