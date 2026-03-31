@@ -21,7 +21,8 @@ func setupRLSTest(t *testing.T) *test.TestContext {
 	// Must use superuser because RLS test user doesn't have DELETE permission on some tables
 	tc.ExecuteSQLAsSuperuser(`
 		-- Delete only test users (those with test email patterns)
-		DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com';
+		DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'
+			OR email IN ('user@example.com', 'admin@example.com', 'user1@example.com', 'user2@example.com');
 		-- Clean test-specific client_keys
 		DELETE FROM auth.client_keys WHERE name LIKE '%Test%' OR name LIKE '%test%';
 		-- Clean impersonation sessions for deleted users (will cascade)

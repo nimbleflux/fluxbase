@@ -250,6 +250,29 @@ jobs:
           mkdir -p internal/adminui/dist
           echo '<!DOCTYPE html><html><head><title>Placeholder</title></head><body></body></html>' > internal/adminui/dist/index.html
 
+      - name: Increase PostgreSQL max_connections
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # Default max_connections=100 is too low for test connection pools.
+          # The e2e tests create multiple pools (main, superuser, RLS) that
+          # together consume ~12+ connections, and the server's internal pools
+          # add more. Increase to 200 to prevent connection exhaustion.
+          psql -h localhost -U postgres -d fluxbase_test -c "ALTER SYSTEM SET max_connections = 200;"
+          PG_CONTAINER=$(docker ps --format '{{.ID}}' --filter "publish=5432")
+          if [ -n "$PG_CONTAINER" ]; then
+            docker restart "$PG_CONTAINER"
+            sleep 5
+            # Wait for postgres to be ready after restart
+            for i in $(seq 1 30); do
+              if psql -h localhost -U postgres -d fluxbase_test -c "SELECT 1" > /dev/null 2>&1; then
+                echo "PostgreSQL ready with max_connections=200"
+                break
+              fi
+              sleep 1
+            done
+          fi
+
       - name: Setup database users
         env:
           PGPASSWORD: postgres

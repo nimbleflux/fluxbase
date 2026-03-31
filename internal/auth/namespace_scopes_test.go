@@ -30,21 +30,21 @@ func TestParseNamespaceScope(t *testing.T) {
 		// Two-part scopes (action:resource)
 		{
 			name:              "execute functions",
-			scope:             "execute:functions",
+			scope:             "functions:execute",
 			expectedAction:    "execute",
 			expectedResource:  "functions",
 			expectedNamespace: "*",
 		},
 		{
 			name:              "read tables",
-			scope:             "read:tables",
+			scope:             "tables:read",
 			expectedAction:    "read",
 			expectedResource:  "tables",
 			expectedNamespace: "*",
 		},
 		{
 			name:              "write storage",
-			scope:             "write:storage",
+			scope:             "storage:write",
 			expectedAction:    "write",
 			expectedResource:  "storage",
 			expectedNamespace: "*",
@@ -52,21 +52,21 @@ func TestParseNamespaceScope(t *testing.T) {
 		// Three-part scopes (action:resource:namespace)
 		{
 			name:              "execute functions in prod namespace",
-			scope:             "execute:functions:prod",
+			scope:             "functions:execute:prod",
 			expectedAction:    "execute",
 			expectedResource:  "functions",
 			expectedNamespace: "prod",
 		},
 		{
 			name:              "execute functions with prefix pattern",
-			scope:             "execute:functions:prod-*",
+			scope:             "functions:execute:prod-*",
 			expectedAction:    "execute",
 			expectedResource:  "functions",
 			expectedNamespace: "prod-*",
 		},
 		{
 			name:              "read rpc in specific namespace",
-			scope:             "read:rpc:api-v1",
+			scope:             "rpc:read:api-v1",
 			expectedAction:    "read",
 			expectedResource:  "rpc",
 			expectedNamespace: "api-v1",
@@ -74,14 +74,14 @@ func TestParseNamespaceScope(t *testing.T) {
 		// Edge cases
 		{
 			name:              "namespace with colon",
-			scope:             "execute:functions:prod:v1",
+			scope:             "functions:execute:prod:v1",
 			expectedAction:    "execute",
 			expectedResource:  "functions",
 			expectedNamespace: "prod:v1",
 		},
 		{
 			name:              "namespace with multiple colons",
-			scope:             "read:tables:schema:public:v2",
+			scope:             "tables:read:schema:public:v2",
 			expectedAction:    "read",
 			expectedResource:  "tables",
 			expectedNamespace: "schema:public:v2",
@@ -247,7 +247,7 @@ func TestHasScopeForNamespace(t *testing.T) {
 		// Exact matches
 		{
 			name:      "exact scope match",
-			scopes:    []string{"execute:functions:production"},
+			scopes:    []string{"functions:execute:production"},
 			action:    "execute",
 			resource:  "functions",
 			namespace: "production",
@@ -255,7 +255,7 @@ func TestHasScopeForNamespace(t *testing.T) {
 		},
 		{
 			name:      "scope without namespace matches all namespaces",
-			scopes:    []string{"execute:functions"},
+			scopes:    []string{"functions:execute"},
 			action:    "execute",
 			resource:  "functions",
 			namespace: "production",
@@ -264,7 +264,7 @@ func TestHasScopeForNamespace(t *testing.T) {
 		// Pattern matches
 		{
 			name:      "prefix pattern matches namespace",
-			scopes:    []string{"execute:functions:prod-*"},
+			scopes:    []string{"functions:execute:prod-*"},
 			action:    "execute",
 			resource:  "functions",
 			namespace: "prod-us-east",
@@ -272,7 +272,7 @@ func TestHasScopeForNamespace(t *testing.T) {
 		},
 		{
 			name:      "prefix pattern does not match different namespace",
-			scopes:    []string{"execute:functions:prod-*"},
+			scopes:    []string{"functions:execute:prod-*"},
 			action:    "execute",
 			resource:  "functions",
 			namespace: "staging-us-east",
@@ -281,7 +281,7 @@ func TestHasScopeForNamespace(t *testing.T) {
 		// Multiple scopes
 		{
 			name:      "one of multiple scopes matches",
-			scopes:    []string{"read:tables:staging", "execute:functions:production"},
+			scopes:    []string{"tables:read:staging", "functions:execute:production"},
 			action:    "execute",
 			resource:  "functions",
 			namespace: "production",
@@ -289,7 +289,7 @@ func TestHasScopeForNamespace(t *testing.T) {
 		},
 		{
 			name:      "none of multiple scopes match",
-			scopes:    []string{"read:tables:staging", "execute:functions:development"},
+			scopes:    []string{"tables:read:staging", "functions:execute:development"},
 			action:    "execute",
 			resource:  "functions",
 			namespace: "production",
@@ -298,7 +298,7 @@ func TestHasScopeForNamespace(t *testing.T) {
 		// Action mismatch
 		{
 			name:      "wrong action does not match",
-			scopes:    []string{"read:functions:production"},
+			scopes:    []string{"functions:read:production"},
 			action:    "execute",
 			resource:  "functions",
 			namespace: "production",
@@ -307,7 +307,7 @@ func TestHasScopeForNamespace(t *testing.T) {
 		// Resource mismatch
 		{
 			name:      "wrong resource does not match",
-			scopes:    []string{"execute:rpc:production"},
+			scopes:    []string{"rpc:execute:production"},
 			action:    "execute",
 			resource:  "functions",
 			namespace: "production",
@@ -316,7 +316,7 @@ func TestHasScopeForNamespace(t *testing.T) {
 		// Wildcard action
 		{
 			name:      "wildcard action matches any action",
-			scopes:    []string{"*:functions:production"},
+			scopes:    []string{"functions:*:production"},
 			action:    "execute",
 			resource:  "functions",
 			namespace: "production",
@@ -325,7 +325,7 @@ func TestHasScopeForNamespace(t *testing.T) {
 		// Wildcard resource
 		{
 			name:      "wildcard resource matches any resource",
-			scopes:    []string{"execute:*:production"},
+			scopes:    []string{"*:execute:production"},
 			action:    "execute",
 			resource:  "functions",
 			namespace: "production",
@@ -382,14 +382,14 @@ func TestExtractAllowedNamespaces(t *testing.T) {
 		// Namespace wildcard in scope
 		{
 			name:     "namespace wildcard allows all",
-			scopes:   []string{"execute:functions:*"},
+			scopes:   []string{"functions:execute:*"},
 			resource: "functions",
 			expected: nil,
 			isNil:    true,
 		},
 		{
 			name:     "prefix pattern allows all",
-			scopes:   []string{"execute:functions:prod-*"},
+			scopes:   []string{"functions:execute:prod-*"},
 			resource: "functions",
 			expected: nil,
 			isNil:    true,
@@ -397,14 +397,14 @@ func TestExtractAllowedNamespaces(t *testing.T) {
 		// Specific namespaces
 		{
 			name:     "single specific namespace",
-			scopes:   []string{"execute:functions:production"},
+			scopes:   []string{"functions:execute:production"},
 			resource: "functions",
 			expected: []string{"production"},
 			isNil:    false,
 		},
 		{
 			name:     "multiple specific namespaces",
-			scopes:   []string{"execute:functions:production", "execute:functions:staging"},
+			scopes:   []string{"functions:execute:production", "functions:execute:staging"},
 			resource: "functions",
 			expected: []string{"production", "staging"},
 			isNil:    false,
@@ -412,7 +412,7 @@ func TestExtractAllowedNamespaces(t *testing.T) {
 		// No namespace in scope = all allowed
 		{
 			name:     "scope without namespace allows all",
-			scopes:   []string{"execute:functions"},
+			scopes:   []string{"functions:execute"},
 			resource: "functions",
 			expected: nil,
 			isNil:    true,
@@ -420,7 +420,7 @@ func TestExtractAllowedNamespaces(t *testing.T) {
 		// Resource mismatch
 		{
 			name:     "scopes for different resource returns empty",
-			scopes:   []string{"execute:rpc:production"},
+			scopes:   []string{"rpc:execute:production"},
 			resource: "functions",
 			expected: []string{},
 			isNil:    false,
@@ -444,7 +444,7 @@ func TestExtractAllowedNamespaces(t *testing.T) {
 		// Mixed scopes
 		{
 			name:     "mixed specific and wildcard returns all",
-			scopes:   []string{"execute:functions:production", "execute:functions:*"},
+			scopes:   []string{"functions:execute:production", "functions:execute:*"},
 			resource: "functions",
 			expected: nil,
 			isNil:    true,
@@ -452,14 +452,14 @@ func TestExtractAllowedNamespaces(t *testing.T) {
 		// Different actions
 		{
 			name:     "read action extracts namespaces",
-			scopes:   []string{"read:functions:production"},
+			scopes:   []string{"functions:read:production"},
 			resource: "functions",
 			expected: []string{"production"},
 			isNil:    false,
 		},
 		{
 			name:     "write action extracts namespaces",
-			scopes:   []string{"write:functions:staging"},
+			scopes:   []string{"functions:write:staging"},
 			resource: "functions",
 			expected: []string{"staging"},
 			isNil:    false,
@@ -467,7 +467,7 @@ func TestExtractAllowedNamespaces(t *testing.T) {
 		// Wildcard action
 		{
 			name:     "wildcard action extracts namespaces",
-			scopes:   []string{"*:functions:production"},
+			scopes:   []string{"functions:*:production"},
 			resource: "functions",
 			expected: []string{"production"},
 			isNil:    false,
@@ -475,7 +475,7 @@ func TestExtractAllowedNamespaces(t *testing.T) {
 		// Wildcard resource
 		{
 			name:     "wildcard resource extracts namespaces",
-			scopes:   []string{"execute:*:production"},
+			scopes:   []string{"*:execute:production"},
 			resource: "functions",
 			expected: []string{"production"},
 			isNil:    false,
@@ -602,7 +602,7 @@ func TestNamespaceScopes_Security(t *testing.T) {
 	})
 
 	t.Run("prevents access without explicit scope", func(t *testing.T) {
-		scopes := []string{"read:tables:production"}
+		scopes := []string{"tables:read:production"}
 
 		// Should not have access to functions
 		assert.False(t, HasScopeForNamespace(scopes, "execute", "functions", "production"))
@@ -615,7 +615,7 @@ func TestNamespaceScopes_Security(t *testing.T) {
 	})
 
 	t.Run("case sensitivity prevents privilege escalation", func(t *testing.T) {
-		scopes := []string{"execute:functions:production"}
+		scopes := []string{"functions:execute:production"}
 
 		// Capital letters should not match
 		assert.False(t, HasScopeForNamespace(scopes, "execute", "functions", "Production"))
@@ -623,7 +623,7 @@ func TestNamespaceScopes_Security(t *testing.T) {
 	})
 
 	t.Run("partial matches do not grant access", func(t *testing.T) {
-		scopes := []string{"execute:functions:prod"}
+		scopes := []string{"functions:execute:prod"}
 
 		// "production" does not match "prod" (not a prefix pattern)
 		assert.False(t, HasScopeForNamespace(scopes, "execute", "functions", "production"))
@@ -637,9 +637,9 @@ func TestNamespaceScopes_Security(t *testing.T) {
 func BenchmarkParseNamespaceScope(b *testing.B) {
 	scopes := []string{
 		"*",
-		"execute:functions",
-		"execute:functions:production",
-		"execute:functions:prod-us-east-*",
+		"functions:execute",
+		"functions:execute:production",
+		"functions:execute:prod-us-east-*",
 	}
 
 	b.ResetTimer()
@@ -671,10 +671,10 @@ func BenchmarkMatchNamespacePattern(b *testing.B) {
 
 func BenchmarkHasScopeForNamespace(b *testing.B) {
 	scopes := []string{
-		"read:tables:production",
-		"execute:functions:prod-*",
-		"write:storage:staging",
-		"*:rpc:*",
+		"tables:read:production",
+		"functions:execute:prod-*",
+		"storage:write:staging",
+		"rpc:*:*",
 	}
 
 	b.ResetTimer()
@@ -685,10 +685,10 @@ func BenchmarkHasScopeForNamespace(b *testing.B) {
 
 func BenchmarkExtractAllowedNamespaces(b *testing.B) {
 	scopes := []string{
-		"execute:functions:production",
-		"execute:functions:staging",
-		"execute:functions:development",
-		"read:tables:*",
+		"functions:execute:production",
+		"functions:execute:staging",
+		"functions:execute:development",
+		"tables:read:*",
 	}
 
 	b.ResetTimer()

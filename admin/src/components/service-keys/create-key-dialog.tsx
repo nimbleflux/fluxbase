@@ -136,13 +136,13 @@ export function CreateKeyDialog({
 
   const SCOPE_OPTIONS = [
     { id: "*", label: "All Scopes" },
-    { id: "read:tables", label: "Read Tables" },
-    { id: "write:tables", label: "Write Tables" },
-    { id: "read:storage", label: "Read Storage" },
-    { id: "write:storage", label: "Write Storage" },
-    { id: "execute:functions", label: "Execute Functions" },
-    { id: "read:auth", label: "Read Auth" },
-    { id: "write:auth", label: "Write Auth" },
+    { id: "tables:read", label: "Read Tables" },
+    { id: "tables:write", label: "Write Tables" },
+    { id: "storage:read", label: "Read Storage" },
+    { id: "storage:write", label: "Write Storage" },
+    { id: "functions:execute", label: "Execute Functions" },
+    { id: "auth:read", label: "Read Auth" },
+    { id: "auth:write", label: "Write Auth" },
   ];
 
   return (

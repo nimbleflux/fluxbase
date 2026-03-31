@@ -170,6 +170,19 @@ test/e2e/                # End-to-end tests
 - `internal/middleware/tenant.go` - Tenant context extraction middleware
 - `internal/database/schema/schemas/platform.sql` - Platform schema with tenants table (declarative)
 
+**Migrations:**
+
+- `internal/migrations/handler.go` - Migrations API HTTP handlers (CRUD, apply, rollback, sync)
+- `internal/migrations/executor.go` - Main database migration execution (`ExecuteWithAdminRole`)
+- `internal/migrations/tenant_executor.go` - Tenant-scoped execution (`SET LOCAL ROLE tenant_migration_role`)
+- `internal/migrations/storage.go` - Migration metadata CRUD (`migrations.app` table)
+- `internal/migrations/declarative.go` - Declarative schema service (pgschema plan/apply/dump)
+- `internal/tenantdb/declarative.go` - Per-tenant declarative schema service
+- `internal/api/routes/migrations.go` - Migration route definitions (`/api/v1/admin/migrations`)
+- `internal/middleware/migrations_security.go` - Migrations API auth, IP allowlist, rate limiting
+- `internal/database/connection.go` - Filesystem migration runner (`runUserMigrations`)
+- `cli/cmd/migrations.go` - CLI commands (`fluxbase migrations sync/list/create/apply/rollback`)
+
 ## Common Commands
 
 ```bash
@@ -179,8 +192,7 @@ make build            # Production build with embedded admin
 
 # Database Operations
 make db-reset         # Reset database (preserve user data)
-make db-reset-full    # Full reset - bootstrap runs on next server start
-make db-reset-full    # Full reset (destroys all data)
+make db-reset-full    # Full reset (destroys all data, bootstrap runs on next server start)
 
 # Testing
 make test             # Unit tests only (2min)
@@ -214,7 +226,34 @@ make setup-dev        # Install dependencies + git hooks
 
 Three-layer system: defaults → `fluxbase.yaml` → `FLUXBASE_*` env vars
 
-Key config sections: server, database, auth, storage, realtime, functions, jobs, email, ai, mcp, branching, graphql, rpc, webhooks, scaling, observability (metrics, tracing), security, cors, api, logging
+Key config sections: server, database, auth, storage, realtime, functions, jobs, email, ai, mcp, branching, graphql, rpc, webhooks, scaling, observability (metrics, tracing), security, cors, api, logging, migrations, tenants
+
+**Database Configuration (relevant to migrations):**
+
+```yaml
+database:
+  user_migrations_path: "/migrations/user"  # Local path for filesystem migrations (env: FLUXBASE_DATABASE_USER_MIGRATIONS_PATH)
+```
+
+**Migrations API Configuration:**
+
+```yaml
+migrations:
+  enabled: true
+  allowed_ip_ranges: []  # IP CIDR allowlist (default: Docker/private networks)
+```
+
+**Tenant Declarative Schema Configuration:**
+
+```yaml
+tenants:
+  declarative:
+    enabled: true
+    schema_dir: "schemas"          # Directory: {schema_dir}/{tenant-slug}/public.sql
+    on_create: true                # Apply on tenant creation
+    on_startup: false              # Apply on server startup
+    allow_destructive: false       # Allow DROP/ALTER in tenant schemas
+```
 
 **MCP Configuration:**
 
@@ -306,7 +345,7 @@ cd sdk-react && bun run type-check  # Uses tsc --noEmit
 - **ESLint**: TypeScript ESLint, React Hooks, React Refresh, TanStack Query
 - **Prettier**: Code formatting with import sorting and Tailwind integration
 - **TypeScript**: No unused vars, type-only imports enforced
-
+1
 ### Pre-Commit Hook Enforcement
 
 Git pre-commit hooks automatically run:
@@ -334,7 +373,7 @@ Git pre-commit hooks automatically run:
 
 ## Migrations
 
-Fluxbase uses a **hybrid migration system**:
+Fluxbase uses a **hybrid migration system** with three subsystems:
 
 ### Internal Schema (Declarative)
 
@@ -344,29 +383,66 @@ Internal Fluxbase tables (auth, storage, functions, jobs, etc.) are managed decl
 - **Schema files:** `internal/database/schema/schemas/*.sql` - Declarative SQL files for each schema
 - **Applied automatically:** Server applies bootstrap + declarative schema on startup
 
-### User Schema (Choice: Imperative or Declarative)
+### User Schema - Imperative Migrations
 
-Users can choose their preferred approach:
+Imperative migrations are tracked in the `migrations.app` table and can be delivered via a local filesystem path or the API:
 
-**Option 1: Imperative Migrations**
+**Local Filesystem:**
 
-- SQL files in `internal/database/migrations/` numbered sequentially (001-113+)
-- Format: `NNN_description.up.sql` / `NNN_description.down.sql`
-- Commands: `make migrate-up`, `make migrate-down`, `make migrate-create`
+- Config: `database.user_migrations_path` (default: `/migrations/user`)
+- Env var: `FLUXBASE_DATABASE_USER_MIGRATIONS_PATH`
+- Files: `{name}.up.sql` / `{name}.down.sql` pairs, sorted alphabetically (e.g. `001_create_users.up.sql`)
+- Applied at startup against the main database as admin user
+- Tracked with `namespace='filesystem'`
+- SQL validated via `pg_query.Parse()` before execution
 
-**Option 2: Declarative Schema**
+**Migrations API (`/api/v1/admin/migrations`):**
 
-- Users can manage their `public` schema declaratively using pgschema
-- Schema files compared to actual database state
-- Changes applied as diffs
+- Requires service key or `service_role` JWT with `admin`, `instance_admin`, or `tenant_admin` role
+- Endpoints: CRUD, apply, rollback, apply-pending, sync
+- `POST /sync` accepts a batch of migrations, deduplicates by SHA256 of up/down SQL, and optionally auto-applies
+- Configurable namespaces (default: `"default"`)
+
+**Tenant-aware routing (backward compatible):**
+
+- **No tenant context** (no `X-FB-Tenant` header, not `tenant_admin` JWT): runs via `db.ExecuteWithAdminRole()` against the main database with full DDL privileges
+- **Default tenant** (`X-FB-Tenant` points to default tenant): `Router.GetPool()` returns the main pool, `TenantExecutor` runs with `SET LOCAL ROLE tenant_migration_role` (restricted to `public` schema)
+- **Named tenant**: `Router.GetPool()` returns a pool to the tenant's separate database, same `tenant_migration_role` restriction to `public` schema
+
+### User Schema - Declarative (pgschema)
+
+Per-tenant declarative schema management using pgschema for diff-based application to the `public` schema:
+
+**Local Filesystem:**
+
+- Config: `tenants.declarative.schema_dir`
+- Structure: `{SchemaDir}/{tenant-slug}/public.sql`
+- Applied on tenant creation (`on_create`), server startup (`on_startup`), or on-demand via API
+
+**Tenant Schema API:**
+
+- `GET /tenants/:id/schema` - Get schema status and pending changes
+- `POST /tenants/:id/schema/content` - Upload schema SQL (stored in `platform.tenant_schemas`)
+- `POST /tenants/:id/schema/content/apply` - Diff and apply uploaded content via pgschema
+- `POST /tenants/:id/schema/apply` - Apply from local filesystem
+- `DELETE /tenants/:id/schema/content` - Delete stored schema
+
+Works for the default tenant too — `Router.GetPool()` returns the main pool when `UsesMainDatabase()` is true.
 
 ### Common Commands
 
 ```bash
+# Database Operations
 make db-reset         # Reset database (preserve user data)
 make db-reset-full    # Full reset - bootstrap runs on next server start
-make migrate-up       # Apply user imperative migrations
-make migrate-down     # Rollback last user migration
+
+# CLI Migrations (interact with server API)
+fluxbase migrations list [--namespace]      # List migrations
+fluxbase migrations create <name>           # Create migration
+fluxbase migrations apply <name>            # Apply a migration
+fluxbase migrations rollback <name>         # Rollback a migration
+fluxbase migrations apply-pending           # Apply all pending
+fluxbase migrations sync [--dir] [--namespace] [--no-apply]  # Sync from directory
 ```
 
 ## Testing

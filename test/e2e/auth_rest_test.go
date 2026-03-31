@@ -188,7 +188,7 @@ func TestRESTAPIKeyScopes(t *testing.T) {
 	defer tc.Close()
 
 	// Create API key with read-only scopes
-	apiKey := tc.CreateAPIKey("Read-Only API Key", []string{"read:tables"})
+	apiKey := tc.CreateAPIKey("Read-Only API Key", []string{"tables:read"})
 
 	// GET should work (read scope)
 	resp := tc.NewRequest("GET", "/api/v1/tables/products").

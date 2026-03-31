@@ -113,6 +113,9 @@ func setupAuthTestServer(t *testing.T) (*fiber.App, *auth.Service, *database.Con
 	// Create auth handler (no captcha service in tests)
 	authHandler := NewAuthHandler(db.Pool(), authService, nil, "http://localhost:3000")
 
+	// Create optional auth middleware for routes that use JWT when available
+	optionalAuth := OptionalAuthMiddleware(authService)
+
 	// Setup auth routes manually (RegisterRoutes was removed)
 	authGroup := app.Group("/api/v1/auth")
 	authGroup.Post("/signup", authHandler.SignUp)
@@ -120,9 +123,10 @@ func setupAuthTestServer(t *testing.T) (*fiber.App, *auth.Service, *database.Con
 	authGroup.Post("/otp/signin", authHandler.SendOTP)
 	authGroup.Post("/otp/verify", authHandler.VerifyOTP)
 	authGroup.Post("/otp/resend", authHandler.ResendOTP)
-	authGroup.Post("/reauthenticate", authHandler.Reauthenticate)
-	authGroup.Get("/user/identities", authHandler.GetUserIdentities)
-	authGroup.Post("/user/identities", authHandler.LinkIdentity)
+	// Reauthenticate and identity routes require JWT auth middleware
+	authGroup.Post("/reauthenticate", optionalAuth, authHandler.Reauthenticate)
+	authGroup.Get("/user/identities", optionalAuth, authHandler.GetUserIdentities)
+	authGroup.Post("/user/identities", optionalAuth, authHandler.LinkIdentity)
 
 	return app, authService, db
 }

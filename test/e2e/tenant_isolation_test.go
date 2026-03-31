@@ -171,14 +171,15 @@ func TestTenantIsolation_BranchingBranches(t *testing.T) {
 
 	// Insert branches for two tenants.
 	// branching.branches requires name, slug, database_name (all NOT NULL).
+	// Valid statuses: creating, ready, migrating, error, deleting, deleted.
 	tc.ExecuteSQLAsSuperuser(`
 		INSERT INTO branching.branches (name, slug, database_name, status, tenant_id)
-		VALUES ('tenant-test-branch1', 'tenant-test-branch1', 'branch_tenant1', 'active', $1)
+		VALUES ('tenant-test-branch1', 'tenant-test-branch1', 'branch_tenant1', 'ready', $1)
 	`, tenantTestID1)
 
 	tc.ExecuteSQLAsSuperuser(`
 		INSERT INTO branching.branches (name, slug, database_name, status, tenant_id)
-		VALUES ('tenant-test-branch2', 'tenant-test-branch2', 'branch_tenant2', 'active', $1)
+		VALUES ('tenant-test-branch2', 'tenant-test-branch2', 'branch_tenant2', 'ready', $1)
 	`, tenantTestID2)
 
 	// Verify as tenant1: should only see tenant1's branch
@@ -206,15 +207,16 @@ func TestTenantIsolation_FunctionsEdgeFunctions(t *testing.T) {
 
 	// Insert edge functions for two tenants.
 	// functions.edge_functions requires name and code (NOT NULL).
-	// Column is "code" not "entrypoint".
+	// Column is "code" not "entrypoint". Set is_public=false to avoid the
+	// public_read policy which grants access regardless of tenant.
 	tc.ExecuteSQLAsSuperuser(`
-		INSERT INTO functions.edge_functions (name, code, tenant_id)
-		VALUES ('tenant-test-func1', 'export default function() { return "hello" }', $1)
+		INSERT INTO functions.edge_functions (name, code, is_public, tenant_id)
+		VALUES ('tenant-test-func1', 'export default function() { return "hello" }', false, $1)
 	`, tenantTestID1)
 
 	tc.ExecuteSQLAsSuperuser(`
-		INSERT INTO functions.edge_functions (name, code, tenant_id)
-		VALUES ('tenant-test-func2', 'export default function() { return "hello" }', $1)
+		INSERT INTO functions.edge_functions (name, code, is_public, tenant_id)
+		VALUES ('tenant-test-func2', 'export default function() { return "hello" }', false, $1)
 	`, tenantTestID2)
 
 	// Verify as tenant1: should only see tenant1's function
@@ -413,12 +415,12 @@ func TestTenantIsolation_NoLeakageAcrossSchemas(t *testing.T) {
 
 	tc.ExecuteSQLAsSuperuser(`
 		INSERT INTO branching.branches (name, slug, database_name, status, tenant_id)
-		VALUES ('tenant1-branch', 'tenant1-branch', 'db1', 'active', $1)
+		VALUES ('tenant1-branch', 'tenant1-branch', 'db1', 'ready', $1)
 	`, tenantTestID1)
 
 	tc.ExecuteSQLAsSuperuser(`
 		INSERT INTO branching.branches (name, slug, database_name, status, tenant_id)
-		VALUES ('tenant2-branch', 'tenant2-branch', 'db2', 'active', $1)
+		VALUES ('tenant2-branch', 'tenant2-branch', 'db2', 'ready', $1)
 	`, tenantTestID2)
 
 	// Query as tenant1 across all schemas

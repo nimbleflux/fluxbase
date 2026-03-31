@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
@@ -301,7 +302,7 @@ func (l *TenantConfigLoader) applyFunctionsEnvOverride(cfg *FunctionsConfig, pat
 		cfg.Enabled = parseBool(value)
 	case "functions_dir", "functionsdir":
 		cfg.FunctionsDir = value
-	case "default_timeout", "defaulttimeout":
+	case "default_timeout", "defaulttimeout", "timeout":
 		if i, err := parseInt(value); err == nil {
 			cfg.DefaultTimeout = i
 		}
@@ -536,10 +537,10 @@ func (l *TenantConfigLoader) loadTenantConfigFiles() error {
 
 // tenantFileConfig represents the structure of a tenant YAML file
 type tenantFileConfig struct {
-	Slug     string          `yaml:"slug"`
-	Name     string          `yaml:"name"`
-	Metadata map[string]any  `yaml:"metadata"`
-	Config   TenantOverrides `yaml:"config"`
+	Slug     string         `yaml:"slug"`
+	Name     string         `yaml:"name"`
+	Metadata map[string]any `yaml:"metadata"`
+	Config   map[string]any `yaml:"config"`
 }
 
 // loadTenantConfigFile loads a single tenant config file
@@ -561,8 +562,25 @@ func (l *TenantConfigLoader) loadTenantConfigFile(filePath string) error {
 		return fmt.Errorf("tenant config file %s missing slug", filePath)
 	}
 
+	// Decode raw config map into TenantOverrides using mapstructure
+	// (which respects mapstructure tags, matching the same keys used by Viper/env var loading)
+	var overrides TenantOverrides
+	if len(fileConfig.Config) > 0 {
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			TagName:     "mapstructure",
+			Result:      &overrides,
+			ErrorUnused: false,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create decoder: %w", err)
+		}
+		if err := decoder.Decode(fileConfig.Config); err != nil {
+			return fmt.Errorf("failed to decode tenant config: %w", err)
+		}
+	}
+
 	// Merge with base config
-	merged, err := l.mergeConfig(fileConfig.Config, fileConfig.Slug)
+	merged, err := l.mergeConfig(overrides, fileConfig.Slug)
 	if err != nil {
 		return fmt.Errorf("failed to merge config: %w", err)
 	}

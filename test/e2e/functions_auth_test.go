@@ -112,7 +112,7 @@ func TestFunctionAnonKeyRequired(t *testing.T) {
 			WithAuth(adminToken).
 			WithJSON(map[string]interface{}{
 				"name":   "test-api-key",
-				"scopes": []string{"execute:functions"},
+				"scopes": []string{"functions:execute"},
 			}).
 			Send()
 		require.Equal(t, fiber.StatusCreated, apiKeyResp.Status(), "Failed to create API key: %s", string(apiKeyResp.Body()))
@@ -324,7 +324,7 @@ func TestFunctionAuthenticationTypes(t *testing.T) {
 					WithAuth(adminToken).
 					WithJSON(map[string]interface{}{
 						"name":   fmt.Sprintf("key-%d", time.Now().UnixNano()),
-						"scopes": []string{"execute:functions"},
+						"scopes": []string{"functions:execute"},
 					}).
 					Send()
 				var keyData map[string]interface{}

@@ -163,7 +163,7 @@ func TestToolRegistry_ListTools(t *testing.T) {
 		registry.Register(&mockToolHandler{
 			name:           "tool-1",
 			description:    "Tool 1",
-			requiredScopes: []string{"read:tables"},
+			requiredScopes: []string{"tables:read"},
 		})
 		registry.Register(&mockToolHandler{
 			name:           "tool-2",
@@ -183,7 +183,7 @@ func TestToolRegistry_ListTools(t *testing.T) {
 		registry.Register(&mockToolHandler{
 			name:           "read-tool",
 			description:    "Read Tool",
-			requiredScopes: []string{"read:tables"},
+			requiredScopes: []string{"tables:read"},
 		})
 		registry.Register(&mockToolHandler{
 			name:           "admin-tool",
@@ -192,7 +192,7 @@ func TestToolRegistry_ListTools(t *testing.T) {
 		})
 
 		authCtx := &AuthContext{
-			Scopes: []string{"read:tables"},
+			Scopes: []string{"tables:read"},
 		}
 		tools := registry.ListTools(authCtx)
 
@@ -205,7 +205,7 @@ func TestToolRegistry_ListTools(t *testing.T) {
 
 		registry.Register(&mockToolHandler{
 			name:           "tool",
-			requiredScopes: []string{"read:tables"},
+			requiredScopes: []string{"tables:read"},
 		})
 
 		authCtx := &AuthContext{Scopes: []string{}}
@@ -616,11 +616,11 @@ func BenchmarkToolRegistry_ListTools(b *testing.B) {
 	for i := 0; i < 20; i++ {
 		registry.Register(&mockToolHandler{
 			name:           "tool-" + string(rune('0'+i)),
-			requiredScopes: []string{"read:tables"},
+			requiredScopes: []string{"tables:read"},
 		})
 	}
 
-	authCtx := &AuthContext{Scopes: []string{"read:tables"}}
+	authCtx := &AuthContext{Scopes: []string{"tables:read"}}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

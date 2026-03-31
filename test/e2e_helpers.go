@@ -888,19 +888,19 @@ func (tc *TestContext) CleanupE2ETestUsers() {
 		log.Debug().Err(err).Msg("Failed to cleanup auth.users e2e test users")
 	}
 
-	// Delete e2e test users from dashboard.users
+	// Delete e2e test users from platform.users
 	_, err = tc.DB.Exec(ctx, fmt.Sprintf(
-		"DELETE FROM dashboard.users WHERE email LIKE '%s%%@example.com'",
+		"DELETE FROM platform.users WHERE email LIKE '%s%%@example.com'",
 		E2ETestEmailPrefix,
 	))
 	if err != nil {
-		log.Debug().Err(err).Msg("Failed to cleanup dashboard.users e2e test users")
+		log.Debug().Err(err).Msg("Failed to cleanup platform.users e2e test users")
 	}
 
 	// Clean up legacy test-* prefix emails (narrower than the old %@example.com pattern)
 	// Only targets test- prefix used by E2E tests, not integration test emails (itest-*)
 	_, _ = tc.DB.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
-	_, _ = tc.DB.Exec(ctx, "DELETE FROM dashboard.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
+	_, _ = tc.DB.Exec(ctx, "DELETE FROM platform.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 	_, _ = tc.DB.Exec(ctx, "DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 }
 
@@ -923,15 +923,15 @@ func CleanupE2ETestUsersGlobal(cfg *config.Config) {
 		log.Debug().Err(err).Msg("Failed to cleanup auth.users e2e test users")
 	}
 
-	// Delete e2e test users from dashboard.users
-	_, err = db.Exec(ctx, "DELETE FROM dashboard.users WHERE email LIKE 'e2e-test-%@example.com'")
+	// Delete e2e test users from platform.users
+	_, err = db.Exec(ctx, "DELETE FROM platform.users WHERE email LIKE 'e2e-test-%@example.com'")
 	if err != nil {
-		log.Debug().Err(err).Msg("Failed to cleanup dashboard.users e2e test users")
+		log.Debug().Err(err).Msg("Failed to cleanup platform.users e2e test users")
 	}
 
 	// Clean up legacy test-* prefix emails (narrower than the old %@example.com pattern)
 	_, _ = db.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
-	_, _ = db.Exec(ctx, "DELETE FROM dashboard.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
+	_, _ = db.Exec(ctx, "DELETE FROM platform.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 	_, _ = db.Exec(ctx, "DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 
 	log.Info().Msg("Cleaned up e2e test users")
@@ -1091,6 +1091,19 @@ func GetTestConfig() *config.Config {
 		Scaling: config.ScalingConfig{
 			DisableScheduler: true, // Disable functions/RPC schedulers for tests to avoid connection issues
 			DisableRealtime:  true, // Disable realtime listener for tests to avoid connection issues
+		},
+		MCP: config.MCPConfig{
+			Enabled:         true,
+			BasePath:        "/mcp",
+			SessionTimeout:  30 * time.Minute,
+			MaxMessageSize:  10 * 1024 * 1024,
+			RateLimitPerMin: 100,
+			OAuth: config.MCPOAuthConfig{
+				Enabled:            true,
+				DCREnabled:         true,
+				TokenExpiry:        1 * time.Hour,
+				RefreshTokenExpiry: 168 * time.Hour,
+			},
 		},
 		EncryptionKey: "test-encryption-key-32-bytes!!!!", // Exactly 32 bytes for AES-256
 		Debug:         getTestDebugMode(),
@@ -1882,8 +1895,10 @@ func (tc *TestContext) QuerySQLAsTenant(tenantID, sql string, args ...interface{
 	_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
 	require.NoError(tc.T, err, "Failed to set app.current_tenant_id")
 
-	// Set JWT claims with service_role so policies that check current_user_role() pass
-	jwtClaims := fmt.Sprintf(`{"sub":"00000000-0000-0000-0000-000000000000","role":"service_role"}`)
+	// Set JWT claims with 'authenticated' role (not service_role) so that
+	// RLS policies checking current_user_role() = 'service_role' do NOT pass.
+	// This ensures the tenant RLS policy is the active filter.
+	jwtClaims := fmt.Sprintf(`{"sub":"00000000-0000-0000-0000-000000000000","role":"authenticated"}`)
 	_, err = tx.Exec(ctx, "SELECT set_config('request.jwt.claims', $1, true)", jwtClaims)
 	require.NoError(tc.T, err, "Failed to set request.jwt.claims")
 
@@ -2092,7 +2107,7 @@ func (tc *TestContext) CreateDashboardAdminUser(email, password string) (userID,
 	require.NoError(tc.T, err, "Failed to get superuser pool for dashboard admin creation")
 
 	err = pool.QueryRow(ctx,
-		`INSERT INTO dashboard.users (email, password_hash, full_name, role, email_verified)
+		`INSERT INTO platform.users (email, password_hash, full_name, role, email_verified)
 		 VALUES ($1, $2, $3, 'instance_admin', true)
 		 ON CONFLICT (email) DO UPDATE
 		 SET password_hash = EXCLUDED.password_hash
@@ -2220,6 +2235,12 @@ func (tc *TestContext) EnsureAuthSchema() {
 			refresh_token TEXT NOT NULL,
 			expires_at TIMESTAMPTZ NOT NULL,
 			created_at TIMESTAMPTZ DEFAULT NOW()
+		)`,
+		`CREATE TABLE IF NOT EXISTS auth.webhook_monitored_tables (
+			schema_name TEXT NOT NULL,
+			table_name TEXT NOT NULL,
+			webhook_count BIGINT DEFAULT 0,
+			PRIMARY KEY (schema_name, table_name)
 		)`,
 	}
 
@@ -2654,10 +2675,15 @@ func (tc *TestContext) CreateServiceKey(name string) string {
 	keyHash, err := bcrypt.GenerateFromPassword([]byte(plaintextKey), 10)
 	require.NoError(tc.T, err, "Failed to hash service key")
 
-	// Insert into auth.service_keys table
+	// Insert into auth.service_keys table.
+	// Use ON CONFLICT to handle duplicate names when tenant_id is NULL
+	// (partial unique index auth_service_keys_name_tenant_null_unique).
+	// On conflict, update the key hash and prefix so the returned key is valid.
 	query := `
 		INSERT INTO auth.service_keys (name, description, key_hash, key_prefix, enabled)
 		VALUES ($1, $2, $3, $4, true)
+		ON CONFLICT (name) WHERE (tenant_id IS NULL)
+		DO UPDATE SET key_hash = EXCLUDED.key_hash, key_prefix = EXCLUDED.key_prefix, description = EXCLUDED.description
 		RETURNING id
 	`
 

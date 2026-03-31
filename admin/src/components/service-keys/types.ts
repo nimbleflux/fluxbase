@@ -16,12 +16,12 @@ export const SCOPE_GROUPS: ScopeGroup[] = [
     description: "Database table access",
     scopes: [
       {
-        id: "read:tables",
+        id: "tables:read",
         label: "Read",
         description: "Query database tables",
       },
       {
-        id: "write:tables",
+        id: "tables:write",
         label: "Write",
         description: "Insert, update, delete records",
       },
@@ -31,9 +31,9 @@ export const SCOPE_GROUPS: ScopeGroup[] = [
     name: "Storage",
     description: "File storage access",
     scopes: [
-      { id: "read:storage", label: "Read", description: "Download files" },
+      { id: "storage:read", label: "Read", description: "Download files" },
       {
-        id: "write:storage",
+        id: "storage:write",
         label: "Write",
         description: "Upload and delete files",
       },
@@ -43,9 +43,9 @@ export const SCOPE_GROUPS: ScopeGroup[] = [
     name: "Functions",
     description: "Edge Functions",
     scopes: [
-      { id: "read:functions", label: "Read", description: "View functions" },
+      { id: "functions:read", label: "Read", description: "View functions" },
       {
-        id: "execute:functions",
+        id: "functions:execute",
         label: "Execute",
         description: "Invoke functions",
       },
@@ -55,9 +55,9 @@ export const SCOPE_GROUPS: ScopeGroup[] = [
     name: "Auth",
     description: "Authentication",
     scopes: [
-      { id: "read:auth", label: "Read", description: "View user profile" },
+      { id: "auth:read", label: "Read", description: "View user profile" },
       {
-        id: "write:auth",
+        id: "auth:write",
         label: "Write",
         description: "Update profile, manage 2FA",
       },
@@ -67,9 +67,9 @@ export const SCOPE_GROUPS: ScopeGroup[] = [
     name: "Client Keys",
     description: "API key management",
     scopes: [
-      { id: "read:clientkeys", label: "Read", description: "List client keys" },
+      { id: "clientkeys:read", label: "Read", description: "List client keys" },
       {
-        id: "write:clientkeys",
+        id: "clientkeys:write",
         label: "Write",
         description: "Create, update, revoke",
       },
@@ -79,9 +79,9 @@ export const SCOPE_GROUPS: ScopeGroup[] = [
     name: "Webhooks",
     description: "Webhook management",
     scopes: [
-      { id: "read:webhooks", label: "Read", description: "List webhooks" },
+      { id: "webhooks:read", label: "Read", description: "List webhooks" },
       {
-        id: "write:webhooks",
+        id: "webhooks:write",
         label: "Write",
         description: "Create, update, delete",
       },
@@ -92,7 +92,7 @@ export const SCOPE_GROUPS: ScopeGroup[] = [
     description: "System monitoring",
     scopes: [
       {
-        id: "read:monitoring",
+        id: "monitoring:read",
         label: "Read",
         description: "View metrics, health, logs",
       },
@@ -118,33 +118,33 @@ export const SCOPE_GROUPS: ScopeGroup[] = [
     name: "RPC",
     description: "Remote procedures",
     scopes: [
-      { id: "read:rpc", label: "Read", description: "List procedures" },
-      { id: "execute:rpc", label: "Execute", description: "Invoke procedures" },
+      { id: "rpc:read", label: "Read", description: "List procedures" },
+      { id: "rpc:execute", label: "Execute", description: "Invoke procedures" },
     ],
   },
   {
     name: "Jobs",
     description: "Background jobs",
     scopes: [
-      { id: "read:jobs", label: "Read", description: "View job queues" },
-      { id: "write:jobs", label: "Write", description: "Manage job entries" },
+      { id: "jobs:read", label: "Read", description: "View job queues" },
+      { id: "jobs:write", label: "Write", description: "Manage job entries" },
     ],
   },
   {
     name: "AI",
     description: "AI & chatbots",
     scopes: [
-      { id: "read:ai", label: "Read", description: "View conversations" },
-      { id: "write:ai", label: "Write", description: "Send messages" },
+      { id: "ai:read", label: "Read", description: "View conversations" },
+      { id: "ai:write", label: "Write", description: "Send messages" },
     ],
   },
   {
     name: "Secrets",
     description: "Secret management",
     scopes: [
-      { id: "read:secrets", label: "Read", description: "View secret names" },
+      { id: "secrets:read", label: "Read", description: "View secret names" },
       {
-        id: "write:secrets",
+        id: "secrets:write",
         label: "Write",
         description: "Create, update, delete",
       },

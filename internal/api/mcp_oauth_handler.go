@@ -60,9 +60,9 @@ func (h *MCPOAuthHandler) HandleAuthorizationServerMetadata(c fiber.Ctx) error {
 		"token_endpoint_auth_methods_supported": []string{"none"}, // Public clients only (PKCE required)
 		"code_challenge_methods_supported":      []string{"S256"},
 		"scopes_supported": []string{
-			"read:tables", "write:tables",
-			"execute:functions", "execute:rpc",
-			"read:storage", "write:storage",
+			"tables:read", "tables:write",
+			"functions:execute", "rpc:execute",
+			"storage:read", "storage:write",
 			"execute:jobs", "read:vectors",
 			"read:schema", "admin:ddl",
 		},
@@ -90,7 +90,7 @@ func (h *MCPOAuthHandler) HandleProtectedResourceMetadata(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"resource":                 issuer + h.config.BasePath,
 		"authorization_servers":    []string{issuer},
-		"scopes_supported":         []string{"read:tables", "write:tables", "read:schema"},
+		"scopes_supported":         []string{"tables:read", "tables:write", "read:schema"},
 		"bearer_methods_supported": []string{"header"},
 	})
 }
@@ -141,7 +141,7 @@ func (h *MCPOAuthHandler) HandleClientRegistration(c fiber.Ctx) error {
 	}
 
 	// Parse and validate scopes (default to safe scopes)
-	scopes := []string{"read:tables", "read:schema"}
+	scopes := []string{"tables:read", "read:schema"}
 	if req.Scopes != "" {
 		scopes = strings.Split(req.Scopes, " ")
 	}

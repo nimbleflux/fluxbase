@@ -228,7 +228,7 @@ func TestGenerateClientKey(t *testing.T) {
 	ctx := context.Background()
 
 	// Default scopes used in tests
-	defaultScopes := []string{"read:tables", "write:tables", "read:storage", "write:storage", "read:functions", "execute:functions"}
+	defaultScopes := []string{"tables:read", "tables:write", "storage:read", "storage:write", "functions:read", "functions:execute"}
 
 	t.Run("Generate client key with default values", func(t *testing.T) {
 		result, err := service.GenerateClientKey(ctx, "test-default-key", nil, nil, defaultScopes, 0, nil)
@@ -260,7 +260,7 @@ func TestGenerateClientKey(t *testing.T) {
 		// Use unique email to avoid conflicts when tests run sequentially
 		email := fmt.Sprintf("clientkey-test-%s@example.com", uuid.New().String()[:8])
 		userID := createTestUser(t, db, email)
-		scopes := []string{"read:tables", "read:storage"}
+		scopes := []string{"tables:read", "storage:read"}
 		rateLimit := 200
 		expiresAt := time.Now().Add(30 * 24 * time.Hour)
 
@@ -304,7 +304,7 @@ func TestValidateClientKey(t *testing.T) {
 	ctx := context.Background()
 
 	// Default scopes used in tests
-	defaultScopes := []string{"read:tables", "write:tables"}
+	defaultScopes := []string{"tables:read", "tables:write"}
 
 	// Create a test client key
 	created, err := service.GenerateClientKey(ctx, "test-validate-key", nil, nil, defaultScopes, 0, nil)
@@ -383,7 +383,7 @@ func TestListClientKeys(t *testing.T) {
 	ctx := context.Background()
 
 	// Default scopes used in tests
-	defaultScopes := []string{"read:tables", "write:tables"}
+	defaultScopes := []string{"tables:read", "tables:write"}
 
 	// Create test users with unique emails to avoid conflicts when tests run sequentially
 	userID1 := createTestUser(t, db, fmt.Sprintf("list-test-%s@example.com", uuid.New().String()[:8]))
@@ -438,7 +438,7 @@ func TestRevokeClientKey(t *testing.T) {
 	ctx := context.Background()
 
 	// Default scopes used in tests
-	defaultScopes := []string{"read:tables", "write:tables"}
+	defaultScopes := []string{"tables:read", "tables:write"}
 
 	t.Run("Revoke existing client key", func(t *testing.T) {
 		created, err := service.GenerateClientKey(ctx, "test-revoke", nil, nil, defaultScopes, 0, nil)
@@ -480,7 +480,7 @@ func TestDeleteClientKey(t *testing.T) {
 	ctx := context.Background()
 
 	// Default scopes used in tests
-	defaultScopes := []string{"read:tables", "write:tables"}
+	defaultScopes := []string{"tables:read", "tables:write"}
 
 	t.Run("Delete existing client key", func(t *testing.T) {
 		created, err := service.GenerateClientKey(ctx, "test-delete", nil, nil, defaultScopes, 0, nil)
@@ -515,7 +515,7 @@ func TestUpdateClientKey(t *testing.T) {
 	ctx := context.Background()
 
 	// Default scopes used in tests
-	defaultScopes := []string{"read:tables", "write:tables"}
+	defaultScopes := []string{"tables:read", "tables:write"}
 
 	created, err := service.GenerateClientKey(ctx, "test-update", nil, nil, defaultScopes, 0, nil)
 	require.NoError(t, err)
@@ -538,7 +538,7 @@ func TestUpdateClientKey(t *testing.T) {
 	})
 
 	t.Run("Update client key scopes", func(t *testing.T) {
-		newScopes := []string{"read:tables", "read:storage"}
+		newScopes := []string{"tables:read", "storage:read"}
 		err := service.UpdateClientKey(ctx, created.ID, nil, nil, newScopes, nil)
 		require.NoError(t, err)
 

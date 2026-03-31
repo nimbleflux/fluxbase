@@ -277,9 +277,9 @@ func TestTenantConfigLoader_EnvVarExpansion(t *testing.T) {
 name: Test Tenant
 config:
   auth:
-    jwtsecret: "${TEST_JWT_SECRET_123}"
+    jwt_secret: "${TEST_JWT_SECRET_123}"
   storage:
-    s3bucket: "${TEST_S3_BUCKET_123}"
+    s3_bucket: "${TEST_S3_BUCKET_123}"
     provider: s3
 `
 	if err := os.WriteFile(tenantFile, []byte(content), 0o644); err != nil {

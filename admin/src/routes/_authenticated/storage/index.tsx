@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import type { AdminStorageObject, AdminBucket } from "@nimbleflux/fluxbase-sdk";
 import { useFluxbaseClient } from "@nimbleflux/fluxbase-sdk-react";
@@ -79,24 +79,14 @@ function StorageBrowser() {
     ? currentPrefix.split("/").filter(Boolean)
     : [];
 
-  useEffect(() => {
-    loadBuckets();
-  }, []);
-
-  useEffect(() => {
-    if (selectedBucket) {
-      loadObjects();
-    }
-  }, [selectedBucket, currentPrefix]);
-
-  const loadBuckets = async () => {
+  const loadBuckets = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await client.admin.storage.listBuckets();
       if (error) throw error;
       setBuckets(data?.buckets || []);
-      if (data?.buckets && data.buckets.length > 0 && !selectedBucket) {
-        setSelectedBucket(data.buckets[0].name);
+      if (data?.buckets && data.buckets.length > 0) {
+        setSelectedBucket((prev) => prev || data.buckets[0].name);
       }
     } catch (error: unknown) {
       const errorMessage =
@@ -105,9 +95,9 @@ function StorageBrowser() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [client]);
 
-  const loadObjects = async () => {
+  const loadObjects = useCallback(async () => {
     if (!selectedBucket) return;
     setLoading(true);
     try {
@@ -126,7 +116,17 @@ function StorageBrowser() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedBucket, currentPrefix, client]);
+
+  useEffect(() => {
+    loadBuckets();
+  }, [loadBuckets]);
+
+  useEffect(() => {
+    if (selectedBucket) {
+      loadObjects();
+    }
+  }, [selectedBucket, currentPrefix, loadObjects]);
 
   const createBucket = async () => {
     if (!newBucketName.trim()) {

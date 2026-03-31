@@ -725,8 +725,8 @@ func TestClientKeyScopes(t *testing.T) {
 			"write:users",
 			"read:posts",
 			"write:posts",
-			"read:clientkeys",
-			"write:clientkeys",
+			"clientkeys:read",
+			"clientkeys:write",
 			"admin",
 		}
 

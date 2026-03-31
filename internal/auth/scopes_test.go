@@ -253,47 +253,47 @@ func TestAllScopes(t *testing.T) {
 func TestScopeConstants(t *testing.T) {
 	t.Run("scope constants have expected format", func(t *testing.T) {
 		// Tables
-		assert.Equal(t, "read:tables", ScopeTablesRead)
-		assert.Equal(t, "write:tables", ScopeTablesWrite)
+		assert.Equal(t, "tables:read", ScopeTablesRead)
+		assert.Equal(t, "tables:write", ScopeTablesWrite)
 
 		// Storage
-		assert.Equal(t, "read:storage", ScopeStorageRead)
-		assert.Equal(t, "write:storage", ScopeStorageWrite)
+		assert.Equal(t, "storage:read", ScopeStorageRead)
+		assert.Equal(t, "storage:write", ScopeStorageWrite)
 
 		// Functions
-		assert.Equal(t, "read:functions", ScopeFunctionsRead)
-		assert.Equal(t, "execute:functions", ScopeFunctionsExecute)
+		assert.Equal(t, "functions:read", ScopeFunctionsRead)
+		assert.Equal(t, "functions:execute", ScopeFunctionsExecute)
 
 		// Auth
-		assert.Equal(t, "read:auth", ScopeAuthRead)
-		assert.Equal(t, "write:auth", ScopeAuthWrite)
+		assert.Equal(t, "auth:read", ScopeAuthRead)
+		assert.Equal(t, "auth:write", ScopeAuthWrite)
 
 		// Client Keys
-		assert.Equal(t, "read:clientkeys", ScopeClientKeysRead)
-		assert.Equal(t, "write:clientkeys", ScopeClientKeysWrite)
+		assert.Equal(t, "clientkeys:read", ScopeClientKeysRead)
+		assert.Equal(t, "clientkeys:write", ScopeClientKeysWrite)
 
 		// Webhooks
-		assert.Equal(t, "read:webhooks", ScopeWebhooksRead)
-		assert.Equal(t, "write:webhooks", ScopeWebhooksWrite)
+		assert.Equal(t, "webhooks:read", ScopeWebhooksRead)
+		assert.Equal(t, "webhooks:write", ScopeWebhooksWrite)
 
 		// Monitoring
-		assert.Equal(t, "read:monitoring", ScopeMonitoringRead)
+		assert.Equal(t, "monitoring:read", ScopeMonitoringRead)
 
 		// Realtime
 		assert.Equal(t, "realtime:connect", ScopeRealtimeConnect)
 		assert.Equal(t, "realtime:broadcast", ScopeRealtimeBroadcast)
 
 		// RPC
-		assert.Equal(t, "read:rpc", ScopeRPCRead)
-		assert.Equal(t, "execute:rpc", ScopeRPCExecute)
+		assert.Equal(t, "rpc:read", ScopeRPCRead)
+		assert.Equal(t, "rpc:execute", ScopeRPCExecute)
 
 		// Jobs
-		assert.Equal(t, "read:jobs", ScopeJobsRead)
-		assert.Equal(t, "write:jobs", ScopeJobsWrite)
+		assert.Equal(t, "jobs:read", ScopeJobsRead)
+		assert.Equal(t, "jobs:write", ScopeJobsWrite)
 
 		// AI
-		assert.Equal(t, "read:ai", ScopeAIRead)
-		assert.Equal(t, "write:ai", ScopeAIWrite)
+		assert.Equal(t, "ai:read", ScopeAIRead)
+		assert.Equal(t, "ai:write", ScopeAIWrite)
 
 		// Wildcard
 		assert.Equal(t, "*", ScopeWildcard)

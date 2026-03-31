@@ -36,7 +36,7 @@ func (h *StorageHandler) MultipartUpload(c fiber.Ctx) error {
 	// Use SECURITY DEFINER function to bypass RLS when checking bucket existence
 	var bucketExists bool
 	err = h.db.Pool().QueryRow(c.RequestCtx(),
-		`SELECT storage.bucket_exists($1)`,
+		`SELECT storage.bucket_exists($1::text, NULL::uuid)`,
 		bucket,
 	).Scan(&bucketExists)
 	if err != nil {
@@ -55,7 +55,7 @@ func (h *StorageHandler) MultipartUpload(c fiber.Ctx) error {
 	// Use SECURITY DEFINER function to bypass RLS when fetching bucket settings
 	var bucketAllowedMimeTypes []string
 	err = h.db.Pool().QueryRow(c.RequestCtx(),
-		`SELECT allowed_mime_types FROM storage.get_bucket_settings($1)`,
+		`SELECT allowed_mime_types FROM storage.get_bucket_settings($1::text, NULL::uuid)`,
 		bucket,
 	).Scan(&bucketAllowedMimeTypes)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {

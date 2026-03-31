@@ -5,12 +5,12 @@ import (
 )
 
 // ParseNamespaceScope parses a scope into its component parts.
-// Scope format: "action:resource:namespace_pattern"
+// Scope format: "resource:action:namespace_pattern"
 // Examples:
 //   - "*" → ("*", "*", "*")
-//   - "execute:functions" → ("execute", "functions", "*")
-//   - "execute:functions:prod" → ("execute", "functions", "prod")
-//   - "execute:functions:prod-*" → ("execute", "functions", "prod-*")
+//   - "tables:read" → ("read", "tables", "*")
+//   - "functions:execute:prod" → ("execute", "functions", "prod")
+//   - "functions:execute:prod-*" → ("execute", "functions", "prod-*")
 //
 // Returns: action, resource, namespacePattern
 func ParseNamespaceScope(scope string) (action, resource, namespacePattern string) {
@@ -24,15 +24,15 @@ func ParseNamespaceScope(scope string) (action, resource, namespacePattern strin
 		return "", "", ""
 	}
 
-	// action:resource (no namespace = all namespaces)
+	// resource:action (no namespace = all namespaces)
 	if len(parts) == 2 {
-		return parts[0], parts[1], "*"
+		return parts[1], parts[0], "*"
 	}
 
-	// action:resource:namespace
+	// resource:action:namespace
 	if len(parts) >= 3 {
 		namespace := strings.Join(parts[2:], ":") // Handle colons in namespace
-		return parts[0], parts[1], namespace
+		return parts[1], parts[0], namespace
 	}
 
 	// Single part (malformed, but handle gracefully)
@@ -70,7 +70,7 @@ func MatchNamespacePattern(namespace, pattern string) bool {
 // resource in a specific namespace.
 //
 // Parameters:
-//   - scopes: List of scope strings (e.g., ["execute:functions:prod", "read:tables"])
+//   - scopes: List of scope strings (e.g., ["execute:functions:prod", "tables:read"])
 //   - action: The action being performed (e.g., "execute", "read", "write")
 //   - resource: The resource type (e.g., "functions", "rpc", "jobs")
 //   - namespace: The specific namespace to check access for

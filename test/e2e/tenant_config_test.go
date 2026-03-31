@@ -194,7 +194,7 @@ func TestTenantAPIEndpoint(t *testing.T) {
 		},
 	}
 
-	resp := tc.NewRequest("POST", "/api/v1/tenants").
+	resp := tc.NewRequest("POST", "/api/v1/admin/tenants").
 		WithBearerToken(adminToken).
 		WithBody(createReq).
 		Send()

@@ -303,18 +303,18 @@ func inferScopesFromRole(role string) []string {
 		// Authenticated users get read/write access to most things
 		// Note: admin:ddl is NOT included - DDL requires explicit admin role
 		return []string{
-			"read:tables",
-			"write:tables",
-			"execute:functions",
-			"execute:rpc",
-			"read:storage",
-			"write:storage",
+			"tables:read",
+			"tables:write",
+			"functions:execute",
+			"rpc:execute",
+			"storage:read",
+			"storage:write",
 			"execute:jobs",
 		}
 	case "anon":
 		// Anonymous users get limited read access
 		return []string{
-			"read:tables",
+			"tables:read",
 		}
 	default:
 		// Unknown roles get minimal access
@@ -344,20 +344,20 @@ const (
 // MCP Scopes
 const (
 	// Table scopes
-	ScopeReadTables  = "read:tables"
-	ScopeWriteTables = "write:tables"
+	ScopeReadTables  = "tables:read"
+	ScopeWriteTables = "tables:write"
 
 	// Function scopes
-	ScopeExecuteFunctions = "execute:functions"
-	ScopeInvokeFunctions  = "execute:functions" // Alias for execute:functions
+	ScopeExecuteFunctions = "functions:execute"
+	ScopeInvokeFunctions  = "functions:execute" // Alias for execute:functions
 
 	// RPC scopes
-	ScopeExecuteRPC = "execute:rpc"
-	ScopeInvokeRPC  = "execute:rpc" // Alias for execute:rpc
+	ScopeExecuteRPC = "rpc:execute"
+	ScopeInvokeRPC  = "rpc:execute" // Alias for execute:rpc
 
 	// Storage scopes
-	ScopeReadStorage  = "read:storage"
-	ScopeWriteStorage = "write:storage"
+	ScopeReadStorage  = "storage:read"
+	ScopeWriteStorage = "storage:write"
 
 	// Job scopes
 	ScopeExecuteJobs = "execute:jobs"

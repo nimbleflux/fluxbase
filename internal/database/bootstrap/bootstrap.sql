@@ -209,8 +209,8 @@ GRANT USAGE ON SCHEMA api TO service_role;
 -- Branching schema - service role only
 GRANT USAGE ON SCHEMA branching TO service_role;
 
--- Logging schema - service role only
-GRANT USAGE ON SCHEMA logging TO service_role;
+-- Logging schema - service role and fluxbase_app (app needs access for direct pool queries)
+GRANT USAGE ON SCHEMA logging TO service_role, fluxbase_app;
 
 -- Migrations schema - service role only (for recording schema state)
 GRANT USAGE ON SCHEMA migrations TO service_role;

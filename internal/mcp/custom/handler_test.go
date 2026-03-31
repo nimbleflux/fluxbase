@@ -145,8 +145,8 @@ func TestDynamicToolHandler_RequiredScopes(t *testing.T) {
 		},
 		{
 			name:           "with additional scopes",
-			requiredScopes: []string{"read:tables", "write:storage"},
-			wantContains:   []string{"execute:custom", "read:tables", "write:storage"},
+			requiredScopes: []string{"tables:read", "storage:write"},
+			wantContains:   []string{"execute:custom", "tables:read", "storage:write"},
 		},
 	}
 
@@ -290,14 +290,14 @@ func TestDynamicResourceProvider_RequiredScopes(t *testing.T) {
 		Name:           "Test",
 		Namespace:      "default",
 		Code:           "export function handler() {}",
-		RequiredScopes: []string{"read:tables"},
+		RequiredScopes: []string{"tables:read"},
 	}
 
 	provider := NewDynamicResourceProvider(resource, nil)
 	scopes := provider.RequiredScopes()
 
 	assert.Contains(t, scopes, "read:custom")
-	assert.Contains(t, scopes, "read:tables")
+	assert.Contains(t, scopes, "tables:read")
 }
 
 func TestValidateToolCodeHandler(t *testing.T) {

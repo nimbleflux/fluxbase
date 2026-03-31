@@ -200,6 +200,7 @@ function JobsPage() {
       }
     };
     fetchNamespaces();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchJobFunctions = useCallback(async () => {
@@ -290,6 +291,7 @@ function JobsPage() {
     return () => {
       channel.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isJobDetailsOpen, selectedJob?.id, selectedJob?.status, fetchJobs]);
 
   useEffect(() => {

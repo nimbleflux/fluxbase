@@ -1,13 +1,4 @@
-import {
-  CheckCircle,
-  XCircle,
-  Loader2,
-  Clock,
-  AlertCircle,
-  StopCircle,
-  Copy,
-} from "lucide-react";
-import type { RPCExecution } from "@/lib/api";
+import { Loader2, StopCircle, Copy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,54 +10,23 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { type RPCExecution } from "@/lib/api";
+import { type ExecutionLog } from "@/hooks/use-execution-logs";
+import {
+  getStatusIcon,
+  getStatusVariant,
+  canCancelExecution,
+} from "./execution-utils";
 
 interface ExecutionDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   execution: RPCExecution | null;
-  logs: Array<{ id: string; level: string; message: string }>;
+  logs: ExecutionLog[];
   loadingLogs: boolean;
   cancellingExecutionId: string | null;
-  onCancelExecution: (execId: string) => void;
+  onCancelExecution: (executionId: string) => void;
   onCopy: (text: string, label: string) => void;
-}
-
-export function getStatusIcon(status: string) {
-  switch (status) {
-    case "completed":
-      return <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />;
-    case "running":
-      return (
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-500" />
-      );
-    case "pending":
-      return <Clock className="h-4 w-4 shrink-0 text-yellow-500" />;
-    case "failed":
-    case "cancelled":
-    case "timeout":
-      return <XCircle className="h-4 w-4 shrink-0 text-red-500" />;
-    default:
-      return <AlertCircle className="text-muted-foreground h-4 w-4 shrink-0" />;
-  }
-}
-
-export function getStatusVariant(
-  status: string,
-): "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "completed":
-      return "secondary";
-    case "failed":
-    case "cancelled":
-    case "timeout":
-      return "destructive";
-    default:
-      return "outline";
-  }
-}
-
-export function canCancelExecution(status: string) {
-  return status === "pending" || status === "running";
 }
 
 export function ExecutionDetailsDialog({

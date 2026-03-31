@@ -190,7 +190,7 @@ function RPCContent() {
         }
       }
     },
-    [selectedNamespace, searchQuery, statusFilter],
+    [selectedNamespace, searchQuery, statusFilter, executionsOffset],
   );
 
   const openExecutionDetails = (exec: RPCExecution) => {
@@ -357,6 +357,7 @@ function RPCContent() {
       }
     };
     fetchNamespaces();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -383,7 +384,7 @@ function RPCContent() {
       fetchExecutions(true);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, activeTab, fetchExecutions, namespacesLoaded]);
 
   if (loading) {
     return (
@@ -829,7 +830,7 @@ function RPCContent() {
         logs={executionLogs}
         loadingLogs={loadingLogs}
         cancellingExecutionId={cancellingExecutionId}
-        onCancelExecution={(execId) => cancelExecution(execId)}
+        onCancelExecution={(execId: string) => cancelExecution(execId)}
         onCopy={copyToClipboard}
       />
 
