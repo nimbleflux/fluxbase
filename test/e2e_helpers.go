@@ -261,13 +261,19 @@ func newTestContextInternal(t *testing.T, cfg *config.Config) *TestContext {
 	// Create server (REST API will now see all migrated tables)
 	server := api.NewServer(cfg, db, "test")
 
-	return &TestContext{
+	tc := &TestContext{
 		DB:     db,
 		Server: server,
 		App:    server.App(),
 		Config: cfg,
 		T:      t,
 	}
+
+	// Seed default system settings for feature flags.
+	// Without these, RequireFeatureEnabled middleware returns 503 FEATURE_DISABLED.
+	tc.EnsureSystemSettings()
+
+	return tc
 }
 
 func NewTestContext(t *testing.T) *TestContext {
@@ -1104,6 +1110,9 @@ func GetTestConfig() *config.Config {
 				TokenExpiry:        1 * time.Hour,
 				RefreshTokenExpiry: 168 * time.Hour,
 			},
+		},
+		Tenants: config.TenantsConfig{
+			Enabled: true,
 		},
 		EncryptionKey: "test-encryption-key-32-bytes!!!!", // Exactly 32 bytes for AES-256
 		Debug:         getTestDebugMode(),
@@ -2360,6 +2369,41 @@ func (tc *TestContext) EnsureFunctionsSchema() {
 	for _, query := range queries {
 		_, err := tc.DB.Exec(ctx, query)
 		require.NoError(tc.T, err, "Failed to create functions schema")
+	}
+}
+
+// EnsureSystemSettings seeds default system settings into the database so that
+// the settings cache can find them. Without these rows, feature flags like
+// app.functions.enabled default to false and the RequireFeatureEnabled middleware
+// blocks all requests with 503 FEATURE_DISABLED.
+func (tc *TestContext) EnsureSystemSettings() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := tc.DB.Health(ctx)
+	require.NoError(tc.T, err, "Database health check failed in EnsureSystemSettings")
+
+	settings := map[string]bool{
+		"app.functions.enabled":   true,
+		"app.storage.enabled":     true,
+		"app.realtime.enabled":    true,
+		"app.ai.enabled":          true,
+		"app.rpc.enabled":         true,
+		"app.jobs.enabled":        true,
+		"app.auth.signup_enabled": true,
+	}
+
+	for key, value := range settings {
+		valStr := "false"
+		if value {
+			valStr = "true"
+		}
+		_, err := tc.DB.Exec(ctx, `
+			INSERT INTO app.settings (key, value, category)
+			VALUES ($1, $2, 'system')
+			ON CONFLICT ON CONSTRAINT idx_app_settings_system_key DO UPDATE SET value = $2
+		`, key, valStr)
+		require.NoError(tc.T, err, "Failed to seed system setting: %s", key)
 	}
 }
 

@@ -336,7 +336,7 @@ func (l *TenantConfigLoader) applyJobsEnvOverride(cfg *JobsConfig, path []string
 		cfg.Enabled = parseBool(value)
 	case "jobs_dir", "jobsdir":
 		cfg.JobsDir = value
-	case "embedded_worker_count", "embeddedworkercount":
+	case "embedded_worker_count", "embeddedworkercount", "worker_count", "workercount":
 		if i, err := parseInt(value); err == nil {
 			cfg.EmbeddedWorkerCount = i
 		}
@@ -398,7 +398,7 @@ func (l *TenantConfigLoader) applyRealtimeEnvOverride(cfg *RealtimeConfig, path 
 	switch key {
 	case "enabled":
 		cfg.Enabled = parseBool(value)
-	case "max_connections", "maxconnections":
+	case "max_connections", "maxconnections", "max_conns", "maxconns":
 		if i, err := parseInt(value); err == nil {
 			cfg.MaxConnections = i
 		}
@@ -486,7 +486,7 @@ func (l *TenantConfigLoader) applyRPCEnvOverride(cfg *RPCConfig, path []string, 
 		if d, err := parseDuration(value); err == nil {
 			cfg.DefaultMaxExecutionTime = d
 		}
-	case "default_max_rows", "defaultmaxrows":
+	case "default_max_rows", "defaultmaxrows", "max_rows", "maxrows":
 		if i, err := parseInt(value); err == nil {
 			cfg.DefaultMaxRows = i
 		}
@@ -570,6 +570,7 @@ func (l *TenantConfigLoader) loadTenantConfigFile(filePath string) error {
 			TagName:     "mapstructure",
 			Result:      &overrides,
 			ErrorUnused: false,
+			DecodeHook:  mapstructure.StringToTimeDurationHookFunc(),
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create decoder: %w", err)

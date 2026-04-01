@@ -832,8 +832,8 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_system TO fluxbase_app;
 --
 
 -- Grant on parent partitioned table (required for INSERT routing to partitions)
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries TO service_role;
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries TO fluxbase_app;
+GRANT DELETE, INSERT, SELECT, TRUNCATE, UPDATE ON TABLE entries TO service_role;
+GRANT DELETE, INSERT, SELECT, TRUNCATE, UPDATE ON TABLE entries TO fluxbase_app;
 
 -- ============================================================================
 -- ATTACH PARTITIONS

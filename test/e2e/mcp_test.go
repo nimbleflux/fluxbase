@@ -74,8 +74,11 @@ func TestMCPInitialize(t *testing.T) {
 
 	resultInfo, ok := result["result"].(map[string]interface{})
 	require.True(t, ok, "result should be a map")
-	assert.Equal(t, "Fluxbase MCP Server", resultInfo["name"])
 	assert.Equal(t, "2024-11-05", resultInfo["protocolVersion"])
+
+	serverInfo, ok := resultInfo["serverInfo"].(map[string]interface{})
+	require.True(t, ok, "serverInfo should be a map")
+	assert.Equal(t, "Fluxbase MCP Server", serverInfo["name"])
 }
 
 // TestMCPListTools tests the MCP tools/list JSON-RPC method.

@@ -449,6 +449,7 @@ RETURNS boolean
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
+SET search_path = public, storage
 AS $$
 BEGIN
     RETURN EXISTS (
@@ -477,6 +478,7 @@ RETURNS boolean
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
+SET search_path = public, storage
 AS $$
 DECLARE
     v_current_tenant TEXT;
@@ -607,6 +609,7 @@ RETURNS boolean
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
+SET search_path = public, storage
 AS $$
 DECLARE
     v_owner_id UUID;
