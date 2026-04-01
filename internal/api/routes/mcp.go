@@ -21,7 +21,7 @@ func BuildMCPRoutes(deps *MCPDeps) *RouteGroup {
 		SubGroups: []*RouteGroup{
 			{
 				Name:   "mcp-health",
-				Prefix: deps.BasePath,
+				Prefix: "",
 				Routes: []Route{
 					{Method: "GET", Path: "/health", Handler: deps.HandleHealth, Summary: "MCP health check", Auth: AuthNone, Public: true},
 				},

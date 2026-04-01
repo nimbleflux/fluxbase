@@ -115,7 +115,7 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 
 	_, err := m.adminPool.Exec(ctx, fmt.Sprintf(
 		"CREATE DATABASE %s ENCODING 'UTF8'",
-		dbName,
+		quoteIdent(dbName),
 	))
 	if err != nil {
 		if statusErr := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusError); statusErr != nil {
@@ -232,7 +232,7 @@ func (m *Manager) DeleteTenantDatabase(ctx context.Context, tenantID string) err
 	}
 
 	// Atomically terminate connections and drop the database (PostgreSQL 13+).
-	_, err = m.adminPool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", *tenant.DBName))
+	_, err = m.adminPool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", quoteIdent(*tenant.DBName)))
 	if err != nil {
 		if statusErr := m.storage.UpdateTenantStatus(ctx, tenantID, TenantStatusError); statusErr != nil {
 			log.Warn().Err(statusErr).Str("tenant_id", tenantID).Msg("Failed to update tenant status to error")

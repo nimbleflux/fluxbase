@@ -2317,6 +2317,7 @@ RETURNS void
 LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
+SET search_path = auth
 AS $$
 DECLARE
     v_count INTEGER;
@@ -2388,6 +2389,7 @@ RETURNS void
 LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
+SET search_path = auth
 AS $$
 DECLARE
     v_count INTEGER;

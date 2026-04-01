@@ -450,49 +450,30 @@ func (h *OAuthHandler) getProviderConfig(ctx context.Context, providerName strin
 	var isCustom bool
 	var allowAppLogin bool
 	var isEncrypted bool
-	var found bool
 
-	// First, try tenant-specific provider if tenant context is available
-	if tenantID != "" {
-		query := `
-			SELECT client_id, client_secret, redirect_url, scopes,
-			       authorization_url, token_url, is_custom, allow_app_login,
-			       COALESCE(is_encrypted, false) AS is_encrypted
-			FROM platform.oauth_providers
-			WHERE provider_name = $1 AND tenant_id = $2::uuid AND enabled = TRUE
-		`
-		err := h.db.QueryRow(ctx, query, providerName, tenantID).Scan(
-			&clientID, &clientSecret, &redirectURL, &scopes,
-			&authURL, &tokenURL, &isCustom, &allowAppLogin, &isEncrypted,
-		)
-		if err == nil {
-			found = true
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("failed to query tenant OAuth provider: %w", err)
-		}
+	// TODO: Add tenant_id column to platform.oauth_providers for full multi-tenant OAuth support.
+	// For now, query all enabled providers regardless of tenant context.
+
+	_ = tenantID // Will be used when tenant_id column is added
+
+	// Query platform-level provider
+	query := `
+		SELECT client_id, client_secret, redirect_url, scopes,
+		       authorization_url, token_url, is_custom, allow_app_login,
+		       COALESCE(is_encrypted, false) AS is_encrypted
+		FROM platform.oauth_providers
+		WHERE provider_name = $1 AND enabled = TRUE
+	`
+	err := h.db.QueryRow(ctx, query, providerName).Scan(
+		&clientID, &clientSecret, &redirectURL, &scopes,
+		&authURL, &tokenURL, &isCustom, &allowAppLogin, &isEncrypted,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("OAuth provider '%s' not found or disabled", providerName)
 	}
-
-	// Fallback to platform-level provider if no tenant-specific provider found
-	if !found {
-		query := `
-			SELECT client_id, client_secret, redirect_url, scopes,
-			       authorization_url, token_url, is_custom, allow_app_login,
-			       COALESCE(is_encrypted, false) AS is_encrypted
-			FROM platform.oauth_providers
-			WHERE provider_name = $1 AND tenant_id IS NULL AND enabled = TRUE
-		`
-		err := h.db.QueryRow(ctx, query, providerName).Scan(
-			&clientID, &clientSecret, &redirectURL, &scopes,
-			&authURL, &tokenURL, &isCustom, &allowAppLogin, &isEncrypted,
-		)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("OAuth provider '%s' not found or disabled", providerName)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to query OAuth provider: %w", err)
-		}
+	if err != nil {
+		return nil, fmt.Errorf("failed to query OAuth provider: %w", err)
 	}
-
 	// SECURITY: Validate that provider allows app login
 	if !allowAppLogin {
 		return nil, fmt.Errorf("OAuth provider '%s' not enabled for application login", providerName)
