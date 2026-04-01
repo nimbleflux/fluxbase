@@ -29,7 +29,7 @@ func TestMCPHealthCheck(t *testing.T) {
 
 	assert.Equal(t, "healthy", result["status"], "MCP server should be healthy")
 	assert.Equal(t, "2024-11-05", result["protocolVersion"], "MCP protocol version should match the constant")
-	assert.Contains(t, result, "serverInfo", "Server info should be present")
+	assert.Contains(t, result, "serverVersion", "Server version should be present")
 }
 
 // TestMCPInitialize tests the MCP JSON-RPC initialize method.

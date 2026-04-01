@@ -327,6 +327,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			},
 		}
 		tenantManager = tenantdb.NewManager(tenantStorage, tenantCfg, db.Pool(), dbURL)
+		tenantManager.SetAdminDBURL(cfg.Database.AdminConnectionString())
 
 		// Create tenant pool router for per-tenant database connections
 		tenantRouter := tenantdb.NewRouter(tenantStorage, tenantCfg, db.Pool(), db.Pool(), dbURL)
