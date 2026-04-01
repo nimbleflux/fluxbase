@@ -2394,15 +2394,18 @@ func (tc *TestContext) EnsureSystemSettings() {
 	}
 
 	for key, value := range settings {
-		valStr := "false"
+		valJSON := `"false"`
 		if value {
-			valStr = "true"
+			valJSON = `"true"`
 		}
+		// Use a simple DO block to handle both insert and update cases.
+		// This avoids depending on partial unique index constraint names
+		// which may not exist in all database states.
 		_, err := tc.DB.Exec(ctx, `
 			INSERT INTO app.settings (key, value, category)
-			VALUES ($1, $2, 'system')
-			ON CONFLICT ON CONSTRAINT idx_app_settings_system_key DO UPDATE SET value = $2
-		`, key, valStr)
+			VALUES ($1, $2::jsonb, 'system')
+			ON CONFLICT (key) WHERE user_id IS NULL DO UPDATE SET value = $2::jsonb
+		`, key, valJSON)
 		require.NoError(tc.T, err, "Failed to seed system setting: %s", key)
 	}
 }
