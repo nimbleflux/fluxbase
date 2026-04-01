@@ -2394,13 +2394,15 @@ func (tc *TestContext) EnsureSystemSettings() {
 	}
 
 	for key, value := range settings {
-		valJSON := `"false"`
+		// The settings cache reads value as setting.Value["value"].(bool),
+		// so we must store {"value": true/false} format, not plain booleans.
+		valJSON := `{"value": false}`
 		if value {
-			valJSON = `"true"`
+			valJSON = `{"value": true}`
 		}
-		// Use a simple DO block to handle both insert and update cases.
-		// This avoids depending on partial unique index constraint names
-		// which may not exist in all database states.
+		// Use ON CONFLICT with partial index predicate (WHERE user_id IS NULL)
+		// instead of constraint name, as partial unique indexes cannot be
+		// referenced by constraint name in ON CONFLICT ON CONSTRAINT.
 		_, err := tc.DB.Exec(ctx, `
 			INSERT INTO app.settings (key, value, category)
 			VALUES ($1, $2::jsonb, 'system')
