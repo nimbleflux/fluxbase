@@ -2403,12 +2403,12 @@ func (tc *TestContext) EnsureSystemSettings() {
 		// Use ON CONFLICT with partial index predicate (WHERE user_id IS NULL)
 		// instead of constraint name, as partial unique indexes cannot be
 		// referenced by constraint name in ON CONFLICT ON CONSTRAINT.
-		_, err := tc.DB.Exec(ctx, `
+		// Use superuser pool to bypass RLS on app.settings.
+		tc.ExecuteSQLAsSuperuser(`
 			INSERT INTO app.settings (key, value, category)
 			VALUES ($1, $2::jsonb, 'system')
 			ON CONFLICT (key) WHERE user_id IS NULL DO UPDATE SET value = $2::jsonb
 		`, key, valJSON)
-		require.NoError(tc.T, err, "Failed to seed system setting: %s", key)
 	}
 }
 
