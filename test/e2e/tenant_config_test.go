@@ -3,7 +3,10 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
+	"mime/multipart"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -205,7 +208,10 @@ func TestTenantAPIEndpoint(t *testing.T) {
 	err := json.Unmarshal(resp.Body(), &createResp)
 	require.NoError(t, err, "Should decode response")
 
-	tenantID, ok := createResp["id"].(string)
+	tenantData, ok := createResp["tenant"].(map[string]interface{})
+	require.True(t, ok, "Response should contain tenant object")
+
+	tenantID, ok := tenantData["id"].(string)
 	require.True(t, ok, "Response should contain tenant ID")
 	require.NotEmpty(t, tenantID, "Tenant ID should not be empty")
 
@@ -287,17 +293,27 @@ func TestStorageManagerWithTenant(t *testing.T) {
 
 	require.Equal(t, fiber.StatusCreated, createResp.Status(), "Bucket creation should succeed")
 
-	// Upload a file
+	// Upload a file (multipart form data required)
 	fileContent := []byte("test content for tenant")
-	uploadResp := tc.NewRequest("POST", "/storage/v1/object/"+bucketName+"/test-file.txt").
-		WithAPIKey(apiKey).
-		WithBody(fileContent).
-		Send()
+	{
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+		part, err := writer.CreateFormFile("file", "test-file.txt")
+		require.NoError(t, err)
+		_, err = part.Write(fileContent)
+		require.NoError(t, err)
+		require.NoError(t, writer.Close())
 
-	require.Equal(t, fiber.StatusOK, uploadResp.Status(), "File upload should succeed")
+		req := httptest.NewRequest("POST", "/api/v1/storage/"+bucketName+"/test-file.txt", body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req.Header.Set("X-Client-Key", apiKey)
+		resp, err := tc.App.Test(req)
+		require.NoError(t, err)
+		require.Equal(t, fiber.StatusCreated, resp.StatusCode, "File upload should succeed")
+	}
 
 	// Download the file
-	downloadResp := tc.NewRequest("GET", "/storage/v1/object/"+bucketName+"/test-file.txt").
+	downloadResp := tc.NewRequest("GET", "/api/v1/storage/"+bucketName+"/test-file.txt").
 		WithAPIKey(apiKey).
 		Send()
 
