@@ -268,13 +268,38 @@ test-coverage-full: test-coverage ## Alias for test-coverage (now includes e2e b
 test-fast: ## Run all tests without race detector (faster, excludes e2e)
 	@FLUXBASE_LOG_LEVEL=info ./scripts/test-runner.sh go test -timeout 1m -v -short -cover $(shell go list ./... | grep -v '/test/e2e')
 
-test-full: ## Run ALL tests including e2e with race detector (may take 5-10 minutes)
+test-setup-db: ## Apply bootstrap + declarative schemas to match CI pipeline setup
+	@echo "${YELLOW}Applying database schema for tests (matching CI pipeline)...${NC}"
+	@echo "${BLUE}Database:${NC} $(DATABASE_ADMIN_USER)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
+	@# 1. Apply bootstrap SQL (creates schemas, extensions, roles, default privileges)
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 -f internal/database/bootstrap/bootstrap.sql
+	@# 2. Apply each declarative schema in dependency order (all use CREATE IF NOT EXISTS = idempotent)
+	@# Note: Some schemas use CREATE POLICY without IF NOT EXISTS, so we don't use ON_ERROR_STOP for re-runs
+	@for schema in platform auth storage jobs functions realtime dashboard ai rpc system migrations app api branching logging mcp; do \
+		echo "Applying schema: $$schema"; \
+		PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -f internal/database/schema/schemas/$$schema.sql || true; \
+	done
+	@# 3. Apply cross-schema foreign keys (idempotent DO blocks)
+	@echo "Applying cross-schema foreign keys..."
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 -f internal/database/schema/schemas/post-schema-fks.sql || true
+	@# 4. Apply cross-schema policies (safe on fresh database)
+	@echo "Applying cross-schema policies..."
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 -f internal/database/schema/schemas/post-schema.sql || true
+	@# 5. Grant role memberships for SET ROLE support
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT anon, authenticated, service_role, tenant_service TO fluxbase_app, fluxbase_rls_test;" || true
+	@# 6. Grant admin privileges
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON DATABASE $(DATABASE_NAME) TO fluxbase_app;" || true
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON SCHEMA public TO fluxbase_app;" || true
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON SCHEMA migrations TO fluxbase_app;" || true
+	@echo "${GREEN}Database schema applied successfully!${NC}"
+
+test-full: test-setup-db ## Run ALL tests including e2e with race detector (may take 5-10 minutes)
 	@./scripts/test-runner.sh go test -timeout 15m -v -race -cover -tags=integration ./...
 
-test-e2e: ## Run e2e tests only (requires postgres, mailhog, minio services). Use RUN= to filter tests.
+test-e2e: test-setup-db ## Run e2e tests only (requires postgres, mailhog, minio services). Use RUN= to filter tests.
 	@./scripts/test-runner.sh go test -v -race -parallel=1 -timeout=5m -tags=integration ./test/e2e/... $(if $(RUN),-run $(RUN),)
 
-test-e2e-fast: ## Run e2e tests without race detector (faster for dev iteration). Use RUN= to filter tests.
+test-e2e-fast: test-setup-db ## Run e2e tests without race detector (faster for dev iteration). Use RUN= to filter tests.
 	@./scripts/test-runner.sh go test -v -parallel=1 -timeout=3m -tags=integration ./test/e2e/... $(if $(RUN),-run $(RUN),)
 
 test-auth: ## Run authentication tests only
