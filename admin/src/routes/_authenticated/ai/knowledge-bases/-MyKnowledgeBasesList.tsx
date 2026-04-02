@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import api from "@/lib/api";
+import api, { type KnowledgeBaseSummary } from "@/lib/api";
 import { KnowledgeBaseCard } from "./-KnowledgeBaseCard";
-import type { KnowledgeBaseSummary } from "@/lib/api";
 
 function MyKnowledgeBasesList() {
   const { data, isLoading, error } = useQuery({
