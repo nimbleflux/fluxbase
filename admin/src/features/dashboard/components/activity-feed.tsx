@@ -158,7 +158,7 @@ export function ActivityFeed() {
         <CardTitle className="flex items-center justify-between text-base">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4" />
-            Recent Activity
+            Recent Issues
           </div>
           {!loading && getConnectionStatus()}
         </CardTitle>

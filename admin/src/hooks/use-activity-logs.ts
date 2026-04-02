@@ -10,7 +10,7 @@ import { fluxbaseClient } from "@/lib/fluxbase-client";
 const ACTIVITY_CATEGORIES = new Set(["security", "execution", "system"]);
 
 // Allowed log levels (exclude debug/trace noise)
-const ACTIVITY_LEVELS = new Set(["info", "warn", "error", "fatal", "panic"]);
+const ACTIVITY_LEVELS = new Set(["warn", "error", "fatal", "panic"]);
 
 // Patterns to exclude from activity feed (websocket noise)
 const EXCLUDED_MESSAGE_PATTERNS = [
@@ -134,7 +134,7 @@ export function useActivityLogs({
       const data = await logsApi.query({
         start_time: startTime,
         limit: maxLogs * 2, // Fetch more to account for filtering
-        levels: ["info", "warn", "error", "fatal", "panic"],
+        levels: ["warn", "error", "fatal", "panic"],
         hide_static_assets: true,
       });
 

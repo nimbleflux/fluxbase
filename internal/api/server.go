@@ -1742,10 +1742,21 @@ func (s *Server) handleHealth(c fiber.Ctx) error {
 	// Add service details for authenticated admin users
 	role, hasRole := GetUserRole(c)
 	if hasRole && (role == "admin" || role == "instance_admin" || role == "service_role" || role == "tenant_admin") {
-		response["services"] = fiber.Map{
+		services := fiber.Map{
 			"database": dbHealthy,
 			"realtime": true, // WebSocket server is part of this process
 		}
+
+		// Include database size if healthy
+		if dbHealthy {
+			var dbSizeStr string
+			err := s.db.Pool().QueryRow(ctx, "SELECT pg_size_pretty(pg_database_size(current_database()))").Scan(&dbSizeStr)
+			if err == nil {
+				services["database_size"] = dbSizeStr
+			}
+		}
+
+		response["services"] = services
 	}
 
 	return c.Status(httpStatus).JSON(response)

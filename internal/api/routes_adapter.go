@@ -10,7 +10,8 @@ import (
 
 func (s *Server) buildHealthRouteDeps() *routes.HealthDeps {
 	return &routes.HealthDeps{
-		Handler: s.handleHealth,
+		Handler:      s.handleHealth,
+		OptionalAuth: middleware.OptionalAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
 	}
 }
 

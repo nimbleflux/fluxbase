@@ -134,14 +134,54 @@ func main() {
 	}
 
 	// 5. Delete test storage buckets
-	result, err = pool.Exec(ctx, "DELETE FROM storage.buckets WHERE id LIKE 'test_%' OR name LIKE 'test_%'")
+	result, err = pool.Exec(ctx, "DELETE FROM storage.buckets WHERE id LIKE 'test_%' OR name LIKE 'test_%' OR name IN ('bucket1', 'bucket2', 's3-bucket1', 's3-bucket2') OR name LIKE '%test-bucket%'")
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to delete test storage buckets")
 	} else if result.RowsAffected() > 0 {
 		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test storage buckets")
 	}
 
-	// 6. Truncate logging.entries table to clean up log entries from tests
+	// 6. Delete test service keys (children of tenants, delete before tenants)
+	result, err = pool.Exec(ctx, "DELETE FROM auth.service_keys WHERE name LIKE 'test_%' OR name LIKE '%Test%' OR name LIKE '%Storage Admin%' OR name LIKE '%S3 Storage%'")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete test service keys")
+	} else if result.RowsAffected() > 0 {
+		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test service keys")
+	}
+
+	// 7. Delete test webhooks
+	result, err = pool.Exec(ctx, "DELETE FROM auth.webhooks WHERE name LIKE 'test_%' OR name LIKE '%Test%'")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete test webhooks")
+	} else if result.RowsAffected() > 0 {
+		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test webhooks")
+	}
+
+	// 8. Delete test edge functions
+	result, err = pool.Exec(ctx, "DELETE FROM functions.edge_functions WHERE name LIKE 'test_%'")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete test edge functions")
+	} else if result.RowsAffected() > 0 {
+		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test edge functions")
+	}
+
+	// 9. Delete test background jobs
+	result, err = pool.Exec(ctx, "DELETE FROM jobs.queue WHERE name LIKE 'test_%'")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete test background jobs")
+	} else if result.RowsAffected() > 0 {
+		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test background jobs")
+	}
+
+	// 10. Delete test tenants (must come after service_keys and other children)
+	result, err = pool.Exec(ctx, "DELETE FROM platform.tenants WHERE slug LIKE 'test-%' OR slug LIKE 'tenant-test-%'")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete test tenants")
+	} else if result.RowsAffected() > 0 {
+		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test tenants")
+	}
+
+	// Truncate logging.entries table to clean up log entries from tests
 	// Don't drop the table as it's created by migrations
 	result, err = pool.Exec(ctx, "TRUNCATE TABLE logging.entries CASCADE")
 	if err != nil {

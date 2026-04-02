@@ -3682,6 +3682,7 @@ export interface HealthResponse {
   services: {
     database: boolean;
     realtime: boolean;
+    database_size?: string; // e.g. "45 MB"
   };
   timestamp?: string;
 }

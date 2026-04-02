@@ -4,7 +4,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func BuildHealthRoutes(healthHandler fiber.Handler) *RouteGroup {
+func BuildHealthRoutes(healthHandler fiber.Handler, optionalAuth fiber.Handler) *RouteGroup {
 	return &RouteGroup{
 		Name: "health",
 		Routes: []Route{
@@ -13,7 +13,7 @@ func BuildHealthRoutes(healthHandler fiber.Handler) *RouteGroup {
 				Path:    "/",
 				Handler: healthHandler,
 				Summary: "Root health check",
-				Auth:    AuthNone,
+				Auth:    AuthOptional,
 				Public:  true,
 			},
 			{
@@ -21,9 +21,12 @@ func BuildHealthRoutes(healthHandler fiber.Handler) *RouteGroup {
 				Path:    "/health",
 				Handler: healthHandler,
 				Summary: "Detailed health check with database status",
-				Auth:    AuthNone,
+				Auth:    AuthOptional,
 				Public:  true,
 			},
+		},
+		AuthMiddlewares: &AuthMiddlewares{
+			Optional: optionalAuth,
 		},
 	}
 }

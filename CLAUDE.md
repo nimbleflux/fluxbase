@@ -185,6 +185,35 @@ test/e2e/                # End-to-end tests
 
 ## Common Commands
 
+### Devcontainer Database Access
+
+When working in the devcontainer, you can use `psql` to query the database directly. The connection credentials are available from environment variables:
+
+```bash
+# Connect to the database
+psql "postgresql://$FLUXBASE_DATABASE_USER:$FLUXBASE_DATABASE_PASSWORD@$FLUXBASE_DATABASE_HOST:$FLUXBASE_DATABASE_PORT/$FLUXBASE_DATABASE_NAME"
+```
+
+Useful queries for debugging:
+
+```sql
+-- List all tables in public schema
+SELECT tablename FROM pg_tables WHERE schemaname = 'public';
+
+-- Check service_role permissions on public tables
+SELECT table_name, privilege_type
+FROM information_schema.role_table_grants
+WHERE grantee = 'service_role' AND table_schema = 'public';
+
+-- Check tenants
+SELECT id, name, slug FROM platform.tenants;
+
+-- Find leftover test tables
+SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'test_%';
+```
+
+### Build & Development
+
 ```bash
 # Development
 make dev              # Start backend + admin UI dev servers

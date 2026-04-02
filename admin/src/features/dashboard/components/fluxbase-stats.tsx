@@ -73,7 +73,8 @@ export function FluxbaseStats() {
               </div>
               <p className="text-muted-foreground text-xs">
                 Database:{" "}
-                {health?.services?.database ? "Connected" : "Disconnected"}
+                {health?.services?.database_size ??
+                  (health?.services?.database ? "Connected" : "Disconnected")}
               </p>
             </>
           )}

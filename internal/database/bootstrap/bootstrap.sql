@@ -327,11 +327,52 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA branching
 ALTER DEFAULT PRIVILEGES IN SCHEMA branching
     GRANT ALL ON SEQUENCES TO service_role;
 
--- Public schema - service_role only
+-- Public schema - service_role and tenant_migration_role
+-- Default privileges cover future tables created by any role in the public schema.
+-- We also set per-role defaults to cover tables created by specific roles (bootstrap user, etc.).
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT ALL ON TABLES TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT ALL ON SEQUENCES TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT EXECUTE ON FUNCTIONS TO service_role;
+
+-- Also set defaults for the bootstrap role explicitly (covers tables created during bootstrap)
 ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER IN SCHEMA public
     GRANT ALL ON TABLES TO service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER IN SCHEMA public
     GRANT EXECUTE ON FUNCTIONS TO service_role;
+
+-- Grant permissions on all existing public schema tables to service_role
+-- This covers tables created by any role before these defaults were in place.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'public') THEN
+        -- Grant ALL on all existing tables in public schema
+        PERFORM 1;
+        BEGIN
+            EXECUTE format('GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role');
+        EXCEPTION WHEN others THEN
+            -- Ignore errors if no tables exist or other issues
+            RAISE NOTICE 'Could not grant on public tables: %', SQLERRM;
+        END;
+
+        -- Grant ALL on all existing sequences in public schema
+        BEGIN
+            EXECUTE format('GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role');
+        EXCEPTION WHEN others THEN
+            RAISE NOTICE 'Could not grant on public sequences: %', SQLERRM;
+        END;
+
+        -- Grant ALL on all existing functions in public schema
+        BEGIN
+            EXECUTE format('GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO service_role');
+        EXCEPTION WHEN others THEN
+            RAISE NOTICE 'Could not grant on public functions: %', SQLERRM;
+        END;
+    END IF;
+END
+$$;
 
 -- Tenant migration role - public schema
 ALTER DEFAULT PRIVILEGES IN SCHEMA public

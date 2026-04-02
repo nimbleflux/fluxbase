@@ -150,7 +150,7 @@ export function TenantSelector() {
               {tenants.map((tenant) => (
                 <CommandItem
                   key={tenant.id}
-                  value={tenant.name}
+                  value={`${tenant.name} ${tenant.id}`}
                   onSelect={() => handleSelectTenant(tenant)}
                 >
                   <Check

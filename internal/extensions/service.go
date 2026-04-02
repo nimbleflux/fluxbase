@@ -120,11 +120,20 @@ func (s *Service) ListExtensionsForTenant(ctx context.Context, tenantID *string,
 
 	// Query enabled_extensions tracking from main database for this tenant
 	filter := mustTenantFilter(tenantID, 1)
-	trackingRows, err := s.db.Query(ctx, fmt.Sprintf(`
-		SELECT extension_name, enabled_at, enabled_by::text
-		FROM platform.enabled_extensions
-		WHERE is_active = true AND %s
-	`, filter), tenantID)
+	var trackingRows pgx.Rows
+	if tenantID != nil {
+		trackingRows, err = s.db.Query(ctx, fmt.Sprintf(`
+			SELECT extension_name, enabled_at, enabled_by::text
+			FROM platform.enabled_extensions
+			WHERE is_active = true AND %s
+		`, filter), *tenantID)
+	} else {
+		trackingRows, err = s.db.Query(ctx, fmt.Sprintf(`
+			SELECT extension_name, enabled_at, enabled_by::text
+			FROM platform.enabled_extensions
+			WHERE is_active = true AND %s
+		`, filter))
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to query enabled extensions: %w", err)
 	}
@@ -249,13 +258,24 @@ func (s *Service) GetExtensionStatus(ctx context.Context, name string) (*Extensi
 func (s *Service) GetExtensionStatusForTenant(ctx context.Context, name string, tenantID *string, tenantPool *pgxpool.Pool) (*ExtensionStatusResponse, error) {
 	filter := mustTenantFilter(tenantID, 2)
 	var isEnabled bool
-	err := s.db.QueryRow(ctx, fmt.Sprintf(`
-		SELECT COALESCE(
-			(SELECT is_active FROM platform.enabled_extensions
-			 WHERE extension_name = $1 AND is_active = true AND %s),
-			false
-		)
-	`, filter), name, tenantID).Scan(&isEnabled)
+	var err error
+	if tenantID != nil {
+		err = s.db.QueryRow(ctx, fmt.Sprintf(`
+			SELECT COALESCE(
+				(SELECT is_active FROM platform.enabled_extensions
+				 WHERE extension_name = $1 AND is_active = true AND %s),
+				false
+			)
+		`, filter), name, *tenantID).Scan(&isEnabled)
+	} else {
+		err = s.db.QueryRow(ctx, fmt.Sprintf(`
+			SELECT COALESCE(
+				(SELECT is_active FROM platform.enabled_extensions
+				 WHERE extension_name = $1 AND is_active = true AND %s),
+				false
+			)
+		`, filter), name).Scan(&isEnabled)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to check extension status: %w", err)
 	}
@@ -466,11 +486,19 @@ func (s *Service) DisableExtensionForTenant(ctx context.Context, name string, us
 
 	// Update enabled_extensions table
 	filter := mustTenantFilter(tenantID, 2)
-	_, err = s.db.Exec(ctx, fmt.Sprintf(`
-		UPDATE platform.enabled_extensions
-		SET is_active = false, disabled_at = NOW(), disabled_by = $3
-		WHERE extension_name = $1 AND is_active = true AND %s
-	`, filter), name, tenantID, userID)
+	if tenantID != nil {
+		_, err = s.db.Exec(ctx, fmt.Sprintf(`
+			UPDATE platform.enabled_extensions
+			SET is_active = false, disabled_at = NOW(), disabled_by = $3
+			WHERE extension_name = $1 AND is_active = true AND %s
+		`, filter), name, *tenantID, userID)
+	} else {
+		_, err = s.db.Exec(ctx, fmt.Sprintf(`
+			UPDATE platform.enabled_extensions
+			SET is_active = false, disabled_at = NOW(), disabled_by = $2
+			WHERE extension_name = $1 AND is_active = true AND %s
+		`, filter), name, userID)
+	}
 	if err != nil {
 		log.Warn().Err(err).Str("extension", name).Msg("Failed to record extension disablement")
 	}

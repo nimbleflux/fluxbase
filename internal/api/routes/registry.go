@@ -381,7 +381,8 @@ type AllDeps struct {
 }
 
 type HealthDeps struct {
-	Handler fiber.Handler
+	Handler      fiber.Handler
+	OptionalAuth fiber.Handler
 }
 
 // RegisterAllRoutes registers all routes and applies them to the Fiber app.
@@ -415,7 +416,7 @@ func AuditRoutes(deps *AllDeps) []RouteAuditEntry {
 // This is the single source of truth for which route groups exist.
 func registerAllGroups(registry *Registry, deps *AllDeps) {
 	if deps.Health != nil {
-		registry.MustRegister(BuildHealthRoutes(deps.Health.Handler))
+		registry.MustRegister(BuildHealthRoutes(deps.Health.Handler, deps.Health.OptionalAuth))
 	}
 	if deps.Realtime != nil {
 		registry.MustRegister(BuildRealtimeRoutes(deps.Realtime))

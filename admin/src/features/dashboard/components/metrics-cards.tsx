@@ -124,8 +124,10 @@ export function MetricsCards() {
     refetchInterval: 30000,
   });
 
-  // Calculate DB size (placeholder for now - would need actual metric)
-  const dbSize = health?.services?.database ? "Connected" : "Disconnected";
+  // Get DB size from health endpoint, fallback to connection status
+  const dbSize =
+    health?.services?.database_size ??
+    (health?.services?.database ? "Connected" : "Disconnected");
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
