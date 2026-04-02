@@ -119,7 +119,18 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 		log.Debug().Str("tenant_id", tid).Msg("Set tenant context for storage operation")
 	}
 
-	log.Debug().Str("user_id", userIDStr).Str("role", roleStr).Msg("Set RLS context for storage operation")
+	// Switch to a non-BYPASSRLS role to enforce RLS policies.
+	// The pool connects as fluxbase_app (BYPASSRLS), so without this,
+	// all RLS policies are bypassed regardless of FORCE ROW LEVEL SECURITY.
+	dbRole := "authenticated"
+	if roleStr == "anon" {
+		dbRole = "anon"
+	}
+	if _, err := tx.Exec(ctx, fmt.Sprintf("SET LOCAL ROLE %s", quoteIdentifier(dbRole))); err != nil {
+		return fmt.Errorf("failed to SET LOCAL ROLE %s: %w", dbRole, err)
+	}
+
+	log.Debug().Str("user_id", userIDStr).Str("role", roleStr).Str("db_role", dbRole).Msg("Set RLS context for storage operation")
 	return nil
 }
 
