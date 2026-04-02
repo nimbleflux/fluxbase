@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
@@ -187,9 +189,10 @@ func TestTenantAPIEndpoint(t *testing.T) {
 	// Create instance admin user
 	adminUserID, adminToken := tc.CreateDashboardAdminUser("tenant-admin-api@example.com", "Admin123!")
 
-	// Create tenant via API
+	// Create tenant via API with unique slug
+	tenantSlug := "test-api-tenant-" + uuid.New().String()[:8]
 	createReq := map[string]interface{}{
-		"slug": "test-api-tenant",
+		"slug": tenantSlug,
 		"name": "Test API Tenant",
 		"metadata": map[string]interface{}{
 			"plan":  "enterprise",
@@ -286,7 +289,7 @@ func TestStorageManagerWithTenant(t *testing.T) {
 	apiKey := tc.CreateAPIKey("storage-test", []string{"storage:read", "storage:write"})
 
 	// Create a bucket
-	bucketName := "test-tenant-bucket"
+	bucketName := "test-tenant-bucket-" + uuid.New().String()[:8]
 	createResp := tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
 		WithAPIKey(apiKey).
 		Send()
