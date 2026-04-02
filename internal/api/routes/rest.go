@@ -10,9 +10,28 @@ type RESTDeps struct {
 	HandleTables fiber.Handler
 	HandleQuery  fiber.Handler
 	HandleById   fiber.Handler
+
+	// Middleware for tenant context
+	TenantMiddleware   fiber.Handler
+	TenantDBMiddleware fiber.Handler
 }
 
 func BuildRESTRoutes(deps *RESTDeps) *RouteGroup {
+	// Build middlewares for tenant context
+	var middlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name:    "TenantContext",
+			Handler: deps.TenantMiddleware,
+		})
+	}
+	if deps.TenantDBMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name:    "TenantDBContext",
+			Handler: deps.TenantDBMiddleware,
+		})
+	}
+
 	return &RouteGroup{
 		Name:   "rest",
 		Prefix: "/api/v1/tables",
@@ -140,6 +159,7 @@ func BuildRESTRoutes(deps *RESTDeps) *RouteGroup {
 		AuthMiddlewares: &AuthMiddlewares{
 			Required: deps.RequireAuth,
 		},
+		Middlewares:  middlewares,
 		RequireScope: deps.RequireScope,
 	}
 }

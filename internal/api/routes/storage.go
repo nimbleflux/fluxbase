@@ -30,9 +30,28 @@ type StorageDeps struct {
 	UploadFile             fiber.Handler
 	DownloadFile           fiber.Handler
 	DeleteFile             fiber.Handler
+
+	// Middleware for tenant context
+	TenantMiddleware   fiber.Handler
+	TenantDBMiddleware fiber.Handler
 }
 
 func BuildStorageRoutes(deps *StorageDeps) *RouteGroup {
+	// Build middlewares for tenant context
+	var middlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name:    "TenantContext",
+			Handler: deps.TenantMiddleware,
+		})
+	}
+	if deps.TenantDBMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name:    "TenantDBContext",
+			Handler: deps.TenantDBMiddleware,
+		})
+	}
+
 	return &RouteGroup{
 		Name:   "storage",
 		Prefix: "/api/v1/storage",
@@ -224,6 +243,7 @@ func BuildStorageRoutes(deps *StorageDeps) *RouteGroup {
 			Optional: deps.OptionalAuth,
 			Required: deps.RequireAuth,
 		},
+		Middlewares:  middlewares,
 		RequireScope: deps.RequireScope,
 	}
 }

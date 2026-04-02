@@ -30,6 +30,10 @@ type AdminDeps struct {
 	UnifiedAuth fiber.Handler
 	RequireRole func(...string) fiber.Handler
 
+	// Middleware for tenant context (inherited by all subgroups)
+	TenantMiddleware   fiber.Handler
+	TenantDBMiddleware fiber.Handler
+
 	// Subgroup dependencies
 	Branch           *BranchDeps
 	Schema           *SchemaAdminDeps
@@ -141,6 +145,21 @@ func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
 		subgroups = append(subgroups, extensionsTenant)
 	}
 
+	// Build middlewares for tenant context (inherited by all subgroups)
+	var middlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name:    "TenantContext",
+			Handler: deps.TenantMiddleware,
+		})
+	}
+	if deps.TenantDBMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name:    "TenantDBContext",
+			Handler: deps.TenantDBMiddleware,
+		})
+	}
+
 	return &RouteGroup{
 		Name:      "admin",
 		Prefix:    "/api/v1/admin",
@@ -150,6 +169,7 @@ func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
 			Required: deps.UnifiedAuth,
 			Unified:  deps.UnifiedAuth,
 		},
+		Middlewares: middlewares,
 		RequireRole: deps.RequireRole,
 	}
 }

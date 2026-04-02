@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useImpersonationStore } from "@/stores/impersonation-store";
+import { useTenantStore } from "@/stores/tenant-store";
 import {
   CreateBucketDialog,
   CreateFolderDialog,
@@ -254,6 +255,10 @@ function StorageBrowser() {
             xhr.open("POST", uploadUrl, true);
             if (token) {
               xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+            }
+            const currentTenant = useTenantStore.getState().currentTenant;
+            if (currentTenant?.id) {
+              xhr.setRequestHeader("X-FB-Tenant", currentTenant.id);
             }
             xhr.send(formData);
           });

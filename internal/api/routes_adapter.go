@@ -54,16 +54,21 @@ func (s *Server) buildStorageRouteDeps() *routes.StorageDeps {
 		UploadFile:             s.Storage.Handler.UploadFile,
 		DownloadFile:           s.Storage.Handler.DownloadFile,
 		DeleteFile:             s.Storage.Handler.DeleteFile,
+
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
 	}
 }
 
 func (s *Server) buildRESTRouteDeps() *routes.RESTDeps {
 	return &routes.RESTDeps{
-		RequireAuth:  middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.DB(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
-		RequireScope: middleware.RequireScope,
-		HandleTables: s.rest.HandleDynamicTable,
-		HandleQuery:  s.rest.HandleDynamicQuery,
-		HandleById:   s.rest.HandleDynamicTableById,
+		RequireAuth:        middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.DB(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
+		RequireScope:       middleware.RequireScope,
+		HandleTables:       s.rest.HandleDynamicTable,
+		HandleQuery:        s.rest.HandleDynamicQuery,
+		HandleById:         s.rest.HandleDynamicTableById,
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
 	}
 }
 
@@ -590,8 +595,10 @@ func (s *Server) buildKnowledgeBaseRouteDeps() *routes.KnowledgeBaseDeps {
 func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 	unifiedAuth := UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db.Pool())
 	return &routes.AdminDeps{
-		UnifiedAuth: unifiedAuth,
-		RequireRole: RequireRole,
+		UnifiedAuth:        unifiedAuth,
+		RequireRole:        RequireRole,
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
 
 		// Subgroup dependencies
 		Branch: s.buildBranchRouteDeps(),
@@ -633,8 +640,6 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			ValidateInternalSchema:  s.Schema.InternalSchema.ValidateSchema,
 			GetInternalSchemaStatus: s.Schema.InternalSchema.GetSchemaStatus,
 			MigrateInternalSchema:   s.Schema.InternalSchema.MigrateSchema,
-			TenantMiddleware:        s.Middleware.Tenant,
-			TenantDBMiddleware:      s.Middleware.TenantDB,
 		},
 		AuthProviders: &routes.AuthProvidersAdminDeps{
 			ListOAuthProviders:  s.Auth.OAuthProvider.ListOAuthProviders,
@@ -668,7 +673,6 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			CreateInvitation:    s.Auth.Invitation.CreateInvitation,
 			ListInvitations:     s.Auth.Invitation.ListInvitations,
 			RevokeInvitation:    s.Auth.Invitation.RevokeInvitation,
-			TenantMiddleware:    s.Middleware.Tenant,
 		},
 		Tenants: &routes.TenantsAdminDeps{
 			ListMyTenants:             s.Tenancy.Tenant.ListMyTenants,
