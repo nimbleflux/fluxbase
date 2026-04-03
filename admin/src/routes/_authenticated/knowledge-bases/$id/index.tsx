@@ -18,6 +18,7 @@ import {
   Type,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTenantStore } from '@/stores/tenant-store'
 import {
   knowledgeBasesApi,
   type KnowledgeBase,
@@ -97,6 +98,7 @@ export const Route = createFileRoute('/_authenticated/knowledge-bases/$id/')({
 function KnowledgeBaseDetailPage() {
   const { id } = Route.useParams()
   const navigate = useNavigate()
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id)
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(null)
   const [documents, setDocuments] = useState<KnowledgeBaseDocument[]>([])
   const [loading, setLoading] = useState(true)
@@ -353,7 +355,7 @@ function KnowledgeBaseDetailPage() {
 
   useEffect(() => {
     fetchData()
-  }, [fetchData])
+  }, [fetchData, currentTenantId])
 
   // Poll for status updates when documents are processing
   useEffect(() => {

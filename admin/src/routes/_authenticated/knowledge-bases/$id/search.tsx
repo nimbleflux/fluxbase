@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { KnowledgeBaseHeader } from '@/components/knowledge-bases/knowledge-base-header'
+import { useTenantStore } from '@/stores/tenant-store'
 
 const RESULTS_PER_PAGE = 5
 
@@ -60,6 +61,7 @@ export const Route = createFileRoute(
 
 function KnowledgeBaseSearchPage() {
   const { id } = Route.useParams()
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id)
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(null)
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
@@ -144,7 +146,7 @@ function KnowledgeBaseSearchPage() {
 
   useEffect(() => {
     fetchKnowledgeBase()
-  }, [fetchKnowledgeBase])
+  }, [fetchKnowledgeBase, currentTenantId])
 
   if (loading) {
     return (

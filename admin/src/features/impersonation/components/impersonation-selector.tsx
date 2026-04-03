@@ -10,6 +10,7 @@ import { getAccessToken } from "@/lib/auth";
 import { setAuthToken as setSDKAuthToken } from "@/lib/fluxbase-client";
 import { impersonationApi } from "@/lib/impersonation-api";
 import { useAuth } from "@/hooks/use-auth";
+import { useTenantStore } from "@/stores/tenant-store";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -175,14 +176,15 @@ export function ImpersonationSelector() {
     }
   };
 
-  // Only show impersonation button to instance_admin users
+  // Only show impersonation button to instance_admin users when a tenant is selected
   const isInstanceAdmin =
     user && "role" in user
       ? Array.isArray(user.role)
         ? user.role.includes("instance_admin")
         : user.role === "instance_admin"
       : false;
-  if (!isInstanceAdmin) {
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  if (!isInstanceAdmin || !currentTenant) {
     return null;
   }
 
@@ -262,6 +264,7 @@ export function ImpersonationSelector() {
                 value={selectedUserId}
                 onSelect={handleUserSelect}
                 disabled={loading}
+                tenantId={currentTenant?.id}
               />
             </div>
           )}

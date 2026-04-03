@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Zap, Activity, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useImpersonationStore } from "@/stores/impersonation-store";
+import { useTenantStore } from "@/stores/tenant-store";
 import {
   functionsApi,
   type EdgeFunction,
@@ -62,6 +63,8 @@ function FunctionsPage() {
 }
 
 function EdgeFunctionsTab() {
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
+
   // Tab state
   const [activeTab, setActiveTab] = useState<"executions" | "functions">(
     "executions",
@@ -331,11 +334,11 @@ function EdgeFunctionsTab() {
       }
     };
     fetchNamespaces();
-  }, []); // Only run on mount - no dependencies needed
+  }, [currentTenantId]); // Re-fetch when tenant changes
 
   useEffect(() => {
     fetchEdgeFunctions();
-  }, [fetchEdgeFunctions, selectedNamespace]);
+  }, [fetchEdgeFunctions, selectedNamespace, currentTenantId]);
 
   // Fetch executions when tab changes or any fetch-related state changes
   useEffect(() => {

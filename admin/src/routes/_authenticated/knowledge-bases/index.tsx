@@ -12,6 +12,7 @@ import {
   type EnrichedUser,
   type AIProvider,
 } from "@/lib/api";
+import { useTenantStore } from "@/stores/tenant-store";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +39,7 @@ export const Route = createFileRoute("/_authenticated/knowledge-bases/")({
 
 function KnowledgeBasesPage() {
   const navigate = useNavigate();
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseSummary[]>(
     [],
   );
@@ -163,7 +165,7 @@ function KnowledgeBasesPage() {
 
   useEffect(() => {
     fetchKnowledgeBases();
-  }, []);
+  }, [fetchKnowledgeBases, currentTenantId]);
 
   useEffect(() => {
     if (createDialogOpen) {

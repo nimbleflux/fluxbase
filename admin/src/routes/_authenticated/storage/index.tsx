@@ -34,6 +34,7 @@ export const Route = createFileRoute("/_authenticated/storage/")({
 
 function StorageBrowser() {
   const client = useFluxbaseClient();
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
 
   const [buckets, setBuckets] = useState<AdminBucket[]>([]);
   const [selectedBucket, setSelectedBucket] = useState<string>("");
@@ -120,8 +121,13 @@ function StorageBrowser() {
   }, [selectedBucket, currentPrefix, client]);
 
   useEffect(() => {
+    setSelectedBucket("");
+    setObjects([]);
+    setPrefixes([]);
+    setCurrentPrefix("");
+    setSelectedFiles(new Set());
     loadBuckets();
-  }, [loadBuckets]);
+  }, [loadBuckets, currentTenantId]);
 
   useEffect(() => {
     if (selectedBucket) {

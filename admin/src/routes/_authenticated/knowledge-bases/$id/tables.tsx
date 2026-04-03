@@ -55,6 +55,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { KnowledgeBaseHeader } from '@/components/knowledge-bases/knowledge-base-header'
+import { useTenantStore } from '@/stores/tenant-store'
 import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/_authenticated/knowledge-bases/$id/tables')({
@@ -82,6 +83,7 @@ const defaultExportOptions: ExportOptions = {
 
 function KnowledgeBaseTablesPage() {
   const { id } = Route.useParams()
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id)
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(null)
   const [tables, setTables] = useState<TableSummary[]>([])
   const [syncConfigs, setSyncConfigs] = useState<TableExportSyncConfig[]>([])
@@ -117,7 +119,7 @@ function KnowledgeBaseTablesPage() {
 
   useEffect(() => {
     fetchData()
-  }, [fetchData])
+  }, [fetchData, currentTenantId])
 
   const openExportDialog = async (table: TableSummary) => {
     setExportDialog({
