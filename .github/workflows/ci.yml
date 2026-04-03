@@ -322,7 +322,7 @@ jobs:
           # All schema files use CREATE TABLE IF NOT EXISTS so they are idempotent.
           # Bootstrap must have already run (creates schemas, extensions, roles).
           SCHEMA_DIR="internal/database/schema/schemas"
-          for schema in platform auth storage jobs functions realtime dashboard ai rpc system migrations app api branching logging mcp; do
+          for schema in platform auth storage jobs functions realtime ai rpc system migrations app api branching logging mcp; do
             echo "Applying schema: $schema"
             psql -h localhost -U postgres -d fluxbase_test -v ON_ERROR_STOP=1 -f "${SCHEMA_DIR}/${schema}.sql"
           done

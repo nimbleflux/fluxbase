@@ -208,7 +208,7 @@ func GetUserRole(c fiber.Ctx) (string, bool) {
 	return r, ok
 }
 
-// UnifiedAuthMiddleware creates a middleware that accepts both auth.users and dashboard.users authentication
+// UnifiedAuthMiddleware creates a middleware that accepts both auth.users and platform.users authentication
 // This allows both application users with admin role AND dashboard admins to access admin endpoints.
 // The db parameter is used to check the actual role from auth.users when JWT role is "authenticated",
 // allowing role changes to take effect immediately without requiring re-login.

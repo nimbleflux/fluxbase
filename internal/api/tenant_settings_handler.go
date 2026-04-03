@@ -208,7 +208,7 @@ func (h *TenantSettingsHandler) GetTenantSetting(c fiber.Ctx) error {
 	}
 
 	// Verify tenant exists
-	_, err := h.tenantDB.GetTenant(ctx, tenantID)
+	tenant, err := h.tenantDB.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
 			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
@@ -218,7 +218,7 @@ func (h *TenantSettingsHandler) GetTenantSetting(c fiber.Ctx) error {
 	}
 
 	// Resolve the setting
-	resolved, err := h.settingsSvc.ResolveSetting(ctx, tenantID, settingPath)
+	resolved, err := h.settingsSvc.ResolveSetting(ctx, tenantID, settingPath, tenant.IsDefault, tenant.Slug)
 	if err != nil {
 		if errors.Is(err, settings.ErrSettingNotFound) {
 			return fiber.NewError(fiber.StatusNotFound, "Setting not found")

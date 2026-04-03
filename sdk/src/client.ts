@@ -552,6 +552,24 @@ export class FluxbaseClient<
   }
 
   /**
+   * Register a callback that is called before every request.
+   * The callback receives the headers object and can modify it in place.
+   * This is useful for dynamically injecting headers at request time
+   * (e.g., reading tenant context from an external store).
+   *
+   * The callback runs after static headers are merged, so it can override them.
+   *
+   * @param callback - A function that receives the headers object, or null to remove
+   *
+   * @category Advanced
+   */
+  setBeforeRequestCallback(
+    callback: ((headers: Record<string, string>) => void) | null,
+  ) {
+    this.fetch.setBeforeRequestCallback(callback);
+  }
+
+  /**
    * Create a new client scoped to a specific tenant
    *
    * This returns a new client instance with the tenant context set.

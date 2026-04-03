@@ -45,6 +45,12 @@ type SettingsAdminDeps struct {
 	TestEmailTemplate   fiber.Handler
 	ResetEmailTemplate  fiber.Handler
 
+	// Email settings - tenant-scoped
+	GetTenantEmailSettings    fiber.Handler
+	UpdateTenantEmailSettings fiber.Handler
+	DeleteTenantEmailSetting  fiber.Handler
+	TestTenantEmailSettings   fiber.Handler
+
 	// Captcha settings - instance admin only
 	GetCaptchaSettings    fiber.Handler
 	UpdateCaptchaSettings fiber.Handler
@@ -100,6 +106,12 @@ func BuildSettingsAdminRoutes(deps *SettingsAdminDeps) *RouteGroup {
 			{Method: "PUT", Path: "/email/templates/:name", Handler: deps.UpdateEmailTemplate, Summary: "Update email template"},
 			{Method: "POST", Path: "/email/templates/:name/test", Handler: deps.TestEmailTemplate, Summary: "Test email template"},
 			{Method: "POST", Path: "/email/templates/:name/reset", Handler: deps.ResetEmailTemplate, Summary: "Reset email template"},
+
+			// Tenant-scoped Email Settings (tenant_admin+)
+			{Method: "GET", Path: "/email/settings/tenant", Handler: deps.GetTenantEmailSettings, Summary: "Get tenant email settings", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "PUT", Path: "/email/settings/tenant", Handler: deps.UpdateTenantEmailSettings, Summary: "Update tenant email settings", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "DELETE", Path: "/email/settings/tenant/:field", Handler: deps.DeleteTenantEmailSetting, Summary: "Delete tenant email setting override", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "POST", Path: "/email/settings/tenant/test", Handler: deps.TestTenantEmailSettings, Summary: "Test tenant email settings", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 
 			// Captcha Settings (uses default roles)
 			{Method: "GET", Path: "/settings/captcha", Handler: deps.GetCaptchaSettings, Summary: "Get captcha settings"},

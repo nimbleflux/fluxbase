@@ -275,7 +275,7 @@ test-setup-db: ## Apply bootstrap + declarative schemas to match CI pipeline set
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 -f internal/database/bootstrap/bootstrap.sql
 	@# 2. Apply each declarative schema in dependency order (all use CREATE IF NOT EXISTS = idempotent)
 	@# Note: Some schemas use CREATE POLICY without IF NOT EXISTS, so we don't use ON_ERROR_STOP for re-runs
-	@for schema in platform auth storage jobs functions realtime dashboard ai rpc system migrations app api branching logging mcp; do \
+	@for schema in platform auth storage jobs functions realtime ai rpc system migrations app api branching logging mcp; do \
 		echo "Applying schema: $$schema"; \
 		PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -f internal/database/schema/schemas/$$schema.sql || true; \
 	done
@@ -410,19 +410,18 @@ migrate-create: ## Create new user migration (usage: make migrate-create name=ad
 	@echo "${YELLOW}Note: Create user migrations in your own directory.${NC}"
 	@echo "${YELLOW}Set USER_MIGRATIONS_PATH in your config.${NC}"
 
-db-reset: ## Reset database (preserves public, auth.users, dashboard.users, setup_completed). Use db-reset-full for full reset.
+db-reset: ## Reset database (preserves public, auth.users, platform.users, setup_completed). Use db-reset-full for full reset.
 	@echo "${YELLOW}Resetting database (preserving public schema, user data, setup_completed)...${NC}"
 	@echo "${BLUE}Database:${NC} $(DATABASE_ADMIN_USER)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
 	@echo "${BLUE}PostgreSQL container:${NC} $(POSTGRES_CONTAINER)"
 	@# Backup user data and settings before dropping schemas
 	@echo "${YELLOW}Backing up user data...${NC}"
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP TABLE IF EXISTS _fluxbase_auth_users_backup; CREATE TABLE _fluxbase_auth_users_backup AS SELECT * FROM auth.users;" 2>/dev/null || true
-	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP TABLE IF EXISTS _fluxbase_dashboard_users_backup; CREATE TABLE _fluxbase_dashboard_users_backup AS SELECT * FROM dashboard.users;" 2>/dev/null || true
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP TABLE IF EXISTS _fluxbase_platform_users_backup; CREATE TABLE _fluxbase_platform_users_backup AS SELECT * FROM platform.users;" 2>/dev/null || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP TABLE IF EXISTS _fluxbase_setup_backup; CREATE TABLE _fluxbase_setup_backup AS SELECT * FROM app.settings WHERE key = 'setup_completed';" 2>/dev/null || true
 	@# Drop all schemas (including auth) for clean migration
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS app CASCADE;" || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS auth CASCADE;" || true
-	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS dashboard CASCADE;" || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS storage CASCADE;" || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS functions CASCADE;" || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS jobs CASCADE;" || true
@@ -445,7 +444,7 @@ db-reset: ## Reset database (preserves public, auth.users, dashboard.users, setu
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT CREATE ON DATABASE $(DATABASE_NAME) TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA app TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA auth TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA dashboard TO fluxbase_app, fluxbase_rls_test;" || true
+	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA platform TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA functions TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA jobs TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA storage TO fluxbase_app, fluxbase_rls_test;" || true
@@ -459,8 +458,8 @@ db-reset: ## Reset database (preserves public, auth.users, dashboard.users, setu
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA app TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA auth TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA auth TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA dashboard TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA dashboard TO fluxbase_app, fluxbase_rls_test;" || true
+	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA platform TO fluxbase_app, fluxbase_rls_test;" || true
+	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA platform TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA functions TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA functions TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA jobs TO fluxbase_app, fluxbase_rls_test;" || true
@@ -489,7 +488,7 @@ db-reset: ## Reset database (preserves public, auth.users, dashboard.users, setu
 	@# Restore user data from backups
 	@echo "${YELLOW}Restoring user data from backups...${NC}"
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "INSERT INTO auth.users SELECT * FROM _fluxbase_auth_users_backup ON CONFLICT (id) DO NOTHING; DROP TABLE IF EXISTS _fluxbase_auth_users_backup;" 2>/dev/null || true
-	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "INSERT INTO dashboard.users SELECT * FROM _fluxbase_dashboard_users_backup ON CONFLICT (id) DO NOTHING; DROP TABLE IF EXISTS _fluxbase_dashboard_users_backup;" 2>/dev/null || true
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "INSERT INTO platform.users SELECT * FROM _fluxbase_platform_users_backup ON CONFLICT (id) DO NOTHING; DROP TABLE IF EXISTS _fluxbase_platform_users_backup;" 2>/dev/null || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "INSERT INTO app.settings SELECT * FROM _fluxbase_setup_backup ON CONFLICT (key) WHERE user_id IS NULL DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(); DROP TABLE IF EXISTS _fluxbase_setup_backup;" 2>/dev/null || true
 	@echo "${GREEN}Database reset complete!${NC}"
 	@echo "${BLUE}Note: Migrations granted all permissions to the user running them ($(DATABASE_ADMIN_USER)).${NC}"

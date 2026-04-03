@@ -743,8 +743,8 @@ func createTestUserWithToken(t *testing.T, tc *testutil.IntegrationTestContext, 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	require.NoError(t, err, "Failed to hash password")
 
-	// Insert user into both auth.users (for auth/JWT) and dashboard.users (for FK constraint)
-	// The secrets table's created_by/updated_by fields reference dashboard.users
+	// Insert user into both auth.users (for auth/JWT) and platform.users (for FK constraint)
+	// The secrets table's created_by/updated_by fields reference platform.users
 	_, err = tc.DB.Pool().Exec(ctx,
 		"INSERT INTO auth.users (id, email, password_hash, email_verified, role, created_at) VALUES ($1, $2, $3, true, 'authenticated', NOW())",
 		userID, email, string(hashedPassword))
@@ -756,7 +756,7 @@ func createTestUserWithToken(t *testing.T, tc *testutil.IntegrationTestContext, 
 	require.NoError(t, err, "Failed to hash dashboard password")
 
 	_, err = tc.DB.Pool().Exec(ctx,
-		"INSERT INTO dashboard.users (id, email, password_hash, full_name, role, created_at) VALUES ($1, $2, $3, $4, 'instance_admin', NOW()) ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash",
+		"INSERT INTO platform.users (id, email, password_hash, full_name, role, created_at) VALUES ($1, $2, $3, $4, 'instance_admin', NOW()) ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash",
 		userID, email, string(dashboardPasswordHash), "Test User")
 	require.NoError(t, err, "Failed to create dashboard user")
 

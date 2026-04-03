@@ -735,13 +735,13 @@ func TestRLSDashboardAdminTablesProtected(t *testing.T) {
 	// Use a unique test provider name to avoid conflicts with existing data
 	testProviderName := fmt.Sprintf("test_provider_%s", userID[:8])
 	tc.ExecuteSQLAsSuperuser(`
-		INSERT INTO dashboard.oauth_providers (id, provider_name, display_name, client_id, client_secret, redirect_url, enabled, created_at, updated_at)
+		INSERT INTO platform.oauth_providers (id, provider_name, display_name, client_id, client_secret, redirect_url, enabled, created_at, updated_at)
 		VALUES (gen_random_uuid(), $1, 'Test Provider', 'client123', 'secret456', 'http://localhost/callback', true, NOW(), NOW())
 		ON CONFLICT (provider_name) DO NOTHING
 	`, testProviderName)
 
 	providers := tc.QuerySQLAsRLSUser(`
-		SELECT * FROM dashboard.oauth_providers
+		SELECT * FROM platform.oauth_providers
 	`, userID)
 
 	require.Len(t, providers, 0, "Regular user should NOT see oauth_providers (dashboard admin only)")
@@ -753,12 +753,12 @@ func TestRLSDashboardAdminTablesProtected(t *testing.T) {
 
 	// Test 3: Activity log should be admin-read only
 	tc.ExecuteSQLAsSuperuser(`
-		INSERT INTO dashboard.activity_log (id, user_id, action, details, created_at)
+		INSERT INTO platform.activity_log (id, user_id, action, details, created_at)
 		VALUES (gen_random_uuid(), NULL, 'test.action', '{"message": "Test log entry"}'::jsonb, NOW())
 	`)
 
 	activityLog := tc.QuerySQLAsRLSUser(`
-		SELECT * FROM dashboard.activity_log
+		SELECT * FROM platform.activity_log
 	`, userID)
 
 	require.Len(t, activityLog, 0, "Regular user should NOT see activity_log (dashboard admin only)")

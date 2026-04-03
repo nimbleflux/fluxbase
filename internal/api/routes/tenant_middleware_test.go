@@ -534,3 +534,124 @@ func minimalExtensionsTenantDeps() *ExtensionsTenantDeps {
 		DisableExtension: tenantAwareHandler,
 	}
 }
+
+// TestTenantMiddleware_MonitoringRouteGroup verifies that monitoring routes
+// correctly wire tenant middleware when deps are provided.
+func TestTenantMiddleware_MonitoringRouteGroup(t *testing.T) {
+	t.Run("with_tenant_middleware", func(t *testing.T) {
+		deps := &MonitoringDeps{
+			RequireAuth:        tenantAwareHandler,
+			RequireScope:       func(...string) fiber.Handler { return tenantAwareHandler },
+			TenantMiddleware:   tenantAwareHandler,
+			TenantDBMiddleware: tenantAwareHandler,
+			GetMetrics:         tenantAwareHandler,
+			GetHealth:          tenantAwareHandler,
+			GetLogs:            tenantAwareHandler,
+		}
+		group := BuildMonitoringRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"monitoring group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantDBContext"),
+			"monitoring group must have TenantDBContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
+
+	t.Run("nil_tenant_middleware", func(t *testing.T) {
+		deps := &MonitoringDeps{
+			RequireAuth:  tenantAwareHandler,
+			RequireScope: func(...string) fiber.Handler { return tenantAwareHandler },
+			GetMetrics:   tenantAwareHandler,
+			GetHealth:    tenantAwareHandler,
+			GetLogs:      tenantAwareHandler,
+		}
+		group := BuildMonitoringRoutes(deps)
+		require.NotNil(t, group)
+		assert.Empty(t, group.Middlewares, "nil tenant middleware should result in empty middlewares")
+	})
+}
+
+// TestRequireExplicitTenant_Enforcement verifies that tenant-scoped admin subgroups
+// have the RequireExplicitTenant middleware applied, while instance-level ones don't.
+func TestRequireExplicitTenant_Enforcement(t *testing.T) {
+	explicitTenantHandler := func(c fiber.Ctx) error { return c.SendString("ok") }
+
+	deps := &AdminDeps{
+		UnifiedAuth:           tenantAwareHandler,
+		RequireRole:           func(...string) fiber.Handler { return tenantAwareHandler },
+		TenantMiddleware:      tenantAwareHandler,
+		TenantDBMiddleware:    tenantAwareHandler,
+		RequireExplicitTenant: explicitTenantHandler,
+		Schema:                minimalSchemaAdminDeps(),
+		AuthProviders:         minimalAuthProvidersAdminDeps(),
+		Users:                 minimalUsersAdminDeps(),
+		Tenants:               minimalTenantsAdminDeps(),
+		ServiceKeys:           minimalServiceKeysAdminDeps(),
+		Functions:             minimalFunctionsAdminDeps(),
+		Jobs:                  minimalJobsAdminDeps(),
+		AI:                    minimalAIAdminDeps(),
+		RPC:                   minimalRPCAdminDeps(),
+		Logs:                  minimalLogsAdminDeps(),
+		Settings:              minimalSettingsAdminDeps(),
+		Extensions:            minimalExtensionsAdminDeps(),
+		ExtensionsTenant:      minimalExtensionsTenantDeps(),
+	}
+
+	group := BuildAdminRoutes(deps)
+	require.NotNil(t, group)
+
+	foundSubgroups := make(map[string]*RouteGroup)
+	for _, sg := range group.SubGroups {
+		foundSubgroups[sg.Name] = sg
+	}
+
+	// Tenant-scoped subgroups MUST have RequireExplicitTenant
+	tenantScoped := []string{
+		"schema_admin",
+		"auth_providers_admin",
+		"users_admin",
+		"service_keys_admin",
+		"functions_admin",
+		"jobs_admin",
+		"ai_admin",
+		"rpc_admin",
+		"logs_admin",
+		"extensions_tenant",
+	}
+	for _, name := range tenantScoped {
+		sg, ok := foundSubgroups[name]
+		require.True(t, ok, "expected subgroup %q to exist", name)
+		assert.True(t, hasMiddlewareNamed(sg.Middlewares, "RequireExplicitTenant"),
+			"subgroup %q should have RequireExplicitTenant middleware, got: %v", name, collectMiddlewareNames(sg.Middlewares))
+	}
+
+	// Instance-level subgroups MUST NOT have RequireExplicitTenant
+	instanceLevel := []string{
+		"tenants_admin",
+		"settings_admin",
+		"extensions_admin",
+	}
+	for _, name := range instanceLevel {
+		sg, ok := foundSubgroups[name]
+		require.True(t, ok, "expected subgroup %q to exist", name)
+		assert.False(t, hasMiddlewareNamed(sg.Middlewares, "RequireExplicitTenant"),
+			"subgroup %q should NOT have RequireExplicitTenant middleware, got: %v", name, collectMiddlewareNames(sg.Middlewares))
+	}
+}
+
+// TestRequireExplicitTenant_NilNoPanic verifies that nil RequireExplicitTenant doesn't panic.
+func TestRequireExplicitTenant_NilNoPanic(t *testing.T) {
+	deps := &AdminDeps{
+		UnifiedAuth:        tenantAwareHandler,
+		RequireRole:        func(...string) fiber.Handler { return tenantAwareHandler },
+		TenantMiddleware:   tenantAwareHandler,
+		TenantDBMiddleware: tenantAwareHandler,
+		// RequireExplicitTenant is nil
+		Schema:  minimalSchemaAdminDeps(),
+		Users:   minimalUsersAdminDeps(),
+		Tenants: minimalTenantsAdminDeps(),
+	}
+	group := BuildAdminRoutes(deps)
+	require.NotNil(t, group)
+	// All subgroups should exist without panic
+	assert.NotEmpty(t, group.SubGroups)
+}

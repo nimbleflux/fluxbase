@@ -28,9 +28,7 @@ func setupExtensionsTest(t *testing.T) (*testutil.IntegrationTestContext, *exten
 	// Ensure the extensions tables exist
 	ctx := context.Background()
 	_, err := tc.DB.Pool().Exec(ctx, `
-		CREATE SCHEMA IF NOT EXISTS dashboard;
-
-		CREATE TABLE IF NOT EXISTS dashboard.available_extensions (
+		CREATE TABLE IF NOT EXISTS platform.available_extensions (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			name TEXT NOT NULL UNIQUE,
 			display_name TEXT,
@@ -43,7 +41,7 @@ func setupExtensionsTest(t *testing.T) (*testutil.IntegrationTestContext, *exten
 			updated_at TIMESTAMP DEFAULT NOW()
 		);
 
-		CREATE TABLE IF NOT EXISTS dashboard.enabled_extensions (
+		CREATE TABLE IF NOT EXISTS platform.enabled_extensions (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			extension_name TEXT NOT NULL,
 			enabled_at TIMESTAMP DEFAULT NOW(),
@@ -67,9 +65,9 @@ func cleanupExtensionsTest(t *testing.T, tc *testutil.IntegrationTestContext) {
 
 	ctx := context.Background()
 	_, err := tc.DB.Pool().Exec(ctx, `
-		DELETE FROM dashboard.enabled_extensions
+		DELETE FROM platform.enabled_extensions
 		WHERE extension_name LIKE 'test_%' OR extension_name LIKE 'test%';
-		DELETE FROM dashboard.available_extensions
+		DELETE FROM platform.available_extensions
 		WHERE name LIKE 'test_%' OR name LIKE 'test%';
 	`)
 	require.NoError(t, err, "Failed to cleanup test data")
@@ -130,7 +128,7 @@ func TestExtensionsService_ListExtensions_WithCustomExtensions(t *testing.T) {
 
 	// Update the metadata for this extension
 	_, err = tc.DB.Pool().Exec(ctx, `
-		INSERT INTO dashboard.available_extensions
+		INSERT INTO platform.available_extensions
 		(name, display_name, description, category, is_core, requires_restart)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (name) DO UPDATE SET
@@ -219,7 +217,7 @@ func TestExtensionsService_EnableExtension_WithValidExtension(t *testing.T) {
 
 	// First, register the extension in the catalog
 	_, err := tc.DB.Pool().Exec(ctx, `
-		INSERT INTO dashboard.available_extensions
+		INSERT INTO platform.available_extensions
 		(name, display_name, description, category, is_core, requires_restart)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (name) DO NOTHING
@@ -248,7 +246,7 @@ func TestExtensionsService_EnableExtension_InvalidName(t *testing.T) {
 	// Register an extension with an invalid name
 	testExtName := fmt.Sprintf("test-invalid_%d", time.Now().Unix())
 	_, err := tc.DB.Pool().Exec(ctx, `
-		INSERT INTO dashboard.available_extensions
+		INSERT INTO platform.available_extensions
 		(name, display_name, description, category, is_core, requires_restart)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, testExtName, "Test Invalid", "Invalid name", "testing", false, false)
@@ -276,7 +274,7 @@ func TestExtensionsService_EnableExtension_InvalidSchema(t *testing.T) {
 	// Register a valid extension
 	testExtName := fmt.Sprintf("test_schema_%d", time.Now().Unix())
 	_, err := tc.DB.Pool().Exec(ctx, `
-		INSERT INTO dashboard.available_extensions
+		INSERT INTO platform.available_extensions
 		(name, display_name, description, category, is_core, requires_restart)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, testExtName, "Test Schema", "Test schema validation", "testing", false, false)
@@ -304,7 +302,7 @@ func TestExtensionsService_DisableExtension_PreventsCore(t *testing.T) {
 	// Register a core extension
 	testExtName := fmt.Sprintf("test_core_%d", time.Now().Unix())
 	_, err := tc.DB.Pool().Exec(ctx, `
-		INSERT INTO dashboard.available_extensions
+		INSERT INTO platform.available_extensions
 		(name, display_name, description, category, is_core, requires_restart)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, testExtName, "Test Core", "A core extension", "core", true, false)
@@ -334,7 +332,7 @@ func TestExtensionsService_DisableExtension_InvalidName(t *testing.T) {
 	invalidName := "test-invalid-" + testExtName
 
 	_, err := tc.DB.Pool().Exec(ctx, `
-		INSERT INTO dashboard.available_extensions
+		INSERT INTO platform.available_extensions
 		(name, display_name, description, category, is_core, requires_restart)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, invalidName, "Test Disable Invalid", "Invalid name", "testing", false, false)
@@ -386,7 +384,7 @@ func TestExtensionsService_InitializeCoreExtensions_InitializesCore(t *testing.T
 
 	for _, name := range testExtNames {
 		_, err := tc.DB.Pool().Exec(ctx, `
-			INSERT INTO dashboard.available_extensions
+			INSERT INTO platform.available_extensions
 			(name, display_name, description, category, is_core, requires_restart)
 			VALUES ($1, $2, $3, $4, $5, $6)
 		`, name, "Test Core", "A core extension", "core", true, false)
@@ -424,7 +422,7 @@ func TestExtensionsService_Validation_ValidIdentifiers(t *testing.T) {
 		t.Run("valid_"+name, func(t *testing.T) {
 			// Register the extension
 			_, err := tc.DB.Pool().Exec(ctx, `
-				INSERT INTO dashboard.available_extensions
+				INSERT INTO platform.available_extensions
 				(name, display_name, description, category, is_core, requires_restart)
 				VALUES ($1, $2, $3, $4, $5, $6)
 			`, name, name, "Test extension", "testing", false, false)
@@ -470,7 +468,7 @@ func TestExtensionsService_Validation_InvalidIdentifiers(t *testing.T) {
 		t.Run("invalid_"+tcCase.name, func(t *testing.T) {
 			// Register the extension with invalid name
 			_, err := tc.DB.Pool().Exec(ctx, `
-				INSERT INTO dashboard.available_extensions
+				INSERT INTO platform.available_extensions
 				(name, display_name, description, category, is_core, requires_restart)
 				VALUES ($1, $2, $3, $4, $5, $6)
 			`, tcCase.name, tcCase.name, "Test extension", "testing", false, false)
@@ -505,7 +503,7 @@ func TestExtensionsService_EnableExtension_ValidSchemas(t *testing.T) {
 			// Register a test extension
 			testExtName := fmt.Sprintf("test_schema_%d", time.Now().UnixNano())
 			_, err := tc.DB.Pool().Exec(ctx, `
-				INSERT INTO dashboard.available_extensions
+				INSERT INTO platform.available_extensions
 				(name, display_name, description, category, is_core, requires_restart)
 				VALUES ($1, $2, $3, $4, $5, $6)
 			`, testExtName, "Test Schema", "Test schema validation", "testing", false, false)
@@ -546,7 +544,7 @@ func TestExtensionsService_EnableExtension_InvalidSchemas(t *testing.T) {
 			// Register a test extension
 			testExtName := fmt.Sprintf("test_bad_schema_%d", time.Now().UnixNano())
 			_, err := tc.DB.Pool().Exec(ctx, `
-				INSERT INTO dashboard.available_extensions
+				INSERT INTO platform.available_extensions
 				(name, display_name, description, category, is_core, requires_restart)
 				VALUES ($1, $2, $3, $4, $5, $6)
 			`, testExtName, "Test Bad Schema", "Test invalid schema", "testing", false, false)
@@ -577,7 +575,7 @@ func TestExtensionsService_EnableExtension_WithUserID(t *testing.T) {
 	// Register a test extension
 	testExtName := fmt.Sprintf("test_user_%d", time.Now().Unix())
 	_, err := tc.DB.Pool().Exec(ctx, `
-		INSERT INTO dashboard.available_extensions
+		INSERT INTO platform.available_extensions
 		(name, display_name, description, category, is_core, requires_restart)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, testExtName, "Test User", "Test user tracking", "testing", false, false)
@@ -607,7 +605,7 @@ func TestExtensionsService_DisableExtension_WithUserID(t *testing.T) {
 	// Register a test extension
 	testExtName := fmt.Sprintf("test_disable_user_%d", time.Now().Unix())
 	_, err := tc.DB.Pool().Exec(ctx, `
-		INSERT INTO dashboard.available_extensions
+		INSERT INTO platform.available_extensions
 		(name, display_name, description, category, is_core, requires_restart)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, testExtName, "Test Disable User", "Test disable user tracking", "testing", false, false)
@@ -644,7 +642,7 @@ func TestExtensionsService_Categories_AreCategorized(t *testing.T) {
 
 	for _, cat := range categories {
 		_, err := tc.DB.Pool().Exec(ctx, `
-			INSERT INTO dashboard.available_extensions
+			INSERT INTO platform.available_extensions
 			(name, display_name, description, category, is_core, requires_restart)
 			VALUES ($1, $2, $3, $4, $5, $6)
 		`, cat.name, cat.name, "Test", cat.category, false, false)

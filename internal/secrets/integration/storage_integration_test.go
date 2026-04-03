@@ -73,7 +73,7 @@ func TestSecretsStorage_CreateSecret_Integration(t *testing.T) {
 
 	t.Run("create secret with user tracking", func(t *testing.T) {
 		// Create a dashboard user directly in the database
-		// The secrets table's created_by/updated_by fields reference dashboard.users, not auth.users
+		// The secrets table's created_by/updated_by fields reference platform.users, not auth.users
 		userUUID := uuid.New()
 		uniqueEmail := fmt.Sprintf("test-%s@example.com", uuid.New().String()[:8])
 		passwordHash := "$2a$10$hashedpasswordhere1234567890123456789012345678901234567890123" // Dummy bcrypt hash
@@ -85,7 +85,7 @@ func TestSecretsStorage_CreateSecret_Integration(t *testing.T) {
 		`, userUUID, uniqueEmail, passwordHash))
 
 		tc.ExecuteSQLAsSuperuser(fmt.Sprintf(`
-			INSERT INTO dashboard.users (id, email, password_hash, full_name, role, created_at)
+			INSERT INTO platform.users (id, email, password_hash, full_name, role, created_at)
 			VALUES ('%s', '%s', '%s', 'Test User', 'instance_admin', NOW())
 			ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash
 		`, userUUID, uniqueEmail, passwordHash))
@@ -363,7 +363,7 @@ func TestSecretsStorage_UpdateSecret_Integration(t *testing.T) {
 		`, userID, uniqueEmail, passwordHash))
 
 		tc.ExecuteSQLAsSuperuser(fmt.Sprintf(`
-			INSERT INTO dashboard.users (id, email, password_hash, full_name, role, created_at)
+			INSERT INTO platform.users (id, email, password_hash, full_name, role, created_at)
 			VALUES ('%s', '%s', '%s', 'Test User', 'instance_admin', NOW())
 			ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash
 		`, userID, uniqueEmail, passwordHash))

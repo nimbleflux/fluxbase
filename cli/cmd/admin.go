@@ -12,7 +12,7 @@ var adminCmd = &cobra.Command{
 	Use:     "admin",
 	Aliases: []string{"adm"},
 	Short:   "Manage admin users and dashboard access",
-	Long: `Manage admin users, invitations, and sessions for the Fluxbase dashboard.
+	Long: `Manage admin users, invitations, and sessions for the Fluxbase platform.
 
 Admin users have access to the Fluxbase admin dashboard for managing
 your database, users, functions, and other platform features.

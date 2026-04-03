@@ -23,7 +23,6 @@ The internal schema includes:
   - jobs: Background job queue
   - functions: Edge functions
   - realtime: Real-time subscriptions
-  - dashboard: Admin dashboard
   - ai: AI chatbots and knowledge bases
   - rpc: Stored procedures
   - system: System infrastructure

@@ -113,7 +113,7 @@ Fluxbase supports four authentication methods, each suited for different use cas
 
 **Separate auth system** from application users:
 
-- Independent user table (`dashboard.users`)
+- Independent user table (`platform.users`)
 - Own JWT tokens with `instance_admin` or `tenant_admin` role
 - Maps to `service_role` for database operations
 

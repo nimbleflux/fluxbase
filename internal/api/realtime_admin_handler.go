@@ -111,7 +111,6 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 	systemSchemas := map[string]bool{
 		"pg_catalog":         true,
 		"information_schema": true,
-		"dashboard":          true,
 		"auth":               true, // auth tables have their own triggers if needed
 		"realtime":           true,
 	}

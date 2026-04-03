@@ -60,13 +60,14 @@ type cachedSetting struct {
 
 // UnifiedService provides settings resolution with tenant/instance/config fallback
 type UnifiedService struct {
-	db            *database.Connection
-	config        *config.Config
-	encryptionKey string
-	cache         map[string]map[string]*cachedSetting // tenantID -> path -> setting
-	overridable   map[string]bool                      // cached overridable settings
-	cacheMu       sync.RWMutex
-	cacheDuration time.Duration
+	db                 *database.Connection
+	config             *config.Config
+	encryptionKey      string
+	tenantConfigLoader *config.TenantConfigLoader
+	cache              map[string]map[string]*cachedSetting // tenantID -> path -> setting
+	overridable        map[string]bool                      // cached overridable settings
+	cacheMu            sync.RWMutex
+	cacheDuration      time.Duration
 }
 
 // NewUnifiedService creates a new unified settings service
@@ -81,8 +82,20 @@ func NewUnifiedService(db *database.Connection, cfg *config.Config, encryptionKe
 	}
 }
 
-// ResolveSetting resolves a setting using the cascade: tenant -> instance -> config
-func (s *UnifiedService) ResolveSetting(ctx context.Context, tenantID, path string) (*ResolvedSetting, error) {
+// SetTenantConfigLoader sets the tenant configuration loader for per-tenant config resolution
+func (s *UnifiedService) SetTenantConfigLoader(loader *config.TenantConfigLoader) {
+	s.tenantConfigLoader = loader
+}
+
+// ResolveSetting resolves a setting using the cascade: tenant -> instance -> config.
+// For the default tenant (isDefaultTenant=true), the full cascade applies:
+//
+//	tenant DB → instance DB → config (YAML/env) → hardcoded default.
+//
+// For non-default tenants, the config layer is skipped:
+//
+//	tenant DB → instance DB → hardcoded default.
+func (s *UnifiedService) ResolveSetting(ctx context.Context, tenantID, path string, isDefaultTenant bool, tenantSlug ...string) (*ResolvedSetting, error) {
 	if path == "" {
 		return nil, ErrInvalidSettingPath
 	}
@@ -115,40 +128,53 @@ func (s *UnifiedService) ResolveSetting(ctx context.Context, tenantID, path stri
 		}
 	}
 
-	// Fall back to instance setting
-	instanceValue, err := s.getInstanceSetting(ctx, path)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("failed to get instance setting: %w", err)
-	}
-	if instanceValue != nil {
-		overridable, _ := s.IsSettingOverridable(ctx, path)
-		s.addToCache(tenantID, path, instanceValue, "instance")
-		return &ResolvedSetting{
-			Value:         instanceValue,
-			Source:        "instance",
-			IsOverridable: overridable,
-		}, nil
+	// Only fall back to instance settings for the default tenant.
+	// Non-default tenants must not inherit instance-level values.
+	if isDefaultTenant {
+		instanceValue, err := s.getInstanceSetting(ctx, path)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("failed to get instance setting: %w", err)
+		}
+		if instanceValue != nil {
+			overridable, _ := s.IsSettingOverridable(ctx, path)
+			s.addToCache(tenantID, path, instanceValue, "instance")
+			return &ResolvedSetting{
+				Value:         instanceValue,
+				Source:        "instance",
+				IsOverridable: overridable,
+			}, nil
+		}
 	}
 
-	// Fall back to config
-	configValue := s.getConfigValue(path)
-	if configValue != nil {
-		s.addToCache(tenantID, path, configValue, "config")
-		return &ResolvedSetting{
-			Value:         configValue,
-			Source:        "config",
-			IsOverridable: false, // Config values cannot be overridden in dashboard
-			IsReadOnly:    true,  // Settings from config file are read-only
-			DataType:      getDataType(configValue),
-		}, nil
+	// Resolve config values from the appropriate config source:
+	// - Default tenant: use the base config (YAML + env vars)
+	// - Non-default tenant: use tenant-specific config overrides (YAML + env vars for that tenant)
+	var cfg *config.Config
+	if isDefaultTenant {
+		cfg = s.config
+	} else if s.tenantConfigLoader != nil && len(tenantSlug) > 0 && tenantSlug[0] != "" {
+		cfg = s.tenantConfigLoader.GetConfigForSlug(tenantSlug[0], false)
+	}
+	if cfg != nil {
+		configValue := s.getConfigValue(cfg, path)
+		if configValue != nil {
+			s.addToCache(tenantID, path, configValue, "config")
+			return &ResolvedSetting{
+				Value:         configValue,
+				Source:        "config",
+				IsOverridable: false,
+				IsReadOnly:    true,
+				DataType:      getDataType(configValue),
+			}, nil
+		}
 	}
 
 	return nil, ErrSettingNotFound
 }
 
 // ResolveSettingWithDefault resolves a setting with a default fallback
-func (s *UnifiedService) ResolveSettingWithDefault(ctx context.Context, tenantID, path string, defaultValue any) (*ResolvedSetting, error) {
-	result, err := s.ResolveSetting(ctx, tenantID, path)
+func (s *UnifiedService) ResolveSettingWithDefault(ctx context.Context, tenantID, path string, defaultValue any, isDefaultTenant bool, tenantSlug ...string) (*ResolvedSetting, error) {
+	result, err := s.ResolveSetting(ctx, tenantID, path, isDefaultTenant, tenantSlug...)
 	if err != nil {
 		if errors.Is(err, ErrSettingNotFound) {
 			return &ResolvedSetting{
@@ -278,8 +304,8 @@ func (s *UnifiedService) getInstanceSetting(ctx context.Context, path string) (a
 	return getNestedValue(settings, path), nil
 }
 
-// getConfigValue gets a value from the config file
-func (s *UnifiedService) getConfigValue(path string) any {
+// getConfigValue gets a value from the given config
+func (s *UnifiedService) getConfigValue(cfg *config.Config, path string) any {
 	parts := strings.Split(path, ".")
 	if len(parts) < 1 {
 		return nil
@@ -287,104 +313,104 @@ func (s *UnifiedService) getConfigValue(path string) any {
 
 	switch parts[0] {
 	case "ai":
-		return s.getAIConfigValue(parts[1:])
+		return getConfigAIValue(cfg, parts[1:])
 	case "auth":
-		return s.getAuthConfigValue(parts[1:])
+		return getConfigAuthValue(cfg, parts[1:])
 	case "email":
-		return s.getEmailConfigValue(parts[1:])
+		return getConfigEmailValue(cfg, parts[1:])
 	case "storage":
-		return s.getStorageConfigValue(parts[1:])
+		return getConfigStorageValue(cfg, parts[1:])
 	default:
 		return nil
 	}
 }
 
-func (s *UnifiedService) getAIConfigValue(parts []string) any {
+func getConfigAIValue(cfg *config.Config, parts []string) any {
 	if len(parts) < 1 {
 		return nil
 	}
 	switch parts[0] {
 	case "enabled":
-		return s.config.AI.Enabled
+		return cfg.AI.Enabled
 	case "default_model":
-		return s.config.AI.DefaultModel
+		return cfg.AI.DefaultModel
 	case "provider_type":
-		return s.config.AI.ProviderType
+		return cfg.AI.ProviderType
 	case "provider_name":
-		return s.config.AI.ProviderName
+		return cfg.AI.ProviderName
 	case "provider_model":
-		return s.config.AI.ProviderModel
+		return cfg.AI.ProviderModel
 	case "embedding_enabled":
-		return s.config.AI.EmbeddingEnabled
+		return cfg.AI.EmbeddingEnabled
 	case "embedding_provider":
-		return s.config.AI.EmbeddingProvider
+		return cfg.AI.EmbeddingProvider
 	case "embedding_model":
-		return s.config.AI.EmbeddingModel
+		return cfg.AI.EmbeddingModel
 	case "openai_api_key":
-		return s.config.AI.OpenAIAPIKey
+		return cfg.AI.OpenAIAPIKey
 	case "openai_base_url":
-		return s.config.AI.OpenAIBaseURL
+		return cfg.AI.OpenAIBaseURL
 	case "azure_api_key":
-		return s.config.AI.AzureAPIKey
+		return cfg.AI.AzureAPIKey
 	case "azure_endpoint":
-		return s.config.AI.AzureEndpoint
+		return cfg.AI.AzureEndpoint
 	}
 	return nil
 }
 
-func (s *UnifiedService) getAuthConfigValue(parts []string) any {
+func getConfigAuthValue(cfg *config.Config, parts []string) any {
 	if len(parts) < 1 {
 		return nil
 	}
 	switch parts[0] {
 	case "signup_enabled":
-		return s.config.Auth.SignupEnabled
+		return cfg.Auth.SignupEnabled
 	case "magic_link_enabled":
-		return s.config.Auth.MagicLinkEnabled
+		return cfg.Auth.MagicLinkEnabled
 	case "oauth_providers":
-		return s.config.Auth.OAuthProviders
+		return cfg.Auth.OAuthProviders
 	case "saml_providers":
-		return s.config.Auth.SAMLProviders
+		return cfg.Auth.SAMLProviders
 	}
 	return nil
 }
 
-func (s *UnifiedService) getEmailConfigValue(parts []string) any {
+func getConfigEmailValue(cfg *config.Config, parts []string) any {
 	if len(parts) < 1 {
 		return nil
 	}
 	switch parts[0] {
 	case "enabled":
-		return s.config.Email.Enabled
+		return cfg.Email.Enabled
 	case "provider":
-		return s.config.Email.Provider
+		return cfg.Email.Provider
 	case "from_address":
-		return s.config.Email.FromAddress
+		return cfg.Email.FromAddress
 	case "from_name":
-		return s.config.Email.FromName
+		return cfg.Email.FromName
 	case "smtp_host":
-		return s.config.Email.SMTPHost
+		return cfg.Email.SMTPHost
 	case "smtp_port":
-		return s.config.Email.SMTPPort
+		return cfg.Email.SMTPPort
 	case "smtp_username":
-		return s.config.Email.SMTPUsername
+		return cfg.Email.SMTPUsername
 	case "smtp_tls":
-		return s.config.Email.SMTPTLS
+		return cfg.Email.SMTPTLS
 	}
 	return nil
 }
 
-func (s *UnifiedService) getStorageConfigValue(parts []string) any {
+func getConfigStorageValue(cfg *config.Config, parts []string) any {
 	if len(parts) < 1 {
 		return nil
 	}
 	switch parts[0] {
 	case "enabled":
-		return s.config.Storage.Enabled
+		return cfg.Storage.Enabled
 	case "provider":
-		return s.config.Storage.Provider
+		return cfg.Storage.Provider
 	case "max_upload_size":
-		return s.config.Storage.MaxUploadSize
+		return cfg.Storage.MaxUploadSize
 	}
 	return nil
 }

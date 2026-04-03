@@ -14,6 +14,7 @@ import type {
   EmailProviderSettings,
   UpdateEmailProviderSettingsRequest,
   TestEmailSettingsResponse,
+  TenantEmailProviderSettings,
   UserSetting,
   UserSettingWithSource,
 } from "./types";
@@ -1251,6 +1252,70 @@ export class EmailSettingsManager {
     provider: "smtp" | "sendgrid" | "mailgun" | "ses",
   ): Promise<EmailProviderSettings> {
     return await this.update({ provider });
+  }
+
+  // Tenant-scoped methods
+
+  /**
+   * Get tenant-level email settings (resolved through cascade)
+   *
+   * Returns email settings resolved for the current tenant context,
+   * including source information for each field.
+   *
+   * @returns Promise resolving to TenantEmailProviderSettings
+   */
+  async getForTenant(): Promise<TenantEmailProviderSettings> {
+    return await this.fetch.get<TenantEmailProviderSettings>(
+      "/api/v1/admin/email/settings/tenant",
+    );
+  }
+
+  /**
+   * Update tenant-level email settings
+   *
+   * Only provided fields are updated. These override instance-level defaults.
+   *
+   * @param request - Settings to update
+   * @returns Promise resolving to TenantEmailProviderSettings
+   */
+  async updateForTenant(
+    request: UpdateEmailProviderSettingsRequest,
+  ): Promise<TenantEmailProviderSettings> {
+    return await this.fetch.put<TenantEmailProviderSettings>(
+      "/api/v1/admin/email/settings/tenant",
+      request,
+    );
+  }
+
+  /**
+   * Delete a tenant-level email setting override
+   *
+   * Removes the tenant override for a specific field, reverting to the instance default.
+   *
+   * @param field - The field name to remove the override for
+   * @returns Promise resolving to TenantEmailProviderSettings
+   */
+  async deleteTenantOverride(
+    field: string,
+  ): Promise<TenantEmailProviderSettings> {
+    return await this.fetch.delete<TenantEmailProviderSettings>(
+      `/api/v1/admin/email/settings/tenant/${field}`,
+    );
+  }
+
+  /**
+   * Test tenant-level email configuration
+   *
+   * @param recipientEmail - Email address to send the test email to
+   * @returns Promise resolving to TestEmailSettingsResponse
+   */
+  async testForTenant(
+    recipientEmail: string,
+  ): Promise<TestEmailSettingsResponse> {
+    return await this.fetch.post<TestEmailSettingsResponse>(
+      "/api/v1/admin/email/settings/tenant/test",
+      { recipient_email: recipientEmail },
+    );
   }
 }
 

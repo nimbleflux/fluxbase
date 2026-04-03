@@ -278,11 +278,13 @@ func (s *Server) buildWebhookRouteDeps() *routes.WebhookDeps {
 
 func (s *Server) buildMonitoringRouteDeps() *routes.MonitoringDeps {
 	return &routes.MonitoringDeps{
-		RequireAuth:  middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
-		RequireScope: middleware.RequireScope,
-		GetMetrics:   s.Monitoring.Handler.GetMetrics,
-		GetHealth:    s.Monitoring.Handler.GetHealth,
-		GetLogs:      s.Monitoring.Handler.GetLogs,
+		RequireAuth:        middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
+		RequireScope:       middleware.RequireScope,
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
+		GetMetrics:         s.Monitoring.Handler.GetMetrics,
+		GetHealth:          s.Monitoring.Handler.GetHealth,
+		GetLogs:            s.Monitoring.Handler.GetLogs,
 	}
 }
 
@@ -595,10 +597,11 @@ func (s *Server) buildKnowledgeBaseRouteDeps() *routes.KnowledgeBaseDeps {
 func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 	unifiedAuth := UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db.Pool())
 	return &routes.AdminDeps{
-		UnifiedAuth:        unifiedAuth,
-		RequireRole:        RequireRole,
-		TenantMiddleware:   s.Middleware.Tenant,
-		TenantDBMiddleware: s.Middleware.TenantDB,
+		UnifiedAuth:           unifiedAuth,
+		RequireRole:           RequireRole,
+		TenantMiddleware:      s.Middleware.Tenant,
+		TenantDBMiddleware:    s.Middleware.TenantDB,
+		RequireExplicitTenant: middleware.RequireExplicitTenant,
 
 		// Subgroup dependencies
 		Branch: s.buildBranchRouteDeps(),
@@ -797,6 +800,10 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			UpdateEmailTemplate:       s.Email.Template.UpdateTemplate,
 			TestEmailTemplate:         s.Email.Template.TestTemplate,
 			ResetEmailTemplate:        s.Email.Template.ResetTemplate,
+			GetTenantEmailSettings:    s.Email.Settings.GetSettingsForTenant,
+			UpdateTenantEmailSettings: s.Email.Settings.UpdateSettingsForTenant,
+			DeleteTenantEmailSetting:  s.Email.Settings.DeleteSettingForTenant,
+			TestTenantEmailSettings:   s.Email.Settings.TestSettingsForTenant,
 			GetCaptchaSettings:        s.Captcha.Settings.GetSettings,
 			UpdateCaptchaSettings:     s.Captcha.Settings.UpdateSettings,
 			GetInstanceSettings:       s.Settings.Instance.GetInstanceSettings,

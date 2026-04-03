@@ -41,6 +41,7 @@ export interface SidebarItem {
   url: string;
   icon: React.ComponentType<{ className?: string }>;
   visibility?: VisibilityLevel;
+  requiresTenant?: boolean;
   badge?: string;
 }
 
@@ -49,6 +50,7 @@ export interface SidebarGroup {
   collapsible?: boolean;
   items: SidebarItem[];
   visibility?: VisibilityLevel;
+  requiresTenant?: boolean;
 }
 
 export interface SidebarDataWithVisibility extends Omit<
@@ -57,6 +59,77 @@ export interface SidebarDataWithVisibility extends Omit<
 > {
   navGroups: SidebarGroup[];
 }
+
+/**
+ * Get the effective route configuration for a given pathname.
+ * Walks sidebar groups/items to find the best matching route (longest prefix match).
+ * Returns { requiresTenant, isInstanceLevel } derived from group default + item override.
+ */
+export function getRouteConfig(pathname: string): {
+  requiresTenant: boolean;
+  isInstanceLevel: boolean;
+} {
+  let bestMatch: {
+    length: number;
+    requiresTenant: boolean;
+    isInstanceLevel: boolean;
+  } | null = null;
+
+  for (const group of sidebarData.navGroups) {
+    for (const item of group.items) {
+      const url = item.url;
+      // Skip non-path items (like "/" for dashboard — too short to be meaningful)
+      if (url.length <= 1) continue;
+
+      // Check if pathname starts with this item's URL
+      if (
+        pathname === url ||
+        pathname.startsWith(url + "/") ||
+        pathname.startsWith(url + "?")
+      ) {
+        if (!bestMatch || url.length > bestMatch.length) {
+          // Item overrides group default
+          const reqTenant =
+            item.requiresTenant ?? group.requiresTenant ?? false;
+          const isInstanceLevel =
+            (item.visibility || group.visibility || "all") === "instance-only";
+          bestMatch = {
+            length: url.length,
+            requiresTenant: reqTenant,
+            isInstanceLevel,
+          };
+        }
+      }
+    }
+  }
+
+  // Check extra routes not in sidebar
+  for (const extra of EXTRA_TENANT_ROUTES) {
+    if (
+      pathname === extra ||
+      pathname.startsWith(extra + "/") ||
+      pathname.startsWith(extra + "?")
+    ) {
+      if (!bestMatch || extra.length > bestMatch.length) {
+        bestMatch = {
+          length: extra.length,
+          requiresTenant: true,
+          isInstanceLevel: false,
+        };
+      }
+    }
+  }
+
+  return bestMatch
+    ? {
+        requiresTenant: bestMatch.requiresTenant,
+        isInstanceLevel: bestMatch.isInstanceLevel,
+      }
+    : { requiresTenant: false, isInstanceLevel: false };
+}
+
+// Extra routes that need tenant context but aren't in the sidebar
+const EXTRA_TENANT_ROUTES = ["/quotas"];
 
 export const sidebarData: SidebarDataWithVisibility = {
   user: {
@@ -86,6 +159,7 @@ export const sidebarData: SidebarDataWithVisibility = {
     {
       title: "Database",
       collapsible: true,
+      requiresTenant: true,
       items: [
         {
           title: "Tables",
@@ -103,13 +177,14 @@ export const sidebarData: SidebarDataWithVisibility = {
           title: "SQL Editor",
           url: "/sql-editor",
           icon: Code,
-          visibility: "tenant-only",
+          visibility: "all",
         },
       ],
     },
     {
       title: "Users & Authentication",
       collapsible: true,
+      requiresTenant: true,
       items: [
         {
           title: "Users",
@@ -128,90 +203,89 @@ export const sidebarData: SidebarDataWithVisibility = {
     {
       title: "AI",
       collapsible: true,
+      requiresTenant: true,
       items: [
         {
           title: "Knowledge Bases",
           url: "/knowledge-bases",
           icon: BookOpen,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "AI Chatbots",
           url: "/chatbots",
           icon: Bot,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "MCP Tools",
           url: "/mcp-tools",
           icon: Wrench,
-          visibility: "tenant-only",
+          visibility: "all",
         },
       ],
     },
     {
       title: "API & Services",
       collapsible: true,
+      requiresTenant: true,
       items: [
         {
           title: "API Explorer",
           url: "/api/rest",
           icon: Code2,
           visibility: "all",
+          requiresTenant: false, // Override: works at both levels
         },
         {
           title: "Realtime",
           url: "/realtime",
           icon: Radio,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "Storage",
           url: "/storage",
           icon: FolderOpen,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "Functions",
           url: "/functions",
           icon: FileCode,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "Jobs",
           url: "/jobs",
           icon: ListTodo,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "RPC",
           url: "/rpc",
           icon: Terminal,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "Email",
           url: "/email-settings",
           icon: Mail,
           visibility: "all",
-        },
-        {
-          title: "Storage Config",
-          url: "/storage-config",
-          icon: HardDrive,
-          visibility: "all",
+          requiresTenant: false, // Both instance and tenant admins can access
         },
         {
           title: "AI Providers",
           url: "/ai-providers",
           icon: Bot,
-          visibility: "tenant-only",
+          visibility: "all",
         },
       ],
     },
     {
       title: "Security",
       collapsible: true,
+      requiresTenant: true,
       items: [
         {
           title: "RLS Policies",
@@ -223,31 +297,31 @@ export const sidebarData: SidebarDataWithVisibility = {
           title: "Security Settings",
           url: "/security-settings",
           icon: ShieldCheck,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "Secrets",
           url: "/secrets",
           icon: Lock,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "Client Keys",
           url: "/client-keys",
           icon: Key,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "Service Keys",
           url: "/service-keys",
           icon: KeyRound,
-          visibility: "tenant-only",
+          visibility: "all",
         },
         {
           title: "Webhooks",
           url: "/webhooks",
           icon: Webhook,
-          visibility: "tenant-only",
+          visibility: "all",
         },
       ],
     },
@@ -303,6 +377,12 @@ export const sidebarData: SidebarDataWithVisibility = {
           icon: Server,
           visibility: "instance-only",
         },
+        {
+          title: "Storage Config",
+          url: "/storage-config",
+          icon: HardDrive,
+          visibility: "instance-only",
+        },
       ],
     },
     {
@@ -330,20 +410,16 @@ export function filterSidebarForContext(
   groups: SidebarGroup[],
   options: { isInstanceAdmin: boolean; actingAsTenantAdmin: boolean },
 ): SidebarGroup[] {
-  const { isInstanceAdmin, actingAsTenantAdmin } = options;
+  const { isInstanceAdmin } = options;
 
   return groups
     .map((group) => {
       const filteredItems = group.items.filter((item) => {
         const visibility = item.visibility || "all";
 
-        // Instance admin: always show instance-only + all
-        // When acting as tenant, also show tenant-only items
+        // Instance admin: see everything (instance-only + all + tenant-only)
         if (isInstanceAdmin) {
-          if (actingAsTenantAdmin) {
-            return true; // Show everything to instance admins in tenant context
-          }
-          return visibility !== "tenant-only"; // Hide tenant-only when not in tenant context
+          return true;
         }
 
         // Tenant admin: show tenant-only + all, hide instance-only

@@ -64,7 +64,7 @@ function KnowledgeBasesPage() {
     initial_permissions: [],
   });
 
-  const fetchKnowledgeBases = async () => {
+  const fetchKnowledgeBases = useCallback(async () => {
     setLoading(true);
     setFeatureDisabled(false);
     try {
@@ -85,7 +85,7 @@ function KnowledgeBasesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const fetchUsers = useCallback(async () => {
     if (usersLoadedRef.current) return;

@@ -616,7 +616,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 		AND with_check IS NULL
 		AND permissive = 'PERMISSIVE'
 		AND NOT ('service_role' = ANY(roles))
-		AND schemaname NOT IN ('auth', 'storage', 'jobs', 'functions', 'branching', 'realtime', 'dashboard', 'ai', 'rpc', 'app', 'platform', 'logging')
+		AND schemaname NOT IN ('auth', 'storage', 'jobs', 'functions', 'branching', 'realtime', 'ai', 'rpc', 'app', 'platform', 'logging')
 	`)
 	if err == nil {
 		defer rows5.Close()

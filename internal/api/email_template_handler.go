@@ -308,7 +308,7 @@ func (h *EmailTemplateHandler) UpdateTemplate(c fiber.Ctx) error {
 	// Insert or update template
 	var templateID uuid.UUID
 	err := h.db.QueryRow(ctx, `
-		INSERT INTO dashboard.email_templates (template_type, subject, html_body, text_body, is_custom)
+		INSERT INTO platform.email_templates (template_type, subject, html_body, text_body, is_custom)
 		VALUES ($1, $2, $3, $4, true)
 		ON CONFLICT (template_type) DO UPDATE
 		SET subject = EXCLUDED.subject,

@@ -59,23 +59,25 @@ type ResolvedConfig struct {
 // This method does NOT cache results - every call fetches fresh data from the database
 // to ensure immediate visibility of setting changes.
 //
-// The tenantID is extracted from the fiber context if not provided.
+// For the default tenant, the cascade is: baseConfig (YAML+env) → instance DB → tenant DB.
+// For non-default tenants, the cascade is: instance DB → tenant DB (no YAML/env layer).
 func (r *TenantConfigResolver) ResolveForRequest(ctx context.Context, c fiber.Ctx) *ResolvedConfig {
 	// Get tenant ID from context or fiber locals
 	tenantID := r.getTenantID(c)
 
-	// Start with a copy of base config
-	resolved := &ResolvedConfig{
-		Auth:      *config.DeepCopyAuthConfig(&r.baseConfig.Auth),
-		Storage:   *config.DeepCopyStorageConfig(&r.baseConfig.Storage),
-		Email:     *config.DeepCopyEmailConfig(&r.baseConfig.Email),
-		Functions: *config.DeepCopyFunctionsConfig(&r.baseConfig.Functions),
-		Jobs:      *config.DeepCopyJobsConfig(&r.baseConfig.Jobs),
-		AI:        *config.DeepCopyAIConfig(&r.baseConfig.AI),
-		Realtime:  *config.DeepCopyRealtimeConfig(&r.baseConfig.Realtime),
-		RPC:       *config.DeepCopyRPCConfig(&r.baseConfig.RPC),
-		GraphQL:   *config.DeepCopyGraphQLConfig(&r.baseConfig.GraphQL),
-		API:       *config.DeepCopyAPIConfig(&r.baseConfig.API),
+	// Determine if this is the default tenant
+	isDefaultTenant := false
+	if c != nil {
+		isDefaultTenant, _ = c.Locals("is_default_tenant").(bool)
+	}
+
+	var resolved *ResolvedConfig
+	if isDefaultTenant {
+		// Default tenant: start with base config (YAML + env)
+		resolved = r.resolvedFromBaseConfig()
+	} else {
+		// Non-default tenant: zero config — no YAML/env layer
+		resolved = &ResolvedConfig{}
 	}
 
 	// Apply instance-level settings from database
@@ -91,19 +93,14 @@ func (r *TenantConfigResolver) ResolveForRequest(ctx context.Context, c fiber.Ct
 
 // ResolveForTenant resolves configuration for a specific tenant ID.
 // This is used by background workers (jobs) that don't have a fiber context.
-func (r *TenantConfigResolver) ResolveForTenant(ctx context.Context, tenantID string) *ResolvedConfig {
-	// Start with a copy of base config
-	resolved := &ResolvedConfig{
-		Auth:      *config.DeepCopyAuthConfig(&r.baseConfig.Auth),
-		Storage:   *config.DeepCopyStorageConfig(&r.baseConfig.Storage),
-		Email:     *config.DeepCopyEmailConfig(&r.baseConfig.Email),
-		Functions: *config.DeepCopyFunctionsConfig(&r.baseConfig.Functions),
-		Jobs:      *config.DeepCopyJobsConfig(&r.baseConfig.Jobs),
-		AI:        *config.DeepCopyAIConfig(&r.baseConfig.AI),
-		Realtime:  *config.DeepCopyRealtimeConfig(&r.baseConfig.Realtime),
-		RPC:       *config.DeepCopyRPCConfig(&r.baseConfig.RPC),
-		GraphQL:   *config.DeepCopyGraphQLConfig(&r.baseConfig.GraphQL),
-		API:       *config.DeepCopyAPIConfig(&r.baseConfig.API),
+func (r *TenantConfigResolver) ResolveForTenant(ctx context.Context, tenantID string, isDefaultTenant bool) *ResolvedConfig {
+	var resolved *ResolvedConfig
+	if isDefaultTenant {
+		// Default tenant: start with base config (YAML + env)
+		resolved = r.resolvedFromBaseConfig()
+	} else {
+		// Non-default tenant: zero config — no YAML/env layer
+		resolved = &ResolvedConfig{}
 	}
 
 	// Apply instance-level settings from database
@@ -481,6 +478,22 @@ func (r *TenantConfigResolver) applyAPISettings(settings map[string]any, cfg *co
 	}
 	if v, ok := settings["max_batch_size"].(float64); ok {
 		cfg.MaxBatchSize = int(v)
+	}
+}
+
+// resolvedFromBaseConfig creates a ResolvedConfig seeded from the YAML/env base config.
+func (r *TenantConfigResolver) resolvedFromBaseConfig() *ResolvedConfig {
+	return &ResolvedConfig{
+		Auth:      *config.DeepCopyAuthConfig(&r.baseConfig.Auth),
+		Storage:   *config.DeepCopyStorageConfig(&r.baseConfig.Storage),
+		Email:     *config.DeepCopyEmailConfig(&r.baseConfig.Email),
+		Functions: *config.DeepCopyFunctionsConfig(&r.baseConfig.Functions),
+		Jobs:      *config.DeepCopyJobsConfig(&r.baseConfig.Jobs),
+		AI:        *config.DeepCopyAIConfig(&r.baseConfig.AI),
+		Realtime:  *config.DeepCopyRealtimeConfig(&r.baseConfig.Realtime),
+		RPC:       *config.DeepCopyRPCConfig(&r.baseConfig.RPC),
+		GraphQL:   *config.DeepCopyGraphQLConfig(&r.baseConfig.GraphQL),
+		API:       *config.DeepCopyAPIConfig(&r.baseConfig.API),
 	}
 }
 

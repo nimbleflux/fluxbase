@@ -28,7 +28,7 @@ export function useAuth() {
   // Use dashboard user (with role) or fall back to Zustand store
   const user = dashboardUser || auth.user;
 
-  // Sign in mutation - uses dashboard authentication (dashboard.users)
+  // Sign in mutation - uses dashboard authentication (platform.users)
   const signInMutation = useMutation({
     mutationFn: async (data: DashboardLoginRequest) => {
       return await dashboardAuthAPI.login(data);

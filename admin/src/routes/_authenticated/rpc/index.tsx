@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { rpcApi, type RPCProcedure, type RPCExecution } from "@/lib/api";
+import { useTenantStore } from "@/stores/tenant-store";
 import { useExecutionLogs } from "@/hooks/use-execution-logs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,7 @@ function RPCPage() {
 }
 
 function RPCContent() {
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
   const [activeTab, setActiveTab] = useState<"executions" | "procedures">(
     "executions",
   );
@@ -358,7 +360,7 @@ function RPCContent() {
     };
     fetchNamespaces();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentTenantId]);
 
   useEffect(() => {
     fetchProcedures();

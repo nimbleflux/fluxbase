@@ -106,20 +106,25 @@ func TenantMiddleware(cfg TenantConfig) fiber.Handler {
 			c.SetContext(ctx)
 		}
 
-		// Look up tenant slug and store tenant-specific config
-		if tenantID != "" && cfg.ConfigLoader != nil {
+		// Look up tenant slug, is_default flag, and store tenant-specific config
+		if tenantID != "" {
 			var slug string
+			var isDefault bool
 			err := cfg.DB.Pool().QueryRow(c.Context(),
-				"SELECT slug FROM platform.tenants WHERE id = $1::uuid",
+				"SELECT slug, is_default FROM platform.tenants WHERE id = $1::uuid",
 				tenantID,
-			).Scan(&slug)
+			).Scan(&slug, &isDefault)
 			if err != nil {
-				log.Debug().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant slug")
+				log.Debug().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant info")
 			} else {
 				c.Locals("tenant_slug", slug)
-				// Get tenant-specific config
-				tenantConfig := cfg.ConfigLoader.GetConfigForSlug(slug)
-				c.Locals("tenant_config", tenantConfig)
+				c.Locals("is_default_tenant", isDefault)
+
+				// Get tenant-specific config (only applies to default tenant via YAML/env)
+				if cfg.ConfigLoader != nil {
+					tenantConfig := cfg.ConfigLoader.GetConfigForSlug(slug, isDefault)
+					c.Locals("tenant_config", tenantConfig)
+				}
 			}
 		}
 
@@ -281,6 +286,20 @@ func SetTenantSessionContext(ctx context.Context, tx pgx.Tx, tenantID string) er
 	return nil
 }
 
+// RequireExplicitTenant rejects requests where the tenant was resolved via default
+// fallback. Tenant-scoped admin endpoints use this to force explicit tenant selection.
+// Sources "header" and "jwt" pass; source "default" or "" returns 400.
+//
+// This must be registered AFTER TenantMiddleware so that tenant_source is available.
+func RequireExplicitTenant(c fiber.Ctx) error {
+	source := GetTenantSourceFromContext(c)
+	if source == "header" || source == "jwt" {
+		return c.Next()
+	}
+	return fiber.NewError(fiber.StatusBadRequest,
+		"tenant context required: select a tenant via X-FB-Tenant header")
+}
+
 // RequireTenantRole creates a middleware that requires a specific tenant role
 // If the user is an instance admin AND has a tenant context set, they are treated as a tenant admin
 func RequireTenantRole(requiredRole string) fiber.Handler {
@@ -424,4 +443,10 @@ func GetTenantRoleFromContext(c fiber.Ctx) string {
 func IsInstanceAdminFromContext(c fiber.Ctx) bool {
 	isAdmin, _ := c.Locals("is_instance_admin").(bool)
 	return isAdmin
+}
+
+// IsDefaultTenantFromContext checks if the current tenant is the default tenant.
+func IsDefaultTenantFromContext(c fiber.Ctx) bool {
+	isDefault, _ := c.Locals("is_default_tenant").(bool)
+	return isDefault
 }

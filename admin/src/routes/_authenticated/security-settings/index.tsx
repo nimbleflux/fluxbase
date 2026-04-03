@@ -499,7 +499,7 @@ function SecuritySettingsPage() {
                       </p>
                       <p className="text-muted-foreground">
                         Settings marked with ENV cannot be changed through the
-                        dashboard. Update your configuration file or environment
+                        platform. Update your configuration file or environment
                         variables to modify these settings.
                       </p>
                     </div>

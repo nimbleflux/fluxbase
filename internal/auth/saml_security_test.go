@@ -78,9 +78,9 @@ func TestValidateRelayState(t *testing.T) {
 		},
 		{
 			name:         "multiple allowed hosts",
-			relayState:   "https://dashboard.example.com/home",
-			allowedHosts: []string{"app.example.com", "dashboard.example.com"},
-			wantURL:      "https://dashboard.example.com/home",
+			relayState:   "https://platform.example.com/home",
+			allowedHosts: []string{"app.example.com", "platform.example.com"},
+			wantURL:      "https://platform.example.com/home",
 			wantError:    false,
 		},
 		{

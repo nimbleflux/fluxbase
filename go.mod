@@ -14,6 +14,7 @@ require (
 	github.com/elastic/go-elasticsearch/v9 v9.3.1
 	github.com/evanw/esbuild v0.27.3
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/gofiber/contrib/v3/websocket v1.1.0
 	github.com/gofiber/fiber/v3 v3.1.0
 	github.com/gofiber/storage/memory/v2 v2.1.1
@@ -89,7 +90,6 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gofiber/schema v1.7.0 // indirect
 	github.com/gofiber/utils/v2 v2.0.2 // indirect

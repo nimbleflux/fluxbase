@@ -2,11 +2,24 @@ import { useState } from "react";
 import z from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
-import type { EmailProviderSettings } from "@nimbleflux/fluxbase-sdk";
-import { Mail, FileText, Send, Loader2, Settings2 } from "lucide-react";
+import type {
+  EmailProviderSettings,
+  TenantEmailProviderSettings,
+} from "@nimbleflux/fluxbase-sdk";
+import {
+  Mail,
+  FileText,
+  Send,
+  Loader2,
+  Settings2,
+  Building2,
+  ArrowLeft,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { fluxbaseClient } from "@/lib/fluxbase-client";
+import { useTenantStore } from "@/stores/tenant-store";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,6 +28,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   OverridableSelect,
@@ -51,6 +65,7 @@ function EmailSettingsPage() {
   const queryClient = useQueryClient();
   const search = route.useSearch();
   const navigate = route.useNavigate();
+  const { currentTenant, isInstanceAdmin } = useTenantStore();
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [editingTemplate, setEditingTemplate] =
     useState<Partial<EmailTemplate> | null>(null);
@@ -81,14 +96,39 @@ function EmailSettingsPage() {
   const [initializedFromDataUpdatedAt, setInitializedFromDataUpdatedAt] =
     useState<number | null>(null);
 
+  // Determine which settings to fetch
+  const hasTenant = !!currentTenant;
+  const showTenantLevel = isInstanceAdmin && hasTenant;
+
+  // Instance-level settings (always fetched for instance admins)
   const {
-    data: settings,
-    isLoading: settingsLoading,
-    dataUpdatedAt,
+    data: instanceSettings,
+    isLoading: instanceSettingsLoading,
+    dataUpdatedAt: instanceDataUpdatedAt,
   } = useQuery<EmailProviderSettings>({
     queryKey: ["email-provider-settings"],
     queryFn: () => fluxbaseClient.admin.settings.email.get(),
   });
+
+  // Tenant-level settings (fetched when tenant is selected)
+  const {
+    data: tenantSettings,
+    isLoading: tenantSettingsLoading,
+    dataUpdatedAt: tenantSettingsDataUpdatedAt,
+  } = useQuery<TenantEmailProviderSettings>({
+    queryKey: ["email-provider-settings", "tenant", currentTenant?.id],
+    queryFn: () => fluxbaseClient.admin.settings.email.getForTenant(),
+    enabled: showTenantLevel,
+  });
+
+  // Use the appropriate settings based on context
+  const settings = showTenantLevel ? tenantSettings : instanceSettings;
+  const settingsLoading = showTenantLevel
+    ? tenantSettingsLoading
+    : instanceSettingsLoading;
+  const dataUpdatedAt = showTenantLevel
+    ? tenantSettingsDataUpdatedAt
+    : instanceDataUpdatedAt;
 
   if (settings && dataUpdatedAt !== initializedFromDataUpdatedAt) {
     setInitializedFromDataUpdatedAt(dataUpdatedAt);
@@ -120,7 +160,8 @@ function EmailSettingsPage() {
     },
   });
 
-  const updateSettingsMutation = useMutation({
+  // Instance-level mutations
+  const updateInstanceSettingsMutation = useMutation({
     mutationFn: (
       data: Parameters<typeof fluxbaseClient.admin.settings.email.update>[0],
     ) => fluxbaseClient.admin.settings.email.update(data),
@@ -155,9 +196,55 @@ function EmailSettingsPage() {
     },
   });
 
+  // Tenant-level mutations
+  const updateTenantSettingsMutation = useMutation({
+    mutationFn: (
+      data: Parameters<
+        typeof fluxbaseClient.admin.settings.email.updateForTenant
+      >[0],
+    ) => fluxbaseClient.admin.settings.email.updateForTenant(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["email-provider-settings", "tenant"],
+      });
+      setHasUnsavedChanges(false);
+      toast.success("Tenant email settings updated");
+    },
+    onError: (error: unknown) => {
+      if (error && typeof error === "object" && "response" in error) {
+        const err = error as {
+          response?: { data?: { error?: string } };
+        };
+        if (err.response?.data?.error) {
+          toast.error(err.response.data.error);
+          return;
+        }
+      }
+      toast.error("Failed to update tenant email settings");
+    },
+  });
+
+  const deleteTenantOverrideMutation = useMutation({
+    mutationFn: (field: string) =>
+      fluxbaseClient.admin.settings.email.deleteTenantOverride(field),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["email-provider-settings", "tenant"],
+      });
+      toast.success("Tenant override removed, reverted to instance default");
+    },
+    onError: () => {
+      toast.error("Failed to remove tenant override");
+    },
+  });
+
   const testSettingsMutation = useMutation({
-    mutationFn: (email: string) =>
-      fluxbaseClient.admin.settings.email.test(email),
+    mutationFn: (email: string) => {
+      if (showTenantLevel) {
+        return fluxbaseClient.admin.settings.email.testForTenant(email);
+      }
+      return fluxbaseClient.admin.settings.email.test(email);
+    },
     onSuccess: () => {
       toast.success("Test email sent successfully");
     },
@@ -233,13 +320,23 @@ function EmailSettingsPage() {
   });
 
   const handleToggleEnabled = (checked: boolean) => {
-    updateSettingsMutation.mutate({ enabled: checked });
+    if (showTenantLevel) {
+      updateTenantSettingsMutation.mutate({ enabled: checked });
+    } else {
+      updateInstanceSettingsMutation.mutate({ enabled: checked });
+    }
   };
 
   const handleProviderChange = (provider: string) => {
-    updateSettingsMutation.mutate({
-      provider: provider as ProviderType,
-    });
+    if (showTenantLevel) {
+      updateTenantSettingsMutation.mutate({
+        provider: provider as ProviderType,
+      });
+    } else {
+      updateInstanceSettingsMutation.mutate({
+        provider: provider as ProviderType,
+      });
+    }
   };
 
   const handleFormChange = (
@@ -286,7 +383,11 @@ function EmailSettingsPage() {
       data.ses_region = formState.ses_region || undefined;
     }
 
-    updateSettingsMutation.mutate(data);
+    if (showTenantLevel) {
+      updateTenantSettingsMutation.mutate(data);
+    } else {
+      updateInstanceSettingsMutation.mutate(data);
+    }
   };
 
   const handleTestConfiguration = () => {
@@ -321,6 +422,10 @@ function EmailSettingsPage() {
     setIsTestEmailPromptOpen(true);
   };
 
+  const activeMutation = showTenantLevel
+    ? updateTenantSettingsMutation
+    : updateInstanceSettingsMutation;
+
   const providerFormProps = {
     formState,
     settings,
@@ -338,6 +443,7 @@ function EmailSettingsPage() {
   }
 
   const currentProvider = settings?.provider || "smtp";
+  const sources = (tenantSettings as TenantEmailProviderSettings)?._sources;
 
   return (
     <div className="flex h-full flex-col">
@@ -349,10 +455,36 @@ function EmailSettingsPage() {
           <div>
             <h1 className="text-xl font-semibold">Email Settings</h1>
             <p className="text-muted-foreground text-sm">
-              Configure email service and customize email templates
+              {showTenantLevel
+                ? `Tenant overrides for ${currentTenant?.name || "tenant"} — inherits from instance defaults`
+                : "Configure email service and customize email templates"}
             </p>
           </div>
         </div>
+        {showTenantLevel && (
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-300"
+            >
+              <Building2 className="mr-1 h-3 w-3" />
+              {currentTenant?.name}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                navigate({
+                  to: "/email-settings",
+                  search: { tab: search.tab },
+                })
+              }
+            >
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              Instance Settings
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto p-6">
@@ -376,11 +508,49 @@ function EmailSettingsPage() {
           </TabsList>
 
           <TabsContent value="configuration" className="space-y-4">
+            {/* Source indicators for tenant-level settings */}
+            {showTenantLevel && sources && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Settings Source</CardTitle>
+                  <CardDescription>
+                    Fields highlighted in blue are overridden at the tenant
+                    level. Others inherit from instance defaults.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(sources)
+                      .filter(([, source]) => source === "tenant")
+                      .map(([field]) => (
+                        <Badge
+                          key={field}
+                          variant="outline"
+                          className="border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                        >
+                          {field}
+                        </Badge>
+                      ))}
+                    {Object.entries(sources).filter(
+                      ([, source]) => source === "tenant",
+                    ).length === 0 && (
+                      <span className="text-muted-foreground text-sm">
+                        No tenant overrides — all settings inherited from
+                        instance
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Email Service Configuration</CardTitle>
                 <CardDescription>
-                  Configure your email service provider and settings
+                  {showTenantLevel
+                    ? "Override instance-level email settings for this tenant"
+                    : "Configure your email service provider and settings"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -391,7 +561,7 @@ function EmailSettingsPage() {
                   checked={settings?.enabled || false}
                   onCheckedChange={handleToggleEnabled}
                   override={settings?._overrides?.enabled}
-                  disabled={updateSettingsMutation.isPending}
+                  disabled={activeMutation.isPending}
                 />
 
                 <OverridableSelect
@@ -401,7 +571,7 @@ function EmailSettingsPage() {
                   value={currentProvider}
                   onValueChange={handleProviderChange}
                   override={settings?._overrides?.provider}
-                  disabled={updateSettingsMutation.isPending}
+                  disabled={activeMutation.isPending}
                 >
                   <SelectItem value="smtp">SMTP</SelectItem>
                   <SelectItem value="sendgrid">SendGrid</SelectItem>
@@ -413,16 +583,28 @@ function EmailSettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings2 className="h-5 w-5" />
-                  {currentProvider === "smtp" && "SMTP Settings"}
-                  {currentProvider === "sendgrid" && "SendGrid Settings"}
-                  {currentProvider === "mailgun" && "Mailgun Settings"}
-                  {currentProvider === "ses" && "AWS SES Settings"}
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Settings2 className="h-5 w-5" />
+                    {currentProvider === "smtp" && "SMTP Settings"}
+                    {currentProvider === "sendgrid" && "SendGrid Settings"}
+                    {currentProvider === "mailgun" && "Mailgun Settings"}
+                    {currentProvider === "ses" && "AWS SES Settings"}
+                  </span>
+                  {showTenantLevel && (
+                    <Badge
+                      variant="outline"
+                      className="border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                    >
+                      <Building2 className="mr-1 h-3 w-3" />
+                      Tenant Override
+                    </Badge>
+                  )}
                 </CardTitle>
                 <CardDescription>
-                  Configure your {currentProvider.toUpperCase()} provider
-                  settings
+                  {showTenantLevel
+                    ? `Override ${currentProvider.toUpperCase()} settings for this tenant`
+                    : `Configure your ${currentProvider.toUpperCase()} provider settings`}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -448,11 +630,9 @@ function EmailSettingsPage() {
                 <div className="flex gap-2 pt-4">
                   <Button
                     onClick={handleSaveProviderSettings}
-                    disabled={
-                      updateSettingsMutation.isPending || !hasUnsavedChanges
-                    }
+                    disabled={activeMutation.isPending || !hasUnsavedChanges}
                   >
-                    {updateSettingsMutation.isPending && (
+                    {activeMutation.isPending && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
                     Save Settings
@@ -468,6 +648,21 @@ function EmailSettingsPage() {
                     <Send className="mr-2 h-4 w-4" />
                     Test Configuration
                   </Button>
+                  {showTenantLevel && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (currentProvider) {
+                          deleteTenantOverrideMutation.mutate(currentProvider);
+                        }
+                      }}
+                      disabled={deleteTenantOverrideMutation.isPending}
+                      className="text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Reset to Instance Default
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

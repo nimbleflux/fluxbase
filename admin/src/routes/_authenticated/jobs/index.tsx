@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useImpersonationStore } from "@/stores/impersonation-store";
+import { useTenantStore } from "@/stores/tenant-store";
 import { jobsApi, type JobFunction, type Job, type JobWorker } from "@/lib/api";
 import { fluxbaseClient } from "@/lib/fluxbase-client";
 import { useExecutionLogs } from "@/hooks/use-execution-logs";
@@ -95,6 +96,7 @@ const getStatusBadgeVariant = (
 };
 
 function JobsPage() {
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
   const [activeTab, setActiveTab] = useState<"functions" | "queue">("queue");
   const [jobFunctions, setJobFunctions] = useState<JobFunction[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -201,7 +203,7 @@ function JobsPage() {
     };
     fetchNamespaces();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentTenantId]);
 
   const fetchJobFunctions = useCallback(async () => {
     try {

@@ -619,15 +619,22 @@ func (l *TenantConfigLoader) expandEnvVars(content string) string {
 	return result
 }
 
-// GetConfigForSlug returns the effective configuration for a tenant by slug
-// Falls back to base config if tenant not found or no overrides exist
-func (l *TenantConfigLoader) GetConfigForSlug(slug string) *Config {
+// GetConfigForSlug returns the effective configuration for a tenant by slug.
+// For the default tenant (isDefaultTenant=true), falls back to base config (YAML+env).
+// For non-default tenants, returns nil if no slug-specific overrides exist,
+// ensuring YAML/env config does not leak to non-default tenants.
+func (l *TenantConfigLoader) GetConfigForSlug(slug string, isDefaultTenant bool) *Config {
 	if merged, ok := l.cache[slug]; ok {
 		return merged
 	}
 
-	// No overrides for this tenant, return base config
-	return l.baseConfig
+	// Only fall back to base config for the default/instance-level tenant
+	if isDefaultTenant {
+		return l.baseConfig
+	}
+
+	// Non-default tenant with no cached overrides: no YAML/env config layer
+	return nil
 }
 
 // GetBaseConfig returns the base configuration

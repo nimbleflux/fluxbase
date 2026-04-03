@@ -45,7 +45,7 @@ type DeclarativeConfig struct {
 // auth must come early as other schemas reference auth.users
 var DefaultFluxbaseSchemas = []string{
 	"platform", "auth", "storage", "jobs", "functions", "realtime",
-	"dashboard", "ai", "rpc", "system", "migrations",
+	"ai", "rpc", "system", "migrations",
 	"app", "api", "branching", "logging", "mcp",
 }
 

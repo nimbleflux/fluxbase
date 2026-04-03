@@ -574,3 +574,89 @@ Before committing changes, verify:
 5. Documentation is updated for user-facing changes
 6. New tests are added for new functionality
 7. Existing tests are updated if behavior changed
+
+## Browser Testing with Firefox MCP
+
+The Firefox DevTools MCP enables headless browser testing of the admin UI. Use it to catch JS errors, verify rendering, and validate form flows that API-level tests can't cover.
+
+### Prerequisites
+
+- `make dev` running (backend on :8080, Vite HMR on :5050)
+- Firefox ESR pre-installed in devcontainer (`.devcontainer/Dockerfile`)
+- MCP configured in `~/.claude.json` under `mcpServers.firefox-devtools`
+
+### Dev URLs
+
+Always use port 5050 (Vite dev server) for browser testing — it proxies API calls to 8080.
+
+| Service | URL |
+| ------- | --- |
+| Admin UI | `http://localhost:5050/admin/` |
+| Backend API | `http://localhost:8080` |
+| MailHog | `http://localhost:8025` |
+| MinIO Console | `http://localhost:9001` |
+
+### Admin Login
+
+After a fresh `make db-reset-full`, the admin UI shows a setup page at `/admin/setup`. The setup token is in `.env` (`FLUXBASE_SECURITY_SETUP_TOKEN`). Once an admin user exists, login is at `/admin/login` via `POST /dashboard/auth/login` with `{email, password}`.
+
+### Common Testing Patterns
+
+**Login and navigate:**
+
+1. `navigate_page` to `http://localhost:5050/admin/login`
+2. `take_snapshot` to get DOM with UIDs
+3. `fill_by_uid` for email/password fields
+4. `click_by_uid` the submit button
+5. `screenshot_page` to verify dashboard loaded
+
+**Check for JS errors:**
+
+1. `clear_console_messages`
+2. Navigate to target page
+3. `list_console_messages` with `level: "error"` — any errors indicate a bug
+
+**Check for failed API calls:**
+
+1. `list_network_requests` with `statusMin: 400`
+2. `get_network_request` by ID to inspect details
+
+**Visual verification:**
+
+- `screenshot_page` for full page capture
+- `screenshot_by_uid` for specific components
+- Use `saveTo` parameter to persist to disk
+
+### MCP Tool Quick Reference
+
+| Tool | Purpose |
+| ---- | ------- |
+| `navigate_page` | Go to a URL |
+| `take_snapshot` | Get DOM tree with stable UIDs for interaction |
+| `click_by_uid` | Click an element |
+| `fill_by_uid` | Type into an input |
+| `fill_form_by_uid` | Fill multiple fields at once |
+| `screenshot_page` | Full page screenshot |
+| `list_console_messages` | Check JS console (filter by level) |
+| `list_network_requests` | See API calls (filter by status) |
+| `get_network_request` | Inspect request/response details |
+| `evaluate_script` | Run JS in page context |
+
+### When to Use Browser vs API Testing
+
+**Use browser testing (Firefox MCP) when:**
+
+- Changes touch `admin/src/` React components or pages
+- Verifying new UI features render correctly
+- Checking for JS console errors after frontend changes
+- Validating form submission flows through the actual UI
+
+**Use API testing (Go E2E, curl) when:**
+
+- Testing `internal/` Go backend code
+- Verifying business logic, auth flows, database operations
+- Running the existing test suite (`make test`, `make test-e2e`)
+
+**Use both when:**
+
+- A feature spans frontend and backend (e.g., a settings page that writes to the database)

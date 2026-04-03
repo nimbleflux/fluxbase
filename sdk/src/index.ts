@@ -393,6 +393,7 @@ export type {
   // Email Provider Settings types (Admin API)
   EmailSettingOverride,
   EmailProviderSettings,
+  TenantEmailProviderSettings,
   UpdateEmailProviderSettingsRequest,
   TestEmailSettingsResponse,
 

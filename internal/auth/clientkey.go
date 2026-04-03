@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 var (
@@ -197,12 +199,7 @@ func (s *ClientKeyService) ValidateClientKey(ctx context.Context, plaintextKey s
 // ListClientKeys lists all client keys (optionally filtered by user and tenant)
 func (s *ClientKeyService) ListClientKeys(ctx context.Context, userID *uuid.UUID) ([]ClientKey, error) {
 	// Get tenant from context
-	tenantIDStr := ""
-	if tid := ctx.Value("tenant_id"); tid != nil {
-		if id, ok := tid.(string); ok {
-			tenantIDStr = id
-		}
-	}
+	tenantIDStr := database.TenantFromContext(ctx)
 
 	var query string
 	var args []interface{}

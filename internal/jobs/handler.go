@@ -378,7 +378,7 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 				parsed, err := uuid.Parse(uidStr)
 				if err == nil {
 					// Verify user exists in auth.users before setting created_by
-					// Dashboard admins are in dashboard.users, not auth.users
+					// Dashboard admins are in platform.users, not auth.users
 					var exists bool
 					checkQuery := "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)"
 					if err := h.storage.conn.Pool().QueryRow(c.RequestCtx(), checkQuery, parsed).Scan(&exists); err == nil && exists {

@@ -40,11 +40,6 @@ CREATE SCHEMA IF NOT EXISTS app;
 GRANT USAGE, CREATE ON SCHEMA app TO CURRENT_USER;
 COMMENT ON SCHEMA app IS 'Application-level configuration, settings, and metadata';
 
--- Dashboard schema: Platform administrator authentication and management
-CREATE SCHEMA IF NOT EXISTS dashboard;
-GRANT USAGE, CREATE ON SCHEMA dashboard TO CURRENT_USER;
-COMMENT ON SCHEMA dashboard IS 'Platform administrator authentication and management';
-
 -- Functions schema: Edge functions and their executions
 CREATE SCHEMA IF NOT EXISTS functions;
 GRANT USAGE, CREATE ON SCHEMA functions TO CURRENT_USER;
@@ -185,7 +180,6 @@ GRANT USAGE ON SCHEMA app TO anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA storage TO anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA functions TO anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA realtime TO anon, authenticated, service_role;
-GRANT USAGE ON SCHEMA dashboard TO anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 
 -- AI schema accessible to all
@@ -269,14 +263,6 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA realtime
 ALTER DEFAULT PRIVILEGES IN SCHEMA realtime
     GRANT ALL ON TABLES TO service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA realtime
-    GRANT ALL ON SEQUENCES TO service_role;
-
--- Dashboard schema
-ALTER DEFAULT PRIVILEGES IN SCHEMA dashboard
-    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated;
-ALTER DEFAULT PRIVILEGES IN SCHEMA dashboard
-    GRANT ALL ON TABLES TO service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA dashboard
     GRANT ALL ON SEQUENCES TO service_role;
 
 -- Jobs schema
@@ -412,3 +398,38 @@ GRANT SELECT, INSERT ON TABLE migrations.bootstrap_state TO service_role;
 INSERT INTO migrations.bootstrap_state (version, checksum)
 VALUES ('2.0.0', '')
 ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- MIGRATION: Move legacy dashboard.* tables to platform schema
+-- Idempotent — safe to run multiple times, no-ops if already migrated.
+-- ============================================================================
+DO $$
+DECLARE
+    tbl record;
+BEGIN
+    -- Skip if dashboard schema doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'dashboard') THEN
+        RETURN;
+    END IF;
+
+    FOR tbl IN
+        SELECT table_name FROM information_schema.tables
+        WHERE table_schema = 'dashboard' AND table_type = 'BASE TABLE'
+    LOOP
+        -- Skip if table already exists in platform schema (platform is authoritative)
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'platform' AND table_name = tbl.table_name) THEN
+            EXECUTE format('ALTER TABLE dashboard.%I SET SCHEMA platform', tbl.table_name);
+            RAISE NOTICE 'Migrated dashboard.% to platform.%', tbl.table_name, tbl.table_name;
+        ELSE
+            EXECUTE format('DROP TABLE dashboard.%I CASCADE', tbl.table_name);
+            RAISE NOTICE 'Dropped duplicate dashboard.% (platform.% already exists)', tbl.table_name, tbl.table_name;
+        END IF;
+    END LOOP;
+
+    -- Drop the now-empty dashboard schema
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'dashboard') THEN
+        EXECUTE 'DROP SCHEMA IF EXISTS dashboard CASCADE';
+        RAISE NOTICE 'Dropped empty dashboard schema';
+    END IF;
+END
+$$;

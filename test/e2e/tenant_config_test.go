@@ -90,7 +90,7 @@ func TestTenantConfigLoader_EnvVarOverrides(t *testing.T) {
 	require.NoError(t, err, "Failed to create tenant config loader")
 
 	// Get tenant config
-	tenantConfig := loader.GetConfigForSlug("e2e-tenant")
+	tenantConfig := loader.GetConfigForSlug("e2e-tenant", false)
 
 	// Verify overrides were applied
 	require.Equal(t, "e2e-tenant-secret-at-least-32-characters!", tenantConfig.Auth.JWTSecret, "JWT secret should be overridden")
@@ -138,11 +138,11 @@ func TestTenantConfigIsolation(t *testing.T) {
 	require.NoError(t, err, "Failed to create tenant config loader")
 
 	// Get config for tenant-a
-	configA := loader.GetConfigForSlug("tenant-a")
+	configA := loader.GetConfigForSlug("tenant-a", false)
 	require.Equal(t, "tenant-a-secret-at-least-32-chars!", configA.Auth.JWTSecret, "Tenant A should have its secret")
 
 	// Get config for tenant-b
-	configB := loader.GetConfigForSlug("tenant-b")
+	configB := loader.GetConfigForSlug("tenant-b", false)
 	require.Equal(t, "tenant-b-secret-at-least-32-chars!", configB.Auth.JWTSecret, "Tenant B should have its secret")
 
 	// Verify they are different
@@ -150,7 +150,7 @@ func TestTenantConfigIsolation(t *testing.T) {
 
 	// Modify configA and verify configB is not affected
 	configA.Auth.JWTSecret = "modified-secret-at-least-32-chars!"
-	configBCheck := loader.GetConfigForSlug("tenant-b")
+	configBCheck := loader.GetConfigForSlug("tenant-b", false)
 	require.Equal(t, "tenant-b-secret-at-least-32-chars!", configBCheck.Auth.JWTSecret, "Modifying configA should not affect configB")
 
 	// Verify base is also not affected
@@ -175,7 +175,7 @@ func TestTenantSlugNormalization(t *testing.T) {
 	require.NoError(t, err, "Failed to create tenant config loader")
 
 	// Lookup should work with normalized slug (acme-corp)
-	tenantConfig := loader.GetConfigForSlug("acme-corp")
+	tenantConfig := loader.GetConfigForSlug("acme-corp", false)
 	require.Equal(t, "acme-secret-at-least-32-characters!", tenantConfig.Auth.JWTSecret, "Env var should be applied to normalized slug")
 
 	log.Info().Msg("Tenant slug normalization test passed")
@@ -268,7 +268,7 @@ config:
 	require.Contains(t, slugs, "yaml-tenant", "YAML tenant should be loaded")
 
 	// Get config and verify
-	tenantConfig := loader.GetConfigForSlug("yaml-tenant")
+	tenantConfig := loader.GetConfigForSlug("yaml-tenant", false)
 	require.Equal(t, 30*time.Minute, tenantConfig.Auth.JWTExpiry, "JWT expiry should be from YAML")
 	require.Equal(t, 45, tenantConfig.Functions.DefaultTimeout, "Functions timeout should be from YAML")
 
@@ -366,7 +366,7 @@ config:
 	require.NoError(t, err, "Failed to create loader")
 
 	// Env var should override YAML file
-	tenantConfig := loader.GetConfigForSlug("priority-tenant")
+	tenantConfig := loader.GetConfigForSlug("priority-tenant", false)
 	require.Equal(t, 2*time.Hour, tenantConfig.Auth.JWTExpiry, "Env var should override YAML (2h > 1h)")
 
 	log.Info().Msg("Tenant config priority test passed")

@@ -15,7 +15,6 @@ import { handleServerError } from "@/lib/handle-server-error";
 import { DirectionProvider } from "./context/direction-provider";
 import { FontProvider } from "./context/font-provider";
 import { ThemeProvider } from "./context/theme-provider";
-import { FluxbaseTenantSync } from "./components/fluxbase-tenant-sync";
 // Generated Routes
 import { routeTree } from "./routeTree.gen";
 // Styles
@@ -100,9 +99,7 @@ if (!rootElement.innerHTML) {
           <DirectionProvider>
             <QueryClientProvider client={queryClient}>
               <FluxbaseProvider client={fluxbaseClient}>
-                <FluxbaseTenantSync>
-                  <RouterProvider router={router} />
-                </FluxbaseTenantSync>
+                <RouterProvider router={router} />
               </FluxbaseProvider>
             </QueryClientProvider>
           </DirectionProvider>

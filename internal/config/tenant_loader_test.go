@@ -76,10 +76,20 @@ func TestTenantConfigLoader_GetConfigForSlug(t *testing.T) {
 		t.Fatalf("Failed to create loader: %v", err)
 	}
 
-	t.Run("returns base config for unknown tenant", func(t *testing.T) {
-		cfg := loader.GetConfigForSlug("unknown-tenant")
+	t.Run("returns nil for unknown non-default tenant", func(t *testing.T) {
+		cfg := loader.GetConfigForSlug("unknown-tenant", false)
+		if cfg != nil {
+			t.Errorf("Expected nil for unknown non-default tenant, got non-nil config")
+		}
+	})
+
+	t.Run("returns base config for unknown default tenant", func(t *testing.T) {
+		cfg := loader.GetConfigForSlug("unknown-tenant", true)
+		if cfg == nil {
+			t.Fatal("Expected base config for unknown default tenant, got nil")
+		}
 		if cfg.Auth.JWTSecret != baseConfig.Auth.JWTSecret {
-			t.Errorf("Expected base JWT secret for unknown tenant, got %s", cfg.Auth.JWTSecret)
+			t.Errorf("Expected base JWT secret for unknown default tenant, got %s", cfg.Auth.JWTSecret)
 		}
 		if cfg.Storage.Provider != "local" {
 			t.Errorf("Expected base storage provider, got %s", cfg.Storage.Provider)
@@ -87,7 +97,7 @@ func TestTenantConfigLoader_GetConfigForSlug(t *testing.T) {
 	})
 
 	t.Run("returns merged config for tenant-a", func(t *testing.T) {
-		cfg := loader.GetConfigForSlug("tenant-a")
+		cfg := loader.GetConfigForSlug("tenant-a", false)
 
 		// Should have tenant-a's JWT secret
 		if cfg.Auth.JWTSecret != "tenant-a-secret-that-is-at-least-32-chars!" {
@@ -117,7 +127,7 @@ func TestTenantConfigLoader_GetConfigForSlug(t *testing.T) {
 	})
 
 	t.Run("returns merged config for tenant-b", func(t *testing.T) {
-		cfg := loader.GetConfigForSlug("tenant-b")
+		cfg := loader.GetConfigForSlug("tenant-b", false)
 
 		// Should have base JWT secret (not overridden)
 		if cfg.Auth.JWTSecret != baseConfig.Auth.JWTSecret {
@@ -221,7 +231,7 @@ func TestTenantConfigLoader_DeepMergeDoesNotAffectBase(t *testing.T) {
 	}
 
 	// Get tenant config
-	tenantCfg := loader.GetConfigForSlug("tenant-c")
+	tenantCfg := loader.GetConfigForSlug("tenant-c", false)
 
 	// Modify the tenant config
 	tenantCfg.Auth.JWTSecret = "modified"
@@ -253,7 +263,7 @@ func TestTenantConfigLoader_EmptyTenantConfigs(t *testing.T) {
 		t.Fatalf("Failed to create loader: %v", err)
 	}
 
-	cfg := loader.GetConfigForSlug("empty-tenant")
+	cfg := loader.GetConfigForSlug("empty-tenant", false)
 
 	// Should have base config values
 	if cfg.Auth.JWTSecret != baseConfig.Auth.JWTSecret {
@@ -306,7 +316,7 @@ config:
 	// Debug: check what slugs are loaded
 	t.Logf("Loaded slugs: %v", loader.GetLoadedSlugs())
 
-	cfg := loader.GetConfigForSlug("test-tenant")
+	cfg := loader.GetConfigForSlug("test-tenant", false)
 
 	// Check that env vars were expanded
 	if cfg.Auth.JWTSecret != "test-secret-from-env-at-least-32-chars!" {
@@ -343,7 +353,7 @@ func TestTenantConfigLoader_EnvVarOverrides(t *testing.T) {
 	}
 
 	// The env tenant should be automatically created from env vars
-	cfg := loader.GetConfigForSlug("env-tenant")
+	cfg := loader.GetConfigForSlug("env-tenant", false)
 
 	// Check that env var overrides were applied
 	if cfg.Auth.JWTSecret != "env-tenant-secret-at-least-32-chars!" {
@@ -384,7 +394,7 @@ func TestTenantConfigLoader_EnvVarOverridesExistingConfig(t *testing.T) {
 		t.Fatalf("Failed to create loader: %v", err)
 	}
 
-	cfg := loader.GetConfigForSlug("override-tenant")
+	cfg := loader.GetConfigForSlug("override-tenant", false)
 
 	// Env var should override inline config
 	if cfg.Auth.JWTSecret != "overridden-secret-at-least-32-chars!" {

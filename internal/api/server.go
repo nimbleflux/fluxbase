@@ -430,7 +430,8 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		authService.GetSettingsCache(),
 		emailManager,
 		secretsService,
-		&cfg.Email,
+		cfg,
+		unifiedSettingsService,
 	)
 
 	// Refresh email manager with settings cache and secrets service now that they're available
@@ -2139,6 +2140,10 @@ func (s *Server) GetLoggingService() *logging.Service {
 // This is called after migrations complete to enable tenant-specific config overrides
 func (s *Server) SetTenantConfigLoader(loader *config.TenantConfigLoader) {
 	s.tenantConfigLoader = loader
+	// Propagate to unified settings service so it can resolve per-tenant config values
+	if s.Settings != nil && s.Settings.Unified != nil {
+		s.Settings.Unified.SetTenantConfigLoader(loader)
+	}
 }
 
 // GetTenantConfigLoader returns the tenant configuration loader

@@ -1,4 +1,4 @@
-import { Outlet } from "@tanstack/react-router";
+import { Outlet, useLocation } from "@tanstack/react-router";
 import { getCookie } from "@/lib/cookies";
 import { cn } from "@/lib/utils";
 import { LayoutProvider } from "@/context/layout-provider";
@@ -15,6 +15,9 @@ import { TenantSelector } from "@/components/tenant-selector";
 import { BranchSelector } from "@/components/branch-selector";
 import { useTenantQueryRefresh } from "@/hooks/use-tenant-query-refresh";
 import { useBranchQueryRefresh } from "@/hooks/use-branch-query-refresh";
+import { getRouteConfig } from "@/components/layout/data/sidebar-data";
+import { TenantRequiredGuard } from "@/components/tenant-required-guard";
+import { InstanceLevelIndicator } from "@/components/instance-level-indicator";
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode;
@@ -27,6 +30,10 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   useTenantQueryRefresh();
   // Refresh all queries when branch context changes
   useBranchQueryRefresh();
+
+  // Get route config for centralized guard/indicator
+  const location = useLocation();
+  const { requiresTenant, isInstanceLevel } = getRouteConfig(location.pathname);
 
   return (
     <SearchProvider>
@@ -51,6 +58,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
             <Header fixed>
               <Search />
               <div className="ms-auto flex items-center space-x-4">
+                {isInstanceLevel && <InstanceLevelIndicator />}
                 <TenantSelector />
                 <BranchSelector />
                 <ImpersonationSelector />
@@ -58,7 +66,13 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                 <ConfigDrawer />
               </div>
             </Header>
-            {children ?? <Outlet />}
+            {requiresTenant ? (
+              <TenantRequiredGuard>
+                {children ?? <Outlet />}
+              </TenantRequiredGuard>
+            ) : (
+              (children ?? <Outlet />)
+            )}
           </SidebarInset>
         </SidebarProvider>
       </LayoutProvider>

@@ -1749,6 +1749,17 @@ export interface EmailProviderSettings {
 }
 
 /**
+ * Tenant-level email provider settings with source information
+ *
+ * Extends EmailProviderSettings with per-field source tracking,
+ * showing whether each value comes from instance, tenant, config, or default.
+ */
+export interface TenantEmailProviderSettings extends EmailProviderSettings {
+  /** Source of each field: "instance" | "tenant" | "config" | "default" */
+  _sources: Record<string, string>;
+}
+
+/**
  * Request to update email provider settings
  *
  * All fields are optional - only provided fields will be updated.

@@ -1588,6 +1588,30 @@ CREATE OR REPLACE TRIGGER trigger_update_sso_identities_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_sso_identities_updated_at();
 
+-- Auto-update updated_at on email_templates
+CREATE OR REPLACE TRIGGER update_platform_email_templates_updated_at
+    BEFORE UPDATE ON email_templates
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Auto-update updated_at on oauth_providers
+CREATE OR REPLACE TRIGGER update_platform_oauth_providers_updated_at
+    BEFORE UPDATE ON oauth_providers
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Auto-update updated_at on sessions
+CREATE OR REPLACE TRIGGER update_platform_sessions_updated_at
+    BEFORE UPDATE ON sessions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Auto-update updated_at on users
+CREATE OR REPLACE TRIGGER update_platform_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 --
 -- Name: delete_jsonb_path(p_jsonb jsonb, p_path text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --

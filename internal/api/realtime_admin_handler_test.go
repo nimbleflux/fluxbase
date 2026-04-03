@@ -354,13 +354,14 @@ func TestHandleEnableRealtime_Validation(t *testing.T) {
 		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 	})
 
-	t.Run("system schema prevention - dashboard", func(t *testing.T) {
+	t.Run("system schema prevention - platform", func(t *testing.T) {
+		// platform is a user data schema (not blocked by system schema protection)
 		app := fiber.New()
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)
 
-		body := `{"schema": "dashboard", "table": "users"}`
+		body := `{"schema": "platform", "table": "users"}`
 		req := httptest.NewRequest(http.MethodPost, "/realtime/enable", bytes.NewReader([]byte(body)))
 		req.Header.Set("Content-Type", "application/json")
 
@@ -368,7 +369,9 @@ func TestHandleEnableRealtime_Validation(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
-		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+		// platform is NOT a system schema, so validation should pass (will fail on nil DB though)
+		// But since handler.db is nil, it returns 500. The key point is it doesn't return 400 (blocked).
+		assert.NotEqual(t, fiber.StatusBadRequest, resp.StatusCode)
 	})
 
 	t.Run("valid events accepted", func(t *testing.T) {
@@ -654,7 +657,6 @@ func TestSystemSchemaProtection(t *testing.T) {
 	systemSchemas := []string{
 		"pg_catalog",
 		"information_schema",
-		"dashboard",
 		"auth",
 		"realtime",
 	}

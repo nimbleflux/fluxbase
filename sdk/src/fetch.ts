@@ -25,6 +25,9 @@ export interface FetchResponseWithHeaders<T> {
 /** Callback type for automatic token refresh on 401 errors */
 export type RefreshTokenCallback = () => Promise<boolean>;
 
+/** Callback type for modifying headers before each request */
+export type BeforeRequestCallback = (headers: Record<string, string>) => void;
+
 export class FluxbaseFetch {
   private baseUrl: string;
   private defaultHeaders: Record<string, string>;
@@ -34,6 +37,7 @@ export class FluxbaseFetch {
   private isRefreshing = false;
   private refreshPromise: Promise<boolean> | null = null;
   private anonKey: string | null = null;
+  private beforeRequestCallback: BeforeRequestCallback | null = null;
 
   constructor(
     baseUrl: string,
@@ -58,6 +62,15 @@ export class FluxbaseFetch {
    */
   setRefreshTokenCallback(callback: RefreshTokenCallback | null) {
     this.refreshTokenCallback = callback;
+  }
+
+  /**
+   * Register a callback to be called before every request.
+   * The callback receives the headers object and can modify it in place.
+   * This is useful for dynamically injecting headers at request time.
+   */
+  setBeforeRequestCallback(callback: BeforeRequestCallback | null) {
+    this.beforeRequestCallback = callback;
   }
 
   /**
@@ -115,6 +128,9 @@ export class FluxbaseFetch {
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const headers = { ...this.defaultHeaders, ...options.headers };
+    if (this.beforeRequestCallback) {
+      this.beforeRequestCallback(headers);
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(
@@ -311,6 +327,9 @@ export class FluxbaseFetch {
   ): Promise<FetchResponseWithHeaders<T>> {
     const url = `${this.baseUrl}${path}`;
     const headers = { ...this.defaultHeaders, ...options.headers };
+    if (this.beforeRequestCallback) {
+      this.beforeRequestCallback(headers);
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(
@@ -469,6 +488,9 @@ export class FluxbaseFetch {
   ): Promise<Headers> {
     const url = `${this.baseUrl}${path}`;
     const headers = { ...this.defaultHeaders, ...options.headers };
+    if (this.beforeRequestCallback) {
+      this.beforeRequestCallback(headers);
+    }
 
     const response = await fetch(url, {
       method: "HEAD",
@@ -487,6 +509,9 @@ export class FluxbaseFetch {
   ): Promise<Blob> {
     const url = `${this.baseUrl}${path}`;
     const headers = { ...this.defaultHeaders, ...options.headers };
+    if (this.beforeRequestCallback) {
+      this.beforeRequestCallback(headers);
+    }
     // Remove Content-Type for blob downloads
     delete headers["Content-Type"];
 

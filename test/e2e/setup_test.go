@@ -468,7 +468,7 @@ func refreshSharedTestContextSchemaCache() {
 // fluxbase_app does not own the schemas and cannot grant permissions on them.
 //
 // Permissions Granted:
-//   - Schema USAGE and CREATE on: auth, dashboard, functions, storage, realtime
+//   - Schema USAGE and CREATE on: auth, platform, functions, storage, realtime
 //   - ALL privileges on tables and sequences in those schemas
 //   - EXECUTE on all functions in functions schema
 //
@@ -505,7 +505,7 @@ func grantRLSTestPermissions() {
 		GRANT CREATE ON DATABASE %s TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA app TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA auth TO fluxbase_rls_test, fluxbase_app;
-		GRANT USAGE, CREATE ON SCHEMA dashboard TO fluxbase_rls_test, fluxbase_app;
+		GRANT USAGE, CREATE ON SCHEMA platform TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA functions TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA jobs TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA storage TO fluxbase_rls_test, fluxbase_app;
@@ -524,8 +524,8 @@ func grantRLSTestPermissions() {
 		GRANT ALL ON ALL SEQUENCES IN SCHEMA app TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL TABLES IN SCHEMA auth TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL SEQUENCES IN SCHEMA auth TO fluxbase_rls_test, fluxbase_app;
-		GRANT ALL ON ALL TABLES IN SCHEMA dashboard TO fluxbase_rls_test, fluxbase_app;
-		GRANT ALL ON ALL SEQUENCES IN SCHEMA dashboard TO fluxbase_rls_test, fluxbase_app;
+		GRANT ALL ON ALL TABLES IN SCHEMA platform TO fluxbase_rls_test, fluxbase_app;
+		GRANT ALL ON ALL SEQUENCES IN SCHEMA platform TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL TABLES IN SCHEMA functions TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL SEQUENCES IN SCHEMA functions TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL TABLES IN SCHEMA jobs TO fluxbase_rls_test, fluxbase_app;
@@ -542,8 +542,8 @@ func grantRLSTestPermissions() {
 		ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
-		ALTER DEFAULT PRIVILEGES IN SCHEMA dashboard GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
-		ALTER DEFAULT PRIVILEGES IN SCHEMA dashboard GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
+		ALTER DEFAULT PRIVILEGES IN SCHEMA platform GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
+		ALTER DEFAULT PRIVILEGES IN SCHEMA platform GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA functions GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA functions GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA jobs GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;

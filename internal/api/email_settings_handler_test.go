@@ -19,13 +19,14 @@ import (
 
 func TestNewEmailSettingsHandler(t *testing.T) {
 	t.Run("creates handler with nil dependencies", func(t *testing.T) {
-		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil)
+		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil, nil)
 		assert.NotNil(t, handler)
 		assert.Nil(t, handler.settingsService)
 		assert.Nil(t, handler.settingsCache)
 		assert.Nil(t, handler.emailManager)
 		assert.Nil(t, handler.secretsService)
-		assert.Nil(t, handler.envConfig)
+		assert.Nil(t, handler.config)
+		assert.Nil(t, handler.unifiedService)
 	})
 }
 
@@ -403,7 +404,7 @@ func TestTestEmailSettingsRequest_Struct(t *testing.T) {
 func TestUpdateSettings_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil)
+		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil, nil)
 
 		app.Put("/email/settings", handler.UpdateSettings)
 
@@ -428,7 +429,7 @@ func TestUpdateSettings_Validation(t *testing.T) {
 
 	t.Run("empty body is valid (no updates)", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil)
+		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil, nil)
 
 		app.Put("/email/settings", handler.UpdateSettings)
 
@@ -452,7 +453,7 @@ func TestUpdateSettings_Validation(t *testing.T) {
 func TestTestSettings_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil)
+		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil, nil)
 
 		app.Post("/email/settings/test", handler.TestSettings)
 
@@ -477,7 +478,7 @@ func TestTestSettings_Validation(t *testing.T) {
 
 	t.Run("missing recipient email", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil)
+		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil, nil)
 
 		app.Post("/email/settings/test", handler.TestSettings)
 
@@ -503,7 +504,7 @@ func TestTestSettings_Validation(t *testing.T) {
 
 	t.Run("empty recipient email", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil)
+		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil, nil)
 
 		app.Post("/email/settings/test", handler.TestSettings)
 
@@ -529,7 +530,7 @@ func TestTestSettings_Validation(t *testing.T) {
 
 	t.Run("email manager not initialized", func(t *testing.T) {
 		app := fiber.New()
-		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil)
+		handler := NewEmailSettingsHandler(nil, nil, nil, nil, nil, nil)
 
 		app.Post("/email/settings/test", handler.TestSettings)
 

@@ -375,7 +375,7 @@ func (h *TenantHandler) ListAdmins(c fiber.Ctx) error {
 		       u.email, du.role as dashboard_role
 		FROM platform.tenant_admin_assignments ta
 		INNER JOIN auth.users u ON u.id = ta.user_id
-		INNER JOIN dashboard.users du ON du.id = ta.user_id
+		INNER JOIN platform.users du ON du.id = ta.user_id
 		WHERE ta.tenant_id = $1::uuid
 		ORDER BY ta.created_at ASC
 	`, tenantID)

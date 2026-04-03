@@ -13,7 +13,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // ServiceKeyHandler handles service key management requests
@@ -98,23 +97,22 @@ type RotateServiceKeyRequest struct {
 	GracePeriodHours int      `json:"grace_period_hours,omitempty"`
 }
 
-func getTenantPool(c fiber.Ctx, db *pgxpool.Pool) *pgxpool.Pool {
-	pool := middleware.GetTenantPool(c)
-	if pool == nil {
-		return db
-	}
-	return pool
-}
-
 // errDBNotInitialized is returned when database connection is not available
 var errDBNotInitialized = fmt.Errorf("database connection not initialized")
 
-// checkDB checks if database connection is available
+// checkDB checks if database connection is available.
+// Always uses the main pool since auth.service_keys only exists in the main database.
 func (h *ServiceKeyHandler) checkDB(c fiber.Ctx) (*pgxpool.Pool, error) {
 	if h.db == nil {
 		return nil, errDBNotInitialized
 	}
-	return getTenantPool(c, h.db), nil
+	return h.db, nil
+}
+
+// getTenantID extracts tenant_id from the request context
+func getTenantID(c fiber.Ctx) string {
+	tenantID, _ := c.Locals("tenant_id").(string)
+	return tenantID
 }
 
 // ListServiceKeys lists all service keys
@@ -126,13 +124,25 @@ func (h *ServiceKeyHandler) ListServiceKeys(c fiber.Ctx) error {
 		})
 	}
 
-	rows, err := pool.Query(c.RequestCtx(), `
+	query := `
 		SELECT id, name, description, key_prefix, COALESCE(key_type, 'service'), scopes, allowed_namespaces, enabled,
 		       rate_limit_per_minute, rate_limit_per_hour,
 		       created_by, created_at, last_used_at, expires_at, revoked_at, deprecated_at, grace_period_ends_at, replaced_by
 		FROM auth.service_keys
-		ORDER BY created_at DESC
-	`)
+		WHERE 1=1
+	`
+	args := []interface{}{}
+	argIdx := 1
+
+	if tenantID := getTenantID(c); tenantID != "" {
+		query += fmt.Sprintf(" AND tenant_id = $%d", argIdx)
+		args = append(args, tenantID)
+		argIdx++
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	rows, err := pool.Query(c.RequestCtx(), query, args...)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list service keys")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -267,14 +277,29 @@ func (h *ServiceKeyHandler) CreateServiceKey(c fiber.Ctx) error {
 		}
 	}
 
-	userID, _ := c.Locals("user_id").(uuid.UUID)
+	// created_by references auth.users(id), but dashboard users authenticate
+	// against platform.users — pass nil when the user isn't in auth.users
+	// to avoid FK violation. c.Locals("user_id") is stored as string.
+	var createdBy interface{}
+	var createdByUUID *uuid.UUID
+	if userIDStr, ok := c.Locals("user_id").(string); ok {
+		if id, err := uuid.Parse(userIDStr); err == nil {
+			createdBy = id
+			createdByUUID = &id
+		}
+	}
+	tenantID := getTenantID(c)
+	tenantUUID := uuid.Nil
+	if tenantID != "" {
+		tenantUUID = uuid.MustParse(tenantID)
+	}
 
 	var keyID uuid.UUID
 	err = pool.QueryRow(c.RequestCtx(), `
-		INSERT INTO auth.service_keys (name, description, key_hash, key_prefix, key_type, scopes, allowed_namespaces, enabled, rate_limit_per_minute, rate_limit_per_hour, created_by, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11)
+		INSERT INTO auth.service_keys (name, description, key_hash, key_prefix, key_type, scopes, allowed_namespaces, enabled, rate_limit_per_minute, rate_limit_per_hour, created_by, expires_at, tenant_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12)
 		RETURNING id
-	`, req.Name, req.Description, string(keyHash), keyPrefix, req.KeyType, scopes, req.AllowedNamespaces, req.RateLimitPerMinute, req.RateLimitPerHour, userID, req.ExpiresAt).Scan(&keyID)
+	`, req.Name, req.Description, string(keyHash), keyPrefix, req.KeyType, scopes, req.AllowedNamespaces, req.RateLimitPerMinute, req.RateLimitPerHour, createdBy, req.ExpiresAt, tenantUUID).Scan(&keyID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create service key")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -296,7 +321,7 @@ func (h *ServiceKeyHandler) CreateServiceKey(c fiber.Ctx) error {
 			Enabled:            true,
 			RateLimitPerMinute: req.RateLimitPerMinute,
 			RateLimitPerHour:   req.RateLimitPerHour,
-			CreatedBy:          &userID,
+			CreatedBy:          createdByUUID,
 			CreatedAt:          time.Now(),
 			ExpiresAt:          req.ExpiresAt,
 		},
@@ -483,7 +508,11 @@ func (h *ServiceKeyHandler) RevokeServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	userID, _ := c.Locals("user_id").(uuid.UUID)
+	// revoked_by references platform.users(id)
+	var userID uuid.UUID
+	if userIDStr, ok := c.Locals("user_id").(string); ok {
+		userID, _ = uuid.Parse(userIDStr)
+	}
 	reason := c.FormValue("reason", "")
 
 	pool, err := h.checkDB(c)
@@ -626,7 +655,21 @@ func (h *ServiceKeyHandler) RotateServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	userID, _ := c.Locals("user_id").(uuid.UUID)
+	// created_by references auth.users(id), but dashboard users authenticate
+	// against platform.users — pass nil to avoid FK violation
+	var createdBy interface{}
+	var createdByUUID *uuid.UUID
+	if userIDStr, ok := c.Locals("user_id").(string); ok {
+		if id, err := uuid.Parse(userIDStr); err == nil {
+			createdBy = id
+			createdByUUID = &id
+		}
+	}
+	tenantID := getTenantID(c)
+	tenantUUID := uuid.Nil
+	if tenantID != "" {
+		tenantUUID = uuid.MustParse(tenantID)
+	}
 
 	tx, err := pool.Begin(c.RequestCtx())
 	if err != nil {
@@ -638,11 +681,11 @@ func (h *ServiceKeyHandler) RotateServiceKey(c fiber.Ctx) error {
 
 	var newID uuid.UUID
 	err = tx.QueryRow(c.RequestCtx(), `
-		INSERT INTO auth.service_keys (name, description, key_hash, key_prefix, key_type, scopes, allowed_namespaces, enabled, rate_limit_per_minute, rate_limit_per_hour, created_by, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11)
+		INSERT INTO auth.service_keys (name, description, key_hash, key_prefix, key_type, scopes, allowed_namespaces, enabled, rate_limit_per_minute, rate_limit_per_hour, created_by, expires_at, tenant_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12)
 		RETURNING id
 	`, oldKey.Name+" (rotated)", oldKey.Description, string(keyHash), keyPrefix, oldKey.KeyType,
-		oldKey.Scopes, oldKey.AllowedNamespaces, oldKey.RateLimitPerMinute, oldKey.RateLimitPerHour, userID, oldKey.ExpiresAt).Scan(&newID)
+		oldKey.Scopes, oldKey.AllowedNamespaces, oldKey.RateLimitPerMinute, oldKey.RateLimitPerHour, createdBy, oldKey.ExpiresAt, tenantUUID).Scan(&newID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create rotated service key")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -683,7 +726,7 @@ func (h *ServiceKeyHandler) RotateServiceKey(c fiber.Ctx) error {
 			Enabled:            true,
 			RateLimitPerMinute: oldKey.RateLimitPerMinute,
 			RateLimitPerHour:   oldKey.RateLimitPerHour,
-			CreatedBy:          &userID,
+			CreatedBy:          createdByUUID,
 			CreatedAt:          time.Now(),
 			ExpiresAt:          oldKey.ExpiresAt,
 		},
