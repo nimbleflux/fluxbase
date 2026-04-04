@@ -34,9 +34,6 @@ type AdminDeps struct {
 	TenantMiddleware   fiber.Handler
 	TenantDBMiddleware fiber.Handler
 
-	// RequireExplicitTenant rejects default-tenant fallback on tenant-scoped subgroups
-	RequireExplicitTenant fiber.Handler
-
 	// Subgroup dependencies
 	Branch           *BranchDeps
 	Schema           *SchemaAdminDeps
@@ -104,75 +101,48 @@ type AdminDeps struct {
 func BuildAdminRoutes(deps *AdminDeps) *RouteGroup {
 	var subgroups []*RouteGroup
 
-	// Tenant-scoped subgroups: require explicit tenant selection (no default fallback)
-	tenantScoped := map[string]bool{
-		"branch":               true,
-		"schema_admin":         true,
-		"auth_providers_admin": true,
-		"users_admin":          true,
-		"service_keys_admin":   true,
-		"functions_admin":      true,
-		"jobs_admin":           true,
-		"ai_admin":             true,
-		"rpc_admin":            true,
-		"logs_admin":           true,
-		"extensions_tenant":    true,
-	}
-
-	// Helper to conditionally add RequireExplicitTenant to tenant-scoped subgroups
-	applyExplicitTenant := func(sg *RouteGroup) *RouteGroup {
-		if sg == nil || deps.RequireExplicitTenant == nil || !tenantScoped[sg.Name] {
-			return sg
-		}
-		sg.Middlewares = append(sg.Middlewares, Middleware{
-			Name:    "RequireExplicitTenant",
-			Handler: deps.RequireExplicitTenant,
-		})
-		return sg
-	}
-
 	// Register subgroups
 	if branch := BuildBranchRoutes(deps.Branch); branch != nil {
-		subgroups = append(subgroups, applyExplicitTenant(branch))
+		subgroups = append(subgroups, branch)
 	}
 	if schema := BuildSchemaAdminRoutes(deps.Schema); schema != nil {
-		subgroups = append(subgroups, applyExplicitTenant(schema))
+		subgroups = append(subgroups, schema)
 	}
 	if authProviders := BuildAuthProvidersAdminRoutes(deps.AuthProviders); authProviders != nil {
-		subgroups = append(subgroups, applyExplicitTenant(authProviders))
+		subgroups = append(subgroups, authProviders)
 	}
 	if users := BuildUsersAdminRoutes(deps.Users); users != nil {
-		subgroups = append(subgroups, applyExplicitTenant(users))
+		subgroups = append(subgroups, users)
 	}
 	if tenants := BuildTenantsAdminRoutes(deps.Tenants); tenants != nil {
-		subgroups = append(subgroups, tenants) // instance-level: no explicit tenant
+		subgroups = append(subgroups, tenants)
 	}
 	if serviceKeys := BuildServiceKeysAdminRoutes(deps.ServiceKeys); serviceKeys != nil {
-		subgroups = append(subgroups, applyExplicitTenant(serviceKeys))
+		subgroups = append(subgroups, serviceKeys)
 	}
 	if functions := BuildFunctionsAdminRoutes(deps.Functions); functions != nil {
-		subgroups = append(subgroups, applyExplicitTenant(functions))
+		subgroups = append(subgroups, functions)
 	}
 	if jobs := BuildJobsAdminRoutes(deps.Jobs); jobs != nil {
-		subgroups = append(subgroups, applyExplicitTenant(jobs))
+		subgroups = append(subgroups, jobs)
 	}
 	if ai := BuildAIAdminRoutes(deps.AI); ai != nil {
-		subgroups = append(subgroups, applyExplicitTenant(ai))
+		subgroups = append(subgroups, ai)
 	}
 	if rpc := BuildRPCAdminRoutes(deps.RPC); rpc != nil {
-		subgroups = append(subgroups, applyExplicitTenant(rpc))
+		subgroups = append(subgroups, rpc)
 	}
 	if logs := BuildLogsAdminRoutes(deps.Logs); logs != nil {
-		subgroups = append(subgroups, applyExplicitTenant(logs))
+		subgroups = append(subgroups, logs)
 	}
 	if settings := BuildSettingsAdminRoutes(deps.Settings); settings != nil {
-		subgroups = append(subgroups, settings) // mixed: instance + tenant routes, no explicit tenant
+		subgroups = append(subgroups, settings)
 	}
 	if extensions := BuildExtensionsAdminRoutes(deps.Extensions); extensions != nil {
-		subgroups = append(subgroups, extensions) // instance-level: no explicit tenant
+		subgroups = append(subgroups, extensions)
 	}
 	if extensionsTenant := BuildExtensionsTenantRoutes(deps.ExtensionsTenant); extensionsTenant != nil {
-		subgroups = append(subgroups, applyExplicitTenant(extensionsTenant))
+		subgroups = append(subgroups, extensionsTenant)
 	}
 
 	// Build middlewares for tenant context (inherited by all subgroups)

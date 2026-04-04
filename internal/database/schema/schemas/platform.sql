@@ -238,7 +238,7 @@ ALTER TABLE oauth_providers FORCE ROW LEVEL SECURITY;
 -- Name: platform_oauth_providers_read; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY platform_oauth_providers_read ON oauth_providers FOR SELECT TO authenticated USING (enabled = true);
+CREATE POLICY platform_oauth_providers_read ON oauth_providers FOR SELECT TO authenticated USING (current_setting('request.jwt.claims', true)::json->>'role' = 'instance_admin');
 
 --
 -- Name: tenants; Type: TABLE; Schema: -; Owner: -

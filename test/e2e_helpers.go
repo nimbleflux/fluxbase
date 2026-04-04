@@ -177,15 +177,16 @@ func E2ETestEmailWithSuffix(suffix string) string {
 //
 // Always close the context with defer tc.Close() to ensure proper cleanup.
 type TestContext struct {
-	DB            *database.Connection
-	Server        *api.Server
-	App           *fiber.App
-	Config        *config.Config
-	T             *testing.T
-	isShared      bool          // True if this is the shared test context (don't close DB)
-	superuserPool *pgxpool.Pool // Pooled connection as postgres superuser
-	rlsPool       *pgxpool.Pool // Pooled connection as fluxbase_rls_test user
-	defaultTenant string        // Cached default tenant ID for X-FB-Tenant header
+	DB                *database.Connection
+	Server            *api.Server
+	App               *fiber.App
+	Config            *config.Config
+	T                 *testing.T
+	isShared          bool          // True if this is the shared test context (don't close DB)
+	superuserPool     *pgxpool.Pool // Pooled connection as postgres superuser
+	rlsPool           *pgxpool.Pool // Pooled connection as fluxbase_rls_test user
+	defaultTenant     string        // Cached default tenant ID for X-FB-Tenant header
+	defaultTenantOnce sync.Once     // Guards defaultTenant initialization
 }
 
 // NewTestContext creates a test context using the fluxbase_app database user.
@@ -1295,13 +1296,13 @@ func (r *APIRequest) Unauthenticated() *APIRequest {
 }
 
 // WithDefaultTenant sets the X-FB-Tenant header to the default tenant ID.
-// This is required for admin endpoints that enforce RequireExplicitTenant.
+// Use this when you need to explicitly target the default tenant (e.g., multi-tenant tests).
 //
 // Example:
 //
 //	resp := tc.NewRequest("GET", "/api/v1/admin/schemas").
 //	    WithAuth(token).
-//	    WithDefaultTenant(tc).
+//	    WithDefaultTenant().
 //	    Send()
 func (r *APIRequest) WithDefaultTenant() *APIRequest {
 	tenantID := r.tc.GetDefaultTenantID()
@@ -1311,27 +1312,26 @@ func (r *APIRequest) WithDefaultTenant() *APIRequest {
 
 // GetDefaultTenantID returns the default tenant ID, caching the result.
 // If no default tenant exists (e.g., in CI where only bootstrap SQL runs), it creates one.
+// Uses sync.Once to prevent data races when called concurrently.
 func (tc *TestContext) GetDefaultTenantID() string {
-	if tc.defaultTenant != "" {
-		return tc.defaultTenant
-	}
+	tc.defaultTenantOnce.Do(func() {
+		var id string
+		err := tc.DB.Pool().QueryRow(context.Background(),
+			"SELECT id::text FROM platform.tenants WHERE is_default = true LIMIT 1",
+		).Scan(&id)
+		if err == nil {
+			tc.defaultTenant = id
+			return
+		}
 
-	var id string
-	err := tc.DB.Pool().QueryRow(context.Background(),
-		"SELECT id::text FROM platform.tenants WHERE is_default = true LIMIT 1",
-	).Scan(&id)
-	if err == nil {
+		// No default tenant exists — create one (CI doesn't seed default tenant)
+		require.NoError(tc.T, tc.DB.Pool().QueryRow(context.Background(),
+			"INSERT INTO platform.tenants (slug, name, is_default) VALUES ('default', 'Default', true) RETURNING id::text",
+		).Scan(&id), "Failed to create default tenant")
+
 		tc.defaultTenant = id
-		return id
-	}
-
-	// No default tenant exists — create one (CI doesn't seed default tenant)
-	require.NoError(tc.T, tc.DB.Pool().QueryRow(context.Background(),
-		"INSERT INTO platform.tenants (slug, name, is_default) VALUES ('default', 'Default', true) RETURNING id::text",
-	).Scan(&id), "Failed to create default tenant")
-
-	tc.defaultTenant = id
-	return id
+	})
+	return tc.defaultTenant
 }
 
 // Send executes the request and returns the response

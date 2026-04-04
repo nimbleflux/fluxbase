@@ -18,7 +18,8 @@ import (
 // TransformTestContext extends StorageTestContext with transform-specific config
 type TransformTestContext struct {
 	*test.TestContext
-	APIKey string
+	APIKey     string
+	ServiceKey string
 }
 
 // setupTransformTest prepares the test context for transform tests
@@ -43,20 +44,24 @@ func setupTransformTest(t *testing.T) *TransformTestContext {
 	// Clean up any existing test storage files
 	tc.CleanupStorageFiles()
 
+	// Create a service key for bucket CRUD (bucket management requires service/admin role)
+	serviceKey := tc.CreateServiceKey("Transform Test Service Key")
+
 	// Create an API key for authenticated requests
 	apiKey := tc.CreateAPIKey("Transform Test API Key", nil)
 
 	return &TransformTestContext{
 		TestContext: tc,
 		APIKey:      apiKey,
+		ServiceKey:  serviceKey,
 	}
 }
 
 // createTestBucketAndUpload creates a bucket and uploads a test image
 func createTestBucketAndUpload(t *testing.T, tc *TransformTestContext, bucketName string, fileName string, content []byte, contentType string) {
-	// Create bucket
+	// Create bucket (requires service key for bucket CRUD)
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusCreated)
 
@@ -81,7 +86,7 @@ func createTestBucketAndUpload(t *testing.T, tc *TransformTestContext, bucketNam
 	// Upload file
 	req := httptest.NewRequest("POST", "/api/v1/storage/"+bucketName+"/"+fileName, body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("X-Client-Key", tc.APIKey)
+	req.Header.Set("X-Service-Key", tc.ServiceKey)
 
 	resp, err := tc.App.Test(req)
 	require.NoError(t, err)
@@ -120,7 +125,7 @@ func TestStorageTransform_GetConfig(t *testing.T) {
 	defer tc.Close()
 
 	resp := tc.NewRequest("GET", "/api/v1/storage/config/transforms").
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusOK)
 
@@ -312,7 +317,7 @@ func TestStorageTransform_NonImageFileIgnoresTransform(t *testing.T) {
 
 	// Request with transform params - should return original since it's not an image
 	resp := tc.NewRequest("GET", "/api/v1/storage/"+bucketName+"/"+fileName+"?w=100").
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send()
 
 	// Should return the file (either 200 or appropriate status)
@@ -414,7 +419,7 @@ func TestStorageTransform_DownloadWithQueryParams(t *testing.T) {
 	// Test download without transform params
 	t.Run("without transform", func(t *testing.T) {
 		resp := tc.NewRequest("GET", "/api/v1/storage/"+bucketName+"/"+fileName).
-			WithAPIKey(tc.APIKey).
+			WithServiceKey(tc.ServiceKey).
 			Send()
 
 		if resp.Status() == fiber.StatusOK {
@@ -429,7 +434,7 @@ func TestStorageTransform_DownloadWithQueryParams(t *testing.T) {
 	// Test download with width param
 	t.Run("with width param", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/storage/"+bucketName+"/"+fileName+"?w=100", nil)
-		req.Header.Set("X-Client-Key", tc.APIKey)
+		req.Header.Set("X-Service-Key", tc.ServiceKey)
 
 		resp, err := tc.App.Test(req)
 		require.NoError(t, err)
@@ -442,7 +447,7 @@ func TestStorageTransform_DownloadWithQueryParams(t *testing.T) {
 	// Test download with format conversion param
 	t.Run("with format param", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/storage/"+bucketName+"/"+fileName+"?fmt=webp", nil)
-		req.Header.Set("X-Client-Key", tc.APIKey)
+		req.Header.Set("X-Service-Key", tc.ServiceKey)
 
 		resp, err := tc.App.Test(req)
 		require.NoError(t, err)
@@ -454,7 +459,7 @@ func TestStorageTransform_DownloadWithQueryParams(t *testing.T) {
 	// Test download with multiple params
 	t.Run("with multiple params", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/storage/"+bucketName+"/"+fileName+"?w=100&h=100&fmt=webp&q=80&fit=cover", nil)
-		req.Header.Set("X-Client-Key", tc.APIKey)
+		req.Header.Set("X-Service-Key", tc.ServiceKey)
 
 		resp, err := tc.App.Test(req)
 		require.NoError(t, err)

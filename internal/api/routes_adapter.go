@@ -598,11 +598,10 @@ func (s *Server) buildKnowledgeBaseRouteDeps() *routes.KnowledgeBaseDeps {
 func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 	unifiedAuth := UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db.Pool())
 	return &routes.AdminDeps{
-		UnifiedAuth:           unifiedAuth,
-		RequireRole:           RequireRole,
-		TenantMiddleware:      s.Middleware.Tenant,
-		TenantDBMiddleware:    s.Middleware.TenantDB,
-		RequireExplicitTenant: middleware.RequireExplicitTenant,
+		UnifiedAuth:        unifiedAuth,
+		RequireRole:        RequireRole,
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
 
 		// Subgroup dependencies
 		Branch: s.buildBranchRouteDeps(),

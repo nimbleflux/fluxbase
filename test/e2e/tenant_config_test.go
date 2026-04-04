@@ -285,13 +285,12 @@ func TestStorageManagerWithTenant(t *testing.T) {
 
 	tc.EnsureStorageSchema()
 
-	// Create an API key for storage operations
-	apiKey := tc.CreateAPIKey("storage-test", []string{"storage:read", "storage:write"})
-
+	// Create a service key for operations that require service role
+	serviceKey := tc.CreateServiceKey("storage-service-test")
 	// Create a bucket
 	bucketName := "test-tenant-bucket-" + uuid.New().String()[:8]
 	createResp := tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
-		WithAPIKey(apiKey).
+		WithServiceKey(serviceKey).
 		Send()
 
 	require.Equal(t, fiber.StatusCreated, createResp.Status(), "Bucket creation should succeed")
@@ -309,7 +308,7 @@ func TestStorageManagerWithTenant(t *testing.T) {
 
 		req := httptest.NewRequest("POST", "/api/v1/storage/"+bucketName+"/test-file.txt", body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
-		req.Header.Set("X-Client-Key", apiKey)
+		req.Header.Set("X-Service-Key", serviceKey)
 		resp, err := tc.App.Test(req)
 		require.NoError(t, err)
 		require.Equal(t, fiber.StatusCreated, resp.StatusCode, "File upload should succeed")
@@ -317,7 +316,7 @@ func TestStorageManagerWithTenant(t *testing.T) {
 
 	// Download the file
 	downloadResp := tc.NewRequest("GET", "/api/v1/storage/"+bucketName+"/test-file.txt").
-		WithAPIKey(apiKey).
+		WithServiceKey(serviceKey).
 		Send()
 
 	require.Equal(t, fiber.StatusOK, downloadResp.Status(), "File download should succeed")

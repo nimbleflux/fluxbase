@@ -17,7 +17,8 @@ import (
 // StorageTestContext extends TestContext with storage-specific auth setup
 type StorageTestContext struct {
 	*test.TestContext
-	APIKey string // API key for authenticated storage requests
+	APIKey     string // API key for authenticated storage requests
+	ServiceKey string // Service key for admin operations (bucket CRUD)
 }
 
 // setupStorageS3Test prepares the test context for S3/MinIO storage tests
@@ -39,9 +40,13 @@ func setupStorageS3Test(t *testing.T) *StorageTestContext {
 	// Create an API key for authenticated requests
 	apiKey := tc.CreateAPIKey("Storage S3 Test API Key", nil)
 
+	// Create a service key for admin operations (bucket CRUD requires admin/service role)
+	serviceKey := tc.CreateServiceKey("Storage S3 Test Service Key")
+
 	return &StorageTestContext{
 		TestContext: tc,
 		APIKey:      apiKey,
+		ServiceKey:  serviceKey,
 	}
 }
 
@@ -54,7 +59,7 @@ func TestStorageS3CreateBucket(t *testing.T) {
 
 	// Create bucket
 	resp := tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusCreated)
 
@@ -103,7 +108,7 @@ func TestStorageS3UploadFile(t *testing.T) {
 
 	// Create bucket first
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusCreated)
 
@@ -123,7 +128,7 @@ func TestStorageS3UploadFile(t *testing.T) {
 	// Upload file
 	req := httptest.NewRequest("POST", "/api/v1/storage/"+bucketName+"/"+fileName, body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("X-Client-Key", tc.APIKey)
+	req.Header.Set("X-Service-Key", tc.ServiceKey)
 
 	resp, err := tc.App.Test(req)
 	require.NoError(t, err)
@@ -143,7 +148,7 @@ func TestStorageS3DownloadFile(t *testing.T) {
 
 	// Create bucket
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusCreated)
 
@@ -159,13 +164,13 @@ func TestStorageS3DownloadFile(t *testing.T) {
 
 	uploadReq := httptest.NewRequest("POST", "/api/v1/storage/"+bucketName+"/"+fileName, body)
 	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
-	uploadReq.Header.Set("X-Client-Key", tc.APIKey)
+	uploadReq.Header.Set("X-Service-Key", tc.ServiceKey)
 	_, err = tc.App.Test(uploadReq)
 	require.NoError(t, err)
 
 	// Now download the file
 	resp := tc.NewRequest("GET", "/api/v1/storage/"+bucketName+"/"+fileName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send()
 
 	// Download should work
@@ -189,7 +194,7 @@ func TestStorageS3DeleteFile(t *testing.T) {
 
 	// Create bucket
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusCreated)
 
@@ -205,13 +210,13 @@ func TestStorageS3DeleteFile(t *testing.T) {
 
 	uploadReq := httptest.NewRequest("POST", "/api/v1/storage/"+bucketName+"/"+fileName, body)
 	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
-	uploadReq.Header.Set("X-Client-Key", tc.APIKey)
+	uploadReq.Header.Set("X-Service-Key", tc.ServiceKey)
 	_, err = tc.App.Test(uploadReq)
 	require.NoError(t, err)
 
 	// Delete the file
 	tc.NewRequest("DELETE", "/api/v1/storage/"+bucketName+"/"+fileName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusNoContent)
 
@@ -227,13 +232,13 @@ func TestStorageS3DeleteBucket(t *testing.T) {
 
 	// Create bucket
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusCreated)
 
 	// Delete bucket
 	tc.NewRequest("DELETE", "/api/v1/storage/buckets/"+bucketName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusNoContent)
 
@@ -249,7 +254,7 @@ func TestStorageS3ListFiles(t *testing.T) {
 
 	// Create bucket
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusCreated)
 
@@ -267,14 +272,14 @@ func TestStorageS3ListFiles(t *testing.T) {
 
 		uploadReq := httptest.NewRequest("POST", "/api/v1/storage/"+bucketName+"/"+fileName, body)
 		uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
-		uploadReq.Header.Set("X-Client-Key", tc.APIKey)
+		uploadReq.Header.Set("X-Service-Key", tc.ServiceKey)
 		_, err = tc.App.Test(uploadReq)
 		require.NoError(t, err)
 	}
 
 	// List files in bucket
 	resp := tc.NewRequest("GET", "/api/v1/storage/"+bucketName).
-		WithAPIKey(tc.APIKey).
+		WithServiceKey(tc.ServiceKey).
 		Send().
 		AssertStatus(fiber.StatusOK)
 

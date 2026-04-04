@@ -286,20 +286,6 @@ func SetTenantSessionContext(ctx context.Context, tx pgx.Tx, tenantID string) er
 	return nil
 }
 
-// RequireExplicitTenant rejects requests where the tenant was resolved via default
-// fallback. Tenant-scoped admin endpoints use this to force explicit tenant selection.
-// Sources "header" and "jwt" pass; source "default" or "" returns 400.
-//
-// This must be registered AFTER TenantMiddleware so that tenant_source is available.
-func RequireExplicitTenant(c fiber.Ctx) error {
-	source := GetTenantSourceFromContext(c)
-	if source == "header" || source == "jwt" {
-		return c.Next()
-	}
-	return fiber.NewError(fiber.StatusBadRequest,
-		"tenant context required: select a tenant via X-FB-Tenant header")
-}
-
 // RequireTenantRole creates a middleware that requires a specific tenant role
 // If the user is an instance admin AND has a tenant context set, they are treated as a tenant admin
 func RequireTenantRole(requiredRole string) fiber.Handler {

@@ -12,6 +12,15 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// getTenantIDArg returns the tenant_id as an interface{} for SQL parameters.
+// Returns nil if no tenant context is set (which maps to SQL NULL).
+func getTenantIDArg(c fiber.Ctx) interface{} {
+	if id, ok := c.Locals("tenant_id").(string); ok && id != "" {
+		return id
+	}
+	return nil
+}
+
 // detectContentType detects content type from file extension
 // SECURITY NOTE: This function only checks file extension, which can be spoofed.
 // For enhanced security, consider using detectContentTypeFromBytes() which validates
@@ -122,6 +131,12 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 	// Switch to a non-BYPASSRLS role to enforce RLS policies.
 	// The pool connects as fluxbase_app (BYPASSRLS), so without this,
 	// all RLS policies are bypassed regardless of FORCE ROW LEVEL SECURITY.
+	// Exception: instance_admin and service_role keep BYPASSRLS for full admin access.
+	if roleStr == "instance_admin" || roleStr == "service_role" {
+		log.Debug().Str("user_id", userIDStr).Str("role", roleStr).Msg("Keeping BYPASSRLS for admin role")
+		return nil
+	}
+
 	dbRole := "authenticated"
 	if roleStr == "anon" {
 		dbRole = "anon"
