@@ -1310,6 +1310,7 @@ func (r *APIRequest) WithDefaultTenant() *APIRequest {
 }
 
 // GetDefaultTenantID returns the default tenant ID, caching the result.
+// If no default tenant exists (e.g., in CI where only bootstrap SQL runs), it creates one.
 func (tc *TestContext) GetDefaultTenantID() string {
 	if tc.defaultTenant != "" {
 		return tc.defaultTenant
@@ -1319,7 +1320,15 @@ func (tc *TestContext) GetDefaultTenantID() string {
 	err := tc.DB.Pool().QueryRow(context.Background(),
 		"SELECT id::text FROM platform.tenants WHERE is_default = true LIMIT 1",
 	).Scan(&id)
-	require.NoError(tc.T, err, "Failed to query default tenant")
+	if err == nil {
+		tc.defaultTenant = id
+		return id
+	}
+
+	// No default tenant exists — create one (CI doesn't seed default tenant)
+	require.NoError(tc.T, tc.DB.Pool().QueryRow(context.Background(),
+		"INSERT INTO platform.tenants (slug, name, is_default) VALUES ('default', 'Default', true) RETURNING id::text",
+	).Scan(&id), "Failed to create default tenant")
 
 	tc.defaultTenant = id
 	return id
