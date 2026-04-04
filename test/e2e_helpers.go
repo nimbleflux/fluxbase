@@ -185,6 +185,7 @@ type TestContext struct {
 	isShared      bool          // True if this is the shared test context (don't close DB)
 	superuserPool *pgxpool.Pool // Pooled connection as postgres superuser
 	rlsPool       *pgxpool.Pool // Pooled connection as fluxbase_rls_test user
+	defaultTenant string        // Cached default tenant ID for X-FB-Tenant header
 }
 
 // NewTestContext creates a test context using the fluxbase_app database user.
@@ -1291,6 +1292,37 @@ func (r *APIRequest) Unauthenticated() *APIRequest {
 	delete(r.headers, "X-Client-Key")
 	delete(r.headers, "X-Service-Key")
 	return r
+}
+
+// WithDefaultTenant sets the X-FB-Tenant header to the default tenant ID.
+// This is required for admin endpoints that enforce RequireExplicitTenant.
+//
+// Example:
+//
+//	resp := tc.NewRequest("GET", "/api/v1/admin/schemas").
+//	    WithAuth(token).
+//	    WithDefaultTenant(tc).
+//	    Send()
+func (r *APIRequest) WithDefaultTenant() *APIRequest {
+	tenantID := r.tc.GetDefaultTenantID()
+	r.headers["X-FB-Tenant"] = tenantID
+	return r
+}
+
+// GetDefaultTenantID returns the default tenant ID, caching the result.
+func (tc *TestContext) GetDefaultTenantID() string {
+	if tc.defaultTenant != "" {
+		return tc.defaultTenant
+	}
+
+	var id string
+	err := tc.DB.Pool().QueryRow(context.Background(),
+		"SELECT id::text FROM platform.tenants WHERE is_default = true LIMIT 1",
+	).Scan(&id)
+	require.NoError(tc.T, err, "Failed to query default tenant")
+
+	tc.defaultTenant = id
+	return id
 }
 
 // Send executes the request and returns the response

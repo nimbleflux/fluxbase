@@ -41,6 +41,7 @@ func TestAdminListSchemas(t *testing.T) {
 
 	resp := tc.NewRequest("GET", "/api/v1/admin/schemas").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 
@@ -112,6 +113,7 @@ func TestAdminCORSHeaders(t *testing.T) {
 
 	resp := tc.NewRequest("GET", "/api/v1/admin/schemas").
 		WithAuth(token).
+		WithDefaultTenant().
 		WithHeader("Origin", "https://example.com").
 		Send().
 		AssertStatus(fiber.StatusOK)
@@ -146,6 +148,7 @@ func TestAdminRequestIDTracking(t *testing.T) {
 
 	resp := tc.NewRequest("GET", "/api/v1/admin/schemas").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 
