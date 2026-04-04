@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import z from "zod";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   ListTodo,
@@ -57,7 +58,13 @@ import {
   type EditFormData,
 } from "@/components/jobs";
 
+const jobsSearchSchema = z.object({
+  tab: z.string().optional().catch("queue"),
+  namespace: z.string().optional().catch("default"),
+});
+
 export const Route = createFileRoute("/_authenticated/jobs/")({
+  validateSearch: jobsSearchSchema,
   component: JobsPage,
 });
 

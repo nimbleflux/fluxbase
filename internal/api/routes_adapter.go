@@ -358,6 +358,7 @@ func (s *Server) buildClientKeysRouteDeps() *routes.ClientKeysDeps {
 		RequireAuth:                      middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
 		RequireAdminIfClientKeysDisabled: middleware.RequireAdminIfClientKeysDisabled(s.Auth.Handler.authService.GetSettingsCache()),
 		RequireScope:                     middleware.RequireScope,
+		TenantMiddleware:                 s.Middleware.Tenant,
 		ListClientKeys:                   s.Auth.ClientKeyHandler.ListClientKeys,
 		GetClientKey:                     s.Auth.ClientKeyHandler.GetClientKey,
 		CreateClientKey:                  s.Auth.ClientKeyHandler.CreateClientKey,

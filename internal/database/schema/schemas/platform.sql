@@ -108,12 +108,17 @@ CREATE POLICY platform_email_templates_read ON email_templates FOR SELECT TO aut
 
 CREATE TABLE IF NOT EXISTS instance_settings (
     id uuid DEFAULT gen_random_uuid(),
+    tenant_id uuid,
     settings jsonb DEFAULT '{}' NOT NULL,
     overridable_settings jsonb,
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
-    CONSTRAINT instance_settings_pkey PRIMARY KEY (id)
+    CONSTRAINT instance_settings_pkey PRIMARY KEY (id),
+    CONSTRAINT instance_settings_tenant_unique UNIQUE (tenant_id)
+    -- FK instance_settings_tenant_id_fkey moved to post-schema-fks.sql
 );
+
+COMMENT ON COLUMN platform.instance_settings.tenant_id IS 'Tenant ID for per-tenant settings. NULL = instance-level settings (singleton row with overridable_settings).';
 
 --
 -- Name: idx_instance_settings_settings; Type: INDEX; Schema: -; Owner: -
@@ -122,10 +127,10 @@ CREATE TABLE IF NOT EXISTS instance_settings (
 CREATE INDEX IF NOT EXISTS idx_instance_settings_settings ON instance_settings USING gin (settings);
 
 --
--- Name: idx_instance_settings_single_row; Type: INDEX; Schema: -; Owner: -
+-- Name: idx_instance_settings_tenant_id; Type: INDEX; Schema: -; Owner: -
 --
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_instance_settings_single_row ON instance_settings ((id IS NOT NULL));
+CREATE INDEX IF NOT EXISTS idx_instance_settings_tenant_id ON instance_settings (tenant_id);
 
 --
 -- Name: instance_settings; Type: RLS; Schema: -; Owner: -
@@ -573,45 +578,6 @@ ALTER TABLE tenant_memberships ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE tenant_memberships FORCE ROW LEVEL SECURITY;
-
---
--- Name: tenant_settings; Type: TABLE; Schema: -; Owner: -
---
-
-CREATE TABLE IF NOT EXISTS tenant_settings (
-    id uuid DEFAULT gen_random_uuid(),
-    tenant_id uuid NOT NULL,
-    settings jsonb DEFAULT '{}' NOT NULL,
-    created_at timestamptz DEFAULT now() NOT NULL,
-    updated_at timestamptz DEFAULT now() NOT NULL,
-    CONSTRAINT tenant_settings_pkey PRIMARY KEY (id),
-    CONSTRAINT tenant_settings_tenant_unique UNIQUE (tenant_id),
-    CONSTRAINT tenant_settings_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE
-);
-
---
--- Name: idx_tenant_settings_settings; Type: INDEX; Schema: -; Owner: -
---
-
-CREATE INDEX IF NOT EXISTS idx_tenant_settings_settings ON tenant_settings USING gin (settings);
-
---
--- Name: idx_tenant_settings_tenant_id; Type: INDEX; Schema: -; Owner: -
---
-
-CREATE INDEX IF NOT EXISTS idx_tenant_settings_tenant_id ON tenant_settings (tenant_id);
-
---
--- Name: tenant_settings; Type: RLS; Schema: -; Owner: -
---
-
-ALTER TABLE tenant_settings ENABLE ROW LEVEL SECURITY;
-
---
--- Name: tenant_settings; Type: RLS; Schema: -; Owner: -
---
-
-ALTER TABLE tenant_settings FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: users; Type: TABLE; Schema: -; Owner: -
@@ -1292,7 +1258,7 @@ BEGIN
     -- Get tenant settings
     SELECT settings
     INTO v_tenant_settings
-    FROM tenant_settings
+    FROM instance_settings
     WHERE tenant_id = p_tenant_id;
 
     v_tenant_settings := COALESCE(v_tenant_settings, '{}');
@@ -1360,7 +1326,7 @@ BEGIN
     IF v_is_overridable AND p_tenant_id IS NOT NULL THEN
         SELECT get_jsonb_path(settings, p_setting_path)
         INTO v_tenant_value
-        FROM tenant_settings
+        FROM instance_settings
         WHERE tenant_id = p_tenant_id;
 
         IF v_tenant_value IS NOT NULL THEN
@@ -1372,6 +1338,7 @@ BEGIN
     SELECT get_jsonb_path(settings, p_setting_path)
     INTO v_instance_value
     FROM instance_settings
+    WHERE tenant_id IS NULL
     LIMIT 1;
 
     IF v_instance_value IS NOT NULL THEN
@@ -1570,14 +1537,7 @@ CREATE OR REPLACE TRIGGER platform_tenants_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
---
--- Name: tenant_settings_updated_at; Type: TRIGGER; Schema: -; Owner: -
---
-
-CREATE OR REPLACE TRIGGER tenant_settings_updated_at
-    BEFORE UPDATE ON tenant_settings
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+-- tenant_settings_updated_at trigger removed (table merged into instance_settings)
 
 --
 -- Name: trigger_update_sso_identities_updated_at; Type: TRIGGER; Schema: -; Owner: -
@@ -1724,7 +1684,7 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 -- Name: instance_settings; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT SELECT ON TABLE instance_settings TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE instance_settings TO tenant_service;
 
 --
 -- Name: invitation_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -1839,24 +1799,6 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE tenant_memberships TO service_role;
-
---
--- Name: tenant_settings; Type: PRIVILEGE; Schema: privileges; Owner: -
---
-
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE tenant_settings TO authenticated;
-
---
--- Name: tenant_settings; Type: PRIVILEGE; Schema: privileges; Owner: -
---
-
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE tenant_settings TO service_role;
-
---
--- Name: tenant_settings; Type: PRIVILEGE; Schema: privileges; Owner: -
---
-
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE tenant_settings TO tenant_service;
 
 --
 -- Name: tenants; Type: PRIVILEGE; Schema: privileges; Owner: -

@@ -79,6 +79,7 @@ import {
   canModify,
   formatRateLimit,
 } from "@/components/service-keys";
+import { useTenantStore } from "@/stores/tenant-store";
 
 export const Route = createFileRoute("/_authenticated/service-keys/")({
   component: ServiceKeysPage,
@@ -86,6 +87,7 @@ export const Route = createFileRoute("/_authenticated/service-keys/")({
 
 function ServiceKeysPage() {
   const queryClient = useQueryClient();
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isKeyDialogOpen, setIsKeyDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -133,14 +135,17 @@ function ServiceKeysPage() {
   >([]);
 
   const { data: serviceKeys, isLoading } = useQuery<ServiceKey[]>({
-    queryKey: ["service-keys"],
+    queryKey: ["service-keys", currentTenantId],
     queryFn: serviceKeysApi.list,
+    enabled: !!currentTenantId,
   });
 
   const createMutation = useMutation({
     mutationFn: serviceKeysApi.create,
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["service-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-keys", currentTenantId],
+      });
       setCreatedKey(data);
       setIsCreateDialogOpen(false);
       setIsKeyDialogOpen(true);
@@ -165,7 +170,9 @@ function ServiceKeysPage() {
       request: UpdateServiceKeyRequest;
     }) => serviceKeysApi.update(id, request),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["service-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-keys", currentTenantId],
+      });
       setIsEditDialogOpen(false);
       setEditingKey(null);
       toast.success("Service key updated successfully");
@@ -178,7 +185,9 @@ function ServiceKeysPage() {
   const enableMutation = useMutation({
     mutationFn: serviceKeysApi.enable,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["service-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-keys", currentTenantId],
+      });
       toast.success("Service key enabled");
     },
     onError: () => {
@@ -189,7 +198,9 @@ function ServiceKeysPage() {
   const disableMutation = useMutation({
     mutationFn: serviceKeysApi.disable,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["service-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-keys", currentTenantId],
+      });
       toast.success("Service key disabled");
     },
     onError: () => {
@@ -200,7 +211,9 @@ function ServiceKeysPage() {
   const deleteMutation = useMutation({
     mutationFn: serviceKeysApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["service-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-keys", currentTenantId],
+      });
       toast.success("Service key deleted successfully");
     },
     onError: () => {
@@ -217,7 +230,9 @@ function ServiceKeysPage() {
       request: RevokeServiceKeyRequest;
     }) => serviceKeysApi.revoke(id, request),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["service-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-keys", currentTenantId],
+      });
       setIsRevokeDialogOpen(false);
       setTargetKey(null);
       setRevokeReason("");
@@ -237,7 +252,9 @@ function ServiceKeysPage() {
       request: DeprecateServiceKeyRequest;
     }) => serviceKeysApi.deprecate(id, request),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["service-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-keys", currentTenantId],
+      });
       setIsDeprecateDialogOpen(false);
       setTargetKey(null);
       setDeprecateReason("");
@@ -258,7 +275,9 @@ function ServiceKeysPage() {
       request: RotateServiceKeyRequest;
     }) => serviceKeysApi.rotate(id, request),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["service-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-keys", currentTenantId],
+      });
       setRotatedKey(data);
       setIsRotateDialogOpen(false);
       setIsRotatedKeyDialogOpen(true);

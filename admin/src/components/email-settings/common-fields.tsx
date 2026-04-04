@@ -36,10 +36,12 @@ export function CommonFields({
         </Label>
         <Input
           id="from_address"
+          type="email"
           placeholder="noreply@example.com"
           value={formState.from_address}
           onChange={(e) => onFormChange("from_address", e.target.value)}
           disabled={isOverridden("from_address")}
+          autoComplete="off"
         />
       </div>
       <div className="space-y-2">
@@ -57,6 +59,7 @@ export function CommonFields({
           value={formState.from_name}
           onChange={(e) => onFormChange("from_name", e.target.value)}
           disabled={isOverridden("from_name")}
+          autoComplete="off"
         />
       </div>
     </div>

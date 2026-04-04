@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import z from "zod";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Terminal,
@@ -42,7 +43,13 @@ import {
   canCancelExecution,
 } from "@/components/rpc";
 
+const rpcSearchSchema = z.object({
+  tab: z.string().optional().catch("executions"),
+  namespace: z.string().optional().catch("default"),
+});
+
 export const Route = createFileRoute("/_authenticated/rpc/")({
+  validateSearch: rpcSearchSchema,
   component: RPCPage,
 });
 

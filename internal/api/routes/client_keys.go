@@ -8,6 +8,7 @@ type ClientKeysDeps struct {
 	RequireAuth                      fiber.Handler
 	RequireAdminIfClientKeysDisabled fiber.Handler
 	RequireScope                     func(...string) fiber.Handler
+	TenantMiddleware                 fiber.Handler
 	ListClientKeys                   fiber.Handler
 	GetClientKey                     fiber.Handler
 	CreateClientKey                  fiber.Handler
@@ -17,12 +18,22 @@ type ClientKeysDeps struct {
 }
 
 func BuildClientKeysRoutes(deps *ClientKeysDeps) *RouteGroup {
+	var middlewares []Middleware
+	middlewares = append(middlewares, Middleware{
+		Name:    "RequireAdminIfClientKeysDisabled",
+		Handler: deps.RequireAdminIfClientKeysDisabled,
+	})
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name:    "TenantContext",
+			Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name:   "client_keys",
-		Prefix: "/api/v1/client-keys",
-		Middlewares: []Middleware{
-			{Name: "RequireAdminIfClientKeysDisabled", Handler: deps.RequireAdminIfClientKeysDisabled},
-		},
+		Name:        "client_keys",
+		Prefix:      "/api/v1/client-keys",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "GET",

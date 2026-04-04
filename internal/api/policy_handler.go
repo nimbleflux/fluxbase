@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -204,11 +205,14 @@ func (s *Server) GetTablesWithRLS(c fiber.Ctx) error {
 		}
 	}
 
-	// Convert to slice
+	// Convert to slice and sort alphabetically by table name
 	tables := make([]TableRLSStatus, 0, len(tablesMap))
 	for _, t := range tablesMap {
 		tables = append(tables, *t)
 	}
+	sort.Slice(tables, func(i, j int) bool {
+		return tables[i].Table < tables[j].Table
+	})
 
 	return c.JSON(tables)
 }

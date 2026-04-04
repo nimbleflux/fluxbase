@@ -5,6 +5,23 @@
 --
 
 -- ============================================================================
+-- platform (intra-schema forward references)
+-- ============================================================================
+
+-- platform.instance_settings.tenant_id -> platform.tenants.id
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'instance_settings_tenant_id_fkey'
+        AND conrelid = 'platform.instance_settings'::regclass
+    ) THEN
+        ALTER TABLE platform.instance_settings ADD CONSTRAINT instance_settings_tenant_id_fkey
+            FOREIGN KEY (tenant_id) REFERENCES platform.tenants(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
+-- ============================================================================
 -- auth -> platform
 -- ============================================================================
 

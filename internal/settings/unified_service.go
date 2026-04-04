@@ -270,7 +270,7 @@ func (s *UnifiedService) isPathOverridableCached(path string) bool {
 func (s *UnifiedService) getTenantSetting(ctx context.Context, tenantID, path string) (any, error) {
 	var settingsJSON []byte
 	err := s.db.QueryRow(ctx, `
-		SELECT settings FROM platform.tenant_settings
+		SELECT settings FROM platform.instance_settings
 		WHERE tenant_id = $1
 	`, tenantID).Scan(&settingsJSON)
 	if err != nil {
@@ -290,6 +290,7 @@ func (s *UnifiedService) getInstanceSetting(ctx context.Context, path string) (a
 	var settingsJSON []byte
 	err := s.db.QueryRow(ctx, `
 		SELECT settings FROM platform.instance_settings
+		WHERE tenant_id IS NULL
 		LIMIT 1
 	`).Scan(&settingsJSON)
 	if err != nil {
@@ -506,6 +507,7 @@ func (s *UnifiedService) SetInstanceSetting(ctx context.Context, path string, va
 	_, err = s.db.Exec(ctx, `
 		UPDATE platform.instance_settings
 		SET settings = $1, updated_at = NOW()
+		WHERE tenant_id IS NULL
 	`, settingsJSON)
 	if err != nil {
 		return fmt.Errorf("failed to update instance settings: %w", err)
@@ -522,7 +524,7 @@ func (s *UnifiedService) SetInstanceSetting(ctx context.Context, path string, va
 func (s *UnifiedService) getOrCreateInstanceSettingsMap(ctx context.Context) (map[string]any, error) {
 	var settingsJSON []byte
 	err := s.db.QueryRow(ctx, `
-		SELECT settings FROM platform.instance_settings LIMIT 1
+		SELECT settings FROM platform.instance_settings WHERE tenant_id IS NULL LIMIT 1
 	`).Scan(&settingsJSON)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -530,8 +532,8 @@ func (s *UnifiedService) getOrCreateInstanceSettingsMap(ctx context.Context) (ma
 			settings := make(map[string]any)
 			settingsJSON, _ := json.Marshal(settings)
 			_, err = s.db.Exec(ctx, `
-				INSERT INTO platform.instance_settings (settings, created_at, updated_at)
-				VALUES ($1, NOW(), NOW())
+				INSERT INTO platform.instance_settings (tenant_id, settings, created_at, updated_at)
+				VALUES (NULL, $1, NOW(), NOW())
 			`, settingsJSON)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create instance settings: %w", err)
@@ -592,7 +594,7 @@ func (s *UnifiedService) SetTenantSetting(ctx context.Context, tenantID, path st
 	}
 
 	_, err = s.db.Exec(ctx, `
-		UPDATE platform.tenant_settings
+		UPDATE platform.instance_settings
 		SET settings = $1, updated_at = NOW()
 		WHERE tenant_id = $2
 	`, settingsJSON, tenantID)
@@ -611,15 +613,15 @@ func (s *UnifiedService) SetTenantSetting(ctx context.Context, tenantID, path st
 func (s *UnifiedService) getOrCreateTenantSettingsMap(ctx context.Context, tenantID string) (map[string]any, error) {
 	var settingsJSON []byte
 	err := s.db.QueryRow(ctx, `
-		SELECT settings FROM platform.tenant_settings WHERE tenant_id = $1
+		SELECT settings FROM platform.instance_settings WHERE tenant_id = $1
 	`, tenantID).Scan(&settingsJSON)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// Create new tenant settings row
+			// Create new tenant settings row in instance_settings
 			settings := make(map[string]any)
 			settingsJSON, _ := json.Marshal(settings)
 			_, err = s.db.Exec(ctx, `
-				INSERT INTO platform.tenant_settings (tenant_id, settings, created_at, updated_at)
+				INSERT INTO platform.instance_settings (tenant_id, settings, created_at, updated_at)
 				VALUES ($1, $2, NOW(), NOW())
 			`, tenantID, settingsJSON)
 			if err != nil {
@@ -660,7 +662,7 @@ func (s *UnifiedService) DeleteTenantSetting(ctx context.Context, tenantID, path
 	}
 
 	_, err = s.db.Exec(ctx, `
-		UPDATE platform.tenant_settings
+		UPDATE platform.instance_settings
 		SET settings = $1, updated_at = NOW()
 		WHERE tenant_id = $2
 	`, settingsJSON, tenantID)
@@ -716,6 +718,7 @@ func (s *UnifiedService) GetInstanceSettings(ctx context.Context) (*InstanceSett
 	err := s.db.QueryRow(ctx, `
 		SELECT settings, overridable_settings, created_at, updated_at
 		FROM platform.instance_settings
+		WHERE tenant_id IS NULL
 		LIMIT 1
 	`).Scan(&settingsJSON, &overridableJSON, &createdAt, &updatedAt)
 	if err != nil {
@@ -765,7 +768,7 @@ func (s *UnifiedService) GetTenantSettings(ctx context.Context, tenantID string)
 
 	err := s.db.QueryRow(ctx, `
 		SELECT settings, created_at, updated_at
-		FROM platform.tenant_settings
+		FROM platform.instance_settings
 		WHERE tenant_id = $1
 	`, tenantID).Scan(&settingsJSON, &createdAt, &updatedAt)
 	if err != nil {
@@ -810,7 +813,7 @@ func (s *UnifiedService) IsSettingOverridable(ctx context.Context, path string) 
 	// Get overridable settings list from database
 	var overridableJSON []byte
 	err := s.db.QueryRow(ctx, `
-		SELECT overridable_settings FROM platform.instance_settings LIMIT 1
+		SELECT overridable_settings FROM platform.instance_settings WHERE tenant_id IS NULL LIMIT 1
 	`).Scan(&overridableJSON)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -858,6 +861,7 @@ func (s *UnifiedService) SetOverridableSettings(ctx context.Context, paths []str
 	_, err = s.db.Exec(ctx, `
 		UPDATE platform.instance_settings
 		SET overridable_settings = $1, updated_at = NOW()
+		WHERE tenant_id IS NULL
 	`, pathsJSON)
 	if err != nil {
 		return fmt.Errorf("failed to update overridable settings: %w", err)

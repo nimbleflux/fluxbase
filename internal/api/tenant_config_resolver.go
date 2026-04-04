@@ -19,8 +19,8 @@ import (
 // Configuration Cascade (Priority: Low → High):
 //  1. Hardcoded defaults (code)
 //  2. Config file (fluxbase.yaml)
-//  3. Instance settings (database: platform.instance_settings)
-//  4. Tenant settings (database: platform.tenant_settings)
+//  3. Instance settings (database: platform.instance_settings WHERE tenant_id IS NULL)
+//  4. Tenant settings (database: platform.instance_settings WHERE tenant_id = $1)
 type TenantConfigResolver struct {
 	db              *database.Connection
 	baseConfig      *config.Config

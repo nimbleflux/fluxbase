@@ -42,6 +42,7 @@ export function SendgridForm({
           value={formState.sendgrid_api_key}
           onChange={(e) => onFormChange("sendgrid_api_key", e.target.value)}
           disabled={isOverridden("sendgrid_api_key")}
+          autoComplete="off"
         />
         <Button
           type="button"

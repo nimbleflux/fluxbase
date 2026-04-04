@@ -66,6 +66,7 @@ function EmailSettingsPage() {
   const search = route.useSearch();
   const navigate = route.useNavigate();
   const { currentTenant, isInstanceAdmin } = useTenantStore();
+  const isDefaultTenant = currentTenant?.is_default ?? false;
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [editingTemplate, setEditingTemplate] =
     useState<Partial<EmailTemplate> | null>(null);
@@ -591,7 +592,7 @@ function EmailSettingsPage() {
                     {currentProvider === "mailgun" && "Mailgun Settings"}
                     {currentProvider === "ses" && "AWS SES Settings"}
                   </span>
-                  {showTenantLevel && (
+                  {showTenantLevel && isDefaultTenant && (
                     <Badge
                       variant="outline"
                       className="border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-300"
@@ -648,7 +649,7 @@ function EmailSettingsPage() {
                     <Send className="mr-2 h-4 w-4" />
                     Test Configuration
                   </Button>
-                  {showTenantLevel && (
+                  {showTenantLevel && isDefaultTenant && (
                     <Button
                       variant="outline"
                       onClick={() => {

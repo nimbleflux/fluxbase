@@ -8,6 +8,7 @@ import {
   type ClientKey,
   type CreateClientKeyRequest,
 } from "@/lib/api";
+import { useTenantStore } from "@/stores/tenant-store";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -37,6 +38,7 @@ import {
 
 const ClientKeysPage = () => {
   const queryClient = useQueryClient();
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isKeyDialogOpen, setIsKeyDialogOpen] = useState(false);
   const [createdKey, setCreatedKey] = useState<ClientKeyWithPlaintext | null>(
@@ -50,14 +52,17 @@ const ClientKeysPage = () => {
   const [expiresAt, setExpiresAt] = useState("");
 
   const { data: clientKeys, isLoading } = useQuery<ClientKey[]>({
-    queryKey: ["client-keys"],
+    queryKey: ["client-keys", currentTenantId],
     queryFn: clientKeysApi.list,
+    enabled: !!currentTenantId,
   });
 
   const createMutation = useMutation({
     mutationFn: clientKeysApi.create,
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["client-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["client-keys", currentTenantId],
+      });
       setCreatedKey(data as unknown as ClientKeyWithPlaintext);
       setIsCreateDialogOpen(false);
       setIsKeyDialogOpen(true);
@@ -73,7 +78,9 @@ const ClientKeysPage = () => {
   const revokeMutation = useMutation({
     mutationFn: clientKeysApi.revoke,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["client-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["client-keys", currentTenantId],
+      });
       toast.success("Client key revoked successfully");
     },
     onError: () => toast.error("Failed to revoke client key"),
@@ -82,7 +89,9 @@ const ClientKeysPage = () => {
   const deleteMutation = useMutation({
     mutationFn: clientKeysApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["client-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["client-keys", currentTenantId],
+      });
       toast.success("Client key deleted successfully");
     },
     onError: () => toast.error("Failed to delete client key"),

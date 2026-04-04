@@ -278,16 +278,9 @@ func (h *ServiceKeyHandler) CreateServiceKey(c fiber.Ctx) error {
 	}
 
 	// created_by references auth.users(id), but dashboard users authenticate
-	// against platform.users — pass nil when the user isn't in auth.users
-	// to avoid FK violation. c.Locals("user_id") is stored as string.
-	var createdBy interface{}
+	// against platform.users — use typed nil to ensure pgx encodes as SQL NULL.
+	createdBy := (*uuid.UUID)(nil)
 	var createdByUUID *uuid.UUID
-	if userIDStr, ok := c.Locals("user_id").(string); ok {
-		if id, err := uuid.Parse(userIDStr); err == nil {
-			createdBy = id
-			createdByUUID = &id
-		}
-	}
 	tenantID := getTenantID(c)
 	tenantUUID := uuid.Nil
 	if tenantID != "" {
@@ -657,14 +650,10 @@ func (h *ServiceKeyHandler) RotateServiceKey(c fiber.Ctx) error {
 
 	// created_by references auth.users(id), but dashboard users authenticate
 	// against platform.users — pass nil to avoid FK violation
+	// Dashboard users authenticate against platform.users, not auth.users.
+	// Always pass nil for created_by to avoid FK violation (column is nullable).
 	var createdBy interface{}
 	var createdByUUID *uuid.UUID
-	if userIDStr, ok := c.Locals("user_id").(string); ok {
-		if id, err := uuid.Parse(userIDStr); err == nil {
-			createdBy = id
-			createdByUUID = &id
-		}
-	}
 	tenantID := getTenantID(c)
 	tenantUUID := uuid.Nil
 	if tenantID != "" {

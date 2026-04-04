@@ -51,7 +51,18 @@ func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
 			claims = c
 		}
 
-		tenantID, tenantSource := resolveTenantID(c, userID, isInstanceAdmin, claims, cfg.Storage)
+		// Respect prior explicit resolution from TenantMiddleware.
+		// Only re-resolve if no explicit source ("header" or "jwt") was set.
+		existingSource, _ := c.Locals("tenant_source").(string)
+		existingTenantID, _ := c.Locals("tenant_id").(string)
+
+		var tenantID, tenantSource string
+		if existingTenantID != "" && (existingSource == "header" || existingSource == "jwt") {
+			tenantID = existingTenantID
+			tenantSource = existingSource
+		} else {
+			tenantID, tenantSource = resolveTenantID(c, userID, isInstanceAdmin, claims, cfg.Storage)
+		}
 
 		if tenantID != "" && !isInstanceAdmin && userID != "" {
 			hasAccess, err := cfg.Storage.IsUserAssignedToTenant(c.Context(), userID, tenantID)

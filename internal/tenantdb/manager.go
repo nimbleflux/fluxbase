@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
@@ -343,9 +345,14 @@ func (m *Manager) hasPendingMigrations(ctx context.Context, pool *pgxpool.Pool) 
 }
 
 func (m *Manager) runSystemMigrationsForDB(ctx context.Context, dbName string) error {
+	const migrationsDir = "/migrations"
+	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
+		return nil
+	}
+
 	dbURL := replaceDBName(m.dbURL, dbName)
 
-	migrator, err := migrate.New("file:///migrations", dbURL)
+	migrator, err := migrate.New("file://"+migrationsDir, dbURL)
 	if err != nil {
 		return fmt.Errorf("failed to create migrator: %w", err)
 	}

@@ -1298,7 +1298,6 @@ CREATE TABLE IF NOT EXISTS service_keys (
     tenant_id uuid,
     CONSTRAINT service_keys_pkey PRIMARY KEY (id),
     CONSTRAINT service_keys_key_prefix_key UNIQUE (key_prefix),
-    CONSTRAINT service_keys_created_by_fkey FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
     CONSTRAINT service_keys_replaced_by_fkey FOREIGN KEY (replaced_by) REFERENCES service_keys (id) ON DELETE SET NULL,
     CONSTRAINT auth_service_keys_key_type_check CHECK (key_type IN ('anon'::text, 'service'::text, 'publishable'::text, 'tenant_service'::text, 'global_service'::text))
 );
