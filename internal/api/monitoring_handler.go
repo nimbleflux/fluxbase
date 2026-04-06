@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/auth"
+
 	"github.com/nimbleflux/fluxbase/internal/jobs"
 	"github.com/nimbleflux/fluxbase/internal/logging"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
@@ -42,19 +43,6 @@ func (h *MonitoringHandler) SetLoggingService(loggingService *logging.Service) {
 // SetJobsStorage sets the jobs storage for job health monitoring
 func (h *MonitoringHandler) SetJobsStorage(jobsStorage *jobs.Storage) {
 	h.jobsStorage = jobsStorage
-}
-
-// RegisterRoutes registers monitoring routes with authentication
-func (h *MonitoringHandler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Apply authentication middleware to all monitoring routes
-	monitoring := app.Group("/api/v1/monitoring",
-		middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager),
-	)
-
-	// All monitoring routes require read:monitoring scope
-	monitoring.Get("/metrics", middleware.RequireScope(auth.ScopeMonitoringRead), h.GetMetrics)
-	monitoring.Get("/health", middleware.RequireScope(auth.ScopeMonitoringRead), h.GetHealth)
-	monitoring.Get("/logs", middleware.RequireScope(auth.ScopeMonitoringRead), h.GetLogs)
 }
 
 // SystemMetrics represents system-wide metrics
@@ -131,7 +119,7 @@ var startTime = time.Now()
 func (h *MonitoringHandler) GetMetrics(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view system metrics",
 		})
@@ -200,32 +188,77 @@ func (h *MonitoringHandler) GetMetrics(c fiber.Ctx) error {
 		},
 	}
 
-	// Storage stats (if available)
-	if h.storageProvider != nil {
-		buckets, err := h.storageProvider.ListBuckets(c.RequestCtx())
-		if err == nil {
-			totalFiles := 0
-			var totalSize int64
-
-			for _, bucket := range buckets {
-				result, err := h.storageProvider.List(c.RequestCtx(), bucket, &storage.ListOptions{MaxKeys: 10000})
-				if err == nil && result != nil {
-					totalFiles += len(result.Objects)
-					for _, file := range result.Objects {
-						totalSize += file.Size
-					}
-				}
-			}
-
-			metrics.StorageStats = &StorageStats{
-				TotalBuckets: len(buckets),
-				TotalFiles:   totalFiles,
-				TotalSizeGB:  float64(totalSize) / 1024 / 1024 / 1024,
-			}
-		}
+	// Storage stats - query database with RLS/tenant context for accurate counts
+	storageStats, err := h.getStorageStats(c)
+	if err == nil {
+		metrics.StorageStats = storageStats
 	}
 
 	return c.JSON(metrics)
+}
+
+// getStorageStats queries storage.buckets and storage.objects tables with RLS/tenant
+// context for accurate counts. Falls back to storage provider if DB query fails.
+func (h *MonitoringHandler) getStorageStats(c fiber.Ctx) (*StorageStats, error) {
+	ctx := context.Background()
+
+	// Get tenant context from middleware
+	tenantID := middleware.GetTenantIDFromContext(c)
+
+	// Get user role for RLS
+	role, _ := c.Locals("user_role").(string)
+	userID, _ := c.Locals("user_id").(string)
+
+	// Determine DB role for RLS
+	dbRole := "authenticated"
+	if role == "anon" {
+		dbRole = "anon"
+	}
+
+	conn, err := h.db.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire connection: %w", err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Set RLS context
+	jwtClaims := fmt.Sprintf(`{"sub":"%s","role":"%s"}`, userID, role)
+	if _, err := tx.Exec(ctx, "SELECT set_config('request.jwt.claims', $1, true)", jwtClaims); err != nil {
+		return nil, fmt.Errorf("failed to set JWT claims: %w", err)
+	}
+	if tenantID != "" {
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID); err != nil {
+			return nil, fmt.Errorf("failed to set tenant context: %w", err)
+		}
+	}
+	if _, err := tx.Exec(ctx, fmt.Sprintf("SET LOCAL ROLE %s", quoteIdentifier(dbRole))); err != nil {
+		return nil, fmt.Errorf("failed to SET LOCAL ROLE: %w", err)
+	}
+
+	// Query bucket count
+	var bucketCount int
+	if err := tx.QueryRow(ctx, "SELECT count(*) FROM storage.buckets").Scan(&bucketCount); err != nil {
+		return nil, fmt.Errorf("failed to count buckets: %w", err)
+	}
+
+	// Query file count and total size
+	var totalFiles int
+	var totalSizeGB float64
+	if err := tx.QueryRow(ctx, "SELECT count(*), coalesce(sum(size)::float8 / 1024 / 1024 / 1024, 0) FROM storage.objects WHERE size IS NOT NULL").Scan(&totalFiles, &totalSizeGB); err != nil {
+		return nil, fmt.Errorf("failed to count objects: %w", err)
+	}
+
+	return &StorageStats{
+		TotalBuckets: bucketCount,
+		TotalFiles:   totalFiles,
+		TotalSizeGB:  totalSizeGB,
+	}, nil
 }
 
 // GetHealth returns the health status of all system components
@@ -233,7 +266,7 @@ func (h *MonitoringHandler) GetMetrics(c fiber.Ctx) error {
 func (h *MonitoringHandler) GetHealth(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view system health",
 		})
@@ -357,7 +390,7 @@ type LogEntry struct {
 func (h *MonitoringHandler) GetLogs(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view logs",
 		})

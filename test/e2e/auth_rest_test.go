@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/nimbleflux/fluxbase/test"
 )
 
@@ -140,7 +141,7 @@ func TestRESTAuthenticationPriority(t *testing.T) {
 	}
 
 	// Clean up only test-specific data to avoid affecting other parallel tests
-	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
+	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 	tc.ExecuteSQL("DELETE FROM auth.client_keys WHERE name LIKE '%Test%' OR name LIKE '%test%'")
 	tc.ExecuteSQL("DELETE FROM auth.service_keys WHERE name LIKE '%Test%' OR name LIKE '%test%'")
 
@@ -187,7 +188,7 @@ func TestRESTAPIKeyScopes(t *testing.T) {
 	defer tc.Close()
 
 	// Create API key with read-only scopes
-	apiKey := tc.CreateAPIKey("Read-Only API Key", []string{"read:tables"})
+	apiKey := tc.CreateAPIKey("Read-Only API Key", []string{"tables:read"})
 
 	// GET should work (read scope)
 	resp := tc.NewRequest("GET", "/api/v1/tables/products").

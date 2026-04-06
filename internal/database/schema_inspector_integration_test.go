@@ -6,10 +6,11 @@ import (
 	"context"
 	"testing"
 
-	database "github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/nimbleflux/fluxbase/test/dbhelpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	database "github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/test/dbhelpers"
 )
 
 // TestSchemaInspector_GetAllTables_Integration tests retrieving all tables from the database.

@@ -333,10 +333,10 @@ func TestValidator_ValidateAccess(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("dashboard_admin bypasses role check", func(t *testing.T) {
+	t.Run("instance_admin bypasses role check", func(t *testing.T) {
 		proc := &Procedure{IsPublic: true, RequireRoles: []string{"admin"}}
 
-		err := v.ValidateAccess(proc, "dashboard_admin", true)
+		err := v.ValidateAccess(proc, "instance_admin", true)
 		assert.NoError(t, err)
 	})
 
@@ -351,10 +351,10 @@ func TestValidator_ValidateAccess(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("dashboard_admin bypasses auth requirement even without user_id", func(t *testing.T) {
+	t.Run("instance_admin bypasses auth requirement even without user_id", func(t *testing.T) {
 		proc := &Procedure{IsPublic: false, RequireRoles: []string{"authenticated"}}
 
-		err := v.ValidateAccess(proc, "dashboard_admin", false)
+		err := v.ValidateAccess(proc, "instance_admin", false)
 		assert.NoError(t, err)
 	})
 

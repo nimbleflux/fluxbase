@@ -13,13 +13,13 @@ title: "FluxbaseFetch"
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `baseUrl` | `string` |
-| `options` | \{ `debug?`: `boolean`; `headers?`: `Record`\<`string`, `string`\>; `timeout?`: `number`; \} |
-| `options.debug?` | `boolean` |
-| `options.headers?` | `Record`\<`string`, `string`\> |
-| `options.timeout?` | `number` |
+| Parameter          | Type                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| `baseUrl`          | `string`                                                                                     |
+| `options`          | \{ `debug?`: `boolean`; `headers?`: `Record`\<`string`, `string`\>; `timeout?`: `number`; \} |
+| `options.debug?`   | `boolean`                                                                                    |
+| `options.headers?` | `Record`\<`string`, `string`\>                                                               |
+| `options.timeout?` | `number`                                                                                     |
 
 #### Returns
 
@@ -36,21 +36,21 @@ DELETE request
 #### Type Parameters
 
 | Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
+| -------------- | ------------ |
+| `T`            | `unknown`    |
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
+| Parameter | Type                                 |
+| --------- | ------------------------------------ |
+| `path`    | `string`                             |
 | `options` | `Omit`\<`FetchOptions`, `"method"`\> |
 
 #### Returns
 
 `Promise`\<`T`\>
 
-***
+---
 
 ### get()
 
@@ -61,21 +61,21 @@ GET request
 #### Type Parameters
 
 | Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
+| -------------- | ------------ |
+| `T`            | `unknown`    |
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
+| Parameter | Type                                 |
+| --------- | ------------------------------------ |
+| `path`    | `string`                             |
 | `options` | `Omit`\<`FetchOptions`, `"method"`\> |
 
 #### Returns
 
 `Promise`\<`T`\>
 
-***
+---
 
 ### getBlob()
 
@@ -85,16 +85,16 @@ GET request that returns response as Blob (for file downloads)
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
+| Parameter | Type                                 |
+| --------- | ------------------------------------ |
+| `path`    | `string`                             |
 | `options` | `Omit`\<`FetchOptions`, `"method"`\> |
 
 #### Returns
 
 `Promise`\<`Blob`\>
 
-***
+---
 
 ### getWithHeaders()
 
@@ -105,21 +105,21 @@ GET request that returns response with headers (for count queries)
 #### Type Parameters
 
 | Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
+| -------------- | ------------ |
+| `T`            | `unknown`    |
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
+| Parameter | Type                                 |
+| --------- | ------------------------------------ |
+| `path`    | `string`                             |
 | `options` | `Omit`\<`FetchOptions`, `"method"`\> |
 
 #### Returns
 
 `Promise`\<`FetchResponseWithHeaders`\<`T`\>\>
 
-***
+---
 
 ### head()
 
@@ -129,16 +129,16 @@ HEAD request
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
+| Parameter | Type                                 |
+| --------- | ------------------------------------ |
+| `path`    | `string`                             |
 | `options` | `Omit`\<`FetchOptions`, `"method"`\> |
 
 #### Returns
 
 `Promise`\<`Headers`\>
 
-***
+---
 
 ### patch()
 
@@ -149,22 +149,22 @@ PATCH request
 #### Type Parameters
 
 | Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
+| -------------- | ------------ |
+| `T`            | `unknown`    |
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
-| `body?` | `unknown` |
+| Parameter  | Type                                             |
+| ---------- | ------------------------------------------------ |
+| `path`     | `string`                                         |
+| `body?`    | `unknown`                                        |
 | `options?` | `Omit`\<`FetchOptions`, `"method"` \| `"body"`\> |
 
 #### Returns
 
 `Promise`\<`T`\>
 
-***
+---
 
 ### post()
 
@@ -175,22 +175,22 @@ POST request
 #### Type Parameters
 
 | Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
+| -------------- | ------------ |
+| `T`            | `unknown`    |
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
-| `body?` | `unknown` |
+| Parameter  | Type                                             |
+| ---------- | ------------------------------------------------ |
+| `path`     | `string`                                         |
+| `body?`    | `unknown`                                        |
 | `options?` | `Omit`\<`FetchOptions`, `"method"` \| `"body"`\> |
 
 #### Returns
 
 `Promise`\<`T`\>
 
-***
+---
 
 ### postWithHeaders()
 
@@ -201,22 +201,22 @@ POST request that returns response with headers (for POST-based queries with cou
 #### Type Parameters
 
 | Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
+| -------------- | ------------ |
+| `T`            | `unknown`    |
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
-| `body?` | `unknown` |
+| Parameter  | Type                                             |
+| ---------- | ------------------------------------------------ |
+| `path`     | `string`                                         |
+| `body?`    | `unknown`                                        |
 | `options?` | `Omit`\<`FetchOptions`, `"method"` \| `"body"`\> |
 
 #### Returns
 
 `Promise`\<`FetchResponseWithHeaders`\<`T`\>\>
 
-***
+---
 
 ### put()
 
@@ -227,22 +227,40 @@ PUT request
 #### Type Parameters
 
 | Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
+| -------------- | ------------ |
+| `T`            | `unknown`    |
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
-| `body?` | `unknown` |
+| Parameter  | Type                                             |
+| ---------- | ------------------------------------------------ |
+| `path`     | `string`                                         |
+| `body?`    | `unknown`                                        |
 | `options?` | `Omit`\<`FetchOptions`, `"method"` \| `"body"`\> |
 
 #### Returns
 
 `Promise`\<`T`\>
 
-***
+---
+
+### removeHeader()
+
+> **removeHeader**(`name`): `void`
+
+Remove a custom header
+
+#### Parameters
+
+| Parameter | Type     |
+| --------- | -------- |
+| `name`    | `string` |
+
+#### Returns
+
+`void`
+
+---
 
 ### request()
 
@@ -253,21 +271,21 @@ Make an HTTP request
 #### Type Parameters
 
 | Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
+| -------------- | ------------ |
+| `T`            | `unknown`    |
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
+| Parameter | Type           |
+| --------- | -------------- |
+| `path`    | `string`       |
 | `options` | `FetchOptions` |
 
 #### Returns
 
 `Promise`\<`T`\>
 
-***
+---
 
 ### requestWithHeaders()
 
@@ -278,21 +296,21 @@ Make an HTTP request and return response with headers
 #### Type Parameters
 
 | Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
+| -------------- | ------------ |
+| `T`            | `unknown`    |
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `path` | `string` |
+| Parameter | Type           |
+| --------- | -------------- |
+| `path`    | `string`       |
 | `options` | `FetchOptions` |
 
 #### Returns
 
 `Promise`\<`FetchResponseWithHeaders`\<`T`\>\>
 
-***
+---
 
 ### setAnonKey()
 
@@ -304,15 +322,15 @@ restored to use this anon key instead of being deleted
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `key` | `string` |
+| Parameter | Type     |
+| --------- | -------- |
+| `key`     | `string` |
 
 #### Returns
 
 `void`
 
-***
+---
 
 ### setAuthToken()
 
@@ -323,15 +341,34 @@ When token is null, restores to anon key if available
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `token` | `string` \| `null` |
+| Parameter | Type               |
+| --------- | ------------------ |
+| `token`   | `string` \| `null` |
 
 #### Returns
 
 `void`
 
-***
+---
+
+### setHeader()
+
+> **setHeader**(`name`, `value`): `void`
+
+Set a custom header on all requests
+
+#### Parameters
+
+| Parameter | Type     |
+| --------- | -------- |
+| `name`    | `string` |
+| `value`   | `string` |
+
+#### Returns
+
+`void`
+
+---
 
 ### setRefreshTokenCallback()
 
@@ -342,8 +379,8 @@ The callback should return true if refresh was successful, false otherwise
 
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
+| Parameter  | Type                             |
+| ---------- | -------------------------------- |
 | `callback` | `RefreshTokenCallback` \| `null` |
 
 #### Returns

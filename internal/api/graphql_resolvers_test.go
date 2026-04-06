@@ -77,8 +77,8 @@ func TestMapAppRoleToDatabaseRole(t *testing.T) {
 			expected: "service_role",
 		},
 		{
-			name:     "dashboard_admin maps to service_role",
-			appRole:  "dashboard_admin",
+			name:     "instance_admin maps to service_role",
+			appRole:  "instance_admin",
 			expected: "service_role",
 		},
 		{
@@ -235,8 +235,8 @@ func TestMapAppRoleToDatabaseRole_EdgeCases(t *testing.T) {
 		assert.Equal(t, "authenticated", result)
 	})
 
-	t.Run("mixed case dashboard_admin", func(t *testing.T) {
-		result := mapAppRoleToDatabaseRole("Dashboard_Admin")
+	t.Run("mixed case instance_admin", func(t *testing.T) {
+		result := mapAppRoleToDatabaseRole("Instance_Admin")
 		assert.Equal(t, "authenticated", result)
 	})
 }
@@ -287,10 +287,10 @@ func TestRLSContext_IntegrationScenarios(t *testing.T) {
 	t.Run("dashboard admin scenario", func(t *testing.T) {
 		ctx := &RLSContext{
 			UserID: "admin-123",
-			Role:   "dashboard_admin",
+			Role:   "instance_admin",
 			Claims: map[string]interface{}{
 				"email": "admin@example.com",
-				"role":  "dashboard_admin",
+				"role":  "instance_admin",
 			},
 		}
 

@@ -6,8 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nimbleflux/fluxbase/internal/pubsub"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/pubsub"
 )
 
 // SchemaCache provides a thread-safe cache for database schema information

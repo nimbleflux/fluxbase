@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // =============================================================================
@@ -29,8 +30,8 @@ func TestIsAdminUser(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "dashboard_admin role",
-			role:     "dashboard_admin",
+			name:     "instance_admin role",
+			role:     "instance_admin",
 			expected: true,
 		},
 		{

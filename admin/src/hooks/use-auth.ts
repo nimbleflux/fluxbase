@@ -1,104 +1,104 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
-import type { SignUpCredentials } from '@nimbleflux/fluxbase-sdk'
-import { useFluxbaseClient } from '@nimbleflux/fluxbase-sdk-react'
-import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
-import { useImpersonationStore } from '@/stores/impersonation-store'
-import { dashboardAuthAPI, type DashboardLoginRequest } from '@/lib/api'
-import { syncAuthToken } from '@/lib/fluxbase-client'
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import type { SignUpCredentials } from "@nimbleflux/fluxbase-sdk";
+import { useFluxbaseClient } from "@nimbleflux/fluxbase-sdk-react";
+import { toast } from "sonner";
+import { useAuthStore } from "@/stores/auth-store";
+import { useImpersonationStore } from "@/stores/impersonation-store";
+import { dashboardAuthAPI, type DashboardLoginRequest } from "@/lib/api";
+import { syncAuthToken } from "@/lib/fluxbase-client";
 
 export function useAuth() {
-  const { auth } = useAuthStore()
-  const queryClient = useQueryClient()
-  const navigate = useNavigate()
-  const client = useFluxbaseClient()
+  const { auth } = useAuthStore();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const client = useFluxbaseClient();
 
   // Fetch current user data from dashboard auth endpoint
   const { data: dashboardUser, isLoading: isLoadingUser } = useQuery({
-    queryKey: ['auth', 'user'],
+    queryKey: ["auth", "user"],
     queryFn: async () => {
-      return await dashboardAuthAPI.me()
+      return await dashboardAuthAPI.me();
     },
     enabled: !!auth.accessToken,
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
-  })
+  });
 
   // Use dashboard user (with role) or fall back to Zustand store
-  const user = dashboardUser || auth.user
+  const user = dashboardUser || auth.user;
 
-  // Sign in mutation - uses dashboard authentication (dashboard.users)
+  // Sign in mutation - uses dashboard authentication (platform.users)
   const signInMutation = useMutation({
     mutationFn: async (data: DashboardLoginRequest) => {
-      return await dashboardAuthAPI.login(data)
+      return await dashboardAuthAPI.login(data);
     },
     onSuccess: (response) => {
       // Clear any stale impersonation state from previous session
-      useImpersonationStore.getState().stopImpersonation()
+      useImpersonationStore.getState().stopImpersonation();
 
       // Check if 2FA is required
       if (response.requires_2fa) {
         // Handle 2FA flow - don't store tokens yet
-        toast.info('Two-factor authentication required')
+        toast.info("Two-factor authentication required");
         // Navigate to 2FA verification page with user_id
-        navigate({ to: '/login/otp' })
-        return
+        navigate({ to: "/login/otp" });
+        return;
       }
 
-      const { access_token, refresh_token, expires_in, user } = response
+      const { access_token, refresh_token, expires_in, user } = response;
 
       // Store tokens
-      auth.setAccessToken(access_token)
-      localStorage.setItem('refresh_token', refresh_token)
+      auth.setAccessToken(access_token);
+      localStorage.setItem("refresh_token", refresh_token);
 
-      // Store user in Zustand with dashboard_admin role
+      // Store user in Zustand with actual role from server
       auth.setUser({
         accountNo: user.id,
         email: user.email,
-        role: ['dashboard_admin'],
+        role: [user.role || "tenant_admin"],
         exp: Date.now() + expires_in * 1000,
-      })
+      });
 
       // Sync SDK token with new admin token
-      syncAuthToken()
+      syncAuthToken();
 
       // Invalidate and refetch user query to get full user data with role
-      queryClient.invalidateQueries({ queryKey: ['auth', 'user'] })
+      queryClient.invalidateQueries({ queryKey: ["auth", "user"] });
 
-      toast.success(`Welcome back, ${user.email}!`)
+      toast.success(`Welcome back, ${user.email}!`);
     },
     onError: (error: unknown) => {
       // Extract error message from axios error response
-      const axiosError = error as { response?: { data?: { error?: string } } }
+      const axiosError = error as { response?: { data?: { error?: string } } };
       const message =
         axiosError.response?.data?.error ||
-        (error instanceof Error ? error.message : 'Failed to sign in')
-      toast.error(message)
+        (error instanceof Error ? error.message : "Failed to sign in");
+      toast.error(message);
     },
-  })
+  });
 
   // Sign up mutation
   const signUpMutation = useMutation({
     mutationFn: async (data: SignUpCredentials) => {
-      return await client.auth.signUp(data)
+      return await client.auth.signUp(data);
     },
     onSuccess: (response) => {
       if (!response.data) {
-        toast.error('Invalid response from server')
-        return
+        toast.error("Invalid response from server");
+        return;
       }
 
-      const { session, user } = response.data
+      const { session, user } = response.data;
 
       if (!session) {
-        toast.error('No session returned from server')
-        return
+        toast.error("No session returned from server");
+        return;
       }
 
       // Store tokens
-      auth.setAccessToken(session.access_token)
-      localStorage.setItem('refresh_token', session.refresh_token)
+      auth.setAccessToken(session.access_token);
+      localStorage.setItem("refresh_token", session.refresh_token);
 
       // Store user in Zustand
       auth.setUser({
@@ -106,46 +106,46 @@ export function useAuth() {
         email: user.email,
         role: [user.role],
         exp: Date.now() + session.expires_in * 1000,
-      })
+      });
 
       // Invalidate and refetch user query
-      queryClient.invalidateQueries({ queryKey: ['auth', 'user'] })
+      queryClient.invalidateQueries({ queryKey: ["auth", "user"] });
 
-      toast.success(`Account created successfully! Welcome, ${user.email}!`)
+      toast.success(`Account created successfully! Welcome, ${user.email}!`);
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to create account')
+      toast.error(error.message || "Failed to create account");
     },
-  })
+  });
 
   // Sign out mutation
   const signOutMutation = useMutation({
     mutationFn: async () => {
-      await client.auth.signOut()
+      await client.auth.signOut();
     },
     onSuccess: () => {
       // Clear tokens and user data
-      auth.reset()
-      localStorage.removeItem('refresh_token')
+      auth.reset();
+      localStorage.removeItem("refresh_token");
 
       // Clear all queries
-      queryClient.clear()
+      queryClient.clear();
 
       // Redirect to login
-      navigate({ to: '/login', replace: true })
+      navigate({ to: "/login", replace: true });
 
-      toast.success('Signed out successfully')
+      toast.success("Signed out successfully");
     },
     onError: (error: Error) => {
       // Even if signout fails on server, clear local data
-      auth.reset()
-      localStorage.removeItem('refresh_token')
-      queryClient.clear()
-      navigate({ to: '/login', replace: true })
+      auth.reset();
+      localStorage.removeItem("refresh_token");
+      queryClient.clear();
+      navigate({ to: "/login", replace: true });
 
-      toast.error(error.message || 'Failed to sign out')
+      toast.error(error.message || "Failed to sign out");
     },
-  })
+  });
 
   return {
     user,
@@ -157,5 +157,5 @@ export function useAuth() {
     isSigningIn: signInMutation.isPending,
     isSigningUp: signUpMutation.isPending,
     isSigningOut: signOutMutation.isPending,
-  }
+  };
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 
@@ -38,12 +39,23 @@ func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
 	search := c.Query("search", "")
 	limit := fiber.Query[int](c, "limit", defaultLimit)
 	offset := fiber.Query[int](c, "offset", 0)
-	userType := c.Query("type", "app") // "app" for auth.users, "dashboard" for dashboard.users
+	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
+
+	// Get tenant ID from context (set by TenantMiddleware when X-FB-Tenant header is present)
+	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantSource, _ := c.Locals("tenant_source").(string)
+	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
+
+	// Instance admins without explicit tenant context see all users across tenants.
+	// When a tenant IS selected via the selector, tenantSource is "header" and filtering applies normally.
+	if isInstanceAdmin && tenantSource == "default" {
+		tenantID = ""
+	}
 
 	// Normalize pagination parameters
 	limit, offset = NormalizePaginationParams(limit, offset, defaultLimit, maxLimit)
 
-	users, err := h.userMgmtService.ListEnrichedUsers(c.RequestCtx(), userType)
+	users, err := h.userMgmtService.ListEnrichedUsers(c.RequestCtx(), userType, tenantID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -114,7 +126,7 @@ func (h *UserManagementHandler) GetUserByID(c fiber.Ctx) error {
 	}
 
 	userID := c.Params("id")
-	userType := c.Query("type", "app") // "app" for auth.users, "dashboard" for dashboard.users
+	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
 
 	user, err := h.userMgmtService.GetEnrichedUserByID(c.RequestCtx(), userID, userType)
 	if err != nil {
@@ -146,7 +158,13 @@ func (h *UserManagementHandler) InviteUser(c fiber.Ctx) error {
 		})
 	}
 
-	userType := c.Query("type", "app") // "app" for auth.users, "dashboard" for dashboard.users
+	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
+
+	// Get tenant ID from context if not provided in request (set by TenantMiddleware)
+	if req.TenantID == "" {
+		tenantID, _ := c.Locals("tenant_id").(string)
+		req.TenantID = tenantID
+	}
 
 	resp, err := h.userMgmtService.InviteUser(c.RequestCtx(), req, userType)
 	if err != nil {
@@ -167,7 +185,7 @@ func (h *UserManagementHandler) DeleteUser(c fiber.Ctx) error {
 	}
 
 	userID := c.Params("id")
-	userType := c.Query("type", "app") // "app" for auth.users, "dashboard" for dashboard.users
+	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
 
 	err := h.userMgmtService.DeleteUser(c.RequestCtx(), userID, userType)
 	if err != nil {
@@ -189,7 +207,7 @@ func (h *UserManagementHandler) DeleteUser(c fiber.Ctx) error {
 // UpdateUserRole updates a user's role
 func (h *UserManagementHandler) UpdateUserRole(c fiber.Ctx) error {
 	userID := c.Params("id")
-	userType := c.Query("type", "app") // "app" for auth.users, "dashboard" for dashboard.users
+	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
 
 	var req struct {
 		Role string `json:"role"`
@@ -224,7 +242,7 @@ func (h *UserManagementHandler) UpdateUserRole(c fiber.Ctx) error {
 // UpdateUser updates a user's information (email, role, password, user_metadata)
 func (h *UserManagementHandler) UpdateUser(c fiber.Ctx) error {
 	userID := c.Params("id")
-	userType := c.Query("type", "app") // "app" for auth.users, "dashboard" for dashboard.users
+	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
 
 	var req auth.UpdateAdminUserRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -263,7 +281,7 @@ func (h *UserManagementHandler) ResetUserPassword(c fiber.Ctx) error {
 	}
 
 	userID := c.Params("id")
-	userType := c.Query("type", "app") // "app" for auth.users, "dashboard" for dashboard.users
+	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
 
 	result, err := h.userMgmtService.ResetUserPassword(c.RequestCtx(), userID, userType)
 	if err != nil {
@@ -336,25 +354,6 @@ func (h *UserManagementHandler) UnlockUser(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message": "User account unlocked successfully",
 	})
-}
-
-// RegisterRoutes registers user management routes
-func (h *UserManagementHandler) RegisterRoutes(app *fiber.App) {
-	admin := app.Group("/api/v1/admin",
-		AuthMiddleware(h.authService),
-		RequireRole("admin"),
-	)
-
-	// User management routes (admin only)
-	admin.Get("/users", h.ListUsers)
-	admin.Get("/users/:id", h.GetUserByID)
-	admin.Post("/users/invite", h.InviteUser)
-	admin.Patch("/users/:id", h.UpdateUser)
-	admin.Delete("/users/:id", h.DeleteUser)
-	admin.Patch("/users/:id/role", h.UpdateUserRole)
-	admin.Post("/users/:id/reset-password", h.ResetUserPassword)
-	admin.Post("/users/:id/lock", h.LockUser)
-	admin.Post("/users/:id/unlock", h.UnlockUser)
 }
 
 // fiber:context-methods migrated

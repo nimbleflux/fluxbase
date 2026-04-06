@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useFluxbaseClient } from "./context";
-import type { AdminAuthResponse, DataResponse } from "@fluxbase/sdk";
+import type { AdminAuthResponse } from "@nimbleflux/fluxbase-sdk";
 
 /**
  * Simplified admin user type returned by authentication

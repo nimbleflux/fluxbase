@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/robfig/cron/v3"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/runtime"
 	"github.com/nimbleflux/fluxbase/internal/secrets"
-	"github.com/robfig/cron/v3"
-	"github.com/rs/zerolog/log"
 )
 
 // Scheduler manages scheduled execution of edge functions via cron

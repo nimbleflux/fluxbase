@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // TestStorageRLS_AdminAccess verifies dashboard admins can access everything
@@ -26,6 +27,9 @@ func TestStorageRLS_AdminAccess(t *testing.T) {
 	// Clean up storage for this test
 	tc.CleanupStorageFiles()
 
+	// Create service key for bucket CRUD (bucket management requires service/admin role)
+	serviceKey := tc.CreateServiceKey("test-bucket-creation")
+
 	// Create dashboard admin
 	adminEmail := "admin-" + test.RandomEmail()
 	_, adminToken := tc.CreateDashboardAdminUser(adminEmail, "password123")
@@ -34,14 +38,23 @@ func TestStorageRLS_AdminAccess(t *testing.T) {
 	userEmail := "user-" + test.RandomEmail()
 	userID, userToken := tc.CreateTestUser(userEmail, "password123")
 
-	// Admin creates a private bucket
+	// Create a private bucket using service key (bucket CRUD requires service/admin role)
 	bucketName := fmt.Sprintf("user-private-%d", time.Now().UnixNano())
 	tc.NewRequest("POST", "/api/v1/storage/buckets/"+bucketName).
-		WithAuth(adminToken).
+		WithServiceKey(serviceKey).
 		Send().
 		AssertStatus(fiber.StatusCreated)
 
-	// Regular user uploads file to private bucket
+	// Assign regular user to default tenant so they can upload without service key
+	// (TenantDBMiddleware checks membership for non-service-role users)
+	tenantID := tc.GetDefaultTenantID()
+	tc.ExecuteSQLAsSuperuser(
+		"INSERT INTO platform.tenant_memberships (tenant_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'tenant_member') ON CONFLICT DO NOTHING",
+		tenantID, userID,
+	)
+
+	// Regular user uploads file to private bucket using their own JWT
+	// (not service key, so owner_id is correctly set to the user)
 	fileName := "secret.txt"
 	fileContent := []byte("secret data")
 
@@ -57,6 +70,7 @@ func TestStorageRLS_AdminAccess(t *testing.T) {
 	uploadReq := httptest.NewRequest("POST", "/api/v1/storage/"+bucketName+"/"+fileName, body)
 	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
 	uploadReq.Header.Set("Authorization", "Bearer "+userToken)
+	uploadReq.Header.Set("X-FB-Tenant", tenantID)
 
 	uploadResp, err := tc.App.Test(uploadReq)
 	require.NoError(t, err)
@@ -97,7 +111,7 @@ func TestStorageRLS_AdminAccess(t *testing.T) {
 		WithAuth(adminToken).
 		Send()
 
-	// Admin with dashboard_admin role should bypass RLS and access the file
+	// Admin with instance_admin role should bypass RLS and access the file
 	require.Equal(t, fiber.StatusOK, downloadResp.Status(),
 		"Admin should be able to download user's private file (bypasses RLS)")
 

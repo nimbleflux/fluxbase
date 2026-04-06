@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // VectorManagerInterface defines the interface for hot-reloading embedding service
@@ -716,6 +717,19 @@ func (h *Handler) ListProviders(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to list providers",
 		})
+	}
+
+	// Filter out config-based (FROM_CONFIG) providers for non-default tenants.
+	// Instance-level YAML/env config must not leak to non-default tenants.
+	isDefaultTenant, _ := c.Locals("is_default_tenant").(bool)
+	if !isDefaultTenant {
+		filtered := make([]*ProviderRecord, 0, len(providers))
+		for _, p := range providers {
+			if p.ID != "FROM_CONFIG" {
+				filtered = append(filtered, p)
+			}
+		}
+		providers = filtered
 	}
 
 	// Remove sensitive config for API response

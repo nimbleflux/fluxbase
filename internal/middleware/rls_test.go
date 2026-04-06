@@ -65,7 +65,7 @@ func TestMapAppRoleToDatabaseRole_ServiceRole(t *testing.T) {
 		expectedDB string
 	}{
 		{"service_role", "service_role"},
-		{"dashboard_admin", "service_role"},
+		{"instance_admin", "service_role"},
 	}
 
 	for _, tt := range tests {
@@ -426,7 +426,7 @@ func TestMapAppRoleToDatabaseRole_ValidRolesOnly(t *testing.T) {
 
 	testRoles := []string{
 		"service_role",
-		"dashboard_admin",
+		"instance_admin",
 		"anon",
 		"",
 		"authenticated",
@@ -451,7 +451,7 @@ func TestMapAppRoleToDatabaseRole_ValidRolesOnly(t *testing.T) {
 func BenchmarkMapAppRoleToDatabaseRole(b *testing.B) {
 	roles := []string{
 		"service_role",
-		"dashboard_admin",
+		"instance_admin",
 		"anon",
 		"authenticated",
 		"admin",

@@ -6,13 +6,14 @@ package api_test
 import (
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 )
 
 // TestOAuthProvider_ListProviders_Integration tests listing all OAuth providers
 func TestOAuthProvider_ListProviders_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -35,7 +36,7 @@ func TestOAuthProvider_ListProviders_Integration(t *testing.T) {
 
 // TestOAuthProvider_CreateProvider_Integration tests creating a custom OAuth provider
 func TestOAuthProvider_CreateProvider_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -69,7 +70,7 @@ func TestOAuthProvider_CreateProvider_Integration(t *testing.T) {
 
 // TestOAuthProvider_CreateProvider_MissingFields_Integration tests creating an OAuth provider without required fields
 func TestOAuthProvider_CreateProvider_MissingFields_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -96,7 +97,7 @@ func TestOAuthProvider_CreateProvider_MissingFields_Integration(t *testing.T) {
 
 // TestOAuthProvider_CreateProvider_CustomWithoutURLs_Integration tests creating custom OAuth provider without required URLs
 func TestOAuthProvider_CreateProvider_CustomWithoutURLs_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -128,7 +129,7 @@ func TestOAuthProvider_CreateProvider_CustomWithoutURLs_Integration(t *testing.T
 
 // TestOAuthProvider_Unauthorized_Integration tests that non-admin users cannot access OAuth provider endpoints
 func TestOAuthProvider_Unauthorized_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -158,7 +159,7 @@ func TestOAuthProvider_Unauthorized_Integration(t *testing.T) {
 
 // TestOAuthProvider_GetProvider_NotFound_Integration tests getting a non-existent OAuth provider
 func TestOAuthProvider_GetProvider_NotFound_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 

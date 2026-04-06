@@ -41,6 +41,7 @@ type AvailableExtension struct {
 type EnabledExtension struct {
 	ID            string     `json:"id"`
 	ExtensionName string     `json:"extension_name"`
+	TenantID      *string    `json:"tenant_id,omitempty"`
 	EnabledAt     time.Time  `json:"enabled_at"`
 	EnabledBy     *string    `json:"enabled_by,omitempty"`
 	DisabledAt    *time.Time `json:"disabled_at,omitempty"`

@@ -8,7 +8,7 @@ import { useFluxbaseClient } from "./context";
 import type {
   RealtimeCallback,
   RealtimePostgresChangesPayload,
-} from "@fluxbase/sdk";
+} from "@nimbleflux/fluxbase-sdk";
 
 export interface UseRealtimeOptions {
   /**
@@ -98,7 +98,11 @@ export function useRealtime(options: UseRealtimeOptions) {
         // Extract table name from channel (e.g., 'table:public.products' -> 'public.products')
         const tableName = channelName.replace(/^table:/, "");
 
-        const key = invalidateKeyRef.current || ["fluxbase", "table", tableName];
+        const key = invalidateKeyRef.current || [
+          "fluxbase",
+          "table",
+          tableName,
+        ];
         queryClient.invalidateQueries({ queryKey: key });
       }
     };

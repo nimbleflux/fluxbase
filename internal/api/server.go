@@ -16,6 +16,8 @@ import (
 	"github.com/gofiber/storage/memory/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/adminui"
 	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/auth"
@@ -42,103 +44,47 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/secrets"
 	"github.com/nimbleflux/fluxbase/internal/settings"
 	"github.com/nimbleflux/fluxbase/internal/storage"
+	"github.com/nimbleflux/fluxbase/internal/tenantdb"
 	"github.com/nimbleflux/fluxbase/internal/webhook"
-	"github.com/rs/zerolog/log"
 )
 
 // Server represents the HTTP server
 type Server struct {
-	app                    *fiber.App
-	config                 *config.Config
-	db                     *database.Connection
-	tracer                 *observability.Tracer
-	rest                   *RESTHandler
-	authHandler            *AuthHandler
-	adminAuthHandler       *AdminAuthHandler
-	dashboardAuthHandler   *DashboardAuthHandler
-	clientKeyService       *auth.ClientKeyService // Added for service-wide access
-	clientKeyHandler       *ClientKeyHandler
-	storageHandler         *StorageHandler
-	webhookHandler         *WebhookHandler
-	monitoringHandler      *MonitoringHandler
-	userManagementHandler  *UserManagementHandler
-	quotaHandler           *QuotaHandler
-	invitationHandler      *InvitationHandler
-	ddlHandler             *DDLHandler
-	oauthProviderHandler   *OAuthProviderHandler
-	oauthHandler           *OAuthHandler
-	samlProviderHandler    *SAMLProviderHandler
-	samlService            *auth.SAMLService
-	adminSessionHandler    *AdminSessionHandler
-	systemSettingsHandler  *SystemSettingsHandler
-	customSettingsHandler  *CustomSettingsHandler
-	userSettingsHandler    *UserSettingsHandler
-	appSettingsHandler     *AppSettingsHandler
-	settingsHandler        *SettingsHandler
-	secretsService         *settings.SecretsService
-	emailTemplateHandler   *EmailTemplateHandler
-	emailSettingsHandler   *EmailSettingsHandler
-	captchaSettingsHandler *CaptchaSettingsHandler
-	sqlHandler             *SQLHandler
-	functionsHandler       *functions.Handler
-	functionsScheduler     *functions.Scheduler
-	jobsHandler            *jobs.Handler
-	jobsManager            *jobs.Manager
-	jobsScheduler          *jobs.Scheduler
-	migrationsHandler      *migrations.Handler
-	realtimeManager        *realtime.Manager
-	realtimeHandler        *realtime.RealtimeHandler
-	realtimeListener       realtime.RealtimeListener
-	realtimeAdminHandler   *RealtimeAdminHandler
-	webhookTriggerService  *webhook.TriggerService
-	aiHandler              *ai.Handler
-	aiChatHandler          *ai.ChatHandler
-	aiConversations        *ai.ConversationManager
-	aiMetrics              *observability.Metrics
-	knowledgeBaseHandler   *ai.KnowledgeBaseHandler
-	kbStorage              *ai.KnowledgeBaseStorage
-	docProcessor           *ai.DocumentProcessor
-	tableExportSyncService *ai.TableExportSyncService
-	rpcHandler             *rpc.Handler
-	rpcScheduler           *rpc.Scheduler
-	graphqlHandler         *GraphQLHandler
-	extensionsHandler      *extensions.Handler
-	vectorManager          *VectorManager
-	vectorHandler          *VectorHandler
-	loggingService         *logging.Service
-	loggingHandler         *LoggingHandler
-	retentionService       *logging.RetentionService
-	schemaCache            *database.SchemaCache
-	secretsHandler         *secrets.Handler
-	secretsStorage         *secrets.Storage
-	serviceKeyHandler      *ServiceKeyHandler
-	schemaExportHandler    *SchemaExportHandler
-	mcpHandler             *mcp.Handler
-	mcpOAuthHandler        *MCPOAuthHandler
-	customMCPManager       *custom.Manager
-	customMCPHandler       *CustomMCPHandler
-	internalAIHandler      *InternalAIHandler
+	// Core infrastructure
+	app    *fiber.App
+	config *config.Config
+	db     *database.Connection
+	tracer *observability.Tracer
+	rest   *RESTHandler
 
-	// Database branching components
-	branchManager   *branching.Manager
-	branchRouter    *branching.Router
-	branchHandler   *BranchHandler
-	githubWebhook   *GitHubWebhookHandler
-	branchScheduler *branching.CleanupScheduler
+	// Handler groups (organized by domain)
+	Auth       *AuthHandlers
+	Storage    *StorageHandlers
+	AI         *AIHandlers
+	Functions  *FunctionsHandlers
+	Jobs       *JobsHandlers
+	Realtime   *RealtimeHandlers
+	MCP        *MCPHandlers
+	Tenancy    *TenancyHandlers
+	Branching  *BranchingHandlers
+	Settings   *SettingsHandlers
+	Webhook    *WebhookHandlers
+	Logging    *LoggingHandlers
+	Schema     *SchemaHandlers
+	RPC        *RPCHandlers
+	GraphQL    *GraphQLHandlers
+	Extensions *ExtensionsHandlers
+	Secrets    *SecretsHandlers
+	Scaling    *ScalingHandlers
+	Metrics    *MetricsComponents
+	Email      *EmailHandlers
+	Captcha    *CaptchaHandlers
+	Monitoring *MonitoringHandlers
+	Quota      *QuotaHandlers
+	Middleware *MiddlewareComponents
 
-	// Leader election for schedulers (used in multi-instance deployments)
-	jobsSchedulerLeader      *scaling.LeaderElector
-	functionsSchedulerLeader *scaling.LeaderElector
-	rpcSchedulerLeader       *scaling.LeaderElector
-
-	// Metrics components
-	metrics         *observability.Metrics
-	metricsServer   *observability.MetricsServer
-	startTime       time.Time
-	metricsStopChan chan struct{}
-
-	// Idempotency middleware for cleanup on shutdown
-	idempotencyMiddleware *middleware.IdempotencyMiddleware
+	// SQL handler (standalone, used by SQL editor)
+	sqlHandler *SQLHandler
 
 	// Server-owned dependencies (instead of global singletons)
 	rateLimiter ratelimit.Store
@@ -151,6 +97,9 @@ type Server struct {
 	// Test transaction support (for HTTP API tests with transaction isolation)
 	// When set, HTTP requests use this transaction instead of the connection pool
 	testTx pgx.Tx
+
+	// Tenant configuration loader for multi-tenant config overrides
+	tenantConfigLoader *config.TenantConfigLoader
 }
 
 // NewServer creates a new HTTP server
@@ -224,7 +173,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 
 	// Initialize email manager (handles dynamic refresh from settings)
 	// The settings cache and secrets service will be injected later once they're initialized
-	emailManager := email.NewManager(&cfg.Email, nil, nil)
+	emailManager := email.NewManager(&cfg.Email, nil, nil, cfg)
 	// Get a service wrapper that delegates to the manager's current service
 	emailService := emailManager.WrapAsService()
 
@@ -243,14 +192,17 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	// the 'allow_user_client_keys' setting check during client key validation
 	clientKeyService := auth.NewClientKeyService(db.Pool(), nil)
 
-	// Initialize storage service (use public URL for signed URLs that users will access)
-	storageService, err := storage.NewService(&cfg.Storage, cfg.GetPublicBaseURL(), cfg.Auth.JWTSecret)
+	// Initialize storage manager (use public URL for signed URLs that users will access)
+	storageManager, err := storage.NewManager(&cfg.Storage, cfg.GetPublicBaseURL(), cfg.Auth.JWTSecret)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize storage service")
+		log.Fatal().Err(err).Msg("Failed to initialize storage manager")
 	}
 
+	// Get base service for backward compatibility
+	storageService := storageManager.GetBaseService()
+
 	// Ensure default buckets exist
-	if err := storageService.EnsureDefaultBuckets(context.Background()); err != nil {
+	if err := storageManager.EnsureDefaultBuckets(context.Background()); err != nil {
 		log.Warn().Err(err).Msg("Failed to ensure default buckets")
 	}
 
@@ -339,7 +291,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	adminAuthHandler := NewAdminAuthHandler(authService, auth.NewUserRepository(db), dashboardAuthService, systemSettingsService, cfg)
 	// Note: dashboardAuthHandler is initialized later after samlService is created
 	clientKeyHandler := NewClientKeyHandler(clientKeyService)
-	storageHandler := NewStorageHandler(storageService, db, &cfg.Storage.Transforms)
+	storageHandler := NewStorageHandler(storageManager, db, cfg, &cfg.Storage.Transforms)
 	webhookHandler := NewWebhookHandler(webhookService)
 
 	// Initialize secrets storage and handler
@@ -349,9 +301,93 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	userMgmtHandler := NewUserManagementHandler(userMgmtService, authService)
 	invitationService := auth.NewInvitationService(db)
 	invitationHandler := NewInvitationHandler(invitationService, dashboardAuthService, emailService, cfg.GetPublicBaseURL())
-	ddlHandler := NewDDLHandler(db)
+	ddlHandler := NewDDLHandler(db, nil) // schemaCache set after cache creation
 	realtimeAdminHandler := NewRealtimeAdminHandler(db)
 	serviceKeyHandler := NewServiceKeyHandler(db.Pool())
+
+	// Initialize multi-tenancy components
+	var tenantManager *tenantdb.Manager
+	var tenantStorage *tenantdb.Storage
+	if cfg.Tenants.Enabled {
+		tenantStorage = tenantdb.NewStorage(db.Pool())
+		dbURL := cfg.Database.RuntimeConnectionString()
+		tenantCfg := tenantdb.Config{
+			Enabled:        cfg.Tenants.Enabled,
+			DatabasePrefix: cfg.Tenants.DatabasePrefix,
+			MaxTenants:     cfg.Tenants.MaxTenants,
+			Pool: tenantdb.PoolConfig{
+				MaxTotalConnections: cfg.Tenants.Pool.MaxTotalConnections,
+				EvictionAge:         cfg.Tenants.Pool.EvictionAge,
+			},
+			Migrations: tenantdb.MigrationsConfig{
+				CheckInterval: cfg.Tenants.Migrations.CheckInterval,
+				OnCreate:      cfg.Tenants.Migrations.OnCreate,
+				OnAccess:      cfg.Tenants.Migrations.OnAccess,
+				Background:    cfg.Tenants.Migrations.Background,
+			},
+		}
+		tenantManager = tenantdb.NewManager(tenantStorage, tenantCfg, db.Pool(), dbURL)
+		tenantManager.SetAdminDBURL(cfg.Database.AdminConnectionString())
+
+		// Create tenant pool router for per-tenant database connections
+		tenantRouter := tenantdb.NewRouter(tenantStorage, tenantCfg, db.Pool(), db.Pool(), dbURL)
+		tenantRouter.SetManager(tenantManager)
+		tenantManager.SetRouter(tenantRouter)
+
+		log.Info().Msg("Multi-tenancy enabled")
+
+		// Initialize tenant declarative schema service if configured
+		// Uses pgschema CLI for proper diff-based schema management
+		if cfg.Tenants.Declarative.Enabled && cfg.Tenants.Declarative.SchemaDir != "" {
+			declarativeCfg := tenantdb.DeclarativeConfig{
+				Enabled:          cfg.Tenants.Declarative.Enabled,
+				SchemaDir:        cfg.Tenants.Declarative.SchemaDir,
+				OnCreate:         cfg.Tenants.Declarative.OnCreate,
+				OnStartup:        cfg.Tenants.Declarative.OnStartup,
+				AllowDestructive: cfg.Tenants.Declarative.AllowDestructive,
+			}
+			declarativeSvc := tenantdb.NewDeclarativeService(
+				declarativeCfg,
+				"pgschema", // pgschema CLI path (must be in PATH)
+				cfg.Database.Host,
+				cfg.Database.Port,
+				cfg.Database.AdminUser,
+				cfg.Database.AdminPassword,
+				db.Pool(),
+			)
+			tenantManager.SetDeclarativeService(declarativeSvc)
+			tenantManager.SetDeclarativeConfig(declarativeCfg)
+			log.Info().
+				Str("schema_dir", cfg.Tenants.Declarative.SchemaDir).
+				Bool("on_create", cfg.Tenants.Declarative.OnCreate).
+				Bool("on_startup", cfg.Tenants.Declarative.OnStartup).
+				Msg("Tenant declarative schema service initialized")
+
+			// Apply schemas on startup if configured
+			if cfg.Tenants.Declarative.OnStartup {
+				go func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+					defer cancel()
+					if err := tenantManager.ApplyDeclarativeSchemas(ctx); err != nil {
+						log.Error().Err(err).Msg("Failed to apply tenant declarative schemas on startup")
+					}
+				}()
+			}
+		}
+	}
+	tenantHandler := NewTenantHandler(db, tenantManager, tenantStorage, invitationService, emailService, cfg)
+
+	// Initialize unified settings service and handlers
+	unifiedSettingsService := settings.NewUnifiedService(db, cfg, cfg.EncryptionKey)
+	instanceSettingsHandler := NewInstanceSettingsHandler(unifiedSettingsService)
+	tenantSettingsHandler := NewTenantSettingsHandler(unifiedSettingsService, tenantStorage)
+
+	// Initialize tenant config resolver for request-time config resolution
+	// This enables immediate visibility of database settings changes (no caching)
+	tenantConfigResolver := NewTenantConfigResolver(db, cfg, unifiedSettingsService)
+	SetGlobalResolver(tenantConfigResolver)
+	log.Info().Msg("Tenant config resolver initialized for dynamic settings")
+
 	oauthProviderHandler := NewOAuthProviderHandler(db.Pool(), authService.GetSettingsCache(), cfg.EncryptionKey, cfg.GetPublicBaseURL(), cfg.Auth.OAuthProviders)
 	jwtManager, err := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiry, cfg.Auth.RefreshExpiry)
 	if err != nil {
@@ -394,7 +430,8 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		authService.GetSettingsCache(),
 		emailManager,
 		secretsService,
-		&cfg.Email,
+		cfg,
+		unifiedSettingsService,
 	)
 
 	// Refresh email manager with settings cache and secrets service now that they're available
@@ -436,7 +473,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	if functionsInternalURL == "" {
 		functionsInternalURL = "http://localhost" + cfg.Server.Address
 	}
-	functionsHandler := functions.NewHandler(db, cfg.Functions.FunctionsDir, cfg.CORS, cfg.Auth.JWTSecret, functionsInternalURL, cfg.Deno.NpmRegistry, cfg.Deno.JsrRegistry, authService, loggingService, secretsStorage)
+	functionsHandler := functions.NewHandler(db, cfg.Functions.FunctionsDir, cfg.CORS, cfg.Auth.JWTSecret, functionsInternalURL, cfg.Deno.NpmRegistry, cfg.Deno.JsrRegistry, authService, loggingService, secretsStorage, cfg)
 	functionsHandler.SetSettingsSecretsService(secretsService)
 	functionsScheduler := functions.NewScheduler(db, cfg.Auth.JWTSecret, functionsInternalURL, secretsStorage)
 	functionsHandler.SetScheduler(functionsScheduler)
@@ -457,7 +494,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Str("jobs_internal_url", jobsInternalURL).
 			Bool("jwt_secret_set", cfg.Auth.JWTSecret != "").
 			Msg("Initializing jobs manager with SDK credentials")
-		jobsManager = jobs.NewManager(&cfg.Jobs, db, cfg.Auth.JWTSecret, jobsInternalURL, secretsStorage)
+		jobsManager = jobs.NewManager(&cfg.Jobs, db, cfg.Auth.JWTSecret, jobsInternalURL, secretsStorage, cfg)
 		jobsManager.SetSettingsSecretsService(secretsService)
 		var err error
 		jobsHandler, err = jobs.NewHandler(db, &cfg.Jobs, jobsManager, authService, loggingService, cfg.Deno.NpmRegistry, cfg.Deno.JsrRegistry)
@@ -485,6 +522,13 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 
 	migrationsHandler := migrations.NewHandler(db, schemaCache)
 
+	// Wire schema cache to DDL handler for invalidation after DDL operations
+	ddlHandler.SetSchemaCache(schemaCache)
+
+	if tenantManager != nil && tenantManager.GetRouter() != nil {
+		migrationsHandler.SetTenantPoolProvider(tenantManager.GetRouter())
+	}
+
 	// Create schema export handler for TypeScript type generation
 	schemaExportHandler := NewSchemaExportHandler(schemaCache, db.Inspector())
 
@@ -498,7 +542,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	// Create vector search handler (for pgvector support) - create early for embedding service sharing
 	// Embedding can be enabled explicitly (EmbeddingEnabled=true) or via fallback from AI provider
 	var vectorHandler *VectorHandler
-	vectorHandler, err = NewVectorHandler(vectorManager, db.Inspector(), db)
+	vectorHandler, err = NewVectorHandler(vectorManager, db.Inspector(), db, cfg)
 	//nolint:gocritic // Initialization state checks, not switch-compatible
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to initialize vector handler")
@@ -655,6 +699,11 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Msg("Internal AI handler initialized for MCP tools/functions/jobs")
 	}
 
+	// Create internal schema handler for declarative schema management
+	internalSchemaHandler := NewInternalSchemaHandler()
+	internalSchemaHandler.Initialize(cfg, db)
+	log.Info().Msg("Internal schema handler initialized")
+
 	// Create RPC components (only if RPC is enabled)
 	var rpcHandler *rpc.Handler
 	var rpcScheduler *rpc.Scheduler
@@ -662,7 +711,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		rpcStorage := rpc.NewStorage(db)
 		rpcLoader := rpc.NewLoader(cfg.RPC.ProceduresDir)
 		rpcMetrics := observability.NewMetrics()
-		rpcHandler = rpc.NewHandler(db, rpcStorage, rpcLoader, rpcMetrics, &cfg.RPC, authService, loggingService)
+		rpcHandler = rpc.NewHandler(db, rpcStorage, rpcLoader, rpcMetrics, &cfg.RPC, authService, loggingService, cfg)
 
 		// Create RPC scheduler and wire it to handler
 		rpcScheduler = rpc.NewScheduler(rpcStorage, rpcHandler.GetExecutor())
@@ -681,6 +730,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		MaxConnectionsPerIP:    cfg.Realtime.MaxConnectionsPerIP,
 		ClientMessageQueueSize: cfg.Realtime.ClientMessageQueueSize,
 	})
+	realtimeManager.SetBaseConfig(cfg)
 
 	// Set up cross-instance broadcasting via pub/sub (if configured)
 	if ps != nil {
@@ -716,81 +766,200 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		monitoringHandler.SetLoggingService(loggingService)
 	}
 
-	// Create server instance
+	// Create server instance with handler groups
 	server := &Server{
-		app:                    app,
-		config:                 cfg,
-		db:                     db,
-		tracer:                 tracer,
-		rest:                   NewRESTHandler(db, NewQueryParser(cfg), schemaCache, cfg),
-		authHandler:            authHandler,
-		adminAuthHandler:       adminAuthHandler,
-		dashboardAuthHandler:   dashboardAuthHandler,
-		clientKeyService:       clientKeyService, // Added for service-wide access
-		clientKeyHandler:       clientKeyHandler,
-		storageHandler:         storageHandler,
-		webhookHandler:         webhookHandler,
-		monitoringHandler:      monitoringHandler,
-		userManagementHandler:  userMgmtHandler,
-		quotaHandler:           quotaHandler,
-		invitationHandler:      invitationHandler,
-		ddlHandler:             ddlHandler,
-		realtimeAdminHandler:   realtimeAdminHandler,
-		oauthProviderHandler:   oauthProviderHandler,
-		oauthHandler:           oauthHandler,
-		samlProviderHandler:    samlProviderHandler,
-		samlService:            samlService,
-		adminSessionHandler:    adminSessionHandler,
-		systemSettingsHandler:  systemSettingsHandler,
-		customSettingsHandler:  customSettingsHandler,
-		userSettingsHandler:    userSettingsHandler,
-		appSettingsHandler:     appSettingsHandler,
-		settingsHandler:        settingsHandler,
-		secretsService:         secretsService,
-		emailTemplateHandler:   emailTemplateHandler,
-		emailSettingsHandler:   emailSettingsHandler,
-		captchaSettingsHandler: captchaSettingsHandler,
-		sqlHandler:             sqlHandler,
-		functionsHandler:       functionsHandler,
-		functionsScheduler:     functionsScheduler,
-		jobsHandler:            jobsHandler,
-		jobsManager:            jobsManager,
-		jobsScheduler:          jobsScheduler,
-		migrationsHandler:      migrationsHandler,
-		realtimeManager:        realtimeManager,
-		realtimeHandler:        realtimeHandler,
-		realtimeListener:       realtimeListener,
-		webhookTriggerService:  webhookTriggerService,
-		aiHandler:              aiHandler,
-		aiChatHandler:          aiChatHandler,
-		aiConversations:        aiConversations,
-		aiMetrics:              aiMetrics,
-		knowledgeBaseHandler:   knowledgeBaseHandler,
-		kbStorage:              kbStorage,
-		docProcessor:           docProcessor,
-		tableExportSyncService: tableExportSyncService,
-		rpcHandler:             rpcHandler,
-		rpcScheduler:           rpcScheduler,
-		extensionsHandler:      extensions.NewHandler(extensions.NewService(db)),
-		vectorManager:          vectorManager,
-		vectorHandler:          vectorHandler,
-		loggingService:         loggingService,
-		loggingHandler:         loggingHandler,
-		retentionService:       retentionService,
-		schemaCache:            schemaCache,
-		secretsHandler:         secretsHandler,
-		secretsStorage:         secretsStorage,
-		serviceKeyHandler:      serviceKeyHandler,
-		schemaExportHandler:    schemaExportHandler,
-		mcpHandler:             mcp.NewHandler(&cfg.MCP, db),
-		mcpOAuthHandler:        NewMCPOAuthHandler(db.Pool(), &cfg.MCP, authService, cfg.BaseURL, cfg.GetPublicBaseURL()),
-		internalAIHandler:      internalAIHandler,
-		metrics:                observability.NewMetrics(),
-		startTime:              time.Now(),
+		app:        app,
+		config:     cfg,
+		db:         db,
+		tracer:     tracer,
+		rest:       NewRESTHandler(db, NewQueryParser(cfg), schemaCache, cfg),
+		sqlHandler: sqlHandler,
+
+		// Auth handlers group
+		Auth: &AuthHandlers{
+			Handler:          authHandler,
+			AdminHandler:     adminAuthHandler,
+			DashboardHandler: dashboardAuthHandler,
+			ClientKeyHandler: clientKeyHandler,
+			ClientKeyService: clientKeyService,
+			OAuthProvider:    oauthProviderHandler,
+			OAuth:            oauthHandler,
+			SAMLProvider:     samlProviderHandler,
+			SAMLService:      samlService,
+			AdminSession:     adminSessionHandler,
+			UserManagement:   userMgmtHandler,
+			Invitation:       invitationHandler,
+		},
+
+		// Storage handlers group
+		Storage: &StorageHandlers{
+			Handler: storageHandler,
+		},
+
+		// AI handlers group
+		AI: &AIHandlers{
+			Handler:         aiHandler,
+			Chat:            aiChatHandler,
+			Conversations:   aiConversations,
+			Metrics:         aiMetrics,
+			KnowledgeBase:   knowledgeBaseHandler,
+			KBStorage:       kbStorage,
+			DocProcessor:    docProcessor,
+			TableExportSync: tableExportSyncService,
+			VectorManager:   vectorManager,
+			VectorHandler:   vectorHandler,
+			Internal:        internalAIHandler,
+		},
+
+		// Functions handlers group
+		Functions: &FunctionsHandlers{
+			Handler:   functionsHandler,
+			Scheduler: functionsScheduler,
+		},
+
+		// Jobs handlers group
+		Jobs: &JobsHandlers{
+			Handler:   jobsHandler,
+			Manager:   jobsManager,
+			Scheduler: jobsScheduler,
+		},
+
+		// Realtime handlers group
+		Realtime: &RealtimeHandlers{
+			Manager:  realtimeManager,
+			Handler:  realtimeHandler,
+			Listener: realtimeListener,
+			Admin:    realtimeAdminHandler,
+		},
+
+		// MCP handlers group
+		MCP: &MCPHandlers{
+			Handler:       mcp.NewHandler(&cfg.MCP, db),
+			OAuth:         NewMCPOAuthHandler(db.Pool(), &cfg.MCP, authService, cfg.BaseURL, cfg.GetPublicBaseURL()),
+			CustomManager: nil, // Initialized later in setupMCPServer
+			CustomHandler: nil, // Initialized later in setupMCPServer
+		},
+
+		// Tenancy handlers group
+		Tenancy: &TenancyHandlers{
+			ServiceKey: serviceKeyHandler,
+			Tenant:     tenantHandler,
+			Manager:    tenantManager,
+			Storage:    tenantStorage,
+		},
+
+		// Branching handlers group (initialized later if enabled)
+		Branching: &BranchingHandlers{},
+
+		// Settings handlers group
+		Settings: &SettingsHandlers{
+			System:   systemSettingsHandler,
+			Custom:   customSettingsHandler,
+			User:     userSettingsHandler,
+			App:      appSettingsHandler,
+			Handler:  settingsHandler,
+			Service:  secretsService,
+			Instance: instanceSettingsHandler,
+			Tenant:   tenantSettingsHandler,
+			Unified:  unifiedSettingsService,
+		},
+
+		// Webhook handlers group
+		Webhook: &WebhookHandlers{
+			Handler: webhookHandler,
+			Trigger: webhookTriggerService,
+		},
+
+		// Logging handlers group
+		Logging: &LoggingHandlers{
+			Service:   loggingService,
+			Handler:   loggingHandler,
+			Retention: retentionService,
+		},
+
+		// Schema handlers group
+		Schema: &SchemaHandlers{
+			DDL:            ddlHandler,
+			Migrations:     migrationsHandler,
+			Cache:          schemaCache,
+			Export:         schemaExportHandler,
+			InternalSchema: internalSchemaHandler,
+		},
+
+		// RPC handlers group
+		RPC: &RPCHandlers{
+			Handler:   rpcHandler,
+			Scheduler: rpcScheduler,
+		},
+
+		// GraphQL handlers group (initialized later if enabled)
+		GraphQL: &GraphQLHandlers{},
+
+		// Extensions handlers group
+		Extensions: &ExtensionsHandlers{
+			Handler: extensions.NewHandler(extensions.NewService(db)),
+		},
+
+		// Secrets handlers group
+		Secrets: &SecretsHandlers{
+			Handler: secretsHandler,
+			Storage: secretsStorage,
+		},
+
+		// Scaling handlers group (initialized later if enabled)
+		Scaling: &ScalingHandlers{},
+
+		// Metrics components
+		Metrics: &MetricsComponents{
+			Metrics:   observability.NewMetrics(),
+			StartTime: time.Now(),
+			StopChan:  nil, // Initialized later
+		},
+
+		// Email handlers group
+		Email: &EmailHandlers{
+			Template: emailTemplateHandler,
+			Settings: emailSettingsHandler,
+		},
+
+		// Captcha handlers group
+		Captcha: &CaptchaHandlers{
+			Settings: captchaSettingsHandler,
+		},
+
+		// Monitoring handlers group
+		Monitoring: &MonitoringHandlers{
+			Handler: monitoringHandler,
+		},
+
+		// Quota handlers group
+		Quota: &QuotaHandlers{
+			Handler: quotaHandler,
+		},
+
+		// Middleware components
+		Middleware: &MiddlewareComponents{
+			Tenant: middleware.TenantMiddleware(middleware.TenantConfig{
+				DB: db,
+			}),
+			TenantDB: func() fiber.Handler {
+				if tenantManager != nil && tenantManager.GetRouter() != nil {
+					return middleware.TenantDBMiddleware(middleware.TenantDBConfig{
+						Router:  tenantManager.GetRouter(),
+						Storage: tenantStorage,
+					})
+				}
+				return nil
+			}(),
+		},
+
 		// Server-owned dependencies
 		rateLimiter:             rateLimitStore,
 		pubSub:                  ps,
 		sharedMiddlewareStorage: sharedMiddlewareStorage,
+
+		// Tenant configuration loader for multi-tenant config overrides
+		tenantConfigLoader: nil, // Initialized later after migrations
 	}
 
 	// Initialize MCP Server if enabled
@@ -812,10 +981,10 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		}
 		branchRouter := branching.NewRouter(branchStorage, cfg.Branching, db.Pool(), dbURL)
 
-		server.branchManager = branchManager
-		server.branchRouter = branchRouter
-		server.branchHandler = NewBranchHandler(branchManager, branchRouter, cfg.Branching)
-		server.githubWebhook = NewGitHubWebhookHandler(branchManager, branchRouter, cfg.Branching)
+		server.Branching.Manager = branchManager
+		server.Branching.Router = branchRouter
+		server.Branching.Handler = NewBranchHandler(branchManager, branchRouter, cfg.Branching)
+		server.Branching.GitHub = NewGitHubWebhookHandler(branchManager, branchRouter, cfg.Branching)
 
 		// Initialize cleanup scheduler if auto_delete_after is set
 		if cfg.Branching.AutoDeleteAfter > 0 {
@@ -824,7 +993,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			if cleanupInterval < time.Hour {
 				cleanupInterval = time.Hour
 			}
-			server.branchScheduler = branching.NewCleanupScheduler(branchManager, branchRouter, cleanupInterval)
+			server.Branching.Scheduler = branching.NewCleanupScheduler(branchManager, branchRouter, cleanupInterval)
 			log.Info().
 				Dur("interval", cleanupInterval).
 				Dur("auto_delete_after", cfg.Branching.AutoDeleteAfter).
@@ -837,9 +1006,13 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Msg("Database Branching enabled")
 	}
 
+	// Store tenant components in server (initialized earlier)
+	server.Tenancy.Manager = tenantManager
+	server.Tenancy.Storage = tenantStorage
+
 	// Create GraphQL handler (if enabled)
 	if cfg.GraphQL.Enabled {
-		server.graphqlHandler = NewGraphQLHandler(db, schemaCache, &cfg.GraphQL)
+		server.GraphQL.Handler = NewGraphQLHandler(db, schemaCache, &cfg.GraphQL, cfg)
 		log.Info().
 			Int("max_depth", cfg.GraphQL.MaxDepth).
 			Int("max_complexity", cfg.GraphQL.MaxComplexity).
@@ -863,12 +1036,12 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	if !cfg.Scaling.DisableScheduler && !cfg.Scaling.WorkerOnly {
 		if cfg.Scaling.EnableSchedulerLeaderElection {
 			// Use leader election - only the leader will run the scheduler
-			server.functionsSchedulerLeader = scaling.NewLeaderElector(
+			server.Scaling.FunctionsLeader = scaling.NewLeaderElector(
 				db.Pool(),
 				scaling.FunctionsSchedulerLockID,
 				"functions-scheduler",
 			)
-			server.functionsSchedulerLeader.Start(
+			server.Scaling.FunctionsLeader.Start(
 				func() {
 					// Became leader - start the scheduler
 					log.Info().Msg("This instance is now the functions scheduler leader")
@@ -914,12 +1087,12 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			if !cfg.Scaling.DisableScheduler && !cfg.Scaling.WorkerOnly {
 				if cfg.Scaling.EnableSchedulerLeaderElection {
 					// Use leader election - only the leader will run the scheduler
-					server.jobsSchedulerLeader = scaling.NewLeaderElector(
+					server.Scaling.JobsLeader = scaling.NewLeaderElector(
 						db.Pool(),
 						scaling.JobsSchedulerLockID,
 						"jobs-scheduler",
 					)
-					server.jobsSchedulerLeader.Start(
+					server.Scaling.JobsLeader.Start(
 						func() {
 							// Became leader - start the scheduler
 							log.Info().Msg("This instance is now the jobs scheduler leader")
@@ -953,12 +1126,12 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		if !cfg.Scaling.DisableScheduler && !cfg.Scaling.WorkerOnly {
 			if cfg.Scaling.EnableSchedulerLeaderElection {
 				// Use leader election - only the leader will run the scheduler
-				server.rpcSchedulerLeader = scaling.NewLeaderElector(
+				server.Scaling.RPCLeader = scaling.NewLeaderElector(
 					db.Pool(),
 					scaling.RPCSchedulerLockID,
 					"rpc-scheduler",
 				)
-				server.rpcSchedulerLeader.Start(
+				server.Scaling.RPCLeader.Start(
 					func() {
 						// Became leader - start the scheduler
 						log.Info().Msg("This instance is now the RPC scheduler leader")
@@ -1000,46 +1173,46 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	}
 
 	// Start branch cleanup scheduler
-	if server.branchScheduler != nil {
-		server.branchScheduler.Start()
+	if server.Branching.Scheduler != nil {
+		server.Branching.Scheduler.Start()
 	}
 
 	// Start Prometheus metrics server if enabled
 	if cfg.Metrics.Enabled {
-		server.metricsServer = observability.NewMetricsServer(cfg.Metrics.Port, cfg.Metrics.Path)
-		if err := server.metricsServer.Start(); err != nil {
+		server.Metrics.Server = observability.NewMetricsServer(cfg.Metrics.Port, cfg.Metrics.Path)
+		if err := server.Metrics.Server.Start(); err != nil {
 			log.Error().Err(err).Msg("Failed to start metrics server")
 		}
 
 		// Wire up database metrics
-		db.SetMetrics(server.metrics)
+		db.SetMetrics(server.Metrics.Metrics)
 
 		// Wire up storage metrics
 		if storageService != nil {
-			storageService.SetMetrics(server.metrics)
+			storageService.SetMetrics(server.Metrics.Metrics)
 		}
 
 		// Wire up auth metrics
-		authService.SetMetrics(server.metrics)
+		authService.SetMetrics(server.Metrics.Metrics)
 
 		// Wire up realtime metrics
 		if realtimeManager != nil {
-			realtimeManager.SetMetrics(server.metrics)
+			realtimeManager.SetMetrics(server.Metrics.Metrics)
 		}
 
 		// Wire up rate limiter metrics
-		middleware.SetRateLimiterMetrics(server.metrics)
+		middleware.SetRateLimiterMetrics(server.Metrics.Metrics)
 
 		// Start uptime tracking goroutine
-		server.metricsStopChan = make(chan struct{})
+		server.Metrics.StopChan = make(chan struct{})
 		go func() {
 			ticker := time.NewTicker(15 * time.Second)
 			defer ticker.Stop()
 			for {
 				select {
 				case <-ticker.C:
-					server.metrics.UpdateUptime(server.startTime)
-				case <-server.metricsStopChan:
+					server.Metrics.Metrics.UpdateUptime(server.Metrics.StartTime)
+				case <-server.Metrics.StopChan:
 					return
 				}
 			}
@@ -1056,8 +1229,8 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	}
 
 	// Auto-load custom MCP tools if enabled
-	if cfg.MCP.Enabled && cfg.MCP.AutoLoadOnBoot && server.customMCPManager != nil {
-		if err := server.customMCPManager.AutoLoadFromDir(context.Background(), cfg.MCP.ToolsDir); err != nil {
+	if cfg.MCP.Enabled && cfg.MCP.AutoLoadOnBoot && server.MCP.CustomManager != nil {
+		if err := server.MCP.CustomManager.AutoLoadFromDir(context.Background(), cfg.MCP.ToolsDir); err != nil {
 			log.Error().Err(err).Msg("Failed to auto-load custom MCP tools")
 		} else {
 			log.Info().Msg("Custom MCP tools auto-loaded successfully")
@@ -1122,8 +1295,8 @@ func (s *Server) createMCPAuthMiddleware() fiber.Handler {
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
 			// Validate MCP OAuth token
-			if s.mcpOAuthHandler != nil {
-				clientID, userID, scopes, err := s.mcpOAuthHandler.ValidateAccessToken(c, token)
+			if s.MCP.OAuth != nil {
+				clientID, userID, scopes, err := s.MCP.OAuth.ValidateAccessToken(c, token)
 				if err == nil {
 					// Valid MCP OAuth token
 					c.Locals("auth_type", "mcp_oauth")
@@ -1139,17 +1312,18 @@ func (s *Server) createMCPAuthMiddleware() fiber.Handler {
 
 		// Fall back to standard auth middleware
 		return middleware.RequireAuthOrServiceKey(
-			s.authHandler.authService,
-			s.clientKeyService,
+			s.Auth.Handler.authService,
+			s.Auth.ClientKeyService,
 			s.DB(),
-			s.dashboardAuthHandler.jwtManager,
+			nil,
+			s.Auth.DashboardHandler.jwtManager,
 		)(c)
 	}
 }
 
 // setupMCPServer initializes the MCP server with tools and resources
 func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageService *storage.Service, functionsHandler *functions.Handler, rpcHandler *rpc.Handler, vectorHandler *VectorHandler) {
-	mcpServer := s.mcpHandler.Server()
+	mcpServer := s.MCP.Handler.Server()
 
 	// Register MCP Tools
 	toolRegistry := mcpServer.ToolRegistry()
@@ -1197,15 +1371,15 @@ func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageServic
 	}
 
 	// Jobs tools
-	if s.jobsManager != nil && s.config.Jobs.Enabled {
+	if s.Jobs.Manager != nil && s.config.Jobs.Enabled {
 		jobsStorage := jobs.NewStorage(s.db)
 		toolRegistry.Register(mcptools.NewSubmitJobTool(jobsStorage))
 		toolRegistry.Register(mcptools.NewGetJobStatusTool(jobsStorage))
 	}
 
 	// Vector search tools
-	if s.aiChatHandler != nil {
-		if ragService := s.aiChatHandler.GetRAGService(); ragService != nil {
+	if s.AI.Chat != nil {
+		if ragService := s.AI.Chat.GetRAGService(); ragService != nil {
 			toolRegistry.Register(mcptools.NewSearchVectorsTool(ragService))
 			log.Debug().Msg("MCP: Registered search_vectors tool")
 		} else {
@@ -1214,8 +1388,8 @@ func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageServic
 	}
 
 	// Knowledge graph tools
-	if s.kbStorage != nil {
-		knowledgeGraph := ai.NewKnowledgeGraph(s.kbStorage)
+	if s.AI.KBStorage != nil {
+		knowledgeGraph := ai.NewKnowledgeGraph(s.AI.KBStorage)
 		toolRegistry.Register(mcptools.NewQueryKnowledgeGraphTool(knowledgeGraph))
 		toolRegistry.Register(mcptools.NewFindRelatedEntitiesTool(knowledgeGraph))
 		toolRegistry.Register(mcptools.NewBrowseKnowledgeGraphTool(knowledgeGraph))
@@ -1262,17 +1436,17 @@ func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageServic
 	}
 
 	// Database branching tools
-	if s.branchManager != nil && s.config.Branching.Enabled {
+	if s.Branching.Manager != nil && s.config.Branching.Enabled {
 		branchStorage := branching.NewStorage(s.db.Pool(), s.config.EncryptionKey)
 		toolRegistry.Register(mcptools.NewListBranchesTool(branchStorage))
 		toolRegistry.Register(mcptools.NewGetBranchTool(branchStorage))
-		toolRegistry.Register(mcptools.NewCreateBranchTool(s.branchManager))
-		toolRegistry.Register(mcptools.NewDeleteBranchTool(s.branchManager, branchStorage))
-		toolRegistry.Register(mcptools.NewResetBranchTool(s.branchManager, branchStorage))
+		toolRegistry.Register(mcptools.NewCreateBranchTool(s.Branching.Manager))
+		toolRegistry.Register(mcptools.NewDeleteBranchTool(s.Branching.Manager, branchStorage))
+		toolRegistry.Register(mcptools.NewResetBranchTool(s.Branching.Manager, branchStorage))
 		toolRegistry.Register(mcptools.NewGrantBranchAccessTool(branchStorage))
 		toolRegistry.Register(mcptools.NewRevokeBranchAccessTool(branchStorage))
-		toolRegistry.Register(mcptools.NewGetActiveBranchTool(s.branchRouter))
-		toolRegistry.Register(mcptools.NewSetActiveBranchTool(s.branchRouter, branchStorage))
+		toolRegistry.Register(mcptools.NewGetActiveBranchTool(s.Branching.Router))
+		toolRegistry.Register(mcptools.NewSetActiveBranchTool(s.Branching.Router, branchStorage))
 	}
 
 	// Register MCP Resources
@@ -1296,9 +1470,9 @@ func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageServic
 	resourceRegistry.Register(mcpresources.NewBucketsResource(s.db))
 
 	// Wire MCP registries to AI chat handler for MCP-enabled chatbots
-	if s.aiChatHandler != nil {
-		s.aiChatHandler.SetMCPToolRegistry(toolRegistry)
-		s.aiChatHandler.SetMCPResources(resourceRegistry)
+	if s.AI.Chat != nil {
+		s.AI.Chat.SetMCPToolRegistry(toolRegistry)
+		s.AI.Chat.SetMCPResources(resourceRegistry)
 		log.Debug().Msg("MCP registries wired to AI chat handler")
 	}
 
@@ -1310,13 +1484,13 @@ func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageServic
 		mcpInternalURL = "http://localhost" + s.config.Server.Address
 	}
 	customExecutor := custom.NewExecutor(s.config.Auth.JWTSecret, mcpInternalURL, nil)
-	s.customMCPManager = custom.NewManager(customStorage, customExecutor, toolRegistry, resourceRegistry)
-	s.customMCPHandler = NewCustomMCPHandler(customStorage, s.customMCPManager, &s.config.MCP)
+	s.MCP.CustomManager = custom.NewManager(customStorage, customExecutor, toolRegistry, resourceRegistry)
+	s.MCP.CustomHandler = NewCustomMCPHandler(customStorage, s.MCP.CustomManager, &s.config.MCP)
 
 	// Load custom tools and resources from database
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := s.customMCPManager.LoadAndRegisterAll(ctx); err != nil {
+	if err := s.MCP.CustomManager.LoadAndRegisterAll(ctx); err != nil {
 		log.Warn().Err(err).Msg("Failed to load some custom MCP tools/resources")
 	}
 
@@ -1345,9 +1519,9 @@ func (s *Server) setupMiddlewares() {
 	}
 
 	// Prometheus metrics middleware - collects HTTP metrics
-	if s.config.Metrics.Enabled && s.metrics != nil {
+	if s.config.Metrics.Enabled && s.Metrics.Metrics != nil {
 		log.Debug().Msg("Adding Prometheus metrics middleware")
-		s.app.Use(s.metrics.MetricsMiddleware())
+		s.app.Use(s.Metrics.Metrics.MetricsMiddleware())
 	}
 
 	// Security headers middleware - protect against common attacks
@@ -1455,7 +1629,7 @@ func (s *Server) setupMiddlewares() {
 	// Uses dynamic limiter that checks settings cache on each request
 	// This allows toggling rate limiting via admin UI without server restart
 	// Pass shared storage to prevent multiple GC goroutines
-	s.app.Use(middleware.DynamicGlobalAPILimiter(s.authHandler.authService.GetSettingsCache(), s.sharedMiddlewareStorage))
+	s.app.Use(middleware.DynamicGlobalAPILimiter(s.Auth.Handler.authService.GetSettingsCache(), s.sharedMiddlewareStorage))
 
 	// Per-endpoint body size limits and JSON depth protection
 	if s.config.Server.BodyLimits.Enabled {
@@ -1482,8 +1656,8 @@ func (s *Server) setupMiddlewares() {
 	// Stores responses in database to return cached results for duplicate POST/PUT/DELETE/PATCH requests
 	idempotencyConfig := middleware.DefaultIdempotencyConfig()
 	idempotencyConfig.DB = s.DB()
-	s.idempotencyMiddleware = middleware.NewIdempotencyMiddleware(idempotencyConfig)
-	s.app.Use(s.idempotencyMiddleware.Middleware())
+	s.Middleware.Idempotency = middleware.NewIdempotencyMiddleware(idempotencyConfig)
+	s.app.Use(s.Middleware.Idempotency.Middleware())
 	log.Info().
 		Str("header", idempotencyConfig.HeaderName).
 		Dur("ttl", idempotencyConfig.TTL).
@@ -1497,457 +1671,22 @@ func (s *Server) setupMiddlewares() {
 
 // setupRoutes sets up all routes
 func (s *Server) setupRoutes() {
-	// Root path - simple health response
-	s.app.Get("/", func(c fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"status": "ok",
-		})
-	})
+	s.auditRoutesAtStartup()
 
-	// Health check endpoint
-	s.app.Get("/health", s.handleHealth)
-
-	// API v1 routes - versioned for future compatibility
-	v1 := s.app.Group("/api/v1")
-
-	// Setup RLS middleware (before REST API routes)
-	rlsConfig := middleware.RLSConfig{
-		DB: s.db,
+	if err := s.registerRoutesViaRegistry(); err != nil {
+		log.Fatal().Err(err).Msg("Failed to setup routes via registry")
 	}
 
-	// REST API routes (auto-generated from database schema)
-	// Required authentication (JWT, API key, or service key) - rejects unauthenticated requests
-	// Metadata listing (GET /) requires admin role; data operations use RLS filtering
-	// Pass jwtManager to support dashboard admin tokens (maps to service_role for full access)
-	// BranchContext middleware enables queries against non-main branches via X-Fluxbase-Branch header
-	restMiddlewares := []any{
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager),
-		middleware.RLSMiddleware(rlsConfig),
-	}
-	// Add branch context middleware if branching is enabled
-	if s.branchRouter != nil {
-		restMiddlewares = append(restMiddlewares, middleware.BranchContextSimple(s.branchRouter))
-	}
-	// Add ETag middleware for conditional requests (304 Not Modified)
-	restMiddlewares = append(restMiddlewares, middleware.ETagWithConfig(middleware.ETagConfig{
-		Weak:              true,
-		SkipPaths:         []string{}, // Don't skip any paths within /tables
-		IncludeMethods:    []string{"GET"},
-		EnableConditional: true,
-	}))
-	rest := v1.Group("/tables", restMiddlewares...)
-	s.setupRESTRoutes(rest)
-
-	// Auth routes with CSRF protection
-	// CSRF middleware protects against cross-site request forgery attacks
-	csrfMiddleware := middleware.CSRF(middleware.CSRFConfig{
-		TokenLength:    32,
-		TokenLookup:    "header:X-CSRF-Token",
-		CookieName:     "csrf_token",
-		CookiePath:     "/",
-		CookieSecure:   s.config.Tracing.Environment == "production",
-		CookieHTTPOnly: true,
-		CookieSameSite: "Strict",
-		Expiration:     24 * time.Hour,
-	})
-
-	// Dashboard auth routes (separate from application auth)
-	// IMPORTANT: Must be registered BEFORE app auth routes so dashboard OAuth/SAML handlers
-	// can check state ownership and call c.Next() if not theirs
-	s.dashboardAuthHandler.RegisterRoutes(s.app)
-
-	authRoutes := v1.Group("/auth", csrfMiddleware)
-	s.setupAuthRoutes(authRoutes)
-
-	// Public settings routes - optional authentication with RLS support
-	// These routes respect app.settings RLS policies based on is_public and is_secret flags
-	settings := v1.Group("/settings", OptionalAuthMiddleware(s.authHandler.authService))
-	settings.Get("/:key", s.settingsHandler.GetSetting)
-	settings.Post("/batch", s.settingsHandler.GetSettings)
-
-	// User secret settings routes - require authentication
-	// Users can only access their own secrets (encrypted, server-side decryption only)
-	userSecrets := v1.Group("/settings/secret",
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-	)
-	userSecrets.Post("/", s.userSettingsHandler.CreateSecret)
-	userSecrets.Get("/", s.userSettingsHandler.ListSecrets)
-	userSecrets.Get("/*", s.userSettingsHandler.GetSecret)
-	userSecrets.Put("/*", s.userSettingsHandler.UpdateSecret)
-	userSecrets.Delete("/*", s.userSettingsHandler.DeleteSecret)
-
-	// User settings routes - require authentication
-	// Non-encrypted user settings with user -> system fallback support
-	// Mirrors edge function secrets helper pattern for regular settings
-	userSettings := v1.Group("/settings/user",
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-	)
-	userSettings.Get("/list", s.userSettingsHandler.ListSettings)                  // List user's own settings
-	userSettings.Get("/own/:key", s.userSettingsHandler.GetUserOwnSetting)         // Get user's own only
-	userSettings.Get("/system/:key", s.userSettingsHandler.GetSystemSettingPublic) // Get system setting
-	userSettings.Get("/:key", s.userSettingsHandler.GetSetting)                    // Get with user -> system fallback
-	userSettings.Put("/:key", s.userSettingsHandler.SetSetting)                    // Create/update user setting
-	userSettings.Delete("/:key", s.userSettingsHandler.DeleteSetting)              // Delete user setting
-
-	// client keys routes - require authentication
-	// When 'allow_user_client_keys' setting is disabled, only admins can manage keys
-	s.clientKeyHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager, s.authHandler.authService.GetSettingsCache())
-
-	// Secrets routes - require authentication
-	s.secretsHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-
-	// Custom MCP tools/resources routes - require admin authentication
-	if s.customMCPHandler != nil && s.config.MCP.Enabled {
-		s.customMCPHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-	}
-
-	// Webhook routes - require authentication
-	s.webhookHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-
-	// Monitoring routes - require authentication
-	s.monitoringHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-
-	// Edge functions routes - require authentication by default, but per-function config can override
-	// Protected by feature flag middleware
-	s.functionsHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-
-	// Jobs routes - require authentication
-	// Protected by feature flag middleware
-	// Note: Admin routes are registered in setupAdminRoutes with proper auth middleware
-	if s.jobsHandler != nil {
-		s.jobsHandler.RegisterRoutes(s.app, s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager)
-	}
-
-	// Internal AI routes - for custom MCP tools, edge functions, and jobs
-	// These endpoints allow runtime code to access AI capabilities via utils.ai.chat() and utils.ai.embed()
-	// SECURITY: Restricted to localhost only + service token authentication
-	// Only server-side runtimes (MCP tools, edge functions, jobs) can access these endpoints
-	if s.internalAIHandler != nil && s.config.AI.Enabled {
-		internalAI := v1.Group("/internal/ai",
-			middleware.RequireInternal(), // Localhost only - prevents external access
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager),
-		)
-		internalAI.Post("/chat", s.internalAIHandler.HandleChat)
-		internalAI.Post("/embed", s.internalAIHandler.HandleEmbed)
-		internalAI.Get("/providers", s.internalAIHandler.HandleListProviders)
-		log.Debug().Msg("Internal AI routes registered for MCP tools/functions/jobs (localhost only)")
-	}
-
-	// Storage routes - optional authentication (allows unauthenticated access to public buckets)
-	// Protected by feature flag middleware
-	// BranchContext middleware enables storage operations against non-main branches
-	storageMiddlewares := []any{
-		middleware.RequireStorageEnabled(s.authHandler.authService.GetSettingsCache()),
-		middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.DB()),
-	}
-	if s.branchRouter != nil {
-		storageMiddlewares = append(storageMiddlewares, middleware.BranchContextSimple(s.branchRouter))
-	}
-	storage := v1.Group("/storage", storageMiddlewares...)
-	s.setupStorageRoutes(storage)
-
-	// MCP routes - Model Context Protocol for AI assistants
-	// Requires authentication via client key, service key, or OAuth token
-	if s.config.MCP.Enabled && s.mcpHandler != nil {
-		// Register OAuth routes first (some are public, some need the MCP group)
-		if s.config.MCP.OAuth.Enabled && s.mcpOAuthHandler != nil {
-			// Create MCP group without auth for OAuth endpoints
-			mcpOAuthGroup := s.app.Group(s.config.MCP.BasePath)
-			s.mcpOAuthHandler.RegisterRoutes(s.app, mcpOAuthGroup)
-			log.Debug().Msg("MCP OAuth routes registered")
-		}
-
-		// Create auth middleware that also accepts MCP OAuth tokens
-		mcpAuthMiddleware := s.createMCPAuthMiddleware()
-
-		mcpGroup := s.app.Group(s.config.MCP.BasePath, mcpAuthMiddleware)
-		s.mcpHandler.RegisterRoutes(mcpGroup)
-		log.Debug().Str("base_path", s.config.MCP.BasePath).Msg("MCP routes registered")
-	}
-
-	// Database Branching routes - GitHub webhook only
-	// Branch management routes are registered later after admin group is created
-	if s.config.Branching.Enabled && s.githubWebhook != nil {
-		// GitHub webhook endpoint (no auth, uses signature verification)
-		// Rate limited to prevent abuse - use specific path to avoid affecting other /api/v1 routes
-		s.app.Post("/api/v1/webhooks/github",
-			middleware.GitHubWebhookLimiter(s.sharedMiddlewareStorage),
-			s.githubWebhook.HandleWebhook,
-		)
-	}
-
-	// Realtime WebSocket endpoint (not versioned as it's WebSocket)
-	// WebSocket validates auth internally, but make it required
-	// Protected by feature flag middleware and realtime:connect scope
-	s.app.Get("/realtime",
-		middleware.RequireRealtimeEnabled(s.authHandler.authService.GetSettingsCache()),
-		middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		middleware.RequireScope(auth.ScopeRealtimeConnect),
-		s.realtimeHandler.HandleWebSocket,
-	)
-
-	// Realtime stats endpoint - require authentication and realtime:connect scope
-	// Protected by feature flag middleware
-	s.app.Get("/api/v1/realtime/stats",
-		middleware.RequireRealtimeEnabled(s.authHandler.authService.GetSettingsCache()),
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		middleware.RequireScope(auth.ScopeRealtimeConnect),
-		s.handleRealtimeStats,
-	)
-
-	// Realtime broadcast endpoint - require authentication and realtime:broadcast scope
-	// Protected by feature flag middleware
-	s.app.Post("/api/v1/realtime/broadcast",
-		middleware.RequireRealtimeEnabled(s.authHandler.authService.GetSettingsCache()),
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		middleware.RequireScope(auth.ScopeRealtimeBroadcast),
-		s.handleRealtimeBroadcast,
-	)
-
-	// AI WebSocket endpoint (require AI enabled and authentication)
-	if s.aiChatHandler != nil {
-		s.app.Get("/ai/ws",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiChatHandler.HandleWebSocket,
-		)
-
-		// Public AI chatbot list endpoint
-		s.app.Get("/api/v1/ai/chatbots",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.ListPublicChatbots,
-		)
-
-		// Chatbot lookup by name (smart namespace resolution)
-		// Must be registered BEFORE /:id to avoid routing conflicts
-		s.app.Get("/api/v1/ai/chatbots/by-name/:name",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.LookupChatbotByName,
-		)
-
-		s.app.Get("/api/v1/ai/chatbots/:id",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.GetPublicChatbot,
-		)
-
-		// User conversation history endpoints (require authentication)
-		s.app.Get("/api/v1/ai/conversations",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.ListUserConversations,
-		)
-
-		s.app.Get("/api/v1/ai/conversations/:id",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.GetUserConversation,
-		)
-
-		s.app.Delete("/api/v1/ai/conversations/:id",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.DeleteUserConversation,
-		)
-
-		s.app.Patch("/api/v1/ai/conversations/:id",
-			middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.aiHandler.UpdateUserConversation,
-		)
-
-		// User-facing Knowledge Base routes (require authentication)
-		if s.kbStorage != nil {
-			userKBRouter := s.app.Group("/api/v1/ai",
-				middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache()),
-				middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			)
-			// Use document-enabled routes if processor is available
-			if s.docProcessor != nil {
-				ai.RegisterUserKnowledgeBaseRoutesWithDocuments(userKBRouter, s.kbStorage, s.docProcessor)
-				log.Info().Msg("User-facing knowledge base routes registered (with document support)")
-			} else {
-				ai.RegisterUserKnowledgeBaseRoutes(userKBRouter, s.kbStorage)
-				log.Info().Msg("User-facing knowledge base routes registered")
-			}
-		}
-	}
-
-	// Public RPC endpoints (only if RPC is enabled) with scope enforcement
-	if s.rpcHandler != nil {
-		// List public procedures - requires read:rpc scope
-		s.app.Get("/api/v1/rpc/procedures",
-			middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			middleware.RequireScope(auth.ScopeRPCRead),
-			s.rpcHandler.ListPublicProcedures,
-		)
-
-		// Invoke RPC procedure - requires execute:rpc scope
-		s.app.Post("/api/v1/rpc/:namespace/:name",
-			middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			middleware.RequireScope(auth.ScopeRPCExecute),
-			s.rpcHandler.Invoke,
-		)
-
-		// Get execution status (public - users can see their own) - requires read:rpc scope
-		s.app.Get("/api/v1/rpc/executions/:id",
-			middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			middleware.RequireScope(auth.ScopeRPCRead),
-			s.rpcHandler.GetPublicExecution,
-		)
-
-		// Get execution logs (public - users can see their own) - requires read:rpc scope
-		s.app.Get("/api/v1/rpc/executions/:id/logs",
-			middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache()),
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			middleware.RequireScope(auth.ScopeRPCRead),
-			s.rpcHandler.GetPublicExecutionLogs,
-		)
-	}
-
-	// Vector search endpoints (only if vector handler is initialized)
-	if s.vectorHandler != nil {
-		// Capabilities endpoint (public - no auth required)
-		// Returns information about pgvector installation status and embedding configuration
-		s.app.Get("/api/v1/capabilities/vector", s.vectorHandler.HandleGetCapabilities)
-
-		// Embedding endpoint (requires authentication)
-		s.app.Post("/api/v1/vector/embed",
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.vectorHandler.HandleEmbed,
-		)
-
-		// Vector search endpoint (requires authentication)
-		s.app.Post("/api/v1/vector/search",
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			s.vectorHandler.HandleSearch,
-		)
-
-		log.Info().Msg("Vector search routes registered")
-	}
-
-	// GraphQL endpoint (if enabled)
-	if s.graphqlHandler != nil {
-		// GraphQL uses its own auth handling to set up RLS context
-		s.app.Post("/api/v1/graphql",
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager),
-			s.graphqlHandler.HandleGraphQL,
-		)
-		// Introspection endpoint (GET)
-		s.app.Get("/api/v1/graphql",
-			middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.DB(), s.dashboardAuthHandler.jwtManager),
-			s.graphqlHandler.HandleIntrospection,
-		)
-		log.Info().Msg("GraphQL endpoint registered at /api/v1/graphql")
-	}
-
-	// Admin API routes - always available (protected by their own auth middleware)
-	admin := v1.Group("/admin")
-	s.setupAdminRoutes(admin)
-
-	// Public invitation routes (no auth required)
-	invitations := v1.Group("/invitations")
-	s.setupPublicInvitationRoutes(invitations)
-
-	log.Info().Msg("Admin API routes registered")
-
-	// Admin UI and dashboard auth routes - only enabled when admin.enabled=true
-	// Requires setup_token for the dashboard authentication system
+	// Admin UI routes - external package
 	if s.config.Admin.Enabled {
 		if s.config.Security.SetupToken == "" {
 			log.Error().Msg("Admin UI is enabled but FLUXBASE_SECURITY_SETUP_TOKEN is not set. Admin UI will not be registered for security reasons.")
 		} else {
-			// Dashboard auth routes (setup, login, etc.)
-			s.setupDashboardAuthRoutes(admin)
-
-			// Admin UI (embedded React app)
-			// Pass the public base URL so it can be injected into the frontend at runtime
 			adminUI := adminui.New(s.config.GetPublicBaseURL())
 			adminUI.RegisterRoutes(s.app)
-			log.Info().Msg("Admin UI enabled")
 		}
-	} else {
-		log.Info().Msg("Admin UI is disabled. Set FLUXBASE_ADMIN_ENABLED=true to enable the admin dashboard UI.")
 	}
 
-	// Sync endpoints - always available (independent of admin dashboard)
-	// Each is protected by IP allowlist + auth + role requirements + feature flag middleware
-	syncAuth := UnifiedAuthMiddleware(s.authHandler.authService, s.dashboardAuthHandler.jwtManager, s.db.Pool())
-
-	// Functions sync
-	funcSync := v1.Group("/admin/functions")
-	funcSync.Post("/sync",
-		middleware.RequireSyncIPAllowlist(s.config.Functions.SyncAllowedIPRanges, "functions", &s.config.Server),
-		syncAuth,
-		RequireRole("admin", "dashboard_admin", "service_role"),
-		s.functionsHandler.SyncFunctions,
-	)
-
-	// Jobs sync (requires jobsHandler)
-	if s.jobsHandler != nil {
-		jobsSync := v1.Group("/admin/jobs")
-		jobsSync.Post("/sync",
-			middleware.RequireSyncIPAllowlist(s.config.Jobs.SyncAllowedIPRanges, "jobs", &s.config.Server),
-			syncAuth,
-			RequireRole("admin", "dashboard_admin", "service_role"),
-			s.jobsHandler.SyncJobs,
-		)
-	}
-
-	// AI chatbots sync (requires aiHandler)
-	if s.aiHandler != nil {
-		requireAI := middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache())
-		aiSync := v1.Group("/admin/ai/chatbots")
-		aiSync.Post("/sync",
-			requireAI,
-			middleware.RequireSyncIPAllowlist(s.config.AI.SyncAllowedIPRanges, "ai", &s.config.Server),
-			syncAuth,
-			RequireRole("admin", "dashboard_admin", "service_role"),
-			s.aiHandler.SyncChatbots,
-		)
-	}
-
-	// RPC sync (requires rpcHandler)
-	if s.rpcHandler != nil {
-		requireRPC := middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache())
-		rpcSync := v1.Group("/admin/rpc")
-		rpcSync.Post("/sync",
-			requireRPC,
-			middleware.RequireSyncIPAllowlist(s.config.RPC.SyncAllowedIPRanges, "rpc", &s.config.Server),
-			syncAuth,
-			RequireRole("admin", "dashboard_admin", "service_role"),
-			s.rpcHandler.SyncProcedures,
-		)
-	}
-
-	// Database Branching routes (require authentication)
-	// Registered under /api/v1 with auth middleware
-	if s.config.Branching.Enabled && s.branchHandler != nil {
-		// Create a group at /api/v1 for branch routes with auth middleware
-		// Routes will be at /api/v1/admin/branches (from branch handler's RegisterRoutes)
-		branchAuthGroup := v1.Group("/",
-			middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-			RequireRole("admin", "dashboard_admin", "service_role"),
-		)
-		s.branchHandler.RegisterRoutes(branchAuthGroup)
-		log.Debug().Msg("Database Branching routes registered")
-	}
-
-	// OpenAPI specification
-	// Uses optional auth middleware to detect admin users and provide full spec with database schema
-	// Non-admin users get minimal spec with only auth endpoints
-	openAPIHandler := NewOpenAPIHandler(s.db)
-	s.app.Get("/openapi.json",
-		middleware.OptionalAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		openAPIHandler.GetOpenAPISpec,
-	)
-
-	// 404 handler
 	s.app.Use(func(c fiber.Ctx) error {
 		return c.Status(404).JSON(fiber.Map{
 			"error": "Not Found",
@@ -1956,546 +1695,24 @@ func (s *Server) setupRoutes() {
 	})
 }
 
-// setupRESTRoutes sets up dynamic REST routes using wildcard patterns
-// This allows new tables created via migrations to be immediately accessible
-// without requiring a server restart.
-func (s *Server) setupRESTRoutes(router fiber.Router) {
-	log.Info().Msg("Setting up dynamic REST API routes with wildcard patterns")
-
-	// Metadata endpoint - list all tables (admin only)
-	// Regular users should not be able to discover all tables; they access tables by name with RLS
-	router.Get("/", RequireRole("admin", "dashboard_admin", "service_role"), s.rest.HandleGetTables)
-
-	// Dynamic routes using wildcard patterns
-	// Order matters: more specific routes first
-
-	// POST query endpoint for complex filters (avoids URL length limits)
-	// Routes: /tables/:schema/:table/query and /tables/:table/query
-	router.Post("/:schema/:table/query",
-		middleware.RequireScope(auth.ScopeTablesRead),
-		s.rest.HandleDynamicQuery)
-	router.Post("/:schema/query",
-		middleware.RequireScope(auth.ScopeTablesRead),
-		s.rest.HandleDynamicQuery)
-
-	// Routes with ID parameter: /tables/:schema/:table/:id and /tables/:table/:id
-	// These handle GET (fetch one), PUT (replace), PATCH (update), DELETE (remove)
-	router.Get("/:schema/:table/:id",
-		middleware.RequireScope(auth.ScopeTablesRead),
-		s.rest.HandleDynamicTableById)
-	router.Put("/:schema/:table/:id",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTableById)
-	router.Patch("/:schema/:table/:id",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTableById)
-	router.Delete("/:schema/:table/:id",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTableById)
-
-	// Collection routes: /tables/:schema/:table and /tables/:table
-	// These handle GET (list), POST (create), PATCH (batch update), DELETE (batch delete)
-	router.Get("/:schema/:table",
-		middleware.RequireScope(auth.ScopeTablesRead),
-		s.rest.HandleDynamicTable)
-	router.Post("/:schema/:table",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-	router.Patch("/:schema/:table",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-	router.Delete("/:schema/:table",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-
-	// Single-segment routes for public schema: /tables/:table
-	// Note: Fiber parses /tables/posts as schema="posts", table=""
-	// The handler detects this and treats it as public.posts
-	router.Get("/:schema",
-		middleware.RequireScope(auth.ScopeTablesRead),
-		s.rest.HandleDynamicTable)
-	router.Post("/:schema",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-	router.Patch("/:schema",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-	router.Delete("/:schema",
-		middleware.RequireScope(auth.ScopeTablesWrite),
-		s.rest.HandleDynamicTable)
-
-	log.Info().Msg("Dynamic REST API routes configured")
-}
-
-// setupAuthRoutes sets up authentication routes
-func (s *Server) setupAuthRoutes(router fiber.Router) {
-	// Import rate limiters from middleware package using config values
-	// Pass shared storage to prevent multiple GC goroutines
-	rateLimiters := map[string]fiber.Handler{
-		"signup":         middleware.AuthSignupLimiterWithConfig(s.config.Security.AuthSignupRateLimit, s.config.Security.AuthSignupRateWindow, s.sharedMiddlewareStorage),
-		"login":          middleware.AuthLoginLimiterWithConfig(s.config.Security.AuthLoginRateLimit, s.config.Security.AuthLoginRateWindow, s.sharedMiddlewareStorage),
-		"refresh":        middleware.AuthRefreshLimiterWithConfig(s.config.Security.AuthRefreshRateLimit, s.config.Security.AuthRefreshRateWindow, s.sharedMiddlewareStorage),
-		"magiclink":      middleware.AuthMagicLinkLimiterWithConfig(s.config.Security.AuthMagicLinkRateLimit, s.config.Security.AuthMagicLinkRateWindow, s.sharedMiddlewareStorage),
-		"password_reset": middleware.AuthPasswordResetLimiterWithConfig(s.config.Security.AuthPasswordResetRateLimit, s.config.Security.AuthPasswordResetRateWindow, s.sharedMiddlewareStorage),
-		"otp":            middleware.AuthMagicLinkLimiterWithConfig(s.config.Security.AuthMagicLinkRateLimit, s.config.Security.AuthMagicLinkRateWindow, s.sharedMiddlewareStorage), // Use same rate limit as magic link
-		"2fa":            middleware.Auth2FALimiterWithConfig(s.config.Security.Auth2FARateLimit, s.config.Security.Auth2FARateWindow, s.sharedMiddlewareStorage),                   // Strict rate limit for 2FA verification
-	}
-
-	// Use the auth handler's RegisterRoutes method with rate limiters
-	// Pass the router (which is /api/v1/auth) instead of the whole app
-	s.authHandler.RegisterRoutes(router, rateLimiters)
-
-	// OAuth routes
-	router.Get("/oauth/providers", s.oauthHandler.ListEnabledProviders)
-	router.Get("/oauth/:provider/authorize", s.oauthHandler.Authorize)
-	router.Get("/oauth/:provider/callback", s.oauthHandler.Callback)
-
-	// OAuth token retrieval - allows users to get their stored provider tokens
-	// Requires authentication (user must be logged in with Fluxbase JWT)
-	router.Get("/oauth/:provider/token",
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		s.oauthHandler.GetProviderToken,
-	)
-
-	// OAuth Single Logout routes
-	// Logout requires authentication, callback is public (validates via state parameter)
-	router.Post("/oauth/:provider/logout",
-		middleware.RequireAuthOrServiceKey(s.authHandler.authService, s.clientKeyService, s.db.Pool(), s.dashboardAuthHandler.jwtManager),
-		s.oauthHandler.Logout,
-	)
-	router.Get("/oauth/:provider/logout/callback", s.oauthHandler.LogoutCallback)
-}
-
-// setupStorageRoutes sets up storage routes
-func (s *Server) setupStorageRoutes(router fiber.Router) {
-	// Signed URL download (PUBLIC - no auth required, token provides authorization)
-	router.Get("/object", s.storageHandler.DownloadSignedObject)
-
-	// Transform config (PUBLIC - no auth required, just returns config info)
-	router.Get("/config/transforms", s.storageHandler.GetTransformConfig)
-
-	// Bucket management with scope enforcement
-	router.Get("/buckets", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.ListBuckets)
-	router.Post("/buckets/:bucket", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.CreateBucket)
-	router.Put("/buckets/:bucket", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.UpdateBucketSettings)
-	router.Delete("/buckets/:bucket", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.DeleteBucket)
-
-	// List files in bucket (must come before /:bucket/*)
-	router.Get("/:bucket", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.ListFiles)
-
-	// Multipart upload (must come before /:bucket/*)
-	router.Post("/:bucket/multipart", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.MultipartUpload)
-
-	// File sharing (must come before /:bucket/* to avoid matching generic routes)
-	router.Post("/:bucket/*/share", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.ShareObject)            // Share file with user
-	router.Delete("/:bucket/*/share/:user_id", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.RevokeShare) // Revoke share
-	router.Get("/:bucket/*/shares", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.ListShares)              // List shares
-
-	// Signed URLs (for S3-compatible storage, must come before /:bucket/*)
-	router.Post("/:bucket/sign/*", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.GenerateSignedURL)
-
-	// Streaming upload (must come before /:bucket/*)
-	// Apply storage upload rate limiting before authentication to prevent abuse
-	router.Post("/:bucket/stream/*", middleware.StorageUploadLimiter(s.sharedMiddlewareStorage), middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.StreamUpload)
-
-	// Chunked upload routes (for resumable large file uploads, must come before /:bucket/*)
-	// Apply storage upload rate limiting to chunked upload init
-	router.Post("/:bucket/chunked/init", middleware.StorageUploadLimiter(s.sharedMiddlewareStorage), middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.InitChunkedUpload)
-	router.Put("/:bucket/chunked/:uploadId/:chunkIndex", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.UploadChunk)
-	router.Post("/:bucket/chunked/:uploadId/complete", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.CompleteChunkedUpload)
-	router.Get("/:bucket/chunked/:uploadId/status", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.GetChunkedUploadStatus)
-	router.Delete("/:bucket/chunked/:uploadId", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.AbortChunkedUpload)
-
-	// File operations (generic wildcard routes - must come LAST)
-	router.Post("/:bucket/*", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.UploadFile)   // Upload file
-	router.Get("/:bucket/*", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.DownloadFile)   // Download file
-	router.Head("/:bucket/*", middleware.RequireScope(auth.ScopeStorageRead), s.storageHandler.DownloadFile)  // HEAD delegates to GetFileInfo for Content-Length
-	router.Delete("/:bucket/*", middleware.RequireScope(auth.ScopeStorageWrite), s.storageHandler.DeleteFile) // Delete file
-}
-
-// setupDashboardAuthRoutes sets up dashboard authentication routes
-// These are only available when admin UI is enabled
-func (s *Server) setupDashboardAuthRoutes(router fiber.Router) {
-	log.Debug().Msg("setupDashboardAuthRoutes called - registering public routes")
-
-	// Public dashboard auth routes (no authentication required)
-	router.Get("/setup/status", s.adminAuthHandler.GetSetupStatus)
-	router.Post("/setup", middleware.AdminSetupLimiterWithConfig(
-		s.config.Security.AdminSetupRateLimit,
-		s.config.Security.AdminSetupRateWindow,
-		s.sharedMiddlewareStorage,
-	), s.adminAuthHandler.InitialSetup)
-	router.Post("/login", middleware.AdminLoginLimiterWithConfig(
-		s.config.Security.AdminLoginRateLimit,
-		s.config.Security.AdminLoginRateWindow,
-		s.sharedMiddlewareStorage,
-	), s.adminAuthHandler.AdminLogin)
-	router.Post("/refresh", s.adminAuthHandler.AdminRefreshToken)
-
-	log.Debug().Msg("Dashboard auth routes registered: GET /setup/status, POST /setup, POST /login, POST /refresh")
-
-	// Protected dashboard auth routes
-	unifiedAuth := UnifiedAuthMiddleware(s.authHandler.authService, s.dashboardAuthHandler.jwtManager, s.db.Pool())
-	router.Post("/logout", unifiedAuth, s.adminAuthHandler.AdminLogout)
-	router.Get("/me", unifiedAuth, s.adminAuthHandler.GetCurrentAdmin)
-}
-
-// setupAdminRoutes sets up admin API routes
-func (s *Server) setupAdminRoutes(router fiber.Router) {
-	// Protected admin routes (require authentication from either auth.users or dashboard.users)
-	// UnifiedAuthMiddleware accepts tokens from both authentication systems
-	// The db pool is passed to allow real-time role checking from auth.users
-	unifiedAuth := UnifiedAuthMiddleware(s.authHandler.authService, s.dashboardAuthHandler.jwtManager, s.db.Pool())
-
-	// Admin panel routes (require admin or dashboard_admin role)
-	router.Get("/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.handleGetTables)
-	router.Get("/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.handleGetTableSchema)
-	router.Get("/schemas", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.handleGetSchemas)
-	router.Post("/query", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.handleExecuteQuery)
-
-	// DDL routes (schema and table management) - require admin or dashboard_admin role
-	router.Get("/ddl/schemas", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.ListSchemas)
-	router.Post("/ddl/schemas", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.CreateSchema)
-	router.Get("/ddl/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.ListTables)
-	router.Post("/ddl/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.CreateTable)
-	router.Delete("/ddl/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.DeleteTable)
-
-	// Legacy DDL routes (without /ddl/ prefix) - keep for backwards compatibility
-	router.Post("/schemas", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.CreateSchema)
-	router.Post("/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.CreateTable)
-	router.Delete("/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.DeleteTable)
-	router.Patch("/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.RenameTable)
-	router.Post("/tables/:schema/:table/columns", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.AddColumn)
-	router.Delete("/tables/:schema/:table/columns/:column", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.ddlHandler.DropColumn)
-
-	// Realtime admin routes - manage realtime enablement for tables
-	router.Post("/realtime/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.realtimeAdminHandler.HandleEnableRealtime)
-	router.Get("/realtime/tables", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.realtimeAdminHandler.HandleListRealtimeTables)
-	router.Get("/realtime/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.realtimeAdminHandler.HandleGetRealtimeStatus)
-	router.Patch("/realtime/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.realtimeAdminHandler.HandleUpdateRealtimeConfig)
-	router.Delete("/realtime/tables/:schema/:table", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.realtimeAdminHandler.HandleDisableRealtime)
-
-	// OAuth provider management routes (require admin or dashboard_admin role)
-	router.Get("/oauth/providers", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.ListOAuthProviders)
-	router.Get("/oauth/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.GetOAuthProvider)
-	router.Post("/oauth/providers", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.CreateOAuthProvider)
-	router.Put("/oauth/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.UpdateOAuthProvider)
-	router.Delete("/oauth/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.DeleteOAuthProvider)
-
-	// SAML provider management routes (require admin or dashboard_admin role)
-	router.Get("/saml/providers", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.ListSAMLProviders)
-	router.Get("/saml/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.GetSAMLProvider)
-	router.Post("/saml/providers", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.CreateSAMLProvider)
-	router.Put("/saml/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.UpdateSAMLProvider)
-	router.Delete("/saml/providers/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.DeleteSAMLProvider)
-	router.Post("/saml/validate-metadata", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.ValidateMetadata)
-	router.Post("/saml/upload-metadata", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.samlProviderHandler.UploadMetadata)
-
-	// Auth settings routes (require admin or dashboard_admin role)
-	router.Get("/auth/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.GetAuthSettings)
-	router.Put("/auth/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.oauthProviderHandler.UpdateAuthSettings)
-
-	// Session management routes (require admin or dashboard_admin role)
-	router.Get("/auth/sessions", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.adminSessionHandler.ListSessions)
-	router.Delete("/auth/sessions/:id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.adminSessionHandler.RevokeSession)
-	router.Delete("/auth/sessions/user/:user_id", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.adminSessionHandler.RevokeUserSessions)
-
-	// System settings routes (require admin or dashboard_admin role)
-	router.Get("/system/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.systemSettingsHandler.ListSettings)
-	router.Get("/system/settings/*", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.systemSettingsHandler.GetSetting)
-	router.Put("/system/settings/*", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.systemSettingsHandler.UpdateSetting)
-	router.Delete("/system/settings/*", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.systemSettingsHandler.DeleteSetting)
-
-	// Custom settings routes (require admin, dashboard_admin, or service_role)
-	router.Post("/settings/custom", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.CreateSetting)
-	router.Get("/settings/custom", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.ListSettings)
-
-	// System secret settings routes (must come before wildcard routes)
-	router.Post("/settings/custom/secret", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.CreateSecretSetting)
-	router.Get("/settings/custom/secrets", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.ListSecretSettings)
-	router.Get("/settings/custom/secret/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.GetSecretSetting)
-	router.Put("/settings/custom/secret/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.UpdateSecretSetting)
-	router.Delete("/settings/custom/secret/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.DeleteSecretSetting)
-
-	// User secret decryption route (service_role only - used by edge functions to decrypt user secrets)
-	router.Get("/settings/user/:user_id/secret/:key/decrypt", unifiedAuth, RequireRole("service_role"), s.userSettingsHandler.GetUserSecretValue)
-
-	// Regular custom settings wildcard routes
-	router.Get("/settings/custom/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.GetSetting)
-	router.Put("/settings/custom/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.UpdateSetting)
-	router.Delete("/settings/custom/*", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.customSettingsHandler.DeleteSetting)
-
-	// App settings routes (require admin or dashboard_admin role)
-	router.Get("/app/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.appSettingsHandler.GetAppSettings)
-	router.Put("/app/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.appSettingsHandler.UpdateAppSettings)
-
-	// Email settings routes (require admin or dashboard_admin role)
-	router.Get("/email/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailSettingsHandler.GetSettings)
-	router.Put("/email/settings", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailSettingsHandler.UpdateSettings)
-	router.Post("/email/settings/test", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailSettingsHandler.TestSettings)
-
-	// Captcha settings routes (require admin or dashboard_admin role)
-	router.Get("/settings/captcha", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.captchaSettingsHandler.GetSettings)
-	router.Put("/settings/captcha", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.captchaSettingsHandler.UpdateSettings)
-
-	// Email template routes (require admin or dashboard_admin role)
-	router.Get("/email/templates", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailTemplateHandler.ListTemplates)
-	router.Get("/email/templates/:type", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailTemplateHandler.GetTemplate)
-	router.Put("/email/templates/:type", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailTemplateHandler.UpdateTemplate)
-	router.Post("/email/templates/:type/reset", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailTemplateHandler.ResetTemplate)
-	router.Post("/email/templates/:type/test", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.emailTemplateHandler.TestTemplate)
-
-	// User management routes (require admin, dashboard_admin, or service_role)
-	router.Get("/users", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.ListUsers)
-	router.Post("/users/invite", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.InviteUser)
-	router.Delete("/users/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.DeleteUser)
-	router.Patch("/users/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.UpdateUser)
-	router.Patch("/users/:id/role", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.UpdateUserRole)
-	router.Post("/users/:id/reset-password", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.userManagementHandler.ResetUserPassword)
-
-	// Quota management routes (require admin, dashboard_admin, or service_role)
-	if s.quotaHandler != nil {
-		router.Get("/users-with-quotas", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.quotaHandler.ListUsersWithQuotas)
-		router.Get("/users/:id/quota", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.quotaHandler.GetUserQuota)
-		router.Put("/users/:id/quota", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.quotaHandler.SetUserQuota)
-	}
-
-	// Invitation management routes (require admin or dashboard_admin role)
-	router.Post("/invitations", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.invitationHandler.CreateInvitation)
-	router.Get("/invitations", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.invitationHandler.ListInvitations)
-	router.Delete("/invitations/:token", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.invitationHandler.RevokeInvitation)
-
-	// Service key management routes (require admin, dashboard_admin, or service_role)
-	router.Get("/service-keys", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.ListServiceKeys)
-	router.Get("/service-keys/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.GetServiceKey)
-	router.Post("/service-keys", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.CreateServiceKey)
-	router.Patch("/service-keys/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.UpdateServiceKey)
-	router.Delete("/service-keys/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.DeleteServiceKey)
-	router.Post("/service-keys/:id/disable", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.DisableServiceKey)
-	router.Post("/service-keys/:id/enable", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.serviceKeyHandler.EnableServiceKey)
-	router.Post("/service-keys/:id/revoke", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.serviceKeyHandler.RevokeServiceKey)
-	router.Post("/service-keys/:id/deprecate", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.serviceKeyHandler.DeprecateServiceKey)
-	router.Post("/service-keys/:id/rotate", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.serviceKeyHandler.RotateServiceKey)
-	router.Get("/service-keys/:id/revocations", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.serviceKeyHandler.GetRevocationHistory)
-
-	// SQL Editor route (require admin or dashboard_admin role)
-	router.Post("/sql/execute", unifiedAuth, RequireRole("admin", "dashboard_admin"), s.sqlHandler.ExecuteSQL)
-
-	// Schema export routes (for TypeScript type generation) - require admin, dashboard_admin, or service_role
-	router.Get("/schema/typescript", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.schemaExportHandler.HandleExportTypeScript)
-	router.Post("/schema/typescript", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.schemaExportHandler.HandleExportTypeScript)
-
-	// Functions management routes (require admin, dashboard_admin, or service_role)
-	router.Post("/functions/reload", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.functionsHandler.ReloadFunctions)
-	router.Get("/functions/namespaces", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.functionsHandler.ListNamespaces)
-	// Note: Functions sync is registered outside setupAdminRoutes so it works when admin dashboard is disabled
-	// Functions executions - admin endpoint to list all executions
-	router.Get("/functions/executions", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.functionsHandler.ListAllExecutions)
-	// Functions execution logs - admin endpoint to get logs for a specific execution
-	router.Get("/functions/executions/:executionId/logs", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.functionsHandler.GetExecutionLogs)
-
-	// Jobs management routes (require admin, dashboard_admin, or service_role)
-	// Only register if jobs are enabled
-	// Note: Jobs sync is registered outside setupAdminRoutes so it works when admin dashboard is disabled
-	if s.jobsHandler != nil {
-		router.Get("/jobs/namespaces", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.ListNamespaces)
-		router.Get("/jobs/functions", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.ListJobFunctions)
-		router.Get("/jobs/functions/:namespace/:name", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.GetJobFunction)
-		router.Delete("/jobs/functions/:namespace/:name", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.DeleteJobFunction)
-		router.Get("/jobs/stats", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.GetJobStats)
-		router.Get("/jobs/workers", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.ListWorkers)
-
-		// Queue operations - list and individual job management
-		router.Get("/jobs/queue", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.ListAllJobs)
-		router.Get("/jobs/queue/:id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.GetJobAdmin)
-		router.Post("/jobs/queue/:id/terminate", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.TerminateJob)
-		router.Post("/jobs/queue/:id/cancel", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.CancelJobAdmin)
-		router.Post("/jobs/queue/:id/retry", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.RetryJobAdmin)
-		router.Post("/jobs/queue/:id/resubmit", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.jobsHandler.ResubmitJobAdmin)
-	}
-
-	// AI management routes (require admin, dashboard_admin, or service_role)
-	// Only register if AI is enabled
-	// Note: AI chatbots sync is registered outside setupAdminRoutes so it works when admin dashboard is disabled
-	if s.aiHandler != nil {
-		// Feature flag check for all AI routes
-		requireAI := middleware.RequireAIEnabled(s.authHandler.authService.GetSettingsCache())
-
-		// Chatbot management
-		router.Get("/ai/chatbots", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.ListChatbots)
-		router.Get("/ai/chatbots/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetChatbot)
-		router.Put("/ai/chatbots/:id/toggle", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.ToggleChatbot)
-		router.Put("/ai/chatbots/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.UpdateChatbot)
-		router.Delete("/ai/chatbots/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.DeleteChatbot)
-
-		// Metrics
-		router.Get("/ai/metrics", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetAIMetrics)
-
-		// Conversations & Audit
-		router.Get("/ai/conversations", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetConversations)
-		router.Get("/ai/conversations/:id/messages", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetConversationMessages)
-		router.Get("/ai/audit", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetAuditLog)
-
-		// Provider management
-		router.Get("/ai/providers", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.ListProviders)
-		router.Get("/ai/providers/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.GetProvider)
-		router.Post("/ai/providers", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.CreateProvider)
-		router.Put("/ai/providers/:id/default", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.SetDefaultProvider)
-		router.Delete("/ai/providers/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.DeleteProvider)
-		router.Put("/ai/providers/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.UpdateProvider)
-		router.Put("/ai/providers/:id/embedding", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.SetEmbeddingProvider)
-		router.Delete("/ai/providers/:id/embedding", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.aiHandler.ClearEmbeddingProvider)
-
-		// Knowledge base management (RAG)
-		if s.knowledgeBaseHandler != nil {
-			router.Get("/ai/knowledge-bases", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListKnowledgeBases)
-			router.Get("/ai/knowledge-bases/capabilities", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetCapabilities)
-			router.Get("/ai/knowledge-bases/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetKnowledgeBase)
-			router.Post("/ai/knowledge-bases", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.CreateKnowledgeBase)
-			router.Put("/ai/knowledge-bases/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UpdateKnowledgeBase)
-			router.Delete("/ai/knowledge-bases/:id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.DeleteKnowledgeBase)
-
-			// Documents within a knowledge base
-			router.Get("/ai/knowledge-bases/:id/documents", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListDocuments)
-			router.Post("/ai/knowledge-bases/:id/documents", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.AddDocument)
-			router.Get("/ai/knowledge-bases/:id/documents/:doc_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetDocument)
-			router.Delete("/ai/knowledge-bases/:id/documents/:doc_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.DeleteDocument)
-			router.Patch("/ai/knowledge-bases/:id/documents/:doc_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UpdateDocument)
-			router.Post("/ai/knowledge-bases/:id/documents/upload", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UploadDocument)
-			router.Post("/ai/knowledge-bases/:id/documents/delete-by-filter", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.DeleteDocumentsByFilter)
-
-			// Document permissions
-			router.Post("/ai/knowledge-bases/:id/documents/:doc_id/permissions", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GrantDocumentPermission)
-			router.Get("/ai/knowledge-bases/:id/documents/:doc_id/permissions", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListDocumentPermissions)
-			router.Delete("/ai/knowledge-bases/:id/documents/:doc_id/permissions/:user_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.RevokeDocumentPermission)
-
-			// Search/test endpoint
-			router.Post("/ai/knowledge-bases/:id/search", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.SearchKnowledgeBase)
-			router.Post("/ai/knowledge-bases/:id/debug-search", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.DebugSearch)
-
-			// Chatbot knowledge base linking
-			router.Get("/ai/chatbots/:id/knowledge-bases", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListChatbotKnowledgeBases)
-			router.Post("/ai/chatbots/:id/knowledge-bases", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.LinkKnowledgeBase)
-			router.Put("/ai/chatbots/:id/knowledge-bases/:kb_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UpdateChatbotKnowledgeBase)
-			router.Delete("/ai/chatbots/:id/knowledge-bases/:kb_id", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UnlinkKnowledgeBase)
-
-			// Table export routes
-			router.Post("/ai/knowledge-bases/:id/tables/export", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ExportTableToKnowledgeBase)
-			router.Get("/ai/tables", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListExportableTables)
-			router.Get("/ai/tables/:schema/:table", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetTableDetails)
-
-			// Table export sync config routes
-			router.Post("/ai/knowledge-bases/:id/sync-configs", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.CreateTableExportSync)
-			router.Get("/ai/knowledge-bases/:id/sync-configs", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListTableExportSyncs)
-			router.Patch("/ai/knowledge-bases/:id/sync-configs/:syncId", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.UpdateTableExportSync)
-			router.Delete("/ai/knowledge-bases/:id/sync-configs/:syncId", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.DeleteTableExportSync)
-			router.Post("/ai/knowledge-bases/:id/sync-configs/:syncId/trigger", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.TriggerTableExportSync)
-
-			// Knowledge base chatbots (reverse lookup - which chatbots use this KB)
-			router.Get("/ai/knowledge-bases/:id/chatbots", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListKnowledgeBaseChatbots)
-
-			// Knowledge graph endpoints
-			router.Get("/ai/knowledge-bases/:id/entities", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.ListEntities)
-			router.Get("/ai/knowledge-bases/:id/entities/search", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.SearchEntities)
-			router.Get("/ai/knowledge-bases/:id/entities/:entity_id/relationships", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetEntityRelationships)
-			router.Get("/ai/knowledge-bases/:id/graph", requireAI, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.knowledgeBaseHandler.GetKnowledgeGraph)
+// auditRoutesAtStartup logs route audit information for security review
+func (s *Server) auditRoutesAtStartup() {
+	entries := s.auditRegisteredRoutes()
+	publicCount := 0
+	authRequiredCount := 0
+	for _, e := range entries {
+		if e.Public {
+			publicCount++
+		}
+		if e.Auth == "required" || e.Auth == "service_key" || e.Auth == "dashboard" {
+			authRequiredCount++
 		}
 	}
-
-	// RPC management routes (require admin, dashboard_admin, or service_role)
-	// Only register if RPC is enabled
-	// Note: RPC sync is registered outside setupAdminRoutes so it works when admin dashboard is disabled
-	if s.rpcHandler != nil {
-		requireRPC := middleware.RequireRPCEnabled(s.authHandler.authService.GetSettingsCache())
-
-		// Procedure management
-		router.Get("/rpc/namespaces", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.ListNamespaces)
-		router.Get("/rpc/procedures", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.ListProcedures)
-		router.Get("/rpc/procedures/:namespace/:name", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.GetProcedure)
-		router.Put("/rpc/procedures/:namespace/:name", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.UpdateProcedure)
-		router.Delete("/rpc/procedures/:namespace/:name", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.DeleteProcedure)
-
-		// Execution management
-		router.Get("/rpc/executions", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.ListExecutions)
-		router.Get("/rpc/executions/:id", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.GetExecution)
-		router.Get("/rpc/executions/:id/logs", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.GetExecutionLogs)
-		router.Post("/rpc/executions/:id/cancel", requireRPC, unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.rpcHandler.CancelExecution)
-	}
-
-	// Extensions management routes
-	router.Get("/extensions", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.extensionsHandler.ListExtensions)
-	router.Get("/extensions/:name/status", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.extensionsHandler.GetExtensionStatus)
-	router.Post("/extensions/:name/enable", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.extensionsHandler.EnableExtension)
-	router.Post("/extensions/:name/disable", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.extensionsHandler.DisableExtension)
-	router.Post("/extensions/sync", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.extensionsHandler.SyncExtensions)
-
-	// Schema graph routes (for ERD/schema visualization)
-	router.Get("/schema/graph", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetSchemaGraph)
-	router.Get("/tables/:schema/:table/relationships", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetTableRelationships)
-
-	// RLS Policy management routes
-	router.Get("/policies", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.ListPolicies)
-	router.Post("/policies", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.CreatePolicy)
-	router.Put("/policies/:schema/:table/:policy", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.UpdatePolicy)
-	router.Delete("/policies/:schema/:table/:policy", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.DeletePolicy)
-	router.Get("/policies/templates", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetPolicyTemplates)
-
-	// Table RLS status routes
-	router.Get("/tables/rls", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetTablesWithRLS)
-	router.Get("/tables/:schema/:table/rls", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetTableRLSStatus)
-	router.Post("/tables/:schema/:table/rls/toggle", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.ToggleTableRLS)
-
-	// Security warnings/advisor
-	router.Get("/security/warnings", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.GetSecurityWarnings)
-
-	// Migrations routes (require service key authentication with enhanced security)
-	// Only registered if migrations API is enabled in config
-	if s.config.Migrations.Enabled {
-		// Build secure middleware stack for migrations API
-		// Layer 1: Feature flag check
-		// Layer 2: IP allowlist (only allow app container)
-		// Layer 3: Service key authentication (no JWT/client keys)
-		// Layer 4: Scope validation (migrations:execute)
-		// Layer 5: Rate limiting (10 req/hour for service keys, service_role rate limit from config)
-		// Layer 6: Audit logging
-		migrationsAuth := []any{
-			middleware.RequireMigrationsEnabled(&s.config.Migrations),
-			middleware.RequireMigrationsIPAllowlist(&s.config.Migrations, &s.config.Server),
-			middleware.RequireServiceKeyOnly(s.db.Pool(), s.authHandler.authService),
-			middleware.RequireMigrationScope(),
-			middleware.MigrationAPILimiterWithConfig(s.config.Security.ServiceRoleRateLimit, s.config.Security.ServiceRoleRateWindow, s.sharedMiddlewareStorage),
-			middleware.MigrationsAuditLog(),
-		}
-
-		s.migrationsHandler.RegisterRoutes(s.app, migrationsAuth...)
-
-		log.Info().
-			Bool("enabled", s.config.Migrations.Enabled).
-			Strs("allowed_ips", s.config.Migrations.AllowedIPRanges).
-			Bool("require_service_key", s.config.Migrations.RequireServiceKey).
-			Msg("Migrations API registered with enhanced security controls")
-	} else {
-		log.Info().Msg("Migrations API disabled")
-	}
-
-	// Central logging routes (require admin, dashboard_admin, or service_role)
-	if s.loggingHandler != nil {
-		router.Get("/logs", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.loggingHandler.QueryLogs)
-		router.Get("/logs/stats", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.loggingHandler.GetLogStats)
-		router.Get("/logs/executions/:execution_id", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.loggingHandler.GetExecutionLogs)
-		router.Post("/logs/flush", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.loggingHandler.FlushLogs)
-		router.Post("/logs/test", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.loggingHandler.GenerateTestLogs)
-	}
-
-	// Schema refresh endpoint (require admin, dashboard_admin, or service_role)
-	router.Post("/schema/refresh", unifiedAuth, RequireRole("admin", "dashboard_admin", "service_role"), s.handleRefreshSchema)
-}
-
-// setupPublicInvitationRoutes sets up public invitation routes (no auth required)
-func (s *Server) setupPublicInvitationRoutes(router fiber.Router) {
-	// Public invitation routes (no authentication required)
-	router.Get("/:token/validate", s.invitationHandler.ValidateInvitation)
-	router.Post("/:token/accept", s.invitationHandler.AcceptInvitation)
+	log.Info().
+		Int("total", len(entries)).
+		Int("public", publicCount).
+		Int("auth_required", authRequiredCount).
+		Msg("Route audit completed")
 }
 
 // handleHealth handles health check requests
@@ -2517,14 +1734,33 @@ func (s *Server) handleHealth(c fiber.Ctx) error {
 		httpStatus = fiber.StatusServiceUnavailable
 	}
 
-	return c.Status(httpStatus).JSON(fiber.Map{
-		"status": status,
-		"services": fiber.Map{
-			"database": dbHealthy,
-			"realtime": s.config.Realtime.Enabled,
-		},
+	// Base response (public)
+	response := fiber.Map{
+		"status":    status,
 		"timestamp": time.Now().UTC(),
-	})
+	}
+
+	// Add service details for authenticated admin users
+	role, hasRole := GetUserRole(c)
+	if hasRole && (role == "admin" || role == "instance_admin" || role == "service_role" || role == "tenant_admin") {
+		services := fiber.Map{
+			"database": dbHealthy,
+			"realtime": true, // WebSocket server is part of this process
+		}
+
+		// Include database size if healthy
+		if dbHealthy {
+			var dbSizeStr string
+			err := s.db.Pool().QueryRow(ctx, "SELECT pg_size_pretty(pg_database_size(current_database()))").Scan(&dbSizeStr)
+			if err == nil {
+				services["database_size"] = dbSizeStr
+			}
+		}
+
+		response["services"] = services
+	}
+
+	return c.Status(httpStatus).JSON(response)
 }
 
 func (s *Server) handleGetTables(c fiber.Ctx) error {
@@ -2537,24 +1773,27 @@ func (s *Server) handleGetTables(c fiber.Ctx) error {
 		}
 	}
 
-	// Check if schema query parameter is provided
-	schemaParam := c.Query("schema")
+	inspector := s.db.Inspector()
+	tenantPool := middleware.GetTenantPool(c)
 
 	var schemasToQuery []string
+	schemaParam := c.Query("schema")
 
 	if schemaParam != "" {
-		// If schema parameter provided, query only that schema
 		schemasToQuery = []string{schemaParam}
 	} else {
-		// Otherwise, get all schemas (backward compatible behavior)
-		schemas, err := s.db.Inspector().GetSchemas(ctx)
+		var schemas []string
+		var err error
+		if tenantPool != nil {
+			schemas, err = inspector.GetSchemasFromPool(ctx, tenantPool)
+		} else {
+			schemas, err = inspector.GetSchemas(ctx)
+		}
 		if err != nil {
 			return SendOperationFailed(c, "list schemas")
 		}
 
-		// Filter out system schemas
 		for _, schema := range schemas {
-			// Skip system schemas only
 			if schema == "information_schema" || schema == "pg_catalog" || schema == "pg_toast" {
 				continue
 			}
@@ -2562,27 +1801,38 @@ func (s *Server) handleGetTables(c fiber.Ctx) error {
 		}
 	}
 
-	// Collect tables, views, and materialized views from requested schema(s)
 	var allItems []database.TableInfo
 	for _, schema := range schemasToQuery {
-		// Get tables
-		tables, err := s.db.Inspector().GetAllTables(ctx, schema)
+		var tables, views, matviews []database.TableInfo
+		var err error
+
+		if tenantPool != nil {
+			tables, err = inspector.GetAllTablesFromPool(ctx, tenantPool, schema)
+		} else {
+			tables, err = inspector.GetAllTables(ctx, schema)
+		}
 		if err != nil {
 			log.Warn().Err(err).Str("schema", schema).Msg("Failed to get tables from schema")
 		} else {
 			allItems = append(allItems, tables...)
 		}
 
-		// Get views
-		views, err := s.db.Inspector().GetAllViews(ctx, schema)
+		if tenantPool != nil {
+			views, err = inspector.GetAllViewsFromPool(ctx, tenantPool, schema)
+		} else {
+			views, err = inspector.GetAllViews(ctx, schema)
+		}
 		if err != nil {
 			log.Warn().Err(err).Str("schema", schema).Msg("Failed to get views from schema")
 		} else {
 			allItems = append(allItems, views...)
 		}
 
-		// Get materialized views
-		matviews, err := s.db.Inspector().GetAllMaterializedViews(ctx, schema)
+		if tenantPool != nil {
+			matviews, err = inspector.GetAllMaterializedViewsFromPool(ctx, tenantPool, schema)
+		} else {
+			matviews, err = inspector.GetAllMaterializedViews(ctx, schema)
+		}
 		if err != nil {
 			log.Warn().Err(err).Str("schema", schema).Msg("Failed to get materialized views from schema")
 		} else {
@@ -2604,8 +1854,13 @@ func (s *Server) handleGetTableSchema(c fiber.Ctx) error {
 		})
 	}
 
-	// Get table information including column details
-	tableInfo, err := s.db.Inspector().GetTableInfo(ctx, schema, table)
+	var tableInfo *database.TableInfo
+	var err error
+	if pool := middleware.GetTenantPool(c); pool != nil {
+		tableInfo, err = s.db.Inspector().GetTableInfoFromPool(ctx, pool, schema, table)
+	} else {
+		tableInfo, err = s.db.Inspector().GetTableInfo(ctx, schema, table)
+	}
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": fmt.Sprintf("Table not found: %s.%s", schema, table),
@@ -2625,7 +1880,13 @@ func (s *Server) handleGetSchemas(c fiber.Ctx) error {
 		}
 	}
 
-	schemas, err := s.db.Inspector().GetSchemas(ctx)
+	var schemas []string
+	var err error
+	if pool := middleware.GetTenantPool(c); pool != nil {
+		schemas, err = s.db.Inspector().GetSchemasFromPool(ctx, pool)
+	} else {
+		schemas, err = s.db.Inspector().GetSchemas(ctx)
+	}
 	if err != nil {
 		return SendOperationFailed(c, "list schemas")
 	}
@@ -2702,97 +1963,97 @@ func (s *Server) Start() error {
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
 	// Stop leader electors first (releases advisory locks)
-	if s.functionsSchedulerLeader != nil {
+	if s.Scaling.FunctionsLeader != nil {
 		log.Info().Msg("Stopping functions scheduler leader election")
-		s.functionsSchedulerLeader.Stop()
+		s.Scaling.FunctionsLeader.Stop()
 	}
-	if s.jobsSchedulerLeader != nil {
+	if s.Scaling.JobsLeader != nil {
 		log.Info().Msg("Stopping jobs scheduler leader election")
-		s.jobsSchedulerLeader.Stop()
+		s.Scaling.JobsLeader.Stop()
 	}
-	if s.rpcSchedulerLeader != nil {
+	if s.Scaling.RPCLeader != nil {
 		log.Info().Msg("Stopping RPC scheduler leader election")
-		s.rpcSchedulerLeader.Stop()
+		s.Scaling.RPCLeader.Stop()
 	}
 
 	// Stop realtime listener (PostgreSQL LISTEN/NOTIFY)
-	if s.realtimeListener != nil {
+	if s.Realtime.Listener != nil {
 		log.Info().Msg("Stopping realtime listener")
-		s.realtimeListener.Stop()
+		s.Realtime.Listener.Stop()
 	}
 
 	// Shutdown realtime manager (close all WebSocket connections)
-	if s.realtimeManager != nil {
+	if s.Realtime.Manager != nil {
 		log.Info().Msg("Closing WebSocket connections")
-		s.realtimeManager.Shutdown()
+		s.Realtime.Manager.Shutdown()
 	}
 
 	// Stop edge functions scheduler
-	if s.functionsScheduler != nil {
-		s.functionsScheduler.Stop()
+	if s.Functions.Scheduler != nil {
+		s.Functions.Scheduler.Stop()
 	}
 
 	// Stop jobs scheduler and manager
-	if s.jobsScheduler != nil {
-		s.jobsScheduler.Stop()
+	if s.Jobs.Scheduler != nil {
+		s.Jobs.Scheduler.Stop()
 	}
-	if s.jobsManager != nil {
-		s.jobsManager.Stop()
+	if s.Jobs.Manager != nil {
+		s.Jobs.Manager.Stop()
 	}
 
 	// Stop RPC scheduler
-	if s.rpcScheduler != nil {
-		s.rpcScheduler.Stop()
+	if s.RPC.Scheduler != nil {
+		s.RPC.Scheduler.Stop()
 	}
 
 	// Stop RPC executor (cancels async executions)
-	if s.rpcHandler != nil {
-		s.rpcHandler.GetExecutor().Stop()
+	if s.RPC.Handler != nil {
+		s.RPC.Handler.GetExecutor().Stop()
 	}
 
 	// Stop webhook trigger service
-	if s.webhookTriggerService != nil {
-		s.webhookTriggerService.Stop()
+	if s.Webhook.Trigger != nil {
+		s.Webhook.Trigger.Stop()
 	}
 
 	// Close AI conversation manager
-	if s.aiConversations != nil {
-		s.aiConversations.Close()
+	if s.AI.Conversations != nil {
+		s.AI.Conversations.Close()
 	}
 
 	// Stop idempotency middleware cleanup goroutine
-	if s.idempotencyMiddleware != nil {
-		s.idempotencyMiddleware.Stop()
+	if s.Middleware.Idempotency != nil {
+		s.Middleware.Idempotency.Stop()
 	}
 
 	// Stop OAuth handler cleanup goroutines
-	if s.oauthHandler != nil {
-		s.oauthHandler.Stop()
+	if s.Auth.OAuth != nil {
+		s.Auth.OAuth.Stop()
 	}
 
 	// Stop branch cleanup scheduler
-	if s.branchScheduler != nil {
-		s.branchScheduler.Stop()
+	if s.Branching.Scheduler != nil {
+		s.Branching.Scheduler.Stop()
 	}
 
 	// Close database branching components
-	if s.branchRouter != nil {
+	if s.Branching.Router != nil {
 		log.Info().Msg("Closing branch connection pools")
-		s.branchRouter.CloseAllPools()
+		s.Branching.Router.CloseAllPools()
 	}
-	if s.branchManager != nil {
+	if s.Branching.Manager != nil {
 		log.Info().Msg("Closing branch manager")
-		s.branchManager.Close()
+		s.Branching.Manager.Close()
 	}
 
 	// Stop metrics uptime goroutine
-	if s.metricsStopChan != nil {
-		close(s.metricsStopChan)
+	if s.Metrics.StopChan != nil {
+		close(s.Metrics.StopChan)
 	}
 
 	// Shutdown metrics server
-	if s.metricsServer != nil {
-		if err := s.metricsServer.Shutdown(ctx); err != nil {
+	if s.Metrics.Server != nil {
+		if err := s.Metrics.Server.Shutdown(ctx); err != nil {
 			log.Warn().Err(err).Msg("Failed to shutdown metrics server")
 		}
 	}
@@ -2805,22 +2066,22 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 
 	// Stop retention cleanup service
-	if s.retentionService != nil {
+	if s.Logging.Retention != nil {
 		log.Info().Msg("Stopping log retention cleanup service")
-		s.retentionService.Stop()
+		s.Logging.Retention.Stop()
 	}
 
 	// Close central logging service (flush remaining log entries)
-	if s.loggingService != nil {
+	if s.Logging.Service != nil {
 		log.Info().Msg("Closing central logging service")
-		if err := s.loggingService.Close(); err != nil {
+		if err := s.Logging.Service.Close(); err != nil {
 			log.Warn().Err(err).Msg("Failed to close logging service")
 		}
 	}
 
 	// Close schema cache (stops invalidation listener)
-	if s.schemaCache != nil {
-		s.schemaCache.Close()
+	if s.Schema.Cache != nil {
+		s.Schema.Cache.Close()
 	}
 
 	// Close server-owned pub/sub (releases PostgreSQL LISTEN connection)
@@ -2848,64 +2109,80 @@ func (s *Server) App() *fiber.App {
 	return s.app
 }
 
-// GetStorageService returns the storage service from the storage handler
+// GetStorageService returns the base storage service from the storage handler
+// Note: For tenant-specific storage, use GetStorageConfig with storage.Manager
 func (s *Server) GetStorageService() *storage.Service {
-	if s.storageHandler == nil {
+	if s.Storage.Handler == nil || s.Storage.Handler.storageManager == nil {
 		return nil
 	}
-	return s.storageHandler.storage
+	return s.Storage.Handler.storageManager.GetBaseService()
 }
 
 // GetWebhookTriggerService returns the webhook trigger service for testing
 func (s *Server) GetWebhookTriggerService() *webhook.TriggerService {
-	return s.webhookTriggerService
+	return s.Webhook.Trigger
 }
 
 // GetAuthService returns the auth service from the auth handler
 func (s *Server) GetAuthService() *auth.Service {
-	if s.authHandler == nil {
+	if s.Auth.Handler == nil {
 		return nil
 	}
-	return s.authHandler.authService
+	return s.Auth.Handler.authService
 }
 
 // GetLoggingService returns the central logging service
 func (s *Server) GetLoggingService() *logging.Service {
-	return s.loggingService
+	return s.Logging.Service
+}
+
+// SetTenantConfigLoader sets the tenant configuration loader
+// This is called after migrations complete to enable tenant-specific config overrides
+func (s *Server) SetTenantConfigLoader(loader *config.TenantConfigLoader) {
+	s.tenantConfigLoader = loader
+	// Propagate to unified settings service so it can resolve per-tenant config values
+	if s.Settings != nil && s.Settings.Unified != nil {
+		s.Settings.Unified.SetTenantConfigLoader(loader)
+	}
+}
+
+// GetTenantConfigLoader returns the tenant configuration loader
+func (s *Server) GetTenantConfigLoader() *config.TenantConfigLoader {
+	return s.tenantConfigLoader
 }
 
 // SchemaCache returns the REST API schema cache
 // This is exposed for testing purposes to refresh the cache after creating tables
 func (s *Server) SchemaCache() *database.SchemaCache {
-	return s.schemaCache
+	return s.Schema.Cache
 }
 
 // LoadFunctionsFromFilesystem loads edge functions from the filesystem
 // This is called at boot time if auto_load_on_boot is enabled
 func (s *Server) LoadFunctionsFromFilesystem(ctx context.Context) error {
-	if s.functionsHandler == nil {
+	if s.Functions.Handler == nil {
 		return fmt.Errorf("functions handler not initialized")
 	}
-	return s.functionsHandler.LoadFromFilesystem(ctx)
+	return s.Functions.Handler.LoadFromFilesystem(ctx)
 }
 
 // LoadJobsFromFilesystem loads job functions from the filesystem
 // This is called at boot time if auto_load_on_boot is enabled
 func (s *Server) LoadJobsFromFilesystem(ctx context.Context) error {
-	if s.jobsHandler == nil {
+	if s.Jobs.Handler == nil {
 		return fmt.Errorf("jobs handler not initialized")
 	}
 	// Use "default" as the namespace for jobs loaded at boot
-	return s.jobsHandler.LoadFromFilesystem(ctx, "default")
+	return s.Jobs.Handler.LoadFromFilesystem(ctx, "default")
 }
 
 // LoadAIChatbotsFromFilesystem loads AI chatbots from the filesystem
 // This is called at boot time if auto_load_on_boot is enabled
 func (s *Server) LoadAIChatbotsFromFilesystem(ctx context.Context) error {
-	if s.aiHandler == nil {
+	if s.AI.Handler == nil {
 		return fmt.Errorf("AI handler not initialized")
 	}
-	return s.aiHandler.AutoLoadChatbots(ctx)
+	return s.AI.Handler.AutoLoadChatbots(ctx)
 }
 
 // customErrorHandler handles errors globally
@@ -2938,7 +2215,7 @@ func customErrorHandler(c fiber.Ctx, err error) error {
 func (s *Server) handleRealtimeStats(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "dashboard_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "tenant_admin" && role != "service_role" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view realtime stats",
 		})
@@ -2954,7 +2231,7 @@ func (s *Server) handleRealtimeStats(c fiber.Ctx) error {
 	limit, offset = NormalizePaginationParams(limit, offset, defaultLimit, maxLimit)
 
 	// Get all connections from the manager
-	manager := s.realtimeHandler.GetManager()
+	manager := s.Realtime.Handler.GetManager()
 	allConnections := manager.GetConnectionsForStats()
 
 	// Build a map of user IDs to emails by querying the database
@@ -3061,13 +2338,13 @@ func (s *Server) handleRealtimeBroadcast(c fiber.Ctx) error {
 	}
 
 	// Get the realtime manager and broadcast to the channel
-	if s.realtimeHandler == nil {
+	if s.Realtime.Handler == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"error": "Realtime service not available",
 		})
 	}
 
-	manager := s.realtimeHandler.GetManager()
+	manager := s.Realtime.Handler.GetManager()
 	recipientCount := manager.BroadcastToChannel(req.Channel, realtime.ServerMessage{
 		Type:    realtime.MessageTypeBroadcast,
 		Channel: req.Channel,

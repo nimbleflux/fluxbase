@@ -662,7 +662,7 @@ func (m *MockTokenBlacklistRepository) GetByJTI(ctx context.Context, jti string)
 	return entry, nil
 }
 
-func (m *MockTokenBlacklistRepository) RevokeAllUserTokens(ctx context.Context, userID, reason string) error {
+func (m *MockTokenBlacklistRepository) RevokeAllUserTokens(ctx context.Context, userID, reason string, expiry time.Duration) error {
 	// In a real implementation, this would query active sessions and blacklist their JTIs
 	// For mock purposes, we just record that this was called
 	return nil

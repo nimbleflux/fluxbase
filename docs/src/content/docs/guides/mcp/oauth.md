@@ -27,11 +27,10 @@ mcp:
   enabled: true
   oauth:
     enabled: true
-    dcr_enabled: true  # Dynamic Client Registration
+    dcr_enabled: true # Dynamic Client Registration
 ```
 
 2. **Connect from Claude Desktop** using just your server URL:
-
    - Open Claude Desktop settings
    - Add a new MCP server with URL: `http://your-server:8080/mcp`
    - Claude will automatically discover OAuth and prompt you to log in
@@ -47,13 +46,14 @@ GET /.well-known/oauth-authorization-server
 ```
 
 Response:
+
 ```json
 {
   "issuer": "https://your-fluxbase.com",
   "authorization_endpoint": "https://your-fluxbase.com/mcp/oauth/authorize",
   "token_endpoint": "https://your-fluxbase.com/mcp/oauth/token",
   "registration_endpoint": "https://your-fluxbase.com/mcp/oauth/register",
-  "scopes_supported": ["read:tables", "write:tables", "execute:functions", ...],
+  "scopes_supported": ["tables:read", "tables:write", "functions:execute", ...],
   "code_challenge_methods_supported": ["S256"]
 }
 ```
@@ -72,6 +72,7 @@ curl -X POST https://your-fluxbase.com/mcp/oauth/register \
 ```
 
 Response:
+
 ```json
 {
   "client_id": "mcp_abc123...",
@@ -114,7 +115,7 @@ mcp:
     enabled: true
     dcr_enabled: true
     token_expiry: 1h
-    refresh_token_expiry: 168h  # 7 days
+    refresh_token_expiry: 168h # 7 days
 ```
 
 ### Allowed Redirect URIs
@@ -158,15 +159,15 @@ FLUXBASE_MCP_OAUTH_REFRESH_TOKEN_EXPIRY=168h
 
 ## Supported MCP Clients
 
-| Client | OAuth Support | Callback URI |
-|--------|---------------|--------------|
-| Claude Desktop | Full | `https://claude.ai/api/mcp/auth_callback` |
-| Claude Code | Full | `https://claude.ai/api/mcp/auth_callback` |
-| Cursor | Full | `cursor://anysphere.cursor-mcp/oauth/*/callback` |
-| VS Code | Full | `http://127.0.0.1:33418` |
-| OpenCode | Full | `http://127.0.0.1:19876/mcp/oauth/callback` |
-| MCP Inspector | Full | `http://localhost:6274/oauth/callback` |
-| ChatGPT | Full | `https://chatgpt.com/connector_platform_oauth_redirect` |
+| Client         | OAuth Support | Callback URI                                            |
+| -------------- | ------------- | ------------------------------------------------------- |
+| Claude Desktop | Full          | `https://claude.ai/api/mcp/auth_callback`               |
+| Claude Code    | Full          | `https://claude.ai/api/mcp/auth_callback`               |
+| Cursor         | Full          | `cursor://anysphere.cursor-mcp/oauth/*/callback`        |
+| VS Code        | Full          | `http://127.0.0.1:33418`                                |
+| OpenCode       | Full          | `http://127.0.0.1:19876/mcp/oauth/callback`             |
+| MCP Inspector  | Full          | `http://localhost:6274/oauth/callback`                  |
+| ChatGPT        | Full          | `https://chatgpt.com/connector_platform_oauth_redirect` |
 
 ## Security
 
@@ -177,6 +178,7 @@ All OAuth flows require PKCE (Proof Key for Code Exchange) with S256 method. Thi
 ### Token Rotation
 
 Refresh tokens are rotated on each use. When a refresh token is used:
+
 1. The old token is revoked
 2. A new access token and refresh token are issued
 
@@ -186,17 +188,17 @@ This limits the window of exposure if a token is compromised.
 
 OAuth tokens are issued with specific MCP scopes. Users approve these scopes during authorization:
 
-| Scope | Permission |
-|-------|------------|
-| `read:tables` | Query database tables |
-| `write:tables` | Insert, update, delete records |
-| `execute:functions` | Invoke edge functions |
-| `execute:rpc` | Execute RPC procedures |
-| `read:storage` | List and download files |
-| `write:storage` | Upload and delete files |
-| `execute:jobs` | Submit and monitor jobs |
-| `read:vectors` | Vector similarity search |
-| `read:schema` | Access database schema |
+| Scope               | Permission                     |
+| ------------------- | ------------------------------ |
+| `read:tables`       | Query database tables          |
+| `write:tables`      | Insert, update, delete records |
+| `execute:functions` | Invoke edge functions          |
+| `execute:rpc`       | Execute RPC procedures         |
+| `read:storage`      | List and download files        |
+| `write:storage`     | Upload and delete files        |
+| `execute:jobs`      | Submit and monitor jobs        |
+| `read:vectors`      | Vector similarity search       |
+| `read:schema`       | Access database schema         |
 
 ### Revoking Access
 
@@ -210,15 +212,16 @@ curl -X POST https://your-fluxbase.com/mcp/oauth/revoke \
 
 ## OAuth vs API Keys
 
-| Feature | OAuth | API Keys |
-|---------|-------|----------|
-| Setup | Zero-config (automatic) | Manual key copy |
-| User consent | Browser-based approval | None |
-| Token rotation | Automatic | Manual |
-| Expiration | Configurable (default 1h) | Long-lived |
-| Best for | Interactive clients | CI/CD, scripts |
+| Feature        | OAuth                     | API Keys        |
+| -------------- | ------------------------- | --------------- |
+| Setup          | Zero-config (automatic)   | Manual key copy |
+| User consent   | Browser-based approval    | None            |
+| Token rotation | Automatic                 | Manual          |
+| Expiration     | Configurable (default 1h) | Long-lived      |
+| Best for       | Interactive clients       | CI/CD, scripts  |
 
 **Recommendation:**
+
 - Use **OAuth** for interactive MCP clients (Claude Desktop, Cursor, VS Code)
 - Use **API Keys** (X-Service-Key, X-Client-Key) for automation and scripts
 
@@ -248,6 +251,7 @@ mcp:
 ### "invalid_grant" Error
 
 Common causes:
+
 - Authorization code expired (10 minute limit)
 - Authorization code already used
 - Invalid PKCE code_verifier

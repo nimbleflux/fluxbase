@@ -9,6 +9,9 @@ import (
 // AuthContextKey is the context key for storing authorization information
 type AuthContextKey struct{}
 
+// TenantContextKey is the context key for storing tenant information
+type TenantContextKey struct{}
+
 // AuthContext represents authentication and authorization context for schema introspection
 type AuthContext struct {
 	UserID    string
@@ -56,4 +59,35 @@ func LogSchemaIntrospection(ctx context.Context, operation string, details map[s
 			Interface("details", details).
 			Msg("Schema introspection (no auth context)")
 	}
+}
+
+// ContextWithTenant returns a context with tenant ID set
+func ContextWithTenant(ctx context.Context, tenantID string) context.Context {
+	return context.WithValue(ctx, TenantContextKey{}, tenantID)
+}
+
+// TenantFromContext extracts tenant ID from context.
+// Returns empty string if no tenant context is set
+func TenantFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	tenantID, ok := ctx.Value(TenantContextKey{}).(string)
+	if !ok {
+		return ""
+	}
+	return tenantID
+}
+
+// ContextWithTenantID returns a context with tenant ID for multi-tenancy support
+// This is an alias for ContextWithTenant for API consistency
+func ContextWithTenantID(ctx context.Context, tenantID string) context.Context {
+	return ContextWithTenant(ctx, tenantID)
+}
+
+// TenantIDFromContext extracts tenant ID from context
+// Returns empty string if no tenant context is set
+// This is an alias for TenantFromContext for API consistency
+func TenantIDFromContext(ctx context.Context) string {
+	return TenantFromContext(ctx)
 }

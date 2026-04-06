@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 )
 
 // =============================================================================
@@ -22,7 +23,7 @@ import (
 // =============================================================================
 
 func TestRESTHandler_RLS_UserIsolation_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -147,7 +148,7 @@ func TestRESTHandler_RLS_UserIsolation_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_RLS_FilterWithRLS_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -220,7 +221,7 @@ func TestRESTHandler_RLS_FilterWithRLS_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_RLS_PaginationWithRLS_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -314,7 +315,7 @@ func TestRESTHandler_RLS_PaginationWithRLS_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_RLS_UpdateOwnRecord_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -386,7 +387,7 @@ func TestRESTHandler_RLS_UpdateOwnRecord_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_RLS_DeleteOwnRecord_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -465,7 +466,7 @@ func TestRESTHandler_RLS_DeleteOwnRecord_Integration(t *testing.T) {
 }
 
 func TestRESTHandler_RLS_BatchOperationsWithRLS_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 

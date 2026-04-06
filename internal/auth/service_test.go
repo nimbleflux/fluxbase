@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/crypto"
 )
 
 // TestableService wraps the auth service components for unit testing

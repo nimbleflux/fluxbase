@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/settings"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/settings"
 )
 
 // SettingsResolver handles settings template resolution for chatbots.

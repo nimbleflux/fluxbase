@@ -166,19 +166,19 @@ func TestGetUserRole(t *testing.T) {
 		assert.Equal(t, "authenticated", role)
 	})
 
-	t.Run("returns dashboard_admin role", func(t *testing.T) {
+	t.Run("returns instance_admin role", func(t *testing.T) {
 		ctx := createTestFiberCtx()
 		defer func() {
 			app := ctx.App()
 			app.ReleaseCtx(ctx)
 		}()
 
-		ctx.Locals("user_role", "dashboard_admin")
+		ctx.Locals("user_role", "instance_admin")
 
 		role, ok := GetUserRole(ctx)
 
 		assert.True(t, ok)
-		assert.Equal(t, "dashboard_admin", role)
+		assert.Equal(t, "instance_admin", role)
 	})
 
 	t.Run("returns empty when user_role is wrong type", func(t *testing.T) {
@@ -209,7 +209,7 @@ func TestRequireRole(t *testing.T) {
 	})
 
 	t.Run("middleware creation with multiple roles", func(t *testing.T) {
-		middleware := RequireRole("admin", "service_role", "dashboard_admin")
+		middleware := RequireRole("admin", "service_role", "instance_admin")
 
 		require.NotNil(t, middleware)
 	})
@@ -326,11 +326,11 @@ func TestRoleConstants(t *testing.T) {
 	t.Run("common role strings", func(t *testing.T) {
 		// Document expected role values used in the system
 		roles := map[string]string{
-			"authenticated":   "Standard authenticated user",
-			"admin":           "Application administrator",
-			"service_role":    "Service account with elevated privileges",
-			"dashboard_admin": "Dashboard admin user",
-			"anon":            "Anonymous/unauthenticated user",
+			"authenticated":  "Standard authenticated user",
+			"admin":          "Application administrator",
+			"service_role":   "Service account with elevated privileges",
+			"instance_admin": "Dashboard admin user",
+			"anon":           "Anonymous/unauthenticated user",
 		}
 
 		for role, description := range roles {

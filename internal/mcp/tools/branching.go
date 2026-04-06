@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/branching"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
-	"github.com/rs/zerolog/log"
 )
 
 // ============================================================================
@@ -197,9 +198,9 @@ func (t *GetBranchTool) Execute(ctx context.Context, args map[string]any, authCt
 				IsError: true,
 			}, nil
 		}
-		branch, err = t.storage.GetBranch(ctx, id)
+		branch, err = t.storage.GetBranch(ctx, id, nil)
 	} else if slug, ok := args["slug"].(string); ok && slug != "" {
-		branch, err = t.storage.GetBranchBySlug(ctx, slug)
+		branch, err = t.storage.GetBranchBySlug(ctx, slug, nil)
 	} else {
 		return &mcp.ToolResult{
 			Content: []mcp.Content{mcp.ErrorContent("Either branch_id or slug is required")},
@@ -474,7 +475,7 @@ func (t *DeleteBranchTool) Execute(ctx context.Context, args map[string]any, aut
 		}
 		branchID = parsed
 	} else if slug, ok := args["slug"].(string); ok && slug != "" {
-		branch, err := t.storage.GetBranchBySlug(ctx, slug)
+		branch, err := t.storage.GetBranchBySlug(ctx, slug, nil)
 		if err != nil {
 			if errors.Is(err, branching.ErrBranchNotFound) {
 				return &mcp.ToolResult{
@@ -591,7 +592,7 @@ func (t *ResetBranchTool) Execute(ctx context.Context, args map[string]any, auth
 		}
 		branchID = parsed
 	} else if slug, ok := args["slug"].(string); ok && slug != "" {
-		branch, err := t.storage.GetBranchBySlug(ctx, slug)
+		branch, err := t.storage.GetBranchBySlug(ctx, slug, nil)
 		if err != nil {
 			if errors.Is(err, branching.ErrBranchNotFound) {
 				return &mcp.ToolResult{
@@ -989,7 +990,7 @@ func (t *SetActiveBranchTool) Execute(ctx context.Context, args map[string]any, 
 
 	// If branch is not empty or "main", verify it exists
 	if branch != "" && branch != "main" {
-		_, err := t.storage.GetBranchBySlug(ctx, branch)
+		_, err := t.storage.GetBranchBySlug(ctx, branch, nil)
 		if err != nil {
 			if errors.Is(err, branching.ErrBranchNotFound) {
 				return &mcp.ToolResult{

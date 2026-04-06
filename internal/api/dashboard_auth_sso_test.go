@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // setupDashboardAuthTestServer creates a test server with dashboard auth routes
@@ -109,13 +110,13 @@ func TestDashboardPasswordLoginDisabled(t *testing.T) {
 	testPassword := "testpassword123"
 
 	// Clean up any existing user first
-	_, err := db.Exec(ctx, "DELETE FROM dashboard.users WHERE email = $1", testEmail)
+	_, err := db.Exec(ctx, "DELETE FROM platform.users WHERE email = $1", testEmail)
 	require.NoError(t, err)
 
 	// Create admin user
 	_, err = db.Exec(ctx, `
-		INSERT INTO dashboard.users (email, password_hash, role, email_verified, email_verified_at, created_at, updated_at)
-		VALUES ($1, crypt($2, gen_salt('bf', 4)), 'admin', true, now(), now(), now())
+		INSERT INTO platform.users (id, email, password_hash, role, email_verified, email_verified_at, is_active, created_at, updated_at)
+		VALUES (gen_random_uuid(), $1, crypt($2, gen_salt('bf', 4)), 'instance_admin', true, now(), true, now(), now())
 	`, testEmail, testPassword)
 	require.NoError(t, err)
 
@@ -181,8 +182,7 @@ func TestDashboardPasswordLoginDisabled(t *testing.T) {
 		require.NoError(t, err)
 
 		// Set environment variable to force password login
-		_ = os.Setenv("FLUXBASE_DASHBOARD_FORCE_PASSWORD_LOGIN", "true")
-		defer func() { _ = os.Unsetenv("FLUXBASE_DASHBOARD_FORCE_PASSWORD_LOGIN") }()
+		t.Setenv("FLUXBASE_DASHBOARD_FORCE_PASSWORD_LOGIN", "true")
 
 		loginReq := map[string]interface{}{
 			"email":    testEmail,
@@ -201,7 +201,7 @@ func TestDashboardPasswordLoginDisabled(t *testing.T) {
 	})
 
 	// Cleanup
-	_, _ = db.Exec(ctx, "DELETE FROM dashboard.users WHERE email = $1", testEmail)
+	_, _ = db.Exec(ctx, "DELETE FROM platform.users WHERE email = $1", testEmail)
 	_, _ = db.Exec(ctx, `DELETE FROM app.settings WHERE key = 'disable_dashboard_password_login' AND category = 'auth'`)
 }
 

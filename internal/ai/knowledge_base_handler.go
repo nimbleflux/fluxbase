@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/storage"
-	"github.com/rs/zerolog/log"
 )
 
 // KnowledgeBaseHandler handles knowledge base management endpoints
@@ -620,7 +621,7 @@ func (h *KnowledgeBaseHandler) DeleteDocumentsByFilter(c fiber.Ctx) error {
 	if userID != nil {
 		isAdmin := false
 		if role := c.Locals("role"); role != nil {
-			isAdmin = role == "service_role" || role == "dashboard_admin"
+			isAdmin = role == "service_role" || role == "instance_admin"
 		}
 		if !isAdmin {
 			filter.UserID = userID

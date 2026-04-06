@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // TestFunctionAuthenticationOnly tests ONLY the authentication logic without function execution
@@ -86,7 +87,7 @@ func TestFunctionAuthenticationOnly(t *testing.T) {
 
 	t.Run("ClientKey_PassesAuth", func(t *testing.T) {
 		// Create client key using the helper
-		clientKey := tc.CreateClientKey("test-key", []string{"execute:functions"})
+		clientKey := tc.CreateClientKey("test-key", []string{"functions:execute"})
 
 		resp := tc.NewRequest("POST", fmt.Sprintf("/api/v1/functions/%s/invoke", functionName)).
 			WithClientKey(clientKey).

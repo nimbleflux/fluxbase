@@ -49,6 +49,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 pnpm-lock.yaml
+package-lock.json
 lerna-debug.log*
 .pnpm-store/
 
@@ -123,5 +124,7 @@ values.tmp.yml
 .mcp.json
 
 .lycheecache
-.claude/settings.local.json
+.claude/
 .husky/
+docs/plans/
+.opencode/

@@ -11,8 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // Manager handles database operations for branches
@@ -76,8 +77,11 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 		return nil, ErrBranchingDisabled
 	}
 
-	// Check limits
-	if err := m.checkLimits(ctx, createdBy); err != nil {
+	// Resolve tenant_id - default to instance-level (nil) if not specified
+	tenantID := req.TenantID
+
+	// Check limits (tenant-scoped)
+	if err := m.checkLimits(ctx, tenantID, createdBy); err != nil {
 		return nil, err
 	}
 
@@ -87,13 +91,17 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 		return nil, fmt.Errorf("%w: %w", ErrInvalidSlug, err)
 	}
 
-	// Check if slug already exists
-	existing, err := m.storage.GetBranchBySlug(ctx, slug)
+	// Check if slug already exists for this tenant
+	existing, err := m.storage.GetBranchBySlug(ctx, slug, tenantID)
 	if err != nil && !errors.Is(err, ErrBranchNotFound) {
 		return nil, fmt.Errorf("failed to check existing branch: %w", err)
 	}
+	// Check if existing branch belongs to the same tenant
 	if existing != nil {
-		return nil, ErrBranchExists
+		if (tenantID == nil && existing.TenantID == nil) ||
+			(tenantID != nil && existing.TenantID != nil && *tenantID == *existing.TenantID) {
+			return nil, ErrBranchExists
+		}
 	}
 
 	// Determine data clone mode
@@ -122,8 +130,19 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 		parentBranchID = &mainBranch.ID
 	}
 
-	// Generate database name
-	databaseName := GenerateDatabaseName(m.config.DatabasePrefix, slug)
+	// Generate database name with tenant prefix
+	var databaseName string
+	if tenantID != nil {
+		// Get tenant slug for database naming
+		tenantSlug, err := m.getTenantSlug(ctx, *tenantID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tenant info: %w", err)
+		}
+		databaseName = GenerateTenantBranchDatabaseName(m.config.DatabasePrefix, tenantSlug, slug)
+	} else {
+		// Instance-level branch (backward compatible)
+		databaseName = GenerateDatabaseName(m.config.DatabasePrefix, slug)
+	}
 
 	// Create branch record
 	branch := &Branch{
@@ -133,6 +152,7 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 		DatabaseName:   databaseName,
 		Status:         BranchStatusCreating,
 		Type:           branchType,
+		TenantID:       tenantID,
 		ParentBranchID: parentBranchID,
 		DataCloneMode:  dataCloneMode,
 		GitHubPRNumber: req.GitHubPRNumber,
@@ -222,8 +242,8 @@ func (m *Manager) CreateBranch(ctx context.Context, req CreateBranchRequest, cre
 func (m *Manager) DeleteBranch(ctx context.Context, branchID uuid.UUID, deletedBy *uuid.UUID) error {
 	startTime := time.Now()
 
-	// Get the branch
-	branch, err := m.storage.GetBranch(ctx, branchID)
+	// Get the branch (no tenant filter — manager operates across tenants)
+	branch, err := m.storage.GetBranch(ctx, branchID, nil)
 	if err != nil {
 		return err
 	}
@@ -266,8 +286,8 @@ func (m *Manager) DeleteBranch(ctx context.Context, branchID uuid.UUID, deletedB
 		return fmt.Errorf("failed to drop database: %w", err)
 	}
 
-	// Mark as deleted
-	if err := m.storage.DeleteBranch(ctx, branchID); err != nil {
+	// Mark as deleted (no tenant filter — manager is the authority)
+	if err := m.storage.DeleteBranch(ctx, branchID, nil); err != nil {
 		return fmt.Errorf("failed to delete branch record: %w", err)
 	}
 
@@ -295,8 +315,8 @@ func (m *Manager) DeleteBranch(ctx context.Context, branchID uuid.UUID, deletedB
 func (m *Manager) ResetBranch(ctx context.Context, branchID uuid.UUID, resetBy *uuid.UUID) error {
 	startTime := time.Now()
 
-	// Get the branch
-	branch, err := m.storage.GetBranch(ctx, branchID)
+	// Get the branch (no tenant filter — manager operates across tenants)
+	branch, err := m.storage.GetBranch(ctx, branchID, nil)
 	if err != nil {
 		return err
 	}
@@ -312,7 +332,7 @@ func (m *Manager) ResetBranch(ctx context.Context, branchID uuid.UUID, resetBy *
 	}
 
 	// Get parent branch
-	parent, err := m.storage.GetBranch(ctx, *branch.ParentBranchID)
+	parent, err := m.storage.GetBranch(ctx, *branch.ParentBranchID, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get parent branch: %w", err)
 	}
@@ -381,10 +401,25 @@ func (m *Manager) ResetBranch(ctx context.Context, branchID uuid.UUID, resetBy *
 }
 
 // checkLimits verifies that branch limits have not been exceeded
-func (m *Manager) checkLimits(ctx context.Context, userID *uuid.UUID) error {
+func (m *Manager) checkLimits(ctx context.Context, tenantID *uuid.UUID, userID *uuid.UUID) error {
+	// Check tenant-specific branch limit first
+	if tenantID != nil && m.config.MaxBranchesPerTenant > 0 {
+		tenantCount, err := m.storage.CountBranchesByTenant(ctx, *tenantID)
+		if err != nil {
+			return fmt.Errorf("failed to count tenant branches: %w", err)
+		}
+		if tenantCount >= m.config.MaxBranchesPerTenant {
+			return ErrMaxTenantBranchesReached
+		}
+	}
+
 	// Check total branch limit
 	if m.config.MaxTotalBranches > 0 {
-		total, err := m.storage.CountBranches(ctx, ListBranchesFilter{})
+		filter := ListBranchesFilter{}
+		if tenantID != nil {
+			filter.TenantID = tenantID
+		}
+		total, err := m.storage.CountBranches(ctx, filter)
 		if err != nil {
 			return fmt.Errorf("failed to count branches: %w", err)
 		}
@@ -405,6 +440,18 @@ func (m *Manager) checkLimits(ctx context.Context, userID *uuid.UUID) error {
 	}
 
 	return nil
+}
+
+// getTenantSlug retrieves the tenant slug for database naming
+func (m *Manager) getTenantSlug(ctx context.Context, tenantID uuid.UUID) (string, error) {
+	// Query the platform.tenants table to get the slug
+	var slug string
+	query := `SELECT slug FROM platform.tenants WHERE id = $1`
+	err := m.storage.GetPool().QueryRow(ctx, query, tenantID).Scan(&slug)
+	if err != nil {
+		return "", fmt.Errorf("failed to get tenant slug: %w", err)
+	}
+	return slug, nil
 }
 
 // createDatabase creates a new database for a branch
@@ -447,7 +494,7 @@ func (m *Manager) createDatabaseSchemaOnly(ctx context.Context, branch *Branch, 
 	}
 
 	// Get parent branch
-	parent, err := m.storage.GetBranch(ctx, *parentBranchID)
+	parent, err := m.storage.GetBranch(ctx, *parentBranchID, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get parent branch: %w", err)
 	}
@@ -496,7 +543,7 @@ func (m *Manager) createDatabaseFullClone(ctx context.Context, branch *Branch, p
 	}
 
 	// Get parent branch
-	parent, err := m.storage.GetBranch(ctx, *parentBranchID)
+	parent, err := m.storage.GetBranch(ctx, *parentBranchID, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get parent branch: %w", err)
 	}
@@ -701,9 +748,34 @@ func (m *Manager) GetConfig() config.BranchingConfig {
 
 // sanitizeIdentifier sanitizes a SQL identifier to prevent injection
 func sanitizeIdentifier(name string) string {
+	// Defense in depth: validate the identifier is alphanumeric before quoting.
+	// All inputs should already be sanitized by GenerateDatabaseName/GenerateTenantBranchDatabaseName.
+	if !isValidIdentifier(name) {
+		log.Error().Str("identifier", name).Msg("sanitizeIdentifier: rejected invalid identifier")
+		return `""`
+	}
 	// Use double quotes and escape any existing quotes
 	escaped := strings.ReplaceAll(name, `"`, `""`)
 	return fmt.Sprintf(`"%s"`, escaped)
+}
+
+// isValidIdentifier checks if a string is a valid PostgreSQL identifier
+func isValidIdentifier(name string) bool {
+	if len(name) == 0 || len(name) > 63 {
+		return false
+	}
+	for i, r := range name {
+		if i == 0 {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_') {
+				return false
+			}
+		} else {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // CreateBranchFromGitHubPR creates a branch for a GitHub PR
@@ -724,8 +796,8 @@ func (m *Manager) CreateBranchFromGitHubPR(ctx context.Context, repo string, prN
 	name := fmt.Sprintf("PR #%d", prNumber)
 	slug := GeneratePRSlug(prNumber)
 
-	// Check if branch already exists
-	existing, err := m.storage.GetBranchBySlug(ctx, slug)
+	// Check if branch already exists (no tenant filter for GitHub PR branches)
+	existing, err := m.storage.GetBranchBySlug(ctx, slug, nil)
 	if err != nil && !errors.Is(err, ErrBranchNotFound) {
 		return nil, fmt.Errorf("failed to check existing branch: %w", err)
 	}

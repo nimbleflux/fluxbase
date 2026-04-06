@@ -51,6 +51,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { KnowledgeBaseHeader } from '@/components/knowledge-bases/knowledge-base-header'
+import { useTenantStore } from '@/stores/tenant-store'
 
 // Entity type colors
 const ENTITY_COLORS: Record<EntityType, string> = {
@@ -129,6 +130,7 @@ export const Route = createFileRoute(
 function KnowledgeGraphPage() {
   const params = Route.useParams()
   const id = params.id
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id)
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(null)
   const [graphData, setGraphData] = useState<KnowledgeGraphData | null>(null)
   const [linkedChatbots, setLinkedChatbots] = useState<ChatbotKnowledgeBaseLink[]>(
@@ -231,7 +233,7 @@ function KnowledgeGraphPage() {
 
   useEffect(() => {
     fetchData()
-  }, [fetchData])
+  }, [fetchData, currentTenantId])
 
   const uniqueEntityTypes = useMemo(() => {
     if (!graphData) return []

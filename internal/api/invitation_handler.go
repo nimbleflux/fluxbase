@@ -9,12 +9,12 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/email"
-	"github.com/rs/zerolog/log"
 )
 
-// InvitationHandler handles invitation-related API endpoints
 type InvitationHandler struct {
 	invitationService *auth.InvitationService
 	dashboardAuth     *auth.DashboardAuthService
@@ -22,7 +22,6 @@ type InvitationHandler struct {
 	baseURL           string
 }
 
-// NewInvitationHandler creates a new invitation handler
 func NewInvitationHandler(
 	invitationService *auth.InvitationService,
 	dashboardAuth *auth.DashboardAuthService,
@@ -37,7 +36,6 @@ func NewInvitationHandler(
 	}
 }
 
-// invitationErrorDetails maps invitation errors to user-friendly messages
 func invitationErrorDetails(err error) string {
 	switch {
 	case errors.Is(err, auth.ErrInvitationExpired):
@@ -51,28 +49,25 @@ func invitationErrorDetails(err error) string {
 	}
 }
 
-// invitationErrorStatus maps invitation errors to HTTP status codes
 func invitationErrorStatus(err error) int {
 	switch {
 	case errors.Is(err, auth.ErrInvitationExpired):
-		return 410 // StatusGone
+		return 410
 	case errors.Is(err, auth.ErrInvitationAlreadyAccepted):
-		return 409 // StatusConflict
+		return 409
 	case errors.Is(err, auth.ErrInvitationNotFound):
-		return 404 // StatusNotFound
+		return 404
 	default:
-		return 400 // StatusBadRequest
+		return 400
 	}
 }
 
-// CreateInvitationRequest represents a request to create an invitation
 type CreateInvitationRequest struct {
 	Email          string `json:"email" validate:"required,email"`
-	Role           string `json:"role" validate:"required,oneof=dashboard_admin dashboard_user"`
-	ExpiryDuration int64  `json:"expiry_duration,omitempty"` // Duration in seconds, default 7 days
+	Role           string `json:"role" validate:"required,oneof=instance_admin tenant_admin"`
+	ExpiryDuration int64  `json:"expiry_duration,omitempty"`
 }
 
-// CreateInvitationResponse represents the invitation creation response
 type CreateInvitationResponse struct {
 	Invitation  *auth.InvitationToken `json:"invitation"`
 	InviteLink  string                `json:"invite_link"`
@@ -80,20 +75,17 @@ type CreateInvitationResponse struct {
 	EmailStatus string                `json:"email_status,omitempty"`
 }
 
-// ValidateInvitationResponse represents the token validation response
 type ValidateInvitationResponse struct {
 	Valid      bool                  `json:"valid"`
 	Invitation *auth.InvitationToken `json:"invitation,omitempty"`
 	Error      string                `json:"error,omitempty"`
 }
 
-// AcceptInvitationRequest represents a request to accept an invitation
 type AcceptInvitationRequest struct {
 	Password string `json:"password" validate:"required,min=12"`
 	Name     string `json:"name" validate:"required,min=2"`
 }
 
-// AcceptInvitationResponse represents the invitation acceptance response
 type AcceptInvitationResponse struct {
 	User         *auth.DashboardUser `json:"user"`
 	AccessToken  string              `json:"access_token"`
@@ -101,12 +93,9 @@ type AcceptInvitationResponse struct {
 	ExpiresIn    int64               `json:"expires_in"`
 }
 
-// CreateInvitation generates a new invitation token
-// POST /api/v1/admin/invitations
 func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 	ctx := context.Background()
 
-	// Get inviter info from context (set by auth middleware)
 	inviterID, ok := c.Locals("user_id").(string)
 	if !ok {
 		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{
@@ -121,7 +110,6 @@ func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	// Parse request
 	var req CreateInvitationRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
@@ -129,20 +117,30 @@ func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	// Validate role
 	if err := auth.ValidateDashboardRole(req.Role); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
-	// Calculate expiry duration (default 7 days)
+	inviterRole, ok := c.Locals("user_role").(string)
+	if !ok {
+		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{
+			"error": "User role not found",
+		})
+	}
+
+	if req.Role == "tenant_admin" && inviterRole != "instance_admin" {
+		return c.Status(http.StatusForbidden).JSON(fiber.Map{
+			"error": "Only instance_admin can invite tenant_admin users",
+		})
+	}
+
 	expiryDuration := 7 * 24 * time.Hour
 	if req.ExpiryDuration > 0 {
 		expiryDuration = time.Duration(req.ExpiryDuration) * time.Second
 	}
 
-	// Create invitation
 	invitation, err := h.invitationService.CreateInvitation(ctx, req.Email, req.Role, &inviterUUID, expiryDuration)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
@@ -150,10 +148,8 @@ func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	// Generate invite link using base URL from config
 	inviteLink := fmt.Sprintf("%s/invite/%s", h.baseURL, invitation.Token)
 
-	// Send email notification
 	emailSent := false
 	emailStatus := ""
 
@@ -178,8 +174,6 @@ func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 	})
 }
 
-// ValidateInvitation validates an invitation token
-// GET /api/v1/invitations/:token/validate
 func (h *InvitationHandler) ValidateInvitation(c fiber.Ctx) error {
 	ctx := context.Background()
 
@@ -199,7 +193,6 @@ func (h *InvitationHandler) ValidateInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	// Don't expose the token in the response
 	invitation.Token = ""
 
 	return c.JSON(ValidateInvitationResponse{
@@ -208,8 +201,6 @@ func (h *InvitationHandler) ValidateInvitation(c fiber.Ctx) error {
 	})
 }
 
-// AcceptInvitation accepts an invitation and creates a new user
-// POST /api/v1/invitations/:token/accept
 func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 	ctx := context.Background()
 
@@ -220,7 +211,6 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	// Parse request
 	var req AcceptInvitationRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
@@ -228,14 +218,12 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	// Validate password strength
 	if err := auth.ValidateDashboardPassword(req.Password); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
-	// Validate invitation token
 	invitation, err := h.invitationService.ValidateToken(ctx, token)
 	if err != nil {
 		return c.Status(invitationErrorStatus(err)).JSON(fiber.Map{
@@ -243,8 +231,6 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	// Set the invitation token in the database session
-	// This allows the RLS policy to verify the invitation
 	_, err = h.dashboardAuth.GetDB().Exec(ctx, "SET LOCAL app.invitation_token = $1", token)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
@@ -252,7 +238,6 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	// Create the user in dashboard.users
 	user, err := h.dashboardAuth.CreateUser(ctx, invitation.Email, req.Password, req.Name)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
@@ -260,9 +245,8 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	// Update user role and verify email
 	_, err = h.dashboardAuth.GetDB().Exec(ctx, `
-		UPDATE dashboard.users
+		UPDATE platform.users
 		SET role = $1, email_verified = true
 		WHERE id = $2
 	`, invitation.Role, user.ID)
@@ -272,9 +256,7 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	// Mark invitation as accepted
 	if err := h.invitationService.AcceptInvitation(ctx, token); err != nil {
-		// Log the error but don't fail the request - user was created successfully
 		log.Warn().
 			Err(err).
 			Str("token", token).
@@ -282,7 +264,6 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 			Msg("Failed to mark invitation as accepted")
 	}
 
-	// Log in the user to get access token
 	loggedInUser, loginResp, err := h.dashboardAuth.Login(ctx, invitation.Email, req.Password, nil, c.Get("User-Agent"))
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
@@ -298,12 +279,9 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 	})
 }
 
-// ListInvitations retrieves all invitations (admin only)
-// GET /api/v1/admin/invitations
 func (h *InvitationHandler) ListInvitations(c fiber.Ctx) error {
 	ctx := context.Background()
 
-	// Parse query parameters
 	includeAccepted := c.Query("include_accepted", "false") == "true"
 	includeExpired := c.Query("include_expired", "false") == "true"
 
@@ -314,7 +292,6 @@ func (h *InvitationHandler) ListInvitations(c fiber.Ctx) error {
 		})
 	}
 
-	// Don't expose tokens in the list
 	for i := range invitations {
 		invitations[i].Token = ""
 	}
@@ -324,8 +301,6 @@ func (h *InvitationHandler) ListInvitations(c fiber.Ctx) error {
 	})
 }
 
-// RevokeInvitation revokes an invitation token (admin only)
-// DELETE /api/v1/admin/invitations/:token
 func (h *InvitationHandler) RevokeInvitation(c fiber.Ctx) error {
 	ctx := context.Background()
 

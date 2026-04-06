@@ -6,9 +6,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/twpayne/go-geom/encoding/geojson"
 	"github.com/twpayne/go-geom/encoding/wkb"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // pgxRowsToJSON converts pgx rows to JSON-serializable format

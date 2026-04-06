@@ -14,7 +14,7 @@ import (
 
 func TestNewHandler(t *testing.T) {
 	t.Run("creates handler with nil dependencies", func(t *testing.T) {
-		handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
+		handler := NewHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 		require.NotNil(t, handler)
 		assert.Nil(t, handler.storage)
@@ -25,7 +25,7 @@ func TestNewHandler(t *testing.T) {
 
 	t.Run("creates handler with storage", func(t *testing.T) {
 		storage := NewStorage(nil)
-		handler := NewHandler(nil, storage, nil, nil, nil, nil, nil)
+		handler := NewHandler(nil, storage, nil, nil, nil, nil, nil, nil)
 
 		require.NotNil(t, handler)
 		assert.Equal(t, storage, handler.storage)
@@ -38,7 +38,7 @@ func TestNewHandler(t *testing.T) {
 
 func TestHandler_SetScheduler(t *testing.T) {
 	t.Run("sets scheduler correctly", func(t *testing.T) {
-		handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
+		handler := NewHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 		assert.Nil(t, handler.scheduler)
 
@@ -55,7 +55,7 @@ func TestHandler_SetScheduler(t *testing.T) {
 
 func TestHandler_GetExecutor(t *testing.T) {
 	t.Run("returns executor", func(t *testing.T) {
-		handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
+		handler := NewHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 		executor := handler.GetExecutor()
 
@@ -150,7 +150,7 @@ func TestStringSlicesEqual(t *testing.T) {
 // =============================================================================
 
 func TestHandler_NeedsUpdate(t *testing.T) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 	now := time.Now()
 
 	t.Run("identical procedures don't need update", func(t *testing.T) {
@@ -358,7 +358,7 @@ func BenchmarkStringSlicesEqual_NotEqual(b *testing.B) {
 }
 
 func BenchmarkHandler_NeedsUpdate_NoUpdate(b *testing.B) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 	schedule := "0 * * * *"
 
 	existing := &Procedure{
@@ -387,7 +387,7 @@ func BenchmarkHandler_NeedsUpdate_NoUpdate(b *testing.B) {
 }
 
 func BenchmarkHandler_NeedsUpdate_NeedsUpdate(b *testing.B) {
-	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
+	handler := NewHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	existing := &Procedure{SQLQuery: "SELECT 1"}
 	new := &Procedure{SQLQuery: "SELECT 2"}

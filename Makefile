@@ -1,4 +1,4 @@
-.PHONY: help dev build clean fmt lint test migrate-up migrate-down migrate-create db-reset db-reset-full deps setup-dev install-hooks uninstall-hooks docs docs-build docs-check-links version docker-build docker-push release cli cli-install cli-completions viz-deps viz-deps-svg viz-internal viz-callgraph viz-callgraph-svg viz-uml viz-uml-api viz-uml-auth viz-module-deps viz-all test-cleanup
+.PHONY: help dev dev-full ensure-embed-placeholder ensure-embedded-sdk build clean fmt lint test migrate-up migrate-down migrate-create db-reset db-reset-full deps setup-dev install-hooks uninstall-hooks docs docs-build docs-check-links version docker-build docker-push release cli cli-install cli-completions viz-deps viz-deps-svg viz-internal viz-callgraph viz-callgraph-svg viz-uml viz-uml-api viz-uml-auth viz-module-deps viz-all test-cleanup test-cli
 
 # Variables
 BINARY_NAME=fluxbase-server
@@ -75,15 +75,62 @@ help: ## Show available commands
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "${GREEN}Quick Start:${NC}"
-	@echo "  make dev            # Build & run backend + frontend (all-in-one)"
+	@echo "  make dev            # Fast dev: backend + frontend (skips admin build)"
 	@echo "  make build          # Build production binary with embedded UI"
 	@echo "  make test-all       # Run ALL tests (backend + SDK + React + integration)"
 	@echo ""
 	@echo "${GREEN}All Commands:${NC}"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  ${GREEN}%-20s${NC} %s\\n", $$1, $$2}'
 
-dev: ## Build and run backend + frontend dev server (all-in-one)
-	@echo "${YELLOW}Starting Fluxbase development environment...${NC}"
+dev: ## Fast dev: backend + frontend (skips admin build, uses Vite HMR at :5050)
+	@echo "${YELLOW}Starting Fluxbase development environment (fast mode)...${NC}"
+	@lsof -ti:8080 | xargs -r kill -9 2>/dev/null || true
+	@lsof -ti:5050 | xargs -r kill -9 2>/dev/null || true
+	@if [ ! -d "sdk/node_modules" ]; then \
+		echo "${YELLOW}Installing SDK dependencies...${NC}"; \
+		cd sdk && unset NODE_OPTIONS && bun install; \
+	fi
+	@$(MAKE) ensure-embedded-sdk
+	@if [ ! -d "admin/node_modules" ]; then \
+		echo "${YELLOW}Installing admin UI dependencies...${NC}"; \
+		cd admin && unset NODE_OPTIONS && bun install; \
+	fi
+	@$(MAKE) ensure-embed-placeholder
+	@echo "${GREEN}Backend:${NC}     http://localhost:8080"
+	@echo "${GREEN}Frontend:${NC}    http://localhost:5050/admin/"
+	@echo "${GREEN}Admin Login:${NC} http://localhost:5050/admin/login"
+	@echo ""
+	@echo "${YELLOW}Press Ctrl+C to stop both servers${NC}"
+	@echo ""
+	@bash -c 'trap "kill 0" EXIT; ./run-server.sh & SERVER_PID=$$!; cd admin && unset NODE_OPTIONS && bun run dev & VITE_PID=$$!; wait -n 2>/dev/null || while kill -0 $$SERVER_PID 2>/dev/null && kill -0 $$VITE_PID 2>/dev/null; do sleep 1; done'
+
+ensure-embed-placeholder:
+	@if [ ! -f "internal/adminui/dist/index.html" ]; then \
+		echo "${YELLOW}Creating placeholder admin UI for embed...${NC}"; \
+		mkdir -p internal/adminui/dist/assets; \
+		echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fluxbase (dev mode)</title></head><body style="font-family:system-ui;padding:2rem;text-align:center"><h1>Dev Mode</h1><p>Use <a href="http://localhost:5050/admin/">localhost:5050</a> for the admin UI with HMR.</p></body></html>' > internal/adminui/dist/index.html; \
+		echo '/* placeholder */' > internal/adminui/dist/assets/placeholder.css; \
+	fi
+
+ensure-embedded-sdk:
+	@SDK_STALE=0; \
+	if [ ! -f "internal/jobs/embedded_sdk.js" ]; then \
+		SDK_STALE=1; \
+	else \
+		NEWER=$$(find sdk/src -newer internal/jobs/embedded_sdk.js -type f 2>/dev/null | head -1); \
+		if [ -n "$$NEWER" ]; then \
+			SDK_STALE=1; \
+		fi; \
+	fi; \
+	if [ "$$SDK_STALE" = "1" ]; then \
+		echo "${YELLOW}Generating embedded SDK for job runtime...${NC}"; \
+		cd sdk && unset NODE_OPTIONS && bun run generate:embedded-sdk; \
+	else \
+		echo "${GREEN}Embedded SDK up to date, skipping generation${NC}"; \
+	fi
+
+dev-full: ## Full build + run (builds admin UI with type-check, slower)
+	@echo "${YELLOW}Starting Fluxbase with full admin UI build...${NC}"
 	@lsof -ti:8080 | xargs -r kill -9 2>/dev/null || true
 	@lsof -ti:5050 | xargs -r kill -9 2>/dev/null || true
 	@if [ ! -d "sdk/node_modules" ]; then \
@@ -102,11 +149,10 @@ dev: ## Build and run backend + frontend dev server (all-in-one)
 	@cp -r admin/dist internal/adminui/dist
 	@echo "${GREEN}Backend:${NC}     http://localhost:8080"
 	@echo "${GREEN}Frontend:${NC}    http://localhost:5050/admin/"
-	@echo "${GREEN}Admin Login:${NC} http://localhost:5050/admin/login"
 	@echo ""
 	@echo "${YELLOW}Press Ctrl+C to stop both servers${NC}"
 	@echo ""
-	@bash -c 'trap "kill 0" EXIT; ./run-server.sh & SERVER_PID=$$!; cd admin && unset NODE_OPTIONS && bun run dev & PNPM_PID=$$!; wait -n 2>/dev/null || while kill -0 $$SERVER_PID 2>/dev/null && kill -0 $$PNPM_PID 2>/dev/null; do sleep 1; done'
+	@bash -c 'trap "kill 0" EXIT; ./run-server.sh & SERVER_PID=$$!; cd admin && unset NODE_OPTIONS && bun run dev & VITE_PID=$$!; wait -n 2>/dev/null || while kill -0 $$SERVER_PID 2>/dev/null && kill -0 $$VITE_PID 2>/dev/null; do sleep 1; done'
 
 version: ## Show version information
 	@echo "${GREEN}Version:${NC}    $(VERSION)"
@@ -130,6 +176,9 @@ clean: ## Clean build artifacts
 	@rm -f build/${BINARY_NAME}
 	@rm -f coverage.out coverage.html
 	@rm -rf internal/adminui/dist
+	@mkdir -p internal/adminui/dist/assets
+	@echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fluxbase (placeholder)</title></head><body style="font-family:system-ui;padding:2rem;text-align:center"><p>Run make dev or make build</p></body></html>' > internal/adminui/dist/index.html
+	@echo '/* placeholder */' > internal/adminui/dist/assets/placeholder.css
 	@echo "${GREEN}Clean complete!${NC}"
 
 fmt: ## Format Go code with gofumpt (stricter than gofmt)
@@ -160,7 +209,7 @@ test-coverage: ## Run ALL tests (unit + e2e) with combined coverage (requires po
 	@echo "${YELLOW}[1/5] Running Go unit tests with coverage for code metrics (~30-60 seconds)...${NC}"
 	@echo "${BLUE}Note: Integration tests with service goroutines are skipped for accurate coverage metrics${NC}"
 	@echo ""
-	@FLUXBASE_LOG_LEVEL=info FLUXBASE_PARALLEL_TEST=true NO_COLOR=1 go test -v -timeout 30m -short -coverprofile=coverage.out -covermode=atomic -p 1 $(shell go list ./... | grep -v "^github.com/nimbleflux/fluxbase/test/e2e$$") 2>&1 | tee /tmp/go-test-output.txt
+	@FLUXBASE_LOG_LEVEL=info FLUXBASE_PARALLEL_TEST=true NO_COLOR=1 go test -v -timeout 30m -short -coverprofile=coverage.out -covermode=set $(shell go list ./... | grep -v "^github.com/nimbleflux/fluxbase/test/e2e$$") 2>&1 | tee /tmp/go-test-output.txt
 	@echo ""
 	@echo "${BLUE}Full test output written to: ${YELLOW}/tmp/go-test-output.txt${NC}"
 	@echo ""
@@ -219,26 +268,54 @@ test-coverage-full: test-coverage ## Alias for test-coverage (now includes e2e b
 test-fast: ## Run all tests without race detector (faster, excludes e2e)
 	@FLUXBASE_LOG_LEVEL=info ./scripts/test-runner.sh go test -timeout 1m -v -short -cover $(shell go list ./... | grep -v '/test/e2e')
 
-test-full: ## Run ALL tests including e2e with race detector (may take 5-10 minutes)
-	@./scripts/test-runner.sh go test -timeout 15m -v -race -cover ./...
+test-setup-db: ## Apply bootstrap + declarative schemas to match CI pipeline setup
+	@echo "${YELLOW}Applying database schema for tests (matching CI pipeline)...${NC}"
+	@echo "${BLUE}Database:${NC} $(DATABASE_ADMIN_USER)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
+	@# 1. Apply bootstrap SQL (creates schemas, extensions, roles, default privileges)
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 -f internal/database/bootstrap/bootstrap.sql
+	@# 2. Apply each declarative schema in dependency order (all use CREATE IF NOT EXISTS = idempotent)
+	@# Note: Some schemas use CREATE POLICY without IF NOT EXISTS, so we don't use ON_ERROR_STOP for re-runs
+	@for schema in platform auth storage jobs functions realtime ai rpc system migrations app api branching logging mcp; do \
+		echo "Applying schema: $$schema"; \
+		PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -f internal/database/schema/schemas/$$schema.sql || true; \
+	done
+	@# 3. Apply cross-schema foreign keys (idempotent DO blocks)
+	@echo "Applying cross-schema foreign keys..."
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 -f internal/database/schema/schemas/post-schema-fks.sql || true
+	@# 4. Apply cross-schema policies (safe on fresh database)
+	@echo "Applying cross-schema policies..."
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 -f internal/database/schema/schemas/post-schema.sql || true
+	@# 5. Grant role memberships for SET ROLE support
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT anon, authenticated, service_role, tenant_service TO fluxbase_app, fluxbase_rls_test;" || true
+	@# 6. Grant admin privileges
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON DATABASE $(DATABASE_NAME) TO fluxbase_app;" || true
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON SCHEMA public TO fluxbase_app;" || true
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON SCHEMA migrations TO fluxbase_app;" || true
+	@echo "${GREEN}Database schema applied successfully!${NC}"
 
-test-e2e: ## Run e2e tests only (requires postgres, mailhog, minio services). Use RUN= to filter tests.
-	@./scripts/test-runner.sh go test -v -race -parallel=1 -timeout=5m ./test/e2e/... $(if $(RUN),-run $(RUN),)
+test-full: test-setup-db ## Run ALL tests including e2e with race detector (may take 5-10 minutes)
+	@./scripts/test-runner.sh go test -timeout 15m -v -race -cover -tags=integration ./...
 
-test-e2e-fast: ## Run e2e tests without race detector (faster for dev iteration). Use RUN= to filter tests.
-	@./scripts/test-runner.sh go test -v -parallel=1 -timeout=3m ./test/e2e/... $(if $(RUN),-run $(RUN),)
+test-e2e: test-setup-db ## Run e2e tests only (requires postgres, mailhog, minio services). Use RUN= to filter tests.
+	@./scripts/test-runner.sh go test -v -race -parallel=1 -timeout=5m -tags=integration ./test/e2e/... $(if $(RUN),-run $(RUN),)
+
+test-e2e-fast: test-setup-db ## Run e2e tests without race detector (faster for dev iteration). Use RUN= to filter tests.
+	@./scripts/test-runner.sh go test -v -parallel=1 -timeout=3m -tags=integration ./test/e2e/... $(if $(RUN),-run $(RUN),)
 
 test-auth: ## Run authentication tests only
-	@./scripts/test-runner.sh go test -v -race -timeout=5m ./test/e2e/ -run TestAuth
+	@./scripts/test-runner.sh go test -v -race -timeout=5m -tags=integration ./test/e2e/ -run TestAuth
 
 test-rls: ## Run RLS security tests only
-	@./scripts/test-runner.sh go test -v -race -timeout=5m ./test/e2e/ -run TestRLS
+	@./scripts/test-runner.sh go test -v -race -timeout=5m -tags=integration ./test/e2e/ -run TestRLS
 
 test-rest: ## Run REST API tests only
-	@./scripts/test-runner.sh go test -v -race -timeout=5m ./test/e2e/ -run TestREST
+	@./scripts/test-runner.sh go test -v -race -timeout=5m -tags=integration ./test/e2e/ -run TestREST
 
 test-storage: ## Run storage tests only
-	@./scripts/test-runner.sh go test -v -race -timeout=5m ./test/e2e/ -run TestStorage
+	@./scripts/test-runner.sh go test -v -race -timeout=5m -tags=integration ./test/e2e/ -run TestStorage
+
+test-cli: ## Run CLI tests (unit + mock server, no external dependencies)
+	@./scripts/test-runner.sh go test -v -race -timeout=2m ./cli/...
 
 test-sdk: ## Run SDK tests (TypeScript)
 	@echo "${YELLOW}Running SDK tests...${NC}"
@@ -315,41 +392,36 @@ uninstall-hooks: ## Uninstall git pre-commit hooks
 	@rm -f .git/hooks/pre-commit
 	@echo "${GREEN}✓ Pre-commit hook uninstalled${NC}"
 
-migrate-up: ## Run database migrations
-	@echo "${YELLOW}Running migrations...${NC}"
-	@echo "${BLUE}Database:${NC} $(DATABASE_ADMIN_USER)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
-	@migrate -path internal/database/migrations -database "postgresql://$(DATABASE_ADMIN_USER):$(DATABASE_ADMIN_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)?sslmode=$(DATABASE_SSL_MODE)" up
-	@echo "${GREEN}Migrations complete!${NC}"
+migrate-up: ## Run user-provided migrations (internal schema is auto-applied)
+	@echo "${YELLOW}Note: Internal Fluxbase schema is applied automatically on server startup.${NC}"
+	@echo "${YELLOW}This target is for user-provided migrations only.${NC}"
+	@echo "${YELLOW}Set USER_MIGRATIONS_PATH in your config to use this feature.${NC}"
 
-migrate-down: ## Rollback last migration
-	@echo "${YELLOW}Rolling back migration...${NC}"
-	@echo "${BLUE}Database:${NC} $(DATABASE_ADMIN_USER)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
-	@migrate -path internal/database/migrations -database "postgresql://$(DATABASE_ADMIN_USER):$(DATABASE_ADMIN_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)?sslmode=$(DATABASE_SSL_MODE)" down 1
-	@echo "${GREEN}Rollback complete!${NC}"
+migrate-down: ## Rollback last user migration
+	@echo "${YELLOW}Note: Internal Fluxbase schema is managed declaratively.${NC}"
+	@echo "${YELLOW}This target is for user-provided migrations only.${NC}"
 
-migrate-create: ## Create new migration (usage: make migrate-create name=add_users_table)
+migrate-create: ## Create new user migration (usage: make migrate-create name=add_users_table)
 	@if [ -z "$(name)" ]; then \
 		echo "${YELLOW}Error: Provide migration name${NC}"; \
 		echo "Usage: make migrate-create name=add_users_table"; \
 		exit 1; \
 	fi
-	@echo "${YELLOW}Creating migration: $(name)...${NC}"
-	@migrate create -ext sql -dir internal/database/migrations -seq $(name)
-	@echo "${GREEN}Migration files created!${NC}"
+	@echo "${YELLOW}Note: Create user migrations in your own directory.${NC}"
+	@echo "${YELLOW}Set USER_MIGRATIONS_PATH in your config.${NC}"
 
-db-reset: ## Reset database (preserves public, auth.users, dashboard.users, setup_completed). Use db-reset-full for full reset.
+db-reset: ## Reset database (preserves public, auth.users, platform.users, setup_completed). Use db-reset-full for full reset.
 	@echo "${YELLOW}Resetting database (preserving public schema, user data, setup_completed)...${NC}"
 	@echo "${BLUE}Database:${NC} $(DATABASE_ADMIN_USER)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
 	@echo "${BLUE}PostgreSQL container:${NC} $(POSTGRES_CONTAINER)"
 	@# Backup user data and settings before dropping schemas
 	@echo "${YELLOW}Backing up user data...${NC}"
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP TABLE IF EXISTS _fluxbase_auth_users_backup; CREATE TABLE _fluxbase_auth_users_backup AS SELECT * FROM auth.users;" 2>/dev/null || true
-	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP TABLE IF EXISTS _fluxbase_dashboard_users_backup; CREATE TABLE _fluxbase_dashboard_users_backup AS SELECT * FROM dashboard.users;" 2>/dev/null || true
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP TABLE IF EXISTS _fluxbase_platform_users_backup; CREATE TABLE _fluxbase_platform_users_backup AS SELECT * FROM platform.users;" 2>/dev/null || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP TABLE IF EXISTS _fluxbase_setup_backup; CREATE TABLE _fluxbase_setup_backup AS SELECT * FROM app.settings WHERE key = 'setup_completed';" 2>/dev/null || true
 	@# Drop all schemas (including auth) for clean migration
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS app CASCADE;" || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS auth CASCADE;" || true
-	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS dashboard CASCADE;" || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS storage CASCADE;" || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS functions CASCADE;" || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS jobs CASCADE;" || true
@@ -365,14 +437,14 @@ db-reset: ## Reset database (preserves public, auth.users, dashboard.users, setu
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "ALTER USER postgres WITH BYPASSRLS;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "ALTER USER postgres SET search_path TO public;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "ALTER USER fluxbase_app WITH BYPASSRLS;" || true
-	@echo "${YELLOW}Running migrations...${NC}"
+	@echo "${YELLOW}Running bootstrap...${NC}"
 	@echo "${BLUE}Database:${NC} $(DATABASE_ADMIN_USER)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
-	@migrate -path internal/database/migrations -database 'postgresql://$(DATABASE_ADMIN_USER):$(DATABASE_ADMIN_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)?sslmode=$(DATABASE_SSL_MODE)&x-migrations-table="migrations"."fluxbase"&x-migrations-table-quoted=1' up
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -f internal/database/bootstrap/bootstrap.sql
 	@echo "${YELLOW}Granting permissions to test users (fluxbase_app, fluxbase_rls_test)...${NC}"
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT CREATE ON DATABASE $(DATABASE_NAME) TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA app TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA auth TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA dashboard TO fluxbase_app, fluxbase_rls_test;" || true
+	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA platform TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA functions TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA jobs TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA storage TO fluxbase_app, fluxbase_rls_test;" || true
@@ -386,8 +458,8 @@ db-reset: ## Reset database (preserves public, auth.users, dashboard.users, setu
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA app TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA auth TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA auth TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA dashboard TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA dashboard TO fluxbase_app, fluxbase_rls_test;" || true
+	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA platform TO fluxbase_app, fluxbase_rls_test;" || true
+	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA platform TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA functions TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA functions TO fluxbase_app, fluxbase_rls_test;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA jobs TO fluxbase_app, fluxbase_rls_test;" || true
@@ -416,90 +488,28 @@ db-reset: ## Reset database (preserves public, auth.users, dashboard.users, setu
 	@# Restore user data from backups
 	@echo "${YELLOW}Restoring user data from backups...${NC}"
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "INSERT INTO auth.users SELECT * FROM _fluxbase_auth_users_backup ON CONFLICT (id) DO NOTHING; DROP TABLE IF EXISTS _fluxbase_auth_users_backup;" 2>/dev/null || true
-	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "INSERT INTO dashboard.users SELECT * FROM _fluxbase_dashboard_users_backup ON CONFLICT (id) DO NOTHING; DROP TABLE IF EXISTS _fluxbase_dashboard_users_backup;" 2>/dev/null || true
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "INSERT INTO platform.users SELECT * FROM _fluxbase_platform_users_backup ON CONFLICT (id) DO NOTHING; DROP TABLE IF EXISTS _fluxbase_platform_users_backup;" 2>/dev/null || true
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "INSERT INTO app.settings SELECT * FROM _fluxbase_setup_backup ON CONFLICT (key) WHERE user_id IS NULL DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(); DROP TABLE IF EXISTS _fluxbase_setup_backup;" 2>/dev/null || true
 	@echo "${GREEN}Database reset complete!${NC}"
 	@echo "${BLUE}Note: Migrations granted all permissions to the user running them ($(DATABASE_ADMIN_USER)).${NC}"
 	@echo "${BLUE}Additional permissions granted to fluxbase_app and fluxbase_rls_test for testing.${NC}"
 
-db-reset-full: ## Full database reset (drops ALL schemas including public, auth, migrations). WARNING: Destroys all data!
-	@echo "${RED}WARNING: Full database reset - this will destroy ALL data including users and migrations!${NC}"
+db-reset-full: ## Full database reset (drops ALL schemas). Bootstrap and schema applied on server startup. WARNING: Destroys all data!
+	@echo "${RED}WARNING: Full database reset - this will destroy ALL data!${NC}"
 	@echo "${BLUE}Database:${NC} $(DATABASE_ADMIN_USER)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
 	@echo "${BLUE}PostgreSQL container:${NC} $(POSTGRES_CONTAINER)"
-	@echo "${YELLOW}Dropping ALL schemas...${NC}"
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS app CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS auth CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS dashboard CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS storage CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS functions CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS jobs CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS realtime CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS ai CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS rpc CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS mcp CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS branching CASCADE;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS migrations CASCADE;" || true
-	@echo "${YELLOW}Dropping and recreating public schema...${NC}"
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DROP SCHEMA IF EXISTS public CASCADE;" || true
+	@echo "${YELLOW}Dropping all non-system schemas...${NC}"
+	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DO \$$\$$ DECLARE r RECORD; BEGIN FOR r IN SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast') LOOP EXECUTE 'DROP SCHEMA IF EXISTS ' || quote_ident(r.nspname) || ' CASCADE'; END LOOP; END \$$\$$;" || true
+	@echo "${YELLOW}Recreating public schema...${NC}"
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "CREATE SCHEMA IF NOT EXISTS public;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "CREATE SCHEMA IF NOT EXISTS migrations;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON SCHEMA public TO postgres;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON SCHEMA public TO public;" || true
-	@echo "${YELLOW}Ensuring test users exist with correct permissions...${NC}"
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DO \$$\$$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'fluxbase_app') THEN CREATE USER fluxbase_app WITH PASSWORD 'fluxbase_app_password' LOGIN CREATEDB BYPASSRLS; END IF; END \$$\$$;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DO \$$\$$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'fluxbase_rls_test') THEN CREATE USER fluxbase_rls_test WITH PASSWORD 'fluxbase_rls_test_password' LOGIN; END IF; END \$$\$$;" || true
+	@echo "${YELLOW}Ensuring test users exist...${NC}"
+	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DO \$$\$$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fluxbase_app') THEN CREATE USER fluxbase_app WITH PASSWORD 'fluxbase_app_password' LOGIN CREATEDB BYPASSRLS; END IF; END \$$\$$;" || true
+	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DO \$$\$$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fluxbase_rls_test') THEN CREATE USER fluxbase_rls_test WITH PASSWORD 'fluxbase_rls_test_password' LOGIN; END IF; END \$$\$$;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "ALTER USER postgres WITH BYPASSRLS;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "ALTER USER postgres SET search_path TO public;" || true
 	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "ALTER USER fluxbase_app WITH BYPASSRLS;" || true
-	@echo "${YELLOW}Running migrations...${NC}"
-	@echo "${BLUE}Database:${NC} $(DATABASE_ADMIN_USER)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
-	@migrate -path internal/database/migrations -database 'postgresql://$(DATABASE_ADMIN_USER):$(DATABASE_ADMIN_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)?sslmode=$(DATABASE_SSL_MODE)&x-migrations-table="migrations"."fluxbase"&x-migrations-table-quoted=1' up
-	@echo "${YELLOW}Granting permissions to test users (fluxbase_app, fluxbase_rls_test)...${NC}"
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT CREATE ON DATABASE $(DATABASE_NAME) TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA app TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA auth TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA dashboard TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA functions TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA jobs TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA storage TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA realtime TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA migrations TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA ai TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA rpc TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA mcp TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT USAGE, CREATE ON SCHEMA branching TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA app TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA app TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA auth TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA auth TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA dashboard TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA dashboard TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA functions TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA functions TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA jobs TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA jobs TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA storage TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA realtime TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA realtime TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA migrations TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA migrations TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA ai TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA ai TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA rpc TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA rpc TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA mcp TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA mcp TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL TABLES IN SCHEMA branching TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA branching TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA storage TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA rpc TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA mcp TO fluxbase_app, fluxbase_rls_test;" || true
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO fluxbase_app, fluxbase_rls_test;" || true
-	@echo "${YELLOW}Granting role memberships for SET ROLE support...${NC}"
-	@docker exec $(POSTGRES_CONTAINER) psql -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "DO \$$\$$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_auth_members WHERE roleid = (SELECT oid FROM pg_roles WHERE rolname = 'anon') AND member = (SELECT oid FROM pg_roles WHERE rolname = 'fluxbase_app')) THEN GRANT anon TO fluxbase_app; END IF; IF NOT EXISTS (SELECT 1 FROM pg_auth_members WHERE roleid = (SELECT oid FROM pg_roles WHERE rolname = 'authenticated') AND member = (SELECT oid FROM pg_roles WHERE rolname = 'fluxbase_app')) THEN GRANT authenticated TO fluxbase_app; END IF; IF NOT EXISTS (SELECT 1 FROM pg_auth_members WHERE roleid = (SELECT oid FROM pg_roles WHERE rolname = 'service_role') AND member = (SELECT oid FROM pg_roles WHERE rolname = 'fluxbase_app')) THEN GRANT service_role TO fluxbase_app; END IF; IF NOT EXISTS (SELECT 1 FROM pg_auth_members WHERE roleid = (SELECT oid FROM pg_roles WHERE rolname = 'anon') AND member = (SELECT oid FROM pg_roles WHERE rolname = 'fluxbase_rls_test')) THEN GRANT anon TO fluxbase_rls_test; END IF; IF NOT EXISTS (SELECT 1 FROM pg_auth_members WHERE roleid = (SELECT oid FROM pg_roles WHERE rolname = 'authenticated') AND member = (SELECT oid FROM pg_roles WHERE rolname = 'fluxbase_rls_test')) THEN GRANT authenticated TO fluxbase_rls_test; END IF; IF NOT EXISTS (SELECT 1 FROM pg_auth_members WHERE roleid = (SELECT oid FROM pg_roles WHERE rolname = 'service_role') AND member = (SELECT oid FROM pg_roles WHERE rolname = 'fluxbase_rls_test')) THEN GRANT service_role TO fluxbase_rls_test; END IF; END \$$\$$;" || true
-	@echo "${GREEN}Full database reset complete!${NC}"
+	@echo "${GREEN}Full database reset complete! Run 'make dev' to apply bootstrap and declarative schema.${NC}"
 
 docs: ## Serve Starlight documentation at http://localhost:4321
 	@echo "${YELLOW}Starting Starlight documentation server...${NC}"

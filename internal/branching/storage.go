@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 )
 
@@ -31,11 +32,11 @@ func NewStorage(pool *pgxpool.Pool, encryptionKey string) *Storage {
 func (s *Storage) CreateBranch(ctx context.Context, branch *Branch) error {
 	query := `
 		INSERT INTO branching.branches (
-			id, name, slug, database_name, status, type, parent_branch_id,
+			id, name, slug, database_name, status, type, tenant_id, parent_branch_id,
 			data_clone_mode, github_pr_number, github_pr_url, github_repo,
 			created_by, expires_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 		) RETURNING created_at, updated_at`
 
 	if branch.ID == uuid.Nil {
@@ -49,6 +50,7 @@ func (s *Storage) CreateBranch(ctx context.Context, branch *Branch) error {
 		branch.DatabaseName,
 		branch.Status,
 		branch.Type,
+		branch.TenantID,
 		branch.ParentBranchID,
 		branch.DataCloneMode,
 		branch.GitHubPRNumber,
@@ -59,23 +61,31 @@ func (s *Storage) CreateBranch(ctx context.Context, branch *Branch) error {
 	).Scan(&branch.CreatedAt, &branch.UpdatedAt)
 }
 
-// GetBranch retrieves a branch by ID
-func (s *Storage) GetBranch(ctx context.Context, id uuid.UUID) (*Branch, error) {
+// GetBranch retrieves a branch by ID.
+// tenantID filters to a specific tenant when non-nil; nil means no tenant filter (admin/system access).
+func (s *Storage) GetBranch(ctx context.Context, id uuid.UUID, tenantID *uuid.UUID) (*Branch, error) {
 	query := `
-		SELECT id, name, slug, database_name, status, type, parent_branch_id,
+		SELECT id, name, slug, database_name, status, type, tenant_id, parent_branch_id,
 			data_clone_mode, github_pr_number, github_pr_url, github_repo,
 			error_message, created_by, created_at, updated_at, expires_at
 		FROM branching.branches
 		WHERE id = $1 AND status != 'deleted'`
 
+	args := []any{id}
+	if tenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, *tenantID)
+	}
+
 	branch := &Branch{}
-	err := s.pool.QueryRow(ctx, query, id).Scan(
+	err := s.pool.QueryRow(ctx, query, args...).Scan(
 		&branch.ID,
 		&branch.Name,
 		&branch.Slug,
 		&branch.DatabaseName,
 		&branch.Status,
 		&branch.Type,
+		&branch.TenantID,
 		&branch.ParentBranchID,
 		&branch.DataCloneMode,
 		&branch.GitHubPRNumber,
@@ -96,23 +106,31 @@ func (s *Storage) GetBranch(ctx context.Context, id uuid.UUID) (*Branch, error) 
 	return branch, nil
 }
 
-// GetBranchBySlug retrieves a branch by slug
-func (s *Storage) GetBranchBySlug(ctx context.Context, slug string) (*Branch, error) {
+// GetBranchBySlug retrieves a branch by slug.
+// tenantID filters to a specific tenant when non-nil; nil means no tenant filter (admin/system access).
+func (s *Storage) GetBranchBySlug(ctx context.Context, slug string, tenantID *uuid.UUID) (*Branch, error) {
 	query := `
-		SELECT id, name, slug, database_name, status, type, parent_branch_id,
+		SELECT id, name, slug, database_name, status, type, tenant_id, parent_branch_id,
 			data_clone_mode, github_pr_number, github_pr_url, github_repo,
 			error_message, created_by, created_at, updated_at, expires_at
 		FROM branching.branches
 		WHERE slug = $1 AND status != 'deleted'`
 
+	args := []any{slug}
+	if tenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, *tenantID)
+	}
+
 	branch := &Branch{}
-	err := s.pool.QueryRow(ctx, query, slug).Scan(
+	err := s.pool.QueryRow(ctx, query, args...).Scan(
 		&branch.ID,
 		&branch.Name,
 		&branch.Slug,
 		&branch.DatabaseName,
 		&branch.Status,
 		&branch.Type,
+		&branch.TenantID,
 		&branch.ParentBranchID,
 		&branch.DataCloneMode,
 		&branch.GitHubPRNumber,
@@ -136,7 +154,7 @@ func (s *Storage) GetBranchBySlug(ctx context.Context, slug string) (*Branch, er
 // GetBranchByGitHubPR retrieves a branch by GitHub repo and PR number
 func (s *Storage) GetBranchByGitHubPR(ctx context.Context, repo string, prNumber int) (*Branch, error) {
 	query := `
-		SELECT id, name, slug, database_name, status, type, parent_branch_id,
+		SELECT id, name, slug, database_name, status, type, tenant_id, parent_branch_id,
 			data_clone_mode, github_pr_number, github_pr_url, github_repo,
 			error_message, created_by, created_at, updated_at, expires_at
 		FROM branching.branches
@@ -150,6 +168,7 @@ func (s *Storage) GetBranchByGitHubPR(ctx context.Context, repo string, prNumber
 		&branch.DatabaseName,
 		&branch.Status,
 		&branch.Type,
+		&branch.TenantID,
 		&branch.ParentBranchID,
 		&branch.DataCloneMode,
 		&branch.GitHubPRNumber,
@@ -173,7 +192,7 @@ func (s *Storage) GetBranchByGitHubPR(ctx context.Context, repo string, prNumber
 // GetMainBranch retrieves the main branch
 func (s *Storage) GetMainBranch(ctx context.Context) (*Branch, error) {
 	query := `
-		SELECT id, name, slug, database_name, status, type, parent_branch_id,
+		SELECT id, name, slug, database_name, status, type, tenant_id, parent_branch_id,
 			data_clone_mode, github_pr_number, github_pr_url, github_repo,
 			error_message, created_by, created_at, updated_at, expires_at
 		FROM branching.branches
@@ -188,6 +207,7 @@ func (s *Storage) GetMainBranch(ctx context.Context) (*Branch, error) {
 		&branch.DatabaseName,
 		&branch.Status,
 		&branch.Type,
+		&branch.TenantID,
 		&branch.ParentBranchID,
 		&branch.DataCloneMode,
 		&branch.GitHubPRNumber,
@@ -211,7 +231,7 @@ func (s *Storage) GetMainBranch(ctx context.Context) (*Branch, error) {
 // ListBranches lists branches with optional filtering
 func (s *Storage) ListBranches(ctx context.Context, filter ListBranchesFilter) ([]*Branch, error) {
 	query := `
-		SELECT id, name, slug, database_name, status, type, parent_branch_id,
+		SELECT id, name, slug, database_name, status, type, tenant_id, parent_branch_id,
 			data_clone_mode, github_pr_number, github_pr_url, github_repo,
 			error_message, created_by, created_at, updated_at, expires_at
 		FROM branching.branches
@@ -219,6 +239,12 @@ func (s *Storage) ListBranches(ctx context.Context, filter ListBranchesFilter) (
 
 	args := []any{}
 	argCounter := 1
+
+	if filter.TenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", argCounter)
+		args = append(args, *filter.TenantID)
+		argCounter++
+	}
 
 	if filter.Status != nil {
 		query += fmt.Sprintf(" AND status = $%d", argCounter)
@@ -275,6 +301,7 @@ func (s *Storage) ListBranches(ctx context.Context, filter ListBranchesFilter) (
 			&branch.DatabaseName,
 			&branch.Status,
 			&branch.Type,
+			&branch.TenantID,
 			&branch.ParentBranchID,
 			&branch.DataCloneMode,
 			&branch.GitHubPRNumber,
@@ -314,14 +341,21 @@ func (s *Storage) UpdateBranchStatus(ctx context.Context, id uuid.UUID, status B
 	return nil
 }
 
-// DeleteBranch marks a branch as deleted (soft delete)
-func (s *Storage) DeleteBranch(ctx context.Context, id uuid.UUID) error {
+// DeleteBranch marks a branch as deleted (soft delete).
+// tenantID scopes the delete to a specific tenant when non-nil; nil means no tenant filter.
+func (s *Storage) DeleteBranch(ctx context.Context, id uuid.UUID, tenantID *uuid.UUID) error {
 	query := `
 		UPDATE branching.branches
 		SET status = 'deleted', updated_at = NOW()
 		WHERE id = $1 AND type != 'main'`
 
-	result, err := s.pool.Exec(ctx, query, id)
+	args := []any{id}
+	if tenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, *tenantID)
+	}
+
+	result, err := s.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete branch: %w", err)
 	}
@@ -339,6 +373,12 @@ func (s *Storage) CountBranches(ctx context.Context, filter ListBranchesFilter) 
 
 	args := []any{}
 	argCounter := 1
+
+	if filter.TenantID != nil {
+		query += fmt.Sprintf(" AND tenant_id = $%d", argCounter)
+		args = append(args, *filter.TenantID)
+		argCounter++
+	}
 
 	if filter.Status != nil {
 		query += fmt.Sprintf(" AND status = $%d", argCounter)
@@ -383,8 +423,8 @@ func (s *Storage) CountBranchesByUser(ctx context.Context, userID uuid.UUID) (in
 func (s *Storage) LogActivity(ctx context.Context, log *ActivityLog) error {
 	query := `
 		INSERT INTO branching.activity_log (
-			id, branch_id, action, status, details, error_message, executed_by, duration_ms
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			id, branch_id, tenant_id, action, status, details, error_message, executed_by, duration_ms
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING executed_at`
 
 	if log.ID == uuid.Nil {
@@ -403,6 +443,7 @@ func (s *Storage) LogActivity(ctx context.Context, log *ActivityLog) error {
 	return s.pool.QueryRow(ctx, query,
 		log.ID,
 		log.BranchID,
+		log.TenantID,
 		log.Action,
 		log.Status,
 		detailsJSON,
@@ -419,7 +460,7 @@ func (s *Storage) GetActivityLog(ctx context.Context, branchID uuid.UUID, limit 
 	}
 
 	query := `
-		SELECT id, branch_id, action, status, details, error_message, executed_by, executed_at, duration_ms
+		SELECT id, branch_id, tenant_id, action, status, details, error_message, executed_by, executed_at, duration_ms
 		FROM branching.activity_log
 		WHERE branch_id = $1
 		ORDER BY executed_at DESC
@@ -438,6 +479,7 @@ func (s *Storage) GetActivityLog(ctx context.Context, branchID uuid.UUID, limit 
 		err := rows.Scan(
 			&log.ID,
 			&log.BranchID,
+			&log.TenantID,
 			&log.Action,
 			&log.Status,
 			&detailsJSON,
@@ -511,7 +553,7 @@ func (s *Storage) GetMigrationHistory(ctx context.Context, branchID uuid.UUID) (
 // GetExpiredBranches returns branches that have passed their expiration time
 func (s *Storage) GetExpiredBranches(ctx context.Context) ([]*Branch, error) {
 	query := `
-		SELECT id, name, slug, database_name, status, type, parent_branch_id,
+		SELECT id, name, slug, database_name, status, type, tenant_id, parent_branch_id,
 			data_clone_mode, github_pr_number, github_pr_url, github_repo,
 			error_message, created_by, created_at, updated_at, expires_at
 		FROM branching.branches
@@ -536,6 +578,7 @@ func (s *Storage) GetExpiredBranches(ctx context.Context) ([]*Branch, error) {
 			&branch.DatabaseName,
 			&branch.Status,
 			&branch.Type,
+			&branch.TenantID,
 			&branch.ParentBranchID,
 			&branch.DataCloneMode,
 			&branch.GitHubPRNumber,
@@ -561,7 +604,7 @@ func (s *Storage) GetExpiredBranches(ctx context.Context) ([]*Branch, error) {
 // GetGitHubConfig retrieves GitHub config for a repository
 func (s *Storage) GetGitHubConfig(ctx context.Context, repository string) (*GitHubConfig, error) {
 	query := `
-		SELECT id, repository, auto_create_on_pr, auto_delete_on_merge,
+		SELECT id, repository, tenant_id, auto_create_on_pr, auto_delete_on_merge,
 			default_data_clone_mode, webhook_secret, created_at, updated_at
 		FROM branching.github_config
 		WHERE repository = $1`
@@ -571,6 +614,7 @@ func (s *Storage) GetGitHubConfig(ctx context.Context, repository string) (*GitH
 	err := s.pool.QueryRow(ctx, query, repository).Scan(
 		&config.ID,
 		&config.Repository,
+		&config.TenantID,
 		&config.AutoCreateOnPR,
 		&config.AutoDeleteOnMerge,
 		&config.DefaultDataCloneMode,
@@ -609,10 +653,10 @@ func (s *Storage) UpsertGitHubConfig(ctx context.Context, config *GitHubConfig) 
 
 	query := `
 		INSERT INTO branching.github_config (
-			id, repository, auto_create_on_pr, auto_delete_on_merge,
+			id, repository, tenant_id, auto_create_on_pr, auto_delete_on_merge,
 			default_data_clone_mode, webhook_secret
-		) VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (repository) DO UPDATE SET
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (repository, tenant_id) DO UPDATE SET
 			auto_create_on_pr = EXCLUDED.auto_create_on_pr,
 			auto_delete_on_merge = EXCLUDED.auto_delete_on_merge,
 			default_data_clone_mode = EXCLUDED.default_data_clone_mode,
@@ -627,6 +671,7 @@ func (s *Storage) UpsertGitHubConfig(ctx context.Context, config *GitHubConfig) 
 	return s.pool.QueryRow(ctx, query,
 		config.ID,
 		config.Repository,
+		config.TenantID,
 		config.AutoCreateOnPR,
 		config.AutoDeleteOnMerge,
 		config.DefaultDataCloneMode,
@@ -651,14 +696,20 @@ func (s *Storage) DeleteGitHubConfig(ctx context.Context, repository string) err
 }
 
 // ListGitHubConfigs lists all GitHub configurations
-func (s *Storage) ListGitHubConfigs(ctx context.Context) ([]*GitHubConfig, error) {
+func (s *Storage) ListGitHubConfigs(ctx context.Context, tenantID *uuid.UUID) ([]*GitHubConfig, error) {
 	query := `
-		SELECT id, repository, auto_create_on_pr, auto_delete_on_merge,
+		SELECT id, repository, tenant_id, auto_create_on_pr, auto_delete_on_merge,
 			default_data_clone_mode, webhook_secret, created_at, updated_at
-		FROM branching.github_config
-		ORDER BY repository`
+		FROM branching.github_config`
 
-	rows, err := s.pool.Query(ctx, query)
+	args := []any{}
+	if tenantID != nil {
+		query += " WHERE tenant_id = $1"
+		args = append(args, *tenantID)
+	}
+	query += " ORDER BY repository"
+
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list GitHub configs: %w", err)
 	}
@@ -671,6 +722,7 @@ func (s *Storage) ListGitHubConfigs(ctx context.Context) ([]*GitHubConfig, error
 		err := rows.Scan(
 			&config.ID,
 			&config.Repository,
+			&config.TenantID,
 			&config.AutoCreateOnPR,
 			&config.AutoDeleteOnMerge,
 			&config.DefaultDataCloneMode,
@@ -701,8 +753,8 @@ func (s *Storage) ListGitHubConfigs(ctx context.Context) ([]*GitHubConfig, error
 // GrantAccess grants a user access to a branch
 func (s *Storage) GrantAccess(ctx context.Context, access *BranchAccess) error {
 	query := `
-		INSERT INTO branching.branch_access (id, branch_id, user_id, access_level, granted_by)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO branching.branch_access (id, branch_id, tenant_id, user_id, access_level, granted_by)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (branch_id, user_id) DO UPDATE SET
 			access_level = EXCLUDED.access_level,
 			granted_by = EXCLUDED.granted_by,
@@ -716,6 +768,7 @@ func (s *Storage) GrantAccess(ctx context.Context, access *BranchAccess) error {
 	return s.pool.QueryRow(ctx, query,
 		access.ID,
 		access.BranchID,
+		access.TenantID,
 		access.UserID,
 		access.AccessLevel,
 		access.GrantedBy,
@@ -733,7 +786,7 @@ func (s *Storage) RevokeAccess(ctx context.Context, branchID, userID uuid.UUID) 
 // GetBranchAccessList returns all access grants for a branch
 func (s *Storage) GetBranchAccessList(ctx context.Context, branchID uuid.UUID) ([]*BranchAccess, error) {
 	query := `
-		SELECT id, branch_id, user_id, access_level, granted_at, granted_by
+		SELECT id, branch_id, tenant_id, user_id, access_level, granted_at, granted_by
 		FROM branching.branch_access
 		WHERE branch_id = $1
 		ORDER BY granted_at DESC`
@@ -750,6 +803,7 @@ func (s *Storage) GetBranchAccessList(ctx context.Context, branchID uuid.UUID) (
 		if err := rows.Scan(
 			&access.ID,
 			&access.BranchID,
+			&access.TenantID,
 			&access.UserID,
 			&access.AccessLevel,
 			&access.GrantedAt,
@@ -766,7 +820,7 @@ func (s *Storage) GetBranchAccessList(ctx context.Context, branchID uuid.UUID) (
 // GetUserAccess returns the access level for a specific user on a branch
 func (s *Storage) GetUserAccess(ctx context.Context, branchID, userID uuid.UUID) (*BranchAccess, error) {
 	query := `
-		SELECT id, branch_id, user_id, access_level, granted_at, granted_by
+		SELECT id, branch_id, tenant_id, user_id, access_level, granted_at, granted_by
 		FROM branching.branch_access
 		WHERE branch_id = $1 AND user_id = $2`
 
@@ -774,6 +828,7 @@ func (s *Storage) GetUserAccess(ctx context.Context, branchID, userID uuid.UUID)
 	err := s.pool.QueryRow(ctx, query, branchID, userID).Scan(
 		&access.ID,
 		&access.BranchID,
+		&access.TenantID,
 		&access.UserID,
 		&access.AccessLevel,
 		&access.GrantedAt,
@@ -835,8 +890,8 @@ func isAccessSufficient(granted, required BranchAccessLevel) bool {
 
 // UserHasAccess checks if a user has access to a branch (any level)
 func (s *Storage) UserHasAccess(ctx context.Context, slug string, userID uuid.UUID) (bool, error) {
-	// Get the branch first
-	branch, err := s.GetBranchBySlug(ctx, slug)
+	// Get the branch first (no tenant filter — access check is cross-tenant for admin users)
+	branch, err := s.GetBranchBySlug(ctx, slug, nil)
 	if err != nil {
 		if errors.Is(err, ErrBranchNotFound) {
 			return false, nil
@@ -936,6 +991,42 @@ func ValidateSlug(slug string) error {
 	}
 
 	return nil
+}
+
+// CountBranchesByTenant counts branches for a specific tenant
+func (s *Storage) CountBranchesByTenant(ctx context.Context, tenantID uuid.UUID) (int, error) {
+	query := `SELECT COUNT(*) FROM branching.branches WHERE tenant_id = $1 AND status NOT IN ('deleted', 'deleting')`
+
+	var count int
+	err := s.pool.QueryRow(ctx, query, tenantID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count tenant branches: %w", err)
+	}
+
+	return count, nil
+}
+
+// GenerateTenantBranchDatabaseName generates a database name for a tenant-scoped branch
+func GenerateTenantBranchDatabaseName(prefix, tenantSlug, branchSlug string) string {
+	// tenantSlug: "acme-corp" or "default"
+	// branchSlug: "my-feature"
+	// Result: "branch_acme_corp_my_feature" or "branch_default_my_feature"
+
+	sanitizedTenant := strings.ReplaceAll(tenantSlug, "-", "_")
+	sanitizedBranch := strings.ReplaceAll(branchSlug, "-", "_")
+	name := fmt.Sprintf("%s%s_%s", prefix, sanitizedTenant, sanitizedBranch)
+
+	// Ensure it starts with a letter or underscore
+	if len(name) > 0 && name[0] >= '0' && name[0] <= '9' {
+		name = "_" + name
+	}
+
+	// Limit to PostgreSQL max identifier length (63 chars)
+	if len(name) > 63 {
+		name = name[:63]
+	}
+
+	return name
 }
 
 // SetPool sets the connection pool (for testing)

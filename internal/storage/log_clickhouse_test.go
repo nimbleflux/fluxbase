@@ -399,15 +399,11 @@ func TestClickHouseLogStorage_toRow(t *testing.T) {
 func TestClickHouseLogStorage_Write_EmptyBatch(t *testing.T) {
 	t.Run("returns nil for empty entries", func(t *testing.T) {
 		storage := &ClickHouseLogStorage{}
-
-		entries := []*LogEntry{}
 		ctx := context.Background()
+		entries := []*LogEntry{}
 
-		// Write should return nil without error for empty batch
-		// (Actual implementation would return early)
-		assert.Empty(t, entries)
-		assert.NotNil(t, storage)
-		_ = ctx // Context would be used in real implementation
+		err := storage.Write(ctx, entries)
+		assert.NoError(t, err)
 	})
 }
 
@@ -465,15 +461,14 @@ func TestClickHouseLogStorage_QueryOptions(t *testing.T) {
 // =============================================================================
 
 func TestClickHouseLogStorage_Delete_RequiresFilter(t *testing.T) {
-	t.Run("delete requires at least one filter", func(t *testing.T) {
+	t.Run("returns error when no filters provided", func(t *testing.T) {
 		storage := &ClickHouseLogStorage{}
-		opts := LogQueryOptions{}
+		ctx := context.Background()
 
-		query := storage.buildQuery(opts)
-
-		// Empty where clause should be prevented
-		assert.Empty(t, query.where)
-		assert.Empty(t, query.args)
+		count, err := storage.Delete(ctx, LogQueryOptions{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "delete requires at least one filter")
+		assert.Equal(t, int64(0), count)
 	})
 }
 

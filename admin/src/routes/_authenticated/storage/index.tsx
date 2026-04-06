@@ -1,1608 +1,840 @@
-import { useState, useEffect, useRef } from 'react'
-import { formatDistanceToNow } from 'date-fns'
-import { createFileRoute } from '@tanstack/react-router'
-import type { AdminStorageObject, AdminBucket } from '@nimbleflux/fluxbase-sdk'
-import { useFluxbaseClient } from '@nimbleflux/fluxbase-sdk-react'
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import type { AdminStorageObject, AdminBucket } from "@nimbleflux/fluxbase-sdk";
+import { useFluxbaseClient } from "@nimbleflux/fluxbase-sdk-react";
 import {
-  FolderOpen,
-  FolderPlus,
+  HardDrive,
   File,
-  Upload,
-  Download,
-  Trash2,
-  Plus,
   Image as ImageIcon,
   FileText,
   FileJson,
   FileCode,
   FileCog,
-  RefreshCw,
-  Eye,
-  Copy,
-  Clock,
-  HardDrive,
-  ChevronRight,
-  Home,
-  Info,
-  Link,
-  Calendar,
-  FileType,
-} from 'lucide-react'
-import { toast } from 'sonner'
-import { useImpersonationStore } from '@/stores/impersonation-store'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
+} from "lucide-react";
+import { toast } from "sonner";
+import { useImpersonationStore } from "@/stores/impersonation-store";
+import { useTenantStore } from "@/stores/tenant-store";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
-import { ConfirmDialog } from '@/components/confirm-dialog'
-import { ImpersonationPopover } from '@/features/impersonation/components/impersonation-popover'
+  CreateBucketDialog,
+  CreateFolderDialog,
+  DeleteConfirmDialog,
+  FilePreviewDialog,
+  DeleteBucketDialog,
+  DeleteFileDialog,
+  FileMetadataSheet,
+  BucketList,
+  FileList,
+  UploadProgress,
+  Toolbar,
+} from "@/components/storage";
 
-export const Route = createFileRoute('/_authenticated/storage/')({
+export const Route = createFileRoute("/_authenticated/storage/")({
   component: StorageBrowser,
-})
+});
 
 function StorageBrowser() {
-  const client = useFluxbaseClient()
+  const client = useFluxbaseClient();
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
 
-  // State
-  const [buckets, setBuckets] = useState<AdminBucket[]>([])
-  const [selectedBucket, setSelectedBucket] = useState<string>('')
-  const [currentPrefix, setCurrentPrefix] = useState<string>('')
-  const [objects, setObjects] = useState<AdminStorageObject[]>([])
-  const [prefixes, setPrefixes] = useState<string[]>([])
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [buckets, setBuckets] = useState<AdminBucket[]>([]);
+  const [selectedBucket, setSelectedBucket] = useState<string>("");
+  const [currentPrefix, setCurrentPrefix] = useState<string>("");
+  const [objects, setObjects] = useState<AdminStorageObject[]>([]);
+  const [prefixes, setPrefixes] = useState<string[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>(
-    {}
-  )
-  const [searchQuery, setSearchQuery] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'size' | 'date'>('name')
-  const [fileTypeFilter, setFileTypeFilter] = useState<string>('all')
-  const [showCreateBucket, setShowCreateBucket] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showFilePreview, setShowFilePreview] = useState(false)
-  const [showCreateFolder, setShowCreateFolder] = useState(false)
-  const [showDeleteBucketConfirm, setShowDeleteBucketConfirm] = useState(false)
+    {},
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "size" | "date">("name");
+  const [fileTypeFilter, setFileTypeFilter] = useState<string>("all");
+  const [isCreateBucketOpen, setIsCreateBucketOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isFilePreviewOpen, setIsFilePreviewOpen] = useState(false);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [isDeleteBucketConfirmOpen, setIsDeleteBucketConfirmOpen] =
+    useState(false);
   const [deletingBucketName, setDeletingBucketName] = useState<string | null>(
-    null
-  )
-  const [showDeleteFileConfirm, setShowDeleteFileConfirm] = useState(false)
-  const [deletingFilePath, setDeletingFilePath] = useState<string | null>(null)
+    null,
+  );
+  const [isDeleteFileConfirmOpen, setIsDeleteFileConfirmOpen] = useState(false);
+  const [deletingFilePath, setDeletingFilePath] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<AdminStorageObject | null>(
-    null
-  )
-  const [previewUrl, setPreviewUrl] = useState<string>('')
-  const [newBucketName, setNewBucketName] = useState('')
-  const [newFolderName, setNewFolderName] = useState('')
-  const [dragActive, setDragActive] = useState(false)
-  const [showMetadata, setShowMetadata] = useState(false)
+    null,
+  );
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [newBucketName, setNewBucketName] = useState("");
+  const [newFolderName, setNewFolderName] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+  const [isMetadataOpen, setIsMetadataOpen] = useState(false);
   const [metadataFile, setMetadataFile] = useState<AdminStorageObject | null>(
-    null
-  )
-  const [signedUrl, setSignedUrl] = useState<string>('')
-  const [signedUrlExpiry, setSignedUrlExpiry] = useState<number>(3600)
-  const [generatingUrl, setGeneratingUrl] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+    null,
+  );
+  const [signedUrl, setSignedUrl] = useState<string>("");
+  const [signedUrlExpiry, setSignedUrlExpiry] = useState<number>(3600);
+  const [generatingUrl, setGeneratingUrl] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Breadcrumb navigation
   const breadcrumbs = currentPrefix
-    ? currentPrefix.split('/').filter(Boolean)
-    : []
+    ? currentPrefix.split("/").filter(Boolean)
+    : [];
 
-  // Load buckets on mount
-  useEffect(() => {
-    loadBuckets()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Load objects when bucket or prefix changes
-  useEffect(() => {
-    if (selectedBucket) {
-      loadObjects()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBucket, currentPrefix])
-
-  const loadBuckets = async () => {
-    setLoading(true)
+  const loadBuckets = useCallback(async () => {
+    setLoading(true);
     try {
-      const { data, error } = await client.admin.storage.listBuckets()
-      if (error) throw error
-      setBuckets(data?.buckets || [])
-      if (data?.buckets && data.buckets.length > 0 && !selectedBucket) {
-        setSelectedBucket(data.buckets[0].name)
+      const { data, error } = await client.admin.storage.listBuckets();
+      if (error) throw error;
+      setBuckets(data?.buckets || []);
+      if (data?.buckets && data.buckets.length > 0) {
+        setSelectedBucket((prev) => prev || data.buckets[0].name);
       }
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to load buckets: ${errorMessage}`)
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to load buckets: ${errorMessage}`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  }, [client]);
 
-  const loadObjects = async () => {
-    if (!selectedBucket) return
-
-    setLoading(true)
+  const loadObjects = useCallback(async () => {
+    if (!selectedBucket) return;
+    setLoading(true);
     try {
       const { data, error } = await client.admin.storage.listObjects(
         selectedBucket,
         currentPrefix || undefined,
-        '/'
-      )
-      if (error) throw error
-      setObjects(data?.objects || [])
-      setPrefixes(data?.prefixes || [])
+        "/",
+      );
+      if (error) throw error;
+      setObjects(data?.objects || []);
+      setPrefixes(data?.prefixes || []);
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to load files: ${errorMessage}`)
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to load files: ${errorMessage}`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  }, [selectedBucket, currentPrefix, client]);
+
+  useEffect(() => {
+    setSelectedBucket("");
+    setObjects([]);
+    setPrefixes([]);
+    setCurrentPrefix("");
+    setSelectedFiles(new Set());
+    loadBuckets();
+  }, [loadBuckets, currentTenantId]);
+
+  useEffect(() => {
+    if (selectedBucket) {
+      loadObjects();
+    }
+  }, [selectedBucket, currentPrefix, loadObjects]);
 
   const createBucket = async () => {
     if (!newBucketName.trim()) {
-      toast.error('Bucket name is required')
-      return
+      toast.error("Bucket name is required");
+      return;
     }
-
-    setLoading(true)
+    setLoading(true);
     try {
-      const { error } = await client.admin.storage.createBucket(newBucketName)
-      if (error) throw error
-      toast.success(`Bucket "${newBucketName}" created`)
-      setShowCreateBucket(false)
-      setNewBucketName('')
-      await loadBuckets()
-      setSelectedBucket(newBucketName)
+      const { error } = await client.admin.storage.createBucket(newBucketName);
+      if (error) throw error;
+      toast.success(`Bucket "${newBucketName}" created`);
+      setIsCreateBucketOpen(false);
+      setNewBucketName("");
+      await loadBuckets();
+      setSelectedBucket(newBucketName);
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to create bucket: ${errorMessage}`)
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to create bucket: ${errorMessage}`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const deleteBucket = async (bucketName: string) => {
-    setLoading(true)
+    setLoading(true);
     try {
-      const { error } = await client.admin.storage.deleteBucket(bucketName)
-      if (error) throw error
-      toast.success(`Bucket "${bucketName}" deleted`)
-      await loadBuckets()
+      const { error } = await client.admin.storage.deleteBucket(bucketName);
+      if (error) throw error;
+      toast.success(`Bucket "${bucketName}" deleted`);
+      await loadBuckets();
       if (selectedBucket === bucketName) {
-        setSelectedBucket(buckets[0]?.name || '')
+        setSelectedBucket(buckets[0]?.name || "");
       }
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to delete bucket: ${errorMessage}`)
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to delete bucket: ${errorMessage}`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const uploadFiles = async (files: FileList | File[]) => {
     if (!selectedBucket) {
-      toast.error('Please select a bucket first')
-      return
+      toast.error("Please select a bucket first");
+      return;
     }
-
-    setUploading(true)
-    const filesArray = Array.from(files)
-    let successCount = 0
+    setUploading(true);
+    const filesArray = Array.from(files);
+    let successCount = 0;
 
     try {
-      // Upload files sequentially
       for (const file of filesArray) {
-        const key = currentPrefix ? `${currentPrefix}${file.name}` : file.name
-        // Use impersonation token if active, otherwise use admin token
+        const key = currentPrefix ? `${currentPrefix}${file.name}` : file.name;
         const {
           isImpersonating: isImpersonatingNow,
           impersonationToken: impersonationTokenNow,
-        } = useImpersonationStore.getState()
+        } = useImpersonationStore.getState();
         const token =
           isImpersonatingNow && impersonationTokenNow
             ? impersonationTokenNow
-            : localStorage.getItem('fluxbase-auth-token')
+            : localStorage.getItem("fluxbase-auth-token");
 
-        // Set initial progress
-        setUploadProgress((prev) => ({ ...prev, [file.name]: 0 }))
+        setUploadProgress((prev) => ({ ...prev, [file.name]: 0 }));
 
         try {
-          const formData = new FormData()
-          formData.append('file', file)
-
-          // Use XMLHttpRequest for better progress tracking and large file support
-          const uploadUrl = `/api/v1/storage/${selectedBucket}/${encodeURIComponent(key)}`
+          const formData = new FormData();
+          formData.append("file", file);
+          const uploadUrl = `/api/v1/storage/${selectedBucket}/${encodeURIComponent(key)}`;
 
           await new Promise<void>((resolve, reject) => {
-            const xhr = new XMLHttpRequest()
+            const xhr = new XMLHttpRequest();
 
-            // Track upload progress
-            xhr.upload.addEventListener('progress', (e) => {
+            xhr.upload.addEventListener("progress", (e) => {
               if (e.lengthComputable) {
-                const percentComplete = Math.round((e.loaded / e.total) * 100)
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
                 setUploadProgress((prev) => ({
                   ...prev,
                   [file.name]: percentComplete,
-                }))
+                }));
               }
-            })
+            });
 
-            // Handle completion
-            xhr.addEventListener('load', () => {
+            xhr.addEventListener("load", () => {
               if (xhr.status >= 200 && xhr.status < 300) {
-                setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }))
+                setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }));
                 setTimeout(() => {
                   setUploadProgress((prev) => {
-                    const updated = { ...prev }
-                    delete updated[file.name]
-                    return updated
-                  })
-                }, 500)
-                successCount++
-                resolve()
+                    const updated = { ...prev };
+                    delete updated[file.name];
+                    return updated;
+                  });
+                }, 500);
+                successCount++;
+                resolve();
               } else {
-                // eslint-disable-next-line no-console
-                console.error(
-                  `Failed to upload ${file.name}: ${xhr.status} ${xhr.statusText}`
-                )
-                // eslint-disable-next-line no-console
-                console.error('Response:', xhr.responseText)
                 setUploadProgress((prev) => {
-                  const updated = { ...prev }
-                  delete updated[file.name]
-                  return updated
-                })
-                reject(new Error(`Upload failed with status ${xhr.status}`))
+                  const updated = { ...prev };
+                  delete updated[file.name];
+                  return updated;
+                });
+                reject(new Error(`Upload failed with status ${xhr.status}`));
               }
-            })
+            });
 
-            // Handle errors
-            xhr.addEventListener('error', () => {
-              // eslint-disable-next-line no-console
-              console.error('Upload error')
+            xhr.addEventListener("error", () => {
               setUploadProgress((prev) => {
-                const updated = { ...prev }
-                delete updated[file.name]
-                return updated
-              })
-              reject(new Error('Network error during upload'))
-            })
+                const updated = { ...prev };
+                delete updated[file.name];
+                return updated;
+              });
+              reject(new Error("Network error during upload"));
+            });
 
-            xhr.addEventListener('abort', () => {
-              // eslint-disable-next-line no-console
-              console.error('Upload aborted')
+            xhr.addEventListener("abort", () => {
               setUploadProgress((prev) => {
-                const updated = { ...prev }
-                delete updated[file.name]
-                return updated
-              })
-              reject(new Error('Upload aborted'))
-            })
+                const updated = { ...prev };
+                delete updated[file.name];
+                return updated;
+              });
+              reject(new Error("Upload aborted"));
+            });
 
-            // Open and send request
-            xhr.open('POST', uploadUrl, true)
+            xhr.open("POST", uploadUrl, true);
             if (token) {
-              xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+              xhr.setRequestHeader("Authorization", `Bearer ${token}`);
             }
-            xhr.send(formData)
-          })
-        } catch (error: unknown) {
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error'
-          // eslint-disable-next-line no-console
-          console.error(`Error uploading ${file.name}:`, errorMessage)
+            const currentTenant = useTenantStore.getState().currentTenant;
+            if (currentTenant?.id) {
+              xhr.setRequestHeader("X-FB-Tenant", currentTenant.id);
+            }
+            xhr.send(formData);
+          });
+        } catch {
           setUploadProgress((prev) => {
-            const updated = { ...prev }
-            delete updated[file.name]
-            return updated
-          })
+            const updated = { ...prev };
+            delete updated[file.name];
+            return updated;
+          });
         }
       }
 
       if (successCount > 0) {
-        toast.success(`Uploaded ${successCount} file(s)`)
-        await loadObjects()
+        toast.success(`Uploaded ${successCount} file(s)`);
+        await loadObjects();
       }
-
       if (successCount < filesArray.length) {
         toast.error(
-          `Failed to upload ${filesArray.length - successCount} file(s)`
-        )
+          `Failed to upload ${filesArray.length - successCount} file(s)`,
+        );
       }
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to upload files: ${errorMessage}`)
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to upload files: ${errorMessage}`);
     } finally {
-      setUploading(false)
-      setUploadProgress({})
+      setUploading(false);
+      setUploadProgress({});
     }
-  }
+  };
 
   const downloadFile = async (key: string) => {
-    if (!selectedBucket) return
-
+    if (!selectedBucket) return;
     try {
       const { data: blob, error } = await client.admin.storage.downloadObject(
         selectedBucket,
-        key
-      )
-      if (error) throw error
-      if (!blob) throw new Error('No data received')
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = key.split('/').pop() || key
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-      toast.success('File downloaded')
+        key,
+      );
+      if (error) throw error;
+      if (!blob) throw new Error("No data received");
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = key.split("/").pop() || key;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success("File downloaded");
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to download file: ${errorMessage}`)
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to download file: ${errorMessage}`);
     }
-  }
+  };
 
   const deleteFile = async (key: string) => {
-    if (!selectedBucket) return
-
+    if (!selectedBucket) return;
     try {
       const { error } = await client.admin.storage.deleteObject(
         selectedBucket,
-        key
-      )
-      if (error) throw error
-      toast.success('File deleted')
-      await loadObjects()
+        key,
+      );
+      if (error) throw error;
+      toast.success("File deleted");
+      await loadObjects();
       setSelectedFiles((prev) => {
-        const next = new Set(prev)
-        next.delete(key)
-        return next
-      })
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to delete file: ${errorMessage}`)
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to delete file: ${errorMessage}`);
     }
-  }
+  };
 
   const deleteSelected = async () => {
-    const files = Array.from(selectedFiles)
-    if (files.length === 0) return
-
-    setLoading(true)
-    let successCount = 0
+    const files = Array.from(selectedFiles);
+    if (files.length === 0) return;
+    setLoading(true);
+    let successCount = 0;
 
     for (const key of files) {
       try {
         const { error } = await client.admin.storage.deleteObject(
           selectedBucket,
-          key
-        )
-        if (error) throw error
-        successCount++
-      } catch (error: unknown) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Unknown error'
-        // eslint-disable-next-line no-console
-        console.error(`Failed to delete ${key}:`, errorMessage)
+          key,
+        );
+        if (error) throw error;
+        successCount++;
+      } catch {
+        // Error already handled
       }
     }
 
     if (successCount > 0) {
-      toast.success(`Deleted ${successCount} file(s)`)
-      await loadObjects()
-      setSelectedFiles(new Set())
+      toast.success(`Deleted ${successCount} file(s)`);
+      await loadObjects();
+      setSelectedFiles(new Set());
     }
-
     if (successCount < files.length) {
-      toast.error(`Failed to delete ${files.length - successCount} file(s)`)
+      toast.error(`Failed to delete ${files.length - successCount} file(s)`);
     }
-
-    setLoading(false)
-    setShowDeleteConfirm(false)
-  }
+    setLoading(false);
+    setIsDeleteConfirmOpen(false);
+  };
 
   const previewFileHandler = async (obj: AdminStorageObject) => {
-    if (!selectedBucket) return
+    if (!selectedBucket) return;
 
-    // Check if file is previewable
-    const isImage = obj.mime_type?.startsWith('image/')
+    const isImage = obj.mime_type?.startsWith("image/");
     const isText =
-      obj.mime_type?.startsWith('text/') ||
-      obj.mime_type?.includes('json') ||
-      obj.mime_type?.includes('javascript')
+      obj.mime_type?.startsWith("text/") ||
+      obj.mime_type?.includes("json") ||
+      obj.mime_type?.includes("javascript");
 
     if (!isImage && !isText) {
-      toast.error('Preview not available for this file type')
-      return
+      toast.error("Preview not available for this file type");
+      return;
     }
 
     try {
       const { data: blob, error } = await client.admin.storage.downloadObject(
         selectedBucket,
-        obj.path
-      )
-      if (error) throw error
-      if (!blob) throw new Error('No data received')
+        obj.path,
+      );
+      if (error) throw error;
+      if (!blob) throw new Error("No data received");
       if (isImage) {
-        const url = URL.createObjectURL(blob)
-        setPreviewUrl(url)
+        const url = URL.createObjectURL(blob);
+        setPreviewUrl(url);
       } else if (isText) {
-        const text = await blob.text()
-        setPreviewUrl(text)
+        const text = await blob.text();
+        setPreviewUrl(text);
       }
-      setPreviewFile(obj)
-      setShowFilePreview(true)
+      setPreviewFile(obj);
+      setIsFilePreviewOpen(true);
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to load file preview: ${errorMessage}`)
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to load file preview: ${errorMessage}`);
     }
-  }
+  };
 
   const navigateToPrefix = (prefix: string) => {
-    setCurrentPrefix(prefix)
-    setSelectedFiles(new Set())
-  }
+    setCurrentPrefix(prefix);
+    setSelectedFiles(new Set());
+  };
 
   const createFolder = async () => {
     if (!selectedBucket || !newFolderName.trim()) {
-      toast.error('Please enter a folder name')
-      return
+      toast.error("Please enter a folder name");
+      return;
     }
-
-    setLoading(true)
+    setLoading(true);
     try {
-      // Create a folder by creating a path with .keep extension
       const folderPath = currentPrefix
         ? `${currentPrefix}${newFolderName.trim()}/.keep`
-        : `${newFolderName.trim()}/.keep`
-
+        : `${newFolderName.trim()}/.keep`;
       const { error } = await client.admin.storage.createFolder(
         selectedBucket,
-        folderPath
-      )
-      if (error) throw error
-      toast.success(`Folder "${newFolderName}" created`)
-      setShowCreateFolder(false)
-      setNewFolderName('')
-      await loadObjects()
+        folderPath,
+      );
+      if (error) throw error;
+      toast.success(`Folder "${newFolderName}" created`);
+      setIsCreateFolderOpen(false);
+      setNewFolderName("");
+      await loadObjects();
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to create folder: ${errorMessage}`)
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to create folder: ${errorMessage}`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const openFileMetadata = async (file: AdminStorageObject) => {
-    setMetadataFile(file)
-    setShowMetadata(true)
-    setSignedUrl('') // Reset signed URL
-  }
+    setMetadataFile(file);
+    setIsMetadataOpen(true);
+    setSignedUrl("");
+  };
 
   const generateSignedURL = async () => {
     if (!selectedBucket || !metadataFile) {
-      toast.error('No file selected')
-      return
+      toast.error("No file selected");
+      return;
     }
-
-    setGeneratingUrl(true)
+    setGeneratingUrl(true);
     try {
       const { data, error } = await client.admin.storage.generateSignedUrl(
         selectedBucket,
         metadataFile.path,
-        signedUrlExpiry
-      )
-      if (error) throw error
-      if (!data) throw new Error('No data received')
-      setSignedUrl(data.url)
-      toast.success('Signed URL generated')
+        signedUrlExpiry,
+      );
+      if (error) throw error;
+      if (!data) throw new Error("No data received");
+      setSignedUrl(data.url);
+      toast.success("Signed URL generated");
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error'
-      toast.error(`Failed to generate signed URL: ${errorMessage}`)
+        error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Failed to generate signed URL: ${errorMessage}`);
     } finally {
-      setGeneratingUrl(false)
+      setGeneratingUrl(false);
     }
-  }
+  };
 
   const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success(`${label} copied to clipboard`)
-  }
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard`);
+  };
 
   const getPublicUrl = (key: string) => {
-    return `${window.location.origin}/api/v1/storage/${selectedBucket}/${encodeURIComponent(key)}`
-  }
+    return `${window.location.origin}/api/v1/storage/${selectedBucket}/${encodeURIComponent(key)}`;
+  };
 
-  // Escape HTML entities to prevent XSS attacks
   const escapeHtml = (text: string): string => {
     const htmlEntities: Record<string, string> = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    }
-    return text.replace(/[&<>"']/g, (char) => htmlEntities[char])
-  }
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return text.replace(/[&<>"']/g, (char) => htmlEntities[char]);
+  };
 
   const formatJson = (text: string) => {
     try {
-      const json = JSON.parse(text)
-      return JSON.stringify(json, null, 2)
+      const json = JSON.parse(text);
+      return JSON.stringify(json, null, 2);
     } catch {
-      return text
+      return text;
     }
-  }
+  };
 
-  // Format JSON with syntax highlighting (HTML-safe)
   const formatJsonWithHighlighting = (text: string): string => {
-    const formatted = formatJson(text)
-    // First escape HTML to prevent XSS, then apply syntax highlighting
-    const escaped = escapeHtml(formatted)
+    const formatted = formatJson(text);
+    const escaped = escapeHtml(formatted);
     return escaped
       .replace(
         /(&quot;(?:[^&]|&(?!quot;))*?&quot;)\s*:/g,
-        '<span style="color: #94a3b8">$1</span>:'
+        '<span style="color: #94a3b8">$1</span>:',
       )
       .replace(
         /:\s*(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g,
-        ': <span style="color: #86efac">$1</span>'
+        ': <span style="color: #86efac">$1</span>',
       )
       .replace(
         /:\s*(\d+(?:\.\d+)?)/g,
-        ': <span style="color: #fbbf24">$1</span>'
+        ': <span style="color: #fbbf24">$1</span>',
       )
       .replace(
         /:\s*(true|false|null)/g,
-        ': <span style="color: #f472b6">$1</span>'
-      )
-  }
+        ': <span style="color: #f472b6">$1</span>',
+      );
+  };
 
-  const isJsonFile = (contentType?: string, fileName?: string) => {
-    return (
-      contentType?.includes('json') ||
-      fileName?.endsWith('.json') ||
-      fileName?.endsWith('.jsonl')
-    )
-  }
+  const isJsonFile = (contentType?: string, fileName?: string): boolean => {
+    return !!(
+      contentType?.includes("json") ||
+      fileName?.endsWith(".json") ||
+      fileName?.endsWith(".jsonl")
+    );
+  };
 
   const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true)
-    } else if (e.type === 'dragleave') {
-      setDragActive(false)
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
     }
-  }
+  };
 
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragActive(false)
-
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      uploadFiles(e.dataTransfer.files)
+      uploadFiles(e.dataTransfer.files);
     }
-  }
+  };
 
   const toggleFileSelection = (key: string) => {
     setSelectedFiles((prev) => {
-      const next = new Set(prev)
+      const next = new Set(prev);
       if (next.has(key)) {
-        next.delete(key)
+        next.delete(key);
       } else {
-        next.add(key)
+        next.add(key);
       }
-      return next
-    })
-  }
+      return next;
+    });
+  };
 
   const getFileIcon = (contentType?: string) => {
-    if (!contentType) return <File className='h-4 w-4' />
-    if (contentType.startsWith('image/'))
-      return <ImageIcon className='h-4 w-4' />
-    if (contentType.includes('json')) return <FileJson className='h-4 w-4' />
-    if (contentType.startsWith('text/')) return <FileText className='h-4 w-4' />
+    if (!contentType) return <File className="h-4 w-4" />;
+    if (contentType.startsWith("image/"))
+      return <ImageIcon className="h-4 w-4" />;
+    if (contentType.includes("json")) return <FileJson className="h-4 w-4" />;
+    if (contentType.startsWith("text/"))
+      return <FileText className="h-4 w-4" />;
     if (
-      contentType.includes('javascript') ||
-      contentType.includes('typescript')
-    ) {
-      return <FileCode className='h-4 w-4' />
-    }
-    return <FileCog className='h-4 w-4' />
-  }
+      contentType.includes("javascript") ||
+      contentType.includes("typescript")
+    )
+      return <FileCode className="h-4 w-4" />;
+    return <FileCog className="h-4 w-4" />;
+  };
 
   const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B'
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
-  }
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+  };
 
-  // Filter and sort objects
   const filteredObjects = objects
     .filter((obj) => {
-      // Search filter
-      if (!obj.path.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false
-      }
+      if (!obj.path.toLowerCase().includes(searchQuery.toLowerCase()))
+        return false;
 
-      // File type filter
-      if (fileTypeFilter !== 'all') {
-        const contentType = obj.mime_type || ''
-        if (fileTypeFilter === 'image' && !contentType.startsWith('image/'))
-          return false
-        if (fileTypeFilter === 'video' && !contentType.startsWith('video/'))
-          return false
-        if (fileTypeFilter === 'audio' && !contentType.startsWith('audio/'))
-          return false
+      if (fileTypeFilter !== "all") {
+        const contentType = obj.mime_type || "";
+        if (fileTypeFilter === "image" && !contentType.startsWith("image/"))
+          return false;
+        if (fileTypeFilter === "video" && !contentType.startsWith("video/"))
+          return false;
+        if (fileTypeFilter === "audio" && !contentType.startsWith("audio/"))
+          return false;
         if (
-          fileTypeFilter === 'document' &&
+          fileTypeFilter === "document" &&
           ![
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument',
-            'text/plain',
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument",
+            "text/plain",
           ].some((t) => contentType.includes(t))
         )
-          return false
+          return false;
         if (
-          fileTypeFilter === 'code' &&
+          fileTypeFilter === "code" &&
           ![
-            'text/javascript',
-            'text/typescript',
-            'application/json',
-            'text/html',
-            'text/css',
-            'text/x-python',
-            'text/x-go',
+            "text/javascript",
+            "text/typescript",
+            "application/json",
+            "text/html",
+            "text/css",
+            "text/x-python",
+            "text/x-go",
           ].some((t) => contentType.includes(t)) &&
           ![
-            '.js',
-            '.ts',
-            '.json',
-            '.html',
-            '.css',
-            '.py',
-            '.go',
-            '.tsx',
-            '.jsx',
+            ".js",
+            ".ts",
+            ".json",
+            ".html",
+            ".css",
+            ".py",
+            ".go",
+            ".tsx",
+            ".jsx",
           ].some((ext) => obj.path.endsWith(ext))
         )
-          return false
+          return false;
         if (
-          fileTypeFilter === 'archive' &&
-          !['application/zip', 'application/x-tar', 'application/gzip'].some(
-            (t) => contentType.includes(t)
+          fileTypeFilter === "archive" &&
+          !["application/zip", "application/x-tar", "application/gzip"].some(
+            (t) => contentType.includes(t),
           )
         )
-          return false
+          return false;
       }
-
-      return true
+      return true;
     })
     .sort((a, b) => {
       switch (sortBy) {
-        case 'name':
-          return a.path.localeCompare(b.path)
-        case 'size':
-          return b.size - a.size
-        case 'date':
+        case "name":
+          return a.path.localeCompare(b.path);
+        case "size":
+          return b.size - a.size;
+        case "date":
           return (
             new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-          )
+          );
         default:
-          return 0
+          return 0;
       }
-    })
+    });
 
-  const totalSize = objects.reduce((sum, obj) => sum + obj.size, 0)
-  const selectedCount = selectedFiles.size
+  const totalSize = objects.reduce((sum, obj) => sum + obj.size, 0);
+  const selectedCount = selectedFiles.size;
+
+  const handleSelectAll = () =>
+    setSelectedFiles(new Set(filteredObjects.map((obj) => obj.path)));
+  const handleDeselectAll = () => setSelectedFiles(new Set());
 
   return (
-    <div className='flex h-full flex-col'>
-      {/* Header */}
-      <div className='bg-background flex items-center justify-between border-b px-6 py-4'>
-        <div className='flex items-center gap-3'>
-          <div className='bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg'>
-            <HardDrive className='text-primary h-5 w-5' />
+    <div className="flex h-full flex-col">
+      <div className="bg-background flex items-center justify-between border-b px-6 py-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+            <HardDrive className="text-primary h-5 w-5" />
           </div>
           <div>
-            <h1 className='text-xl font-semibold'>Storage</h1>
-            <p className='text-muted-foreground text-sm'>
+            <h1 className="text-xl font-semibold">Storage</h1>
+            <p className="text-muted-foreground text-sm">
               Manage files and buckets in your storage backend
             </p>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className='flex flex-1 overflow-hidden p-6'>
-        {/* Sidebar - Buckets */}
-        <div className='bg-muted/10 flex h-full w-64 flex-col border-r p-4'>
-        <div className='mb-4 flex items-center justify-between'>
-          <h3 className='font-semibold'>Buckets</h3>
-          <Button
-            variant='ghost'
-            size='icon'
-            onClick={() => setShowCreateBucket(true)}
-          >
-            <Plus className='h-4 w-4' />
-          </Button>
-        </div>
+      <div className="flex flex-1 overflow-hidden p-6">
+        <BucketList
+          buckets={buckets}
+          selectedBucket={selectedBucket}
+          onSelectBucket={(name) => {
+            setSelectedBucket(name);
+            setCurrentPrefix("");
+            setSelectedFiles(new Set());
+          }}
+          onDeleteBucket={(name) => {
+            setDeletingBucketName(name);
+            setIsDeleteBucketConfirmOpen(true);
+          }}
+          objectCount={objects.length}
+          totalSize={totalSize}
+          formatBytes={formatBytes}
+          onCreateBucket={() => setIsCreateBucketOpen(true)}
+        />
 
-        <ScrollArea className='min-h-0 flex-1'>
-          <div className='space-y-1'>
-            {buckets.map((bucket) => (
-              <div
-                key={bucket.id}
-                className={`group hover:bg-muted/50 flex cursor-pointer items-center justify-between rounded p-2 ${
-                  selectedBucket === bucket.name ? 'bg-muted' : ''
-                }`}
-                onClick={() => {
-                  setSelectedBucket(bucket.name)
-                  setCurrentPrefix('')
-                  setSelectedFiles(new Set())
+        <div className="flex flex-1 flex-col">
+          {selectedBucket ? (
+            <>
+              <Toolbar
+                breadcrumbs={breadcrumbs}
+                searchQuery={searchQuery}
+                sortBy={sortBy}
+                fileTypeFilter={fileTypeFilter}
+                selectedCount={selectedCount}
+                filteredCount={filteredObjects.length}
+                uploading={uploading}
+                loading={loading}
+                onNavigateToPrefix={navigateToPrefix}
+                onSearchChange={setSearchQuery}
+                onSortChange={setSortBy}
+                onFileTypeFilterChange={setFileTypeFilter}
+                onSelectAll={handleSelectAll}
+                onDeselectAll={handleDeselectAll}
+                onRefresh={loadObjects}
+                onCreateFolder={() => setIsCreateFolderOpen(true)}
+                onUpload={() => fileInputRef.current?.click()}
+                onDeleteSelected={() => setIsDeleteConfirmOpen(true)}
+                fileInputRef={fileInputRef}
+                onFileInputChange={uploadFiles}
+              />
+
+              <UploadProgress uploadProgress={uploadProgress} />
+
+              <FileList
+                prefixes={prefixes}
+                objects={filteredObjects}
+                selectedFiles={selectedFiles}
+                currentPrefix={currentPrefix}
+                searchQuery={searchQuery}
+                loading={loading}
+                dragActive={dragActive}
+                onNavigateToPrefix={navigateToPrefix}
+                onToggleFileSelection={toggleFileSelection}
+                onFileMetadata={openFileMetadata}
+                onFilePreview={previewFileHandler}
+                onFileDownload={downloadFile}
+                onFileDelete={(path) => {
+                  setDeletingFilePath(path);
+                  setIsDeleteFileConfirmOpen(true);
                 }}
-              >
-                <div className='flex min-w-0 flex-1 items-center gap-2'>
-                  <HardDrive className='h-4 w-4 flex-shrink-0' />
-                  <span className='truncate text-sm'>{bucket.name}</span>
-                </div>
-                <Button
-                  variant='ghost'
-                  size='icon'
-                  className='h-6 w-6 opacity-0 group-hover:opacity-100'
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setDeletingBucketName(bucket.name)
-                    setShowDeleteBucketConfirm(true)
-                  }}
-                >
-                  <Trash2 className='h-3 w-3' />
-                </Button>
-              </div>
-            ))}
-            {buckets.length === 0 && !loading && (
-              <p className='text-muted-foreground text-sm'>No buckets</p>
-            )}
-          </div>
-        </ScrollArea>
-
-        {selectedBucket && (
-          <div className='space-y-2 border-t pt-4'>
-            <div className='text-muted-foreground text-xs'>
-              <div className='flex justify-between'>
-                <span>Files:</span>
-                <span>{objects.length}</span>
-              </div>
-              <div className='flex justify-between'>
-                <span>Total Size:</span>
-                <span>{formatBytes(totalSize)}</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Main Content */}
-      <div className='flex flex-1 flex-col'>
-        {selectedBucket ? (
-          <>
-            {/* Toolbar */}
-            <div className='space-y-4 border-b p-4'>
-              {/* Breadcrumb */}
-              <div className='flex items-center gap-2 text-sm'>
-                <Button
-                  variant='ghost'
-                  size='sm'
-                  onClick={() => navigateToPrefix('')}
-                  className='h-7 px-2'
-                >
-                  <Home className='h-3 w-3' />
-                </Button>
-                {breadcrumbs.map((crumb, i) => (
-                  <div key={i} className='flex items-center gap-2'>
-                    <ChevronRight className='text-muted-foreground h-3 w-3' />
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      onClick={() => {
-                        const prefix =
-                          breadcrumbs.slice(0, i + 1).join('/') + '/'
-                        navigateToPrefix(prefix)
-                      }}
-                      className='h-7 px-2'
-                    >
-                      {crumb}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Actions */}
-              <div className='space-y-3'>
-                <div className='flex items-center gap-2'>
-                  <div className='flex flex-1 items-center gap-2'>
-                    <div className='relative max-w-sm flex-1'>
-                      <Input
-                        placeholder='Search files...'
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                    </div>
-                    <Select
-                      value={sortBy}
-                      onValueChange={(v) =>
-                        setSortBy(v as 'name' | 'size' | 'date')
-                      }
-                    >
-                      <SelectTrigger className='w-32'>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='name'>Name</SelectItem>
-                        <SelectItem value='size'>Size</SelectItem>
-                        <SelectItem value='date'>Date</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    onClick={loadObjects}
-                    disabled={loading}
-                  >
-                    <RefreshCw
-                      className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
-                    />
-                  </Button>
-
-                  <input
-                    ref={fileInputRef}
-                    type='file'
-                    multiple
-                    className='hidden'
-                    onChange={(e) => {
-                      if (e.target.files) {
-                        uploadFiles(e.target.files)
-                        e.target.value = ''
-                      }
-                    }}
-                  />
-
-                  <Button
-                    variant='outline'
-                    onClick={() => setShowCreateFolder(true)}
-                    size='sm'
-                  >
-                    <FolderPlus className='mr-2 h-4 w-4' />
-                    New Folder
-                  </Button>
-
-                  <Button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
-                    size='sm'
-                  >
-                    <Upload className='mr-2 h-4 w-4' />
-                    {uploading ? 'Uploading...' : 'Upload'}
-                  </Button>
-
-                  <ImpersonationPopover
-                    contextLabel='Browsing as'
-                    defaultReason='Storage browser testing'
-                  />
-                </div>
-
-                {/* File Type Filter Chips */}
-                <div className='flex flex-wrap items-center gap-2'>
-                  <Badge
-                    variant={fileTypeFilter === 'all' ? 'default' : 'outline'}
-                    className='cursor-pointer'
-                    onClick={() => setFileTypeFilter('all')}
-                  >
-                    All Files
-                  </Badge>
-                  <Badge
-                    variant={fileTypeFilter === 'image' ? 'default' : 'outline'}
-                    className='cursor-pointer'
-                    onClick={() => setFileTypeFilter('image')}
-                  >
-                    <ImageIcon className='mr-1 h-3 w-3' />
-                    Images
-                  </Badge>
-                  <Badge
-                    variant={fileTypeFilter === 'video' ? 'default' : 'outline'}
-                    className='cursor-pointer'
-                    onClick={() => setFileTypeFilter('video')}
-                  >
-                    <FileCode className='mr-1 h-3 w-3' />
-                    Videos
-                  </Badge>
-                  <Badge
-                    variant={fileTypeFilter === 'audio' ? 'default' : 'outline'}
-                    className='cursor-pointer'
-                    onClick={() => setFileTypeFilter('audio')}
-                  >
-                    <FileText className='mr-1 h-3 w-3' />
-                    Audio
-                  </Badge>
-                  <Badge
-                    variant={
-                      fileTypeFilter === 'document' ? 'default' : 'outline'
-                    }
-                    className='cursor-pointer'
-                    onClick={() => setFileTypeFilter('document')}
-                  >
-                    <FileText className='mr-1 h-3 w-3' />
-                    Documents
-                  </Badge>
-                  <Badge
-                    variant={fileTypeFilter === 'code' ? 'default' : 'outline'}
-                    className='cursor-pointer'
-                    onClick={() => setFileTypeFilter('code')}
-                  >
-                    <FileCode className='mr-1 h-3 w-3' />
-                    Code
-                  </Badge>
-                  <Badge
-                    variant={
-                      fileTypeFilter === 'archive' ? 'default' : 'outline'
-                    }
-                    className='cursor-pointer'
-                    onClick={() => setFileTypeFilter('archive')}
-                  >
-                    <FileCog className='mr-1 h-3 w-3' />
-                    Archives
-                  </Badge>
-                </div>
-
-                {filteredObjects.length > 0 && (
-                  <div className='flex items-center gap-2'>
-                    <Checkbox
-                      checked={
-                        selectedCount === filteredObjects.length &&
-                        filteredObjects.length > 0
-                      }
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          // Select all filtered files
-                          setSelectedFiles(
-                            new Set(filteredObjects.map((obj) => obj.path))
-                          )
-                        } else {
-                          // Deselect all
-                          setSelectedFiles(new Set())
-                        }
-                      }}
-                    />
-                    <span className='text-muted-foreground text-sm'>
-                      {selectedCount === 0
-                        ? 'Select All'
-                        : `${selectedCount} selected`}
-                    </span>
-                  </div>
-                )}
-
-                {selectedCount > 0 && (
-                  <Button
-                    variant='destructive'
-                    size='sm'
-                    onClick={() => setShowDeleteConfirm(true)}
-                  >
-                    <Trash2 className='mr-2 h-4 w-4' />
-                    Delete ({selectedCount})
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* Upload Progress */}
-            {Object.keys(uploadProgress).length > 0 && (
-              <div className='bg-muted/40 space-y-3 border-b p-4'>
-                <div className='text-sm font-medium'>Uploading files...</div>
-                {Object.entries(uploadProgress).map(([filename, progress]) => (
-                  <div key={filename} className='space-y-1.5'>
-                    <div className='flex items-center justify-between text-xs'>
-                      <span className='text-muted-foreground flex-1 truncate'>
-                        {filename}
-                      </span>
-                      <span className='ml-2 font-medium'>{progress}%</span>
-                    </div>
-                    <div className='bg-muted relative h-2 w-full overflow-hidden rounded-full'>
-                      <div
-                        className='bg-primary h-full transition-all duration-300'
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* File List */}
-            <div
-              className='flex-1 overflow-auto p-4'
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              {dragActive && (
-                <div className='bg-primary/10 border-primary fixed inset-0 z-50 flex items-center justify-center border-4 border-dashed'>
-                  <div className='text-center'>
-                    <Upload className='text-primary mx-auto mb-4 h-12 w-12' />
-                    <p className='text-lg font-semibold'>
-                      Drop files to upload
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className='space-y-2'>
-                {/* Folders */}
-                {prefixes.map((prefix) => (
-                  <Card
-                    key={prefix}
-                    className='hover:bg-muted/50 cursor-pointer p-3 transition-colors'
-                    onClick={() => navigateToPrefix(prefix)}
-                  >
-                    <div className='flex items-center gap-3'>
-                      <FolderOpen className='h-5 w-5 text-blue-500' />
-                      <div className='min-w-0 flex-1'>
-                        <p className='truncate font-medium'>
-                          {prefix.replace(currentPrefix, '').replace('/', '')}
-                        </p>
-                      </div>
-                      <ChevronRight className='text-muted-foreground h-4 w-4' />
-                    </div>
-                  </Card>
-                ))}
-
-                {/* Files */}
-                {filteredObjects.map((obj) => (
-                  <Card
-                    key={obj.path}
-                    className='hover:bg-muted/50 p-3 transition-colors'
-                  >
-                    <div className='flex items-center gap-3'>
-                      <Checkbox
-                        checked={selectedFiles.has(obj.path)}
-                        onCheckedChange={() => toggleFileSelection(obj.path)}
-                      />
-                      {getFileIcon(obj.mime_type)}
-                      <div className='min-w-0 flex-1'>
-                        <p className='truncate font-medium'>
-                          {obj.path.replace(currentPrefix, '')}
-                        </p>
-                        <div className='text-muted-foreground flex items-center gap-3 text-xs'>
-                          <span>{formatBytes(obj.size)}</span>
-                          <span className='flex items-center gap-1'>
-                            <Clock className='h-3 w-3' />
-                            {formatDistanceToNow(new Date(obj.updated_at), {
-                              addSuffix: true,
-                            })}
-                          </span>
-                          {obj.mime_type && (
-                            <Badge variant='outline' className='text-xs'>
-                              {obj.mime_type.split('/')[1]}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div className='flex gap-1'>
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          onClick={() => openFileMetadata(obj)}
-                          title='File info'
-                        >
-                          <Info className='h-4 w-4' />
-                        </Button>
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          onClick={() => previewFileHandler(obj)}
-                          title='Preview'
-                        >
-                          <Eye className='h-4 w-4' />
-                        </Button>
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          onClick={() => downloadFile(obj.path)}
-                          title='Download'
-                        >
-                          <Download className='h-4 w-4' />
-                        </Button>
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          onClick={() => {
-                            setDeletingFilePath(obj.path)
-                            setShowDeleteFileConfirm(true)
-                          }}
-                          title='Delete'
-                        >
-                          <Trash2 className='h-4 w-4' />
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-
-                {filteredObjects.length === 0 &&
-                  prefixes.length === 0 &&
-                  !loading && (
-                    <div className='text-muted-foreground py-12 text-center'>
-                      <FolderOpen className='mx-auto mb-4 h-12 w-12 opacity-50' />
-                      <p>No files in this folder</p>
-                      <p className='mt-2 text-sm'>
-                        Drag and drop files here or click Upload
-                      </p>
-                    </div>
-                  )}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className='text-muted-foreground flex flex-1 items-center justify-center'>
-            <div className='text-center'>
-              <HardDrive className='mx-auto mb-4 h-12 w-12 opacity-50' />
-              <p>Select a bucket to browse files</p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Create Bucket Dialog */}
-      <Dialog open={showCreateBucket} onOpenChange={setShowCreateBucket}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Bucket</DialogTitle>
-            <DialogDescription>
-              Enter a name for your new storage bucket
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            placeholder='my-bucket'
-            value={newBucketName}
-            onChange={(e) => setNewBucketName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') createBucket()
-            }}
-          />
-          <DialogFooter>
-            <Button
-              variant='outline'
-              onClick={() => setShowCreateBucket(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={createBucket} disabled={loading}>
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Folder Dialog */}
-      <Dialog open={showCreateFolder} onOpenChange={setShowCreateFolder}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Folder</DialogTitle>
-            <DialogDescription>
-              Enter a name for your new folder
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            placeholder='my-folder'
-            value={newFolderName}
-            onChange={(e) => setNewFolderName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') createFolder()
-            }}
-          />
-          <DialogFooter>
-            <Button
-              variant='outline'
-              onClick={() => setShowCreateFolder(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={createFolder} disabled={loading}>
-              Create Folder
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Files</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete {selectedCount} file(s)? This
-              action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant='outline'
-              onClick={() => setShowDeleteConfirm(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant='destructive'
-              onClick={deleteSelected}
-              disabled={loading}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* File Preview Dialog */}
-      <Dialog open={showFilePreview} onOpenChange={setShowFilePreview}>
-        <DialogContent className='max-h-[90vh] max-w-4xl'>
-          <DialogHeader>
-            <DialogTitle>{previewFile?.path}</DialogTitle>
-            <DialogDescription>
-              {previewFile && (
-                <div className='flex items-center gap-4 text-sm'>
-                  <span>{formatBytes(previewFile.size)}</span>
-                  <span>{previewFile.mime_type}</span>
-                  <span>
-                    {formatDistanceToNow(new Date(previewFile.updated_at), {
-                      addSuffix: true,
-                    })}
-                  </span>
-                </div>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className='max-h-[60vh]'>
-            {previewFile?.mime_type?.startsWith('image/') ? (
-              <img src={previewUrl} alt={previewFile.path} className='w-full' />
-            ) : isJsonFile(previewFile?.mime_type, previewFile?.path) ? (
-              <div className='rounded-lg bg-slate-950 p-4'>
-                <pre className='font-mono text-sm'>
-                  <code
-                    className='language-json text-slate-100'
-                    dangerouslySetInnerHTML={{
-                      __html: formatJsonWithHighlighting(previewUrl),
-                    }}
-                  />
-                </pre>
-              </div>
-            ) : (
-              <pre className='bg-muted/50 rounded p-4 font-mono text-sm'>
-                {previewUrl}
-              </pre>
-            )}
-          </ScrollArea>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setShowFilePreview(false)}>
-              Close
-            </Button>
-            {previewFile && !previewFile.mime_type?.startsWith('image/') && (
-              <Button
-                variant='outline'
-                onClick={() => {
-                  const textToCopy = isJsonFile(
-                    previewFile.mime_type,
-                    previewFile.path
-                  )
-                    ? formatJson(previewUrl)
-                    : previewUrl
-                  navigator.clipboard.writeText(textToCopy)
-                  toast.success('Copied to clipboard')
-                }}
-              >
-                <Copy className='mr-2 h-4 w-4' />
-                Copy
-              </Button>
-            )}
-            {previewFile && (
-              <Button onClick={() => downloadFile(previewFile.path)}>
-                <Download className='mr-2 h-4 w-4' />
-                Download
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Bucket Confirmation */}
-      <ConfirmDialog
-        open={showDeleteBucketConfirm}
-        onOpenChange={setShowDeleteBucketConfirm}
-        title='Delete Bucket'
-        desc={`Are you sure you want to delete the bucket "${deletingBucketName}"? This action cannot be undone.`}
-        confirmText='Delete'
-        destructive
-        handleConfirm={() => {
-          if (deletingBucketName) {
-            deleteBucket(deletingBucketName)
-          }
-          setShowDeleteBucketConfirm(false)
-          setDeletingBucketName(null)
-        }}
-      />
-
-      {/* Delete File Confirmation */}
-      <ConfirmDialog
-        open={showDeleteFileConfirm}
-        onOpenChange={setShowDeleteFileConfirm}
-        title='Delete File'
-        desc={`Are you sure you want to delete "${deletingFilePath}"? This action cannot be undone.`}
-        confirmText='Delete'
-        destructive
-        handleConfirm={() => {
-          if (deletingFilePath) {
-            deleteFile(deletingFilePath)
-          }
-          setShowDeleteFileConfirm(false)
-          setDeletingFilePath(null)
-        }}
-      />
-
-      {/* File Metadata Sheet */}
-      <Sheet open={showMetadata} onOpenChange={setShowMetadata}>
-        <SheetContent className='w-full overflow-y-auto sm:max-w-lg'>
-          <SheetHeader>
-            <SheetTitle>File Details</SheetTitle>
-            <SheetDescription>View and manage file metadata</SheetDescription>
-          </SheetHeader>
-
-          {metadataFile && (
-            <div className='mt-6 space-y-6'>
-              {/* File Info */}
-              <div className='space-y-4'>
-                <div className='flex items-start gap-3'>
-                  {getFileIcon(metadataFile.mime_type)}
-                  <div className='min-w-0 flex-1'>
-                    <h3 className='truncate font-medium'>
-                      {metadataFile.path.replace(currentPrefix, '')}
-                    </h3>
-                    <p className='text-muted-foreground truncate text-sm'>
-                      {metadataFile.path}
-                    </p>
-                  </div>
-                </div>
-
-                <div className='grid gap-3'>
-                  <div className='flex items-center justify-between border-b py-2'>
-                    <div className='text-muted-foreground flex items-center gap-2 text-sm'>
-                      <HardDrive className='h-4 w-4' />
-                      <span>Size</span>
-                    </div>
-                    <span className='text-sm font-medium'>
-                      {formatBytes(metadataFile.size)}
-                    </span>
-                  </div>
-
-                  <div className='flex items-center justify-between border-b py-2'>
-                    <div className='text-muted-foreground flex items-center gap-2 text-sm'>
-                      <FileType className='h-4 w-4' />
-                      <span>Type</span>
-                    </div>
-                    <Badge variant='outline' className='text-xs'>
-                      {metadataFile.mime_type || 'Unknown'}
-                    </Badge>
-                  </div>
-
-                  <div className='flex items-center justify-between border-b py-2'>
-                    <div className='text-muted-foreground flex items-center gap-2 text-sm'>
-                      <Calendar className='h-4 w-4' />
-                      <span>Modified</span>
-                    </div>
-                    <span className='text-sm font-medium'>
-                      {formatDistanceToNow(new Date(metadataFile.updated_at), {
-                        addSuffix: true,
-                      })}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Public URL */}
-              <div className='space-y-2'>
-                <label className='text-sm font-medium'>Public URL</label>
-                <div className='flex gap-2'>
-                  <Input
-                    value={getPublicUrl(metadataFile.path)}
-                    readOnly
-                    className='flex-1 font-mono text-xs'
-                  />
-                  <Button
-                    variant='outline'
-                    size='icon'
-                    onClick={() =>
-                      copyToClipboard(getPublicUrl(metadataFile.path), 'URL')
-                    }
-                  >
-                    <Copy className='h-4 w-4' />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Signed URL Generator */}
-              <div className='space-y-3 border-t pt-4'>
-                <div className='flex items-center gap-2'>
-                  <Link className='h-4 w-4' />
-                  <h4 className='font-medium'>Generate Signed URL</h4>
-                </div>
-                <p className='text-muted-foreground text-sm'>
-                  Create a temporary URL with an expiration time for secure file
-                  sharing.
-                </p>
-
-                <div className='space-y-2'>
-                  <label className='text-sm font-medium'>Expires In</label>
-                  <Select
-                    value={signedUrlExpiry.toString()}
-                    onValueChange={(val) => setSignedUrlExpiry(parseInt(val))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value='900'>15 minutes</SelectItem>
-                      <SelectItem value='1800'>30 minutes</SelectItem>
-                      <SelectItem value='3600'>1 hour</SelectItem>
-                      <SelectItem value='7200'>2 hours</SelectItem>
-                      <SelectItem value='21600'>6 hours</SelectItem>
-                      <SelectItem value='86400'>24 hours</SelectItem>
-                      <SelectItem value='604800'>7 days</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Button
-                  onClick={generateSignedURL}
-                  disabled={generatingUrl}
-                  className='w-full'
-                >
-                  {generatingUrl ? (
-                    <>
-                      <RefreshCw className='mr-2 h-4 w-4 animate-spin' />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Link className='mr-2 h-4 w-4' />
-                      Generate Signed URL
-                    </>
-                  )}
-                </Button>
-
-                {signedUrl && (
-                  <div className='bg-muted space-y-2 rounded-lg p-3'>
-                    <div className='flex items-center justify-between'>
-                      <span className='text-sm font-medium'>Signed URL</span>
-                      <Button
-                        variant='ghost'
-                        size='sm'
-                        onClick={() => copyToClipboard(signedUrl, 'Signed URL')}
-                      >
-                        <Copy className='mr-1 h-3 w-3' />
-                        Copy
-                      </Button>
-                    </div>
-                    <p className='text-muted-foreground font-mono text-xs break-all'>
-                      {signedUrl}
-                    </p>
-                    <p className='text-muted-foreground text-xs'>
-                      Expires in{' '}
-                      {signedUrlExpiry < 3600
-                        ? `${signedUrlExpiry / 60} minutes`
-                        : `${signedUrlExpiry / 3600} hours`}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Custom Metadata */}
-              {metadataFile.metadata &&
-                Object.keys(metadataFile.metadata).length > 0 && (
-                  <div className='space-y-3 border-t pt-4'>
-                    <h4 className='font-medium'>Custom Metadata</h4>
-                    <div className='space-y-2'>
-                      {Object.entries(metadataFile.metadata).map(
-                        ([key, value]) => (
-                          <div
-                            key={key}
-                            className='flex items-center justify-between border-b py-2'
-                          >
-                            <span className='text-muted-foreground text-sm'>
-                              {key}
-                            </span>
-                            <span className='max-w-[200px] truncate text-sm font-medium'>
-                              {typeof value === 'object'
-                                ? JSON.stringify(value)
-                                : String(value)}
-                            </span>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-
-              {/* Actions */}
-              <div className='flex gap-2 border-t pt-4'>
-                <Button
-                  variant='outline'
-                  className='flex-1'
-                  onClick={() => downloadFile(metadataFile.path)}
-                >
-                  <Download className='mr-2 h-4 w-4' />
-                  Download
-                </Button>
-                <Button
-                  variant='outline'
-                  className='flex-1'
-                  onClick={() => {
-                    setShowMetadata(false)
-                    previewFileHandler(metadataFile)
-                  }}
-                >
-                  <Eye className='mr-2 h-4 w-4' />
-                  Preview
-                </Button>
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                formatBytes={formatBytes}
+                getFileIcon={getFileIcon}
+              />
+            </>
+          ) : (
+            <div className="text-muted-foreground flex flex-1 items-center justify-center">
+              <div className="text-center">
+                <HardDrive className="mx-auto mb-4 h-12 w-12 opacity-50" />
+                <p>Select a bucket to browse files</p>
               </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </div>
       </div>
+
+      <CreateBucketDialog
+        isOpen={isCreateBucketOpen}
+        onOpenChange={setIsCreateBucketOpen}
+        bucketName={newBucketName}
+        onBucketNameChange={setNewBucketName}
+        onCreate={createBucket}
+        loading={loading}
+      />
+
+      <CreateFolderDialog
+        isOpen={isCreateFolderOpen}
+        onOpenChange={setIsCreateFolderOpen}
+        folderName={newFolderName}
+        onFolderNameChange={setNewFolderName}
+        onCreate={createFolder}
+        loading={loading}
+      />
+
+      <DeleteConfirmDialog
+        isOpen={isDeleteConfirmOpen}
+        onOpenChange={setIsDeleteConfirmOpen}
+        selectedCount={selectedCount}
+        onDelete={deleteSelected}
+        loading={loading}
+      />
+
+      <FilePreviewDialog
+        isOpen={isFilePreviewOpen}
+        onOpenChange={setIsFilePreviewOpen}
+        file={previewFile}
+        previewUrl={previewUrl}
+        onDownload={() => previewFile && downloadFile(previewFile.path)}
+        formatBytes={formatBytes}
+        formatJson={formatJson}
+        formatJsonWithHighlighting={formatJsonWithHighlighting}
+        isJsonFile={isJsonFile}
+      />
+
+      <DeleteBucketDialog
+        isOpen={isDeleteBucketConfirmOpen}
+        onOpenChange={setIsDeleteBucketConfirmOpen}
+        bucketName={deletingBucketName}
+        onDelete={() => deletingBucketName && deleteBucket(deletingBucketName)}
+      />
+
+      <DeleteFileDialog
+        isOpen={isDeleteFileConfirmOpen}
+        onOpenChange={setIsDeleteFileConfirmOpen}
+        filePath={deletingFilePath}
+        onDelete={() => deletingFilePath && deleteFile(deletingFilePath)}
+      />
+
+      <FileMetadataSheet
+        isOpen={isMetadataOpen}
+        onOpenChange={setIsMetadataOpen}
+        file={metadataFile}
+        currentPrefix={currentPrefix}
+        signedUrl={signedUrl}
+        signedUrlExpiry={signedUrlExpiry}
+        generatingUrl={generatingUrl}
+        onSignedUrlExpiryChange={setSignedUrlExpiry}
+        onGenerateSignedUrl={generateSignedURL}
+        onDownload={() => metadataFile && downloadFile(metadataFile.path)}
+        onPreview={() => metadataFile && previewFileHandler(metadataFile)}
+        getPublicUrl={getPublicUrl}
+        formatBytes={formatBytes}
+        getFileIcon={getFileIcon}
+        copyToClipboard={copyToClipboard}
+      />
     </div>
-  )
+  );
 }

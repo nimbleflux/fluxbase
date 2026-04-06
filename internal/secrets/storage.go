@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
@@ -68,6 +69,12 @@ func NewStorage(db *database.Connection, encryptionKey string) *Storage {
 
 // CreateSecret creates a new secret with encrypted value
 func (s *Storage) CreateSecret(ctx context.Context, secret *Secret, plainValue string, userID *uuid.UUID) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.CreateSecretWithTenant(ctx, tenantID, secret, plainValue, userID)
+}
+
+// CreateSecretWithTenant creates a new secret with encrypted value and tenant context
+func (s *Storage) CreateSecretWithTenant(ctx context.Context, tenantID string, secret *Secret, plainValue string, userID *uuid.UUID) error {
 	// Encrypt the value before storage
 	encryptedValue, err := crypto.Encrypt(plainValue, s.encryptionKey)
 	if err != nil {
@@ -81,7 +88,7 @@ func (s *Storage) CreateSecret(ctx context.Context, secret *Secret, plainValue s
 		RETURNING id, version, created_at, updated_at
 	`
 
-	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			secret.Name, secret.Scope, secret.Namespace, encryptedValue,
 			secret.Description, secret.ExpiresAt, userID,
@@ -102,16 +109,19 @@ func (s *Storage) CreateSecret(ctx context.Context, secret *Secret, plainValue s
 
 // GetSecret retrieves a secret by ID (metadata only, no value)
 func (s *Storage) GetSecret(ctx context.Context, id uuid.UUID) (*Secret, error) {
+	tenantID := database.TenantFromContext(ctx)
+
 	query := `
 		SELECT id, name, scope, namespace, description, version, expires_at,
 		       created_at, updated_at, created_by, updated_by
 		FROM functions.secrets
 		WHERE id = $1
+		  AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 	`
 
 	secret := &Secret{}
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, id).Scan(
+		return tx.QueryRow(ctx, query, id, tenantID).Scan(
 			&secret.ID, &secret.Name, &secret.Scope, &secret.Namespace,
 			&secret.Description, &secret.Version, &secret.ExpiresAt,
 			&secret.CreatedAt, &secret.UpdatedAt, &secret.CreatedBy, &secret.UpdatedBy,
@@ -126,6 +136,8 @@ func (s *Storage) GetSecret(ctx context.Context, id uuid.UUID) (*Secret, error) 
 
 // GetSecretByName retrieves a secret by name and optional namespace
 func (s *Storage) GetSecretByName(ctx context.Context, name string, namespace *string) (*Secret, error) {
+	tenantID := database.TenantFromContext(ctx)
+
 	var query string
 	var args []interface{}
 
@@ -135,16 +147,18 @@ func (s *Storage) GetSecretByName(ctx context.Context, name string, namespace *s
 			       created_at, updated_at, created_by, updated_by
 			FROM functions.secrets
 			WHERE name = $1 AND scope = 'global' AND namespace IS NULL
+			  AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 		`
-		args = []interface{}{name}
+		args = []interface{}{name, tenantID}
 	} else {
 		query = `
 			SELECT id, name, scope, namespace, description, version, expires_at,
 			       created_at, updated_at, created_by, updated_by
 			FROM functions.secrets
 			WHERE name = $1 AND namespace = $2
+			  AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))
 		`
-		args = []interface{}{name, *namespace}
+		args = []interface{}{name, *namespace, tenantID}
 	}
 
 	secret := &Secret{}
@@ -164,15 +178,17 @@ func (s *Storage) GetSecretByName(ctx context.Context, name string, namespace *s
 
 // ListSecrets returns all secrets matching the filter criteria (metadata only)
 func (s *Storage) ListSecrets(ctx context.Context, scope *string, namespace *string) ([]SecretSummary, error) {
+	tenantID := database.TenantFromContext(ctx)
+
 	query := `
 		SELECT id, name, scope, namespace, description, version, expires_at,
 		       CASE WHEN expires_at IS NOT NULL AND expires_at < NOW() THEN true ELSE false END as is_expired,
 		       created_at, updated_at, created_by, updated_by
 		FROM functions.secrets
-		WHERE 1=1
+		WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 	`
-	args := []interface{}{}
-	argIdx := 1
+	args := []interface{}{tenantID}
+	argIdx := 2
 
 	if scope != nil {
 		query += fmt.Sprintf(" AND scope = $%d", argIdx)

@@ -3,13 +3,16 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // ErrTokenBlacklisted is returned when a token is found in the blacklist
@@ -111,7 +114,8 @@ func (r *TokenBlacklistRepository) GetByJTI(ctx context.Context, jti string) (*T
 }
 
 // RevokeAllUserTokens revokes all tokens for a specific user
-func (r *TokenBlacklistRepository) RevokeAllUserTokens(ctx context.Context, userID, reason string) error {
+// The expiry parameter determines how long the revocation marker persists
+func (r *TokenBlacklistRepository) RevokeAllUserTokens(ctx context.Context, userID, reason string, expiry time.Duration) error {
 	// This is a bit tricky - we can't blacklist tokens we don't know about
 	// Instead, we invalidate all the user's sessions
 	// The session-based approach is better for "revoke all" scenarios
@@ -122,7 +126,7 @@ func (r *TokenBlacklistRepository) RevokeAllUserTokens(ctx context.Context, user
 	// Use a special JTI pattern for "all tokens" revocation
 	specialJTI := "user:" + userID + ":all:" + uuid.New().String()
 
-	return r.Add(ctx, specialJTI, &userID, reason, time.Now().Add(24*time.Hour))
+	return r.Add(ctx, specialJTI, &userID, reason, time.Now().Add(expiry))
 }
 
 // DeleteExpired removes expired tokens from the blacklist
@@ -156,6 +160,15 @@ func (r *TokenBlacklistRepository) DeleteByUser(ctx context.Context, userID stri
 type TokenBlacklistService struct {
 	repo       *TokenBlacklistRepository
 	jwtManager *JWTManager
+	// Cache for user-wide revocation checks to avoid per-request DB queries
+	userRevocationCache sync.Map // map[userID]*userRevocationCacheEntry
+	cacheTTL            time.Duration
+}
+
+// userRevocationCacheEntry stores cached user revocation information
+type userRevocationCacheEntry struct {
+	revokedAt time.Time
+	cachedAt  time.Time
 }
 
 // NewTokenBlacklistService creates a new token blacklist service
@@ -163,6 +176,7 @@ func NewTokenBlacklistService(repo *TokenBlacklistRepository, jwtManager *JWTMan
 	return &TokenBlacklistService{
 		repo:       repo,
 		jwtManager: jwtManager,
+		cacheTTL:   5 * time.Second,
 	}
 }
 
@@ -214,13 +228,102 @@ func (s *TokenBlacklistService) RevokeToken(ctx context.Context, token, reason s
 }
 
 // IsTokenRevoked checks if a token has been revoked
-func (s *TokenBlacklistService) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
-	return s.repo.IsBlacklisted(ctx, jti)
+// It checks both exact JTI revocation and user-wide revocation
+func (s *TokenBlacklistService) IsTokenRevoked(ctx context.Context, jti string, userID string, tokenIssuedAt time.Time) (bool, error) {
+	// First, check exact JTI match (existing behavior)
+	isBlacklisted, err := s.repo.IsBlacklisted(ctx, jti)
+	if err != nil {
+		return false, fmt.Errorf("failed to check token blacklist: %w", err)
+	}
+	if isBlacklisted {
+		return true, nil
+	}
+
+	// If userID is empty, skip user-wide check (backward compatibility)
+	if userID == "" {
+		return false, nil
+	}
+
+	// Check for user-wide revocation: look for any entry matching `user:{userID}:all:*`
+	// where created_at >= tokenIssuedAt (token was issued before the revocation)
+	revokedAt, err := s.getUserRevocationTime(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("failed to check user revocation: %w", err)
+	}
+
+	// If a user-wide revocation exists and the token was issued before it, the token is revoked
+	if !revokedAt.IsZero() && tokenIssuedAt.Before(revokedAt) {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// getUserRevocationTime checks the cache first, then the DB for user-wide revocation
+// Returns the time of the most recent user-wide revocation, or zero time if none exists
+func (s *TokenBlacklistService) getUserRevocationTime(ctx context.Context, userID string) (time.Time, error) {
+	// Check cache first
+	if cached, ok := s.userRevocationCache.Load(userID); ok {
+		entry := cached.(*userRevocationCacheEntry)
+		// If cache entry is fresh (within TTL), use it
+		if time.Since(entry.cachedAt) < s.cacheTTL {
+			// If revokedAt is zero, no revocation exists
+			return entry.revokedAt, nil
+		}
+		// Cache expired, remove it
+		s.userRevocationCache.Delete(userID)
+	}
+
+	// Cache miss or expired - query the database
+	// Look for the most recent entry matching `user:{userID}:all:*`
+	var revokedAt time.Time
+	query := `
+		SELECT created_at
+		FROM auth.token_blacklist
+		WHERE token_jti LIKE $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	pattern := "user:" + userID + ":all:*"
+
+	err := database.WrapWithServiceRole(ctx, s.repo.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, pattern).Scan(&revokedAt)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// No user-wide revocation found - cache this fact
+			s.userRevocationCache.Store(userID, &userRevocationCacheEntry{
+				revokedAt: time.Time{},
+				cachedAt:  time.Now(),
+			})
+			return time.Time{}, nil
+		}
+		return time.Time{}, err
+	}
+
+	// Cache the revocation time
+	s.userRevocationCache.Store(userID, &userRevocationCacheEntry{
+		revokedAt: revokedAt,
+		cachedAt:  time.Now(),
+	})
+
+	return revokedAt, nil
+}
+
+// invalidateUserCache removes the cache entry for a specific user
+// Should be called when RevokeAllUserTokens is invoked
+func (s *TokenBlacklistService) invalidateUserCache(userID string) {
+	s.userRevocationCache.Delete(userID)
 }
 
 // RevokeAllUserTokens revokes all tokens for a user
+// The revocation marker expires after the maximum token TTL to ensure it covers
+// all valid tokens at the time of revocation
 func (s *TokenBlacklistService) RevokeAllUserTokens(ctx context.Context, userID, reason string) error {
-	return s.repo.RevokeAllUserTokens(ctx, userID, reason)
+	// Invalidate the cache for this user
+	s.invalidateUserCache(userID)
+
+	return s.repo.RevokeAllUserTokens(ctx, userID, reason, s.jwtManager.getMaxTokenTTL())
 }
 
 // CleanupExpiredTokens removes expired tokens from the blacklist

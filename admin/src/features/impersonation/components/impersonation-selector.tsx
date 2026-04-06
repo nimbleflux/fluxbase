@@ -1,16 +1,17 @@
-import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { UserCog, User, UserX, Shield, X } from 'lucide-react'
-import { toast } from 'sonner'
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { UserCog, User, UserX, Shield, X } from "lucide-react";
+import { toast } from "sonner";
 import {
   useImpersonationStore,
   type ImpersonationType,
-} from '@/stores/impersonation-store'
-import { getAccessToken } from '@/lib/auth'
-import { setAuthToken as setSDKAuthToken } from '@/lib/fluxbase-client'
-import { impersonationApi } from '@/lib/impersonation-api'
-import { useAuth } from '@/hooks/use-auth'
-import { Button } from '@/components/ui/button'
+} from "@/stores/impersonation-store";
+import { getAccessToken } from "@/lib/auth";
+import { setAuthToken as setSDKAuthToken } from "@/lib/fluxbase-client";
+import { impersonationApi } from "@/lib/impersonation-api";
+import { useAuth } from "@/hooks/use-auth";
+import { useTenantStore } from "@/stores/tenant-store";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -19,64 +20,64 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { UserSearch } from './user-search'
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { UserSearch } from "./user-search";
 
 export function ImpersonationSelector() {
-  const { user } = useAuth()
+  const { user } = useAuth();
   const {
     isImpersonating,
     startImpersonation,
     stopImpersonation,
     impersonatedUser,
     impersonationType: activeImpersonationType,
-  } = useImpersonationStore()
-  const queryClient = useQueryClient()
-  const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [stopping, setStopping] = useState(false)
+  } = useImpersonationStore();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [impersonationType, setImpersonationType] =
-    useState<ImpersonationType>('user')
-  const [selectedUserId, setSelectedUserId] = useState<string>('')
-  const [reason, setReason] = useState('')
+    useState<ImpersonationType>("user");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [reason, setReason] = useState("");
 
   const handleStartImpersonation = async () => {
     if (!reason.trim()) {
-      toast.error('Please provide a reason for impersonation')
-      return
+      toast.error("Please provide a reason for impersonation");
+      return;
     }
 
-    if (impersonationType === 'user' && !selectedUserId) {
-      toast.error('Please select a user to impersonate')
-      return
+    if (impersonationType === "user" && !selectedUserId) {
+      toast.error("Please select a user to impersonate");
+      return;
     }
 
     try {
-      setLoading(true)
-      let response
+      setLoading(true);
+      let response;
 
       switch (impersonationType) {
-        case 'user':
+        case "user":
           response = await impersonationApi.startUserImpersonation(
             selectedUserId,
-            reason
-          )
-          break
-        case 'anon':
-          response = await impersonationApi.startAnonImpersonation(reason)
-          break
-        case 'service':
-          response = await impersonationApi.startServiceImpersonation(reason)
-          break
+            reason,
+          );
+          break;
+        case "anon":
+          response = await impersonationApi.startAnonImpersonation(reason);
+          break;
+        case "service":
+          response = await impersonationApi.startServiceImpersonation(reason);
+          break;
       }
 
       startImpersonation(
@@ -84,133 +85,134 @@ export function ImpersonationSelector() {
         response.refresh_token,
         response.target_user,
         response.session,
-        impersonationType
-      )
+        impersonationType,
+      );
 
       // Update SDK client token to use impersonation token
-      setSDKAuthToken(response.access_token)
+      setSDKAuthToken(response.access_token);
 
       toast.success(
         `Started impersonating ${
-          impersonationType === 'user'
+          impersonationType === "user"
             ? response.target_user.email
-            : impersonationType === 'anon'
-              ? 'anonymous user'
-              : 'service role'
-        }`
-      )
+            : impersonationType === "anon"
+              ? "anonymous user"
+              : "service role"
+        }`,
+      );
 
       // Reset form and close dialog
-      setOpen(false)
-      setSelectedUserId('')
-      setReason('')
+      setOpen(false);
+      setSelectedUserId("");
+      setReason("");
 
       // Invalidate all queries to refetch data with new impersonation context
-      queryClient.invalidateQueries()
+      queryClient.invalidateQueries();
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error && 'response' in error
+        error instanceof Error && "response" in error
           ? (error as { response?: { data?: { error?: string } } }).response
               ?.data?.error
-          : undefined
-      toast.error(errorMessage || 'Failed to start impersonation')
+          : undefined;
+      toast.error(errorMessage || "Failed to start impersonation");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleUserSelect = (userId: string, _userEmail: string) => {
-    setSelectedUserId(userId)
-  }
+    setSelectedUserId(userId);
+  };
 
   const handleStopImpersonation = async () => {
     try {
-      setStopping(true)
-      await impersonationApi.stopImpersonation()
-      stopImpersonation()
+      setStopping(true);
+      await impersonationApi.stopImpersonation();
+      stopImpersonation();
 
       // Reset SDK client token to admin token
-      const adminToken = getAccessToken()
+      const adminToken = getAccessToken();
       if (adminToken) {
-        setSDKAuthToken(adminToken)
+        setSDKAuthToken(adminToken);
       }
 
-      toast.success('Impersonation stopped')
+      toast.success("Impersonation stopped");
 
       // Invalidate all queries to refetch data with admin context
-      queryClient.invalidateQueries()
+      queryClient.invalidateQueries();
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error && 'response' in error
+        error instanceof Error && "response" in error
           ? (error as { response?: { data?: { error?: string } } }).response
               ?.data?.error
-          : undefined
-      toast.error(errorMessage || 'Failed to stop impersonation')
+          : undefined;
+      toast.error(errorMessage || "Failed to stop impersonation");
     } finally {
-      setStopping(false)
+      setStopping(false);
     }
-  }
+  };
 
   const getDisplayLabel = () => {
     switch (activeImpersonationType) {
-      case 'user':
-        return impersonatedUser?.email || 'User'
-      case 'anon':
-        return 'Anonymous'
-      case 'service':
-        return 'Service Role'
+      case "user":
+        return impersonatedUser?.email || "User";
+      case "anon":
+        return "Anonymous";
+      case "service":
+        return "Service Role";
       default:
-        return 'User'
+        return "User";
     }
-  }
+  };
 
   const getIcon = () => {
     switch (impersonationType) {
-      case 'user':
-        return <User className='h-4 w-4' />
-      case 'anon':
-        return <UserX className='h-4 w-4' />
-      case 'service':
-        return <Shield className='h-4 w-4' />
+      case "user":
+        return <User className="h-4 w-4" />;
+      case "anon":
+        return <UserX className="h-4 w-4" />;
+      case "service":
+        return <Shield className="h-4 w-4" />;
     }
-  }
+  };
 
-  // Only show impersonation button to dashboard_admin users
-  const isDashboardAdmin =
-    user && 'role' in user
+  // Only show impersonation button to instance_admin users when a tenant is selected
+  const isInstanceAdmin =
+    user && "role" in user
       ? Array.isArray(user.role)
-        ? user.role.includes('dashboard_admin')
-        : user.role === 'dashboard_admin'
-      : false
-  if (!isDashboardAdmin) {
-    return null
+        ? user.role.includes("instance_admin")
+        : user.role === "instance_admin"
+      : false;
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  if (!isInstanceAdmin || !currentTenant) {
+    return null;
   }
 
   // Show cancel button when impersonating
   if (isImpersonating) {
     return (
       <Button
-        variant='outline'
-        size='sm'
+        variant="outline"
+        size="sm"
         onClick={handleStopImpersonation}
         disabled={stopping}
-        className='gap-2 border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900'
+        className="gap-2 border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900"
       >
-        <X className='h-4 w-4' />
-        {stopping ? 'Stopping...' : `Cancel: ${getDisplayLabel()}`}
+        <X className="h-4 w-4" />
+        {stopping ? "Stopping..." : `Cancel: ${getDisplayLabel()}`}
       </Button>
-    )
+    );
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant='outline' size='sm' className='gap-2'>
-          <UserCog className='h-4 w-4' />
+        <Button variant="outline" size="sm" className="gap-2">
+          <UserCog className="h-4 w-4" />
           Impersonate User
         </Button>
       </DialogTrigger>
-      <DialogContent className='sm:max-w-[500px]'>
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Start User Impersonation</DialogTitle>
           <DialogDescription>
@@ -220,34 +222,34 @@ export function ImpersonationSelector() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className='grid gap-4 py-4'>
-          <div className='grid gap-2'>
-            <Label htmlFor='impersonation-type'>Impersonation Type</Label>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
+            <Label htmlFor="impersonation-type">Impersonation Type</Label>
             <Select
               value={impersonationType}
               onValueChange={(value) =>
                 setImpersonationType(value as ImpersonationType)
               }
             >
-              <SelectTrigger id='impersonation-type'>
+              <SelectTrigger id="impersonation-type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value='user'>
-                  <div className='flex items-center gap-2'>
-                    <User className='h-4 w-4' />
+                <SelectItem value="user">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
                     Specific User
                   </div>
                 </SelectItem>
-                <SelectItem value='anon'>
-                  <div className='flex items-center gap-2'>
-                    <UserX className='h-4 w-4' />
+                <SelectItem value="anon">
+                  <div className="flex items-center gap-2">
+                    <UserX className="h-4 w-4" />
                     Anonymous (anon key)
                   </div>
                 </SelectItem>
-                <SelectItem value='service'>
-                  <div className='flex items-center gap-2'>
-                    <Shield className='h-4 w-4' />
+                <SelectItem value="service">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
                     Service Role
                   </div>
                 </SelectItem>
@@ -255,28 +257,29 @@ export function ImpersonationSelector() {
             </Select>
           </div>
 
-          {impersonationType === 'user' && (
-            <div className='grid gap-2'>
-              <Label htmlFor='user-select'>User</Label>
+          {impersonationType === "user" && (
+            <div className="grid gap-2">
+              <Label htmlFor="user-select">User</Label>
               <UserSearch
                 value={selectedUserId}
                 onSelect={handleUserSelect}
                 disabled={loading}
+                tenantId={currentTenant?.id}
               />
             </div>
           )}
 
-          <div className='grid gap-2'>
-            <Label htmlFor='reason'>Reason</Label>
+          <div className="grid gap-2">
+            <Label htmlFor="reason">Reason</Label>
             <Textarea
-              id='reason'
-              placeholder='e.g., Customer support ticket #1234, debugging user-reported issue'
+              id="reason"
+              placeholder="e.g., Customer support ticket #1234, debugging user-reported issue"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               disabled={loading}
               rows={3}
             />
-            <p className='text-muted-foreground text-xs'>
+            <p className="text-muted-foreground text-xs">
               This reason will be logged in the audit trail
             </p>
           </div>
@@ -284,7 +287,7 @@ export function ImpersonationSelector() {
 
         <DialogFooter>
           <Button
-            variant='outline'
+            variant="outline"
             onClick={() => setOpen(false)}
             disabled={loading}
           >
@@ -292,16 +295,16 @@ export function ImpersonationSelector() {
           </Button>
           <Button onClick={handleStartImpersonation} disabled={loading}>
             {loading ? (
-              'Starting...'
+              "Starting..."
             ) : (
               <>
                 {getIcon()}
-                <span className='ml-2'>Start Impersonation</span>
+                <span className="ml-2">Start Impersonation</span>
               </>
             )}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

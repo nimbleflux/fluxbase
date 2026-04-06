@@ -12,9 +12,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/rs/zerolog/log"
 )
 
 // MCPOAuthHandler handles OAuth 2.1 authentication for MCP clients
@@ -37,33 +38,9 @@ func NewMCPOAuthHandler(db *pgxpool.Pool, cfg *config.MCPConfig, authService *au
 	}
 }
 
-// RegisterRoutes registers OAuth routes
-// wellKnownGroup is for /.well-known endpoints (public, no auth)
-// mcpGroup is for /mcp/oauth/* endpoints
-func (h *MCPOAuthHandler) RegisterRoutes(app fiber.Router, mcpGroup fiber.Router) {
-	// Public discovery endpoints (no auth required)
-	app.Get("/.well-known/oauth-authorization-server", h.handleAuthorizationServerMetadata)
-	app.Get("/.well-known/oauth-protected-resource", h.handleProtectedResourceMetadata)
-	app.Get("/.well-known/oauth-protected-resource/mcp", h.handleProtectedResourceMetadata)
-
-	// OAuth endpoints (under /mcp/oauth/*)
-	oauth := mcpGroup.Group("/oauth")
-
-	// Dynamic Client Registration (public)
-	oauth.Post("/register", h.handleClientRegistration)
-
-	// Authorization endpoints
-	oauth.Get("/authorize", h.handleAuthorize)
-	oauth.Post("/authorize", h.handleAuthorizeConsent)
-
-	// Token endpoints
-	oauth.Post("/token", h.handleToken)
-	oauth.Post("/revoke", h.handleRevoke)
-}
-
-// handleAuthorizationServerMetadata returns OAuth 2.0 Authorization Server Metadata
+// HandleAuthorizationServerMetadata returns OAuth 2.0 Authorization Server Metadata
 // RFC 8414: https://datatracker.ietf.org/doc/html/rfc8414
-func (h *MCPOAuthHandler) handleAuthorizationServerMetadata(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleAuthorizationServerMetadata(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "OAuth is not enabled for MCP",
@@ -83,9 +60,9 @@ func (h *MCPOAuthHandler) handleAuthorizationServerMetadata(c fiber.Ctx) error {
 		"token_endpoint_auth_methods_supported": []string{"none"}, // Public clients only (PKCE required)
 		"code_challenge_methods_supported":      []string{"S256"},
 		"scopes_supported": []string{
-			"read:tables", "write:tables",
-			"execute:functions", "execute:rpc",
-			"read:storage", "write:storage",
+			"tables:read", "tables:write",
+			"functions:execute", "rpc:execute",
+			"storage:read", "storage:write",
 			"execute:jobs", "read:vectors",
 			"read:schema", "admin:ddl",
 		},
@@ -101,7 +78,7 @@ func (h *MCPOAuthHandler) handleAuthorizationServerMetadata(c fiber.Ctx) error {
 
 // handleProtectedResourceMetadata returns OAuth 2.0 Protected Resource Metadata
 // This tells clients where to get authorization
-func (h *MCPOAuthHandler) handleProtectedResourceMetadata(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleProtectedResourceMetadata(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "OAuth is not enabled for MCP",
@@ -113,14 +90,14 @@ func (h *MCPOAuthHandler) handleProtectedResourceMetadata(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"resource":                 issuer + h.config.BasePath,
 		"authorization_servers":    []string{issuer},
-		"scopes_supported":         []string{"read:tables", "write:tables", "read:schema"},
+		"scopes_supported":         []string{"tables:read", "tables:write", "read:schema"},
 		"bearer_methods_supported": []string{"header"},
 	})
 }
 
 // handleClientRegistration handles Dynamic Client Registration (DCR)
 // RFC 7591: https://datatracker.ietf.org/doc/html/rfc7591
-func (h *MCPOAuthHandler) handleClientRegistration(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleClientRegistration(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled || !h.config.OAuth.DCREnabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":             "invalid_request",
@@ -164,7 +141,7 @@ func (h *MCPOAuthHandler) handleClientRegistration(c fiber.Ctx) error {
 	}
 
 	// Parse and validate scopes (default to safe scopes)
-	scopes := []string{"read:tables", "read:schema"}
+	scopes := []string{"tables:read", "read:schema"}
 	if req.Scopes != "" {
 		scopes = strings.Split(req.Scopes, " ")
 	}
@@ -214,7 +191,7 @@ func (h *MCPOAuthHandler) handleClientRegistration(c fiber.Ctx) error {
 }
 
 // handleAuthorize handles the authorization endpoint
-func (h *MCPOAuthHandler) handleAuthorize(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleAuthorize(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "OAuth is not enabled",
@@ -368,14 +345,14 @@ func (h *MCPOAuthHandler) handleAuthorize(c fiber.Ctx) error {
 }
 
 // handleAuthorizeConsent handles POST to authorization endpoint (consent form submission)
-func (h *MCPOAuthHandler) handleAuthorizeConsent(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleAuthorizeConsent(c fiber.Ctx) error {
 	// For now, redirect to GET handler
 	// In a full implementation, this would process user consent
-	return h.handleAuthorize(c)
+	return h.HandleAuthorize(c)
 }
 
 // handleToken handles the token endpoint
-func (h *MCPOAuthHandler) handleToken(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleToken(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "OAuth is not enabled",
@@ -614,7 +591,7 @@ func (h *MCPOAuthHandler) handleRefreshTokenGrant(c fiber.Ctx) error {
 }
 
 // handleRevoke handles token revocation
-func (h *MCPOAuthHandler) handleRevoke(c fiber.Ctx) error {
+func (h *MCPOAuthHandler) HandleRevoke(c fiber.Ctx) error {
 	if !h.config.OAuth.Enabled {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "OAuth is not enabled",

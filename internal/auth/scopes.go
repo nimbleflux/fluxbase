@@ -8,51 +8,51 @@ import (
 // Scope constants for API key authorization
 const (
 	// Tables
-	ScopeTablesRead  = "read:tables"
-	ScopeTablesWrite = "write:tables"
+	ScopeTablesRead  = "tables:read"
+	ScopeTablesWrite = "tables:write"
 
 	// Storage
-	ScopeStorageRead  = "read:storage"
-	ScopeStorageWrite = "write:storage"
+	ScopeStorageRead  = "storage:read"
+	ScopeStorageWrite = "storage:write"
 
 	// Functions
-	ScopeFunctionsRead    = "read:functions"
-	ScopeFunctionsExecute = "execute:functions"
+	ScopeFunctionsRead    = "functions:read"
+	ScopeFunctionsExecute = "functions:execute"
 
 	// Auth
-	ScopeAuthRead  = "read:auth"
-	ScopeAuthWrite = "write:auth"
+	ScopeAuthRead  = "auth:read"
+	ScopeAuthWrite = "auth:write"
 
 	// Client Keys
-	ScopeClientKeysRead  = "read:clientkeys"
-	ScopeClientKeysWrite = "write:clientkeys"
+	ScopeClientKeysRead  = "clientkeys:read"
+	ScopeClientKeysWrite = "clientkeys:write"
 
 	// Webhooks
-	ScopeWebhooksRead  = "read:webhooks"
-	ScopeWebhooksWrite = "write:webhooks"
+	ScopeWebhooksRead  = "webhooks:read"
+	ScopeWebhooksWrite = "webhooks:write"
 
 	// Monitoring
-	ScopeMonitoringRead = "read:monitoring"
+	ScopeMonitoringRead = "monitoring:read"
 
 	// Realtime
 	ScopeRealtimeConnect   = "realtime:connect"
 	ScopeRealtimeBroadcast = "realtime:broadcast"
 
 	// RPC
-	ScopeRPCRead    = "read:rpc"
-	ScopeRPCExecute = "execute:rpc"
+	ScopeRPCRead    = "rpc:read"
+	ScopeRPCExecute = "rpc:execute"
 
 	// Jobs
-	ScopeJobsRead  = "read:jobs"
-	ScopeJobsWrite = "write:jobs"
+	ScopeJobsRead  = "jobs:read"
+	ScopeJobsWrite = "jobs:write"
 
 	// AI
-	ScopeAIRead  = "read:ai"
-	ScopeAIWrite = "write:ai"
+	ScopeAIRead  = "ai:read"
+	ScopeAIWrite = "ai:write"
 
 	// Secrets
-	ScopeSecretsRead  = "read:secrets"
-	ScopeSecretsWrite = "write:secrets"
+	ScopeSecretsRead  = "secrets:read"
+	ScopeSecretsWrite = "secrets:write"
 
 	// Migrations
 	ScopeMigrationsRead    = "migrations:read"

@@ -2,15 +2,17 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/time/rate"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/storage"
-	"github.com/rs/zerolog/log"
-	"golang.org/x/time/rate"
 )
 
 // StorageHandler handles file storage operations
@@ -22,7 +24,8 @@ import (
 // - storage_sharing.go: ShareObject, RevokeShare, ListShares
 // - storage_utils.go: helper functions (detectContentType, parseMetadata, getUserID, setRLSContext)
 type StorageHandler struct {
-	storage         *storage.Service
+	storageManager  *storage.Manager
+	baseConfig      *config.Config
 	db              *database.Connection
 	transformer     *storage.ImageTransformer
 	transformConfig *config.TransformConfig
@@ -39,8 +42,11 @@ type StorageHandler struct {
 }
 
 // NewStorageHandler creates a new storage handler with automatic cache initialization
-func NewStorageHandler(storageSvc *storage.Service, db *database.Connection, transformCfg *config.TransformConfig) *StorageHandler {
+func NewStorageHandler(storageMgr *storage.Manager, db *database.Connection, baseConfig *config.Config, transformCfg *config.TransformConfig) *StorageHandler {
 	var cache *storage.TransformCache
+
+	// Get base service for cache initialization
+	storageSvc := storageMgr.GetBaseService()
 
 	// Initialize transform cache if transforms are enabled
 	if transformCfg != nil && transformCfg.Enabled && storageSvc != nil {
@@ -69,11 +75,11 @@ func NewStorageHandler(storageSvc *storage.Service, db *database.Connection, tra
 		}
 	}
 
-	return NewStorageHandlerWithCache(storageSvc, db, transformCfg, cache)
+	return NewStorageHandlerWithCache(storageMgr, db, baseConfig, transformCfg, cache)
 }
 
 // NewStorageHandlerWithCache creates a new storage handler with optional transform cache
-func NewStorageHandlerWithCache(storageSvc *storage.Service, db *database.Connection, transformCfg *config.TransformConfig, cache *storage.TransformCache) *StorageHandler {
+func NewStorageHandlerWithCache(storageMgr *storage.Manager, db *database.Connection, baseConfig *config.Config, transformCfg *config.TransformConfig, cache *storage.TransformCache) *StorageHandler {
 	var transformer *storage.ImageTransformer
 	var transformSem chan struct{}
 	var rateLimit rate.Limit
@@ -107,7 +113,8 @@ func NewStorageHandlerWithCache(storageSvc *storage.Service, db *database.Connec
 	}
 
 	return &StorageHandler{
-		storage:            storageSvc,
+		storageManager:     storageMgr,
+		baseConfig:         baseConfig,
 		db:                 db,
 		transformer:        transformer,
 		transformConfig:    transformCfg,
@@ -117,6 +124,16 @@ func NewStorageHandlerWithCache(storageSvc *storage.Service, db *database.Connec
 		transformBurst:     burst,
 		transformSem:       transformSem,
 	}
+}
+
+// getService returns the storage service for the current request context.
+// It uses the tenant-specific configuration if available, otherwise returns the base service.
+func (h *StorageHandler) getService(c fiber.Ctx) (*storage.Service, error) {
+	if h.storageManager == nil {
+		return nil, fmt.Errorf("storage manager not initialized")
+	}
+	cfg := GetStorageConfig(c, h.baseConfig)
+	return h.storageManager.GetService(cfg)
 }
 
 // getTransformLimiter returns the rate limiter for a given key (IP:userID)

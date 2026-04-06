@@ -5,9 +5,10 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/rs/zerolog/log"
 )
 
 // AppSettingsHandler handles application settings operations

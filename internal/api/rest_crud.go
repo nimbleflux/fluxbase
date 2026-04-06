@@ -8,15 +8,16 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
-	"github.com/rs/zerolog/log"
 )
 
-// isAdminUser checks if the request is from an admin or dashboard_admin user
+// isAdminUser checks if the request is from an admin or instance_admin user
 func isAdminUser(c fiber.Ctx) bool {
 	role, ok := c.Locals("user_role").(string)
-	return ok && (role == "admin" || role == "dashboard_admin")
+	return ok && (role == "admin" || role == "instance_admin")
 }
 
 // makeGetHandler creates a GET handler for listing records
@@ -47,6 +48,9 @@ func (h *RESTHandler) makeGetHandler(table database.TableInfo) fiber.Handler {
 
 		// Build SELECT query using fresh metadata
 		query, args := h.buildSelectQuery(table, params)
+
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
 
 		// Execute query with RLS context
 		var results []map[string]interface{}
@@ -102,6 +106,9 @@ func (h *RESTHandler) makeGetByIdHandler(table database.TableInfo) fiber.Handler
 			`SELECT * FROM "%s"."%s" WHERE "%s" = $1`,
 			table.Schema, table.Name, pkColumn,
 		)
+
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
 
 		// Execute query with RLS context
 		var results []map[string]interface{}
@@ -276,6 +283,9 @@ func (h *RESTHandler) makePostHandler(table database.TableInfo) fiber.Handler {
 
 		query += buildReturningClause(table)
 
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
+
 		// Execute query with RLS context
 		var results []map[string]interface{}
 		if err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -368,6 +378,9 @@ func (h *RESTHandler) makePutHandler(table database.TableInfo) fiber.Handler {
 			quoteIdentifier(pkColumn), i,
 		) + buildReturningClause(table)
 
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
+
 		// Execute query with RLS context
 		var results []map[string]interface{}
 		err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -419,6 +432,9 @@ func (h *RESTHandler) makeDeleteHandler(table database.TableInfo) fiber.Handler 
 			`DELETE FROM "%s"."%s" WHERE "%s" = $1`,
 			table.Schema, table.Name, pkColumn,
 		) + buildReturningClause(table)
+
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
 
 		// Execute query with RLS context
 		var results []map[string]interface{}

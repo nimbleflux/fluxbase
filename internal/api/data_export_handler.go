@@ -8,7 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
@@ -96,6 +96,9 @@ func (h *DataExportHandler) HandleDataExport(c fiber.Ctx) error {
 	quotedTableName := quoteIdentifier(schema) + "." + quoteIdentifier(table)
 	quotedPKColumn := quoteIdentifier(pkColumn)
 	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ANY($1) ORDER BY %s", quotedTableName, quotedPKColumn, quotedPKColumn)
+
+	// Set target schema for tenant-aware pool routing
+	middleware.SetTargetSchema(c, schema)
 
 	// Execute query with RLS
 	var results []map[string]interface{}
@@ -204,15 +207,4 @@ func formatValue(v interface{}) string {
 	default:
 		return fmt.Sprintf("%v", val)
 	}
-}
-
-// RegisterRoutes registers the data export endpoints
-func (h *DataExportHandler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Apply authentication middleware
-	export := app.Group("/api/v1/export",
-		middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager),
-	)
-
-	// Export requires read scope
-	export.Get("", middleware.RequireScope(auth.ScopeTablesRead), h.HandleDataExport)
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
@@ -454,7 +455,7 @@ func formatPlaceholder(column string, argNum int) string {
 	return fmt.Sprintf("%s = $%d", column, argNum)
 }
 
-// CreateInTable creates a new user in the specified table (auth.users or dashboard.users)
+// CreateInTable creates a new user in the specified table (auth.users or platform.users)
 func (r *UserRepository) CreateInTable(ctx context.Context, req CreateUserRequest, passwordHash string, userType string) (*User, error) {
 	user := &User{
 		ID:            uuid.New().String(),
@@ -470,7 +471,7 @@ func (r *UserRepository) CreateInTable(ctx context.Context, req CreateUserReques
 
 	// Set default role if not provided
 	if user.Role == "" {
-		if userType == "dashboard" {
+		if userType == "platform" {
 			user.Role = "admin"
 		} else {
 			user.Role = "authenticated"
@@ -480,8 +481,8 @@ func (r *UserRepository) CreateInTable(ctx context.Context, req CreateUserReques
 	// Determine which table to use (hardcoded for security)
 	schema := "auth"
 	table := "users"
-	if userType == "dashboard" {
-		schema = "dashboard"
+	if userType == "platform" {
+		schema = "platform"
 	}
 	quotedTable := quoteTableName(schema, table)
 
@@ -527,8 +528,8 @@ func (r *UserRepository) UpdateInTable(ctx context.Context, id string, req Updat
 	// Determine which table to use (hardcoded for security)
 	schema := "auth"
 	table := "users"
-	if userType == "dashboard" {
-		schema = "dashboard"
+	if userType == "platform" {
+		schema = "platform"
 	}
 	quotedTable := quoteTableName(schema, table)
 
@@ -610,8 +611,8 @@ func (r *UserRepository) UpdatePasswordInTable(ctx context.Context, id string, n
 	// Determine which table to use (hardcoded for security)
 	schema := "auth"
 	table := "users"
-	if userType == "dashboard" {
-		schema = "dashboard"
+	if userType == "platform" {
+		schema = "platform"
 	}
 	quotedTable := quoteTableName(schema, table)
 
@@ -640,8 +641,8 @@ func (r *UserRepository) DeleteFromTable(ctx context.Context, id string, userTyp
 	// Determine which table to use (hardcoded for security)
 	schema := "auth"
 	table := "users"
-	if userType == "dashboard" {
-		schema = "dashboard"
+	if userType == "platform" {
+		schema = "platform"
 	}
 	quotedTable := quoteTableName(schema, table)
 
@@ -666,8 +667,8 @@ func (r *UserRepository) GetByIDFromTable(ctx context.Context, id string, userTy
 	// Determine which table to use (hardcoded for security)
 	schema := "auth"
 	table := "users"
-	if userType == "dashboard" {
-		schema = "dashboard"
+	if userType == "platform" {
+		schema = "platform"
 	}
 	quotedTable := quoteTableName(schema, table)
 

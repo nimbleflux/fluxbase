@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -28,14 +27,8 @@ func TestBuildEnvForFunction(t *testing.T) {
 
 	// Set environment variables
 	for key, value := range testVars {
-		_ = os.Setenv(key, value)
+		t.Setenv(key, value)
 	}
-	defer func() {
-		// Clean up
-		for key := range testVars {
-			_ = os.Unsetenv(key)
-		}
-	}()
 
 	// Test with RuntimeTypeFunction
 	req := ExecutionRequest{
@@ -88,14 +81,9 @@ func TestBuildEnvForFunction(t *testing.T) {
 	}
 
 	// Test system variables behavior
-	_ = os.Setenv("PATH", "/usr/bin")
-	_ = os.Setenv("HOME", "/home/user")
-	_ = os.Setenv("RANDOM_VAR", "should-be-excluded")
-	defer func() {
-		_ = os.Unsetenv("PATH")
-		_ = os.Unsetenv("HOME")
-		_ = os.Unsetenv("RANDOM_VAR")
-	}()
+	t.Setenv("PATH", "/usr/bin")
+	t.Setenv("HOME", "/home/user")
+	t.Setenv("RANDOM_VAR", "should-be-excluded")
 
 	env = buildEnv(req, RuntimeTypeFunction, "http://localhost:8080", "user-token", "service-token", nil, nil)
 	envMap = make(map[string]string)
@@ -412,8 +400,7 @@ func TestEncryptionKeyBlocked(t *testing.T) {
 	}
 
 	// Set the encryption key env var
-	_ = os.Setenv("FLUXBASE_ENCRYPTION_KEY", "my-secret-encryption-key")
-	defer func() { _ = os.Unsetenv("FLUXBASE_ENCRYPTION_KEY") }()
+	t.Setenv("FLUXBASE_ENCRYPTION_KEY", "my-secret-encryption-key")
 
 	req := ExecutionRequest{
 		ID:        uuid.New(),

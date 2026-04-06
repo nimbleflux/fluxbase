@@ -447,14 +447,14 @@ func TestListClientKeys_ParameterParsing(t *testing.T) {
 		assert.NotEqual(t, fiber.StatusForbidden, resp.StatusCode)
 	})
 
-	t.Run("dashboard_admin can list other user's keys", func(t *testing.T) {
+	t.Run("instance_admin can list other user's keys", func(t *testing.T) {
 		app := fiber.New()
 		handler := NewClientKeyHandler(nil)
 
-		// Set dashboard_admin role
+		// Set instance_admin role
 		app.Use(func(c fiber.Ctx) error {
 			c.Locals("user_id", uuid.New().String())
-			c.Locals("user_role", "dashboard_admin")
+			c.Locals("user_role", "instance_admin")
 			return c.Next()
 		})
 
@@ -725,8 +725,8 @@ func TestClientKeyScopes(t *testing.T) {
 			"write:users",
 			"read:posts",
 			"write:posts",
-			"read:clientkeys",
-			"write:clientkeys",
+			"clientkeys:read",
+			"clientkeys:write",
 			"admin",
 		}
 
@@ -796,7 +796,7 @@ func TestClientKeyRateLimits(t *testing.T) {
 // =============================================================================
 
 func TestAdminRoleVerification(t *testing.T) {
-	adminRoles := []string{"admin", "dashboard_admin", "service_role"}
+	adminRoles := []string{"admin", "instance_admin", "service_role"}
 	nonAdminRoles := []string{"user", "authenticated", "anon", ""}
 
 	t.Run("admin roles allow cross-user access", func(t *testing.T) {

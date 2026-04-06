@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // cleanup2FATestUsers removes any existing test users created by 2FA tests

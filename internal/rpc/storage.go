@@ -8,8 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // Storage handles database operations for RPC entities
@@ -30,6 +32,12 @@ func NewStorage(db *database.Connection) *Storage {
 
 // CreateProcedure creates a new procedure in the database
 func (s *Storage) CreateProcedure(ctx context.Context, proc *Procedure) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.CreateProcedureWithTenant(ctx, tenantID, proc)
+}
+
+// CreateProcedureWithTenant creates a new procedure in the database with tenant context
+func (s *Storage) CreateProcedureWithTenant(ctx context.Context, tenantID string, proc *Procedure) error {
 	query := `
 		INSERT INTO rpc.procedures (
 			id, name, namespace, description, sql_query, original_code,
@@ -52,12 +60,15 @@ func (s *Storage) CreateProcedure(ctx context.Context, proc *Procedure) error {
 	}
 	proc.UpdatedAt = time.Now()
 
-	_, err := s.db.Exec(ctx, query,
-		proc.ID, proc.Name, proc.Namespace, proc.Description, proc.SQLQuery, proc.OriginalCode,
-		proc.InputSchema, proc.OutputSchema, proc.AllowedTables, proc.AllowedSchemas,
-		proc.MaxExecutionTimeSeconds, proc.RequireRoles, proc.IsPublic, proc.DisableExecutionLogs, proc.Schedule,
-		proc.Enabled, proc.Version, proc.Source, proc.CreatedBy, proc.CreatedAt, proc.UpdatedAt,
-	)
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query,
+			proc.ID, proc.Name, proc.Namespace, proc.Description, proc.SQLQuery, proc.OriginalCode,
+			proc.InputSchema, proc.OutputSchema, proc.AllowedTables, proc.AllowedSchemas,
+			proc.MaxExecutionTimeSeconds, proc.RequireRoles, proc.IsPublic, proc.DisableExecutionLogs, proc.Schedule,
+			proc.Enabled, proc.Version, proc.Source, proc.CreatedBy, proc.CreatedAt, proc.UpdatedAt,
+		)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create procedure: %w", err)
 	}
@@ -66,6 +77,7 @@ func (s *Storage) CreateProcedure(ctx context.Context, proc *Procedure) error {
 		Str("id", proc.ID).
 		Str("name", proc.Name).
 		Str("namespace", proc.Namespace).
+		Str("tenant_id", tenantID).
 		Msg("Created RPC procedure")
 
 	return nil
@@ -73,6 +85,12 @@ func (s *Storage) CreateProcedure(ctx context.Context, proc *Procedure) error {
 
 // UpdateProcedure updates an existing procedure in the database
 func (s *Storage) UpdateProcedure(ctx context.Context, proc *Procedure) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.UpdateProcedureWithTenant(ctx, tenantID, proc)
+}
+
+// UpdateProcedureWithTenant updates an existing procedure in the database with tenant context
+func (s *Storage) UpdateProcedureWithTenant(ctx context.Context, tenantID string, proc *Procedure) error {
 	query := `
 		UPDATE rpc.procedures SET
 			description = $2,
@@ -95,23 +113,28 @@ func (s *Storage) UpdateProcedure(ctx context.Context, proc *Procedure) error {
 
 	proc.UpdatedAt = time.Now()
 
-	result, err := s.db.Exec(ctx, query,
-		proc.ID,
-		proc.Description,
-		proc.SQLQuery,
-		proc.OriginalCode,
-		proc.InputSchema,
-		proc.OutputSchema,
-		proc.AllowedTables,
-		proc.AllowedSchemas,
-		proc.MaxExecutionTimeSeconds,
-		proc.RequireRoles,
-		proc.IsPublic,
-		proc.DisableExecutionLogs,
-		proc.Schedule,
-		proc.Enabled,
-		proc.UpdatedAt,
-	)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query,
+			proc.ID,
+			proc.Description,
+			proc.SQLQuery,
+			proc.OriginalCode,
+			proc.InputSchema,
+			proc.OutputSchema,
+			proc.AllowedTables,
+			proc.AllowedSchemas,
+			proc.MaxExecutionTimeSeconds,
+			proc.RequireRoles,
+			proc.IsPublic,
+			proc.DisableExecutionLogs,
+			proc.Schedule,
+			proc.Enabled,
+			proc.UpdatedAt,
+		)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to update procedure: %w", err)
 	}
@@ -123,6 +146,7 @@ func (s *Storage) UpdateProcedure(ctx context.Context, proc *Procedure) error {
 	log.Info().
 		Str("id", proc.ID).
 		Str("name", proc.Name).
+		Str("tenant_id", tenantID).
 		Msg("Updated RPC procedure")
 
 	return nil
@@ -288,9 +312,20 @@ func (s *Storage) ListPublicProcedures(ctx context.Context, namespace string) ([
 
 // DeleteProcedure deletes a procedure by ID
 func (s *Storage) DeleteProcedure(ctx context.Context, id string) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.DeleteProcedureWithTenant(ctx, tenantID, id)
+}
+
+// DeleteProcedureWithTenant deletes a procedure by ID with tenant context
+func (s *Storage) DeleteProcedureWithTenant(ctx context.Context, tenantID string, id string) error {
 	query := `DELETE FROM rpc.procedures WHERE id = $1`
 
-	result, err := s.db.Exec(ctx, query, id)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, id)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to delete procedure: %w", err)
 	}
@@ -299,15 +334,26 @@ func (s *Storage) DeleteProcedure(ctx context.Context, id string) error {
 		return fmt.Errorf("procedure not found: %s", id)
 	}
 
-	log.Info().Str("id", id).Msg("Deleted RPC procedure")
+	log.Info().Str("id", id).Str("tenant_id", tenantID).Msg("Deleted RPC procedure")
 	return nil
 }
 
 // DeleteProcedureByName deletes a procedure by namespace and name
 func (s *Storage) DeleteProcedureByName(ctx context.Context, namespace, name string) error {
+	tenantID := database.TenantFromContext(ctx)
+	return s.DeleteProcedureByNameWithTenant(ctx, tenantID, namespace, name)
+}
+
+// DeleteProcedureByNameWithTenant deletes a procedure by namespace and name with tenant context
+func (s *Storage) DeleteProcedureByNameWithTenant(ctx context.Context, tenantID string, namespace, name string) error {
 	query := `DELETE FROM rpc.procedures WHERE namespace = $1 AND name = $2`
 
-	result, err := s.db.Exec(ctx, query, namespace, name)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, namespace, name)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to delete procedure: %w", err)
 	}
@@ -319,6 +365,7 @@ func (s *Storage) DeleteProcedureByName(ctx context.Context, namespace, name str
 	log.Info().
 		Str("namespace", namespace).
 		Str("name", name).
+		Str("tenant_id", tenantID).
 		Msg("Deleted RPC procedure")
 
 	return nil

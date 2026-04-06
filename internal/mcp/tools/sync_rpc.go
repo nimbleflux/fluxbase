@@ -8,9 +8,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/nimbleflux/fluxbase/internal/rpc"
-	"github.com/rs/zerolog/log"
 )
 
 // SyncRPCTool implements the sync_rpc MCP tool for deploying RPC procedures

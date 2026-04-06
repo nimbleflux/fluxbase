@@ -9,8 +9,9 @@ import (
 	"github.com/graphql-go/graphql"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // GraphQLResolverFactory creates resolvers for GraphQL queries and mutations
@@ -46,7 +47,7 @@ type RLSContext struct {
 // This is a copy of the middleware function to avoid import cycles
 func mapAppRoleToDatabaseRole(appRole string) string {
 	switch appRole {
-	case "service_role", "dashboard_admin":
+	case "service_role", "instance_admin":
 		return "service_role"
 	case "anon", "":
 		return "anon"

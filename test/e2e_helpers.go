@@ -77,17 +77,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/nimbleflux/fluxbase/internal/api"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/pubsub"
 	"github.com/nimbleflux/fluxbase/internal/ratelimit"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -175,12 +177,16 @@ func E2ETestEmailWithSuffix(suffix string) string {
 //
 // Always close the context with defer tc.Close() to ensure proper cleanup.
 type TestContext struct {
-	DB       *database.Connection
-	Server   *api.Server
-	App      *fiber.App
-	Config   *config.Config
-	T        *testing.T
-	isShared bool // True if this is the shared test context (don't close DB)
+	DB                *database.Connection
+	Server            *api.Server
+	App               *fiber.App
+	Config            *config.Config
+	T                 *testing.T
+	isShared          bool          // True if this is the shared test context (don't close DB)
+	superuserPool     *pgxpool.Pool // Pooled connection as postgres superuser
+	rlsPool           *pgxpool.Pool // Pooled connection as fluxbase_rls_test user
+	defaultTenant     string        // Cached default tenant ID for X-FB-Tenant header
+	defaultTenantOnce sync.Once     // Guards defaultTenant initialization
 }
 
 // NewTestContext creates a test context using the fluxbase_app database user.
@@ -257,13 +263,19 @@ func newTestContextInternal(t *testing.T, cfg *config.Config) *TestContext {
 	// Create server (REST API will now see all migrated tables)
 	server := api.NewServer(cfg, db, "test")
 
-	return &TestContext{
+	tc := &TestContext{
 		DB:     db,
 		Server: server,
 		App:    server.App(),
 		Config: cfg,
 		T:      t,
 	}
+
+	// Seed default system settings for feature flags.
+	// Without these, RequireFeatureEnabled middleware returns 503 FEATURE_DISABLED.
+	tc.EnsureSystemSettings()
+
+	return tc
 }
 
 func NewTestContext(t *testing.T) *TestContext {
@@ -595,8 +607,8 @@ func IsSharedRLSTestContextInitialized() bool {
 func ResetRLSTestState(tc *TestContext) {
 	// Clean up test data from previous RLS test
 	tc.ExecuteSQLAsSuperuser(`
-		-- Delete test users
-		DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com';
+		-- Delete test users (only e2e-test- and test- prefixes, not integration test users)
+		DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com';
 
 		-- Delete ALL storage objects (safe since this is a test database)
 		DELETE FROM storage.objects;
@@ -641,6 +653,16 @@ func (tc *TestContext) Close() {
 		if pubsub.GlobalPubSub != nil {
 			_ = pubsub.GlobalPubSub.Close()
 			pubsub.GlobalPubSub = nil
+		}
+
+		// Close pooled superuser and RLS connections
+		if tc.superuserPool != nil {
+			tc.superuserPool.Close()
+			tc.superuserPool = nil
+		}
+		if tc.rlsPool != nil {
+			tc.rlsPool.Close()
+			tc.rlsPool = nil
 		}
 
 		// Then close the database connection
@@ -874,20 +896,20 @@ func (tc *TestContext) CleanupE2ETestUsers() {
 		log.Debug().Err(err).Msg("Failed to cleanup auth.users e2e test users")
 	}
 
-	// Delete e2e test users from dashboard.users
+	// Delete e2e test users from platform.users
 	_, err = tc.DB.Exec(ctx, fmt.Sprintf(
-		"DELETE FROM dashboard.users WHERE email LIKE '%s%%@example.com'",
+		"DELETE FROM platform.users WHERE email LIKE '%s%%@example.com'",
 		E2ETestEmailPrefix,
 	))
 	if err != nil {
-		log.Debug().Err(err).Msg("Failed to cleanup dashboard.users e2e test users")
+		log.Debug().Err(err).Msg("Failed to cleanup platform.users e2e test users")
 	}
 
-	// Also clean up any legacy test users with @example.com or @test.com patterns
-	// This handles tests that haven't been updated yet
-	_, _ = tc.DB.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
-	_, _ = tc.DB.Exec(ctx, "DELETE FROM dashboard.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
-	_, _ = tc.DB.Exec(ctx, "DELETE FROM auth.magic_links WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
+	// Clean up legacy test-* prefix emails (narrower than the old %@example.com pattern)
+	// Only targets test- prefix used by E2E tests, not integration test emails (itest-*)
+	_, _ = tc.DB.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
+	_, _ = tc.DB.Exec(ctx, "DELETE FROM platform.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
+	_, _ = tc.DB.Exec(ctx, "DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 }
 
 // CleanupE2ETestUsersGlobal is a standalone function to clean up e2e test users.
@@ -909,16 +931,16 @@ func CleanupE2ETestUsersGlobal(cfg *config.Config) {
 		log.Debug().Err(err).Msg("Failed to cleanup auth.users e2e test users")
 	}
 
-	// Delete e2e test users from dashboard.users
-	_, err = db.Exec(ctx, "DELETE FROM dashboard.users WHERE email LIKE 'e2e-test-%@example.com'")
+	// Delete e2e test users from platform.users
+	_, err = db.Exec(ctx, "DELETE FROM platform.users WHERE email LIKE 'e2e-test-%@example.com'")
 	if err != nil {
-		log.Debug().Err(err).Msg("Failed to cleanup dashboard.users e2e test users")
+		log.Debug().Err(err).Msg("Failed to cleanup platform.users e2e test users")
 	}
 
-	// Also clean up any legacy test users with @example.com or @test.com patterns
-	_, _ = db.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
-	_, _ = db.Exec(ctx, "DELETE FROM dashboard.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
-	_, _ = db.Exec(ctx, "DELETE FROM auth.magic_links WHERE email LIKE '%@example.com' OR email LIKE '%@test.com'")
+	// Clean up legacy test-* prefix emails (narrower than the old %@example.com pattern)
+	_, _ = db.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
+	_, _ = db.Exec(ctx, "DELETE FROM platform.users WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
+	_, _ = db.Exec(ctx, "DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'")
 
 	log.Info().Msg("Cleaned up e2e test users")
 }
@@ -1077,6 +1099,22 @@ func GetTestConfig() *config.Config {
 		Scaling: config.ScalingConfig{
 			DisableScheduler: true, // Disable functions/RPC schedulers for tests to avoid connection issues
 			DisableRealtime:  true, // Disable realtime listener for tests to avoid connection issues
+		},
+		MCP: config.MCPConfig{
+			Enabled:         true,
+			BasePath:        "/mcp",
+			SessionTimeout:  30 * time.Minute,
+			MaxMessageSize:  10 * 1024 * 1024,
+			RateLimitPerMin: 100,
+			OAuth: config.MCPOAuthConfig{
+				Enabled:            true,
+				DCREnabled:         true,
+				TokenExpiry:        1 * time.Hour,
+				RefreshTokenExpiry: 168 * time.Hour,
+			},
+		},
+		Tenants: config.TenantsConfig{
+			Enabled: true,
 		},
 		EncryptionKey: "test-encryption-key-32-bytes!!!!", // Exactly 32 bytes for AES-256
 		Debug:         getTestDebugMode(),
@@ -1255,6 +1293,45 @@ func (r *APIRequest) Unauthenticated() *APIRequest {
 	delete(r.headers, "X-Client-Key")
 	delete(r.headers, "X-Service-Key")
 	return r
+}
+
+// WithDefaultTenant sets the X-FB-Tenant header to the default tenant ID.
+// Use this when you need to explicitly target the default tenant (e.g., multi-tenant tests).
+//
+// Example:
+//
+//	resp := tc.NewRequest("GET", "/api/v1/admin/schemas").
+//	    WithAuth(token).
+//	    WithDefaultTenant().
+//	    Send()
+func (r *APIRequest) WithDefaultTenant() *APIRequest {
+	tenantID := r.tc.GetDefaultTenantID()
+	r.headers["X-FB-Tenant"] = tenantID
+	return r
+}
+
+// GetDefaultTenantID returns the default tenant ID, caching the result.
+// If no default tenant exists (e.g., in CI where only bootstrap SQL runs), it creates one.
+// Uses sync.Once to prevent data races when called concurrently.
+func (tc *TestContext) GetDefaultTenantID() string {
+	tc.defaultTenantOnce.Do(func() {
+		var id string
+		err := tc.DB.Pool().QueryRow(context.Background(),
+			"SELECT id::text FROM platform.tenants WHERE is_default = true LIMIT 1",
+		).Scan(&id)
+		if err == nil {
+			tc.defaultTenant = id
+			return
+		}
+
+		// No default tenant exists — create one (CI doesn't seed default tenant)
+		require.NoError(tc.T, tc.DB.Pool().QueryRow(context.Background(),
+			"INSERT INTO platform.tenants (slug, name, is_default) VALUES ('default', 'Default', true) RETURNING id::text",
+		).Scan(&id), "Failed to create default tenant")
+
+		tc.defaultTenant = id
+	})
+	return tc.defaultTenant
 }
 
 // Send executes the request and returns the response
@@ -1462,18 +1539,72 @@ func (tc *TestContext) ExecuteSQL(sql string, args ...interface{}) {
 //	    INSERT INTO tasks (user_id, title, description)
 //	    VALUES ($1, 'Admin Created Task', 'Created by superuser')
 //	`, userID)
+
+// getSuperuserPool returns a pooled connection as the postgres superuser.
+// The pool is lazily initialized on first call and reused across subsequent calls.
+func (tc *TestContext) getSuperuserPool(ctx context.Context) (*pgxpool.Pool, error) {
+	if tc.superuserPool != nil {
+		return tc.superuserPool, nil
+	}
+
+	connStr := fmt.Sprintf("host=%s port=%d user=postgres password=postgres dbname=%s sslmode=disable pool_max_conns=2",
+		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
+
+	config, err := pgxpool.ParseConfig(connStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse superuser pool config: %w", err)
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create superuser pool: %w", err)
+	}
+
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to ping superuser pool: %w", err)
+	}
+
+	tc.superuserPool = pool
+	return pool, nil
+}
+
+// getRLSPool returns a pooled connection as the fluxbase_rls_test user.
+// The pool is lazily initialized on first call and reused across subsequent calls.
+func (tc *TestContext) getRLSPool(ctx context.Context) (*pgxpool.Pool, error) {
+	if tc.rlsPool != nil {
+		return tc.rlsPool, nil
+	}
+
+	connStr := fmt.Sprintf("host=%s port=%d user=fluxbase_rls_test password=fluxbase_rls_test_password dbname=%s sslmode=disable pool_max_conns=2",
+		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
+
+	config, err := pgxpool.ParseConfig(connStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse RLS pool config: %w", err)
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create RLS pool: %w", err)
+	}
+
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to ping RLS pool: %w", err)
+	}
+
+	tc.rlsPool = pool
+	return pool, nil
+}
+
 func (tc *TestContext) ExecuteSQLAsSuperuser(sql string, args ...interface{}) {
 	ctx := context.Background()
 
-	// Create a temporary connection as postgres superuser
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres password=postgres dbname=%s sslmode=disable",
-		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
+	pool, err := tc.getSuperuserPool(ctx)
+	require.NoError(tc.T, err, "Failed to get superuser pool")
 
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(tc.T, err, "Failed to connect as superuser")
-	defer func() { _ = conn.Close(ctx) }()
-
-	_, err = conn.Exec(ctx, sql, args...)
+	_, err = pool.Exec(ctx, sql, args...)
 	require.NoError(tc.T, err, "Failed to execute SQL as superuser")
 }
 
@@ -1690,15 +1821,10 @@ func convertPgTypeToGoType(v interface{}) interface{} {
 func (tc *TestContext) QuerySQLAsSuperuser(sql string, args ...interface{}) []map[string]interface{} {
 	ctx := context.Background()
 
-	// Create a temporary connection as postgres superuser
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres password=postgres dbname=%s sslmode=disable",
-		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
+	pool, err := tc.getSuperuserPool(ctx)
+	require.NoError(tc.T, err, "Failed to get superuser pool")
 
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(tc.T, err, "Failed to connect as superuser")
-	defer func() { _ = conn.Close(ctx) }()
-
-	rows, err := conn.Query(ctx, sql, args...)
+	rows, err := pool.Query(ctx, sql, args...)
 	require.NoError(tc.T, err, "Failed to query as superuser")
 	defer rows.Close()
 
@@ -1742,16 +1868,11 @@ func (tc *TestContext) QuerySQLAsSuperuser(sql string, args ...interface{}) []ma
 func (tc *TestContext) QuerySQLAsRLSUser(sql string, userID string, args ...interface{}) []map[string]interface{} {
 	ctx := context.Background()
 
-	// Create a temporary connection as fluxbase_rls_test user (no BYPASSRLS)
-	connStr := fmt.Sprintf("host=%s port=%d user=fluxbase_rls_test password=fluxbase_rls_test_password dbname=%s sslmode=disable",
-		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
-
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(tc.T, err, "Failed to connect as RLS test user")
-	defer func() { _ = conn.Close(ctx) }()
+	pool, err := tc.getRLSPool(ctx)
+	require.NoError(tc.T, err, "Failed to get RLS pool")
 
 	// Begin a transaction to set RLS context
-	tx, err := conn.Begin(ctx)
+	tx, err := pool.Begin(ctx)
 	require.NoError(tc.T, err, "Failed to begin transaction")
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -1782,6 +1903,72 @@ func (tc *TestContext) QuerySQLAsRLSUser(sql string, userID string, args ...inte
 	}
 
 	// Commit transaction (though we're only reading)
+	err = tx.Commit(ctx)
+	require.NoError(tc.T, err, "Failed to commit transaction")
+
+	return results
+}
+
+// QuerySQLAsTenant executes a query with tenant context set, using the fluxbase_rls_test user.
+// This simulates a tenant-scoped database query where RLS policies filter by tenant_id.
+//
+// Parameters:
+//   - tenantID: The tenant ID to set as app.current_tenant_id
+//   - sql: The SQL query to execute
+//   - args: Optional query arguments
+//
+// The RLS context is set with:
+//   - app.current_tenant_id = tenantID (for has_tenant_access checks)
+//   - request.jwt.claims = minimal claims with service_role (to pass authenticated checks)
+//
+// Use this to test that tenant-scoped RLS policies correctly isolate data between tenants.
+//
+// Example:
+//
+//	// Test that tenant1 cannot see tenant2's records
+//	records := tc.QuerySQLAsTenant(tenant1ID, `SELECT * FROM logging.entries`)
+//	for _, r := range records {
+//	    require.Equal(t, tenant1ID, r["tenant_id"])
+//	}
+func (tc *TestContext) QuerySQLAsTenant(tenantID, sql string, args ...interface{}) []map[string]interface{} {
+	ctx := context.Background()
+
+	pool, err := tc.getRLSPool(ctx)
+	require.NoError(tc.T, err, "Failed to get RLS pool")
+
+	// Begin a transaction to set tenant context
+	tx, err := pool.Begin(ctx)
+	require.NoError(tc.T, err, "Failed to begin transaction")
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Set tenant context variable
+	_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
+	require.NoError(tc.T, err, "Failed to set app.current_tenant_id")
+
+	// Set JWT claims with 'authenticated' role (not service_role) so that
+	// RLS policies checking current_user_role() = 'service_role' do NOT pass.
+	// This ensures the tenant RLS policy is the active filter.
+	jwtClaims := fmt.Sprintf(`{"sub":"00000000-0000-0000-0000-000000000000","role":"authenticated"}`)
+	_, err = tx.Exec(ctx, "SELECT set_config('request.jwt.claims', $1, true)", jwtClaims)
+	require.NoError(tc.T, err, "Failed to set request.jwt.claims")
+
+	// Execute the query
+	rows, err := tx.Query(ctx, sql, args...)
+	require.NoError(tc.T, err, "Failed to query as tenant")
+	defer rows.Close()
+
+	results := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		values, err := rows.Values()
+		require.NoError(tc.T, err)
+
+		row := make(map[string]interface{})
+		for i, col := range rows.FieldDescriptions() {
+			row[string(col.Name)] = convertPgTypeToGoType(values[i])
+		}
+		results = append(results, row)
+	}
+
 	err = tx.Commit(ctx)
 	require.NoError(tc.T, err, "Failed to commit transaction")
 
@@ -1964,19 +2151,14 @@ func (tc *TestContext) CreateDashboardAdminUser(email, password string) (userID,
 		require.NoError(tc.T, err, "Failed to hash password")
 	}
 
-	// Insert dashboard user with bcrypt hash using superuser connection
+	// Insert dashboard user with bcrypt hash using superuser pool
 	// This is necessary for RLS test contexts where the test user doesn't have BYPASSRLS
-	// Create a temporary connection as postgres superuser
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres password=postgres dbname=%s sslmode=disable",
-		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
+	pool, err := tc.getSuperuserPool(ctx)
+	require.NoError(tc.T, err, "Failed to get superuser pool for dashboard admin creation")
 
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(tc.T, err, "Failed to connect as superuser for dashboard admin creation")
-	defer func() { _ = conn.Close(ctx) }()
-
-	err = conn.QueryRow(ctx,
-		`INSERT INTO dashboard.users (email, password_hash, full_name, role, email_verified)
-		 VALUES ($1, $2, $3, 'dashboard_admin', true)
+	err = pool.QueryRow(ctx,
+		`INSERT INTO platform.users (email, password_hash, full_name, role, email_verified)
+		 VALUES ($1, $2, $3, 'instance_admin', true)
 		 ON CONFLICT (email) DO UPDATE
 		 SET password_hash = EXCLUDED.password_hash
 		 RETURNING id`,
@@ -2104,6 +2286,12 @@ func (tc *TestContext) EnsureAuthSchema() {
 			expires_at TIMESTAMPTZ NOT NULL,
 			created_at TIMESTAMPTZ DEFAULT NOW()
 		)`,
+		`CREATE TABLE IF NOT EXISTS auth.webhook_monitored_tables (
+			schema_name TEXT NOT NULL,
+			table_name TEXT NOT NULL,
+			webhook_count BIGINT DEFAULT 0,
+			PRIMARY KEY (schema_name, table_name)
+		)`,
 	}
 
 	for _, query := range queries {
@@ -2113,9 +2301,9 @@ func (tc *TestContext) EnsureAuthSchema() {
 }
 
 // EnsureStorageSchema ensures storage schema and tables exist
-// This schema must match internal/database/migrations/010_tables_storage.up.sql
-// Note: In most cases, migrations will have already created these tables. This function
-// only creates them if they don't exist (for isolated test environments without migrations).
+// This schema must match internal/database/schema/schemas/storage.sql
+// Note: In most cases, bootstrap + declarative schema will have already created these tables.
+// This function only creates them if they don't exist (for isolated test environments).
 func (tc *TestContext) EnsureStorageSchema() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -2225,6 +2413,46 @@ func (tc *TestContext) EnsureFunctionsSchema() {
 	}
 }
 
+// EnsureSystemSettings seeds default system settings into the database so that
+// the settings cache can find them. Without these rows, feature flags like
+// app.functions.enabled default to false and the RequireFeatureEnabled middleware
+// blocks all requests with 503 FEATURE_DISABLED.
+func (tc *TestContext) EnsureSystemSettings() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := tc.DB.Health(ctx)
+	require.NoError(tc.T, err, "Database health check failed in EnsureSystemSettings")
+
+	settings := map[string]bool{
+		"app.functions.enabled":   true,
+		"app.storage.enabled":     true,
+		"app.realtime.enabled":    true,
+		"app.ai.enabled":          true,
+		"app.rpc.enabled":         true,
+		"app.jobs.enabled":        true,
+		"app.auth.signup_enabled": true,
+	}
+
+	for key, value := range settings {
+		// The settings cache reads value as setting.Value["value"].(bool),
+		// so we must store {"value": true/false} format, not plain booleans.
+		valJSON := `{"value": false}`
+		if value {
+			valJSON = `{"value": true}`
+		}
+		// Use ON CONFLICT with partial index predicate (WHERE user_id IS NULL)
+		// instead of constraint name, as partial unique indexes cannot be
+		// referenced by constraint name in ON CONFLICT ON CONSTRAINT.
+		// Use superuser pool to bypass RLS on app.settings.
+		tc.ExecuteSQLAsSuperuser(`
+			INSERT INTO app.settings (key, value, category)
+			VALUES ($1, $2::jsonb, 'system')
+			ON CONFLICT (key) WHERE user_id IS NULL DO UPDATE SET value = $2::jsonb
+		`, key, valJSON)
+	}
+}
+
 // EnsureRLSTestTables ensures test tables for RLS testing exist with proper policies
 func (tc *TestContext) EnsureRLSTestTables() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -2290,17 +2518,13 @@ func (tc *TestContext) EnsureRLSTestTables() {
 		`GRANT ALL ON TABLE public.tasks TO authenticated`,
 	}
 
-	// Create a temporary connection as postgres superuser to create tables and policies
+	// Use pooled superuser connection to create tables and policies
 	// This is necessary because the RLS test user doesn't have table ownership permissions
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres password=postgres dbname=%s sslmode=disable",
-		tc.Config.Database.Host, tc.Config.Database.Port, tc.Config.Database.Database)
-
-	conn, err := pgx.Connect(ctx, connStr)
-	require.NoError(tc.T, err, "Failed to connect as superuser for table creation")
-	defer func() { _ = conn.Close(ctx) }()
+	pool, err := tc.getSuperuserPool(ctx)
+	require.NoError(tc.T, err, "Failed to get superuser pool for table creation")
 
 	for _, query := range queries {
-		_, err := conn.Exec(ctx, query)
+		_, err := pool.Exec(ctx, query)
 		require.NoError(tc.T, err, "Failed to create RLS test tables: %v", err)
 	}
 
@@ -2541,10 +2765,15 @@ func (tc *TestContext) CreateServiceKey(name string) string {
 	keyHash, err := bcrypt.GenerateFromPassword([]byte(plaintextKey), 10)
 	require.NoError(tc.T, err, "Failed to hash service key")
 
-	// Insert into auth.service_keys table
+	// Insert into auth.service_keys table.
+	// Use ON CONFLICT to handle duplicate names when tenant_id is NULL
+	// (partial unique index auth_service_keys_name_tenant_null_unique).
+	// On conflict, update the key hash and prefix so the returned key is valid.
 	query := `
 		INSERT INTO auth.service_keys (name, description, key_hash, key_prefix, enabled)
 		VALUES ($1, $2, $3, $4, true)
+		ON CONFLICT (name) WHERE (tenant_id IS NULL)
+		DO UPDATE SET key_hash = EXCLUDED.key_hash, key_prefix = EXCLUDED.key_prefix, description = EXCLUDED.description
 		RETURNING id
 	`
 

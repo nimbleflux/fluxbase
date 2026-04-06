@@ -9,9 +9,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
-	"github.com/rs/zerolog/log"
 )
 
 // batchInsert handles batch insert operations
@@ -182,6 +183,9 @@ func (h *RESTHandler) batchInsert(ctx context.Context, c fiber.Ctx, table databa
 
 	query += buildReturningClause(table)
 
+	// Set target schema for tenant-aware pool routing
+	middleware.SetTargetSchema(c, table.Schema)
+
 	// Execute query with RLS context
 	var results []map[string]interface{}
 	err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -301,6 +305,9 @@ func (h *RESTHandler) makeBatchPatchHandler(table database.TableInfo) fiber.Hand
 
 		query += buildReturningClause(table)
 
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
+
 		// Execute query with RLS context
 		var results []map[string]interface{}
 		err = middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -375,6 +382,9 @@ func (h *RESTHandler) makeBatchDeleteHandler(table database.TableInfo) fiber.Han
 			`DELETE FROM "%s"."%s" WHERE %s`,
 			table.Schema, table.Name, whereSQL,
 		) + buildReturningClause(table)
+
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
 
 		// Execute query with RLS context
 		var results []map[string]interface{}

@@ -4,41 +4,95 @@ import (
 	"context"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/auth"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
-// RequireMigrationsEnabled checks if migrations API is enabled
-// If disabled, returns HTTP 404 to hide the feature entirely
-func RequireMigrationsEnabled(cfg *config.MigrationsConfig) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		if !cfg.Enabled {
-			log.Warn().
-				Str("path", c.Path()).
-				Str("ip", c.IP()).
-				Msg("Migrations API access denied - feature disabled")
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Not Found",
-			})
-		}
-		return c.Next()
+type MigrationsTenantPoolProvider interface {
+	GetPool(tenantID string) (*pgxpool.Pool, error)
+}
+
+type migrationsRateLimiter struct {
+	limit    int
+	window   time.Duration
+	storage  fiber.Storage
+	requests map[string]*migrationsRateLimitEntry
+	mu       sync.Mutex
+}
+
+type migrationsRateLimitEntry struct {
+	count     int
+	expiresAt time.Time
+}
+
+func newRateLimiter(limit int, window time.Duration, storage fiber.Storage) *migrationsRateLimiter {
+	return &migrationsRateLimiter{
+		limit:    limit,
+		window:   window,
+		storage:  storage,
+		requests: make(map[string]*migrationsRateLimitEntry),
 	}
 }
 
-// RequireMigrationsIPAllowlist restricts access to migrations API by IP range
-// Only IPs within the configured ranges are allowed
-// If no IP ranges are configured, all IPs are allowed
-// The serverConfig is used for trusted proxy configuration to prevent IP spoofing
-func RequireMigrationsIPAllowlist(migrationsCfg *config.MigrationsConfig, serverCfg *config.ServerConfig) fiber.Handler {
-	// Parse allowed IP ranges at startup
+func (rl *migrationsRateLimiter) allow(key string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	if entry, exists := rl.requests[key]; exists {
+		if now.After(entry.expiresAt) {
+			entry.count = 1
+			entry.expiresAt = now.Add(rl.window)
+			return true
+		}
+		if entry.count >= rl.limit {
+			return false
+		}
+		entry.count++
+		return true
+	}
+
+	rl.requests[key] = &migrationsRateLimitEntry{
+		count:     1,
+		expiresAt: now.Add(rl.window),
+	}
+	return true
+}
+
+func RequireMigrationsFullSecurity(
+	cfg *config.MigrationsConfig,
+	serverCfg *config.ServerConfig,
+	db *pgxpool.Pool,
+	authService *auth.Service,
+	rateLimit int,
+	rateWindow time.Duration,
+	storage fiber.Storage,
+) fiber.Handler {
+	return RequireMigrationsFullSecurityWithTenantProvider(
+		cfg, serverCfg, db, authService, rateLimit, rateWindow, storage, nil,
+	)
+}
+
+func RequireMigrationsFullSecurityWithTenantProvider(
+	cfg *config.MigrationsConfig,
+	serverCfg *config.ServerConfig,
+	db *pgxpool.Pool,
+	authService *auth.Service,
+	rateLimit int,
+	rateWindow time.Duration,
+	storage fiber.Storage,
+	tenantPoolProvider MigrationsTenantPoolProvider,
+) fiber.Handler {
 	var allowedNets []*net.IPNet
-	for _, ipRange := range migrationsCfg.AllowedIPRanges {
+	for _, ipRange := range cfg.AllowedIPRanges {
 		_, network, err := net.ParseCIDR(ipRange)
 		if err != nil {
 			log.Error().Err(err).Str("range", ipRange).Msg("Invalid IP range in migrations config")
@@ -47,320 +101,253 @@ func RequireMigrationsIPAllowlist(migrationsCfg *config.MigrationsConfig, server
 		allowedNets = append(allowedNets, network)
 	}
 
+	limiter := newRateLimiter(rateLimit, rateWindow, storage)
+
 	return func(c fiber.Ctx) error {
-		// Skip if no IP ranges configured (allows all)
-		if len(allowedNets) == 0 {
-			return c.Next()
+		if !cfg.Enabled {
+			log.Warn().Str("path", c.Path()).Str("ip", c.IP()).Msg("Migrations API access denied - feature disabled")
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Not Found"})
 		}
 
-		clientIP := GetTrustedClientIP(c, serverCfg)
-
-		// Check if IP is in any allowed range
-		for _, network := range allowedNets {
-			if network.Contains(clientIP) {
-				log.Debug().
-					Str("ip", clientIP.String()).
-					Str("network", network.String()).
-					Msg("Migrations API access allowed - IP in allowlist")
-				return c.Next()
-			}
-		}
-
-		// IP not in allowlist
-		log.Warn().
-			Str("ip", clientIP.String()).
-			Str("path", c.Path()).
-			Msg("Migrations API access denied - IP not in allowlist")
-
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied - IP not allowlisted for migrations",
-		})
-	}
-}
-
-// RequireServiceKeyOnly enforces service key authentication (service keys or service_role JWT)
-// Migrations API requires the highest level of authentication
-// Accepts: 1) Service keys (sk_*) via X-Service-Key, Authorization, or clientkey headers
-//  2. JWT tokens with service_role via Authorization or clientkey headers
-func RequireServiceKeyOnly(db *pgxpool.Pool, authService *auth.Service) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		// Try JWT authentication first (from clientkey or Authorization header)
-		authHeader := c.Get("Authorization")
-		clientkey := c.Get("clientkey")
-
-		// Extract JWT token from headers
-		var jwtToken string
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			token := strings.TrimPrefix(authHeader, "Bearer ")
-			// Check if it's a JWT (starts with eyJ) not a service key (starts with sk_)
-			if strings.HasPrefix(token, "eyJ") {
-				jwtToken = token
-			}
-		}
-		if jwtToken == "" && strings.HasPrefix(clientkey, "eyJ") {
-			jwtToken = clientkey
-		}
-
-		// If we have a JWT token, validate it
-		if jwtToken != "" {
-			log.Debug().Str("jwt_prefix", jwtToken[:min(20, len(jwtToken))]).Msg("Validating JWT token")
-
-			claims, err := authService.ValidateToken(jwtToken)
-			if err == nil {
-				// Check if role is service_role
-				if claims.Role == "service_role" {
-					log.Debug().
-						Str("role", claims.Role).
-						Msg("Migrations API access granted - service_role JWT")
-
-					// Set context locals
-					c.Locals("auth_type", "jwt")
-					c.Locals("user_role", claims.Role)
-					c.Locals("user_id", claims.UserID)
-
-					return c.Next()
+		if len(allowedNets) > 0 {
+			clientIP := GetTrustedClientIP(c, serverCfg)
+			allowed := false
+			for _, network := range allowedNets {
+				if network.Contains(clientIP) {
+					allowed = true
+					break
 				}
-
-				log.Warn().
-					Str("role", claims.Role).
-					Msg("Migrations API access denied - JWT role must be service_role")
-				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-					"error": "Migrations API requires service_role JWT",
-				})
 			}
-
-			log.Debug().Err(err).Msg("JWT validation failed, trying service key")
-		}
-
-		// Try service key authentication
-		serviceKey := ""
-
-		// Try X-Service-Key header first (most explicit)
-		serviceKey = c.Get("X-Service-Key")
-		// Only log prefix of service key for security
-		keyPrefix := ""
-		if len(serviceKey) > 0 {
-			keyPrefix = serviceKey[:min(16, len(serviceKey))] + "..."
-		}
-		log.Debug().Str("key_prefix", keyPrefix).Msg("Checking X-Service-Key header")
-
-		// Try Authorization header (ServiceKey or Bearer with service key)
-		if serviceKey == "" && strings.HasPrefix(authHeader, "ServiceKey ") {
-			serviceKey = strings.TrimPrefix(authHeader, "ServiceKey ")
-		} else if serviceKey == "" && strings.HasPrefix(authHeader, "Bearer ") {
-			// Accept Bearer token if it looks like a service key
-			token := strings.TrimPrefix(authHeader, "Bearer ")
-			if strings.HasPrefix(token, "sk_") {
-				serviceKey = token
+			if !allowed {
+				log.Warn().Str("ip", clientIP.String()).Str("path", c.Path()).Msg("Migrations API access denied - IP not in allowlist")
+				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Access denied - IP not allowlisted for migrations"})
 			}
 		}
 
-		// Try clientkey header (used by SDK)
-		if serviceKey == "" && strings.HasPrefix(clientkey, "sk_") {
-			serviceKey = clientkey
+		if !migrationsValidateAuthAndScope(c, db, authService, tenantPoolProvider) {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Service key or service_role JWT authentication required for migrations API"})
 		}
 
-		if serviceKey != "" {
-			log.Debug().Str("key_prefix", serviceKey[:min(16, len(serviceKey))]).Msg("Validating service key")
-
-			// Validate service key
-			if validateMigrationServiceKey(c, db, serviceKey) {
-				return c.Next()
-			}
-
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid service key",
-			})
+		rateLimitKey := migrationsGetRateLimitKey(c)
+		if !limiter.allow(rateLimitKey) {
+			log.Warn().Str("key", rateLimitKey).Int("limit", rateLimit).Msg("Migrations API rate limit exceeded")
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"error": "Rate limit exceeded"})
 		}
 
-		// Neither JWT nor service key provided
-		log.Warn().
-			Str("path", c.Path()).
-			Str("ip", c.IP()).
-			Msg("Migrations API access denied - service key or service_role JWT required")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Service key or service_role JWT authentication required for migrations API",
-		})
-	}
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// RequireMigrationScope checks if authentication has migrations permissions
-// Accepts both service_role JWT (full access) and service keys with migrations:execute scope
-func RequireMigrationScope() fiber.Handler {
-	return func(c fiber.Ctx) error {
-		authType := c.Locals("auth_type")
-
-		// JWT with service_role has full access (no scope check needed)
-		if authType == "jwt" {
-			role := c.Locals("user_role")
-			if role == "service_role" {
-				log.Debug().
-					Str("auth_type", "jwt").
-					Str("role", "service_role").
-					Msg("Migrations scope check passed - service_role has full access")
-				return c.Next()
-			}
-
-			log.Warn().
-				Str("auth_type", "jwt").
-				Interface("role", role).
-				Msg("Migrations require service_role JWT")
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Migrations require service_role JWT",
-			})
-		}
-
-		// For service keys, check scopes
-		if authType != "service_key" {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Migrations require service key or service_role JWT authentication",
-			})
-		}
-
-		scopes, ok := c.Locals("service_key_scopes").([]string)
-		if !ok {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "No scopes found",
-			})
-		}
-
-		// Check for migration scope
-		hasScope := false
-		requiredScope := "migrations:execute"
-		for _, scope := range scopes {
-			if scope == requiredScope || scope == "*" {
-				hasScope = true
-				break
-			}
-		}
-
-		if !hasScope {
-			log.Warn().
-				Str("required", requiredScope).
-				Interface("scopes", scopes).
-				Msg("Service key missing required scope")
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Service key does not have migrations:execute scope",
-			})
-		}
-
-		return c.Next()
-	}
-}
-
-// MigrationsAuditLog logs all migrations API requests for security auditing
-func MigrationsAuditLog() fiber.Handler {
-	return func(c fiber.Ctx) error {
 		start := time.Now()
-
-		// Get service key info before processing
 		serviceKeyID := c.Locals("service_key_id")
 		serviceKeyName := c.Locals("service_key_name")
-
-		// Log request
-		log.Info().
-			Str("method", c.Method()).
-			Str("path", c.Path()).
-			Str("ip", c.IP()).
-			Interface("service_key_id", serviceKeyID).
-			Interface("service_key_name", serviceKeyName).
+		log.Info().Str("method", c.Method()).Str("path", c.Path()).Str("ip", c.IP()).
+			Interface("service_key_id", serviceKeyID).Interface("service_key_name", serviceKeyName).
 			Msg("Migrations API request started")
 
-		// Continue processing
 		err := c.Next()
 
-		// Log response
-		log.Info().
-			Str("method", c.Method()).
-			Str("path", c.Path()).
-			Int("status", c.Response().StatusCode()).
-			Dur("duration", time.Since(start)).
-			Str("ip", c.IP()).
-			Interface("service_key_id", serviceKeyID).
+		log.Info().Str("method", c.Method()).Str("path", c.Path()).
+			Int("status", c.Response().StatusCode()).Dur("duration", time.Since(start)).
+			Str("ip", c.IP()).Interface("service_key_id", serviceKeyID).
 			Msg("Migrations API request completed")
 
 		return err
 	}
 }
 
-// validateMigrationServiceKey validates a service key for migrations API
-// This is similar to validateServiceKey but sets auth_type to "service_key"
-func validateMigrationServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) bool {
-	// Extract key prefix (first 16 chars for identification)
+func migrationsValidateAuthAndScope(c fiber.Ctx, db *pgxpool.Pool, authService *auth.Service, tenantPoolProvider MigrationsTenantPoolProvider) bool {
+	authHeader := c.Get("Authorization")
+	clientkey := c.Get("clientkey")
+
+	var jwtToken string
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if strings.HasPrefix(token, "eyJ") {
+			jwtToken = token
+		}
+	}
+	if jwtToken == "" && strings.HasPrefix(clientkey, "eyJ") {
+		jwtToken = clientkey
+	}
+
+	if jwtToken != "" {
+		claims, err := authService.ValidateToken(jwtToken)
+		if err == nil {
+			c.Locals("auth_type", "jwt")
+			c.Locals("user_role", claims.Role)
+			c.Locals("user_id", claims.UserID)
+			c.Locals("claims", claims)
+
+			if claims.Role == "service_role" {
+				tenantID := migrationsGetTenantIDFromHeader(c)
+				if tenantID != "" && tenantPoolProvider != nil {
+					c.Locals("tenant_id", tenantID)
+					c.Locals("is_tenant_migration", true)
+					return true
+				}
+				c.Locals("is_tenant_migration", false)
+				return true
+			}
+
+			if claims.Role == "admin" || claims.Role == "instance_admin" {
+				c.Locals("is_tenant_migration", false)
+				return true
+			}
+
+			if claims.Role == "tenant_admin" || (claims.TenantID != nil && *claims.TenantID != "") {
+				tenantID := migrationsGetTenantID(c, claims)
+				if tenantID == "" {
+					log.Warn().Str("user_id", claims.UserID).Str("role", claims.Role).Msg("Tenant admin must have tenant context")
+					return false
+				}
+
+				if !migrationsValidateTenantMembership(c.RequestCtx(), db, claims.UserID, tenantID) {
+					log.Warn().Str("user_id", claims.UserID).Str("tenant_id", tenantID).Msg("User not member of tenant")
+					return false
+				}
+
+				c.Locals("tenant_id", tenantID)
+				c.Locals("is_tenant_migration", true)
+				return true
+			}
+		}
+	}
+
+	serviceKey := c.Get("X-Service-Key")
+	if serviceKey == "" {
+		if strings.HasPrefix(authHeader, "ServiceKey ") {
+			serviceKey = strings.TrimPrefix(authHeader, "ServiceKey ")
+		} else if serviceKey == "" && strings.HasPrefix(authHeader, "Bearer ") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+			if strings.HasPrefix(token, "sk_") {
+				serviceKey = token
+			}
+		}
+	}
+	if serviceKey == "" && strings.HasPrefix(clientkey, "sk_") {
+		serviceKey = clientkey
+	}
+
+	if serviceKey != "" {
+		tenantID := migrationsGetTenantIDFromHeader(c)
+
+		if tenantID != "" && tenantPoolProvider != nil {
+			tenantPool, err := tenantPoolProvider.GetPool(tenantID)
+			if err != nil {
+				log.Warn().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant pool for service key validation")
+				return false
+			}
+
+			if migrationsValidateServiceKeyWithScope(c, tenantPool, serviceKey, "migrations:execute") {
+				c.Locals("tenant_id", tenantID)
+				c.Locals("is_tenant_migration", true)
+				return true
+			}
+		}
+
+		if migrationsValidateServiceKeyWithScope(c, db, serviceKey, "migrations:execute") {
+			c.Locals("is_tenant_migration", false)
+			return true
+		}
+	}
+
+	log.Warn().Str("path", c.Path()).Str("ip", c.IP()).Msg("Migrations API auth failed")
+	return false
+}
+
+func migrationsGetTenantIDFromHeader(c fiber.Ctx) string {
+	return c.Get("X-FB-Tenant")
+}
+
+func migrationsGetTenantID(c fiber.Ctx, claims *auth.TokenClaims) string {
+	if headerTenant := c.Get("X-FB-Tenant"); headerTenant != "" {
+		return headerTenant
+	}
+	if claims.TenantID != nil {
+		return *claims.TenantID
+	}
+	return ""
+}
+
+func migrationsValidateTenantMembership(ctx context.Context, db *pgxpool.Pool, userID, tenantID string) bool {
+	var isMember bool
+	err := db.QueryRow(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM platform.tenant_admin_assignments taa
+			INNER JOIN platform.tenants t ON t.id = taa.tenant_id
+			WHERE taa.user_id = $1::uuid
+			AND taa.tenant_id = $2::uuid
+			AND t.deleted_at IS NULL
+		)`,
+		userID, tenantID,
+	).Scan(&isMember)
+	if err != nil {
+		log.Debug().Err(err).Str("user_id", userID).Str("tenant_id", tenantID).Msg("Failed to validate tenant membership")
+		return false
+	}
+	return isMember
+}
+
+func migrationsValidateServiceKeyWithScope(c fiber.Ctx, db *pgxpool.Pool, serviceKey, requiredScope string) bool {
 	if len(serviceKey) < 16 || !strings.HasPrefix(serviceKey, "sk_") {
 		return false
 	}
 	keyPrefix := serviceKey[:16]
 
-	// Look up service key in database by prefix
-	var keyHash string
-	var keyID string
-	var keyName string
+	var keyHash, keyID, keyName string
 	var scopes []string
 	var enabled bool
 	var expiresAt *time.Time
 
 	err := db.QueryRow(c.RequestCtx(),
-		`SELECT id, name, key_hash, scopes, enabled, expires_at
-		 FROM auth.service_keys
-		 WHERE key_prefix = $1`,
+		`SELECT id, name, key_hash, scopes, enabled, expires_at FROM auth.service_keys WHERE key_prefix = $1`,
 		keyPrefix,
 	).Scan(&keyID, &keyName, &keyHash, &scopes, &enabled, &expiresAt)
 	if err != nil {
-		log.Debug().Err(err).Str("prefix", keyPrefix).Msg("Service key not found")
 		return false
 	}
 
-	// Check if key is enabled
-	if !enabled {
-		log.Debug().Str("key_id", keyID).Msg("Service key is disabled")
+	if !enabled || (expiresAt != nil && expiresAt.Before(time.Now())) {
 		return false
 	}
 
-	// Check if key has expired
-	if expiresAt != nil && expiresAt.Before(time.Now()) {
-		log.Debug().Str("key_id", keyID).Msg("Service key has expired")
+	if err := bcrypt.CompareHashAndPassword([]byte(keyHash), []byte(serviceKey)); err != nil {
 		return false
 	}
 
-	// Verify the key hash
-	err = bcrypt.CompareHashAndPassword([]byte(keyHash), []byte(serviceKey))
-	if err != nil {
-		log.Debug().Err(err).Str("prefix", keyPrefix).Msg("Invalid service key hash")
+	hasScope := false
+	for _, scope := range scopes {
+		if scope == requiredScope || scope == "*" {
+			hasScope = true
+			break
+		}
+	}
+	if !hasScope {
+		log.Warn().Str("required", requiredScope).Interface("scopes", scopes).Msg("Service key missing required scope")
 		return false
 	}
 
-	// Update last_used_at timestamp (fire and forget)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, _ = db.Exec(ctx,
-			`UPDATE auth.service_keys SET last_used_at = NOW() WHERE id = $1`,
-			keyID,
-		)
+		_, _ = db.Exec(ctx, `UPDATE auth.service_keys SET last_used_at = NOW() WHERE id = $1`, keyID)
 	}()
 
-	// Store service key information in context
 	c.Locals("service_key_id", keyID)
 	c.Locals("service_key_name", keyName)
 	c.Locals("service_key_scopes", scopes)
 	c.Locals("auth_type", "service_key")
 
-	log.Debug().
-		Str("key_id", keyID).
-		Str("key_name", keyName).
-		Interface("scopes", scopes).
-		Msg("Service key validated for migrations API")
-
 	return true
 }
 
-// fiber:context-methods migrated
+func migrationsGetRateLimitKey(c fiber.Ctx) string {
+	if keyID := c.Locals("service_key_id"); keyID != nil {
+		if id, ok := keyID.(string); ok {
+			return "migration:" + id
+		}
+	}
+	if userID := c.Locals("user_id"); userID != nil {
+		if id, ok := userID.(string); ok && id != "" {
+			return "migration:" + id
+		}
+	}
+	return "migration:ip:" + c.IP()
+}

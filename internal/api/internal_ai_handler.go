@@ -6,8 +6,9 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/ai"
 )
 
 // InternalAIHandler handles AI requests from custom MCP tools, edge functions, and jobs.

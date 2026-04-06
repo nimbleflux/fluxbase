@@ -648,7 +648,7 @@ jobs:
               echo ''
               echo '**CLI:**'
               echo '```bash'
-              echo "curl -fsSL https://fluxbase.dev/install-cli.sh | bash -s -- ${TAG}"
+              echo "curl -fsSL https://raw.githubusercontent.com/nimbleflux/fluxbase/main/install-cli.sh | bash -s -- ${TAG}"
               echo '```'
               echo ''
               echo '---'

@@ -4,8 +4,9 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // GraphQL request/response types
@@ -35,7 +36,7 @@ func setupGraphQLTest(t *testing.T) *test.TestContext {
 
 	// Clean only test-specific data and truncate products table
 	tc.ExecuteSQLAsSuperuser(`
-		DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com';
+		DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com';
 		TRUNCATE TABLE public.products RESTART IDENTITY CASCADE;
 	`)
 
@@ -57,7 +58,7 @@ func setupGraphQLRLSTest(t *testing.T) *test.TestContext {
 
 	// Clean only test-specific data
 	tc.ExecuteSQLAsSuperuser(`
-		DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com';
+		DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com';
 		DELETE FROM public.tasks WHERE user_id IS NOT NULL;
 	`)
 

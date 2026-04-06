@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nimbleflux/fluxbase/internal/storage"
 	"github.com/rs/zerolog"
+
+	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
 // Writer is a custom io.Writer that intercepts zerolog output and sends it

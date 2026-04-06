@@ -9,23 +9,25 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/secrets"
 	"github.com/nimbleflux/fluxbase/internal/testutil"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // TestSecretsHandler_CreateSecret_Integration tests POST /secrets endpoint
 func TestSecretsHandler_CreateSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -182,7 +184,7 @@ func TestSecretsHandler_CreateSecret_Integration(t *testing.T) {
 
 // TestSecretsHandler_ListSecrets_Integration tests GET /secrets endpoint
 func TestSecretsHandler_ListSecrets_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -250,7 +252,7 @@ func TestSecretsHandler_ListSecrets_Integration(t *testing.T) {
 
 // TestSecretsHandler_GetSecret_Integration tests GET /secrets/:id
 func TestSecretsHandler_GetSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -294,7 +296,7 @@ func TestSecretsHandler_GetSecret_Integration(t *testing.T) {
 
 // TestSecretsHandler_UpdateSecret_Integration tests PUT /secrets/:id
 func TestSecretsHandler_UpdateSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -390,7 +392,7 @@ func TestSecretsHandler_UpdateSecret_Integration(t *testing.T) {
 
 // TestSecretsHandler_DeleteSecret_Integration tests DELETE /secrets/:id
 func TestSecretsHandler_DeleteSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -437,7 +439,7 @@ func TestSecretsHandler_DeleteSecret_Integration(t *testing.T) {
 
 // TestSecretsHandler_GetVersions_Integration tests GET /secrets/:id/versions
 func TestSecretsHandler_GetVersions_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -482,7 +484,7 @@ func TestSecretsHandler_GetVersions_Integration(t *testing.T) {
 
 // TestSecretsHandler_Rollback_Integration tests POST /secrets/:id/rollback/:version
 func TestSecretsHandler_Rollback_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -532,7 +534,7 @@ func TestSecretsHandler_Rollback_Integration(t *testing.T) {
 
 // TestSecretsHandler_GetStats_Integration tests GET /secrets/stats
 func TestSecretsHandler_GetStats_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -590,7 +592,7 @@ func TestSecretsHandler_GetStats_Integration(t *testing.T) {
 
 // TestSecretsHandler_Expiration_Integration tests expiration handling
 func TestSecretsHandler_Expiration_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	app := setupSecretsApp(t, tc)
@@ -653,17 +655,50 @@ func setupSecretsApp(t *testing.T, tc *testutil.IntegrationTestContext) *fiber.A
 		RefreshExpiry: 24 * time.Hour,
 	}
 
-	// Create auth service
-	authService := auth.NewService(db, authCfg, nil, "http://localhost:3000")
 	jwtManager, err := auth.NewJWTManager(authCfg.JWTSecret, authCfg.JWTExpiry, authCfg.RefreshExpiry)
 	require.NoError(t, err)
-	clientKeyService := auth.NewClientKeyService(db.Pool(), nil)
 
 	// Create handler
 	handler := secrets.NewHandler(storage)
 
-	// Register routes
-	handler.RegisterRoutes(app, authService, clientKeyService, db.Pool(), jwtManager)
+	// Register routes manually (RegisterRoutes was removed)
+	// Simple auth middleware that validates JWT tokens
+	authMiddleware := func(c fiber.Ctx) error {
+		authHeader := c.Get("Authorization")
+		if authHeader == "" {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Missing authorization header",
+			})
+		}
+
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString == authHeader {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Invalid authorization header format",
+			})
+		}
+
+		claims, err := jwtManager.ValidateToken(tokenString)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Invalid or expired token",
+			})
+		}
+
+		c.Locals("userID", claims.UserID)
+		c.Locals("userEmail", claims.Email)
+		return c.Next()
+	}
+
+	secretsGroup := app.Group("/api/v1/secrets", authMiddleware)
+	secretsGroup.Get("/", handler.ListSecrets)
+	secretsGroup.Get("/stats", handler.GetStats)
+	secretsGroup.Post("/", handler.CreateSecret)
+	secretsGroup.Get("/:id", handler.GetSecret)
+	secretsGroup.Put("/:id", handler.UpdateSecret)
+	secretsGroup.Delete("/:id", handler.DeleteSecret)
+	secretsGroup.Get("/:id/versions", handler.GetVersions)
+	secretsGroup.Post("/:id/rollback/:version", handler.RollbackToVersion)
 
 	return app
 }
@@ -708,8 +743,8 @@ func createTestUserWithToken(t *testing.T, tc *testutil.IntegrationTestContext, 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	require.NoError(t, err, "Failed to hash password")
 
-	// Insert user into both auth.users (for auth/JWT) and dashboard.users (for FK constraint)
-	// The secrets table's created_by/updated_by fields reference dashboard.users
+	// Insert user into both auth.users (for auth/JWT) and platform.users (for FK constraint)
+	// The secrets table's created_by/updated_by fields reference platform.users
 	_, err = tc.DB.Pool().Exec(ctx,
 		"INSERT INTO auth.users (id, email, password_hash, email_verified, role, created_at) VALUES ($1, $2, $3, true, 'authenticated', NOW())",
 		userID, email, string(hashedPassword))
@@ -721,7 +756,7 @@ func createTestUserWithToken(t *testing.T, tc *testutil.IntegrationTestContext, 
 	require.NoError(t, err, "Failed to hash dashboard password")
 
 	_, err = tc.DB.Pool().Exec(ctx,
-		"INSERT INTO dashboard.users (id, email, password_hash, full_name, role, created_at) VALUES ($1, $2, $3, $4, 'dashboard_admin', NOW()) ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash",
+		"INSERT INTO platform.users (id, email, password_hash, full_name, role, created_at) VALUES ($1, $2, $3, $4, 'instance_admin', NOW()) ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash",
 		userID, email, string(dashboardPasswordHash), "Test User")
 	require.NoError(t, err, "Failed to create dashboard user")
 

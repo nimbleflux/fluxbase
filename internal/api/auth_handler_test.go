@@ -224,7 +224,7 @@ func TestAuthHandler_SetSAMLService(t *testing.T) {
 func TestGetAccessToken_FromCookie(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		token := handler.getAccessToken(c)
 		return c.SendString(token)
@@ -246,7 +246,7 @@ func TestGetAccessToken_FromCookie(t *testing.T) {
 func TestGetAccessToken_FromBearerHeader(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		token := handler.getAccessToken(c)
 		return c.SendString(token)
@@ -265,7 +265,7 @@ func TestGetAccessToken_FromBearerHeader(t *testing.T) {
 func TestGetAccessToken_CookiePriority(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		token := handler.getAccessToken(c)
 		return c.SendString(token)
@@ -289,7 +289,7 @@ func TestGetAccessToken_CookiePriority(t *testing.T) {
 func TestGetAccessToken_HeaderWithoutBearer(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		token := handler.getAccessToken(c)
 		return c.SendString(token)
@@ -308,7 +308,7 @@ func TestGetAccessToken_HeaderWithoutBearer(t *testing.T) {
 func TestGetAccessToken_Empty(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		token := handler.getAccessToken(c)
 		return c.SendString(token)
@@ -326,7 +326,7 @@ func TestGetAccessToken_Empty(t *testing.T) {
 func TestGetAccessToken_ShortBearerHeader(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		token := handler.getAccessToken(c)
 		return c.SendString(token)
@@ -351,7 +351,7 @@ func TestGetAccessToken_ShortBearerHeader(t *testing.T) {
 func TestGetRefreshToken_FromCookie(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		token := handler.getRefreshToken(c)
 		return c.SendString(token)
@@ -373,7 +373,7 @@ func TestGetRefreshToken_FromCookie(t *testing.T) {
 func TestGetRefreshToken_Empty(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		token := handler.getRefreshToken(c)
 		return c.SendString(token)
@@ -395,7 +395,7 @@ func TestGetRefreshToken_Empty(t *testing.T) {
 func TestSetAuthCookies(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		handler.setAuthCookies(c, "access_token_test", "refresh_token_test", 3600)
 		return c.SendString("OK")
@@ -433,7 +433,7 @@ func TestSetAuthCookies_Secure(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 	handler.SetSecureCookie(true)
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		handler.setAuthCookies(c, "token", "refresh", 3600)
 		return c.SendString("OK")
@@ -454,7 +454,7 @@ func TestSetAuthCookies_Secure(t *testing.T) {
 func TestClearAuthCookies(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		handler.clearAuthCookies(c)
 		return c.SendString("OK")
@@ -482,7 +482,7 @@ func TestClearAuthCookies(t *testing.T) {
 func TestSignInAnonymous_Disabled(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/signin/anonymous", handler.SignInAnonymous)
 
 	req := httptest.NewRequest("POST", "/auth/signin/anonymous", nil)
@@ -502,7 +502,7 @@ func TestSignInAnonymous_Disabled(t *testing.T) {
 func TestGetCSRFToken_ReturnsToken(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 
 	// Simulate CSRF middleware setting the cookie
 	app.Use(func(c fiber.Ctx) error {
@@ -544,7 +544,7 @@ func TestGetCSRFToken_ReturnsToken(t *testing.T) {
 func TestGetUser_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/auth/user", handler.GetUser)
 
 	req := httptest.NewRequest("GET", "/auth/user", nil)
@@ -558,7 +558,7 @@ func TestGetUser_NoAuth(t *testing.T) {
 func TestUpdateUser_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Patch("/auth/user", handler.UpdateUser)
 
 	body := `{"name": "Test"}`
@@ -574,7 +574,7 @@ func TestUpdateUser_NoAuth(t *testing.T) {
 func TestSetupTOTP_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/2fa/setup", handler.SetupTOTP)
 
 	req := httptest.NewRequest("POST", "/auth/2fa/setup", nil)
@@ -588,7 +588,7 @@ func TestSetupTOTP_NoAuth(t *testing.T) {
 func TestEnableTOTP_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/2fa/enable", handler.EnableTOTP)
 
 	body := `{"code": "123456"}`
@@ -604,7 +604,7 @@ func TestEnableTOTP_NoAuth(t *testing.T) {
 func TestDisableTOTP_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/2fa/disable", handler.DisableTOTP)
 
 	body := `{"password": "secret"}`
@@ -620,7 +620,7 @@ func TestDisableTOTP_NoAuth(t *testing.T) {
 func TestGetTOTPStatus_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/auth/2fa/status", handler.GetTOTPStatus)
 
 	req := httptest.NewRequest("GET", "/auth/2fa/status", nil)
@@ -709,7 +709,7 @@ func BenchmarkSetAuthCookies(b *testing.B) {
 func TestSignOut_NoToken(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/signout", handler.SignOut)
 
 	req := httptest.NewRequest("POST", "/auth/signout", nil)
@@ -724,7 +724,7 @@ func TestSignOut_NoToken(t *testing.T) {
 func TestRefreshToken_NoToken(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/token/refresh", handler.RefreshToken)
 
 	// Test with no body and no cookies
@@ -740,7 +740,7 @@ func TestRefreshToken_NoToken(t *testing.T) {
 func TestSendMagicLink_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/magiclink", handler.SendMagicLink)
 
 	tests := []struct {
@@ -777,7 +777,7 @@ func TestSendMagicLink_Validation(t *testing.T) {
 func TestRequestPasswordReset_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/password/reset", handler.RequestPasswordReset)
 
 	tests := []struct {
@@ -812,7 +812,7 @@ func TestRequestPasswordReset_Validation(t *testing.T) {
 func TestResetPassword_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/password/reset/confirm", handler.ResetPassword)
 
 	tests := []struct {
@@ -857,7 +857,7 @@ func TestResetPassword_Validation(t *testing.T) {
 func TestVerifyPasswordResetToken_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/auth/password/reset/verify", handler.VerifyPasswordResetToken)
 
 	tests := []struct {
@@ -891,7 +891,7 @@ func TestVerifyPasswordResetToken_Validation(t *testing.T) {
 func TestVerifyEmail_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/verify", handler.VerifyEmail)
 
 	tests := []struct {
@@ -926,7 +926,7 @@ func TestVerifyEmail_Validation(t *testing.T) {
 func TestResendVerificationEmail_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/resend-verification", handler.ResendVerificationEmail)
 
 	tests := []struct {
@@ -961,7 +961,7 @@ func TestResendVerificationEmail_Validation(t *testing.T) {
 func TestStartImpersonation_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/impersonation/start", handler.StartImpersonation)
 
 	body := `{"user_id": "user-123", "reason": "Testing"}`
@@ -978,7 +978,7 @@ func TestStartImpersonation_NoAuth(t *testing.T) {
 func TestStopImpersonation_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/impersonation/stop", handler.StopImpersonation)
 
 	req := httptest.NewRequest("POST", "/auth/impersonation/stop", nil)
@@ -993,7 +993,7 @@ func TestStopImpersonation_NoAuth(t *testing.T) {
 func TestGetActiveImpersonation_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/auth/impersonation/active", handler.GetActiveImpersonation)
 
 	req := httptest.NewRequest("GET", "/auth/impersonation/active", nil)
@@ -1008,7 +1008,7 @@ func TestGetActiveImpersonation_NoAuth(t *testing.T) {
 func TestListImpersonationSessions_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/auth/impersonation/sessions", handler.ListImpersonationSessions)
 
 	req := httptest.NewRequest("GET", "/auth/impersonation/sessions", nil)
@@ -1023,7 +1023,7 @@ func TestListImpersonationSessions_NoAuth(t *testing.T) {
 func TestGetCSRFToken_Handler(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/auth/csrf-token", handler.GetCSRFToken)
 
 	req := httptest.NewRequest("GET", "/auth/csrf-token", nil)
@@ -1048,7 +1048,7 @@ func TestGetCSRFToken_Handler(t *testing.T) {
 func TestUpdateUser_AuthHandlerValidation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Patch("/auth/user", handler.UpdateUser)
 
 	tests := []struct {
@@ -1094,7 +1094,7 @@ func TestUpdateUser_AuthHandlerValidation(t *testing.T) {
 func TestStartAnonImpersonation_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/impersonate/anon", handler.StartAnonImpersonation)
 
 	body := `{"reason": "Testing anonymous impersonation"}`
@@ -1111,7 +1111,7 @@ func TestStartAnonImpersonation_NoAuth(t *testing.T) {
 func TestStartAnonImpersonation_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/impersonate/anon", handler.StartAnonImpersonation)
 
 	tests := []struct {
@@ -1151,7 +1151,7 @@ func TestStartAnonImpersonation_Validation(t *testing.T) {
 func TestStartServiceImpersonation_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/impersonate/service", handler.StartServiceImpersonation)
 
 	body := `{"reason": "Testing service role impersonation"}`
@@ -1168,7 +1168,7 @@ func TestStartServiceImpersonation_NoAuth(t *testing.T) {
 func TestStartServiceImpersonation_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/impersonate/service", handler.StartServiceImpersonation)
 
 	tests := []struct {
@@ -1208,7 +1208,7 @@ func TestStartServiceImpersonation_Validation(t *testing.T) {
 func TestGetCaptchaConfig_NilService(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/auth/captcha/config", handler.GetCaptchaConfig)
 
 	req := httptest.NewRequest("GET", "/auth/captcha/config", nil)
@@ -1224,7 +1224,7 @@ func TestGetCaptchaConfig_NilService(t *testing.T) {
 func TestCheckCaptcha_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/captcha/check", handler.CheckCaptcha)
 
 	tests := []struct {
@@ -1269,7 +1269,7 @@ func TestCheckCaptcha_Validation(t *testing.T) {
 func TestVerifyMagicLink_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/magiclink/verify", handler.VerifyMagicLink)
 
 	tests := []struct {
@@ -1309,7 +1309,7 @@ func TestVerifyMagicLink_Validation(t *testing.T) {
 func TestVerifyTOTP_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/2fa/verify", handler.VerifyTOTP)
 
 	tests := []struct {
@@ -1354,7 +1354,7 @@ func TestVerifyTOTP_Validation(t *testing.T) {
 func TestSendOTP_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/otp/signin", handler.SendOTP)
 
 	tests := []struct {
@@ -1389,7 +1389,7 @@ func TestSendOTP_Validation(t *testing.T) {
 func TestVerifyOTP_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/otp/verify", handler.VerifyOTP)
 
 	tests := []struct {
@@ -1429,7 +1429,7 @@ func TestVerifyOTP_Validation(t *testing.T) {
 func TestResendOTP_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/otp/resend", handler.ResendOTP)
 
 	tests := []struct {
@@ -1464,7 +1464,7 @@ func TestResendOTP_Validation(t *testing.T) {
 func TestGetUserIdentities_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/auth/user/identities", handler.GetUserIdentities)
 
 	req := httptest.NewRequest("GET", "/auth/user/identities", nil)
@@ -1478,7 +1478,7 @@ func TestGetUserIdentities_NoAuth(t *testing.T) {
 func TestLinkIdentity_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/user/identities", handler.LinkIdentity)
 
 	body := `{"provider": "google"}`
@@ -1494,7 +1494,7 @@ func TestLinkIdentity_NoAuth(t *testing.T) {
 func TestLinkIdentity_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/user/identities", handler.LinkIdentity)
 
 	tests := []struct {
@@ -1534,7 +1534,7 @@ func TestLinkIdentity_Validation(t *testing.T) {
 func TestUnlinkIdentity_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Delete("/auth/user/identities/identity-123", handler.UnlinkIdentity)
 
 	req := httptest.NewRequest("DELETE", "/auth/user/identities/identity-123", nil)
@@ -1548,7 +1548,7 @@ func TestUnlinkIdentity_NoAuth(t *testing.T) {
 func TestReauthenticate_NoAuth(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/reauthenticate", handler.Reauthenticate)
 
 	req := httptest.NewRequest("POST", "/auth/reauthenticate", nil)
@@ -1562,7 +1562,7 @@ func TestReauthenticate_NoAuth(t *testing.T) {
 func TestSignInWithIDToken_Validation(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/signin/idtoken", handler.SignInWithIDToken)
 
 	tests := []struct {
@@ -1616,7 +1616,7 @@ func TestSignInWithIDToken_Validation(t *testing.T) {
 func TestListImpersonationSessions_QueryParameters(t *testing.T) {
 	handler := NewAuthHandler(nil, nil, nil, "")
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/auth/impersonation/sessions", handler.ListImpersonationSessions)
 
 	tests := []struct {

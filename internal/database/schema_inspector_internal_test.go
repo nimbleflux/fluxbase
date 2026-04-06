@@ -6,9 +6,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/test/dbhelpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test/dbhelpers"
 )
 
 // TestSchemaInspector_getColumns_Integration tests the internal getColumns function.

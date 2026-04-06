@@ -5,8 +5,9 @@ import (
 	"net"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // RequireSyncIPAllowlist creates middleware that restricts sync endpoints to allowed IPs

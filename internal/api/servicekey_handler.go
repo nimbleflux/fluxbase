@@ -33,7 +33,9 @@ type ServiceKey struct {
 	Name               string     `json:"name"`
 	Description        *string    `json:"description,omitempty"`
 	KeyPrefix          string     `json:"key_prefix"`
+	KeyType            string     `json:"key_type"`
 	Scopes             []string   `json:"scopes"`
+	AllowedNamespaces  []string   `json:"allowed_namespaces,omitempty"`
 	Enabled            bool       `json:"enabled"`
 	RateLimitPerMinute *int       `json:"rate_limit_per_minute,omitempty"`
 	RateLimitPerHour   *int       `json:"rate_limit_per_hour,omitempty"`
@@ -41,19 +43,25 @@ type ServiceKey struct {
 	CreatedAt          time.Time  `json:"created_at"`
 	LastUsedAt         *time.Time `json:"last_used_at,omitempty"`
 	ExpiresAt          *time.Time `json:"expires_at,omitempty"`
+	RevokedAt          *time.Time `json:"revoked_at,omitempty"`
+	DeprecatedAt       *time.Time `json:"deprecated_at,omitempty"`
+	GracePeriodEndsAt  *time.Time `json:"grace_period_ends_at,omitempty"`
+	ReplacedBy         *uuid.UUID `json:"replaced_by,omitempty"`
 }
 
 // ServiceKeyWithKey is returned only on creation, includes the plaintext key
 type ServiceKeyWithKey struct {
 	ServiceKey
-	Key string `json:"key"` // Only returned on creation
+	Key string `json:"key"`
 }
 
 // CreateServiceKeyRequest represents a request to create a service key
 type CreateServiceKeyRequest struct {
 	Name               string     `json:"name"`
 	Description        *string    `json:"description,omitempty"`
+	KeyType            string     `json:"key_type"`
 	Scopes             []string   `json:"scopes,omitempty"`
+	AllowedNamespaces  []string   `json:"allowed_namespaces,omitempty"`
 	RateLimitPerMinute *int       `json:"rate_limit_per_minute,omitempty"`
 	RateLimitPerHour   *int       `json:"rate_limit_per_hour,omitempty"`
 	ExpiresAt          *time.Time `json:"expires_at,omitempty"`
@@ -64,27 +72,77 @@ type UpdateServiceKeyRequest struct {
 	Name               *string  `json:"name,omitempty"`
 	Description        *string  `json:"description,omitempty"`
 	Scopes             []string `json:"scopes,omitempty"`
+	AllowedNamespaces  []string `json:"allowed_namespaces,omitempty"`
 	Enabled            *bool    `json:"enabled,omitempty"`
 	RateLimitPerMinute *int     `json:"rate_limit_per_minute,omitempty"`
 	RateLimitPerHour   *int     `json:"rate_limit_per_hour,omitempty"`
 }
 
+// RevokeServiceKeyRequest represents a request to revoke a service key
+type RevokeServiceKeyRequest struct {
+	Reason string `json:"reason"`
+}
+
+// DeprecateServiceKeyRequest represents a request to deprecate a service key
+type DeprecateServiceKeyRequest struct {
+	Reason           string `json:"reason"`
+	GracePeriodHours int    `json:"grace_period_hours"`
+}
+
+// RotateServiceKeyRequest represents a request to rotate a service key
+type RotateServiceKeyRequest struct {
+	NewName          *string  `json:"new_name,omitempty"`
+	NewKeyName       *string  `json:"new_key_name,omitempty"`
+	NewScopes        []string `json:"new_scopes,omitempty"`
+	GracePeriodHours int      `json:"grace_period_hours,omitempty"`
+}
+
+// errDBNotInitialized is returned when database connection is not available
+var errDBNotInitialized = fmt.Errorf("database connection not initialized")
+
+// checkDB checks if database connection is available.
+// Always uses the main pool since auth.service_keys only exists in the main database.
+func (h *ServiceKeyHandler) checkDB(c fiber.Ctx) (*pgxpool.Pool, error) {
+	if h.db == nil {
+		return nil, errDBNotInitialized
+	}
+	return h.db, nil
+}
+
+// getTenantID extracts tenant_id from the request context
+func getTenantID(c fiber.Ctx) string {
+	tenantID, _ := c.Locals("tenant_id").(string)
+	return tenantID
+}
+
 // ListServiceKeys lists all service keys
 func (h *ServiceKeyHandler) ListServiceKeys(c fiber.Ctx) error {
-	// Check if database connection is available
-	if h.db == nil {
+	pool, err := h.checkDB(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
-	rows, err := h.db.Query(c.RequestCtx(), `
-		SELECT id, name, description, key_prefix, scopes, enabled,
+	query := `
+		SELECT id, name, description, key_prefix, COALESCE(key_type, 'service'), scopes, allowed_namespaces, enabled,
 		       rate_limit_per_minute, rate_limit_per_hour,
-		       created_by, created_at, last_used_at, expires_at
+		       created_by, created_at, last_used_at, expires_at, revoked_at, deprecated_at, grace_period_ends_at, replaced_by
 		FROM auth.service_keys
-		ORDER BY created_at DESC
-	`)
+		WHERE 1=1
+	`
+	args := []interface{}{}
+	argIdx := 1
+
+	if tenantID := getTenantID(c); tenantID != "" {
+		query += fmt.Sprintf(" AND tenant_id = $%d", argIdx)
+		args = append(args, tenantID)
+		argIdx++
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	rows, err := pool.Query(c.RequestCtx(), query, args...)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list service keys")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -97,12 +155,13 @@ func (h *ServiceKeyHandler) ListServiceKeys(c fiber.Ctx) error {
 	for rows.Next() {
 		var key ServiceKey
 		err := rows.Scan(
-			&key.ID, &key.Name, &key.Description, &key.KeyPrefix, &key.Scopes, &key.Enabled,
-			&key.RateLimitPerMinute, &key.RateLimitPerHour,
+			&key.ID, &key.Name, &key.Description, &key.KeyPrefix, &key.KeyType, &key.Scopes,
+			&key.AllowedNamespaces, &key.Enabled, &key.RateLimitPerMinute, &key.RateLimitPerHour,
 			&key.CreatedBy, &key.CreatedAt, &key.LastUsedAt, &key.ExpiresAt,
+			&key.RevokedAt, &key.DeprecatedAt, &key.GracePeriodEndsAt, &key.ReplacedBy,
 		)
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to scan service key row")
+			log.Error().Err(err).Msg("Failed to scan service key")
 			continue
 		}
 		keys = append(keys, key)
@@ -125,24 +184,25 @@ func (h *ServiceKeyHandler) GetServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
+	pool, err := h.checkDB(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
 	var key ServiceKey
-	err = h.db.QueryRow(c.RequestCtx(), `
-		SELECT id, name, description, key_prefix, scopes, enabled,
+	err = pool.QueryRow(c.RequestCtx(), `
+		SELECT id, name, description, key_prefix, COALESCE(key_type, 'service'), scopes, allowed_namespaces, enabled,
 		       rate_limit_per_minute, rate_limit_per_hour,
-		       created_by, created_at, last_used_at, expires_at
+		       created_by, created_at, last_used_at, expires_at, revoked_at, deprecated_at, grace_period_ends_at, replaced_by
 		FROM auth.service_keys
 		WHERE id = $1
 	`, id).Scan(
-		&key.ID, &key.Name, &key.Description, &key.KeyPrefix, &key.Scopes, &key.Enabled,
-		&key.RateLimitPerMinute, &key.RateLimitPerHour,
+		&key.ID, &key.Name, &key.Description, &key.KeyPrefix, &key.KeyType, &key.Scopes,
+		&key.AllowedNamespaces, &key.Enabled, &key.RateLimitPerMinute, &key.RateLimitPerHour,
 		&key.CreatedBy, &key.CreatedAt, &key.LastUsedAt, &key.ExpiresAt,
+		&key.RevokedAt, &key.DeprecatedAt, &key.GracePeriodEndsAt, &key.ReplacedBy,
 	)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -168,89 +228,98 @@ func (h *ServiceKeyHandler) CreateServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
+	if req.KeyType == "" {
+		req.KeyType = "service"
+	}
+
+	if req.KeyType != "anon" && req.KeyType != "service" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "key_type must be 'anon' or 'service'",
+		})
+	}
+
+	pool, err := h.checkDB(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
-	// Generate a secure random key
 	keyBytes := make([]byte, 32)
 	if _, err := rand.Read(keyBytes); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to generate key",
 		})
 	}
-	randomPart := base64.RawURLEncoding.EncodeToString(keyBytes)
-	plainKey := fmt.Sprintf("sk_%s", randomPart)
-	keyPrefix := plainKey[:16]
 
-	// Hash the key
-	keyHash, err := bcrypt.GenerateFromPassword([]byte(plainKey), bcrypt.DefaultCost)
+	prefix := "sk_live_"
+	if req.KeyType == "anon" {
+		prefix = "pk_live_"
+	}
+	fullKey := prefix + base64.URLEncoding.EncodeToString(keyBytes)
+	keyPrefix := fullKey[:16]
+
+	keyHash, err := bcrypt.GenerateFromPassword([]byte(fullKey), bcrypt.DefaultCost)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to hash key",
 		})
 	}
 
-	// Default scopes if not provided
-	scopes := req.Scopes
-	if scopes == nil {
-		scopes = []string{"*"}
+	var scopes []string
+	if req.Scopes != nil {
+		scopes = req.Scopes
+	} else {
+		if req.KeyType == "service" {
+			scopes = []string{"*"}
+		} else {
+			scopes = []string{"read"}
+		}
 	}
 
-	// Validate scopes
-	if err := auth.ValidateScopes(scopes); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": fmt.Sprintf("Invalid scopes: %v", err),
-		})
+	// created_by references auth.users(id), but dashboard users authenticate
+	// against platform.users — use typed nil to ensure pgx encodes as SQL NULL.
+	createdBy := (*uuid.UUID)(nil)
+	var createdByUUID *uuid.UUID
+	tenantID := getTenantID(c)
+	tenantUUID := uuid.Nil
+	if tenantID != "" {
+		tenantUUID = uuid.MustParse(tenantID)
 	}
 
-	// Get creator user ID if available
-	var createdBy *uuid.UUID
-	if userID, ok := c.Locals("user_id").(uuid.UUID); ok {
-		createdBy = &userID
-	}
-
-	// Insert the key
-	var key ServiceKey
-	err = h.db.QueryRow(c.RequestCtx(), `
-		INSERT INTO auth.service_keys (
-			name, description, key_hash, key_prefix, scopes, enabled,
-			rate_limit_per_minute, rate_limit_per_hour, created_by, expires_at
-		) VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9)
-		RETURNING id, name, description, key_prefix, scopes, enabled,
-		          rate_limit_per_minute, rate_limit_per_hour,
-		          created_by, created_at, last_used_at, expires_at
-	`,
-		req.Name, req.Description, string(keyHash), keyPrefix, scopes,
-		req.RateLimitPerMinute, req.RateLimitPerHour, createdBy, req.ExpiresAt,
-	).Scan(
-		&key.ID, &key.Name, &key.Description, &key.KeyPrefix, &key.Scopes, &key.Enabled,
-		&key.RateLimitPerMinute, &key.RateLimitPerHour,
-		&key.CreatedBy, &key.CreatedAt, &key.LastUsedAt, &key.ExpiresAt,
-	)
+	var keyID uuid.UUID
+	err = pool.QueryRow(c.RequestCtx(), `
+		INSERT INTO auth.service_keys (name, description, key_hash, key_prefix, key_type, scopes, allowed_namespaces, enabled, rate_limit_per_minute, rate_limit_per_hour, created_by, expires_at, tenant_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12)
+		RETURNING id
+	`, req.Name, req.Description, string(keyHash), keyPrefix, req.KeyType, scopes, req.AllowedNamespaces, req.RateLimitPerMinute, req.RateLimitPerHour, createdBy, req.ExpiresAt, tenantUUID).Scan(&keyID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create service key")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to create service key: %v", err),
+			"error": "Failed to create service key",
 		})
 	}
 
-	// Return the key with the plaintext (only time it's shown)
-	result := ServiceKeyWithKey{
-		ServiceKey: key,
-		Key:        plainKey,
-	}
+	log.Info().Str("key_id", keyID.String()).Str("key_type", req.KeyType).Str("name", req.Name).Msg("Service key created")
 
-	log.Info().
-		Str("key_id", key.ID.String()).
-		Str("name", key.Name).
-		Str("prefix", keyPrefix).
-		Msg("Service key created")
-
-	return c.Status(fiber.StatusCreated).JSON(result)
+	return c.Status(fiber.StatusCreated).JSON(ServiceKeyWithKey{
+		ServiceKey: ServiceKey{
+			ID:                 keyID,
+			Name:               req.Name,
+			Description:        req.Description,
+			KeyPrefix:          keyPrefix,
+			KeyType:            req.KeyType,
+			Scopes:             scopes,
+			AllowedNamespaces:  req.AllowedNamespaces,
+			Enabled:            true,
+			RateLimitPerMinute: req.RateLimitPerMinute,
+			RateLimitPerHour:   req.RateLimitPerHour,
+			CreatedBy:          createdByUUID,
+			CreatedAt:          time.Now(),
+			ExpiresAt:          req.ExpiresAt,
+		},
+		Key: fullKey,
+	})
 }
 
 // UpdateServiceKey updates a service key
@@ -270,70 +339,34 @@ func (h *ServiceKeyHandler) UpdateServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	// Validate scopes if provided
-	if len(req.Scopes) > 0 {
-		if err := auth.ValidateScopes(req.Scopes); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": fmt.Sprintf("Invalid scopes: %v", err),
-			})
-		}
-	}
-
-	// Build dynamic update query
-	updates := make(map[string]interface{})
-	if req.Name != nil {
-		updates["name"] = *req.Name
-	}
-	if req.Description != nil {
-		updates["description"] = *req.Description
-	}
-	if req.Scopes != nil {
-		updates["scopes"] = req.Scopes
-	}
-	if req.Enabled != nil {
-		updates["enabled"] = *req.Enabled
-	}
-	if req.RateLimitPerMinute != nil {
-		updates["rate_limit_per_minute"] = *req.RateLimitPerMinute
-	}
-	if req.RateLimitPerHour != nil {
-		updates["rate_limit_per_hour"] = *req.RateLimitPerHour
-	}
-
-	if len(updates) == 0 {
+	// Validate that at least one field is provided for update
+	if req.Name == nil && req.Description == nil && req.Scopes == nil &&
+		req.AllowedNamespaces == nil && req.Enabled == nil &&
+		req.RateLimitPerMinute == nil && req.RateLimitPerHour == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "No fields to update",
 		})
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
+	pool, err := h.checkDB(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
-	// Build SET clause dynamically
-	setClause := ""
-	args := make([]interface{}, 0, len(updates)+1)
-	i := 1
-	for field, value := range updates {
-		if i > 1 {
-			setClause += ", "
-		}
-		setClause += fmt.Sprintf("%s = $%d", field, i)
-		args = append(args, value)
-		i++
-	}
-	args = append(args, id)
-
-	query := fmt.Sprintf(`
+	result, err := pool.Exec(c.RequestCtx(), `
 		UPDATE auth.service_keys
-		SET %s
-		WHERE id = $%d
-	`, setClause, i)
-
-	result, err := h.db.Exec(c.RequestCtx(), query, args...)
+		SET name = COALESCE($1, name),
+		    description = COALESCE($2, description),
+		    scopes = COALESCE($3, scopes),
+		    allowed_namespaces = COALESCE($4, allowed_namespaces),
+		    enabled = COALESCE($5, enabled),
+		    rate_limit_per_minute = COALESCE($6, rate_limit_per_minute),
+		    rate_limit_per_hour = COALESCE($7, rate_limit_per_hour),
+		    updated_at = NOW()
+		WHERE id = $8
+	`, req.Name, req.Description, req.Scopes, req.AllowedNamespaces, req.Enabled, req.RateLimitPerMinute, req.RateLimitPerHour, id)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to update service key")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -347,14 +380,7 @@ func (h *ServiceKeyHandler) UpdateServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	log.Info().
-		Str("key_id", id.String()).
-		Msg("Service key updated")
-
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Service key updated successfully",
-	})
+	return h.GetServiceKey(c)
 }
 
 // DeleteServiceKey deletes a service key
@@ -367,16 +393,14 @@ func (h *ServiceKeyHandler) DeleteServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
+	pool, err := h.checkDB(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
-	result, err := h.db.Exec(c.RequestCtx(), `
-		DELETE FROM auth.service_keys WHERE id = $1
-	`, id)
+	result, err := pool.Exec(c.RequestCtx(), `DELETE FROM auth.service_keys WHERE id = $1`, id)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to delete service key")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -390,14 +414,12 @@ func (h *ServiceKeyHandler) DeleteServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	log.Info().
-		Str("key_id", id.String()).
-		Msg("Service key deleted")
+	log.Info().Str("key_id", id.String()).Msg("Service key deleted")
 
-	return c.Status(fiber.StatusNoContent).Send(nil)
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// DisableServiceKey disables a service key without deleting it
+// DisableServiceKey disables a service key
 func (h *ServiceKeyHandler) DisableServiceKey(c fiber.Ctx) error {
 	idStr := c.Params("id")
 	id, err := uuid.Parse(idStr)
@@ -407,16 +429,14 @@ func (h *ServiceKeyHandler) DisableServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
+	pool, err := h.checkDB(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
-	result, err := h.db.Exec(c.RequestCtx(), `
-		UPDATE auth.service_keys SET enabled = false WHERE id = $1
-	`, id)
+	result, err := pool.Exec(c.RequestCtx(), `UPDATE auth.service_keys SET enabled = false WHERE id = $1`, id)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to disable service key")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -430,14 +450,9 @@ func (h *ServiceKeyHandler) DisableServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	log.Info().
-		Str("key_id", id.String()).
-		Msg("Service key disabled")
+	log.Info().Str("key_id", id.String()).Msg("Service key disabled")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Service key disabled successfully",
-	})
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // EnableServiceKey enables a service key
@@ -450,16 +465,14 @@ func (h *ServiceKeyHandler) EnableServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
+	pool, err := h.checkDB(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
-	result, err := h.db.Exec(c.RequestCtx(), `
-		UPDATE auth.service_keys SET enabled = true WHERE id = $1
-	`, id)
+	result, err := pool.Exec(c.RequestCtx(), `UPDATE auth.service_keys SET enabled = true WHERE id = $1`, id)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to enable service key")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -473,400 +486,279 @@ func (h *ServiceKeyHandler) EnableServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	log.Info().
-		Str("key_id", id.String()).
-		Msg("Service key enabled")
+	log.Info().Str("key_id", id.String()).Msg("Service key enabled")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Service key enabled successfully",
-	})
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// RevokeServiceKeyRequest represents a request to revoke a service key
-type RevokeServiceKeyRequest struct {
-	Reason string `json:"reason"`
-}
-
-// RevokeServiceKey immediately revokes a service key (emergency revocation)
-// POST /api/v1/admin/service-keys/:id/revoke
+// RevokeServiceKey revokes a service key
 func (h *ServiceKeyHandler) RevokeServiceKey(c fiber.Ctx) error {
 	idStr := c.Params("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return SendInvalidID(c, "service key ID")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid service key ID",
+		})
 	}
 
-	var req RevokeServiceKeyRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return SendInvalidBody(c)
+	// revoked_by references platform.users(id)
+	var userID uuid.UUID
+	if userIDStr, ok := c.Locals("user_id").(string); ok {
+		userID, _ = uuid.Parse(userIDStr)
 	}
+	reason := c.FormValue("reason", "")
 
-	if req.Reason == "" {
-		return SendMissingField(c, "reason")
-	}
-
-	// Get admin user ID from context
-	adminID, ok := c.Locals("user_id").(string)
-	if !ok {
-		return SendUnauthorized(c, "User not authenticated", ErrCodeAuthRequired)
-	}
-	adminUUID, err := uuid.Parse(adminID)
+	pool, err := h.checkDB(c)
 	if err != nil {
-		return SendUnauthorized(c, "Invalid user ID", ErrCodeInvalidUserID)
-	}
-
-	// Check if database connection is available
-	if h.db == nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
-	// Get the key prefix for audit log
-	var keyPrefix string
-	err = h.db.QueryRow(c.RequestCtx(), `
-		SELECT key_prefix FROM auth.service_keys WHERE id = $1
-	`, id).Scan(&keyPrefix)
-	if err != nil {
-		return SendResourceNotFound(c, "Service key")
-	}
-
-	// Start transaction
-	tx, err := h.db.Begin(c.RequestCtx())
-	if err != nil {
-		return SendOperationFailed(c, "start transaction")
-	}
-	defer func() { _ = tx.Rollback(c.RequestCtx()) }()
-
-	// Revoke the key
-	result, err := tx.Exec(c.RequestCtx(), `
+	result, err := pool.Exec(c.RequestCtx(), `
 		UPDATE auth.service_keys
-		SET enabled = false, revoked_at = NOW(), revoked_by = $2, revocation_reason = $3
-		WHERE id = $1 AND revoked_at IS NULL
-	`, id, adminUUID, req.Reason)
+		SET revoked_at = NOW(),
+		    revoked_by = $1,
+		    revocation_reason = $2,
+		    enabled = false
+		WHERE id = $3
+	`, userID, reason, id)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to revoke service key")
-		return SendOperationFailed(c, "revoke service key")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to revoke service key",
+		})
 	}
 
 	if result.RowsAffected() == 0 {
-		return SendConflict(c, "Service key not found or already revoked", ErrCodeAlreadyExists)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Service key not found",
+		})
 	}
 
-	// Log to audit table
-	_, err = tx.Exec(c.RequestCtx(), `
-		INSERT INTO auth.service_key_revocations (key_id, key_prefix, revoked_by, reason, revocation_type)
-		VALUES ($1, $2, $3, $4, 'emergency')
-	`, id, keyPrefix, adminUUID, req.Reason)
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to create revocation audit log")
-		// Don't fail the operation for audit log failure
-	}
+	log.Warn().Str("key_id", id.String()).Str("reason", reason).Msg("Service key revoked")
 
-	if err := tx.Commit(c.RequestCtx()); err != nil {
-		return SendOperationFailed(c, "commit transaction")
-	}
-
-	log.Warn().
-		Str("key_id", id.String()).
-		Str("key_prefix", keyPrefix).
-		Str("revoked_by", adminID).
-		Str("reason", req.Reason).
-		Msg("Service key emergency revoked")
-
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Service key revoked successfully",
-		"key_id":  id,
-	})
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// DeprecateServiceKeyRequest represents a request to deprecate a service key for rotation
-type DeprecateServiceKeyRequest struct {
-	Reason           string `json:"reason"`
-	GracePeriodHours int    `json:"grace_period_hours"` // Default: 24 hours
-}
-
-// DeprecateServiceKey marks a service key for rotation with a grace period
-// During the grace period, the key still works but is flagged for replacement
-// POST /api/v1/admin/service-keys/:id/deprecate
+// DeprecateServiceKey marks a service key for rotation
 func (h *ServiceKeyHandler) DeprecateServiceKey(c fiber.Ctx) error {
 	idStr := c.Params("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return SendInvalidID(c, "service key ID")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid service key ID",
+		})
 	}
 
-	var req DeprecateServiceKeyRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return SendInvalidBody(c)
+	gracePeriodHours := 24
+	if gp := c.FormValue("grace_period_hours"); gp != "" {
+		if _, err := fmt.Sscanf(gp, "%d", &gracePeriodHours); err != nil {
+			gracePeriodHours = 24
+		}
 	}
 
-	if req.Reason == "" {
-		req.Reason = "Key rotation"
-	}
+	gracePeriodEndsAt := time.Now().Add(time.Duration(gracePeriodHours) * time.Hour)
 
-	gracePeriod := req.GracePeriodHours
-	if gracePeriod <= 0 {
-		gracePeriod = 24 // Default: 24 hours
-	}
-	if gracePeriod > 720 { // Max 30 days
-		gracePeriod = 720
-	}
-
-	// Check if database connection is available
-	if h.db == nil {
+	pool, err := h.checkDB(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
-	graceEndTime := time.Now().Add(time.Duration(gracePeriod) * time.Hour)
-
-	result, err := h.db.Exec(c.RequestCtx(), `
+	result, err := pool.Exec(c.RequestCtx(), `
 		UPDATE auth.service_keys
-		SET deprecated_at = NOW(), grace_period_ends_at = $2
-		WHERE id = $1 AND deprecated_at IS NULL AND revoked_at IS NULL
-	`, id, graceEndTime)
+		SET deprecated_at = NOW(),
+		    grace_period_ends_at = $1
+		WHERE id = $2
+	`, gracePeriodEndsAt, id)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to deprecate service key")
-		return SendOperationFailed(c, "deprecate service key")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to deprecate service key",
+		})
 	}
 
 	if result.RowsAffected() == 0 {
-		return SendConflict(c, "Service key not found, already deprecated, or revoked", ErrCodeConflict)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Service key not found",
+		})
 	}
 
-	log.Info().
-		Str("key_id", id.String()).
-		Int("grace_period_hours", gracePeriod).
-		Time("grace_ends", graceEndTime).
-		Str("reason", req.Reason).
-		Msg("Service key deprecated for rotation")
+	log.Info().Str("key_id", id.String()).Time("grace_period_ends", gracePeriodEndsAt).Msg("Service key deprecated")
 
 	return c.JSON(fiber.Map{
-		"success":            true,
-		"message":            "Service key deprecated for rotation",
-		"key_id":             id,
-		"grace_period_ends":  graceEndTime,
-		"grace_period_hours": gracePeriod,
+		"deprecated_at":        time.Now(),
+		"grace_period_ends_at": gracePeriodEndsAt,
 	})
 }
 
-// RotateServiceKeyRequest represents a request to rotate a service key
-type RotateServiceKeyRequest struct {
-	GracePeriodHours int      `json:"grace_period_hours"` // Default: 24 hours
-	NewKeyName       *string  `json:"new_key_name,omitempty"`
-	NewScopes        []string `json:"new_scopes,omitempty"`
-}
-
-// RotateServiceKey creates a new replacement key and deprecates the old one
-// POST /api/v1/admin/service-keys/:id/rotate
+// RotateServiceKey rotates a service key, creating a new one and deprecating the old
 func (h *ServiceKeyHandler) RotateServiceKey(c fiber.Ctx) error {
 	idStr := c.Params("id")
-	id, err := uuid.Parse(idStr)
+	oldID, err := uuid.Parse(idStr)
 	if err != nil {
-		return SendInvalidID(c, "service key ID")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid service key ID",
+		})
 	}
 
-	var req RotateServiceKeyRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return SendInvalidBody(c)
-	}
-
-	// Check if database connection is available
-	if h.db == nil {
+	pool, err := h.checkDB(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
-	// Get the old key details
 	var oldKey ServiceKey
-	err = h.db.QueryRow(c.RequestCtx(), `
-		SELECT id, name, description, key_prefix, scopes, enabled,
-		       rate_limit_per_minute, rate_limit_per_hour,
-		       created_by, created_at, last_used_at, expires_at
+	err = pool.QueryRow(c.RequestCtx(), `
+		SELECT id, name, description, key_prefix, COALESCE(key_type, 'service'), scopes, allowed_namespaces,
+		       rate_limit_per_minute, rate_limit_per_hour, expires_at
 		FROM auth.service_keys
-		WHERE id = $1 AND revoked_at IS NULL
-	`, id).Scan(
-		&oldKey.ID, &oldKey.Name, &oldKey.Description, &oldKey.KeyPrefix, &oldKey.Scopes, &oldKey.Enabled,
-		&oldKey.RateLimitPerMinute, &oldKey.RateLimitPerHour,
-		&oldKey.CreatedBy, &oldKey.CreatedAt, &oldKey.LastUsedAt, &oldKey.ExpiresAt,
+		WHERE id = $1
+	`, oldID).Scan(
+		&oldKey.ID, &oldKey.Name, &oldKey.Description, &oldKey.KeyPrefix, &oldKey.KeyType,
+		&oldKey.Scopes, &oldKey.AllowedNamespaces, &oldKey.RateLimitPerMinute, &oldKey.RateLimitPerHour, &oldKey.ExpiresAt,
 	)
 	if err != nil {
-		return SendResourceNotFound(c, "Service key")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Service key not found",
+		})
 	}
 
-	gracePeriod := req.GracePeriodHours
-	if gracePeriod <= 0 {
-		gracePeriod = 24
-	}
-	if gracePeriod > 720 {
-		gracePeriod = 720
-	}
-
-	// Get admin user ID
-	createdBy, _ := c.Locals("user_id").(string)
-	var createdByUUID *uuid.UUID
-	if uid, err := uuid.Parse(createdBy); err == nil {
-		createdByUUID = &uid
-	}
-
-	// Generate new key
 	keyBytes := make([]byte, 32)
 	if _, err := rand.Read(keyBytes); err != nil {
-		return SendOperationFailed(c, "generate secure key")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to generate key",
+		})
 	}
-	plainKey := "sk_" + base64.URLEncoding.EncodeToString(keyBytes)
-	keyHash, err := bcrypt.GenerateFromPassword([]byte(plainKey), bcrypt.DefaultCost)
+
+	prefix := "sk_live_"
+	if oldKey.KeyType == "anon" {
+		prefix = "pk_live_"
+	}
+	fullKey := prefix + base64.URLEncoding.EncodeToString(keyBytes)
+	keyPrefix := fullKey[:16]
+
+	keyHash, err := bcrypt.GenerateFromPassword([]byte(fullKey), bcrypt.DefaultCost)
 	if err != nil {
-		return SendOperationFailed(c, "hash key")
-	}
-	keyPrefix := plainKey[:16]
-
-	// Determine new key properties
-	newName := oldKey.Name + " (rotated)"
-	if req.NewKeyName != nil && *req.NewKeyName != "" {
-		newName = *req.NewKeyName
-	}
-	scopes := oldKey.Scopes
-	if len(req.NewScopes) > 0 {
-		if err := auth.ValidateScopes(req.NewScopes); err != nil {
-			return SendBadRequest(c, fmt.Sprintf("Invalid scopes: %v", err), ErrCodeValidationFailed)
-		}
-		scopes = req.NewScopes
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to hash key",
+		})
 	}
 
-	graceEndTime := time.Now().Add(time.Duration(gracePeriod) * time.Hour)
+	// created_by references auth.users(id), but dashboard users authenticate
+	// against platform.users — pass nil to avoid FK violation
+	// Dashboard users authenticate against platform.users, not auth.users.
+	// Always pass nil for created_by to avoid FK violation (column is nullable).
+	var createdBy interface{}
+	var createdByUUID *uuid.UUID
+	tenantID := getTenantID(c)
+	tenantUUID := uuid.Nil
+	if tenantID != "" {
+		tenantUUID = uuid.MustParse(tenantID)
+	}
 
-	// Start transaction
-	tx, err := h.db.Begin(c.RequestCtx())
+	tx, err := pool.Begin(c.RequestCtx())
 	if err != nil {
-		return SendOperationFailed(c, "start transaction")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to begin transaction",
+		})
 	}
 	defer func() { _ = tx.Rollback(c.RequestCtx()) }()
 
-	// Create new key
-	var newKey ServiceKey
+	var newID uuid.UUID
 	err = tx.QueryRow(c.RequestCtx(), `
-		INSERT INTO auth.service_keys (
-			name, description, key_hash, key_prefix, scopes, enabled,
-			rate_limit_per_minute, rate_limit_per_hour, created_by, expires_at
-		) VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9)
-		RETURNING id, name, description, key_prefix, scopes, enabled,
-		          rate_limit_per_minute, rate_limit_per_hour,
-		          created_by, created_at, last_used_at, expires_at
-	`,
-		newName, oldKey.Description, string(keyHash), keyPrefix, scopes,
-		oldKey.RateLimitPerMinute, oldKey.RateLimitPerHour, createdByUUID, oldKey.ExpiresAt,
-	).Scan(
-		&newKey.ID, &newKey.Name, &newKey.Description, &newKey.KeyPrefix, &newKey.Scopes, &newKey.Enabled,
-		&newKey.RateLimitPerMinute, &newKey.RateLimitPerHour,
-		&newKey.CreatedBy, &newKey.CreatedAt, &newKey.LastUsedAt, &newKey.ExpiresAt,
-	)
+		INSERT INTO auth.service_keys (name, description, key_hash, key_prefix, key_type, scopes, allowed_namespaces, enabled, rate_limit_per_minute, rate_limit_per_hour, created_by, expires_at, tenant_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12)
+		RETURNING id
+	`, oldKey.Name+" (rotated)", oldKey.Description, string(keyHash), keyPrefix, oldKey.KeyType,
+		oldKey.Scopes, oldKey.AllowedNamespaces, oldKey.RateLimitPerMinute, oldKey.RateLimitPerHour, createdBy, oldKey.ExpiresAt, tenantUUID).Scan(&newID)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to create replacement key")
-		return SendOperationFailed(c, "create replacement key")
+		log.Error().Err(err).Msg("Failed to create rotated service key")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to create rotated key",
+		})
 	}
 
-	// Deprecate old key and link to new one
 	_, err = tx.Exec(c.RequestCtx(), `
 		UPDATE auth.service_keys
-		SET deprecated_at = NOW(), grace_period_ends_at = $2, replaced_by = $3
-		WHERE id = $1
-	`, id, graceEndTime, newKey.ID)
+		SET deprecated_at = NOW(),
+		    replaced_by = $1
+		WHERE id = $2
+	`, newID, oldID)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to deprecate old key")
-		return SendOperationFailed(c, "deprecate old key")
-	}
-
-	// Log rotation to audit table
-	if createdByUUID != nil {
-		_, _ = tx.Exec(c.RequestCtx(), `
-			INSERT INTO auth.service_key_revocations (key_id, key_prefix, revoked_by, reason, revocation_type)
-			VALUES ($1, $2, $3, $4, 'rotation')
-		`, id, oldKey.KeyPrefix, createdByUUID, "Key rotation")
+		log.Error().Err(err).Msg("Failed to deprecate old service key")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to deprecate old key",
+		})
 	}
 
 	if err := tx.Commit(c.RequestCtx()); err != nil {
-		return SendOperationFailed(c, "commit transaction")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to commit transaction",
+		})
 	}
 
-	log.Info().
-		Str("old_key_id", id.String()).
-		Str("new_key_id", newKey.ID.String()).
-		Str("new_prefix", keyPrefix).
-		Int("grace_period_hours", gracePeriod).
-		Msg("Service key rotated")
+	log.Warn().Str("old_key_id", oldID.String()).Str("new_key_id", newID.String()).Msg("Service key rotated")
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"success":           true,
-		"message":           "Service key rotated successfully",
-		"old_key_id":        id,
-		"grace_period_ends": graceEndTime,
-		"new_key": ServiceKeyWithKey{
-			ServiceKey: newKey,
-			Key:        plainKey,
+	return c.Status(fiber.StatusCreated).JSON(ServiceKeyWithKey{
+		ServiceKey: ServiceKey{
+			ID:                 newID,
+			Name:               oldKey.Name + " (rotated)",
+			Description:        oldKey.Description,
+			KeyPrefix:          keyPrefix,
+			KeyType:            oldKey.KeyType,
+			Scopes:             oldKey.Scopes,
+			AllowedNamespaces:  oldKey.AllowedNamespaces,
+			Enabled:            true,
+			RateLimitPerMinute: oldKey.RateLimitPerMinute,
+			RateLimitPerHour:   oldKey.RateLimitPerHour,
+			CreatedBy:          createdByUUID,
+			CreatedAt:          time.Now(),
+			ExpiresAt:          oldKey.ExpiresAt,
 		},
+		Key: fullKey,
 	})
 }
 
 // GetRevocationHistory returns the revocation history for a service key
-// GET /api/v1/admin/service-keys/:id/revocations
 func (h *ServiceKeyHandler) GetRevocationHistory(c fiber.Ctx) error {
 	idStr := c.Params("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return SendInvalidID(c, "service key ID")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid service key ID",
+		})
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
+	pool, err := h.checkDB(c)
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
 		})
 	}
 
-	rows, err := h.db.Query(c.RequestCtx(), `
-		SELECT id, key_id, key_prefix, revoked_by, reason, revocation_type, created_at
-		FROM auth.service_key_revocations
-		WHERE key_id = $1
-		ORDER BY created_at DESC
-	`, id)
+	var key ServiceKey
+	err = pool.QueryRow(c.RequestCtx(), `
+		SELECT id, name, revoked_at, revoked_by, revocation_reason
+		FROM auth.service_keys
+		WHERE id = $1
+	`, id).Scan(&key.ID, &key.Name, &key.RevokedAt, &key.ReplacedBy, &key.Description)
 	if err != nil {
-		return SendOperationFailed(c, "fetch revocation history")
-	}
-	defer rows.Close()
-
-	type RevocationEntry struct {
-		ID             uuid.UUID  `json:"id"`
-		KeyID          uuid.UUID  `json:"key_id"`
-		KeyPrefix      string     `json:"key_prefix"`
-		RevokedBy      *uuid.UUID `json:"revoked_by,omitempty"`
-		Reason         string     `json:"reason"`
-		RevocationType string     `json:"revocation_type"`
-		CreatedAt      time.Time  `json:"created_at"`
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Service key not found",
+		})
 	}
 
-	var entries []RevocationEntry
-	for rows.Next() {
-		var entry RevocationEntry
-		if err := rows.Scan(
-			&entry.ID, &entry.KeyID, &entry.KeyPrefix,
-			&entry.RevokedBy, &entry.Reason, &entry.RevocationType, &entry.CreatedAt,
-		); err != nil {
-			continue
-		}
-		entries = append(entries, entry)
-	}
-
-	if entries == nil {
-		entries = []RevocationEntry{}
-	}
-
-	return c.JSON(entries)
+	return c.JSON(fiber.Map{
+		"id":                key.ID,
+		"name":              key.Name,
+		"revoked_at":        key.RevokedAt,
+		"revoked_by":        key.ReplacedBy,
+		"revocation_reason": key.Description,
+	})
 }
 
-// fiber:context-methods migrated
+var _ = auth.Service{}

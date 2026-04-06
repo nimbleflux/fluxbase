@@ -1,4 +1,4 @@
-import type { FluxbaseFetch } from './fetch'
+import type { FluxbaseFetch } from "./fetch";
 import type {
   // Client Keys
   ClientKey,
@@ -25,7 +25,7 @@ import type {
   ListInvitationsResponse,
   RevokeInvitationResponse,
   ValidateInvitationResponse,
-} from './types'
+} from "./types";
 
 /**
  * Client Keys management client
@@ -52,10 +52,10 @@ import type {
  * @category Management
  */
 export class ClientKeysManager {
-  private fetch: FluxbaseFetch
+  private fetch: FluxbaseFetch;
 
   constructor(fetch: FluxbaseFetch) {
-    this.fetch = fetch
+    this.fetch = fetch;
   }
 
   /**
@@ -78,8 +78,13 @@ export class ClientKeysManager {
    * console.log('Client Key:', key)
    * ```
    */
-  async create(request: CreateClientKeyRequest): Promise<CreateClientKeyResponse> {
-    return await this.fetch.post<CreateClientKeyResponse>('/api/v1/client-keys', request)
+  async create(
+    request: CreateClientKeyRequest,
+  ): Promise<CreateClientKeyResponse> {
+    return await this.fetch.post<CreateClientKeyResponse>(
+      "/api/v1/client-keys",
+      request,
+    );
   }
 
   /**
@@ -97,7 +102,7 @@ export class ClientKeysManager {
    * ```
    */
   async list(): Promise<ListClientKeysResponse> {
-    return await this.fetch.get<ListClientKeysResponse>('/api/v1/client-keys')
+    return await this.fetch.get<ListClientKeysResponse>("/api/v1/client-keys");
   }
 
   /**
@@ -113,7 +118,7 @@ export class ClientKeysManager {
    * ```
    */
   async get(keyId: string): Promise<ClientKey> {
-    return await this.fetch.get<ClientKey>(`/api/v1/client-keys/${keyId}`)
+    return await this.fetch.get<ClientKey>(`/api/v1/client-keys/${keyId}`);
   }
 
   /**
@@ -131,8 +136,14 @@ export class ClientKeysManager {
    * })
    * ```
    */
-  async update(keyId: string, updates: UpdateClientKeyRequest): Promise<ClientKey> {
-    return await this.fetch.patch<ClientKey>(`/api/v1/client-keys/${keyId}`, updates)
+  async update(
+    keyId: string,
+    updates: UpdateClientKeyRequest,
+  ): Promise<ClientKey> {
+    return await this.fetch.patch<ClientKey>(
+      `/api/v1/client-keys/${keyId}`,
+      updates,
+    );
   }
 
   /**
@@ -150,7 +161,10 @@ export class ClientKeysManager {
    * ```
    */
   async revoke(keyId: string): Promise<RevokeClientKeyResponse> {
-    return await this.fetch.post<RevokeClientKeyResponse>(`/api/v1/client-keys/${keyId}/revoke`, {})
+    return await this.fetch.post<RevokeClientKeyResponse>(
+      `/api/v1/client-keys/${keyId}/revoke`,
+      {},
+    );
   }
 
   /**
@@ -168,14 +182,16 @@ export class ClientKeysManager {
    * ```
    */
   async delete(keyId: string): Promise<DeleteClientKeyResponse> {
-    return await this.fetch.delete<DeleteClientKeyResponse>(`/api/v1/client-keys/${keyId}`)
+    return await this.fetch.delete<DeleteClientKeyResponse>(
+      `/api/v1/client-keys/${keyId}`,
+    );
   }
 }
 
 /**
  * @deprecated Use ClientKeysManager instead
  */
-export const APIKeysManager = ClientKeysManager
+export const APIKeysManager = ClientKeysManager;
 
 /**
  * Webhooks management client
@@ -202,10 +218,10 @@ export const APIKeysManager = ClientKeysManager
  * @category Management
  */
 export class WebhooksManager {
-  private fetch: FluxbaseFetch
+  private fetch: FluxbaseFetch;
 
   constructor(fetch: FluxbaseFetch) {
-    this.fetch = fetch
+    this.fetch = fetch;
   }
 
   /**
@@ -225,7 +241,7 @@ export class WebhooksManager {
    * ```
    */
   async create(request: CreateWebhookRequest): Promise<Webhook> {
-    return await this.fetch.post<Webhook>('/api/v1/webhooks', request)
+    return await this.fetch.post<Webhook>("/api/v1/webhooks", request);
   }
 
   /**
@@ -243,7 +259,7 @@ export class WebhooksManager {
    * ```
    */
   async list(): Promise<ListWebhooksResponse> {
-    return await this.fetch.get<ListWebhooksResponse>('/api/v1/webhooks')
+    return await this.fetch.get<ListWebhooksResponse>("/api/v1/webhooks");
   }
 
   /**
@@ -259,7 +275,7 @@ export class WebhooksManager {
    * ```
    */
   async get(webhookId: string): Promise<Webhook> {
-    return await this.fetch.get<Webhook>(`/api/v1/webhooks/${webhookId}`)
+    return await this.fetch.get<Webhook>(`/api/v1/webhooks/${webhookId}`);
   }
 
   /**
@@ -277,8 +293,14 @@ export class WebhooksManager {
    * })
    * ```
    */
-  async update(webhookId: string, updates: UpdateWebhookRequest): Promise<Webhook> {
-    return await this.fetch.patch<Webhook>(`/api/v1/webhooks/${webhookId}`, updates)
+  async update(
+    webhookId: string,
+    updates: UpdateWebhookRequest,
+  ): Promise<Webhook> {
+    return await this.fetch.patch<Webhook>(
+      `/api/v1/webhooks/${webhookId}`,
+      updates,
+    );
   }
 
   /**
@@ -294,7 +316,9 @@ export class WebhooksManager {
    * ```
    */
   async delete(webhookId: string): Promise<DeleteWebhookResponse> {
-    return await this.fetch.delete<DeleteWebhookResponse>(`/api/v1/webhooks/${webhookId}`)
+    return await this.fetch.delete<DeleteWebhookResponse>(
+      `/api/v1/webhooks/${webhookId}`,
+    );
   }
 
   /**
@@ -315,7 +339,10 @@ export class WebhooksManager {
    * ```
    */
   async test(webhookId: string): Promise<TestWebhookResponse> {
-    return await this.fetch.post<TestWebhookResponse>(`/api/v1/webhooks/${webhookId}/test`, {})
+    return await this.fetch.post<TestWebhookResponse>(
+      `/api/v1/webhooks/${webhookId}/test`,
+      {},
+    );
   }
 
   /**
@@ -334,10 +361,13 @@ export class WebhooksManager {
    * })
    * ```
    */
-  async listDeliveries(webhookId: string, limit: number = 50): Promise<ListWebhookDeliveriesResponse> {
+  async listDeliveries(
+    webhookId: string,
+    limit: number = 50,
+  ): Promise<ListWebhookDeliveriesResponse> {
     return await this.fetch.get<ListWebhookDeliveriesResponse>(
       `/api/v1/webhooks/${webhookId}/deliveries?limit=${limit}`,
-    )
+    );
   }
 }
 
@@ -345,7 +375,7 @@ export class WebhooksManager {
  * Invitations management client
  *
  * Provides methods for creating and managing user invitations.
- * Invitations allow admins to invite new users to join the dashboard.
+ * Invitations allow admins to invite new users to join the platform.
  *
  * @example
  * ```typescript
@@ -364,10 +394,10 @@ export class WebhooksManager {
  * @category Management
  */
 export class InvitationsManager {
-  private fetch: FluxbaseFetch
+  private fetch: FluxbaseFetch;
 
   constructor(fetch: FluxbaseFetch) {
-    this.fetch = fetch
+    this.fetch = fetch;
   }
 
   /**
@@ -388,8 +418,13 @@ export class InvitationsManager {
    * console.log('Send this link to the user:', invitation.invite_link)
    * ```
    */
-  async create(request: CreateInvitationRequest): Promise<CreateInvitationResponse> {
-    return await this.fetch.post<CreateInvitationResponse>('/api/v1/admin/invitations', request)
+  async create(
+    request: CreateInvitationRequest,
+  ): Promise<CreateInvitationResponse> {
+    return await this.fetch.post<CreateInvitationResponse>(
+      "/api/v1/admin/invitations",
+      request,
+    );
   }
 
   /**
@@ -413,20 +448,24 @@ export class InvitationsManager {
    * })
    * ```
    */
-  async list(options: ListInvitationsOptions = {}): Promise<ListInvitationsResponse> {
-    const params = new URLSearchParams()
+  async list(
+    options: ListInvitationsOptions = {},
+  ): Promise<ListInvitationsResponse> {
+    const params = new URLSearchParams();
 
     if (options.include_accepted !== undefined) {
-      params.append('include_accepted', String(options.include_accepted))
+      params.append("include_accepted", String(options.include_accepted));
     }
     if (options.include_expired !== undefined) {
-      params.append('include_expired', String(options.include_expired))
+      params.append("include_expired", String(options.include_expired));
     }
 
-    const queryString = params.toString()
-    const url = queryString ? `/api/v1/admin/invitations?${queryString}` : '/api/v1/admin/invitations'
+    const queryString = params.toString();
+    const url = queryString
+      ? `/api/v1/admin/invitations?${queryString}`
+      : "/api/v1/admin/invitations";
 
-    return await this.fetch.get<ListInvitationsResponse>(url)
+    return await this.fetch.get<ListInvitationsResponse>(url);
   }
 
   /**
@@ -447,7 +486,9 @@ export class InvitationsManager {
    * ```
    */
   async validate(token: string): Promise<ValidateInvitationResponse> {
-    return await this.fetch.get<ValidateInvitationResponse>(`/api/v1/invitations/${token}/validate`)
+    return await this.fetch.get<ValidateInvitationResponse>(
+      `/api/v1/invitations/${token}/validate`,
+    );
   }
 
   /**
@@ -469,8 +510,14 @@ export class InvitationsManager {
    * console.log('Welcome:', response.user.name)
    * ```
    */
-  async accept(token: string, request: AcceptInvitationRequest): Promise<AcceptInvitationResponse> {
-    return await this.fetch.post<AcceptInvitationResponse>(`/api/v1/invitations/${token}/accept`, request)
+  async accept(
+    token: string,
+    request: AcceptInvitationRequest,
+  ): Promise<AcceptInvitationResponse> {
+    return await this.fetch.post<AcceptInvitationResponse>(
+      `/api/v1/invitations/${token}/accept`,
+      request,
+    );
   }
 
   /**
@@ -486,7 +533,9 @@ export class InvitationsManager {
    * ```
    */
   async revoke(token: string): Promise<RevokeInvitationResponse> {
-    return await this.fetch.delete<RevokeInvitationResponse>(`/api/v1/admin/invitations/${token}`)
+    return await this.fetch.delete<RevokeInvitationResponse>(
+      `/api/v1/admin/invitations/${token}`,
+    );
   }
 }
 
@@ -497,21 +546,21 @@ export class InvitationsManager {
  */
 export class FluxbaseManagement {
   /** Client Keys management */
-  public clientKeys: ClientKeysManager
+  public clientKeys: ClientKeysManager;
 
   /** @deprecated Use clientKeys instead */
-  public apiKeys: ClientKeysManager
+  public apiKeys: ClientKeysManager;
 
   /** Webhooks management */
-  public webhooks: WebhooksManager
+  public webhooks: WebhooksManager;
 
   /** Invitations management */
-  public invitations: InvitationsManager
+  public invitations: InvitationsManager;
 
   constructor(fetch: FluxbaseFetch) {
-    this.clientKeys = new ClientKeysManager(fetch)
-    this.apiKeys = this.clientKeys // Backwards compatibility alias
-    this.webhooks = new WebhooksManager(fetch)
-    this.invitations = new InvitationsManager(fetch)
+    this.clientKeys = new ClientKeysManager(fetch);
+    this.apiKeys = this.clientKeys; // Backwards compatibility alias
+    this.webhooks = new WebhooksManager(fetch);
+    this.invitations = new InvitationsManager(fetch);
   }
 }

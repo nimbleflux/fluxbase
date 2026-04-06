@@ -549,50 +549,6 @@ func TestInitiateSAMLLogout_NilService(t *testing.T) {
 }
 
 // =============================================================================
-// RegisterRoutes Tests
-// =============================================================================
-
-func TestSAMLHandler_RegisterRoutes(t *testing.T) {
-	handler := NewSAMLHandler(nil, nil)
-
-	app := fiber.New()
-	router := app.Group("/auth")
-	handler.RegisterRoutes(router)
-
-	routes := []struct {
-		method string
-		path   string
-	}{
-		{"GET", "/auth/saml/providers"},
-		{"GET", "/auth/saml/metadata/test"},
-		{"GET", "/auth/saml/login/test"},
-		{"POST", "/auth/saml/acs"},
-		{"GET", "/auth/saml/logout/test"},
-		{"POST", "/auth/saml/slo"},
-		{"GET", "/auth/saml/slo"},
-	}
-
-	for _, route := range routes {
-		t.Run(route.method+" "+route.path, func(t *testing.T) {
-			req := httptest.NewRequest(route.method, route.path, nil)
-			resp, err := app.Test(req)
-			require.NoError(t, err)
-			defer func() { _ = resp.Body.Close() }()
-
-			// Routes should be registered (not a router-level 404)
-			// Handler may return 404 due to nil service, but the route exists
-			var result map[string]interface{}
-			err = json.NewDecoder(resp.Body).Decode(&result)
-			if err == nil && result["error"] != nil {
-				// If there's an error response, it should be from our handler
-				errorMsg := result["error"].(string)
-				assert.NotContains(t, errorMsg, "Cannot "+route.method)
-			}
-		})
-	}
-}
-
-// =============================================================================
 // Edge Case Tests
 // =============================================================================
 

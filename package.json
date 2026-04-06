@@ -13,5 +13,12 @@
   "scripts": {
     "prepare": "command -v lefthook >/dev/null 2>&1 && lefthook install || true"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "picomatch": "^4.0.4"
+  },
+  "overrides": {
+    "h3": "^1.15.9",
+    "smol-toml": "^1.6.1",
+    "picomatch": "^4.0.4"
+  }
 }

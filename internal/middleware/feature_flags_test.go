@@ -101,7 +101,7 @@ func TestFeatureFlag_DisabledResponse(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 
-	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
@@ -129,8 +129,8 @@ func TestFeatureFlag_ResponseFormat(t *testing.T) {
 			require.NoError(t, err)
 			defer func() { _ = resp.Body.Close() }()
 
-			// All should return 404 when cache is nil
-			assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+			// All should return 503 when cache is nil (feature disabled)
+			assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
 		})
 	}
 }

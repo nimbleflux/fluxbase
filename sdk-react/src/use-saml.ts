@@ -4,7 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFluxbaseClient } from "./context";
-import type { SAMLLoginOptions, SAMLProvider } from "@fluxbase/sdk";
+import type { SAMLLoginOptions, SAMLProvider } from "@nimbleflux/fluxbase-sdk";
 
 /**
  * Hook to get available SAML SSO providers

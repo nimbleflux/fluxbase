@@ -10,16 +10,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nimbleflux/fluxbase/internal/pubsub"
-	"github.com/nimbleflux/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/pubsub"
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 )
 
 // TestPostgresPubSub_Start verifies that the pubsub starts correctly
 // and launches the listenLoop goroutine.
 func TestPostgresPubSub_Start(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "pubsub")
 	defer tc.Close()
 
 	ps := pubsub.NewPostgresPubSub(tc.DB.Pool())
@@ -36,7 +37,7 @@ func TestPostgresPubSub_Start(t *testing.T) {
 
 // TestPostgresPubSub_Subscribe creates subscriptions and verifies they work.
 func TestPostgresPubSub_Subscribe(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "pubsub")
 	defer tc.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -63,7 +64,7 @@ func TestPostgresPubSub_Subscribe(t *testing.T) {
 // TestPostgresPubSub_MultipleSubscribers verifies multiple subscribers
 // can be created for the same channel.
 func TestPostgresPubSub_MultipleSubscribers(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "pubsub")
 	defer tc.Close()
 
 	ctx := context.Background()
@@ -93,7 +94,7 @@ func TestPostgresPubSub_MultipleSubscribers(t *testing.T) {
 
 // TestPostgresPubSub_PublishBasic verifies basic publish functionality.
 func TestPostgresPubSub_PublishBasic(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "pubsub")
 	defer tc.Close()
 
 	ctx := context.Background()
@@ -109,7 +110,7 @@ func TestPostgresPubSub_PublishBasic(t *testing.T) {
 
 // TestPostgresPubSub_PayloadSizeLimit verifies the 8000 byte payload limit.
 func TestPostgresPubSub_PayloadSizeLimit(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "pubsub")
 	defer tc.Close()
 
 	ctx := context.Background()
@@ -138,7 +139,7 @@ func TestPostgresPubSub_PayloadSizeLimit(t *testing.T) {
 
 // TestPostgresPubSub_BuiltinChannels verifies the built-in channel constants.
 func TestPostgresPubSub_BuiltinChannels(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "pubsub")
 	defer tc.Close()
 
 	ctx := context.Background()
@@ -163,7 +164,7 @@ func TestPostgresPubSub_BuiltinChannels(t *testing.T) {
 // TestPostgresPubSub_UnsubscribeOnContextCancel verifies that subscribers
 // are removed when their context is cancelled.
 func TestPostgresPubSub_UnsubscribeOnContextCancel(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "pubsub")
 	defer tc.Close()
 
 	ps := pubsub.NewPostgresPubSub(tc.DB.Pool())
@@ -201,7 +202,7 @@ func TestPostgresPubSub_UnsubscribeOnContextCancel(t *testing.T) {
 // TestPostgresPubSub_CloseClosesAllChannels verifies that Close()
 // closes all subscriber channels.
 func TestPostgresPubSub_CloseClosesAllChannels(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "pubsub")
 	defer tc.Close()
 
 	ctx := context.Background()
@@ -229,7 +230,7 @@ func TestPostgresPubSub_CloseClosesAllChannels(t *testing.T) {
 
 // TestPostgresPubSub_EmptyPayload verifies that empty payloads work correctly.
 func TestPostgresPubSub_EmptyPayload(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "pubsub")
 	defer tc.Close()
 
 	ctx := context.Background()

@@ -31,10 +31,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/test"
-	"github.com/rs/zerolog/log"
 )
 
 // getEnvOrDefault returns the value of an environment variable or a default value.
@@ -467,7 +468,7 @@ func refreshSharedTestContextSchemaCache() {
 // fluxbase_app does not own the schemas and cannot grant permissions on them.
 //
 // Permissions Granted:
-//   - Schema USAGE and CREATE on: auth, dashboard, functions, storage, realtime
+//   - Schema USAGE and CREATE on: auth, platform, functions, storage, realtime
 //   - ALL privileges on tables and sequences in those schemas
 //   - EXECUTE on all functions in functions schema
 //
@@ -504,7 +505,7 @@ func grantRLSTestPermissions() {
 		GRANT CREATE ON DATABASE %s TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA app TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA auth TO fluxbase_rls_test, fluxbase_app;
-		GRANT USAGE, CREATE ON SCHEMA dashboard TO fluxbase_rls_test, fluxbase_app;
+		GRANT USAGE, CREATE ON SCHEMA platform TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA functions TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA jobs TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA storage TO fluxbase_rls_test, fluxbase_app;
@@ -523,8 +524,8 @@ func grantRLSTestPermissions() {
 		GRANT ALL ON ALL SEQUENCES IN SCHEMA app TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL TABLES IN SCHEMA auth TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL SEQUENCES IN SCHEMA auth TO fluxbase_rls_test, fluxbase_app;
-		GRANT ALL ON ALL TABLES IN SCHEMA dashboard TO fluxbase_rls_test, fluxbase_app;
-		GRANT ALL ON ALL SEQUENCES IN SCHEMA dashboard TO fluxbase_rls_test, fluxbase_app;
+		GRANT ALL ON ALL TABLES IN SCHEMA platform TO fluxbase_rls_test, fluxbase_app;
+		GRANT ALL ON ALL SEQUENCES IN SCHEMA platform TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL TABLES IN SCHEMA functions TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL SEQUENCES IN SCHEMA functions TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL TABLES IN SCHEMA jobs TO fluxbase_rls_test, fluxbase_app;
@@ -541,8 +542,8 @@ func grantRLSTestPermissions() {
 		ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA auth GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
-		ALTER DEFAULT PRIVILEGES IN SCHEMA dashboard GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
-		ALTER DEFAULT PRIVILEGES IN SCHEMA dashboard GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
+		ALTER DEFAULT PRIVILEGES IN SCHEMA platform GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
+		ALTER DEFAULT PRIVILEGES IN SCHEMA platform GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA functions GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA functions GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA jobs GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
@@ -723,11 +724,51 @@ func teardownTestTables() {
 
 	// Delete test storage buckets (id/name starts with 'test')
 	// Note: Cascade will delete associated objects and permissions
-	result, err = db.Exec(ctx, "DELETE FROM storage.buckets WHERE id LIKE 'test_%' OR name LIKE 'test_%'")
+	result, err = db.Exec(ctx, "DELETE FROM storage.buckets WHERE id LIKE 'test_%' OR name LIKE 'test_%' OR name IN ('bucket1', 'bucket2', 's3-bucket1', 's3-bucket2') OR name LIKE '%test-bucket%'")
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to delete test storage buckets")
 	} else if result.RowsAffected() > 0 {
 		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test storage buckets")
+	}
+
+	// Delete test service keys (children of tenants, delete before tenants)
+	result, err = db.Exec(ctx, "DELETE FROM auth.service_keys WHERE name LIKE 'test_%' OR name LIKE '%Test%' OR name LIKE '%Storage Admin%' OR name LIKE '%S3 Storage%'")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete test service keys")
+	} else if result.RowsAffected() > 0 {
+		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test service keys")
+	}
+
+	// Delete test webhooks
+	result, err = db.Exec(ctx, "DELETE FROM auth.webhooks WHERE name LIKE 'test_%' OR name LIKE '%Test%'")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete test webhooks")
+	} else if result.RowsAffected() > 0 {
+		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test webhooks")
+	}
+
+	// Delete test edge functions
+	result, err = db.Exec(ctx, "DELETE FROM functions.edge_functions WHERE name LIKE 'test_%'")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete test edge functions")
+	} else if result.RowsAffected() > 0 {
+		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test edge functions")
+	}
+
+	// Delete test background jobs
+	result, err = db.Exec(ctx, "DELETE FROM jobs.queue WHERE name LIKE 'test_%'")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete test background jobs")
+	} else if result.RowsAffected() > 0 {
+		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test background jobs")
+	}
+
+	// Delete test tenants (must come after service_keys and other children)
+	result, err = db.Exec(ctx, "DELETE FROM platform.tenants WHERE slug LIKE 'test-%' OR slug LIKE 'tenant-test-%'")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete test tenants")
+	} else if result.RowsAffected() > 0 {
+		log.Info().Int64("count", result.RowsAffected()).Msg("Deleted test tenants")
 	}
 
 	log.Info().Msg("E2E test tables teardown complete")

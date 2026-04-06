@@ -1,66 +1,66 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useFluxbaseClient } from './context'
-import type { EnrichedUser, ListUsersOptions } from '@fluxbase/sdk'
+import { useState, useEffect, useCallback } from "react";
+import { useFluxbaseClient } from "./context";
+import type { EnrichedUser, ListUsersOptions } from "@nimbleflux/fluxbase-sdk";
 
 export interface UseUsersOptions extends ListUsersOptions {
   /**
    * Whether to automatically fetch users on mount
    * @default true
    */
-  autoFetch?: boolean
+  autoFetch?: boolean;
 
   /**
    * Refetch interval in milliseconds (0 to disable)
    * @default 0
    */
-  refetchInterval?: number
+  refetchInterval?: number;
 }
 
 export interface UseUsersReturn {
   /**
    * Array of users
    */
-  users: EnrichedUser[]
+  users: EnrichedUser[];
 
   /**
    * Total number of users (for pagination)
    */
-  total: number
+  total: number;
 
   /**
    * Whether users are being fetched
    */
-  isLoading: boolean
+  isLoading: boolean;
 
   /**
    * Any error that occurred
    */
-  error: Error | null
+  error: Error | null;
 
   /**
    * Refetch users
    */
-  refetch: () => Promise<void>
+  refetch: () => Promise<void>;
 
   /**
    * Invite a new user
    */
-  inviteUser: (email: string, role: 'user' | 'admin') => Promise<void>
+  inviteUser: (email: string, role: "user" | "admin") => Promise<void>;
 
   /**
    * Update user role
    */
-  updateUserRole: (userId: string, role: 'user' | 'admin') => Promise<void>
+  updateUserRole: (userId: string, role: "user" | "admin") => Promise<void>;
 
   /**
    * Delete a user
    */
-  deleteUser: (userId: string) => Promise<void>
+  deleteUser: (userId: string) => Promise<void>;
 
   /**
    * Reset user password
    */
-  resetPassword: (userId: string) => Promise<{ message: string }>
+  resetPassword: (userId: string) => Promise<{ message: string }>;
 }
 
 /**
@@ -94,95 +94,96 @@ export interface UseUsersReturn {
  * ```
  */
 export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
-  const { autoFetch = true, refetchInterval = 0, ...listOptions } = options
-  const client = useFluxbaseClient()
+  const { autoFetch = true, refetchInterval = 0, ...listOptions } = options;
+  const client = useFluxbaseClient();
 
-  const [users, setUsers] = useState<EnrichedUser[]>([])
-  const [total, setTotal] = useState(0)
-  const [isLoading, setIsLoading] = useState(autoFetch)
-  const [error, setError] = useState<Error | null>(null)
+  const [users, setUsers] = useState<EnrichedUser[]>([]);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(autoFetch);
+  const [error, setError] = useState<Error | null>(null);
 
   /**
    * Fetch users from API
    */
   const fetchUsers = useCallback(async () => {
     try {
-      setIsLoading(true)
-      setError(null)
-      const { data, error: apiError } = await client.admin.listUsers(listOptions)
+      setIsLoading(true);
+      setError(null);
+      const { data, error: apiError } =
+        await client.admin.listUsers(listOptions);
       if (apiError) {
-        throw apiError
+        throw apiError;
       }
-      setUsers(data!.users)
-      setTotal(data!.total)
+      setUsers(data!.users);
+      setTotal(data!.total);
     } catch (err) {
-      setError(err as Error)
+      setError(err as Error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [client, JSON.stringify(listOptions)])
+  }, [client, JSON.stringify(listOptions)]);
 
   /**
    * Invite a new user
    */
   const inviteUser = useCallback(
-    async (email: string, role: 'user' | 'admin'): Promise<void> => {
-      await client.admin.inviteUser({ email, role })
-      await fetchUsers() // Refresh list
+    async (email: string, role: "user" | "admin"): Promise<void> => {
+      await client.admin.inviteUser({ email, role });
+      await fetchUsers(); // Refresh list
     },
-    [client, fetchUsers]
-  )
+    [client, fetchUsers],
+  );
 
   /**
    * Update user role
    */
   const updateUserRole = useCallback(
-    async (userId: string, role: 'user' | 'admin'): Promise<void> => {
-      await client.admin.updateUserRole(userId, role)
-      await fetchUsers() // Refresh list
+    async (userId: string, role: "user" | "admin"): Promise<void> => {
+      await client.admin.updateUserRole(userId, role);
+      await fetchUsers(); // Refresh list
     },
-    [client, fetchUsers]
-  )
+    [client, fetchUsers],
+  );
 
   /**
    * Delete a user
    */
   const deleteUser = useCallback(
     async (userId: string): Promise<void> => {
-      await client.admin.deleteUser(userId)
-      await fetchUsers() // Refresh list
+      await client.admin.deleteUser(userId);
+      await fetchUsers(); // Refresh list
     },
-    [client, fetchUsers]
-  )
+    [client, fetchUsers],
+  );
 
   /**
    * Reset user password
    */
   const resetPassword = useCallback(
     async (userId: string): Promise<{ message: string }> => {
-      const { data, error } = await client.admin.resetUserPassword(userId)
+      const { data, error } = await client.admin.resetUserPassword(userId);
       if (error) {
-        throw error
+        throw error;
       }
-      return data!
+      return data!;
     },
-    [client]
-  )
+    [client],
+  );
 
   // Auto-fetch on mount
   useEffect(() => {
     if (autoFetch) {
-      fetchUsers()
+      fetchUsers();
     }
-  }, [autoFetch, fetchUsers])
+  }, [autoFetch, fetchUsers]);
 
   // Set up refetch interval
   useEffect(() => {
     if (refetchInterval > 0) {
-      const interval = setInterval(fetchUsers, refetchInterval)
-      return () => clearInterval(interval)
+      const interval = setInterval(fetchUsers, refetchInterval);
+      return () => clearInterval(interval);
     }
-  }, [refetchInterval, fetchUsers])
+  }, [refetchInterval, fetchUsers]);
 
   return {
     users,
@@ -193,6 +194,6 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
     inviteUser,
     updateUserRole,
     deleteUser,
-    resetPassword
-  }
+    resetPassword,
+  };
 }

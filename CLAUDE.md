@@ -40,7 +40,7 @@ test/e2e/                # End-to-end tests
 | `logutil/`       | Log utilities (sanitization, formatting)                                                                    |
 | `logging/`       | Structured logging with batching and retention policies                                                     |
 | `mcp/`           | Model Context Protocol server for AI assistant integration                                                  |
-| `middleware/`    | Auth, CORS, rate limiting, logging, branch context middlewares                                              |
+| `middleware/`    | Auth, CORS, rate limiting, logging, branch and tenant context middlewares                                   |
 | `migrations/`    | Database migration management                                                                               |
 | `observability/` | Prometheus metrics and OpenTelemetry tracing                                                                |
 | `pubsub/`        | Distributed pub/sub (local, PostgreSQL, Redis backends)                                                     |
@@ -53,6 +53,7 @@ test/e2e/                # End-to-end tests
 | `secrets/`       | Secret management for functions/jobs                                                                        |
 | `settings/`      | Application settings and custom configuration                                                               |
 | `storage/`       | File storage abstraction (local filesystem or S3/MinIO)                                                     |
+| `tenantdb/`      | Tenant database routing, FDW connections, separate tenant databases                                         |
 | `testcontext/`   | Test context utilities for E2E tests                                                                        |
 | `testutil/`      | Test utilities and helpers                                                                                  |
 | `webhook/`       | Webhook system for database events (INSERT, UPDATE, DELETE)                                                 |
@@ -66,7 +67,10 @@ test/e2e/                # End-to-end tests
 - `branching.*` - Database branch metadata, access control, GitHub config
 - `ai.*` - Knowledge bases, documents, chatbots, permissions
 - `logging.*` - Centralized logging entries with TimescaleDB hypertable support
+- `platform.*` - Multi-tenancy (tenants, service_keys, tenant_admin_assignments, users)
 - `public` - User application tables
+
+**Tenant Isolation:** All tenant-scoped tables use Row Level Security (RLS) with the `tenant_service` role for automatic tenant isolation. The `platform.tenants` table stores tenant metadata, and `platform.service_keys` manages API keys per tenant.
 
 ## Key Files by Feature
 
@@ -159,7 +163,56 @@ test/e2e/                # End-to-end tests
 - `internal/ai/knowledge_base.go` - Core data models
 - `internal/ai/knowledge_base_storage.go` - Storage operations
 
+**Multi-Tenancy:**
+
+- `internal/api/tenant_handler.go` - Tenant CRUD HTTP handlers
+- `internal/api/servicekey_handler.go` - Service key management API
+- `internal/middleware/tenant.go` - Tenant context extraction middleware
+- `internal/database/schema/schemas/platform.sql` - Platform schema with tenants table (declarative)
+
+**Migrations:**
+
+- `internal/migrations/handler.go` - Migrations API HTTP handlers (CRUD, apply, rollback, sync)
+- `internal/migrations/executor.go` - Main database migration execution (`ExecuteWithAdminRole`)
+- `internal/migrations/tenant_executor.go` - Tenant-scoped execution (`SET LOCAL ROLE tenant_migration_role`)
+- `internal/migrations/storage.go` - Migration metadata CRUD (`migrations.app` table)
+- `internal/migrations/declarative.go` - Declarative schema service (pgschema plan/apply/dump)
+- `internal/tenantdb/declarative.go` - Per-tenant declarative schema service
+- `internal/api/routes/migrations.go` - Migration route definitions (`/api/v1/admin/migrations`)
+- `internal/middleware/migrations_security.go` - Migrations API auth, IP allowlist, rate limiting
+- `internal/database/connection.go` - Filesystem migration runner (`runUserMigrations`)
+- `cli/cmd/migrations.go` - CLI commands (`fluxbase migrations sync/list/create/apply/rollback`)
+
 ## Common Commands
+
+### Devcontainer Database Access
+
+When working in the devcontainer, you can use `psql` to query the database directly. The connection credentials are available from environment variables:
+
+```bash
+# Connect to the database
+psql "postgresql://$FLUXBASE_DATABASE_USER:$FLUXBASE_DATABASE_PASSWORD@$FLUXBASE_DATABASE_HOST:$FLUXBASE_DATABASE_PORT/$FLUXBASE_DATABASE_NAME"
+```
+
+Useful queries for debugging:
+
+```sql
+-- List all tables in public schema
+SELECT tablename FROM pg_tables WHERE schemaname = 'public';
+
+-- Check service_role permissions on public tables
+SELECT table_name, privilege_type
+FROM information_schema.role_table_grants
+WHERE grantee = 'service_role' AND table_schema = 'public';
+
+-- Check tenants
+SELECT id, name, slug FROM platform.tenants;
+
+-- Find leftover test tables
+SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'test_%';
+```
+
+### Build & Development
 
 ```bash
 # Development
@@ -167,10 +220,8 @@ make dev              # Start backend + admin UI dev servers
 make build            # Production build with embedded admin
 
 # Database Operations
-make migrate-up       # Run database migrations
-make migrate-down     # Rollback last migration
 make db-reset         # Reset database (preserve user data)
-make db-reset-full    # Full reset (destroys all data)
+make db-reset-full    # Full reset (destroys all data, bootstrap runs on next server start)
 
 # Testing
 make test             # Unit tests only (2min)
@@ -204,7 +255,34 @@ make setup-dev        # Install dependencies + git hooks
 
 Three-layer system: defaults → `fluxbase.yaml` → `FLUXBASE_*` env vars
 
-Key config sections: server, database, auth, storage, realtime, functions, jobs, email, ai, mcp, branching, graphql, rpc, webhooks, scaling, observability (metrics, tracing), security, cors, api, logging
+Key config sections: server, database, auth, storage, realtime, functions, jobs, email, ai, mcp, branching, graphql, rpc, webhooks, scaling, observability (metrics, tracing), security, cors, api, logging, migrations, tenants
+
+**Database Configuration (relevant to migrations):**
+
+```yaml
+database:
+  user_migrations_path: "/migrations/user"  # Local path for filesystem migrations (env: FLUXBASE_DATABASE_USER_MIGRATIONS_PATH)
+```
+
+**Migrations API Configuration:**
+
+```yaml
+migrations:
+  enabled: true
+  allowed_ip_ranges: []  # IP CIDR allowlist (default: Docker/private networks)
+```
+
+**Tenant Declarative Schema Configuration:**
+
+```yaml
+tenants:
+  declarative:
+    enabled: true
+    schema_dir: "schemas"          # Directory: {schema_dir}/{tenant-slug}/public.sql
+    on_create: true                # Apply on tenant creation
+    on_startup: false              # Apply on server startup
+    allow_destructive: false       # Allow DROP/ALTER in tenant schemas
+```
 
 **MCP Configuration:**
 
@@ -280,15 +358,15 @@ golangci-lint run ./...  # Includes type checking
 
 ```bash
 # Admin UI
-cd admin && pnpm run type-check
-cd admin && pnpm run lint
+cd admin && bun run type-check
+cd admin && bun run lint
 
 # SDK
-cd sdk && pnpm run type-check
-cd sdk && pnpm run lint
+cd sdk && bun run type-check
+cd sdk && bun run lint
 
 # SDK React
-cd sdk-react && pnpm run type-check  # Uses tsc --noEmit
+cd sdk-react && bun run type-check  # Uses tsc --noEmit
 ```
 
 **What gets checked:**
@@ -296,7 +374,7 @@ cd sdk-react && pnpm run type-check  # Uses tsc --noEmit
 - **ESLint**: TypeScript ESLint, React Hooks, React Refresh, TanStack Query
 - **Prettier**: Code formatting with import sorting and Tailwind integration
 - **TypeScript**: No unused vars, type-only imports enforced
-
+1
 ### Pre-Commit Hook Enforcement
 
 Git pre-commit hooks automatically run:
@@ -324,15 +402,77 @@ Git pre-commit hooks automatically run:
 
 ## Migrations
 
-SQL files in `internal/database/migrations/` numbered sequentially (001-089+).
-Format: `NNN_description.up.sql` / `NNN_description.down.sql`
+Fluxbase uses a **hybrid migration system** with three subsystems:
 
-**Recent Migrations (082-089):**
+### Internal Schema (Declarative)
 
-- Knowledge base ownership with visibility control (private, shared, public)
-- User-scoped RLS policies for knowledge bases
-- Execution log migration to centralized logging
-- TimescaleDB hypertable with compression (7-day) and retention (90-day) policies
+Internal Fluxbase tables (auth, storage, functions, jobs, etc.) are managed declaratively:
+
+- **Bootstrap:** `internal/database/bootstrap/bootstrap.sql` - Creates schemas, extensions, roles, default privileges
+- **Schema files:** `internal/database/schema/schemas/*.sql` - Declarative SQL files for each schema
+- **Applied automatically:** Server applies bootstrap + declarative schema on startup
+
+### User Schema - Imperative Migrations
+
+Imperative migrations are tracked in the `migrations.app` table and can be delivered via a local filesystem path or the API:
+
+**Local Filesystem:**
+
+- Config: `database.user_migrations_path` (default: `/migrations/user`)
+- Env var: `FLUXBASE_DATABASE_USER_MIGRATIONS_PATH`
+- Files: `{name}.up.sql` / `{name}.down.sql` pairs, sorted alphabetically (e.g. `001_create_users.up.sql`)
+- Applied at startup against the main database as admin user
+- Tracked with `namespace='filesystem'`
+- SQL validated via `pg_query.Parse()` before execution
+
+**Migrations API (`/api/v1/admin/migrations`):**
+
+- Requires service key or `service_role` JWT with `admin`, `instance_admin`, or `tenant_admin` role
+- Endpoints: CRUD, apply, rollback, apply-pending, sync
+- `POST /sync` accepts a batch of migrations, deduplicates by SHA256 of up/down SQL, and optionally auto-applies
+- Configurable namespaces (default: `"default"`)
+
+**Tenant-aware routing (backward compatible):**
+
+- **No tenant context** (no `X-FB-Tenant` header, not `tenant_admin` JWT): runs via `db.ExecuteWithAdminRole()` against the main database with full DDL privileges
+- **Default tenant** (`X-FB-Tenant` points to default tenant): `Router.GetPool()` returns the main pool, `TenantExecutor` runs with `SET LOCAL ROLE tenant_migration_role` (restricted to `public` schema)
+- **Named tenant**: `Router.GetPool()` returns a pool to the tenant's separate database, same `tenant_migration_role` restriction to `public` schema
+
+### User Schema - Declarative (pgschema)
+
+Per-tenant declarative schema management using pgschema for diff-based application to the `public` schema:
+
+**Local Filesystem:**
+
+- Config: `tenants.declarative.schema_dir`
+- Structure: `{SchemaDir}/{tenant-slug}/public.sql`
+- Applied on tenant creation (`on_create`), server startup (`on_startup`), or on-demand via API
+
+**Tenant Schema API:**
+
+- `GET /tenants/:id/schema` - Get schema status and pending changes
+- `POST /tenants/:id/schema/content` - Upload schema SQL (stored in `platform.tenant_schemas`)
+- `POST /tenants/:id/schema/content/apply` - Diff and apply uploaded content via pgschema
+- `POST /tenants/:id/schema/apply` - Apply from local filesystem
+- `DELETE /tenants/:id/schema/content` - Delete stored schema
+
+Works for the default tenant too — `Router.GetPool()` returns the main pool when `UsesMainDatabase()` is true.
+
+### Common Commands
+
+```bash
+# Database Operations
+make db-reset         # Reset database (preserve user data)
+make db-reset-full    # Full reset - bootstrap runs on next server start
+
+# CLI Migrations (interact with server API)
+fluxbase migrations list [--namespace]      # List migrations
+fluxbase migrations create <name>           # Create migration
+fluxbase migrations apply <name>            # Apply a migration
+fluxbase migrations rollback <name>         # Rollback a migration
+fluxbase migrations apply-pending           # Apply all pending
+fluxbase migrations sync [--dir] [--namespace] [--no-apply]  # Sync from directory
+```
 
 ## Testing
 
@@ -434,3 +574,89 @@ Before committing changes, verify:
 5. Documentation is updated for user-facing changes
 6. New tests are added for new functionality
 7. Existing tests are updated if behavior changed
+
+## Browser Testing with Firefox MCP
+
+The Firefox DevTools MCP enables headless browser testing of the admin UI. Use it to catch JS errors, verify rendering, and validate form flows that API-level tests can't cover.
+
+### Prerequisites
+
+- `make dev` running (backend on :8080, Vite HMR on :5050)
+- Firefox ESR pre-installed in devcontainer (`.devcontainer/Dockerfile`)
+- MCP configured in `~/.claude.json` under `mcpServers.firefox-devtools`
+
+### Dev URLs
+
+Always use port 5050 (Vite dev server) for browser testing — it proxies API calls to 8080.
+
+| Service | URL |
+| ------- | --- |
+| Admin UI | `http://localhost:5050/admin/` |
+| Backend API | `http://localhost:8080` |
+| MailHog | `http://localhost:8025` |
+| MinIO Console | `http://localhost:9001` |
+
+### Admin Login
+
+After a fresh `make db-reset-full`, the admin UI shows a setup page at `/admin/setup`. The setup token is in `.env` (`FLUXBASE_SECURITY_SETUP_TOKEN`). Once an admin user exists, login is at `/admin/login` via `POST /dashboard/auth/login` with `{email, password}`.
+
+### Common Testing Patterns
+
+**Login and navigate:**
+
+1. `navigate_page` to `http://localhost:5050/admin/login`
+2. `take_snapshot` to get DOM with UIDs
+3. `fill_by_uid` for email/password fields
+4. `click_by_uid` the submit button
+5. `screenshot_page` to verify dashboard loaded
+
+**Check for JS errors:**
+
+1. `clear_console_messages`
+2. Navigate to target page
+3. `list_console_messages` with `level: "error"` — any errors indicate a bug
+
+**Check for failed API calls:**
+
+1. `list_network_requests` with `statusMin: 400`
+2. `get_network_request` by ID to inspect details
+
+**Visual verification:**
+
+- `screenshot_page` for full page capture
+- `screenshot_by_uid` for specific components
+- Use `saveTo` parameter to persist to disk
+
+### MCP Tool Quick Reference
+
+| Tool | Purpose |
+| ---- | ------- |
+| `navigate_page` | Go to a URL |
+| `take_snapshot` | Get DOM tree with stable UIDs for interaction |
+| `click_by_uid` | Click an element |
+| `fill_by_uid` | Type into an input |
+| `fill_form_by_uid` | Fill multiple fields at once |
+| `screenshot_page` | Full page screenshot |
+| `list_console_messages` | Check JS console (filter by level) |
+| `list_network_requests` | See API calls (filter by status) |
+| `get_network_request` | Inspect request/response details |
+| `evaluate_script` | Run JS in page context |
+
+### When to Use Browser vs API Testing
+
+**Use browser testing (Firefox MCP) when:**
+
+- Changes touch `admin/src/` React components or pages
+- Verifying new UI features render correctly
+- Checking for JS console errors after frontend changes
+- Validating form submission flows through the actual UI
+
+**Use API testing (Go E2E, curl) when:**
+
+- Testing `internal/` Go backend code
+- Verifying business logic, auth flows, database operations
+- Running the existing test suite (`make test`, `make test-e2e`)
+
+**Use both when:**
+
+- A feature spans frontend and backend (e.g., a settings page that writes to the database)

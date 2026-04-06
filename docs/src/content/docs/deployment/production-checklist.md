@@ -9,11 +9,11 @@ Complete this checklist before deploying Fluxbase to production to ensure securi
 
 ### Authentication & Authorization
 
-- [ ] **JWT Secret**: Changed from default, at least 32 characters
+- [ ] **JWT Secret**: Changed from default, at least 32 characters (64 recommended)
 
   ```bash
-  # Generate strong secret
-  openssl rand -base64 32
+  # Generate strong secret (64 chars)
+  openssl rand -base64 48
   ```
 
 - [ ] **Database Password**: Strong password, not default

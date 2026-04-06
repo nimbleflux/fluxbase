@@ -8,8 +8,9 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // setupAdminTest prepares the test context for admin API tests
@@ -40,6 +41,7 @@ func TestAdminListSchemas(t *testing.T) {
 
 	resp := tc.NewRequest("GET", "/api/v1/admin/schemas").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 
@@ -111,6 +113,7 @@ func TestAdminCORSHeaders(t *testing.T) {
 
 	resp := tc.NewRequest("GET", "/api/v1/admin/schemas").
 		WithAuth(token).
+		WithDefaultTenant().
 		WithHeader("Origin", "https://example.com").
 		Send().
 		AssertStatus(fiber.StatusOK)
@@ -145,6 +148,7 @@ func TestAdminRequestIDTracking(t *testing.T) {
 
 	resp := tc.NewRequest("GET", "/api/v1/admin/schemas").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 

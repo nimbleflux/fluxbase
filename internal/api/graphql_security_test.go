@@ -315,8 +315,8 @@ func TestMapAppRoleToDatabaseRole_Security(t *testing.T) {
 			wantRole: "service_role",
 		},
 		{
-			name:     "dashboard_admin maps to service_role",
-			appRole:  "dashboard_admin",
+			name:     "instance_admin maps to service_role",
+			appRole:  "instance_admin",
 			wantRole: "service_role",
 		},
 		{

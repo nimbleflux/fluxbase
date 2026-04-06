@@ -10,10 +10,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/branching"
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/branching"
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // =============================================================================
@@ -225,7 +226,7 @@ func TestGrantBranchAccessRequest_Struct(t *testing.T) {
 
 func TestCreateBranch_Validation(t *testing.T) {
 	t.Run("branching disabled", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{
 			Enabled: false,
 		})
@@ -253,7 +254,7 @@ func TestCreateBranch_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{
 			Enabled: true,
 		})
@@ -280,7 +281,7 @@ func TestCreateBranch_Validation(t *testing.T) {
 	})
 
 	t.Run("empty branch name", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{
 			Enabled: true,
 		})
@@ -309,7 +310,7 @@ func TestCreateBranch_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid expires_in duration", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{
 			Enabled: true,
 		})
@@ -347,7 +348,7 @@ func TestListBranches_ParameterParsing(t *testing.T) {
 	// These tests verify parameter parsing behavior
 
 	t.Run("default pagination", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches", handler.ListBranches)
@@ -362,7 +363,7 @@ func TestListBranches_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("custom pagination", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches", handler.ListBranches)
@@ -376,7 +377,7 @@ func TestListBranches_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("filter by status", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches", handler.ListBranches)
@@ -390,7 +391,7 @@ func TestListBranches_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("filter by type", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches", handler.ListBranches)
@@ -404,7 +405,7 @@ func TestListBranches_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("filter by github_repo", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches", handler.ListBranches)
@@ -418,14 +419,8 @@ func TestListBranches_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("filter mine", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestAppWithUser(t, "550e8400-e29b-41d4-a716-446655440000", "")
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
-
-		// Middleware to set user_id
-		app.Use(func(c fiber.Ctx) error {
-			c.Locals("user_id", "550e8400-e29b-41d4-a716-446655440000")
-			return c.Next()
-		})
 
 		app.Get("/branches", handler.ListBranches)
 
@@ -444,7 +439,7 @@ func TestListBranches_ParameterParsing(t *testing.T) {
 
 func TestGetBranch_ParameterParsing(t *testing.T) {
 	t.Run("with UUID parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches/:id", handler.GetBranch)
@@ -459,7 +454,7 @@ func TestGetBranch_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("with slug parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches/:id", handler.GetBranch)
@@ -479,7 +474,7 @@ func TestGetBranch_ParameterParsing(t *testing.T) {
 
 func TestDeleteBranch_ParameterParsing(t *testing.T) {
 	t.Run("with UUID parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Delete("/branches/:id", handler.DeleteBranch)
@@ -493,7 +488,7 @@ func TestDeleteBranch_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("with slug parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Delete("/branches/:id", handler.DeleteBranch)
@@ -513,7 +508,7 @@ func TestDeleteBranch_ParameterParsing(t *testing.T) {
 
 func TestResetBranch_ParameterParsing(t *testing.T) {
 	t.Run("with UUID parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Post("/branches/:id/reset", handler.ResetBranch)
@@ -527,7 +522,7 @@ func TestResetBranch_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("with slug parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Post("/branches/:id/reset", handler.ResetBranch)
@@ -547,7 +542,7 @@ func TestResetBranch_ParameterParsing(t *testing.T) {
 
 func TestGetBranchActivity_ParameterParsing(t *testing.T) {
 	t.Run("default limit", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches/:id/activity", handler.GetBranchActivity)
@@ -561,7 +556,7 @@ func TestGetBranchActivity_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("custom limit", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches/:id/activity", handler.GetBranchActivity)
@@ -575,7 +570,7 @@ func TestGetBranchActivity_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("limit capped at 100", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches/:id/activity", handler.GetBranchActivity)
@@ -595,7 +590,7 @@ func TestGetBranchActivity_ParameterParsing(t *testing.T) {
 
 func TestGetPoolStats_Handler(t *testing.T) {
 	t.Run("handler reachable", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches/stats/pools", handler.GetPoolStats)
@@ -617,7 +612,7 @@ func TestGetPoolStats_Handler(t *testing.T) {
 
 func TestGetActiveBranch_Handler(t *testing.T) {
 	t.Run("handler reachable", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches/active", handler.GetActiveBranch)
@@ -637,7 +632,7 @@ func TestGetActiveBranch_Handler(t *testing.T) {
 
 func TestSetActiveBranch_Validation(t *testing.T) {
 	t.Run("branching disabled", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{
 			Enabled: false,
 		})
@@ -665,7 +660,7 @@ func TestSetActiveBranch_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{
 			Enabled: true,
 		})
@@ -683,7 +678,7 @@ func TestSetActiveBranch_Validation(t *testing.T) {
 	})
 
 	t.Run("empty branch slug", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{
 			Enabled: true,
 		})
@@ -718,7 +713,7 @@ func TestSetActiveBranch_Validation(t *testing.T) {
 
 func TestResetActiveBranch_Handler(t *testing.T) {
 	t.Run("handler reachable", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Delete("/branches/active", handler.ResetActiveBranch)
@@ -738,7 +733,7 @@ func TestResetActiveBranch_Handler(t *testing.T) {
 
 func TestListGitHubConfigs_Handler(t *testing.T) {
 	t.Run("handler reachable", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/github/configs", handler.ListGitHubConfigs)
@@ -758,7 +753,7 @@ func TestListGitHubConfigs_Handler(t *testing.T) {
 
 func TestUpsertGitHubConfig_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Post("/github/configs", handler.UpsertGitHubConfig)
@@ -783,7 +778,7 @@ func TestUpsertGitHubConfig_Validation(t *testing.T) {
 	})
 
 	t.Run("empty repository", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Post("/github/configs", handler.UpsertGitHubConfig)
@@ -816,7 +811,7 @@ func TestUpsertGitHubConfig_Validation(t *testing.T) {
 
 func TestDeleteGitHubConfig_ParameterParsing(t *testing.T) {
 	t.Run("with repository parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Delete("/github/configs/:repository", handler.DeleteGitHubConfig)
@@ -836,7 +831,7 @@ func TestDeleteGitHubConfig_ParameterParsing(t *testing.T) {
 
 func TestListBranchAccess_ParameterParsing(t *testing.T) {
 	t.Run("with UUID parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches/:id/access", handler.ListBranchAccess)
@@ -850,7 +845,7 @@ func TestListBranchAccess_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("with slug parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Get("/branches/:id/access", handler.ListBranchAccess)
@@ -870,7 +865,7 @@ func TestListBranchAccess_ParameterParsing(t *testing.T) {
 
 func TestGrantBranchAccess_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Post("/branches/:id/access", handler.GrantBranchAccess)
@@ -887,7 +882,7 @@ func TestGrantBranchAccess_Validation(t *testing.T) {
 	})
 
 	t.Run("empty user_id", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Post("/branches/:id/access", handler.GrantBranchAccess)
@@ -905,7 +900,7 @@ func TestGrantBranchAccess_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid user_id format", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Post("/branches/:id/access", handler.GrantBranchAccess)
@@ -928,7 +923,7 @@ func TestGrantBranchAccess_Validation(t *testing.T) {
 
 func TestRevokeBranchAccess_Validation(t *testing.T) {
 	t.Run("invalid user_id format", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Delete("/branches/:id/access/:user_id", handler.RevokeBranchAccess)
@@ -943,7 +938,7 @@ func TestRevokeBranchAccess_Validation(t *testing.T) {
 	})
 
 	t.Run("with valid UUID parameters", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
 
 		app.Delete("/branches/:id/access/:user_id", handler.RevokeBranchAccess)
@@ -1059,46 +1054,8 @@ func TestBranchAccessLevels(t *testing.T) {
 	})
 
 	t.Run("access level hierarchy", func(t *testing.T) {
-		// Verify the access level strings
 		assert.Equal(t, "read", string(branching.BranchAccessRead))
 		assert.Equal(t, "write", string(branching.BranchAccessWrite))
 		assert.Equal(t, "admin", string(branching.BranchAccessAdmin))
-	})
-}
-
-// =============================================================================
-// RegisterRoutes Tests
-// =============================================================================
-
-func TestBranchHandler_RegisterRoutes(t *testing.T) {
-	t.Run("routes are registered without panic", func(t *testing.T) {
-		app := fiber.New()
-		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
-
-		// RegisterRoutes should not panic with nil dependencies
-		assert.NotPanics(t, func() {
-			handler.RegisterRoutes(app)
-		})
-	})
-
-	t.Run("all handler methods exist", func(t *testing.T) {
-		handler := NewBranchHandler(nil, nil, config.BranchingConfig{})
-
-		assert.NotNil(t, handler.CreateBranch)
-		assert.NotNil(t, handler.ListBranches)
-		assert.NotNil(t, handler.GetBranch)
-		assert.NotNil(t, handler.DeleteBranch)
-		assert.NotNil(t, handler.ResetBranch)
-		assert.NotNil(t, handler.GetBranchActivity)
-		assert.NotNil(t, handler.GetPoolStats)
-		assert.NotNil(t, handler.GetActiveBranch)
-		assert.NotNil(t, handler.SetActiveBranch)
-		assert.NotNil(t, handler.ResetActiveBranch)
-		assert.NotNil(t, handler.ListGitHubConfigs)
-		assert.NotNil(t, handler.UpsertGitHubConfig)
-		assert.NotNil(t, handler.DeleteGitHubConfig)
-		assert.NotNil(t, handler.ListBranchAccess)
-		assert.NotNil(t, handler.GrantBranchAccess)
-		assert.NotNil(t, handler.RevokeBranchAccess)
 	})
 }

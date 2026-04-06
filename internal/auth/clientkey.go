@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 var (
@@ -194,26 +196,34 @@ func (s *ClientKeyService) ValidateClientKey(ctx context.Context, plaintextKey s
 	return &clientKey, nil
 }
 
-// ListClientKeys lists all client keys (optionally filtered by user)
+// ListClientKeys lists all client keys (optionally filtered by user and tenant)
 func (s *ClientKeyService) ListClientKeys(ctx context.Context, userID *uuid.UUID) ([]ClientKey, error) {
+	// Get tenant from context
+	tenantIDStr := database.TenantFromContext(ctx)
+
 	var query string
 	var args []interface{}
+	argIdx := 1
+
+	// Build query with tenant filtering
+	baseQuery := `
+		SELECT id, name, description, key_hash, key_prefix, user_id, scopes, allowed_namespaces, rate_limit_per_minute, last_used_at, expires_at, revoked_at, created_at, updated_at
+		FROM auth.client_keys
+		WHERE 1=1
+	`
+
+	if tenantIDStr != "" {
+		baseQuery += fmt.Sprintf(" AND tenant_id = $%d", argIdx)
+		args = append(args, tenantIDStr)
+		argIdx++
+	}
 
 	if userID != nil {
-		query = `
-			SELECT id, name, description, key_hash, key_prefix, user_id, scopes, rate_limit_per_minute, last_used_at, expires_at, revoked_at, created_at, updated_at
-			FROM auth.client_keys
-			WHERE user_id = $1
-			ORDER BY created_at DESC
-		`
-		args = []interface{}{userID}
-	} else {
-		query = `
-			SELECT id, name, description, key_hash, key_prefix, user_id, scopes, rate_limit_per_minute, last_used_at, expires_at, revoked_at, created_at, updated_at
-			FROM auth.client_keys
-			ORDER BY created_at DESC
-		`
+		baseQuery += fmt.Sprintf(" AND user_id = $%d", argIdx)
+		args = append(args, *userID)
 	}
+
+	query = baseQuery + " ORDER BY created_at DESC"
 
 	rows, err := s.db.Query(ctx, query, args...)
 	if err != nil {
@@ -232,6 +242,7 @@ func (s *ClientKeyService) ListClientKeys(ctx context.Context, userID *uuid.UUID
 			&clientKey.KeyPrefix,
 			&clientKey.UserID,
 			&clientKey.Scopes,
+			&clientKey.AllowedNamespaces,
 			&clientKey.RateLimitPerMinute,
 			&clientKey.LastUsedAt,
 			&clientKey.ExpiresAt,

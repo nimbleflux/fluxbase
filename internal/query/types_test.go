@@ -12,6 +12,7 @@ import (
 
 func TestFilterOperator_BasicOperators(t *testing.T) {
 	t.Run("comparison operators have expected values", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, FilterOperator("eq"), OpEqual)
 		assert.Equal(t, FilterOperator("neq"), OpNotEqual)
 		assert.Equal(t, FilterOperator("gt"), OpGreaterThan)
@@ -21,16 +22,19 @@ func TestFilterOperator_BasicOperators(t *testing.T) {
 	})
 
 	t.Run("text matching operators have expected values", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, FilterOperator("like"), OpLike)
 		assert.Equal(t, FilterOperator("ilike"), OpILike)
 	})
 
 	t.Run("set operators have expected values", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, FilterOperator("in"), OpIn)
 		assert.Equal(t, FilterOperator("nin"), OpNotIn)
 	})
 
 	t.Run("null operators have expected values", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, FilterOperator("is"), OpIs)
 		assert.Equal(t, FilterOperator("isnot"), OpIsNot)
 	})
@@ -38,6 +42,7 @@ func TestFilterOperator_BasicOperators(t *testing.T) {
 
 func TestFilterOperator_ArrayJsonOperators(t *testing.T) {
 	t.Run("array/jsonb operators have expected values", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, FilterOperator("cs"), OpContains)
 		assert.Equal(t, FilterOperator("cd"), OpContained)
 		assert.Equal(t, FilterOperator("cd"), OpContainedBy) // Alias
@@ -46,6 +51,7 @@ func TestFilterOperator_ArrayJsonOperators(t *testing.T) {
 	})
 
 	t.Run("aliases point to same value", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, OpContained, OpContainedBy)
 		assert.Equal(t, OpOverlap, OpOverlaps)
 	})
@@ -53,6 +59,7 @@ func TestFilterOperator_ArrayJsonOperators(t *testing.T) {
 
 func TestFilterOperator_TextSearchOperators(t *testing.T) {
 	t.Run("full text search operators have expected values", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, FilterOperator("fts"), OpTextSearch)
 		assert.Equal(t, FilterOperator("plfts"), OpPhraseSearch)
 		assert.Equal(t, FilterOperator("wfts"), OpWebSearch)
@@ -61,6 +68,7 @@ func TestFilterOperator_TextSearchOperators(t *testing.T) {
 
 func TestFilterOperator_RangeOperators(t *testing.T) {
 	t.Run("range operators have expected values", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, FilterOperator("not"), OpNot)
 		assert.Equal(t, FilterOperator("adj"), OpAdjacent)
 		assert.Equal(t, FilterOperator("sl"), OpStrictlyLeft)
@@ -72,6 +80,7 @@ func TestFilterOperator_RangeOperators(t *testing.T) {
 
 func TestFilterOperator_PostGISOperators(t *testing.T) {
 	t.Run("PostGIS spatial operators have expected values", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, FilterOperator("st_intersects"), OpSTIntersects)
 		assert.Equal(t, FilterOperator("st_contains"), OpSTContains)
 		assert.Equal(t, FilterOperator("st_within"), OpSTWithin)
@@ -85,6 +94,7 @@ func TestFilterOperator_PostGISOperators(t *testing.T) {
 
 func TestFilterOperator_VectorOperators(t *testing.T) {
 	t.Run("pgvector similarity operators have expected values", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, FilterOperator("vec_l2"), OpVectorL2)
 		assert.Equal(t, FilterOperator("vec_cos"), OpVectorCosine)
 		assert.Equal(t, FilterOperator("vec_ip"), OpVectorIP)
@@ -93,6 +103,7 @@ func TestFilterOperator_VectorOperators(t *testing.T) {
 
 func TestFilterOperator_Distinctness(t *testing.T) {
 	t.Run("all operators are distinct (excluding aliases)", func(t *testing.T) {
+		t.Parallel()
 		// Get all unique operator values (excluding aliases)
 		operators := []FilterOperator{
 			OpEqual, OpNotEqual, OpGreaterThan, OpGreaterOrEqual,
@@ -121,6 +132,7 @@ func TestFilterOperator_Distinctness(t *testing.T) {
 
 func TestFilterOperator_StringConversion(t *testing.T) {
 	t.Run("can convert to string", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, "eq", string(OpEqual))
 		assert.Equal(t, "neq", string(OpNotEqual))
 		assert.Equal(t, "st_intersects", string(OpSTIntersects))
@@ -128,6 +140,7 @@ func TestFilterOperator_StringConversion(t *testing.T) {
 	})
 
 	t.Run("can create from string", func(t *testing.T) {
+		t.Parallel()
 		op := FilterOperator("eq")
 		assert.Equal(t, OpEqual, op)
 
@@ -142,6 +155,7 @@ func TestFilterOperator_StringConversion(t *testing.T) {
 
 func TestFilter_Struct(t *testing.T) {
 	t.Run("all fields accessible", func(t *testing.T) {
+		t.Parallel()
 		filter := Filter{
 			Column:    "age",
 			Operator:  OpGreaterThan,
@@ -158,6 +172,7 @@ func TestFilter_Struct(t *testing.T) {
 	})
 
 	t.Run("zero value filter", func(t *testing.T) {
+		t.Parallel()
 		var filter Filter
 
 		assert.Empty(t, filter.Column)
@@ -168,6 +183,7 @@ func TestFilter_Struct(t *testing.T) {
 	})
 
 	t.Run("filter with nil value", func(t *testing.T) {
+		t.Parallel()
 		filter := Filter{
 			Column:   "deleted_at",
 			Operator: OpIs,
@@ -180,6 +196,7 @@ func TestFilter_Struct(t *testing.T) {
 	})
 
 	t.Run("filter with slice value", func(t *testing.T) {
+		t.Parallel()
 		filter := Filter{
 			Column:   "status",
 			Operator: OpIn,
@@ -194,6 +211,7 @@ func TestFilter_Struct(t *testing.T) {
 	})
 
 	t.Run("filter with OR grouping", func(t *testing.T) {
+		t.Parallel()
 		// Multiple filters in same OR group
 		filter1 := Filter{
 			Column:    "status",
@@ -234,6 +252,7 @@ func TestFilter_DifferentValueTypes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			filter := Filter{
 				Column:   "column",
 				Operator: OpEqual,
@@ -251,6 +270,7 @@ func TestFilter_DifferentValueTypes(t *testing.T) {
 
 func TestOrderBy_Struct(t *testing.T) {
 	t.Run("all fields accessible", func(t *testing.T) {
+		t.Parallel()
 		orderBy := OrderBy{
 			Column:      "created_at",
 			Desc:        true,
@@ -267,6 +287,7 @@ func TestOrderBy_Struct(t *testing.T) {
 	})
 
 	t.Run("zero value orderBy", func(t *testing.T) {
+		t.Parallel()
 		var orderBy OrderBy
 
 		assert.Empty(t, orderBy.Column)
@@ -278,6 +299,7 @@ func TestOrderBy_Struct(t *testing.T) {
 	})
 
 	t.Run("ascending order with nulls first", func(t *testing.T) {
+		t.Parallel()
 		orderBy := OrderBy{
 			Column:     "priority",
 			Desc:       false,
@@ -290,6 +312,7 @@ func TestOrderBy_Struct(t *testing.T) {
 	})
 
 	t.Run("descending order with nulls last", func(t *testing.T) {
+		t.Parallel()
 		orderBy := OrderBy{
 			Column: "updated_at",
 			Desc:   true,
@@ -301,6 +324,7 @@ func TestOrderBy_Struct(t *testing.T) {
 	})
 
 	t.Run("vector similarity ordering", func(t *testing.T) {
+		t.Parallel()
 		embedding := []float32{0.1, 0.2, 0.3, 0.4}
 		orderBy := OrderBy{
 			Column:      "embedding",
@@ -321,6 +345,7 @@ func TestOrderBy_Struct(t *testing.T) {
 
 func TestOperatorCategories(t *testing.T) {
 	t.Run("comparison operators", func(t *testing.T) {
+		t.Parallel()
 		comparisonOps := []FilterOperator{
 			OpEqual, OpNotEqual, OpGreaterThan, OpGreaterOrEqual,
 			OpLessThan, OpLessOrEqual,
@@ -332,6 +357,7 @@ func TestOperatorCategories(t *testing.T) {
 	})
 
 	t.Run("spatial operators start with st_", func(t *testing.T) {
+		t.Parallel()
 		spatialOps := []FilterOperator{
 			OpSTIntersects, OpSTContains, OpSTWithin, OpSTDWithin,
 			OpSTDistance, OpSTTouches, OpSTCrosses, OpSTOverlaps,
@@ -345,6 +371,7 @@ func TestOperatorCategories(t *testing.T) {
 	})
 
 	t.Run("vector operators start with vec_", func(t *testing.T) {
+		t.Parallel()
 		vectorOps := []FilterOperator{
 			OpVectorL2, OpVectorCosine, OpVectorIP,
 		}
@@ -413,6 +440,7 @@ func BenchmarkFilterWithSliceValue(b *testing.B) {
 
 func TestFilter_EdgeCases(t *testing.T) {
 	t.Run("empty column name", func(t *testing.T) {
+		t.Parallel()
 		filter := Filter{
 			Column:   "",
 			Operator: OpEqual,
@@ -423,6 +451,7 @@ func TestFilter_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("empty operator", func(t *testing.T) {
+		t.Parallel()
 		filter := Filter{
 			Column:   "name",
 			Operator: "",
@@ -433,6 +462,7 @@ func TestFilter_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("custom operator string", func(t *testing.T) {
+		t.Parallel()
 		customOp := FilterOperator("custom_op")
 		filter := Filter{
 			Column:   "field",
@@ -444,6 +474,7 @@ func TestFilter_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("complex nested value", func(t *testing.T) {
+		t.Parallel()
 		complexValue := map[string]interface{}{
 			"type": "Point",
 			"coordinates": []float64{
@@ -465,6 +496,7 @@ func TestFilter_EdgeCases(t *testing.T) {
 
 func TestOrderBy_EdgeCases(t *testing.T) {
 	t.Run("empty column name", func(t *testing.T) {
+		t.Parallel()
 		orderBy := OrderBy{
 			Column: "",
 			Desc:   true,
@@ -474,6 +506,7 @@ func TestOrderBy_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("invalid nulls value", func(t *testing.T) {
+		t.Parallel()
 		// The struct doesn't validate, so invalid values are allowed
 		orderBy := OrderBy{
 			Column: "name",
@@ -484,6 +517,7 @@ func TestOrderBy_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("vector ordering without vector value", func(t *testing.T) {
+		t.Parallel()
 		orderBy := OrderBy{
 			Column:   "embedding",
 			VectorOp: OpVectorL2,
@@ -495,6 +529,7 @@ func TestOrderBy_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("deprecated NullsFirst field", func(t *testing.T) {
+		t.Parallel()
 		orderBy := OrderBy{
 			Column:     "priority",
 			NullsFirst: true,

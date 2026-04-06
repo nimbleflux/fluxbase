@@ -12,13 +12,19 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/api"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/database/bootstrap"
+	"github.com/nimbleflux/fluxbase/internal/keys"
+	"github.com/nimbleflux/fluxbase/internal/migrations"
 	"github.com/nimbleflux/fluxbase/internal/storage"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -134,6 +140,7 @@ func main() {
 			os.Exit(1)
 		}
 		log.Info().Msg("Database connection test successful")
+		db.Close() // Close connection after test
 
 		log.Info().Msg("All validation checks passed")
 		if cleanupVips != nil {
@@ -152,24 +159,84 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Defer database close - must be after db is created and before any os.Exit calls
-	// This ensures database is closed on shutdown
-	defer func() {
-		log.Debug().Msg("Closing database connection...")
-		db.Close()
-	}()
-
-	// Run migrations
-	log.Info().Msg("Running database migrations...")
-	if err := db.Migrate(); err != nil {
+	// Run bootstrap (extensions, schemas, roles, default privileges)
+	// This handles operations that pgschema cannot manage
+	log.Info().Msg("Running database bootstrap...")
+	bootstrapConfig := bootstrap.Config{
+		Host:          cfg.Database.Host,
+		Port:          cfg.Database.Port,
+		Database:      cfg.Database.Database,
+		User:          cfg.Database.User,
+		Password:      cfg.Database.Password,
+		AdminUser:     cfg.Database.AdminUser,
+		AdminPassword: cfg.Database.AdminPassword,
+	}
+	bootstrapSvc := bootstrap.NewServiceWithConfig(db.Pool(), bootstrapConfig)
+	if err := bootstrapSvc.EnsureBootstrap(context.Background()); err != nil {
 		if cleanupVips != nil {
 			cleanupVips()
 		}
-		db.Close() // Explicitly close since defer won't run with os.Exit
-		log.Error().Err(err).Msg("Failed to run migrations")
-		os.Exit(1) //nolint:gocritic // cleanup handled explicitly above
+		db.Close()
+		log.Error().Err(err).Msg("Failed to run bootstrap")
+		os.Exit(1)
 	}
-	log.Info().Msg("Database migrations completed successfully")
+	log.Info().Msg("Database bootstrap completed successfully")
+
+	// Apply declarative schema (tables, indexes, functions, policies)
+	// This uses pgschema to apply the internal Fluxbase schema
+	log.Info().Msg("Applying declarative schema...")
+	declarativeConfig := migrations.DeclarativeConfig{
+		SchemaDir:        "internal/database/schema/schemas",
+		Schemas:          migrations.DefaultFluxbaseSchemas,
+		AllowDestructive: false,
+		LockTimeout:      30,
+	}
+	declarativeSvc := migrations.NewDeclarativeService(
+		"pgschema",
+		cfg.Database.Host,
+		cfg.Database.Port,
+		cfg.Database.AdminUser,
+		cfg.Database.AdminPassword,
+		cfg.Database.Database,
+		declarativeConfig,
+	)
+	declarativeSvc.SetPool(db.Pool())
+
+	// Detect migration state for smooth transition from imperative to declarative
+	validator := migrations.NewValidator(declarativeSvc, db.Pool())
+	migrationState, err := validator.DetectMigrationState(context.Background())
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to detect migration state, continuing with startup")
+	}
+
+	// Determine source based on migration state
+	// - "fresh_install": New installation with no prior migrations
+	// - "transitioned": Existing installation with imperative migrations
+	// - "schema_apply": Default when state is unknown
+	source := "fresh_install"
+	if migrationState != nil && migrationState.HasImperativeMigrations && !migrationState.HasDeclarativeState {
+		// Existing installation detected - log and proceed with declarative
+		// Note: Dirty migrations are not blocking - declarative system compares
+		// actual DB state to desired state regardless of how it got there
+		log.Info().
+			Int64("last_migration_version", migrationState.LastAppliedVersion).
+			Bool("had_dirty_migrations", migrationState.HasDirtyMigrations).
+			Msg("Detected existing installation with imperative migrations - proceeding with declarative schema")
+		source = "transitioned"
+	} else if migrationState != nil && migrationState.HasDeclarativeState {
+		// Already using declarative system
+		source = "schema_apply"
+	}
+
+	if err := declarativeSvc.ApplyDeclarativeWithSource(context.Background(), source); err != nil {
+		if cleanupVips != nil {
+			cleanupVips()
+		}
+		db.Close()
+		log.Error().Err(err).Msg("Failed to apply declarative schema")
+		os.Exit(1)
+	}
+	log.Info().Str("source", source).Msg("Declarative schema applied successfully")
 
 	// Recreate the pool after migrations to clear any stale prepared statement cache
 	// Migrations can invalidate cached statement plans, causing panics in pgx
@@ -180,8 +247,27 @@ func main() {
 		log.Warn().Err(err).Msg("Failed to recreate connection pool, continuing with existing pool")
 	}
 
+	// Ensure default tenant and service keys exist
+	log.Info().Msg("Initializing default tenant and service keys...")
+	if err := ensureDefaultTenantAndKeys(db.Pool(), cfg); err != nil {
+		log.Warn().Err(err).Msg("Failed to initialize default tenant and keys - continuing startup")
+	}
+
+	// Initialize tenant config loader for multi-tenant configuration overrides
+	tenantConfigLoader, err := config.NewTenantConfigLoader(cfg)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to load tenant configurations")
+	}
+	log.Info().
+		Int("tenant_configs", len(tenantConfigLoader.GetLoadedSlugs())).
+		Str("config_dir", cfg.Tenants.ConfigDir).
+		Msg("Tenant configuration loader initialized")
+
 	// Initialize API server
 	server := api.NewServer(cfg, db, Version)
+
+	// Set tenant config loader for multi-tenant config overrides
+	server.SetTenantConfigLoader(tenantConfigLoader)
 
 	// Generate and set service role and anon keys for edge functions
 	// These are JWT tokens that edge functions can use to call the Fluxbase API
@@ -196,8 +282,11 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to create JWT manager")
 	}
 
+	// Get default tenant ID for JWT claims
+	defaultTenantID := getDefaultTenantID(db.Pool())
+
 	// Generate service role token (full admin access, bypasses RLS)
-	serviceRoleKey, err := jwtManager.GenerateServiceRoleToken()
+	serviceRoleKey, err := jwtManager.GenerateServiceRoleTokenWithTenant(defaultTenantID)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to generate service role key")
 	} else {
@@ -208,7 +297,7 @@ func main() {
 	}
 
 	// Generate anon token (public access)
-	anonKey, err := jwtManager.GenerateAnonToken()
+	anonKey, err := jwtManager.GenerateAnonTokenWithTenant(defaultTenantID)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to generate anon key")
 	} else {
@@ -304,6 +393,11 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error().Err(err).Msg("Graceful shutdown failed")
 	}
+
+	// Close database connection AFTER server shutdown completes
+	// This ensures all workers and background services have stopped
+	log.Debug().Msg("Closing database connection...")
+	db.Close()
 
 	log.Info().Msg("Server exited")
 
@@ -442,4 +536,211 @@ func getEmailProviderInfo(email config.EmailConfig) string {
 		return fmt.Sprintf("smtp (%s:%d)", email.SMTPHost, email.SMTPPort)
 	}
 	return email.Provider
+}
+
+// ensureDefaultTenantAndKeys ensures the default tenant and service keys exist
+func ensureDefaultTenantAndKeys(pool *pgxpool.Pool, cfg *config.Config) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var tenantID uuid.UUID
+	var tenantExists bool
+
+	// Check if default tenant exists
+	err := pool.QueryRow(ctx,
+		"SELECT id, true FROM platform.tenants WHERE slug = 'default' AND deleted_at IS NULL",
+	).Scan(&tenantID, &tenantExists)
+	if err != nil && err.Error() != "no rows in result set" {
+		// Try alternative error check for pgx
+		if !isNoRowsError(err) {
+			return fmt.Errorf("failed to check for default tenant: %w", err)
+		}
+	}
+
+	if !tenantExists {
+		// Create default tenant
+		tenantName := cfg.Tenants.Default.Name
+		if tenantName == "" {
+			tenantName = "Default"
+		}
+
+		err := pool.QueryRow(ctx,
+			"INSERT INTO platform.tenants (slug, name, is_default) VALUES ('default', $1, true) RETURNING id",
+			tenantName,
+		).Scan(&tenantID)
+		if err != nil {
+			return fmt.Errorf("failed to create default tenant: %w", err)
+		}
+		log.Info().Str("id", tenantID.String()).Msg("Created default tenant")
+	} else {
+		log.Debug().Str("id", tenantID.String()).Msg("Default tenant already exists")
+	}
+
+	// Handle service key
+	if err := ensureServiceKey(ctx, pool, cfg, tenantID, keys.KeyTypeTenantService); err != nil {
+		return fmt.Errorf("failed to ensure service key: %w", err)
+	}
+
+	// Handle anon key
+	if err := ensureServiceKey(ctx, pool, cfg, tenantID, keys.KeyTypeAnon); err != nil {
+		return fmt.Errorf("failed to ensure anon key: %w", err)
+	}
+
+	return nil
+}
+
+// ensureServiceKey ensures a service key exists for the given type
+// For database-per-tenant, keys are stored in auth.service_keys in the tenant's database
+func ensureServiceKey(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, tenantID uuid.UUID, keyType string) error {
+	var configKey string
+	var keyName string
+
+	switch keyType {
+	case keys.KeyTypeTenantService:
+		configKey = cfg.Tenants.Default.ServiceKey
+		if cfg.Tenants.Default.ServiceKeyFile != "" {
+			if data, err := os.ReadFile(cfg.Tenants.Default.ServiceKeyFile); err == nil {
+				configKey = strings.TrimSpace(string(data))
+			} else {
+				log.Warn().Err(err).Str("file", cfg.Tenants.Default.ServiceKeyFile).Msg("Failed to read service key file")
+			}
+		}
+		keyName = "Default Service Key"
+	case keys.KeyTypeAnon:
+		configKey = cfg.Tenants.Default.AnonKey
+		if cfg.Tenants.Default.AnonKeyFile != "" {
+			if data, err := os.ReadFile(cfg.Tenants.Default.AnonKeyFile); err == nil {
+				configKey = strings.TrimSpace(string(data))
+			} else {
+				log.Warn().Err(err).Str("file", cfg.Tenants.Default.AnonKeyFile).Msg("Failed to read anon key file")
+			}
+		}
+		keyName = "Default Anon Key"
+	default:
+		return fmt.Errorf("unsupported key type: %s", keyType)
+	}
+
+	// Check for existing key of this type in auth.service_keys
+	var existingKeyID uuid.UUID
+	var existingKeyHash string
+	err := pool.QueryRow(ctx,
+		"SELECT id, key_hash FROM auth.service_keys WHERE key_type = $1 AND enabled = true AND revoked_at IS NULL",
+		keyType,
+	).Scan(&existingKeyID, &existingKeyHash)
+	hasExistingKey := err == nil
+
+	if configKey != "" {
+		// Config-managed key provided
+		keyHash, err := keys.HashKey(configKey)
+		if err != nil {
+			return fmt.Errorf("failed to hash config key: %w", err)
+		}
+
+		if hasExistingKey {
+			// Check if hash matches
+			if keys.VerifyKey(configKey, existingKeyHash) {
+				log.Debug().Str("type", keyType).Msg("Config-managed key already stored")
+				return nil
+			}
+			// Key changed, disable old and create new
+			_, err := pool.Exec(ctx,
+				"UPDATE auth.service_keys SET enabled = false WHERE id = $1",
+				existingKeyID,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to disable old key: %w", err)
+			}
+		}
+
+		// Insert new config-managed key
+		keyPrefix := keys.ExtractPrefix(configKey)
+		_, err = pool.Exec(ctx,
+			`INSERT INTO auth.service_keys 
+			(name, key_hash, key_prefix, key_type, enabled, scopes, rate_limit_per_minute)
+			VALUES ($1, $2, $3, $4, true, $5, $6)`,
+			keyName, keyHash, keyPrefix, keyType, getDefaultScopes(keyType), getDefaultRateLimit(keyType),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert config-managed key: %w", err)
+		}
+
+		log.Info().Str("type", keyType).Msg("Stored config-managed key")
+		return nil
+	}
+
+	// No config key provided
+	if hasExistingKey {
+		log.Debug().Str("type", keyType).Msg("Service key already exists")
+		return nil
+	}
+
+	// Generate new key
+	fullKey, keyHash, keyPrefix, err := keys.GenerateKey(keyType)
+	if err != nil {
+		return fmt.Errorf("failed to generate key: %w", err)
+	}
+
+	// Insert generated key
+	_, err = pool.Exec(ctx,
+		`INSERT INTO auth.service_keys 
+		(name, key_hash, key_prefix, key_type, enabled, scopes, rate_limit_per_minute)
+		VALUES ($1, $2, $3, $4, true, $5, $6)`,
+		keyName, keyHash, keyPrefix, keyType, getDefaultScopes(keyType), getDefaultRateLimit(keyType),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert generated key: %w", err)
+	}
+
+	// Display generated key once at WARN level for visibility
+	log.Warn().
+		Str("type", keyType).
+		Str("key", fullKey).
+		Msg("Generated new service key - save this key securely, it will not be shown again")
+
+	return nil
+}
+
+// getDefaultScopes returns default scopes for a key type
+func getDefaultScopes(keyType string) []string {
+	switch keyType {
+	case keys.KeyTypeTenantService:
+		return []string{"*"}
+	case keys.KeyTypeAnon:
+		return []string{"read"}
+	default:
+		return []string{}
+	}
+}
+
+// getDefaultRateLimit returns default rate limit for a key type
+func getDefaultRateLimit(keyType string) int {
+	switch keyType {
+	case keys.KeyTypeTenantService:
+		return 10000
+	case keys.KeyTypeAnon:
+		return 60
+	default:
+		return 60
+	}
+}
+
+// getDefaultTenantID returns the default tenant ID
+func getDefaultTenantID(pool *pgxpool.Pool) *string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var tenantID string
+	err := pool.QueryRow(ctx,
+		"SELECT id::text FROM platform.tenants WHERE slug = 'default' AND deleted_at IS NULL",
+	).Scan(&tenantID)
+	if err != nil {
+		log.Debug().Err(err).Msg("Failed to get default tenant ID")
+		return nil
+	}
+	return &tenantID
+}
+
+// isNoRowsError checks if the error is a "no rows" error
+func isNoRowsError(err error) bool {
+	return err != nil && (err.Error() == "no rows in result set" || strings.Contains(err.Error(), "no rows"))
 }

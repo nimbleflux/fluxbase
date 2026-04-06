@@ -2,54 +2,58 @@
  * HTTP client for making requests to the Fluxbase API
  */
 
-import type { FluxbaseError, HttpMethod } from './types'
+import type { FluxbaseError, HttpMethod } from "./types";
 
 export interface FetchOptions {
-  method: HttpMethod
-  headers?: Record<string, string>
-  body?: unknown
-  timeout?: number
+  method: HttpMethod;
+  headers?: Record<string, string>;
+  body?: unknown;
+  timeout?: number;
   /** Skip automatic token refresh on 401 (used for auth endpoints) */
-  skipAutoRefresh?: boolean
+  skipAutoRefresh?: boolean;
 }
 
 /**
  * Response with headers included (for count queries)
  */
 export interface FetchResponseWithHeaders<T> {
-  data: T
-  headers: Headers
-  status: number
+  data: T;
+  headers: Headers;
+  status: number;
 }
 
 /** Callback type for automatic token refresh on 401 errors */
-export type RefreshTokenCallback = () => Promise<boolean>
+export type RefreshTokenCallback = () => Promise<boolean>;
+
+/** Callback type for modifying headers before each request */
+export type BeforeRequestCallback = (headers: Record<string, string>) => void;
 
 export class FluxbaseFetch {
-  private baseUrl: string
-  private defaultHeaders: Record<string, string>
-  private timeout: number
-  private debug: boolean
-  private refreshTokenCallback: RefreshTokenCallback | null = null
-  private isRefreshing = false
-  private refreshPromise: Promise<boolean> | null = null
-  private anonKey: string | null = null
+  private baseUrl: string;
+  private defaultHeaders: Record<string, string>;
+  private timeout: number;
+  private debug: boolean;
+  private refreshTokenCallback: RefreshTokenCallback | null = null;
+  private isRefreshing = false;
+  private refreshPromise: Promise<boolean> | null = null;
+  private anonKey: string | null = null;
+  private beforeRequestCallback: BeforeRequestCallback | null = null;
 
   constructor(
     baseUrl: string,
     options: {
-      headers?: Record<string, string>
-      timeout?: number
-      debug?: boolean
-    } = {}
+      headers?: Record<string, string>;
+      timeout?: number;
+      debug?: boolean;
+    } = {},
   ) {
-    this.baseUrl = baseUrl.replace(/\/$/, '') // Remove trailing slash
+    this.baseUrl = baseUrl.replace(/\/$/, ""); // Remove trailing slash
     this.defaultHeaders = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...options.headers,
-    }
-    this.timeout = options.timeout ?? 30000
-    this.debug = options.debug ?? false
+    };
+    this.timeout = options.timeout ?? 30000;
+    this.debug = options.debug ?? false;
   }
 
   /**
@@ -57,7 +61,16 @@ export class FluxbaseFetch {
    * The callback should return true if refresh was successful, false otherwise
    */
   setRefreshTokenCallback(callback: RefreshTokenCallback | null) {
-    this.refreshTokenCallback = callback
+    this.refreshTokenCallback = callback;
+  }
+
+  /**
+   * Register a callback to be called before every request.
+   * The callback receives the headers object and can modify it in place.
+   * This is useful for dynamically injecting headers at request time.
+   */
+  setBeforeRequestCallback(callback: BeforeRequestCallback | null) {
+    this.beforeRequestCallback = callback;
   }
 
   /**
@@ -66,7 +79,7 @@ export class FluxbaseFetch {
    * restored to use this anon key instead of being deleted
    */
   setAnonKey(key: string) {
-    this.anonKey = key
+    this.anonKey = key;
   }
 
   /**
@@ -75,20 +88,34 @@ export class FluxbaseFetch {
    */
   setAuthToken(token: string | null) {
     if (token) {
-      this.defaultHeaders['Authorization'] = `Bearer ${token}`
+      this.defaultHeaders["Authorization"] = `Bearer ${token}`;
     } else if (this.anonKey) {
       // Restore anon key auth instead of deleting header
-      this.defaultHeaders['Authorization'] = `Bearer ${this.anonKey}`
+      this.defaultHeaders["Authorization"] = `Bearer ${this.anonKey}`;
     } else {
-      delete this.defaultHeaders['Authorization']
+      delete this.defaultHeaders["Authorization"];
     }
+  }
+
+  /**
+   * Set a custom header on all requests
+   */
+  setHeader(name: string, value: string) {
+    this.defaultHeaders[name] = value;
+  }
+
+  /**
+   * Remove a custom header
+   */
+  removeHeader(name: string) {
+    delete this.defaultHeaders[name];
   }
 
   /**
    * Make an HTTP request
    */
   async request<T = unknown>(path: string, options: FetchOptions): Promise<T> {
-    return this.requestInternal<T>(path, options, false)
+    return this.requestInternal<T>(path, options, false);
   }
 
   /**
@@ -97,53 +124,67 @@ export class FluxbaseFetch {
   private async requestInternal<T = unknown>(
     path: string,
     options: FetchOptions,
-    isRetry: boolean
+    isRetry: boolean,
   ): Promise<T> {
-    const url = `${this.baseUrl}${path}`
-    const headers = { ...this.defaultHeaders, ...options.headers }
+    const url = `${this.baseUrl}${path}`;
+    const headers = { ...this.defaultHeaders, ...options.headers };
+    if (this.beforeRequestCallback) {
+      this.beforeRequestCallback(headers);
+    }
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), options.timeout ?? this.timeout)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      options.timeout ?? this.timeout,
+    );
 
     if (this.debug) {
-      console.log(`[Fluxbase SDK] ${options.method} ${url}`, options.body)
+      console.log(`[Fluxbase SDK] ${options.method} ${url}`, options.body);
     }
 
     try {
       // Determine if body is FormData (needs special handling for multipart uploads)
       // Use constructor.name check for cross-runtime compatibility (Deno, Node, Browser)
       // instanceof can fail across different realms/contexts in bundled IIFE code
-      const isFormData = options.body &&
-        (options.body.constructor?.name === 'FormData' || options.body instanceof FormData);
+      const isFormData =
+        options.body &&
+        (options.body.constructor?.name === "FormData" ||
+          options.body instanceof FormData);
 
       // For FormData, omit Content-Type to let runtime set multipart/form-data with boundary
       const requestHeaders = isFormData
         ? Object.fromEntries(
-            Object.entries(headers).filter(([key]) => key.toLowerCase() !== 'content-type')
+            Object.entries(headers).filter(
+              ([key]) => key.toLowerCase() !== "content-type",
+            ),
           )
         : headers;
 
       const response = await fetch(url, {
         method: options.method,
         headers: requestHeaders,
-        body: isFormData ? (options.body as FormData) : (options.body ? JSON.stringify(options.body) : undefined),
+        body: isFormData
+          ? (options.body as FormData)
+          : options.body
+            ? JSON.stringify(options.body)
+            : undefined,
         signal: controller.signal,
-      })
+      });
 
-      clearTimeout(timeoutId)
+      clearTimeout(timeoutId);
 
       // Parse response
-      const contentType = response.headers.get('content-type')
-      let data: unknown
+      const contentType = response.headers.get("content-type");
+      let data: unknown;
 
-      if (contentType?.includes('application/json')) {
-        data = await response.json()
+      if (contentType?.includes("application/json")) {
+        data = await response.json();
       } else {
-        data = await response.text()
+        data = await response.text();
       }
 
       if (this.debug) {
-        console.log(`[Fluxbase SDK] Response:`, response.status, data)
+        console.log(`[Fluxbase SDK] Response:`, response.status, data);
       }
 
       // Handle 401 errors with automatic token refresh
@@ -153,42 +194,42 @@ export class FluxbaseFetch {
         !options.skipAutoRefresh &&
         this.refreshTokenCallback
       ) {
-        const refreshSuccess = await this.handleTokenRefresh()
+        const refreshSuccess = await this.handleTokenRefresh();
         if (refreshSuccess) {
           // Retry the request with the new token
-          return this.requestInternal<T>(path, options, true)
+          return this.requestInternal<T>(path, options, true);
         }
       }
 
       // Handle errors
       if (!response.ok) {
         const error = new Error(
-          typeof data === 'object' && data && 'error' in data
+          typeof data === "object" && data && "error" in data
             ? String(data.error)
-            : response.statusText
-        ) as FluxbaseError
+            : response.statusText,
+        ) as FluxbaseError;
 
-        error.status = response.status
-        error.details = data
+        error.status = response.status;
+        error.details = data;
 
-        throw error
+        throw error;
       }
 
-      return data as T
+      return data as T;
     } catch (err) {
-      clearTimeout(timeoutId)
+      clearTimeout(timeoutId);
 
       if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-          const timeoutError = new Error('Request timeout') as FluxbaseError
-          timeoutError.status = 408
-          throw timeoutError
+        if (err.name === "AbortError") {
+          const timeoutError = new Error("Request timeout") as FluxbaseError;
+          timeoutError.status = 408;
+          throw timeoutError;
         }
 
-        throw err
+        throw err;
       }
 
-      throw new Error('Unknown error occurred')
+      throw new Error("Unknown error occurred");
     }
   }
 
@@ -199,17 +240,17 @@ export class FluxbaseFetch {
   private async handleTokenRefresh(): Promise<boolean> {
     // If already refreshing, wait for the existing refresh to complete
     if (this.isRefreshing && this.refreshPromise) {
-      return this.refreshPromise
+      return this.refreshPromise;
     }
 
-    this.isRefreshing = true
-    this.refreshPromise = this.executeRefresh()
+    this.isRefreshing = true;
+    this.refreshPromise = this.executeRefresh();
 
     try {
-      return await this.refreshPromise
+      return await this.refreshPromise;
     } finally {
-      this.isRefreshing = false
-      this.refreshPromise = null
+      this.isRefreshing = false;
+      this.refreshPromise = null;
     }
   }
 
@@ -218,45 +259,62 @@ export class FluxbaseFetch {
    */
   private async executeRefresh(): Promise<boolean> {
     if (!this.refreshTokenCallback) {
-      return false
+      return false;
     }
 
     try {
-      return await this.refreshTokenCallback()
+      return await this.refreshTokenCallback();
     } catch (error) {
       if (this.debug) {
-        console.error('[Fluxbase SDK] Token refresh failed:', error)
+        console.error("[Fluxbase SDK] Token refresh failed:", error);
       }
-      return false
+      return false;
     }
   }
 
   /**
    * GET request
    */
-  async get<T = unknown>(path: string, options: Omit<FetchOptions, 'method'> = {}): Promise<T> {
-    return this.request<T>(path, { ...options, method: 'GET' })
+  async get<T = unknown>(
+    path: string,
+    options: Omit<FetchOptions, "method"> = {},
+  ): Promise<T> {
+    return this.request<T>(path, { ...options, method: "GET" });
   }
 
   /**
    * GET request that returns response with headers (for count queries)
    */
-  async getWithHeaders<T = unknown>(path: string, options: Omit<FetchOptions, 'method'> = {}): Promise<FetchResponseWithHeaders<T>> {
-    return this.requestWithHeaders<T>(path, { ...options, method: 'GET' })
+  async getWithHeaders<T = unknown>(
+    path: string,
+    options: Omit<FetchOptions, "method"> = {},
+  ): Promise<FetchResponseWithHeaders<T>> {
+    return this.requestWithHeaders<T>(path, { ...options, method: "GET" });
   }
 
   /**
    * POST request that returns response with headers (for POST-based queries with count)
    */
-  async postWithHeaders<T = unknown>(path: string, body?: unknown, options: Omit<FetchOptions, 'method' | 'body'> = {}): Promise<FetchResponseWithHeaders<T>> {
-    return this.requestWithHeaders<T>(path, { ...options, method: 'POST', body })
+  async postWithHeaders<T = unknown>(
+    path: string,
+    body?: unknown,
+    options: Omit<FetchOptions, "method" | "body"> = {},
+  ): Promise<FetchResponseWithHeaders<T>> {
+    return this.requestWithHeaders<T>(path, {
+      ...options,
+      method: "POST",
+      body,
+    });
   }
 
   /**
    * Make an HTTP request and return response with headers
    */
-  async requestWithHeaders<T = unknown>(path: string, options: FetchOptions): Promise<FetchResponseWithHeaders<T>> {
-    return this.requestWithHeadersInternal<T>(path, options, false)
+  async requestWithHeaders<T = unknown>(
+    path: string,
+    options: FetchOptions,
+  ): Promise<FetchResponseWithHeaders<T>> {
+    return this.requestWithHeadersInternal<T>(path, options, false);
   }
 
   /**
@@ -265,53 +323,67 @@ export class FluxbaseFetch {
   private async requestWithHeadersInternal<T = unknown>(
     path: string,
     options: FetchOptions,
-    isRetry: boolean
+    isRetry: boolean,
   ): Promise<FetchResponseWithHeaders<T>> {
-    const url = `${this.baseUrl}${path}`
-    const headers = { ...this.defaultHeaders, ...options.headers }
+    const url = `${this.baseUrl}${path}`;
+    const headers = { ...this.defaultHeaders, ...options.headers };
+    if (this.beforeRequestCallback) {
+      this.beforeRequestCallback(headers);
+    }
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), options.timeout ?? this.timeout)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      options.timeout ?? this.timeout,
+    );
 
     if (this.debug) {
-      console.log(`[Fluxbase SDK] ${options.method} ${url}`, options.body)
+      console.log(`[Fluxbase SDK] ${options.method} ${url}`, options.body);
     }
 
     try {
       // Determine if body is FormData (needs special handling for multipart uploads)
       // Use constructor.name check for cross-runtime compatibility (Deno, Node, Browser)
       // instanceof can fail across different realms/contexts in bundled IIFE code
-      const isFormData = options.body &&
-        (options.body.constructor?.name === 'FormData' || options.body instanceof FormData);
+      const isFormData =
+        options.body &&
+        (options.body.constructor?.name === "FormData" ||
+          options.body instanceof FormData);
 
       // For FormData, omit Content-Type to let runtime set multipart/form-data with boundary
       const requestHeaders = isFormData
         ? Object.fromEntries(
-            Object.entries(headers).filter(([key]) => key.toLowerCase() !== 'content-type')
+            Object.entries(headers).filter(
+              ([key]) => key.toLowerCase() !== "content-type",
+            ),
           )
         : headers;
 
       const response = await fetch(url, {
         method: options.method,
         headers: requestHeaders,
-        body: isFormData ? (options.body as FormData) : (options.body ? JSON.stringify(options.body) : undefined),
+        body: isFormData
+          ? (options.body as FormData)
+          : options.body
+            ? JSON.stringify(options.body)
+            : undefined,
         signal: controller.signal,
-      })
+      });
 
-      clearTimeout(timeoutId)
+      clearTimeout(timeoutId);
 
       // Parse response
-      const contentType = response.headers.get('content-type')
-      let data: unknown
+      const contentType = response.headers.get("content-type");
+      let data: unknown;
 
-      if (contentType?.includes('application/json')) {
-        data = await response.json()
+      if (contentType?.includes("application/json")) {
+        data = await response.json();
       } else {
-        data = await response.text()
+        data = await response.text();
       }
 
       if (this.debug) {
-        console.log(`[Fluxbase SDK] Response:`, response.status, data)
+        console.log(`[Fluxbase SDK] Response:`, response.status, data);
       }
 
       // Handle 401 errors with automatic token refresh
@@ -321,137 +393,167 @@ export class FluxbaseFetch {
         !options.skipAutoRefresh &&
         this.refreshTokenCallback
       ) {
-        const refreshSuccess = await this.handleTokenRefresh()
+        const refreshSuccess = await this.handleTokenRefresh();
         if (refreshSuccess) {
           // Retry the request with the new token
-          return this.requestWithHeadersInternal<T>(path, options, true)
+          return this.requestWithHeadersInternal<T>(path, options, true);
         }
       }
 
       // Handle errors
       if (!response.ok) {
         const error = new Error(
-          typeof data === 'object' && data && 'error' in data
+          typeof data === "object" && data && "error" in data
             ? String(data.error)
-            : response.statusText
-        ) as FluxbaseError
+            : response.statusText,
+        ) as FluxbaseError;
 
-        error.status = response.status
-        error.details = data
+        error.status = response.status;
+        error.details = data;
 
-        throw error
+        throw error;
       }
 
       return {
         data: data as T,
         headers: response.headers,
         status: response.status,
-      }
+      };
     } catch (err) {
-      clearTimeout(timeoutId)
+      clearTimeout(timeoutId);
 
       if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-          const timeoutError = new Error('Request timeout') as FluxbaseError
-          timeoutError.status = 408
-          throw timeoutError
+        if (err.name === "AbortError") {
+          const timeoutError = new Error("Request timeout") as FluxbaseError;
+          timeoutError.status = 408;
+          throw timeoutError;
         }
 
-        throw err
+        throw err;
       }
 
-      throw new Error('Unknown error occurred')
+      throw new Error("Unknown error occurred");
     }
   }
 
   /**
    * POST request
    */
-  async post<T = unknown>(path: string, body?: unknown, options: Omit<FetchOptions, 'method' | 'body'> = {}): Promise<T> {
-    return this.request<T>(path, { ...options, method: 'POST', body })
+  async post<T = unknown>(
+    path: string,
+    body?: unknown,
+    options: Omit<FetchOptions, "method" | "body"> = {},
+  ): Promise<T> {
+    return this.request<T>(path, { ...options, method: "POST", body });
   }
 
   /**
    * PUT request
    */
-  async put<T = unknown>(path: string, body?: unknown, options: Omit<FetchOptions, 'method' | 'body'> = {}): Promise<T> {
-    return this.request<T>(path, { ...options, method: 'PUT', body })
+  async put<T = unknown>(
+    path: string,
+    body?: unknown,
+    options: Omit<FetchOptions, "method" | "body"> = {},
+  ): Promise<T> {
+    return this.request<T>(path, { ...options, method: "PUT", body });
   }
 
   /**
    * PATCH request
    */
-  async patch<T = unknown>(path: string, body?: unknown, options: Omit<FetchOptions, 'method' | 'body'> = {}): Promise<T> {
-    return this.request<T>(path, { ...options, method: 'PATCH', body })
+  async patch<T = unknown>(
+    path: string,
+    body?: unknown,
+    options: Omit<FetchOptions, "method" | "body"> = {},
+  ): Promise<T> {
+    return this.request<T>(path, { ...options, method: "PATCH", body });
   }
 
   /**
    * DELETE request
    */
-  async delete<T = unknown>(path: string, options: Omit<FetchOptions, 'method'> = {}): Promise<T> {
-    return this.request<T>(path, { ...options, method: 'DELETE' })
+  async delete<T = unknown>(
+    path: string,
+    options: Omit<FetchOptions, "method"> = {},
+  ): Promise<T> {
+    return this.request<T>(path, { ...options, method: "DELETE" });
   }
 
   /**
    * HEAD request
    */
-  async head(path: string, options: Omit<FetchOptions, 'method'> = {}): Promise<Headers> {
-    const url = `${this.baseUrl}${path}`
-    const headers = { ...this.defaultHeaders, ...options.headers }
+  async head(
+    path: string,
+    options: Omit<FetchOptions, "method"> = {},
+  ): Promise<Headers> {
+    const url = `${this.baseUrl}${path}`;
+    const headers = { ...this.defaultHeaders, ...options.headers };
+    if (this.beforeRequestCallback) {
+      this.beforeRequestCallback(headers);
+    }
 
     const response = await fetch(url, {
-      method: 'HEAD',
+      method: "HEAD",
       headers,
-    })
+    });
 
-    return response.headers
+    return response.headers;
   }
 
   /**
    * GET request that returns response as Blob (for file downloads)
    */
-  async getBlob(path: string, options: Omit<FetchOptions, 'method'> = {}): Promise<Blob> {
-    const url = `${this.baseUrl}${path}`
-    const headers = { ...this.defaultHeaders, ...options.headers }
+  async getBlob(
+    path: string,
+    options: Omit<FetchOptions, "method"> = {},
+  ): Promise<Blob> {
+    const url = `${this.baseUrl}${path}`;
+    const headers = { ...this.defaultHeaders, ...options.headers };
+    if (this.beforeRequestCallback) {
+      this.beforeRequestCallback(headers);
+    }
     // Remove Content-Type for blob downloads
-    delete headers['Content-Type']
+    delete headers["Content-Type"];
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), options.timeout ?? this.timeout)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      options.timeout ?? this.timeout,
+    );
 
     if (this.debug) {
-      console.log(`[Fluxbase SDK] GET (blob) ${url}`)
+      console.log(`[Fluxbase SDK] GET (blob) ${url}`);
     }
 
     try {
       const response = await fetch(url, {
-        method: 'GET',
+        method: "GET",
         headers,
         signal: controller.signal,
-      })
+      });
 
-      clearTimeout(timeoutId)
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const error = new Error(response.statusText) as FluxbaseError
-        error.status = response.status
-        throw error
+        const error = new Error(response.statusText) as FluxbaseError;
+        error.status = response.status;
+        throw error;
       }
 
-      return await response.blob()
+      return await response.blob();
     } catch (err) {
-      clearTimeout(timeoutId)
+      clearTimeout(timeoutId);
 
       if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-          const timeoutError = new Error('Request timeout') as FluxbaseError
-          timeoutError.status = 408
-          throw timeoutError
+        if (err.name === "AbortError") {
+          const timeoutError = new Error("Request timeout") as FluxbaseError;
+          timeoutError.status = 408;
+          throw timeoutError;
         }
-        throw err
+        throw err;
       }
 
-      throw new Error('Unknown error occurred')
+      throw new Error("Unknown error occurred");
     }
   }
 }

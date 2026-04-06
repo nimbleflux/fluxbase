@@ -18,6 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libvips-dev \
     # Graphviz for rendering dependency graphs
     graphviz \
+    # Hex dump utility
+    xxd \
+    # Browser for MCP-based debugging
+    firefox-esr \
     && rm -rf /var/lib/apt/lists/* \
     && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
     && locale-gen en_US.UTF-8 \
@@ -36,9 +40,19 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 
 # =============================================================================
-# LAYER 3: Bun runtime (includes Node.js compatibility, rarely changes)
+# LAYER 3: Node.js runtime (for Astro docs and other Node.js tools)
 # =============================================================================
-ARG BUN_VERSION=1.2.15
+ARG NODE_VERSION=22
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && node --version \
+    && npm --version
+
+# =============================================================================
+# LAYER 4: Bun runtime (includes Node.js compatibility, rarely changes)
+# =============================================================================
+ARG BUN_VERSION=1.3.11
 ENV BUN_INSTALL=/home/vscode/.bun
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then BUN_ARCH="x64"; \
@@ -54,7 +68,7 @@ RUN ARCH=$(uname -m) && \
     && bun --version
 
 # =============================================================================
-# LAYER 4: Pinned runtime versions (changes when you update versions)
+# LAYER 5: Pinned runtime versions (changes when you update versions)
 # =============================================================================
 # Pin Deno version instead of latest
 ARG DENO_VERSION=2.7.4
@@ -69,7 +83,19 @@ RUN ARCH=$(dpkg --print-architecture) \
     && deno --version
 
 # =============================================================================
-# LAYER 5: Create user (rarely changes)
+# LAYER 6: pgschema - Declarative schema migration tool
+# =============================================================================
+ARG PGSCHEMA_VERSION=1.7.4
+RUN ARCH=$(dpkg --print-architecture) \
+    && if [ "$ARCH" = "amd64" ]; then PGSCHEMA_ARCH="linux-amd64"; \
+    elif [ "$ARCH" = "arm64" ]; then PGSCHEMA_ARCH="linux-arm64"; \
+    else echo "Unsupported architecture: $ARCH" && exit 1; fi \
+    && curl -fsSL "https://github.com/pgplex/pgschema/releases/download/v${PGSCHEMA_VERSION}/pgschema-${PGSCHEMA_VERSION}-${PGSCHEMA_ARCH}" -o /usr/local/bin/pgschema \
+    && chmod +x /usr/local/bin/pgschema \
+    && pgschema --help > /dev/null 2>&1 || echo "pgschema installed"
+
+# =============================================================================
+# LAYER 7: Create user (rarely changes)
 # =============================================================================
 ARG USERNAME=vscode
 ARG USER_UID=1000
@@ -81,7 +107,7 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
 # =============================================================================
-# LAYER 6: User setup - global tools (moderately stable)
+# LAYER 7: User setup - global tools (moderately stable)
 # =============================================================================
 USER $USERNAME
 ENV SHELL=/bin/bash \
@@ -102,14 +128,14 @@ RUN bun install -g \
     serve@14
 
 # =============================================================================
-# LAYER 7: Go tools (pin versions for cache stability)
+# LAYER 8: Go tools (pin versions for cache stability)
 # =============================================================================
 USER root
 
 # Go tools with pinned versions
 RUN go install -v golang.org/x/tools/gopls@latest \
     && go install -v github.com/go-delve/delve/cmd/dlv@latest \
-    && go install -v github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.10.0 \
+    && go install -v github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest \
     && go install -v github.com/air-verse/air@latest \
     && go install -v -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
     && go install -v github.com/swaggo/swag/cmd/swag@latest \
@@ -126,10 +152,11 @@ RUN go install -v golang.org/x/tools/gopls@latest \
     && go install -v github.com/ofabry/go-callvis@latest \
     && go install -v github.com/kisielk/godepgraph@latest \
     && go install -v github.com/loov/goda@latest \
-    && go install -v github.com/jfeliu007/goplantuml/cmd/goplantuml@latest
+    && go install -v github.com/jfeliu007/goplantuml/cmd/goplantuml@latest \
+    && go install -v github.com/jorgerojas26/lazysql@latest
 
 # =============================================================================
-# LAYER 8: Final setup (frequently changes - Air config, etc.)
+# LAYER 9: Final setup (frequently changes - Air config, etc.)
 # =============================================================================
 RUN mkdir -p /go/pkg /go/bin \
     && chown -R $USERNAME:$USERNAME /go

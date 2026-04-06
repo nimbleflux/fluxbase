@@ -10,8 +10,9 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // TestOAuthListEnabledProviders tests listing enabled OAuth providers
@@ -432,7 +433,7 @@ func cleanupOAuthProviders(t *testing.T, tc *test.TestContext) {
 	}
 
 	// Delete all OAuth providers
-	_, err = tc.DB.Pool().Exec(context.Background(), "DELETE FROM dashboard.oauth_providers")
+	_, err = tc.DB.Pool().Exec(context.Background(), "DELETE FROM platform.oauth_providers")
 	if err != nil {
 		t.Logf("Warning: Failed to cleanup OAuth providers: %v", err)
 	}

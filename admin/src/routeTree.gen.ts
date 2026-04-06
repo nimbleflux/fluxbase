@@ -24,6 +24,7 @@ import { Route as authResetPasswordRouteImport } from './routes/(auth)/reset-pas
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
+import { Route as AuthenticatedTenantsIndexRouteImport } from './routes/_authenticated/tenants/index'
 import { Route as AuthenticatedTablesIndexRouteImport } from './routes/_authenticated/tables/index'
 import { Route as AuthenticatedStorageIndexRouteImport } from './routes/_authenticated/storage/index'
 import { Route as AuthenticatedStorageConfigIndexRouteImport } from './routes/_authenticated/storage-config/index'
@@ -42,6 +43,7 @@ import { Route as AuthenticatedMcpToolsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
 import { Route as AuthenticatedKnowledgeBasesIndexRouteImport } from './routes/_authenticated/knowledge-bases/index'
 import { Route as AuthenticatedJobsIndexRouteImport } from './routes/_authenticated/jobs/index'
+import { Route as AuthenticatedInstanceSettingsIndexRouteImport } from './routes/_authenticated/instance-settings/index'
 import { Route as AuthenticatedFunctionsIndexRouteImport } from './routes/_authenticated/functions/index'
 import { Route as AuthenticatedFeaturesIndexRouteImport } from './routes/_authenticated/features/index'
 import { Route as AuthenticatedExtensionsIndexRouteImport } from './routes/_authenticated/extensions/index'
@@ -51,6 +53,7 @@ import { Route as AuthenticatedClientKeysIndexRouteImport } from './routes/_auth
 import { Route as AuthenticatedChatbotsIndexRouteImport } from './routes/_authenticated/chatbots/index'
 import { Route as AuthenticatedAuthenticationIndexRouteImport } from './routes/_authenticated/authentication/index'
 import { Route as AuthenticatedAiProvidersIndexRouteImport } from './routes/_authenticated/ai-providers/index'
+import { Route as AuthenticatedTenantsTenantIdRouteImport } from './routes/_authenticated/tenants/$tenantId'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedApiRestRouteImport } from './routes/_authenticated/api/rest'
@@ -136,6 +139,12 @@ const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
   path: '/users/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTenantsIndexRoute =
+  AuthenticatedTenantsIndexRouteImport.update({
+    id: '/tenants/',
+    path: '/tenants/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedTablesIndexRoute =
   AuthenticatedTablesIndexRouteImport.update({
     id: '/tables/',
@@ -241,6 +250,12 @@ const AuthenticatedJobsIndexRoute = AuthenticatedJobsIndexRouteImport.update({
   path: '/jobs/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedInstanceSettingsIndexRoute =
+  AuthenticatedInstanceSettingsIndexRouteImport.update({
+    id: '/instance-settings/',
+    path: '/instance-settings/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedFunctionsIndexRoute =
   AuthenticatedFunctionsIndexRouteImport.update({
     id: '/functions/',
@@ -293,6 +308,12 @@ const AuthenticatedAiProvidersIndexRoute =
   AuthenticatedAiProvidersIndexRouteImport.update({
     id: '/ai-providers/',
     path: '/ai-providers/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTenantsTenantIdRoute =
+  AuthenticatedTenantsTenantIdRouteImport.update({
+    id: '/tenants/$tenantId',
+    path: '/tenants/$tenantId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSettingsAppearanceRoute =
@@ -365,6 +386,7 @@ export interface FileRoutesByFullPath {
   '/api/rest': typeof AuthenticatedApiRestRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
+  '/tenants/$tenantId': typeof AuthenticatedTenantsTenantIdRoute
   '/ai-providers/': typeof AuthenticatedAiProvidersIndexRoute
   '/authentication/': typeof AuthenticatedAuthenticationIndexRoute
   '/chatbots/': typeof AuthenticatedChatbotsIndexRoute
@@ -374,6 +396,7 @@ export interface FileRoutesByFullPath {
   '/extensions/': typeof AuthenticatedExtensionsIndexRoute
   '/features/': typeof AuthenticatedFeaturesIndexRoute
   '/functions/': typeof AuthenticatedFunctionsIndexRoute
+  '/instance-settings/': typeof AuthenticatedInstanceSettingsIndexRoute
   '/jobs/': typeof AuthenticatedJobsIndexRoute
   '/knowledge-bases/': typeof AuthenticatedKnowledgeBasesIndexRoute
   '/logs/': typeof AuthenticatedLogsIndexRoute
@@ -392,6 +415,7 @@ export interface FileRoutesByFullPath {
   '/storage-config/': typeof AuthenticatedStorageConfigIndexRoute
   '/storage/': typeof AuthenticatedStorageIndexRoute
   '/tables/': typeof AuthenticatedTablesIndexRoute
+  '/tenants/': typeof AuthenticatedTenantsIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/knowledge-bases/$id/graph': typeof AuthenticatedKnowledgeBasesIdGraphRoute
@@ -417,6 +441,7 @@ export interface FileRoutesByTo {
   '/api/rest': typeof AuthenticatedApiRestRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
+  '/tenants/$tenantId': typeof AuthenticatedTenantsTenantIdRoute
   '/ai-providers': typeof AuthenticatedAiProvidersIndexRoute
   '/authentication': typeof AuthenticatedAuthenticationIndexRoute
   '/chatbots': typeof AuthenticatedChatbotsIndexRoute
@@ -426,6 +451,7 @@ export interface FileRoutesByTo {
   '/extensions': typeof AuthenticatedExtensionsIndexRoute
   '/features': typeof AuthenticatedFeaturesIndexRoute
   '/functions': typeof AuthenticatedFunctionsIndexRoute
+  '/instance-settings': typeof AuthenticatedInstanceSettingsIndexRoute
   '/jobs': typeof AuthenticatedJobsIndexRoute
   '/knowledge-bases': typeof AuthenticatedKnowledgeBasesIndexRoute
   '/logs': typeof AuthenticatedLogsIndexRoute
@@ -444,6 +470,7 @@ export interface FileRoutesByTo {
   '/storage-config': typeof AuthenticatedStorageConfigIndexRoute
   '/storage': typeof AuthenticatedStorageIndexRoute
   '/tables': typeof AuthenticatedTablesIndexRoute
+  '/tenants': typeof AuthenticatedTenantsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
   '/knowledge-bases/$id/graph': typeof AuthenticatedKnowledgeBasesIdGraphRoute
@@ -471,6 +498,7 @@ export interface FileRoutesById {
   '/_authenticated/api/rest': typeof AuthenticatedApiRestRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
+  '/_authenticated/tenants/$tenantId': typeof AuthenticatedTenantsTenantIdRoute
   '/_authenticated/ai-providers/': typeof AuthenticatedAiProvidersIndexRoute
   '/_authenticated/authentication/': typeof AuthenticatedAuthenticationIndexRoute
   '/_authenticated/chatbots/': typeof AuthenticatedChatbotsIndexRoute
@@ -480,6 +508,7 @@ export interface FileRoutesById {
   '/_authenticated/extensions/': typeof AuthenticatedExtensionsIndexRoute
   '/_authenticated/features/': typeof AuthenticatedFeaturesIndexRoute
   '/_authenticated/functions/': typeof AuthenticatedFunctionsIndexRoute
+  '/_authenticated/instance-settings/': typeof AuthenticatedInstanceSettingsIndexRoute
   '/_authenticated/jobs/': typeof AuthenticatedJobsIndexRoute
   '/_authenticated/knowledge-bases/': typeof AuthenticatedKnowledgeBasesIndexRoute
   '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
@@ -498,6 +527,7 @@ export interface FileRoutesById {
   '/_authenticated/storage-config/': typeof AuthenticatedStorageConfigIndexRoute
   '/_authenticated/storage/': typeof AuthenticatedStorageIndexRoute
   '/_authenticated/tables/': typeof AuthenticatedTablesIndexRoute
+  '/_authenticated/tenants/': typeof AuthenticatedTenantsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/_authenticated/knowledge-bases/$id/graph': typeof AuthenticatedKnowledgeBasesIdGraphRoute
@@ -525,6 +555,7 @@ export interface FileRouteTypes {
     | '/api/rest'
     | '/errors/$error'
     | '/settings/appearance'
+    | '/tenants/$tenantId'
     | '/ai-providers/'
     | '/authentication/'
     | '/chatbots/'
@@ -534,6 +565,7 @@ export interface FileRouteTypes {
     | '/extensions/'
     | '/features/'
     | '/functions/'
+    | '/instance-settings/'
     | '/jobs/'
     | '/knowledge-bases/'
     | '/logs/'
@@ -552,6 +584,7 @@ export interface FileRouteTypes {
     | '/storage-config/'
     | '/storage/'
     | '/tables/'
+    | '/tenants/'
     | '/users/'
     | '/webhooks/'
     | '/knowledge-bases/$id/graph'
@@ -577,6 +610,7 @@ export interface FileRouteTypes {
     | '/api/rest'
     | '/errors/$error'
     | '/settings/appearance'
+    | '/tenants/$tenantId'
     | '/ai-providers'
     | '/authentication'
     | '/chatbots'
@@ -586,6 +620,7 @@ export interface FileRouteTypes {
     | '/extensions'
     | '/features'
     | '/functions'
+    | '/instance-settings'
     | '/jobs'
     | '/knowledge-bases'
     | '/logs'
@@ -604,6 +639,7 @@ export interface FileRouteTypes {
     | '/storage-config'
     | '/storage'
     | '/tables'
+    | '/tenants'
     | '/users'
     | '/webhooks'
     | '/knowledge-bases/$id/graph'
@@ -630,6 +666,7 @@ export interface FileRouteTypes {
     | '/_authenticated/api/rest'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/appearance'
+    | '/_authenticated/tenants/$tenantId'
     | '/_authenticated/ai-providers/'
     | '/_authenticated/authentication/'
     | '/_authenticated/chatbots/'
@@ -639,6 +676,7 @@ export interface FileRouteTypes {
     | '/_authenticated/extensions/'
     | '/_authenticated/features/'
     | '/_authenticated/functions/'
+    | '/_authenticated/instance-settings/'
     | '/_authenticated/jobs/'
     | '/_authenticated/knowledge-bases/'
     | '/_authenticated/logs/'
@@ -657,6 +695,7 @@ export interface FileRouteTypes {
     | '/_authenticated/storage-config/'
     | '/_authenticated/storage/'
     | '/_authenticated/tables/'
+    | '/_authenticated/tenants/'
     | '/_authenticated/users/'
     | '/_authenticated/webhooks/'
     | '/_authenticated/knowledge-bases/$id/graph'
@@ -789,6 +828,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUsersIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/tenants/': {
+      id: '/_authenticated/tenants/'
+      path: '/tenants'
+      fullPath: '/tenants/'
+      preLoaderRoute: typeof AuthenticatedTenantsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/tables/': {
       id: '/_authenticated/tables/'
       path: '/tables'
@@ -915,6 +961,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedJobsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/instance-settings/': {
+      id: '/_authenticated/instance-settings/'
+      path: '/instance-settings'
+      fullPath: '/instance-settings/'
+      preLoaderRoute: typeof AuthenticatedInstanceSettingsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/functions/': {
       id: '/_authenticated/functions/'
       path: '/functions'
@@ -976,6 +1029,13 @@ declare module '@tanstack/react-router' {
       path: '/ai-providers'
       fullPath: '/ai-providers/'
       preLoaderRoute: typeof AuthenticatedAiProvidersIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tenants/$tenantId': {
+      id: '/_authenticated/tenants/$tenantId'
+      path: '/tenants/$tenantId'
+      fullPath: '/tenants/$tenantId'
+      preLoaderRoute: typeof AuthenticatedTenantsTenantIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings/appearance': {
@@ -1049,6 +1109,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedApiRestRoute: typeof AuthenticatedApiRestRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
+  AuthenticatedTenantsTenantIdRoute: typeof AuthenticatedTenantsTenantIdRoute
   AuthenticatedAiProvidersIndexRoute: typeof AuthenticatedAiProvidersIndexRoute
   AuthenticatedAuthenticationIndexRoute: typeof AuthenticatedAuthenticationIndexRoute
   AuthenticatedChatbotsIndexRoute: typeof AuthenticatedChatbotsIndexRoute
@@ -1058,6 +1119,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedExtensionsIndexRoute: typeof AuthenticatedExtensionsIndexRoute
   AuthenticatedFeaturesIndexRoute: typeof AuthenticatedFeaturesIndexRoute
   AuthenticatedFunctionsIndexRoute: typeof AuthenticatedFunctionsIndexRoute
+  AuthenticatedInstanceSettingsIndexRoute: typeof AuthenticatedInstanceSettingsIndexRoute
   AuthenticatedJobsIndexRoute: typeof AuthenticatedJobsIndexRoute
   AuthenticatedKnowledgeBasesIndexRoute: typeof AuthenticatedKnowledgeBasesIndexRoute
   AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
@@ -1076,6 +1138,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedStorageConfigIndexRoute: typeof AuthenticatedStorageConfigIndexRoute
   AuthenticatedStorageIndexRoute: typeof AuthenticatedStorageIndexRoute
   AuthenticatedTablesIndexRoute: typeof AuthenticatedTablesIndexRoute
+  AuthenticatedTenantsIndexRoute: typeof AuthenticatedTenantsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
   AuthenticatedKnowledgeBasesIdGraphRoute: typeof AuthenticatedKnowledgeBasesIdGraphRoute
@@ -1091,6 +1154,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedApiRestRoute: AuthenticatedApiRestRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
+  AuthenticatedTenantsTenantIdRoute: AuthenticatedTenantsTenantIdRoute,
   AuthenticatedAiProvidersIndexRoute: AuthenticatedAiProvidersIndexRoute,
   AuthenticatedAuthenticationIndexRoute: AuthenticatedAuthenticationIndexRoute,
   AuthenticatedChatbotsIndexRoute: AuthenticatedChatbotsIndexRoute,
@@ -1100,6 +1164,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedExtensionsIndexRoute: AuthenticatedExtensionsIndexRoute,
   AuthenticatedFeaturesIndexRoute: AuthenticatedFeaturesIndexRoute,
   AuthenticatedFunctionsIndexRoute: AuthenticatedFunctionsIndexRoute,
+  AuthenticatedInstanceSettingsIndexRoute:
+    AuthenticatedInstanceSettingsIndexRoute,
   AuthenticatedJobsIndexRoute: AuthenticatedJobsIndexRoute,
   AuthenticatedKnowledgeBasesIndexRoute: AuthenticatedKnowledgeBasesIndexRoute,
   AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,
@@ -1119,6 +1185,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedStorageConfigIndexRoute: AuthenticatedStorageConfigIndexRoute,
   AuthenticatedStorageIndexRoute: AuthenticatedStorageIndexRoute,
   AuthenticatedTablesIndexRoute: AuthenticatedTablesIndexRoute,
+  AuthenticatedTenantsIndexRoute: AuthenticatedTenantsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
   AuthenticatedKnowledgeBasesIdGraphRoute:

@@ -10,20 +10,29 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/logutil"
-	"github.com/rs/zerolog/log"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // DDLHandler handles Database Definition Language (DDL) operations
 // for schema and table management
 type DDLHandler struct {
-	db *database.Connection
+	db          *database.Connection
+	schemaCache *database.SchemaCache
 }
 
 // NewDDLHandler creates a new DDL handler
-func NewDDLHandler(db *database.Connection) *DDLHandler {
-	return &DDLHandler{db: db}
+func NewDDLHandler(db *database.Connection, schemaCache *database.SchemaCache) *DDLHandler {
+	return &DDLHandler{db: db, schemaCache: schemaCache}
+}
+
+// SetSchemaCache sets the schema cache for invalidation after DDL operations
+func (h *DDLHandler) SetSchemaCache(cache *database.SchemaCache) {
+	h.schemaCache = cache
 }
 
 // Validation patterns
@@ -99,7 +108,7 @@ func (h *DDLHandler) CreateSchema(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Check if schema already exists
-	exists, err := h.schemaExists(ctx, req.Name)
+	exists, err := h.schemaExists(ctx, c, req.Name)
 	if err != nil {
 		log.Error().Err(err).Str("schema", req.Name).Msg("Failed to check schema existence")
 		return c.Status(500).JSON(fiber.Map{
@@ -118,7 +127,7 @@ func (h *DDLHandler) CreateSchema(c fiber.Ctx) error {
 	queryMetadata := logutil.ExtractDDLMetadata(query)
 	log.Info().Str("schema", req.Name).Str("operation", queryMetadata).Msg("Creating schema")
 
-	err = h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 		_, execErr := conn.Exec(ctx, query)
 		return execErr
 	})
@@ -131,11 +140,12 @@ func (h *DDLHandler) CreateSchema(c fiber.Ctx) error {
 
 	// Set up default privileges for tables created in this schema by the admin user
 	// This ensures that future tables created via DDL API will automatically get grants to service_role
-	if err := h.setupSchemaDefaultPrivileges(ctx, req.Name); err != nil {
+	if err := h.setupSchemaDefaultPrivileges(ctx, c, req.Name); err != nil {
 		log.Error().Err(err).Str("schema", req.Name).Msg("Failed to set up default privileges")
 		// Don't fail the request - schema was created successfully, just log the error
 	}
 
+	h.invalidateCache(ctx)
 	log.Info().Str("schema", req.Name).Msg("Schema created successfully")
 	return c.Status(201).JSON(fiber.Map{
 		"success": true,
@@ -184,7 +194,7 @@ func (h *DDLHandler) CreateTable(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Check if schema exists
-	exists, err := h.schemaExists(ctx, req.Schema)
+	exists, err := h.schemaExists(ctx, c, req.Schema)
 	if err != nil {
 		log.Error().Err(err).Str("schema", req.Schema).Msg("Failed to check schema existence")
 		return c.Status(500).JSON(fiber.Map{
@@ -198,7 +208,7 @@ func (h *DDLHandler) CreateTable(c fiber.Ctx) error {
 	}
 
 	// Check if table already exists
-	tableExists, err := h.tableExists(ctx, req.Schema, req.Name)
+	tableExists, err := h.tableExists(ctx, c, req.Schema, req.Name)
 	if err != nil {
 		log.Error().Err(err).Str("table", req.Schema+"."+req.Name).Msg("Failed to check table existence")
 		return c.Status(500).JSON(fiber.Map{
@@ -226,7 +236,7 @@ func (h *DDLHandler) CreateTable(c fiber.Ctx) error {
 		Msg("Creating table")
 
 	// Execute CREATE TABLE with admin role for full DDL access (superuser privileges)
-	err = h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 		_, execErr := conn.Exec(ctx, query)
 		return execErr
 	})
@@ -237,14 +247,15 @@ func (h *DDLHandler) CreateTable(c fiber.Ctx) error {
 		})
 	}
 
-	// Grant permissions to service_role for dashboard_admin access
+	// Grant permissions to service_role for instance_admin access
 	// This is necessary because tables created via ExecuteWithAdminRole don't
 	// inherit default privileges from migration 027 (which only applies to CURRENT_USER)
-	if err := h.grantTablePermissions(ctx, req.Schema, req.Name); err != nil {
+	if err := h.grantTablePermissions(ctx, c, req.Schema, req.Name); err != nil {
 		log.Error().Err(err).Str("table", req.Schema+"."+req.Name).Msg("Failed to grant permissions to service_role")
 		// Don't fail the request - table was created successfully, just log the error
 	}
 
+	h.invalidateCache(ctx)
 	log.Info().Str("table", req.Schema+"."+req.Name).Msg("Table created successfully")
 	return c.Status(201).JSON(fiber.Map{
 		"success": true,
@@ -281,7 +292,7 @@ func (h *DDLHandler) DeleteTable(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Check if table exists
-	exists, err := h.tableExists(ctx, schema, table)
+	exists, err := h.tableExists(ctx, c, schema, table)
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to check table existence")
 		return c.Status(500).JSON(fiber.Map{
@@ -299,7 +310,7 @@ func (h *DDLHandler) DeleteTable(c fiber.Ctx) error {
 	log.Info().Str("table", schema+"."+table).Str("operation", logutil.ExtractDDLMetadata(query)).Msg("Dropping table")
 
 	// Execute DROP TABLE with admin role for full DDL access (superuser privileges)
-	err = h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 		_, execErr := conn.Exec(ctx, query)
 		return execErr
 	})
@@ -310,6 +321,7 @@ func (h *DDLHandler) DeleteTable(c fiber.Ctx) error {
 		})
 	}
 
+	h.invalidateCache(ctx)
 	log.Info().Str("table", schema+"."+table).Msg("Table dropped successfully")
 	return c.JSON(fiber.Map{
 		"success": true,
@@ -364,7 +376,7 @@ func (h *DDLHandler) AddColumn(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Check if table exists
-	exists, err := h.tableExists(ctx, schema, table)
+	exists, err := h.tableExists(ctx, c, schema, table)
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to check table existence")
 		return SendOperationFailed(c, "check table existence")
@@ -374,7 +386,7 @@ func (h *DDLHandler) AddColumn(c fiber.Ctx) error {
 	}
 
 	// Check if column already exists
-	colExists, err := h.columnExists(ctx, schema, table, req.Name)
+	colExists, err := h.columnExists(ctx, c, schema, table, req.Name)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to check column existence")
 		return SendOperationFailed(c, "check column existence")
@@ -397,7 +409,7 @@ func (h *DDLHandler) AddColumn(c fiber.Ctx) error {
 
 	log.Info().Str("table", schema+"."+table).Str("column", req.Name).Str("operation", logutil.ExtractDDLMetadata(query)).Msg("Adding column")
 
-	err = h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 		_, execErr := conn.Exec(ctx, query)
 		return execErr
 	})
@@ -408,6 +420,7 @@ func (h *DDLHandler) AddColumn(c fiber.Ctx) error {
 		})
 	}
 
+	h.invalidateCache(ctx)
 	log.Info().Str("table", schema+"."+table).Str("column", req.Name).Msg("Column added successfully")
 	return c.Status(201).JSON(fiber.Map{
 		"success": true,
@@ -442,7 +455,7 @@ func (h *DDLHandler) DropColumn(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Check if table exists
-	exists, err := h.tableExists(ctx, schema, table)
+	exists, err := h.tableExists(ctx, c, schema, table)
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to check table existence")
 		return SendOperationFailed(c, "check table existence")
@@ -452,7 +465,7 @@ func (h *DDLHandler) DropColumn(c fiber.Ctx) error {
 	}
 
 	// Check if column exists
-	colExists, err := h.columnExists(ctx, schema, table, column)
+	colExists, err := h.columnExists(ctx, c, schema, table, column)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to check column existence")
 		return SendOperationFailed(c, "check column existence")
@@ -466,7 +479,7 @@ func (h *DDLHandler) DropColumn(c fiber.Ctx) error {
 
 	log.Info().Str("table", schema+"."+table).Str("column", column).Str("operation", logutil.ExtractDDLMetadata(query)).Msg("Dropping column")
 
-	err = h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 		_, execErr := conn.Exec(ctx, query)
 		return execErr
 	})
@@ -475,6 +488,7 @@ func (h *DDLHandler) DropColumn(c fiber.Ctx) error {
 		return SendInternalError(c, fmt.Sprintf("Failed to drop column: %v", err))
 	}
 
+	h.invalidateCache(ctx)
 	log.Info().Str("table", schema+"."+table).Str("column", column).Msg("Column dropped successfully")
 	return c.JSON(fiber.Map{
 		"success": true,
@@ -520,7 +534,7 @@ func (h *DDLHandler) RenameTable(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Check if source table exists
-	exists, err := h.tableExists(ctx, schema, table)
+	exists, err := h.tableExists(ctx, c, schema, table)
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to check table existence")
 		return SendOperationFailed(c, "check table existence")
@@ -530,7 +544,7 @@ func (h *DDLHandler) RenameTable(c fiber.Ctx) error {
 	}
 
 	// Check if target table name already exists
-	targetExists, err := h.tableExists(ctx, schema, req.NewName)
+	targetExists, err := h.tableExists(ctx, c, schema, req.NewName)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to check target table existence")
 		return SendOperationFailed(c, "check target table existence")
@@ -544,7 +558,7 @@ func (h *DDLHandler) RenameTable(c fiber.Ctx) error {
 
 	log.Info().Str("table", schema+"."+table).Str("newName", req.NewName).Str("operation", logutil.ExtractDDLMetadata(query)).Msg("Renaming table")
 
-	err = h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 		_, execErr := conn.Exec(ctx, query)
 		return execErr
 	})
@@ -555,6 +569,7 @@ func (h *DDLHandler) RenameTable(c fiber.Ctx) error {
 		})
 	}
 
+	h.invalidateCache(ctx)
 	log.Info().Str("table", schema+"."+table).Str("newName", req.NewName).Msg("Table renamed successfully")
 	return c.JSON(fiber.Map{
 		"success": true,
@@ -586,28 +601,52 @@ func validateIdentifier(name, entityType string) error {
 	return nil
 }
 
-// schemaExists checks if a schema exists
-func (h *DDLHandler) schemaExists(ctx context.Context, schema string) (bool, error) {
+// schemaExists checks if a schema exists, using tenant pool when available.
+func (h *DDLHandler) schemaExists(ctx context.Context, c fiber.Ctx, schema string) (bool, error) {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`
-	err := h.db.Pool().QueryRow(ctx, query, schema).Scan(&exists)
+	err := h.queryPool(c).QueryRow(ctx, query, schema).Scan(&exists)
 	return exists, err
 }
 
-// tableExists checks if a table exists
-func (h *DDLHandler) tableExists(ctx context.Context, schema, table string) (bool, error) {
+// tableExists checks if a table exists, using tenant pool when available.
+func (h *DDLHandler) tableExists(ctx context.Context, c fiber.Ctx, schema, table string) (bool, error) {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2)`
-	err := h.db.Pool().QueryRow(ctx, query, schema, table).Scan(&exists)
+	err := h.queryPool(c).QueryRow(ctx, query, schema, table).Scan(&exists)
 	return exists, err
 }
 
-// columnExists checks if a column exists in a table
-func (h *DDLHandler) columnExists(ctx context.Context, schema, table, column string) (bool, error) {
+// columnExists checks if a column exists in a table, using tenant pool when available.
+func (h *DDLHandler) columnExists(ctx context.Context, c fiber.Ctx, schema, table, column string) (bool, error) {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3)`
-	err := h.db.Pool().QueryRow(ctx, query, schema, table, column).Scan(&exists)
+	err := h.queryPool(c).QueryRow(ctx, query, schema, table, column).Scan(&exists)
 	return exists, err
+}
+
+// queryPool returns the tenant pool if available, otherwise the main pool.
+func (h *DDLHandler) queryPool(c fiber.Ctx) *pgxpool.Pool {
+	if pool := middleware.GetTenantPool(c); pool != nil {
+		return pool
+	}
+	return h.db.Pool()
+}
+
+// executeWithAdminRole executes a function with admin role, routing to the
+// tenant database when a tenant context is active.
+func (h *DDLHandler) executeWithAdminRole(ctx context.Context, c fiber.Ctx, fn func(conn *pgx.Conn) error) error {
+	if dbName, _ := c.Locals("tenant_db_name").(string); dbName != "" {
+		return h.db.ExecuteWithAdminRoleForDB(ctx, dbName, fn)
+	}
+	return h.db.ExecuteWithAdminRole(ctx, fn)
+}
+
+// invalidateCache invalidates the schema cache after DDL operations.
+func (h *DDLHandler) invalidateCache(ctx context.Context) {
+	if h.schemaCache != nil {
+		h.schemaCache.InvalidateAll(ctx)
+	}
 }
 
 // buildCreateTableQuery constructs a CREATE TABLE query from the request
@@ -754,17 +793,21 @@ func isValidCastType(t string) bool {
 	return true
 }
 
-// escapeLiteral escapes a string literal for SQL
-// This is a simple implementation - for production, consider using a proper SQL builder
+// escapeLiteral escapes a string literal for SQL using PostgreSQL-compatible rules.
+// Handles single quotes, backslashes, and null bytes.
 func escapeLiteral(value string) string {
-	// Replace single quotes with double single quotes
-	escaped := strings.ReplaceAll(value, "'", "''")
-	return fmt.Sprintf("'%s'", escaped)
+	// Remove null bytes (never valid in SQL literals)
+	cleaned := strings.ReplaceAll(value, "\x00", "")
+	// Escape backslashes
+	cleaned = strings.ReplaceAll(cleaned, `\`, `\\`)
+	// Replace single quotes with double single quotes (PostgreSQL standard)
+	cleaned = strings.ReplaceAll(cleaned, "'", "''")
+	return fmt.Sprintf("'%s'", cleaned)
 }
 
 // grantTablePermissions grants necessary permissions on a table to service_role
-// This ensures that dashboard_admin (which maps to service_role) can access the table
-func (h *DDLHandler) grantTablePermissions(ctx context.Context, schema, table string) error {
+// This ensures that instance_admin (which maps to service_role) can access the table
+func (h *DDLHandler) grantTablePermissions(ctx context.Context, c fiber.Ctx, schema, table string) error {
 	// Grant SELECT, INSERT, UPDATE, DELETE on the table to service_role
 	grantTableQuery := fmt.Sprintf(
 		"GRANT SELECT, INSERT, UPDATE, DELETE ON %s.%s TO service_role",
@@ -772,7 +815,7 @@ func (h *DDLHandler) grantTablePermissions(ctx context.Context, schema, table st
 		quoteIdentifier(table),
 	)
 
-	err := h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+	err := h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 		_, err := conn.Exec(ctx, grantTableQuery)
 		return err
 	})
@@ -789,7 +832,7 @@ func (h *DDLHandler) grantTablePermissions(ctx context.Context, schema, table st
 		  AND sequence_name LIKE $2
 	`
 
-	rows, err := h.db.Pool().Query(ctx, grantSequencesQuery, schema, table+"_%")
+	rows, err := h.queryPool(c).Query(ctx, grantSequencesQuery, schema, table+"_%")
 	if err != nil {
 		// Don't fail if we can't query sequences - table permissions are already granted
 		log.Debug().Err(err).Str("table", schema+"."+table).Msg("Failed to query sequences for table")
@@ -813,7 +856,7 @@ func (h *DDLHandler) grantTablePermissions(ctx context.Context, schema, table st
 			quoteIdentifier(schema),
 			quoteIdentifier(seqName),
 		)
-		err := h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+		err := h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 			_, err := conn.Exec(ctx, grantSeqQuery)
 			return err
 		})
@@ -832,7 +875,7 @@ func (h *DDLHandler) grantTablePermissions(ctx context.Context, schema, table st
 
 // setupSchemaDefaultPrivileges sets up default privileges for a schema
 // so that tables created by the admin user automatically get grants to service_role
-func (h *DDLHandler) setupSchemaDefaultPrivileges(ctx context.Context, schema string) error {
+func (h *DDLHandler) setupSchemaDefaultPrivileges(ctx context.Context, c fiber.Ctx, schema string) error {
 	// Set up default privileges for tables created in this schema
 	// This ensures that future tables created via DDL API will automatically get grants to service_role
 	queries := []string{
@@ -845,7 +888,7 @@ func (h *DDLHandler) setupSchemaDefaultPrivileges(ctx context.Context, schema st
 	}
 
 	for _, query := range queries {
-		err := h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+		err := h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 			_, err := conn.Exec(ctx, query)
 			return err
 		})
@@ -856,7 +899,7 @@ func (h *DDLHandler) setupSchemaDefaultPrivileges(ctx context.Context, schema st
 
 	// Also grant USAGE on the schema itself to service_role, anon, and authenticated
 	grantSchemaQuery := fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO service_role, anon, authenticated", quoteIdentifier(schema))
-	err := h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+	err := h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 		_, err := conn.Exec(ctx, grantSchemaQuery)
 		return err
 	})
@@ -879,8 +922,15 @@ func (h *DDLHandler) ListSchemas(c fiber.Ctx) error {
 	}
 
 	ctx := c.RequestCtx()
+	inspector := h.db.Inspector()
 
-	schemas, err := h.db.Inspector().GetSchemas(ctx)
+	var schemas []string
+	var err error
+	if tenantPool := middleware.GetTenantPool(c); tenantPool != nil {
+		schemas, err = inspector.GetSchemasFromPool(ctx, tenantPool)
+	} else {
+		schemas, err = inspector.GetSchemas(ctx)
+	}
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list schemas")
 		return SendOperationFailed(c, "list schemas")
@@ -914,6 +964,8 @@ func (h *DDLHandler) ListTables(c fiber.Ctx) error {
 
 	ctx := c.RequestCtx()
 	schemaParam := c.Query("schema")
+	inspector := h.db.Inspector()
+	tenantPool := middleware.GetTenantPool(c)
 
 	var schemasToQuery []string
 
@@ -922,7 +974,13 @@ func (h *DDLHandler) ListTables(c fiber.Ctx) error {
 		schemasToQuery = []string{schemaParam}
 	} else {
 		// Otherwise, get all schemas
-		schemas, err := h.db.Inspector().GetSchemas(ctx)
+		var schemas []string
+		var err error
+		if tenantPool != nil {
+			schemas, err = inspector.GetSchemasFromPool(ctx, tenantPool)
+		} else {
+			schemas, err = inspector.GetSchemas(ctx)
+		}
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to list schemas")
 			return SendOperationFailed(c, "list schemas")
@@ -945,7 +1003,13 @@ func (h *DDLHandler) ListTables(c fiber.Ctx) error {
 	var tables []tableInfo
 
 	for _, schema := range schemasToQuery {
-		dbTables, err := h.db.Inspector().GetAllTables(ctx, schema)
+		var dbTables []database.TableInfo
+		var err error
+		if tenantPool != nil {
+			dbTables, err = inspector.GetAllTablesFromPool(ctx, tenantPool, schema)
+		} else {
+			dbTables, err = inspector.GetAllTables(ctx, schema)
+		}
 		if err != nil {
 			log.Warn().Err(err).Str("schema", schema).Msg("Failed to get tables from schema")
 			continue

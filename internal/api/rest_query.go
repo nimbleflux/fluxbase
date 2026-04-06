@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
@@ -75,6 +76,9 @@ func (h *RESTHandler) makePostQueryHandler(table database.TableInfo) fiber.Handl
 		// Build and execute query (reuse existing logic from GET handler)
 		query, args := h.buildSelectQuery(table, params)
 
+		// Set target schema for tenant-aware pool routing
+		middleware.SetTargetSchema(c, table.Schema)
+
 		// Execute query with RLS context
 		var results []map[string]interface{}
 		err = middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -135,6 +139,14 @@ func (h *RESTHandler) convertPostQueryToParams(req *PostQueryRequest) (*QueryPar
 
 	// Convert regular filters
 	for _, f := range req.Filters {
+		// Validate column name (base part, before any ->> JSONB operator)
+		baseCol := f.Column
+		if idx := strings.Index(f.Column, "->"); idx >= 0 {
+			baseCol = strings.TrimSpace(f.Column[:idx])
+		}
+		if !isValidIdentifier(baseCol) {
+			return nil, fmt.Errorf("invalid column name: %s", baseCol)
+		}
 		params.Filters = append(params.Filters, Filter{
 			Column:   f.Column,
 			Operator: FilterOperator(f.Operator),

@@ -10,9 +10,10 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/branching"
 	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/rs/zerolog/log"
 )
 
 // GitHubWebhookHandler handles GitHub webhook events for database branching
@@ -29,11 +30,6 @@ func NewGitHubWebhookHandler(manager *branching.Manager, router *branching.Route
 		router:  router,
 		config:  cfg,
 	}
-}
-
-// RegisterRoutes registers GitHub webhook routes
-func (h *GitHubWebhookHandler) RegisterRoutes(api fiber.Router) {
-	api.Post("/webhooks/github", h.HandleWebhook)
 }
 
 // GitHubWebhookPayload represents the common fields in GitHub webhook payloads

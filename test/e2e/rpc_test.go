@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // TestRPCAdminSync tests the admin sync endpoint for RPC procedures

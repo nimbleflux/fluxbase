@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/rs/zerolog/log"
 )
 
 // rateLimiter tracks request counts per client key using a sliding window
@@ -111,23 +112,8 @@ func (h *Handler) Server() *Server {
 	return h.server
 }
 
-// RegisterPublicRoutes registers public MCP routes that don't require authentication
-func (h *Handler) RegisterPublicRoutes(app fiber.Router) {
-	app.Get("/health", h.handleHealth)
-}
-
-// RegisterRoutes registers the authenticated MCP routes
-// Auth middleware should be applied before calling this
-func (h *Handler) RegisterRoutes(app fiber.Router) {
-	// Main MCP endpoint - Streamable HTTP transport
-	// POST: Send JSON-RPC requests
-	// GET: Initiate SSE stream for server notifications (optional)
-	app.Post("/", h.handlePost)
-	app.Get("/", h.handleGet)
-}
-
-// handleHealth handles health check requests
-func (h *Handler) handleHealth(c fiber.Ctx) error {
+// HandleHealth handles health check requests
+func (h *Handler) HandleHealth(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status":          "healthy",
 		"protocolVersion": MCPVersion,
@@ -135,8 +121,8 @@ func (h *Handler) handleHealth(c fiber.Ctx) error {
 	})
 }
 
-// handlePost handles JSON-RPC POST requests
-func (h *Handler) handlePost(c fiber.Ctx) error {
+// HandlePost handles JSON-RPC POST requests
+func (h *Handler) HandlePost(c fiber.Ctx) error {
 	// Check content type
 	contentType := c.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "application/json") {
@@ -195,8 +181,8 @@ func (h *Handler) handlePost(c fiber.Ctx) error {
 	return h.sendJSONResponse(c, response)
 }
 
-// handleGet handles GET requests for SSE stream initiation
-func (h *Handler) handleGet(c fiber.Ctx) error {
+// HandleGet handles GET requests for SSE stream initiation
+func (h *Handler) HandleGet(c fiber.Ctx) error {
 	// Check if client accepts SSE
 	accept := c.Get("Accept")
 	if !strings.Contains(accept, "text/event-stream") {

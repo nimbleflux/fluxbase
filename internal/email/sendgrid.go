@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/rs/zerolog/log"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // SendGridService handles email sending via SendGrid

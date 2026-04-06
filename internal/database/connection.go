@@ -2,9 +2,8 @@ package database
 
 import (
 	"context"
-	"embed"
-	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,24 +11,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	pg_query "github.com/pganalyze/pg_query_go/v6"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/logutil"
 	"github.com/nimbleflux/fluxbase/internal/observability"
-	pg_query "github.com/pganalyze/pg_query_go/v6"
-	"github.com/rs/zerolog/log"
 )
-
-//go:embed migrations/*.sql
-var migrationsFS embed.FS
 
 // Type aliases for backward compatibility with refactored code
 // These aliases allow the middleware and handlers to use simpler type names
@@ -314,15 +306,10 @@ func (c *Connection) RecreatePool() error {
 	return nil
 }
 
-// Migrate runs database migrations from both system and user sources
+// Migrate runs database migrations from user sources
+// Note: Internal Fluxbase schema is now managed declaratively (see bootstrap + pgschema)
 func (c *Connection) Migrate() error {
-	// Step 1: Run system migrations (embedded in binary)
-	log.Info().Msg("Running system migrations...")
-	if err := c.runSystemMigrations(); err != nil {
-		return fmt.Errorf("failed to run system migrations: %w", err)
-	}
-
-	// Step 2: Run user migrations (from file system) if path is configured
+	// Run user migrations (from file system) if path is configured
 	if c.config.UserMigrationsPath != "" {
 		log.Info().Str("path", c.config.UserMigrationsPath).Msg("Running user migrations...")
 		if err := c.runUserMigrations(); err != nil {
@@ -336,144 +323,6 @@ func (c *Connection) Migrate() error {
 	// This allows the application to SET ROLE for RLS and service operations
 	if err := c.grantRolesToRuntimeUser(); err != nil {
 		return fmt.Errorf("failed to grant roles to runtime user: %w", err)
-	}
-
-	return nil
-}
-
-// runSystemMigrations runs migrations embedded in the binary
-func (c *Connection) runSystemMigrations() error {
-	// Ensure migrations schema and fluxbase table exist before migrations run
-	// This is needed because the migration system needs the table to exist
-	// We must connect as admin user to create the schema and table
-	ctx := context.Background()
-
-	// Create a temporary admin connection for schema setup
-	// Use AdminPassword if set, otherwise fall back to Password
-	adminPassword := c.config.AdminPassword
-	if adminPassword == "" {
-		adminPassword = c.config.Password
-	}
-	adminConnStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		c.config.AdminUser,
-		adminPassword,
-		c.config.Host,
-		c.config.Port,
-		c.config.Database,
-		c.config.SSLMode,
-	)
-
-	adminConn, err := pgx.Connect(ctx, adminConnStr)
-	if err != nil {
-		return fmt.Errorf("failed to connect as admin user: %w", err)
-	}
-	defer func() { _ = adminConn.Close(ctx) }()
-
-	// Create migrations schema as admin (if not exists)
-	_, err = adminConn.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS migrations")
-	if err != nil {
-		return fmt.Errorf("failed to create migrations schema: %w", err)
-	}
-
-	// Ensure the fluxbase migrations table exists as admin
-	// The migrate library expects this table to exist in the specified schema
-	_, err = adminConn.Exec(ctx, `CREATE TABLE IF NOT EXISTS "migrations"."fluxbase" (
-		version bigint NOT NULL PRIMARY KEY,
-		dirty boolean NOT NULL
-	)`)
-	if err != nil {
-		return fmt.Errorf("failed to create migrations.fluxbase table: %w", err)
-	}
-
-	// Check if database has a version that doesn't exist in our embedded migration files
-	// This can happen when switching branches or after migrations are renumbered
-	// We must fix this BEFORE creating the migrate instance, as golang-migrate validates files on Force()
-	highestAvailable := c.findHighestMigrationVersion()
-	log.Debug().Int("highest_available", highestAvailable).Msg("Found highest available migration version")
-
-	if highestAvailable > 0 {
-		var recordedVersion int64
-		var dirty bool
-		err = adminConn.QueryRow(ctx, `SELECT version, dirty FROM "migrations"."fluxbase" LIMIT 1`).Scan(&recordedVersion, &dirty)
-		if err == nil {
-			fileExists := c.migrationFileExists(int(recordedVersion))
-			log.Debug().
-				Int64("recorded_version", recordedVersion).
-				Bool("dirty", dirty).
-				Bool("file_exists", fileExists).
-				Msg("Checking migration state")
-
-			needsReset := false
-			reason := ""
-
-			switch {
-			case recordedVersion > int64(highestAvailable):
-				needsReset = true
-				reason = "version higher than available migrations"
-			case !fileExists:
-				needsReset = true
-				reason = "migration file does not exist"
-			case dirty:
-				// If dirty but file exists, just clear the dirty flag
-				// This happens when a previous migration was interrupted
-				log.Warn().
-					Int64("recorded_version", recordedVersion).
-					Bool("was_dirty", dirty).
-					Msg("Clearing dirty flag for existing migration version")
-
-				_, err = adminConn.Exec(ctx, `UPDATE "migrations"."fluxbase" SET dirty = false WHERE version = $1`, recordedVersion)
-				if err != nil {
-					return fmt.Errorf("failed to clear dirty flag: %w", err)
-				}
-			}
-
-			if needsReset {
-				log.Warn().
-					Int64("recorded_version", recordedVersion).
-					Int("highest_available", highestAvailable).
-					Bool("was_dirty", dirty).
-					Str("reason", reason).
-					Msg("Resetting database migration version to highest available")
-
-				_, err = adminConn.Exec(ctx, `UPDATE "migrations"."fluxbase" SET version = $1, dirty = false`, highestAvailable)
-				if err != nil {
-					return fmt.Errorf("failed to reset migration version: %w", err)
-				}
-			}
-		}
-	}
-
-	// Create migrations source from embedded filesystem
-	sourceDriver, err := iofs.New(migrationsFS, "migrations")
-	if err != nil {
-		return fmt.Errorf("failed to create migration source: %w", err)
-	}
-
-	// Use connection string with system migrations table (admin user for migrations)
-	connStr := fmt.Sprintf("pgx5://%s:%s@%s:%d/%s?sslmode=%s&x-migrations-table=\"migrations\".\"fluxbase\"&x-migrations-table-quoted=1",
-		c.config.AdminUser,
-		adminPassword,
-		c.config.Host,
-		c.config.Port,
-		c.config.Database,
-		c.config.SSLMode,
-	)
-
-	// Create migration instance
-	m, err := migrate.NewWithSourceInstance("iofs", sourceDriver, connStr)
-	if err != nil {
-		return fmt.Errorf("failed to create migration instance: %w", err)
-	}
-	defer func() {
-		srcErr, dbErr := m.Close()
-		if srcErr != nil || dbErr != nil {
-			log.Debug().AnErr("srcErr", srcErr).AnErr("dbErr", dbErr).Msg("Migration close returned errors")
-		}
-	}()
-
-	// Run migrations with error handling
-	if err := c.applyMigrations(m, "system"); err != nil {
-		return err
 	}
 
 	return nil
@@ -709,131 +558,6 @@ func (c *Connection) logMigrationExecution(ctx context.Context, conn *pgx.Conn, 
 	}
 }
 
-// applyMigrations applies pending migrations and handles errors
-func (c *Connection) applyMigrations(m *migrate.Migrate, source string) error {
-	// Check current version and dirty state
-	version, dirty, err := m.Version()
-	if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
-		return fmt.Errorf("failed to get migration version: %w", err)
-	}
-
-	// If database is in dirty state, force the version to clean it
-	if dirty {
-		log.Warn().Str("source", source).Uint("version", version).Msg("Database is in dirty state, forcing version to clean")
-		if err := m.Force(int(version)); err != nil { // #nosec G104 - Migration versions are small (<100K)
-			return fmt.Errorf("failed to force migration version: %w", err)
-		}
-	}
-
-	// Run migrations
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		// Check if error is due to missing migration file
-		if strings.Contains(err.Error(), "file does not exist") || strings.Contains(err.Error(), "no migration found") {
-			// Find the highest available migration version
-			highestVersion := c.findHighestMigrationVersion()
-			if highestVersion > 0 && version > uint(highestVersion) {
-				log.Warn().
-					Str("source", source).
-					Uint("recorded_version", version).
-					Int("highest_available", highestVersion).
-					Msg("Database version higher than available migrations, resetting to highest available")
-
-				// Force to highest available version
-				if forceErr := m.Force(highestVersion); forceErr != nil {
-					return fmt.Errorf("failed to force migration version to %d: %w", highestVersion, forceErr)
-				}
-
-				// Try running migrations again
-				if retryErr := m.Up(); retryErr != nil && !errors.Is(retryErr, migrate.ErrNoChange) {
-					return fmt.Errorf("failed to run %s migrations after version reset: %w", source, retryErr)
-				}
-				log.Info().Str("source", source).Int("version", highestVersion).Msg("Migrations recovered after version reset")
-				return nil
-			}
-		}
-		return fmt.Errorf("failed to run %s migrations: %w", source, err)
-	}
-
-	if errors.Is(err, migrate.ErrNoChange) {
-		log.Info().Str("source", source).Msg("No new migrations to apply")
-	} else {
-		version, _, _ := m.Version()
-		log.Info().Str("source", source).Uint("version", version).Msg("Migrations applied successfully")
-	}
-
-	return nil
-}
-
-// findHighestMigrationVersion scans embedded migrations to find the highest version number
-func (c *Connection) findHighestMigrationVersion() int {
-	entries, err := migrationsFS.ReadDir("migrations")
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to read embedded migrations directory")
-		return 0
-	}
-
-	highest := 0
-	versionRegex := regexp.MustCompile(`^(\d+)_.*\.up\.sql$`)
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		matches := versionRegex.FindStringSubmatch(entry.Name())
-		if len(matches) > 1 {
-			var version int
-			if _, err := fmt.Sscanf(matches[1], "%d", &version); err == nil {
-				if version > highest {
-					highest = version
-				}
-			}
-		}
-	}
-
-	return highest
-}
-
-// migrationFileExists checks if both up and down migration files exist in the embedded filesystem
-// golang-migrate requires both files to be present for a version to be valid
-func (c *Connection) migrationFileExists(version int) bool {
-	entries, err := migrationsFS.ReadDir("migrations")
-	if err != nil {
-		log.Debug().Err(err).Msg("Failed to read migrations directory")
-		return false
-	}
-
-	// Try both zero-padded (057_) and non-padded (57_) prefixes
-	prefixes := []string{
-		fmt.Sprintf("%03d_", version),
-		fmt.Sprintf("%d_", version),
-	}
-	hasUp := false
-	hasDown := false
-
-	// Log first few files to see what's embedded
-	for i, entry := range entries {
-		if i < 5 || i >= len(entries)-5 {
-			log.Debug().Str("file", entry.Name()).Int("index", i).Msg("Embedded migration file")
-		}
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(entry.Name(), prefix) {
-				log.Debug().Str("file", entry.Name()).Str("prefix", prefix).Msg("Found matching migration file")
-				if strings.HasSuffix(entry.Name(), ".up.sql") {
-					hasUp = true
-				} else if strings.HasSuffix(entry.Name(), ".down.sql") {
-					hasDown = true
-				}
-				break
-			}
-		}
-		if hasUp && hasDown {
-			return true
-		}
-	}
-	log.Debug().Int("version", version).Bool("hasUp", hasUp).Bool("hasDown", hasDown).Msg("Migration file check result")
-	return hasUp && hasDown
-}
-
 // grantRolesToRuntimeUser grants Fluxbase roles to the runtime database user
 // This allows the application to SET ROLE for RLS and service operations
 // Only runs if runtime user is different from admin user
@@ -1051,6 +775,79 @@ func WrapWithServiceRole(ctx context.Context, conn *Connection, fn func(tx pgx.T
 	return nil
 }
 
+// WrapWithTenantContext wraps a database operation with tenant context for multi-tenancy.
+// This sets the app.current_tenant_id session variable so that RLS policies and triggers
+// can enforce tenant isolation. Use this for storage operations on tenant-scoped tables.
+func WrapWithTenantContext(ctx context.Context, conn *Connection, tenantID string, fn func(tx pgx.Tx) error) error {
+	// Start transaction
+	tx, err := conn.Pool().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Set tenant context if provided
+	if tenantID != "" {
+		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
+		if err != nil {
+			log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to set tenant context")
+			return fmt.Errorf("failed to set tenant context: %w", err)
+		}
+	}
+
+	// Execute the wrapped function
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// WrapWithServiceRoleAndTenant wraps a database operation with both service_role and tenant context.
+// This bypasses RLS but still sets tenant_id for new records via the set_tenant_id trigger.
+// Use this for privileged operations that still need to associate records with a tenant.
+func WrapWithServiceRoleAndTenant(ctx context.Context, conn *Connection, tenantID string, fn func(tx pgx.Tx) error) error {
+	// Start transaction
+	tx, err := conn.Pool().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// SET LOCAL ROLE service_role - bypasses RLS for privileged operations
+	_, err = tx.Exec(ctx, "SET LOCAL ROLE service_role")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to SET LOCAL ROLE service_role")
+		return fmt.Errorf("failed to SET LOCAL ROLE service_role: %w", err)
+	}
+
+	// Set tenant context if provided (for triggers that auto-populate tenant_id)
+	if tenantID != "" {
+		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
+		if err != nil {
+			log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to set tenant context")
+			return fmt.Errorf("failed to set tenant context: %w", err)
+		}
+	}
+
+	// Execute the wrapped function
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
 // ExecuteWithAdminRole executes a database operation using admin credentials
 // Used for migrations that require DDL privileges (CREATE TABLE, ALTER, etc.)
 // Creates a temporary admin connection that is closed after execution
@@ -1108,6 +905,55 @@ func (c *Connection) ExecuteWithAdminRole(ctx context.Context, fn func(conn *pgx
 	}
 
 	log.Debug().Msg("Migration executed successfully with admin privileges")
+	return nil
+}
+
+// ExecuteWithAdminRoleForDB executes a function with admin privileges against
+// a specific database (for tenant DDL operations). It replaces the database name
+// in the admin connection string with the provided dbName.
+func (c *Connection) ExecuteWithAdminRoleForDB(ctx context.Context, dbName string, fn func(conn *pgx.Conn) error) error {
+	adminConnStr := c.config.AdminConnectionString()
+
+	adminUser := c.config.AdminUser
+	if adminUser == "" {
+		adminUser = c.config.User
+	}
+
+	// Replace database name in connection string
+	u, err := url.Parse(adminConnStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse admin connection string: %w", err)
+	}
+	u.Path = dbName
+	adminConnStrForDB := u.String()
+
+	log.Info().
+		Str("admin_user", adminUser).
+		Str("database", dbName).
+		Msg("Connecting as admin user for tenant DDL")
+
+	adminConn, err := pgx.Connect(ctx, adminConnStrForDB)
+	if err != nil {
+		log.Error().Err(err).Str("admin_user", adminUser).Str("database", dbName).Msg("Failed to connect as admin user for tenant DDL")
+		return fmt.Errorf("failed to connect as admin to database %s: %w", dbName, err)
+	}
+	defer func() { _ = adminConn.Close(ctx) }()
+
+	tx, err := adminConn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := fn(adminConn); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	log.Debug().Str("database", dbName).Msg("Tenant DDL executed successfully with admin privileges")
 	return nil
 }
 

@@ -16,39 +16,39 @@ func TestCanEditSetting(t *testing.T) {
 		expected   bool
 	}{
 		{
-			name:       "dashboard_admin can always edit",
+			name:       "instance_admin can always edit",
 			editableBy: []string{"admin"},
-			userRole:   "dashboard_admin",
+			userRole:   "instance_admin",
 			expected:   true,
 		},
 		{
 			name:       "admin can edit if in list",
-			editableBy: []string{"admin", "dashboard_admin"},
+			editableBy: []string{"admin", "instance_admin"},
 			userRole:   "admin",
 			expected:   true,
 		},
 		{
 			name:       "admin can always edit",
-			editableBy: []string{"dashboard_admin"},
+			editableBy: []string{"instance_admin"},
 			userRole:   "admin",
 			expected:   true,
 		},
 		{
 			name:       "service_role can always edit",
-			editableBy: []string{"dashboard_admin"},
+			editableBy: []string{"instance_admin"},
 			userRole:   "service_role",
 			expected:   true,
 		},
 		{
 			name:       "unknown role cannot edit",
-			editableBy: []string{"admin", "dashboard_admin"},
+			editableBy: []string{"admin", "instance_admin"},
 			userRole:   "user",
 			expected:   false,
 		},
 		{
-			name:       "empty editableBy list, dashboard_admin can still edit",
+			name:       "empty editableBy list, instance_admin can still edit",
 			editableBy: []string{},
-			userRole:   "dashboard_admin",
+			userRole:   "instance_admin",
 			expected:   true,
 		},
 		{
@@ -127,7 +127,7 @@ func TestCreateCustomSettingRequest_Validation(t *testing.T) {
 				Value:       map[string]interface{}{"enabled": true},
 				ValueType:   "json",
 				Description: "Test description",
-				EditableBy:  []string{"dashboard_admin", "admin"},
+				EditableBy:  []string{"instance_admin", "admin"},
 				Metadata:    map[string]interface{}{"category": "test"},
 			},
 			shouldFail: false,
@@ -166,7 +166,7 @@ func TestCustomSetting_Struct(t *testing.T) {
 			Value:       map[string]interface{}{"enabled": true, "count": 42},
 			ValueType:   "json",
 			Description: "A test setting",
-			EditableBy:  []string{"dashboard_admin", "admin"},
+			EditableBy:  []string{"instance_admin", "admin"},
 			Metadata:    map[string]interface{}{"version": "1.0"},
 			CreatedBy:   &createdBy,
 			UpdatedBy:   &createdBy,
@@ -179,7 +179,7 @@ func TestCustomSetting_Struct(t *testing.T) {
 		assert.Equal(t, "json", setting.ValueType)
 		assert.Equal(t, "A test setting", setting.Description)
 		assert.Len(t, setting.EditableBy, 2)
-		assert.Contains(t, setting.EditableBy, "dashboard_admin")
+		assert.Contains(t, setting.EditableBy, "instance_admin")
 		assert.Equal(t, "1.0", setting.Metadata["version"])
 		assert.Equal(t, &createdBy, setting.CreatedBy)
 	})
@@ -262,7 +262,7 @@ func TestCanEditSetting_AdditionalCases(t *testing.T) {
 	})
 
 	t.Run("authenticated user cannot edit admin-only settings", func(t *testing.T) {
-		result := CanEditSetting([]string{"dashboard_admin"}, "authenticated")
+		result := CanEditSetting([]string{"instance_admin"}, "authenticated")
 		assert.False(t, result)
 	})
 
@@ -461,7 +461,7 @@ func TestUpdateUserSettingRequest_Struct(t *testing.T) {
 // =============================================================================
 
 func BenchmarkCanEditSetting(b *testing.B) {
-	editableBy := []string{"dashboard_admin", "admin", "moderator", "editor"}
+	editableBy := []string{"instance_admin", "admin", "moderator", "editor"}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -562,7 +562,7 @@ func TestCanEditSetting_EdgeCases(t *testing.T) {
 		for _, role := range specialRoles {
 			result := CanEditSetting([]string{role}, "authenticated")
 			// The implementation doesn't support wildcards
-			// Only dashboard_admin, admin, and service_role bypass the check
+			// Only instance_admin, admin, and service_role bypass the check
 			assert.False(t, result, "special role '%s' should NOT match regular user", role)
 		}
 	})
@@ -669,7 +669,7 @@ func TestCustomSetting_EditableByHandling(t *testing.T) {
 
 		assert.Nil(t, setting.EditableBy)
 		// nil editable_by means only admins can edit
-		assert.True(t, CanEditSetting(setting.EditableBy, "dashboard_admin"))
+		assert.True(t, CanEditSetting(setting.EditableBy, "instance_admin"))
 		assert.False(t, CanEditSetting(setting.EditableBy, "authenticated"))
 	})
 
@@ -682,7 +682,7 @@ func TestCustomSetting_EditableByHandling(t *testing.T) {
 		}
 
 		assert.Empty(t, setting.EditableBy)
-		assert.True(t, CanEditSetting(setting.EditableBy, "dashboard_admin"))
+		assert.True(t, CanEditSetting(setting.EditableBy, "instance_admin"))
 		assert.False(t, CanEditSetting(setting.EditableBy, "authenticated"))
 	})
 

@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 func TestNewSyncJobTool(t *testing.T) {

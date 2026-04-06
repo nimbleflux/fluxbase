@@ -5,9 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/auth"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
+
 	"github.com/nimbleflux/fluxbase/internal/webhook"
 )
 
@@ -60,25 +58,6 @@ func NewWebhookHandler(webhookService *webhook.WebhookService) *WebhookHandler {
 	return &WebhookHandler{
 		webhookService: webhookService,
 	}
-}
-
-// RegisterRoutes registers webhook routes with authentication
-func (h *WebhookHandler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Apply authentication middleware to all webhook routes
-	webhooks := app.Group("/api/v1/webhooks",
-		middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager),
-	)
-
-	// Read operations require read:webhooks scope
-	webhooks.Get("/", middleware.RequireScope(auth.ScopeWebhooksRead), h.ListWebhooks)
-	webhooks.Get("/:id", middleware.RequireScope(auth.ScopeWebhooksRead), h.GetWebhook)
-	webhooks.Get("/:id/deliveries", middleware.RequireScope(auth.ScopeWebhooksRead), h.ListDeliveries)
-
-	// Write operations require write:webhooks scope
-	webhooks.Post("/", middleware.RequireScope(auth.ScopeWebhooksWrite), h.CreateWebhook)
-	webhooks.Patch("/:id", middleware.RequireScope(auth.ScopeWebhooksWrite), h.UpdateWebhook)
-	webhooks.Delete("/:id", middleware.RequireScope(auth.ScopeWebhooksWrite), h.DeleteWebhook)
-	webhooks.Post("/:id/test", middleware.RequireScope(auth.ScopeWebhooksWrite), h.TestWebhook)
 }
 
 // CreateWebhook creates a new webhook

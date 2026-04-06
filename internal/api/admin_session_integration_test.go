@@ -7,14 +7,15 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 )
 
 // TestAdminSession_ListSessions_Integration tests listing all admin sessions
 func TestAdminSession_ListSessions_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -53,7 +54,7 @@ func TestAdminSession_ListSessions_Integration(t *testing.T) {
 
 // TestAdminSession_ListSessions_Pagination_Integration tests pagination for session listing
 func TestAdminSession_ListSessions_Pagination_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -101,7 +102,7 @@ func TestAdminSession_ListSessions_Pagination_Integration(t *testing.T) {
 
 // TestAdminSession_RevokeSession_Integration tests revoking a specific session
 func TestAdminSession_RevokeSession_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -152,7 +153,7 @@ func TestAdminSession_RevokeSession_Integration(t *testing.T) {
 
 // TestAdminSession_RevokeSession_NotFound_Integration tests revoking a non-existent session
 func TestAdminSession_RevokeSession_NotFound_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -174,7 +175,7 @@ func TestAdminSession_RevokeSession_NotFound_Integration(t *testing.T) {
 
 // TestAdminSession_RevokeUserSessions_Integration tests revoking all sessions for a user
 func TestAdminSession_RevokeUserSessions_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 
@@ -228,7 +229,7 @@ func TestAdminSession_RevokeUserSessions_Integration(t *testing.T) {
 
 // TestAdminSession_Unauthorized_Integration tests that regular users cannot access admin session endpoints
 func TestAdminSession_Unauthorized_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "api")
 	defer tc.Close()
 	defer tc.CleanupTestData()
 

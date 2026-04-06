@@ -9,8 +9,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // SAMLHandler handles SAML SSO endpoints
@@ -58,8 +60,12 @@ func (h *SAMLHandler) ListSAMLProviders(c fiber.Ctx) error {
 		return c.JSON([]SAMLProviderResponse{})
 	}
 
+	// Get tenant context for tenant-specific provider lookup
+	tenantID := middleware.GetTenantIDFromContext(c)
+
 	// SECURITY: Only list providers that allow app login
-	providers := h.samlService.GetProvidersForApp()
+	// Uses tenant-aware method that checks tenant-specific providers first
+	providers := h.samlService.GetProvidersForAppWithTenant(c.RequestCtx(), tenantID)
 	response := make([]SAMLProviderResponse, 0, len(providers))
 
 	baseURL := c.BaseURL()
@@ -652,22 +658,6 @@ func convertAttributes(attrs map[string][]string) map[string]interface{} {
 		}
 	}
 	return result
-}
-
-// RegisterSAMLRoutes registers SAML-related routes
-func (h *SAMLHandler) RegisterRoutes(router fiber.Router) {
-	saml := router.Group("/saml")
-
-	// Public endpoints
-	saml.Get("/providers", h.ListSAMLProviders)
-	saml.Get("/metadata/:provider", h.GetSPMetadata)
-	saml.Get("/login/:provider", h.InitiateSAMLLogin)
-	saml.Post("/acs", h.HandleSAMLAssertion)
-
-	// SLO endpoints
-	saml.Get("/logout/:provider", h.InitiateSAMLLogout) // SP-initiated logout (requires auth)
-	saml.Post("/slo", h.HandleSAMLLogout)               // IdP-initiated logout & SP callback
-	saml.Get("/slo", h.HandleSAMLLogout)                // Some IdPs use GET for SLO
 }
 
 // CreateSAMLUser method to add to auth.Service

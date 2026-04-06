@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // setupFunctionsTest prepares the test context for functions reload tests
@@ -79,6 +80,7 @@ func TestFunctionsReloadEndpoint(t *testing.T) {
 	// Test reload endpoint - should create functions from files
 	resp := tc.NewRequest("POST", "/api/v1/admin/functions/reload").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 
@@ -102,12 +104,14 @@ func TestFunctionsReloadUnauthorized(t *testing.T) {
 
 	// Test without authentication
 	tc.NewRequest("POST", "/api/v1/admin/functions/reload").
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusUnauthorized)
 
 	// Test with invalid token
 	tc.NewRequest("POST", "/api/v1/admin/functions/reload").
 		WithAuth("invalid-token").
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusUnauthorized)
 }
@@ -127,6 +131,7 @@ func TestFunctionsReloadWithRegularUser(t *testing.T) {
 	// Test with regular user token - should be forbidden
 	tc.NewRequest("POST", "/api/v1/admin/functions/reload").
 		WithAuth(userToken).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusForbidden)
 }
@@ -149,6 +154,7 @@ func TestFunctionsReloadUpdatesExistingFunctions(t *testing.T) {
 	// First reload - should create the function
 	resp1 := tc.NewRequest("POST", "/api/v1/admin/functions/reload").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 
@@ -166,6 +172,7 @@ func TestFunctionsReloadUpdatesExistingFunctions(t *testing.T) {
 	// Second reload - should update the function
 	resp2 := tc.NewRequest("POST", "/api/v1/admin/functions/reload").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 
@@ -204,6 +211,7 @@ func TestFunctionsReloadWithInvalidFiles(t *testing.T) {
 	// Reload - should process valid function and skip/report invalid ones
 	resp := tc.NewRequest("POST", "/api/v1/admin/functions/reload").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 
@@ -223,6 +231,7 @@ func TestFunctionsReloadEmptyDirectory(t *testing.T) {
 	// Reload should succeed but report 0 functions
 	resp := tc.NewRequest("POST", "/api/v1/admin/functions/reload").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 
@@ -252,6 +261,7 @@ func TestFunctionsReloadConcurrent(t *testing.T) {
 		go func(id int) {
 			resp := tc.NewRequest("POST", "/api/v1/admin/functions/reload").
 				WithAuth(token).
+				WithDefaultTenant().
 				Send()
 
 			// All requests should succeed
@@ -307,6 +317,7 @@ func TestFunctionsDirectoryBasedPattern(t *testing.T) {
 	// Reload functions - should load both patterns
 	resp := tc.NewRequest("POST", "/api/v1/admin/functions/reload").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 
@@ -354,6 +365,7 @@ func TestFunctionsPriorityPattern(t *testing.T) {
 	// Reload functions - should only create one function using the flat file
 	resp := tc.NewRequest("POST", "/api/v1/admin/functions/reload").
 		WithAuth(token).
+		WithDefaultTenant().
 		Send().
 		AssertStatus(fiber.StatusOK)
 

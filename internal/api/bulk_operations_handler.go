@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
@@ -140,6 +140,9 @@ func (h *BulkOperationsHandler) handleBulkDelete(c fiber.Ctx, ctx context.Contex
 	quotedPKColumn := quoteIdentifier(pkColumn)
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s = ANY($1)", quotedTableName, quotedPKColumn)
 
+	// Set target schema for tenant-aware pool routing
+	middleware.SetTargetSchema(c, schema)
+
 	// Execute with RLS context
 	var rowsAffected int64
 	err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -170,6 +173,9 @@ func (h *BulkOperationsHandler) handleBulkExport(c fiber.Ctx, ctx context.Contex
 	quotedPKColumn := quoteIdentifier(pkColumn)
 	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ANY($1)", quotedTableName, quotedPKColumn)
 
+	// Set target schema for tenant-aware pool routing
+	middleware.SetTargetSchema(c, schema)
+
 	// Execute with RLS context
 	var results []map[string]interface{}
 	err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
@@ -193,15 +199,4 @@ func (h *BulkOperationsHandler) handleBulkExport(c fiber.Ctx, ctx context.Contex
 		"count":   len(results),
 		"records": results,
 	})
-}
-
-// RegisterRoutes registers the bulk operations endpoints
-func (h *BulkOperationsHandler) RegisterRoutes(app *fiber.App, authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, jwtManager *auth.JWTManager) {
-	// Apply authentication middleware
-	bulk := app.Group("/api/v1/bulk",
-		middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager),
-	)
-
-	// Bulk operations require write scope
-	bulk.Post("", middleware.RequireScope(auth.ScopeTablesWrite), h.HandleBulkAction)
 }

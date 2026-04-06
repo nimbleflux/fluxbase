@@ -232,7 +232,7 @@ async function waitForJob(jobId: string) {
     console.log(`Status: ${job.status}`);
     if (job.progress) {
       console.log(
-        `Progress: ${job.progress.percent}% - ${job.progress.message}`
+        `Progress: ${job.progress.percent}% - ${job.progress.message}`,
       );
     }
 
@@ -278,7 +278,7 @@ channel
     // Filter for our specific job
     if (updatedJob.id === job.id) {
       console.log(
-        `[${updatedJob.progress.percent}%] ${updatedJob.progress.message}`
+        `[${updatedJob.progress.percent}%] ${updatedJob.progress.message}`,
       );
 
       // Handle completion
@@ -380,7 +380,7 @@ channel
 **Admins see all jobs:**
 
 ```typescript
-// Admin or dashboard_admin role can see all jobs
+// Admin, instance_admin, or tenant_admin role can see all jobs
 const channel = adminClient.realtime.channel("table:jobs.queue");
 
 channel
@@ -410,7 +410,7 @@ channel
     },
     (payload) => {
       console.log("Running job progress:", payload.new.progress);
-    }
+    },
   )
   .subscribe();
 ```
@@ -490,7 +490,7 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   const context = job.getJobContext();
   const { items } = context.payload;
@@ -540,7 +540,7 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   const context = job.getJobContext();
 
@@ -581,7 +581,7 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   const context = job.getJobContext();
   const { retention_days = 30 } = context.payload;
@@ -702,7 +702,7 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   // Get secrets with automatic fallback: user -> system
   const stripeKey = secrets.getRequired("stripe_api_key");
@@ -937,7 +937,7 @@ import { createClient } from "@nimbleflux/fluxbase-sdk";
 import { readFile } from "fs/promises";
 
 const client = createClient(process.env.FLUXBASE_URL!, {
-  serviceKey: process.env.FLUXBASE_SERVICE_KEY!,
+  serviceKey: process.env.FLUXBASE_SERVICE_ROLE_KEY!,
 });
 
 // Read job file
@@ -993,7 +993,7 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   const context = job.getJobContext();
   const { file_url } = context.payload;
@@ -1020,14 +1020,14 @@ export async function handler(
       batch.map((item) => ({
         ...item,
         user_id: context.user?.id,
-      }))
+      })),
     );
 
     processed += batch.length;
     const progress = 10 + Math.floor((processed / data.length) * 90);
     job.reportProgress(
       progress,
-      `Imported ${processed}/${data.length} records`
+      `Imported ${processed}/${data.length} records`,
     );
   }
 
@@ -1042,7 +1042,7 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   const { items } = job.getJobPayload();
 
@@ -1056,7 +1056,7 @@ export async function handler(
       job.reportProgress(progress, `Processed ${index + 1}/${items.length}`);
 
       return result;
-    })
+    }),
   );
 
   return { success: true, results };
@@ -1070,7 +1070,7 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   const context = job.getJobContext();
   const apiKey = Deno.env.get("FLUXBASE_EXTERNAL_API_KEY");
@@ -1108,7 +1108,7 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   const context = job.getJobContext();
   const { source_file } = context.payload;
@@ -1150,14 +1150,14 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   const context = job.getJobContext();
   const { total_batches, current_batch = 0 } = context.payload;
 
   job.reportProgress(
     0,
-    `Processing batch ${current_batch + 1}/${total_batches}`
+    `Processing batch ${current_batch + 1}/${total_batches}`,
   );
 
   // Process current batch
@@ -1237,14 +1237,17 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   job.reportProgress(10, "Fetching data...");
 
   const { data: records } = await fluxbaseService
     .from("sales_data")
     .select("*")
-    .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+    .gte(
+      "created_at",
+      new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    )
     .execute();
 
   job.reportProgress(40, "Analyzing with AI...");
@@ -1254,14 +1257,15 @@ export async function handler(
     messages: [
       {
         role: "system",
-        content: "You are a business analyst. Provide concise, actionable insights."
+        content:
+          "You are a business analyst. Provide concise, actionable insights.",
       },
       {
         role: "user",
-        content: `Analyze this week's sales data and provide key insights:\n${JSON.stringify(records, null, 2)}`
-      }
+        content: `Analyze this week's sales data and provide key insights:\n${JSON.stringify(records, null, 2)}`,
+      },
     ],
-    maxTokens: 500
+    maxTokens: 500,
   });
 
   job.reportProgress(80, "Saving report...");
@@ -1272,7 +1276,7 @@ export async function handler(
     .insert({
       type: "weekly_analysis",
       content: response.content,
-      generated_at: new Date().toISOString()
+      generated_at: new Date().toISOString(),
     })
     .execute();
 
@@ -1294,7 +1298,7 @@ export async function handler(
   req: Request,
   fluxbase: FluxbaseClient,
   fluxbaseService: FluxbaseClient,
-  job: JobUtils
+  job: JobUtils,
 ) {
   const { document_ids } = job.getJobPayload();
 
@@ -1319,14 +1323,14 @@ export async function handler(
         .upsert({
           document_id: doc.id,
           embedding: embedding,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .execute();
     }
 
     job.reportProgress(
       Math.round(((i + 1) / document_ids.length) * 100),
-      `Processed ${i + 1}/${document_ids.length} documents`
+      `Processed ${i + 1}/${document_ids.length} documents`,
     );
   }
 
@@ -1358,19 +1362,25 @@ interface JobUtils {
       content: string;
       model: string;
       finish_reason?: string;
-      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      usage?: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+      };
     }>;
 
-    embed(options: {
-      text: string;
-      provider?: string;
-    }): Promise<{
+    embed(options: { text: string; provider?: string }): Promise<{
       embedding: number[];
       model: string;
     }>;
 
     listProviders(): Promise<{
-      providers: Array<{ name: string; type: string; model: string; enabled: boolean }>;
+      providers: Array<{
+        name: string;
+        type: string;
+        model: string;
+        enabled: boolean;
+      }>;
       default: string;
     }>;
   };

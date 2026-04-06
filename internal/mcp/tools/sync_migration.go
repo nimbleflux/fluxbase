@@ -11,9 +11,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/nimbleflux/fluxbase/internal/migrations"
-	"github.com/rs/zerolog/log"
 )
 
 // SyncMigrationTool implements the sync_migration MCP tool for deploying database migrations

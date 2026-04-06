@@ -27,7 +27,8 @@ func TestWrapCode_FunctionType(t *testing.T) {
 	assert.Contains(t, result, "_fluxbase")
 	assert.Contains(t, result, "_fluxbaseService")
 	assert.Contains(t, result, "_functionUtils")
-	assert.Contains(t, result, "Fluxbase = _functionUtils")
+	assert.Contains(t, result, "..._functionUtils")
+	assert.Contains(t, result, "_tenantUtils")
 }
 
 func TestWrapCode_JobType(t *testing.T) {
@@ -45,7 +46,8 @@ func TestWrapCode_JobType(t *testing.T) {
 	assert.Contains(t, result, "_fluxbase")
 	assert.Contains(t, result, "_fluxbaseService")
 	assert.Contains(t, result, "_jobUtils")
-	assert.Contains(t, result, "Fluxbase = _jobUtils")
+	assert.Contains(t, result, "..._jobUtils")
+	assert.Contains(t, result, "_tenantUtils")
 }
 
 func TestWrapCode_UnknownType(t *testing.T) {

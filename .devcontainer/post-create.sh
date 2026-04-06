@@ -90,16 +90,11 @@ else
   echo "⚠️  Deno not found - edge functions bundling may fail"
 fi
 
-# Run migrations
-echo "🗄️  Running database migrations..."
+# Run bootstrap (server will apply declarative schema on startup)
+echo "🗄️  Running database bootstrap..."
 cd /workspace
-# Check for dirty migration state and fix it
-DIRTY_VERSION=$(PGPASSWORD=postgres psql -h postgres -U postgres -d fluxbase_dev -tAc "SELECT version FROM schema_migrations WHERE dirty = true" 2>/dev/null || echo "")
-if [ -n "$DIRTY_VERSION" ]; then
-  echo "⚠️  Fixing dirty migration at version $DIRTY_VERSION..."
-  migrate -path internal/database/migrations -database "postgresql://postgres:postgres@postgres:5432/fluxbase_dev?sslmode=disable" force "$DIRTY_VERSION" || true
-fi
-make migrate-up || echo "⚠️  Migrations may have already been run"
+PGPASSWORD=postgres psql -h postgres -U postgres -d fluxbase_dev -f /workspace/internal/database/bootstrap/bootstrap.sql || echo "⚠️  Bootstrap may have already been run"
+echo "✅ Bootstrap complete - server will apply declarative schema on first startup"
 
 # bun is already set up in the Dockerfile - just verify it's available
 echo "📦 Verifying bun..."
@@ -289,7 +284,7 @@ echo "📝 Quick Start:"
 echo "  - Run app with hot-reload: make dev"
 echo "  - Run tests: make test"
 echo "  - View docs: make docs-dev"
-echo "  - Run database migrations: make migrate-up"
+echo "  - Database: bootstrap + declarative schema auto-applied on startup"
 echo ""
 echo "🖥️  CLI Commands (use 'fluxbase' or 'fb'):"
 echo "  - fluxbase auth login      # Authenticate with server"

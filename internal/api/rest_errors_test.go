@@ -80,7 +80,7 @@ func TestHandleDatabaseError(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 
 			// Create a test handler that uses handleDatabaseError
 			app.Get("/test", func(c fiber.Ctx) error {
@@ -141,7 +141,7 @@ func TestIsUserAuthenticated(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 
 			var result bool
 			app.Get("/test", func(c fiber.Ctx) error {
@@ -185,7 +185,7 @@ func TestGetRequestID_FromMiddleware(t *testing.T) {
 }
 
 func TestGetRequestID_FromHeader(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 
 	var result string
 	app.Get("/test", func(c fiber.Ctx) error {
@@ -225,7 +225,7 @@ func TestGetRequestID_MiddlewareUsesHeader(t *testing.T) {
 }
 
 func TestGetRequestID_Empty(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 
 	var result string
 	app.Get("/test", func(c fiber.Ctx) error {
@@ -359,7 +359,7 @@ func TestHandleDatabaseError_IncludesRequestID(t *testing.T) {
 // =============================================================================
 
 func TestSendBadRequest(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendBadRequest(c, "Invalid parameter", ErrCodeInvalidInput)
 	})
@@ -377,7 +377,7 @@ func TestSendBadRequest(t *testing.T) {
 }
 
 func TestSendUnauthorized(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendUnauthorized(c, "Token expired", ErrCodeExpiredToken)
 	})
@@ -395,7 +395,7 @@ func TestSendUnauthorized(t *testing.T) {
 }
 
 func TestSendForbidden(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendForbidden(c, "Access denied", ErrCodeAccessDenied)
 	})
@@ -413,7 +413,7 @@ func TestSendForbidden(t *testing.T) {
 }
 
 func TestSendNotFound(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendNotFound(c, "Resource not found")
 	})
@@ -431,7 +431,7 @@ func TestSendNotFound(t *testing.T) {
 }
 
 func TestSendConflict(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendConflict(c, "Resource already exists", ErrCodeAlreadyExists)
 	})
@@ -449,7 +449,7 @@ func TestSendConflict(t *testing.T) {
 }
 
 func TestSendInternalError(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendInternalError(c, "Something went wrong")
 	})
@@ -467,7 +467,7 @@ func TestSendInternalError(t *testing.T) {
 }
 
 func TestSendValidationError(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		details := map[string]string{"email": "invalid format"}
 		return SendValidationError(c, "Validation failed", details)
@@ -487,7 +487,7 @@ func TestSendValidationError(t *testing.T) {
 }
 
 func TestSendMissingAuth(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", SendMissingAuth)
 
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -503,7 +503,7 @@ func TestSendMissingAuth(t *testing.T) {
 }
 
 func TestSendInvalidToken(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", SendInvalidToken)
 
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -519,7 +519,7 @@ func TestSendInvalidToken(t *testing.T) {
 }
 
 func TestSendTokenRevoked(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", SendTokenRevoked)
 
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -535,7 +535,7 @@ func TestSendTokenRevoked(t *testing.T) {
 }
 
 func TestSendInsufficientPermissions(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", SendInsufficientPermissions)
 
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -551,7 +551,7 @@ func TestSendInsufficientPermissions(t *testing.T) {
 }
 
 func TestSendAdminRequired(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", SendAdminRequired)
 
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -567,7 +567,7 @@ func TestSendAdminRequired(t *testing.T) {
 }
 
 func TestSendInvalidBody(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", SendInvalidBody)
 
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -583,7 +583,7 @@ func TestSendInvalidBody(t *testing.T) {
 }
 
 func TestSendMissingField(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendMissingField(c, "email")
 	})
@@ -601,7 +601,7 @@ func TestSendMissingField(t *testing.T) {
 }
 
 func TestSendInvalidID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendInvalidID(c, "user ID")
 	})
@@ -619,7 +619,7 @@ func TestSendInvalidID(t *testing.T) {
 }
 
 func TestSendResourceNotFound(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendResourceNotFound(c, "User")
 	})
@@ -637,7 +637,7 @@ func TestSendResourceNotFound(t *testing.T) {
 }
 
 func TestSendOperationFailed(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendOperationFailed(c, "create user")
 	})
@@ -655,7 +655,7 @@ func TestSendOperationFailed(t *testing.T) {
 }
 
 func TestSendFeatureDisabled(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		return SendFeatureDisabled(c, "User registration")
 	})

@@ -18,15 +18,16 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/oauth2"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/email"
-	"github.com/rs/zerolog/log"
-	"golang.org/x/oauth2"
 )
 
-// DashboardAuthHandler handles dashboard authentication endpoints
+// DashboardAuthHandler handles platform authentication endpoints
 type DashboardAuthHandler struct {
 	authService   *auth.DashboardAuthService
 	jwtManager    *auth.JWTManager
@@ -66,40 +67,6 @@ func NewDashboardAuthHandler(authService *auth.DashboardAuthService, jwtManager 
 		oauthStates:   make(map[string]*dashboardOAuthState),
 		oauthConfigs:  make(map[string]*oauth2.Config),
 	}
-}
-
-// RegisterRoutes registers dashboard auth routes
-func (h *DashboardAuthHandler) RegisterRoutes(app *fiber.App) {
-	dashboard := app.Group("/dashboard/auth")
-
-	// Public routes
-	dashboard.Post("/signup", h.Signup)
-	dashboard.Post("/login", h.Login)
-	dashboard.Post("/refresh", h.RefreshToken)
-	dashboard.Post("/2fa/verify", h.VerifyTOTP)
-
-	// Password reset routes (public)
-	dashboard.Post("/password/reset", h.RequestPasswordReset)
-	dashboard.Post("/password/reset/verify", h.VerifyPasswordResetToken)
-	dashboard.Post("/password/reset/confirm", h.ConfirmPasswordReset)
-
-	// SSO routes (public)
-	dashboard.Get("/sso/providers", h.GetSSOProviders)
-	dashboard.Get("/sso/oauth/:provider", h.InitiateOAuthLogin)
-	dashboard.Get("/sso/oauth/:provider/callback", h.OAuthCallback)
-	dashboard.Get("/sso/saml/:provider", h.InitiateSAMLLogin)
-	dashboard.Post("/sso/saml/acs", h.SAMLACSCallback)
-
-	// Protected routes (require dashboard JWT)
-	dashboard.Get("/me", h.RequireDashboardAuth, h.GetCurrentUser)
-	dashboard.Put("/profile", h.RequireDashboardAuth, h.UpdateProfile)
-	dashboard.Post("/password/change", h.RequireDashboardAuth, h.ChangePassword)
-	dashboard.Delete("/account", h.RequireDashboardAuth, h.DeleteAccount)
-
-	// 2FA routes
-	dashboard.Post("/2fa/setup", h.RequireDashboardAuth, h.SetupTOTP)
-	dashboard.Post("/2fa/enable", h.RequireDashboardAuth, h.EnableTOTP)
-	dashboard.Post("/2fa/disable", h.RequireDashboardAuth, h.DisableTOTP)
 }
 
 // Signup creates a new dashboard user account
@@ -260,8 +227,8 @@ func (h *DashboardAuthHandler) VerifyTOTP(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to fetch user")
 	}
 
-	// Generate JWT tokens
-	accessToken, refreshToken, _, err := h.jwtManager.GenerateTokenPair(user.ID.String(), user.Email, "dashboard_admin", nil, nil)
+	// Generate JWT tokens - platform admins get instance_admin role
+	accessToken, refreshToken, _, err := h.jwtManager.GenerateTokenPair(user.ID.String(), user.Email, "instance_admin", nil, nil)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to generate tokens")
 	}
@@ -283,8 +250,8 @@ func (h *DashboardAuthHandler) GetCurrentUser(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, "User not found")
 	}
 
-	// Set role from JWT (RequireDashboardAuth middleware validates this is "dashboard_admin")
-	user.Role = "dashboard_admin"
+	// Set role from JWT (RequireDashboardAuth middleware validates this is "instance_admin")
+	user.Role = "instance_admin"
 
 	return c.JSON(user)
 }
@@ -614,8 +581,8 @@ func (h *DashboardAuthHandler) RequireDashboardAuth(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "Invalid token")
 	}
 
-	// Verify role is dashboard_admin
-	if claims.Role != "dashboard_admin" {
+	// Verify role is instance_admin
+	if claims.Role != "instance_admin" {
 		return fiber.NewError(fiber.StatusForbidden, "Insufficient permissions")
 	}
 
@@ -775,8 +742,8 @@ func (h *DashboardAuthHandler) getOAuthProvidersForDashboard(ctx context.Context
 	err := database.WrapWithServiceRole(ctx, h.db, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
 			SELECT id, display_name, provider_name
-			FROM dashboard.oauth_providers
-			WHERE enabled = true AND allow_dashboard_login = true
+		FROM platform.oauth_providers
+		WHERE enabled = true AND allow_dashboard_login = true
 		`)
 		if err != nil {
 			return err
@@ -822,8 +789,8 @@ func (h *DashboardAuthHandler) InitiateOAuthLogin(c fiber.Ctx) error {
 			SELECT client_id, client_secret, provider_name, scopes,
 			       is_custom, authorization_url, token_url, user_info_url,
 			       COALESCE(is_encrypted, false) AS is_encrypted
-			FROM dashboard.oauth_providers
-			WHERE (id::text = $1 OR provider_name = $1) AND enabled = true AND allow_dashboard_login = true
+		FROM platform.oauth_providers
+		WHERE (id::text = $1 OR provider_name = $1) AND enabled = true AND allow_dashboard_login = true
 		`, providerID).Scan(&clientID, &clientSecret, &providerName, &scopes, &isCustom, &authURL, &tokenURL, &userInfoURL, &isEncrypted)
 	})
 	if err != nil {
@@ -1028,8 +995,8 @@ func (h *DashboardAuthHandler) OAuthCallback(c fiber.Ctx) error {
 				   token_url IS NOT NULL, COALESCE(token_url, ''),
 				   user_info_url IS NOT NULL, COALESCE(user_info_url, ''),
 				   COALESCE(is_encrypted, false) AS is_encrypted
-			FROM dashboard.oauth_providers
-			WHERE (id::text = $1 OR provider_name = $1) AND enabled = true AND allow_dashboard_login = true
+		FROM platform.oauth_providers
+		WHERE (id::text = $1 OR provider_name = $1) AND enabled = true AND allow_dashboard_login = true
 		`, providerID).Scan(&clientID, &clientSecret, &scopes, &isCustom,
 			&authzURLNull, &authzURL, &tokenURLNull, &tokenURL, &userInfoURLNull, &userInfoURLStr, &isEncrypted)
 		if err != nil {
@@ -1115,8 +1082,8 @@ func (h *DashboardAuthHandler) OAuthCallback(c fiber.Ctx) error {
 	err = database.WrapWithServiceRole(ctx, h.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT display_name, required_claims, denied_claims
-			FROM dashboard.oauth_providers
-			WHERE (id::text = $1 OR provider_name = $1) AND enabled = true AND allow_dashboard_login = true
+		FROM platform.oauth_providers
+		WHERE (id::text = $1 OR provider_name = $1) AND enabled = true AND allow_dashboard_login = true
 		`, providerID).Scan(&providerDisplayName, &requiredClaimsJSON, &deniedClaimsJSON)
 	})
 	if err != nil {

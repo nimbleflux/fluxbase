@@ -1,20 +1,22 @@
-import { useQuery } from '@tanstack/react-query'
-import { KnowledgeBaseCard } from './-KnowledgeBaseCard'
-import type { KnowledgeBaseSummary } from '@/lib/api'
+import { useQuery } from "@tanstack/react-query";
+import api, { type KnowledgeBaseSummary } from "@/lib/api";
+import { KnowledgeBaseCard } from "./-KnowledgeBaseCard";
 
 function PublicKnowledgeBasesList() {
   const { data, isLoading } = useQuery({
-    queryKey: ['my-knowledge-bases'],
+    queryKey: ["my-knowledge-bases"],
     queryFn: async () => {
-      const res = await fetch('/api/v1/ai/knowledge-bases')
-      if (!res.ok) throw new Error('Failed to fetch')
-      return res.json()
+      const res = await api.get("/api/v1/ai/knowledge-bases");
+      return res.data;
     },
-  })
+  });
 
-  if (isLoading) return <div className="text-center py-8">Loading...</div>
+  if (isLoading) return <div className="text-center py-8">Loading...</div>;
 
-  const publicKBs = data?.knowledge_bases?.filter((kb: KnowledgeBaseSummary) => kb.visibility === 'public') || []
+  const publicKBs =
+    data?.knowledge_bases?.filter(
+      (kb: KnowledgeBaseSummary) => kb.visibility === "public",
+    ) || [];
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -27,7 +29,7 @@ function PublicKnowledgeBasesList() {
         </div>
       )}
     </div>
-  )
+  );
 }
 
-export { PublicKnowledgeBasesList }
+export { PublicKnowledgeBasesList };

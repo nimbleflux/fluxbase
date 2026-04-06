@@ -3,7 +3,6 @@
 # ==============================================================================
 # This setup is optimized for local development with live code reload.
 # It builds Fluxbase from source and includes useful development tools:
-# - pgAdmin: Database management UI (http://localhost:5050)
 # - MailHog: Email testing UI (http://localhost:8025)
 #
 # Quick Start:
@@ -128,24 +127,6 @@ services:
       - fluxbase-network
     restart: unless-stopped
 
-  # Optional: pgAdmin for database management
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: fluxbase-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@fluxbase.eu
-      PGADMIN_DEFAULT_PASSWORD: admin
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      - fluxbase-network
-    depends_on:
-      - postgres
-    restart: unless-stopped
-
   # MailHog for testing email functionality
   mailhog:
     image: mailhog/mailhog:latest
@@ -159,7 +140,6 @@ services:
 
 volumes:
   postgres_data:
-  pgadmin_data:
 
 networks:
   fluxbase-network:

@@ -132,7 +132,7 @@ CREATE POLICY user_isolation ON public.user_data
 
 ### 7. Service Role Security
 
-The `service_role` and `dashboard_admin` roles have unrestricted access to all database operations and bypass RLS policies. This is necessary for administrative tasks but requires strict security measures.
+The `service_role`, `instance_admin`, and `tenant_admin` roles have elevated access to database operations. `service_role` and `instance_admin` bypass all RLS policies for full platform access, while `tenant_admin` is scoped to assigned tenants. This is necessary for administrative tasks but requires strict security measures.
 
 **⚠️ CRITICAL SECURITY IMPLICATIONS:**
 
@@ -148,7 +148,7 @@ The `service_role` and `dashboard_admin` roles have unrestricted access to all d
 security:
   # Restrict service role to specific IP addresses (if possible)
   service_role_allowed_ips:
-    - "10.0.0.0/8"    # Internal network only
+    - "10.0.0.0/8" # Internal network only
     - "172.16.0.0/12" # Private network
 
   # Enable additional audit logging for service role operations
@@ -158,6 +158,7 @@ security:
 **Best Practices:**
 
 1. **Store credentials securely:**
+
    ```bash
    # Use environment variables (never commit to git)
    export FLUXBASE_SERVICE_ROLE_KEY="your-service-role-key"
@@ -168,18 +169,25 @@ security:
    ```
 
 2. **Implement IP whitelisting:**
+
    ```typescript
    // Server-side middleware to restrict service role usage
-   function restrictServiceRole(req: Request, res: Response, next: NextFunction) {
+   function restrictServiceRole(
+     req: Request,
+     res: Response,
+     next: NextFunction,
+   ) {
      const token = getAuthToken(req);
      const payload = decodeJwt(token);
 
-     if (payload.role === 'service_role') {
-       const allowedIPs = ['10.0.0.0/8', '172.16.0.0/12'];
+     if (payload.role === "service_role") {
+       const allowedIPs = ["10.0.0.0/8", "172.16.0.0/12"];
        const clientIP = req.ip;
 
        if (!isIPInCIDR(clientIP, allowedIPs)) {
-         return res.status(403).json({ error: 'Service role not allowed from this IP' });
+         return res
+           .status(403)
+           .json({ error: "Service role not allowed from this IP" });
        }
      }
 
@@ -188,6 +196,7 @@ security:
    ```
 
 3. **Enable comprehensive audit logging:**
+
    ```sql
    -- Track all service role operations
    CREATE TABLE audit.service_role_log (
@@ -205,13 +214,15 @@ security:
    ```
 
 4. **Implement rate limiting for service roles:**
+
    ```yaml
    # Even service roles should have rate limits to prevent abuse
    rate_limiting:
-     service_role_per_minute: 1000  # Still limit, but higher than regular users
+     service_role_per_minute: 1000 # Still limit, but higher than regular users
    ```
 
 5. **Rotate service role secrets regularly:**
+
    ```bash
    # Example: Rotate service role keys monthly
    # 1. Generate new key
@@ -221,6 +232,7 @@ security:
    ```
 
 6. **Never expose service role tokens to clients:**
+
    ```typescript
    // ❌ NEVER: Send service role token to client
    res.json({ service_token: serviceRoleToken });
@@ -246,7 +258,7 @@ auth:
   saml_providers:
     - name: okta
       enabled: true
-      allow_idp_initiated: false  # Recommended - prevents replay attacks
+      allow_idp_initiated: false # Recommended - prevents replay attacks
 ```
 
 ### 2. Validate Audience Restrictions
@@ -280,7 +292,7 @@ auth:
     - name: okta
       enabled: true
       idp_metadata_url: "https://company.okta.com/app/xxx/sso/saml/metadata"
-      allow_insecure_metadata_url: false  # Default - requires HTTPS
+      allow_insecure_metadata_url: false # Default - requires HTTPS
 ```
 
 ### 5. User Attribute Sanitization
@@ -301,19 +313,24 @@ Deeply nested queries can cause exponential resource consumption. Configure maxi
 # fluxbase.yaml
 graphql:
   enabled: true
-  max_depth: 10  # Maximum nesting depth
+  max_depth: 10 # Maximum nesting depth
 ```
 
 **Example rejected query (depth > 5):**
 
 ```graphql
 {
-  users {           # depth 1
-    posts {         # depth 2
-      comments {    # depth 3
-        author {    # depth 4
-          posts {   # depth 5
-            title   # depth 6 - REJECTED
+  users {
+    # depth 1
+    posts {
+      # depth 2
+      comments {
+        # depth 3
+        author {
+          # depth 4
+          posts {
+            # depth 5
+            title # depth 6 - REJECTED
           }
         }
       }
@@ -328,10 +345,11 @@ Fluxbase calculates a complexity score for each query based on fields and list t
 
 ```yaml
 graphql:
-  max_complexity: 1000  # Maximum complexity score
+  max_complexity: 1000 # Maximum complexity score
 ```
 
 The complexity score accounts for:
+
 - Base cost per field (1 point)
 - Higher cost for list fields (10 points)
 - Multiplied cost for nested lists
@@ -342,7 +360,7 @@ GraphQL introspection exposes your entire schema. Disable it in production.
 
 ```yaml
 graphql:
-  introspection: false  # Disable schema introspection
+  introspection: false # Disable schema introspection
 ```
 
 ### 4. Row Level Security (RLS) Enforcement
@@ -350,6 +368,7 @@ graphql:
 The GraphQL endpoint enforces PostgreSQL Row Level Security for all operations:
 
 **How it works:**
+
 - GraphQL resolvers execute queries with `SET LOCAL ROLE` set to the appropriate database role
 - JWT claims are passed via `request.jwt.claims` for use in RLS policies
 - All queries, mutations, and foreign key traversals respect RLS policies
@@ -360,7 +379,8 @@ The GraphQL endpoint enforces PostgreSQL Row Level Security for all operations:
 **Role Mapping:**
 | Application Role | Database Role |
 |-----------------|---------------|
-| `service_role`, `dashboard_admin` | `service_role` (bypasses RLS) |
+| `service_role`, `instance_admin` | `service_role` (bypasses RLS) |
+| `tenant_admin` | `tenant_service` (tenant-scoped RLS) |
 | `anon`, empty | `anon` |
 | All others (`user`, `admin`, etc.) | `authenticated` |
 
@@ -694,8 +714,8 @@ const jwtSecret = await getSecret("fluxbase/jwt-secret");
 #!/bin/bash
 # rotate-secrets.sh
 
-# Generate new JWT secret
-NEW_SECRET=$(openssl rand -base64 32)
+# Generate new JWT secret (64 chars recommended)
+NEW_SECRET=$(openssl rand -base64 48)
 
 # Update in secrets manager
 kubectl patch secret fluxbase-secrets \
@@ -845,7 +865,7 @@ const debouncedSubmit = debounce(
     await submitForm(data);
   },
   1000,
-  { leading: true, trailing: false }
+  { leading: true, trailing: false },
 );
 ```
 

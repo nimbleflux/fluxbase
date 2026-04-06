@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { KnowledgeBaseHeader } from '@/components/knowledge-bases/knowledge-base-header'
+import { useTenantStore } from '@/stores/tenant-store'
 
 export const Route = createFileRoute(
   '/_authenticated/knowledge-bases/$id/settings'
@@ -37,6 +38,7 @@ export const Route = createFileRoute(
 function KnowledgeBaseSettingsPage() {
   const { id } = Route.useParams()
   const navigate = useNavigate()
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id)
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -100,7 +102,7 @@ function KnowledgeBaseSettingsPage() {
 
   useEffect(() => {
     fetchKnowledgeBase()
-  }, [fetchKnowledgeBase])
+  }, [fetchKnowledgeBase, currentTenantId])
 
   if (loading) {
     return (

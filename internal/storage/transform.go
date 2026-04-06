@@ -5,7 +5,6 @@ package storage
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"strings"

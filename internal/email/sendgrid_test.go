@@ -3,9 +3,10 @@ package email
 import (
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // =============================================================================
@@ -14,6 +15,7 @@ import (
 
 func TestNewSendGridService(t *testing.T) {
 	t.Run("returns error for missing API key", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:       "sendgrid",
 			SendGridAPIKey: "",
@@ -28,6 +30,7 @@ func TestNewSendGridService(t *testing.T) {
 	})
 
 	t.Run("creates service with valid config", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:       "sendgrid",
 			SendGridAPIKey: "SG.test-api-key",
@@ -50,6 +53,7 @@ func TestNewSendGridService(t *testing.T) {
 
 func TestSendGridService_IsConfigured(t *testing.T) {
 	t.Run("returns false when disabled", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:        false,
 			Provider:       "sendgrid",
@@ -62,6 +66,7 @@ func TestSendGridService_IsConfigured(t *testing.T) {
 	})
 
 	t.Run("returns true when enabled and configured", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Enabled:        true,
 			Provider:       "sendgrid",
@@ -81,6 +86,7 @@ func TestSendGridService_IsConfigured(t *testing.T) {
 
 func TestSendGridService_Struct(t *testing.T) {
 	t.Run("stores config and client", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:       "sendgrid",
 			SendGridAPIKey: "SG.abc123xyz",
@@ -110,22 +116,27 @@ func TestSendGridService_EmailMethods(t *testing.T) {
 	service, _ := NewSendGridService(cfg)
 
 	t.Run("SendMagicLink method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("SendVerificationEmail method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("SendPasswordReset method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("SendInvitationEmail method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 
 	t.Run("Send method exists", func(t *testing.T) {
+		t.Parallel()
 		assert.NotNil(t, service)
 	})
 }
@@ -136,6 +147,7 @@ func TestSendGridService_EmailMethods(t *testing.T) {
 
 func TestSendGridService_APIKeyFormat(t *testing.T) {
 	t.Run("accepts SG. prefixed keys", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:       "sendgrid",
 			SendGridAPIKey: "SG.abcdefghijklmnop",
@@ -149,6 +161,7 @@ func TestSendGridService_APIKeyFormat(t *testing.T) {
 	})
 
 	t.Run("accepts non-prefixed keys", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:       "sendgrid",
 			SendGridAPIKey: "some-legacy-key-format",
@@ -168,6 +181,7 @@ func TestSendGridService_APIKeyFormat(t *testing.T) {
 
 func TestSendGridService_StatusCodeHandling(t *testing.T) {
 	t.Run("documents status code error threshold", func(t *testing.T) {
+		t.Parallel()
 		// The Send method checks: if response.StatusCode >= 400
 		// This means:
 		// - 2xx: Success
@@ -194,6 +208,7 @@ func TestSendGridService_StatusCodeHandling(t *testing.T) {
 
 func TestSendGridService_ReplyToConfiguration(t *testing.T) {
 	t.Run("configures reply-to when set", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:       "sendgrid",
 			SendGridAPIKey: "SG.test-key",
@@ -208,6 +223,7 @@ func TestSendGridService_ReplyToConfiguration(t *testing.T) {
 	})
 
 	t.Run("skips reply-to when not set", func(t *testing.T) {
+		t.Parallel()
 		cfg := &config.EmailConfig{
 			Provider:       "sendgrid",
 			SendGridAPIKey: "SG.test-key",

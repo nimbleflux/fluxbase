@@ -40,8 +40,8 @@ You need the setup token **once** when registering the first dashboard user.
 If you prefer to generate secrets manually:
 
 ```bash
-# JWT Secret (base64, 32+ bytes)
-openssl rand -base64 32
+# JWT Secret (base64, 48 bytes for 64 chars recommended)
+openssl rand -base64 48
 
 # Encryption Key (exactly 32 characters for AES-256)
 openssl rand -base64 32 | head -c 32

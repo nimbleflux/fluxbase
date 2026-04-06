@@ -6,11 +6,9 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nimbleflux/fluxbase/internal/auth"
+
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/mcp/custom"
-	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // CustomMCPHandler handles custom MCP tool and resource management requests.
@@ -27,45 +25,6 @@ func NewCustomMCPHandler(storage *custom.Storage, manager *custom.Manager, mcpCo
 		manager:   manager,
 		mcpConfig: mcpConfig,
 	}
-}
-
-// RegisterRoutes registers custom MCP routes.
-func (h *CustomMCPHandler) RegisterRoutes(
-	app *fiber.App,
-	authService *auth.Service,
-	clientKeyService *auth.ClientKeyService,
-	db *pgxpool.Pool,
-	jwtManager *auth.JWTManager,
-) {
-	// Custom MCP tools and resources require admin access
-	mcpAdmin := app.Group("/api/v1/mcp",
-		middleware.RequireAuthOrServiceKey(authService, clientKeyService, db, jwtManager),
-		middleware.RequireAdmin(),
-	)
-
-	// MCP Configuration
-	mcpAdmin.Get("/config", h.GetConfig)
-
-	// Custom Tools CRUD
-	// Note: Static routes (/sync) must be registered before parameterized routes (/:id)
-	// to ensure correct route matching
-	mcpAdmin.Get("/tools", h.ListTools)
-	mcpAdmin.Post("/tools", h.CreateTool)
-	mcpAdmin.Post("/tools/sync", h.SyncTool)
-	mcpAdmin.Get("/tools/:id", h.GetTool)
-	mcpAdmin.Put("/tools/:id", h.UpdateTool)
-	mcpAdmin.Delete("/tools/:id", h.DeleteTool)
-	mcpAdmin.Post("/tools/:id/test", h.TestTool)
-
-	// Custom Resources CRUD
-	// Note: Static routes (/sync) must be registered before parameterized routes (/:id)
-	mcpAdmin.Get("/resources", h.ListResources)
-	mcpAdmin.Post("/resources", h.CreateResource)
-	mcpAdmin.Post("/resources/sync", h.SyncResource)
-	mcpAdmin.Get("/resources/:id", h.GetResource)
-	mcpAdmin.Put("/resources/:id", h.UpdateResource)
-	mcpAdmin.Delete("/resources/:id", h.DeleteResource)
-	mcpAdmin.Post("/resources/:id/test", h.TestResource)
 }
 
 // Configuration Handlers

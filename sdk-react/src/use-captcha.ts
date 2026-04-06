@@ -8,7 +8,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useFluxbaseClient } from "./context";
-import type { CaptchaConfig, CaptchaProvider } from "@fluxbase/sdk";
+import type { CaptchaConfig, CaptchaProvider } from "@nimbleflux/fluxbase-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
@@ -241,7 +241,7 @@ export function useCaptcha(provider?: CaptchaProvider): CaptchaState {
  */
 export function isCaptchaRequiredForEndpoint(
   config: CaptchaConfig | undefined,
-  endpoint: string
+  endpoint: string,
 ): boolean {
   if (!config?.enabled) {
     return false;

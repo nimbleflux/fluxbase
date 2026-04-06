@@ -32,6 +32,7 @@ import { FluxbaseAdminAI } from "./admin-ai";
 import { FluxbaseAdminRPC } from "./admin-rpc";
 import { FluxbaseAdminStorage } from "./admin-storage";
 import { FluxbaseAdminRealtime } from "./admin-realtime";
+import { ServiceKeysManager } from "./admin-service-keys";
 
 /**
  * Admin client for managing Fluxbase instance
@@ -105,6 +106,11 @@ export class FluxbaseAdmin {
    */
   public realtime: FluxbaseAdminRealtime;
 
+  /**
+   * Service keys manager for API key management (list, create, rotate, revoke)
+   */
+  public serviceKeys: ServiceKeysManager;
+
   constructor(fetch: FluxbaseFetch) {
     this.fetch = fetch;
     this.settings = new FluxbaseSettings(fetch);
@@ -120,6 +126,7 @@ export class FluxbaseAdmin {
     this.rpc = new FluxbaseAdminRPC(fetch);
     this.storage = new FluxbaseAdminStorage(fetch);
     this.realtime = new FluxbaseAdminRealtime(fetch);
+    this.serviceKeys = new ServiceKeysManager(fetch);
   }
 
   /**

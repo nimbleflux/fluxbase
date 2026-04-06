@@ -4,27 +4,37 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // EnrichedUser represents a user with additional metadata for admin view
 type EnrichedUser struct {
-	ID             string                 `json:"id"`
-	Email          string                 `json:"email"`
-	EmailVerified  bool                   `json:"email_verified"`
-	Role           string                 `json:"role"`
-	Provider       string                 `json:"provider"` // "email", "invite_pending", "magic_link"
-	ActiveSessions int                    `json:"active_sessions"`
-	LastSignIn     *time.Time             `json:"last_sign_in"`
-	IsLocked       bool                   `json:"is_locked"`
-	UserMetadata   map[string]interface{} `json:"user_metadata"`
-	AppMetadata    map[string]interface{} `json:"app_metadata"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
+	ID                string                 `json:"id"`
+	Email             string                 `json:"email"`
+	EmailVerified     bool                   `json:"email_verified"`
+	Role              string                 `json:"role"`
+	Provider          string                 `json:"provider"` // "email", "invite_pending", "magic_link"
+	ActiveSessions    int                    `json:"active_sessions"`
+	LastSignIn        *time.Time             `json:"last_sign_in"`
+	IsLocked          bool                   `json:"is_locked"`
+	UserMetadata      map[string]interface{} `json:"user_metadata"`
+	AppMetadata       map[string]interface{} `json:"app_metadata"`
+	CreatedAt         time.Time              `json:"created_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
+	TenantAssignments []TenantAssignment     `json:"tenant_assignments,omitempty"`
+}
+
+// TenantAssignment represents a user's assignment to a tenant
+type TenantAssignment struct {
+	TenantID   string `json:"tenant_id"`
+	TenantName string `json:"tenant_name"`
+	TenantSlug string `json:"tenant_slug"`
 }
 
 // UserManagementService provides admin operations for user management
@@ -54,8 +64,9 @@ func NewUserManagementService(
 }
 
 // ListEnrichedUsers returns a list of users with enriched metadata
-// userType can be "app" for auth.users or "dashboard" for dashboard.users
-func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType string) ([]*EnrichedUser, error) {
+// userType can be "app" for auth.users or "platform" for platform.users
+// tenantID is optional and filters app users by tenant membership
+func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType string, tenantID string) ([]*EnrichedUser, error) {
 	// Default to app users if not specified
 	if userType == "" {
 		userType = "app"
@@ -64,9 +75,64 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 	// Determine which table to query
 	usersTable := "auth.users"
 	sessionsTable := "auth.sessions"
-	if userType == "dashboard" {
-		usersTable = "dashboard.users"
-		sessionsTable = "dashboard.sessions"
+	tenantAssignmentsSelect := ""
+	tenantAssignmentsJoin := ""
+
+	if userType == "platform" {
+		usersTable = "platform.users"
+		sessionsTable = "platform.sessions"
+		// Join to get tenant assignments for platform users
+		tenantAssignmentsJoin = `
+			LEFT JOIN LATERAL (
+				SELECT COALESCE(
+					jsonb_agg(
+						jsonb_build_object(
+							'tenant_id', t.id,
+							'tenant_name', t.name,
+							'tenant_slug', t.slug
+						)
+					),
+					'[]'::jsonb
+				) as assignments
+				FROM platform.tenant_admin_assignments taa
+				JOIN platform.tenants t ON t.id = taa.tenant_id
+				WHERE taa.user_id = u.id
+			) ta ON true`
+		tenantAssignmentsSelect = ", ta.assignments as tenant_assignments"
+	} else {
+		// App users: join tenant memberships to populate tenant_assignments
+		tenantAssignmentsJoin = `
+			LEFT JOIN LATERAL (
+				SELECT COALESCE(
+					jsonb_agg(
+						jsonb_build_object(
+							'tenant_id', t.id,
+							'tenant_name', t.name,
+							'tenant_slug', t.slug
+						)
+					),
+					'[]'::jsonb
+				) as assignments
+				FROM platform.tenant_memberships tm
+				JOIN platform.tenants t ON t.id = tm.tenant_id
+				WHERE tm.user_id = u.id
+			) ta ON true`
+		tenantAssignmentsSelect = ", ta.assignments as tenant_assignments"
+	}
+
+	// Build GROUP BY clause - include tenant assignments for all user types
+	groupByClause := "u.id, u.email, u.email_verified, u.role, u.user_metadata, u.app_metadata, u.created_at, u.updated_at, u.password_hash, u.is_locked, ta.assignments"
+
+	// Build WHERE clause for tenant filtering (app users only)
+	var whereClause string
+	var args []interface{}
+	if userType == "app" && tenantID != "" {
+		whereClause = `
+			WHERE u.id IN (
+				SELECT tm.user_id FROM platform.tenant_memberships tm
+				WHERE tm.tenant_id = $1
+			)`
+		args = append(args, tenantID)
 	}
 
 	query := fmt.Sprintf(`
@@ -87,15 +153,18 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 				ELSE 'email'
 			END as provider,
 			COALESCE(u.is_locked, false) as is_locked
+			%s
 		FROM %s u
 		LEFT JOIN %s s ON u.id = s.user_id
-		GROUP BY u.id, u.email, u.email_verified, u.role, u.user_metadata, u.app_metadata, u.created_at, u.updated_at, u.password_hash, u.is_locked
+		%s
+		%s
+		GROUP BY %s
 		ORDER BY u.created_at DESC
-	`, usersTable, sessionsTable)
+	`, tenantAssignmentsSelect, usersTable, sessionsTable, tenantAssignmentsJoin, whereClause, groupByClause)
 
 	var users []*EnrichedUser
 	err := database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query)
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("failed to query enriched users: %w", err)
 		}
@@ -103,6 +172,8 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 
 		for rows.Next() {
 			user := &EnrichedUser{}
+			var tenantAssignmentsJSON []byte
+
 			err := rows.Scan(
 				&user.ID,
 				&user.Email,
@@ -116,9 +187,16 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 				&user.LastSignIn,
 				&user.Provider,
 				&user.IsLocked,
+				&tenantAssignmentsJSON,
 			)
 			if err != nil {
 				return fmt.Errorf("failed to scan enriched user: %w", err)
+			}
+			// Parse tenant assignments from JSON
+			if len(tenantAssignmentsJSON) > 0 && string(tenantAssignmentsJSON) != "null" {
+				if err := json.Unmarshal(tenantAssignmentsJSON, &user.TenantAssignments); err != nil {
+					user.TenantAssignments = nil
+				}
 			}
 			users = append(users, user)
 		}
@@ -133,7 +211,7 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 }
 
 // GetEnrichedUserByID returns a single user with enriched metadata
-// userType can be "app" for auth.users or "dashboard" for dashboard.users
+// userType can be "app" for auth.users or "platform" for platform.users
 func (s *UserManagementService) GetEnrichedUserByID(ctx context.Context, userID string, userType string) (*EnrichedUser, error) {
 	// Default to app users if not specified
 	if userType == "" {
@@ -143,9 +221,9 @@ func (s *UserManagementService) GetEnrichedUserByID(ctx context.Context, userID 
 	// Determine which table to query
 	usersTable := "auth.users"
 	sessionsTable := "auth.sessions"
-	if userType == "dashboard" {
-		usersTable = "dashboard.users"
-		sessionsTable = "dashboard.sessions"
+	if userType == "platform" {
+		usersTable = "platform.users"
+		sessionsTable = "platform.sessions"
 	}
 
 	query := fmt.Sprintf(`
@@ -205,6 +283,7 @@ type InviteUserRequest struct {
 	Role      string `json:"role"`
 	Password  string `json:"password,omitempty"`   // Optional: if provided, use this instead of generating
 	SkipEmail bool   `json:"skip_email,omitempty"` // Optional: if true, don't send invitation email
+	TenantID  string `json:"tenant_id,omitempty"`  // Optional: tenant to add the user to (for app users)
 }
 
 // InviteUserResponse represents the response after inviting a user
@@ -217,10 +296,10 @@ type InviteUserResponse struct {
 
 // InviteUser creates a new user and either sends them an invite email or returns a temp password
 func (s *UserManagementService) InviteUser(ctx context.Context, req InviteUserRequest, userType string) (*InviteUserResponse, error) {
-	// Validate role - for dashboard users, default to dashboard_admin
+	// Validate role - for platform/dashboard users, default to instance_admin
 	if req.Role == "" {
-		if userType == "dashboard" {
-			req.Role = "dashboard_admin"
+		if userType == "platform" {
+			req.Role = "instance_admin"
 		} else {
 			req.Role = "user"
 		}
@@ -255,6 +334,20 @@ func (s *UserManagementService) InviteUser(ctx context.Context, req InviteUserRe
 	user, err := s.userRepo.CreateInTable(ctx, createReq, hashedPassword, userType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Add user to tenant if tenant_id is provided (for app users only)
+	if userType == "app" && req.TenantID != "" && s.userRepo.db != nil {
+		_, err := s.userRepo.db.Pool().Exec(ctx,
+			`INSERT INTO platform.tenant_memberships (tenant_id, user_id, role)
+			 VALUES ($1::uuid, $2::uuid, 'tenant_member')
+			 ON CONFLICT (tenant_id, user_id) DO NOTHING`,
+			req.TenantID, user.ID,
+		)
+		if err != nil {
+			// Log error but don't fail - user was created successfully
+			// The admin can manually add them to the tenant later
+		}
 	}
 
 	// Try to send invitation email if email service is available and not skipped
@@ -365,8 +458,8 @@ func (s *UserManagementService) UnlockUser(ctx context.Context, userID string, u
 func (s *UserManagementService) setUserLockStatus(ctx context.Context, userID string, userType string, locked bool) error {
 	// Determine which table to update
 	usersTable := "auth.users"
-	if userType == "dashboard" {
-		usersTable = "dashboard.users"
+	if userType == "platform" {
+		usersTable = "platform.users"
 	}
 
 	query := fmt.Sprintf(`

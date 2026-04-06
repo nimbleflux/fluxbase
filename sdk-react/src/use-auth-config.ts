@@ -8,7 +8,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useFluxbaseClient } from "./context";
-import type { AuthConfig } from "@fluxbase/sdk";
+import type { AuthConfig } from "@nimbleflux/fluxbase-sdk";
 
 /**
  * Hook to get the complete authentication configuration from the server

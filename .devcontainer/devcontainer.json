@@ -168,7 +168,12 @@
     "FLUXBASE_STORAGE_S3_ACCESS_KEY": "minioadmin",
     "FLUXBASE_STORAGE_S3_SECRET_KEY": "minioadmin",
     "FLUXBASE_STORAGE_S3_REGION": "us-east-1",
-    "FLUXBASE_MCP_ENABLED": "true"
+    "FLUXBASE_MCP_ENABLED": "true",
+    "PGHOST": "postgres",
+    "PGPORT": "5432",
+    "PGUSER": "fluxbase_app",
+    "PGPASSWORD": "fluxbase_app_password",
+    "PGDATABASE": "fluxbase_dev"
   },
   "runArgs": ["--memory=8g", "--memory-swap=8g"]
 }

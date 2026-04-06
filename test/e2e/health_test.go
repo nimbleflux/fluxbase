@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+
 	"github.com/nimbleflux/fluxbase/test"
 )
 

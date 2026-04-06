@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // AuditLogger logs AI query execution for compliance and debugging
@@ -57,7 +58,7 @@ func (l *AuditLogger) LogQuery(ctx context.Context, entry *AuditEntry) error {
 	}
 
 	// Validate user_id exists in auth.users before inserting
-	// Admin users are in dashboard.users, not auth.users, so we need to check
+	// Admin users are in platform.users, not auth.users, so we need to check
 	validUserID := entry.UserID
 	if validUserID != nil && *validUserID != "" {
 		var exists bool

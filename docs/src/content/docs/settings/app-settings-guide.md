@@ -16,7 +16,7 @@ This guide explains how to use Fluxbase's unified application settings system wi
 
 ## Overview
 
-Fluxbase provides a unified `app.settings` table in the `app` schema for storing all application-level configuration. This replaces the previous separate tables (`dashboard.auth_settings`, `dashboard.system_settings`, `dashboard.custom_settings`).
+Fluxbase provides a unified `app.settings` table in the `app` schema for storing all application-level configuration. This replaces the previous separate tables (`platform.auth_settings`, `platform.system_settings`, `platform.custom_settings`).
 
 ### Key Features
 
@@ -42,7 +42,7 @@ CREATE TABLE app.settings (
     description TEXT,
     is_public BOOLEAN DEFAULT false,
     is_secret BOOLEAN DEFAULT false,
-    editable_by TEXT[] NOT NULL DEFAULT ARRAY['dashboard_admin']::TEXT[],
+    editable_by TEXT[] NOT NULL DEFAULT ARRAY['instance_admin']::TEXT[],
     metadata JSONB DEFAULT '{}'::JSONB,
     created_by UUID,
     updated_by UUID,
@@ -258,7 +258,7 @@ CREATE POLICY "Users can read settings with public_api flag"
 import (
     "context"
     "time"
-    "github.com/fluxbase/fluxbase/internal/auth"
+    "github.com/nimbleflux/fluxbase/internal/auth"
 )
 
 // Initialize settings cache
@@ -331,7 +331,7 @@ If you have existing data in the old settings tables, here's how to migrate:
 ```sql
 -- Migration script to move data from old tables to app.settings
 
--- Migrate dashboard.auth_settings
+-- Migrate platform.auth_settings
 INSERT INTO app.settings (key, value, category, description, created_at, updated_at)
 SELECT
     key,
@@ -340,10 +340,10 @@ SELECT
     description,
     created_at,
     updated_at
-FROM dashboard.auth_settings
+FROM platform.auth_settings
 ON CONFLICT (key) DO NOTHING;
 
--- Migrate dashboard.system_settings
+-- Migrate platform.system_settings
 INSERT INTO app.settings (key, value, category, description, created_at, updated_at)
 SELECT
     key,
@@ -352,10 +352,10 @@ SELECT
     description,
     created_at,
     updated_at
-FROM dashboard.system_settings
+FROM platform.system_settings
 ON CONFLICT (key) DO NOTHING;
 
--- Migrate dashboard.custom_settings
+-- Migrate platform.custom_settings
 INSERT INTO app.settings (
     key, value, value_type, category, description,
     editable_by, metadata, created_by, updated_by,
@@ -373,13 +373,13 @@ SELECT
     updated_by,
     created_at,
     updated_at
-FROM dashboard.custom_settings
+FROM platform.custom_settings
 ON CONFLICT (key) DO NOTHING;
 
 -- After verifying migration, drop old tables
--- DROP TABLE dashboard.auth_settings;
--- DROP TABLE dashboard.system_settings;
--- DROP TABLE dashboard.custom_settings;
+-- DROP TABLE platform.auth_settings;
+-- DROP TABLE platform.system_settings;
+-- DROP TABLE platform.custom_settings;
 ```
 
 ## Best Practices

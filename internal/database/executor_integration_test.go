@@ -7,9 +7,10 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // TestExecutor_Query_Integration tests basic query execution.

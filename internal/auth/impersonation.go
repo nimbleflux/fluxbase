@@ -8,8 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // Well-known UUIDs for synthetic users (anon/service role impersonation)
@@ -53,6 +54,8 @@ type ImpersonationSession struct {
 	IPAddress         string            `json:"ip_address,omitempty" db:"ip_address"`
 	UserAgent         string            `json:"user_agent,omitempty" db:"user_agent"`
 	IsActive          bool              `json:"is_active" db:"is_active"`
+	AccessTokenJTI    string            `json:"access_token_jti,omitempty" db:"access_token_jti"`
+	RefreshTokenJTI   string            `json:"refresh_token_jti,omitempty" db:"refresh_token_jti"`
 }
 
 // ImpersonationRepository handles database operations for impersonation sessions
@@ -69,9 +72,9 @@ func NewImpersonationRepository(db *database.Connection) *ImpersonationRepositor
 func (r *ImpersonationRepository) Create(ctx context.Context, session *ImpersonationSession) (*ImpersonationSession, error) {
 	query := `
 		INSERT INTO auth.impersonation_sessions
-		(id, admin_user_id, target_user_id, impersonation_type, target_role, reason, started_at, ip_address, user_agent, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id, admin_user_id, target_user_id, impersonation_type, target_role, reason, started_at, ended_at, ip_address, user_agent, is_active
+		(id, admin_user_id, target_user_id, impersonation_type, target_role, reason, started_at, ip_address, user_agent, is_active, access_token_jti, refresh_token_jti)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		RETURNING id, admin_user_id, target_user_id, impersonation_type, target_role, reason, started_at, ended_at, ip_address, user_agent, is_active, access_token_jti, refresh_token_jti
 	`
 
 	result := &ImpersonationSession{}
@@ -87,6 +90,8 @@ func (r *ImpersonationRepository) Create(ctx context.Context, session *Impersona
 			session.IPAddress,
 			session.UserAgent,
 			session.IsActive,
+			session.AccessTokenJTI,
+			session.RefreshTokenJTI,
 		).Scan(
 			&result.ID,
 			&result.AdminUserID,
@@ -99,6 +104,8 @@ func (r *ImpersonationRepository) Create(ctx context.Context, session *Impersona
 			&result.IPAddress,
 			&result.UserAgent,
 			&result.IsActive,
+			&result.AccessTokenJTI,
+			&result.RefreshTokenJTI,
 		)
 	})
 	if err != nil {
@@ -133,7 +140,7 @@ func (r *ImpersonationRepository) EndSession(ctx context.Context, sessionID stri
 // GetActiveByAdmin gets the active impersonation session for an admin
 func (r *ImpersonationRepository) GetActiveByAdmin(ctx context.Context, adminUserID string) (*ImpersonationSession, error) {
 	query := `
-		SELECT id, admin_user_id, target_user_id, impersonation_type, target_role, reason, started_at, ended_at, ip_address, user_agent, is_active
+		SELECT id, admin_user_id, target_user_id, impersonation_type, target_role, reason, started_at, ended_at, ip_address, user_agent, is_active, access_token_jti, refresh_token_jti
 		FROM auth.impersonation_sessions
 		WHERE admin_user_id = $1 AND is_active = true
 		ORDER BY started_at DESC
@@ -154,6 +161,8 @@ func (r *ImpersonationRepository) GetActiveByAdmin(ctx context.Context, adminUse
 			&session.IPAddress,
 			&session.UserAgent,
 			&session.IsActive,
+			&session.AccessTokenJTI,
+			&session.RefreshTokenJTI,
 		)
 	})
 	if err != nil {
@@ -169,7 +178,7 @@ func (r *ImpersonationRepository) GetActiveByAdmin(ctx context.Context, adminUse
 // ListByAdmin lists all impersonation sessions for an admin (audit trail)
 func (r *ImpersonationRepository) ListByAdmin(ctx context.Context, adminUserID string, limit, offset int) ([]*ImpersonationSession, error) {
 	query := `
-		SELECT id, admin_user_id, target_user_id, impersonation_type, target_role, reason, started_at, ended_at, ip_address, user_agent, is_active
+		SELECT id, admin_user_id, target_user_id, impersonation_type, target_role, reason, started_at, ended_at, ip_address, user_agent, is_active, access_token_jti, refresh_token_jti
 		FROM auth.impersonation_sessions
 		WHERE admin_user_id = $1
 		ORDER BY started_at DESC
@@ -198,6 +207,8 @@ func (r *ImpersonationRepository) ListByAdmin(ctx context.Context, adminUserID s
 				&session.IPAddress,
 				&session.UserAgent,
 				&session.IsActive,
+				&session.AccessTokenJTI,
+				&session.RefreshTokenJTI,
 			)
 			if err != nil {
 				return err
@@ -213,10 +224,11 @@ func (r *ImpersonationRepository) ListByAdmin(ctx context.Context, adminUserID s
 
 // ImpersonationService provides business logic for admin impersonation
 type ImpersonationService struct {
-	repo       *ImpersonationRepository
-	userRepo   *UserRepository
-	jwtManager *JWTManager
-	db         *database.Connection
+	repo                  *ImpersonationRepository
+	userRepo              *UserRepository
+	jwtManager            *JWTManager
+	db                    *database.Connection
+	tokenBlacklistService *TokenBlacklistService
 }
 
 // NewImpersonationService creates a new impersonation service
@@ -234,40 +246,46 @@ func NewImpersonationService(
 	}
 }
 
-// verifyAdminUser checks if the user is a dashboard admin
-// Returns nil if the user is a valid dashboard admin, error otherwise
-// Checks both dashboard.users and auth.users tables
+// SetTokenBlacklistService sets the token blacklist service dependency
+// This is called during service initialization to wire up dependencies
+func (s *ImpersonationService) SetTokenBlacklistService(service *TokenBlacklistService) {
+	s.tokenBlacklistService = service
+}
+
+// verifyAdminUser checks if the user is a platform admin
+// Returns nil if the user is a valid platform admin, error otherwise
+// Checks both platform.users and auth.users tables
 func (s *ImpersonationService) verifyAdminUser(ctx context.Context, adminUserID string) error {
-	// First, check if user exists in dashboard.users (they are always admins)
+	// First, check if user exists in platform.users (they are always admins)
 	var count int
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT COUNT(*) FROM dashboard.users
+			SELECT COUNT(*) FROM platform.users
 			WHERE id = $1 AND deleted_at IS NULL AND is_active = true
 		`, adminUserID).Scan(&count)
 	})
 
 	if err != nil {
-		log.Debug().Err(err).Str("admin_user_id", adminUserID).Msg("Failed to check dashboard.users, falling back to auth.users")
+		log.Debug().Err(err).Str("admin_user_id", adminUserID).Msg("Failed to check platform.users, falling back to auth.users")
 	} else if count > 0 {
-		// User exists in dashboard.users and is active
-		log.Debug().Str("admin_user_id", adminUserID).Msg("Admin verified via dashboard.users")
+		// User exists in platform.users and is active
+		log.Debug().Str("admin_user_id", adminUserID).Msg("Admin verified via platform.users")
 		return nil
 	}
 
-	// Fall back to checking auth.users for users with dashboard_admin role
+	// Fall back to checking auth.users for users with instance_admin role
 	adminUser, err := s.userRepo.GetByID(ctx, adminUserID)
 	if err != nil {
 		log.Debug().Err(err).Str("admin_user_id", adminUserID).Msg("Admin user not found in auth.users either")
 		return fmt.Errorf("admin user not found: %w", err)
 	}
 
-	if adminUser.Role != "dashboard_admin" {
-		log.Debug().Str("admin_user_id", adminUserID).Str("role", adminUser.Role).Msg("User is not a dashboard_admin")
+	if adminUser.Role != "instance_admin" {
+		log.Debug().Str("admin_user_id", adminUserID).Str("role", adminUser.Role).Msg("User is not a instance_admin")
 		return ErrNotAdmin
 	}
 
-	log.Debug().Str("admin_user_id", adminUserID).Msg("Admin verified via auth.users with dashboard_admin role")
+	log.Debug().Str("admin_user_id", adminUserID).Msg("Admin verified via auth.users with instance_admin role")
 	return nil
 }
 
@@ -294,7 +312,7 @@ func (s *ImpersonationService) StartImpersonation(
 	adminUserID string,
 	req StartImpersonationRequest,
 ) (*StartImpersonationResponse, error) {
-	// Verify admin user exists and is admin (checks both dashboard.users and auth.users)
+	// Verify admin user exists and is admin (checks both platform.users and auth.users)
 	if err := s.verifyAdminUser(ctx, adminUserID); err != nil {
 		return nil, err
 	}
@@ -340,16 +358,21 @@ func (s *ImpersonationService) StartImpersonation(
 	}
 
 	// Generate JWT tokens for the target user with their metadata
-	// Note: The JWT contains the target user's info, but we track admin in the session
-	accessToken, _, err := s.jwtManager.GenerateAccessToken(targetUser.ID, targetUser.Email, targetUser.Role, targetUser.UserMetadata, targetUser.AppMetadata)
+	// SECURITY: Include impersonated_by claim to mark these as impersonation tokens
+	// Note: The JWT contains the target user's info, but we track admin in the session and token
+	accessToken, accessClaims, err := s.jwtManager.GenerateAccessToken(targetUser.ID, targetUser.Email, targetUser.Role, targetUser.UserMetadata, targetUser.AppMetadata, WithImpersonatedBy(adminUserID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, _, err := s.jwtManager.GenerateRefreshToken(targetUser.ID, targetUser.Email, targetUser.Role, "", targetUser.UserMetadata, targetUser.AppMetadata)
+	refreshToken, refreshClaims, err := s.jwtManager.GenerateRefreshToken(targetUser.ID, targetUser.Email, targetUser.Role, "", targetUser.UserMetadata, targetUser.AppMetadata, WithImpersonatedBy(adminUserID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
+
+	// Update session with JTIs for later revocation
+	createdSession.AccessTokenJTI = accessClaims.ID
+	createdSession.RefreshTokenJTI = refreshClaims.ID
 
 	return &StartImpersonationResponse{
 		Session:      createdSession,
@@ -368,7 +391,7 @@ func (s *ImpersonationService) StartAnonImpersonation(
 	ipAddress string,
 	userAgent string,
 ) (*StartImpersonationResponse, error) {
-	// Verify admin user exists and is admin (checks both dashboard.users and auth.users)
+	// Verify admin user exists and is admin (checks both platform.users and auth.users)
 	if err := s.verifyAdminUser(ctx, adminUserID); err != nil {
 		return nil, err
 	}
@@ -403,16 +426,21 @@ func (s *ImpersonationService) StartAnonImpersonation(
 	}
 
 	// Generate JWT tokens for anonymous user (no metadata for anonymous users)
+	// SECURITY: Include impersonated_by claim to mark these as impersonation tokens
 	// Use well-known nil UUID for anonymous users
-	accessToken, _, err := s.jwtManager.GenerateAccessToken(AnonUserID, "anonymous@fluxbase.local", "anon", nil, nil)
+	accessToken, accessClaims, err := s.jwtManager.GenerateAccessToken(AnonUserID, "anonymous@fluxbase.local", "anon", nil, nil, WithImpersonatedBy(adminUserID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, _, err := s.jwtManager.GenerateRefreshToken(AnonUserID, "anonymous@fluxbase.local", "anon", "", nil, nil)
+	refreshToken, refreshClaims, err := s.jwtManager.GenerateRefreshToken(AnonUserID, "anonymous@fluxbase.local", "anon", "", nil, nil, WithImpersonatedBy(adminUserID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
+
+	// Update session with JTIs for later revocation
+	createdSession.AccessTokenJTI = accessClaims.ID
+	createdSession.RefreshTokenJTI = refreshClaims.ID
 
 	// Create a synthetic user object for response
 	targetUser := &User{
@@ -438,7 +466,7 @@ func (s *ImpersonationService) StartServiceImpersonation(
 	ipAddress string,
 	userAgent string,
 ) (*StartImpersonationResponse, error) {
-	// Verify admin user exists and is admin (checks both dashboard.users and auth.users)
+	// Verify admin user exists and is admin (checks both platform.users and auth.users)
 	if err := s.verifyAdminUser(ctx, adminUserID); err != nil {
 		return nil, err
 	}
@@ -473,16 +501,21 @@ func (s *ImpersonationService) StartServiceImpersonation(
 	}
 
 	// Generate JWT tokens for service role (no metadata for service role)
+	// SECURITY: Include impersonated_by claim to mark these as impersonation tokens
 	// Use well-known UUID for service role users
-	accessToken, _, err := s.jwtManager.GenerateAccessToken(ServiceUserID, "service@fluxbase.local", "service_role", nil, nil)
+	accessToken, accessClaims, err := s.jwtManager.GenerateAccessToken(ServiceUserID, "service@fluxbase.local", "service_role", nil, nil, WithImpersonatedBy(adminUserID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, _, err := s.jwtManager.GenerateRefreshToken(ServiceUserID, "service@fluxbase.local", "service_role", "", nil, nil)
+	refreshToken, refreshClaims, err := s.jwtManager.GenerateRefreshToken(ServiceUserID, "service@fluxbase.local", "service_role", "", nil, nil, WithImpersonatedBy(adminUserID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
+
+	// Update session with JTIs for later revocation
+	createdSession.AccessTokenJTI = accessClaims.ID
+	createdSession.RefreshTokenJTI = refreshClaims.ID
 
 	// Create a synthetic user object for response
 	targetUser := &User{
@@ -506,6 +539,34 @@ func (s *ImpersonationService) StopImpersonation(ctx context.Context, adminUserI
 	session, err := s.repo.GetActiveByAdmin(ctx, adminUserID)
 	if err != nil {
 		return err
+	}
+
+	// Revoke the access token if JTI is available
+	if session.AccessTokenJTI != "" && s.tokenBlacklistService != nil {
+		// Calculate expiry time - access tokens typically live for minutes to hours
+		// We keep the blacklist entry until the token would naturally expire
+		expiresAt := time.Now().Add(1 * time.Hour) // Conservative 1 hour for access tokens
+
+		// Convert adminUserID to pointer for revokedBy parameter
+		if err := s.tokenBlacklistService.repo.Add(ctx, session.AccessTokenJTI, &adminUserID, "impersonation_stopped", expiresAt); err != nil {
+			// Log error but don't fail - session ending is more important
+			log.Error().Err(err).Str("jti", session.AccessTokenJTI).Msg("Failed to blacklist access token during impersonation stop")
+		} else {
+			log.Info().Str("jti", session.AccessTokenJTI).Str("admin_user_id", adminUserID).Msg("Blacklisted impersonation access token")
+		}
+	}
+
+	// Revoke the refresh token if JTI is available
+	if session.RefreshTokenJTI != "" && s.tokenBlacklistService != nil {
+		// Refresh tokens live longer, so blacklist for 24 hours
+		expiresAt := time.Now().Add(24 * time.Hour)
+
+		if err := s.tokenBlacklistService.repo.Add(ctx, session.RefreshTokenJTI, &adminUserID, "impersonation_stopped", expiresAt); err != nil {
+			// Log error but don't fail - session ending is more important
+			log.Error().Err(err).Str("jti", session.RefreshTokenJTI).Msg("Failed to blacklist refresh token during impersonation stop")
+		} else {
+			log.Info().Str("jti", session.RefreshTokenJTI).Str("admin_user_id", adminUserID).Msg("Blacklisted impersonation refresh token")
+		}
 	}
 
 	// End the session

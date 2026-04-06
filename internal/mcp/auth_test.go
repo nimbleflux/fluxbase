@@ -31,23 +31,23 @@ func TestAuthContext_HasScope(t *testing.T) {
 			ctx: &AuthContext{
 				Scopes: []string{"*"},
 			},
-			scope:       "read:tables",
+			scope:       "tables:read",
 			expectedHas: true,
 		},
 		{
 			name: "exact scope match",
 			ctx: &AuthContext{
-				Scopes: []string{"read:tables", "write:tables"},
+				Scopes: []string{"tables:read", "tables:write"},
 			},
-			scope:       "read:tables",
+			scope:       "tables:read",
 			expectedHas: true,
 		},
 		{
 			name: "scope not present",
 			ctx: &AuthContext{
-				Scopes: []string{"read:tables"},
+				Scopes: []string{"tables:read"},
 			},
-			scope:       "write:tables",
+			scope:       "tables:write",
 			expectedHas: false,
 		},
 		{
@@ -55,7 +55,7 @@ func TestAuthContext_HasScope(t *testing.T) {
 			ctx: &AuthContext{
 				Scopes: []string{},
 			},
-			scope:       "read:tables",
+			scope:       "tables:read",
 			expectedHas: false,
 		},
 		{
@@ -63,7 +63,7 @@ func TestAuthContext_HasScope(t *testing.T) {
 			ctx: &AuthContext{
 				Scopes: nil,
 			},
-			scope:       "read:tables",
+			scope:       "tables:read",
 			expectedHas: false,
 		},
 		{
@@ -99,17 +99,17 @@ func TestAuthContext_HasScopes(t *testing.T) {
 		{
 			name: "has all required scopes",
 			ctx: &AuthContext{
-				Scopes: []string{"read:tables", "write:tables", "execute:functions"},
+				Scopes: []string{"tables:read", "tables:write", "functions:execute"},
 			},
-			scopes:      []string{"read:tables", "write:tables"},
+			scopes:      []string{"tables:read", "tables:write"},
 			expectedHas: true,
 		},
 		{
 			name: "missing one scope",
 			ctx: &AuthContext{
-				Scopes: []string{"read:tables"},
+				Scopes: []string{"tables:read"},
 			},
-			scopes:      []string{"read:tables", "write:tables"},
+			scopes:      []string{"tables:read", "tables:write"},
 			expectedHas: false,
 		},
 		{
@@ -117,7 +117,7 @@ func TestAuthContext_HasScopes(t *testing.T) {
 			ctx: &AuthContext{
 				IsServiceRole: true,
 			},
-			scopes:      []string{"read:tables", "write:tables", "admin:ddl"},
+			scopes:      []string{"tables:read", "tables:write", "admin:ddl"},
 			expectedHas: true,
 		},
 		{
@@ -125,13 +125,13 @@ func TestAuthContext_HasScopes(t *testing.T) {
 			ctx: &AuthContext{
 				Scopes: []string{"*"},
 			},
-			scopes:      []string{"read:tables", "write:tables"},
+			scopes:      []string{"tables:read", "tables:write"},
 			expectedHas: true,
 		},
 		{
 			name: "empty required scopes",
 			ctx: &AuthContext{
-				Scopes: []string{"read:tables"},
+				Scopes: []string{"tables:read"},
 			},
 			scopes:      []string{},
 			expectedHas: true,
@@ -141,7 +141,7 @@ func TestAuthContext_HasScopes(t *testing.T) {
 			ctx: &AuthContext{
 				Scopes: []string{},
 			},
-			scopes:      []string{"read:tables"},
+			scopes:      []string{"tables:read"},
 			expectedHas: false,
 		},
 	}
@@ -168,25 +168,25 @@ func TestAuthContext_HasAnyScope(t *testing.T) {
 		{
 			name: "has first scope",
 			ctx: &AuthContext{
-				Scopes: []string{"read:tables"},
+				Scopes: []string{"tables:read"},
 			},
-			scopes:      []string{"read:tables", "write:tables"},
+			scopes:      []string{"tables:read", "tables:write"},
 			expectedHas: true,
 		},
 		{
 			name: "has second scope",
 			ctx: &AuthContext{
-				Scopes: []string{"write:tables"},
+				Scopes: []string{"tables:write"},
 			},
-			scopes:      []string{"read:tables", "write:tables"},
+			scopes:      []string{"tables:read", "tables:write"},
 			expectedHas: true,
 		},
 		{
 			name: "has neither scope",
 			ctx: &AuthContext{
-				Scopes: []string{"execute:functions"},
+				Scopes: []string{"functions:execute"},
 			},
-			scopes:      []string{"read:tables", "write:tables"},
+			scopes:      []string{"tables:read", "tables:write"},
 			expectedHas: false,
 		},
 		{
@@ -200,7 +200,7 @@ func TestAuthContext_HasAnyScope(t *testing.T) {
 		{
 			name: "empty required scopes returns false",
 			ctx: &AuthContext{
-				Scopes: []string{"read:tables"},
+				Scopes: []string{"tables:read"},
 			},
 			scopes:      []string{},
 			expectedHas: false,
@@ -560,27 +560,27 @@ func TestInferScopesFromRole(t *testing.T) {
 			expectedScopes: []string{"*"},
 		},
 		{
-			name:           "dashboard_admin gets wildcard",
-			role:           "dashboard_admin",
+			name:           "instance_admin gets wildcard",
+			role:           "instance_admin",
 			expectedScopes: []string{"*"},
 		},
 		{
 			name: "authenticated gets read/write scopes",
 			role: "authenticated",
 			expectedScopes: []string{
-				"read:tables",
-				"write:tables",
-				"execute:functions",
-				"execute:rpc",
-				"read:storage",
-				"write:storage",
+				"tables:read",
+				"tables:write",
+				"functions:execute",
+				"rpc:execute",
+				"storage:read",
+				"storage:write",
 				"execute:jobs",
 			},
 		},
 		{
 			name:           "anon gets only read:tables",
 			role:           "anon",
-			expectedScopes: []string{"read:tables"},
+			expectedScopes: []string{"tables:read"},
 		},
 		{
 			name:           "unknown role gets empty scopes",
@@ -608,23 +608,23 @@ func TestInferScopesFromRole(t *testing.T) {
 
 func TestScopeConstants(t *testing.T) {
 	t.Run("table scopes", func(t *testing.T) {
-		assert.Equal(t, "read:tables", ScopeReadTables)
-		assert.Equal(t, "write:tables", ScopeWriteTables)
+		assert.Equal(t, "tables:read", ScopeReadTables)
+		assert.Equal(t, "tables:write", ScopeWriteTables)
 	})
 
 	t.Run("function scopes", func(t *testing.T) {
-		assert.Equal(t, "execute:functions", ScopeExecuteFunctions)
+		assert.Equal(t, "functions:execute", ScopeExecuteFunctions)
 		assert.Equal(t, ScopeExecuteFunctions, ScopeInvokeFunctions) // Alias
 	})
 
 	t.Run("RPC scopes", func(t *testing.T) {
-		assert.Equal(t, "execute:rpc", ScopeExecuteRPC)
+		assert.Equal(t, "rpc:execute", ScopeExecuteRPC)
 		assert.Equal(t, ScopeExecuteRPC, ScopeInvokeRPC) // Alias
 	})
 
 	t.Run("storage scopes", func(t *testing.T) {
-		assert.Equal(t, "read:storage", ScopeReadStorage)
-		assert.Equal(t, "write:storage", ScopeWriteStorage)
+		assert.Equal(t, "storage:read", ScopeReadStorage)
+		assert.Equal(t, "storage:write", ScopeWriteStorage)
 	})
 
 	t.Run("job scopes", func(t *testing.T) {
@@ -676,7 +676,7 @@ func TestAuthContext_Struct(t *testing.T) {
 			AuthType:               "jwt",
 			ClientKeyID:            "key-123",
 			ClientKeyName:          "my-key",
-			Scopes:                 []string{"read:tables"},
+			Scopes:                 []string{"tables:read"},
 			IsServiceRole:          false,
 			AllowedNamespaces:      []string{"default"},
 			IsImpersonating:        true,
@@ -691,7 +691,7 @@ func TestAuthContext_Struct(t *testing.T) {
 		assert.Equal(t, "jwt", ctx.AuthType)
 		assert.Equal(t, "key-123", ctx.ClientKeyID)
 		assert.Equal(t, "my-key", ctx.ClientKeyName)
-		assert.Equal(t, []string{"read:tables"}, ctx.Scopes)
+		assert.Equal(t, []string{"tables:read"}, ctx.Scopes)
 		assert.False(t, ctx.IsServiceRole)
 		assert.Equal(t, []string{"default"}, ctx.AllowedNamespaces)
 		assert.True(t, ctx.IsImpersonating)
@@ -729,7 +729,7 @@ func BenchmarkAuthContext_HasScope_ServiceRole(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		_ = ctx.HasScope("read:tables")
+		_ = ctx.HasScope("tables:read")
 	}
 }
 
@@ -739,27 +739,27 @@ func BenchmarkAuthContext_HasScope_Wildcard(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		_ = ctx.HasScope("read:tables")
+		_ = ctx.HasScope("tables:read")
 	}
 }
 
 func BenchmarkAuthContext_HasScope_ExactMatch(b *testing.B) {
 	ctx := &AuthContext{
-		Scopes: []string{"read:tables", "write:tables", "execute:functions", "execute:rpc"},
+		Scopes: []string{"tables:read", "tables:write", "functions:execute", "rpc:execute"},
 	}
 
 	for i := 0; i < b.N; i++ {
-		_ = ctx.HasScope("execute:rpc")
+		_ = ctx.HasScope("rpc:execute")
 	}
 }
 
 func BenchmarkAuthContext_HasScopes_Multiple(b *testing.B) {
 	ctx := &AuthContext{
-		Scopes: []string{"read:tables", "write:tables", "execute:functions", "execute:rpc"},
+		Scopes: []string{"tables:read", "tables:write", "functions:execute", "rpc:execute"},
 	}
 
 	for i := 0; i < b.N; i++ {
-		_ = ctx.HasScopes("read:tables", "write:tables")
+		_ = ctx.HasScopes("tables:read", "tables:write")
 	}
 }
 

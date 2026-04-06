@@ -124,6 +124,9 @@ export { FluxbaseAdminStorage } from "./admin-storage";
 // Admin module
 export { FluxbaseAdmin } from "./admin";
 
+// Tenant module
+export { FluxbaseTenant } from "./tenant";
+
 // Management module
 export {
   FluxbaseManagement,
@@ -151,6 +154,7 @@ export { DDLManager } from "./ddl";
 
 // Realtime Admin module
 export { FluxbaseAdminRealtime } from "./admin-realtime";
+export { ServiceKeysManager } from "./admin-service-keys";
 
 // OAuth configuration module
 export {
@@ -389,6 +393,7 @@ export type {
   // Email Provider Settings types (Admin API)
   EmailSettingOverride,
   EmailProviderSettings,
+  TenantEmailProviderSettings,
   UpdateEmailProviderSettingsRequest,
   TestEmailSettingsResponse,
 
@@ -428,7 +433,6 @@ export type {
   // Provider Token types
   ProviderTokenResponse,
   ProviderTokenNotFoundError,
-
   AuthSettings,
   UpdateAuthSettingsRequest,
   UpdateAuthSettingsResponse,
@@ -523,20 +527,23 @@ export type {
   VectorSearchOptions,
   VectorSearchResult,
 
-  // Branching types
-  BranchStatus,
-  BranchType,
-  DataCloneMode,
-  Branch,
-  CreateBranchOptions,
-  ListBranchesOptions,
-  ListBranchesResponse,
-  BranchActivity,
-  BranchPoolStats,
+  // Multi-tenancy types
+  Tenant,
+  TenantStatus,
+  TenantAdminAssignment,
+  TenantAdminWithUser,
+  TenantWithRole,
+  CreateTenantOptions,
+  UpdateTenantOptions,
+  AssignAdminOptions,
 
-  // Deprecated Supabase-compatible aliases
-  SupabaseResponse,
-  SupabaseAuthResponse,
+  // Service Key types
+  ServiceKey,
+  ServiceKeyWithKey,
+  CreateServiceKeyRequest,
+  UpdateServiceKeyRequest,
+  RevokeServiceKeyRequest,
+  DeprecateServiceKeyRequest,
 } from "./types";
 
 // Secrets types (defined in secrets module)

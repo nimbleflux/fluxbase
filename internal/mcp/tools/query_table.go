@@ -7,11 +7,12 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/query"
-	"github.com/rs/zerolog/log"
 )
 
 // executeWithRLS wraps a database operation with RLS context from MCP AuthContext

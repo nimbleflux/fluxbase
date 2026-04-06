@@ -9,16 +9,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/secrets"
 	"github.com/nimbleflux/fluxbase/internal/testutil"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSecretsStorage_CreateSecret_Integration tests creating encrypted secrets
 func TestSecretsStorage_CreateSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	encryptionKey := "12345678901234567890123456789012"
@@ -72,7 +73,7 @@ func TestSecretsStorage_CreateSecret_Integration(t *testing.T) {
 
 	t.Run("create secret with user tracking", func(t *testing.T) {
 		// Create a dashboard user directly in the database
-		// The secrets table's created_by/updated_by fields reference dashboard.users, not auth.users
+		// The secrets table's created_by/updated_by fields reference platform.users, not auth.users
 		userUUID := uuid.New()
 		uniqueEmail := fmt.Sprintf("test-%s@example.com", uuid.New().String()[:8])
 		passwordHash := "$2a$10$hashedpasswordhere1234567890123456789012345678901234567890123" // Dummy bcrypt hash
@@ -84,8 +85,8 @@ func TestSecretsStorage_CreateSecret_Integration(t *testing.T) {
 		`, userUUID, uniqueEmail, passwordHash))
 
 		tc.ExecuteSQLAsSuperuser(fmt.Sprintf(`
-			INSERT INTO dashboard.users (id, email, password_hash, full_name, role, created_at)
-			VALUES ('%s', '%s', '%s', 'Test User', 'dashboard_admin', NOW())
+			INSERT INTO platform.users (id, email, password_hash, full_name, role, created_at)
+			VALUES ('%s', '%s', '%s', 'Test User', 'instance_admin', NOW())
 			ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash
 		`, userUUID, uniqueEmail, passwordHash))
 
@@ -154,7 +155,7 @@ func TestSecretsStorage_CreateSecret_Integration(t *testing.T) {
 
 // TestSecretsStorage_GetSecret_Integration tests retrieving secret metadata
 func TestSecretsStorage_GetSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	encryptionKey := "12345678901234567890123456789012"
@@ -231,7 +232,7 @@ func TestSecretsStorage_GetSecret_Integration(t *testing.T) {
 
 // TestSecretsStorage_ListSecrets_Integration tests listing secrets with filters
 func TestSecretsStorage_ListSecrets_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	encryptionKey := "12345678901234567890123456789012"
@@ -295,7 +296,7 @@ func TestSecretsStorage_ListSecrets_Integration(t *testing.T) {
 
 // TestSecretsStorage_UpdateSecret_Integration tests updating secrets
 func TestSecretsStorage_UpdateSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	encryptionKey := "12345678901234567890123456789012"
@@ -362,8 +363,8 @@ func TestSecretsStorage_UpdateSecret_Integration(t *testing.T) {
 		`, userID, uniqueEmail, passwordHash))
 
 		tc.ExecuteSQLAsSuperuser(fmt.Sprintf(`
-			INSERT INTO dashboard.users (id, email, password_hash, full_name, role, created_at)
-			VALUES ('%s', '%s', '%s', 'Test User', 'dashboard_admin', NOW())
+			INSERT INTO platform.users (id, email, password_hash, full_name, role, created_at)
+			VALUES ('%s', '%s', '%s', 'Test User', 'instance_admin', NOW())
 			ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash
 		`, userID, uniqueEmail, passwordHash))
 
@@ -398,7 +399,7 @@ func TestSecretsStorage_UpdateSecret_Integration(t *testing.T) {
 
 // TestSecretsStorage_DeleteSecret_Integration tests deleting secrets
 func TestSecretsStorage_DeleteSecret_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	encryptionKey := "12345678901234567890123456789012"
@@ -424,7 +425,7 @@ func TestSecretsStorage_DeleteSecret_Integration(t *testing.T) {
 
 // TestSecretsStorage_Versions_Integration tests version history and rollback
 func TestSecretsStorage_Versions_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	encryptionKey := "12345678901234567890123456789012"
@@ -496,7 +497,7 @@ func TestSecretsStorage_Versions_Integration(t *testing.T) {
 
 // TestSecretsStorage_GetSecretsForNamespace_Integration tests retrieving decrypted secrets for a namespace
 func TestSecretsStorage_GetSecretsForNamespace_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	encryptionKey := "12345678901234567890123456789012"
@@ -562,7 +563,7 @@ func TestSecretsStorage_GetSecretsForNamespace_Integration(t *testing.T) {
 
 // TestSecretsStorage_GetStats_Integration tests statistics gathering
 func TestSecretsStorage_GetStats_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	encryptionKey := "12345678901234567890123456789012"
@@ -609,7 +610,7 @@ func TestSecretsStorage_GetStats_Integration(t *testing.T) {
 
 // TestSecretsStorage_EncryptionDecryption_Integration tests actual encryption/decryption
 func TestSecretsStorage_EncryptionDecryption_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	encryptionKey := "12345678901234567890123456789012"
@@ -709,7 +710,7 @@ func TestSecretsStorage_EncryptionDecryption_Integration(t *testing.T) {
 
 // TestSecretsStorage_VersionEncryption_Integration tests that versions store encrypted values
 func TestSecretsStorage_VersionEncryption_Integration(t *testing.T) {
-	tc := testutil.NewIntegrationTestContext(t)
+	tc := testutil.NewIntegrationTestContextWithNamespace(t, "secrets")
 	defer tc.CleanupTestData()
 
 	encryptionKey := "12345678901234567890123456789012"

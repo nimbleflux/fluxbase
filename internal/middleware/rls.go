@@ -8,9 +8,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/rs/zerolog/log"
 )
 
 // quoteIdentifier safely quotes a PostgreSQL identifier to prevent SQL injection.
@@ -73,7 +74,7 @@ func RLSMiddleware(config RLSConfig) fiber.Handler {
 		// Store RLS context for use in query execution
 		c.Locals("rls_user_id", userID)
 
-		// Map application role to database role (handles dashboard_admin -> service_role)
+		// Map application role to database role (handles instance_admin, tenant_service -> service_role)
 		// Important: Check for both non-nil AND non-empty string to avoid
 		// overwriting "authenticated" default with empty string (which maps to "anon")
 		if role := c.Locals("user_role"); role != nil {
@@ -101,10 +102,16 @@ func RLSMiddleware(config RLSConfig) fiber.Handler {
 // PostgreSQL-level security, and application roles (admin, user, etc.) for business logic
 func mapAppRoleToDatabaseRole(appRole string) string {
 	switch appRole {
-	case "service_role", "dashboard_admin":
-		// Service role and dashboard_admin map to service_role - has BYPASSRLS privilege
-		// Dashboard admins are Fluxbase platform admins and need full data access
+	case "service_role", "instance_admin":
+		// Service role and instance_admin map to service_role - has BYPASSRLS privilege
+		// Instance admins are Fluxbase platform admins and need full data access
 		return "service_role"
+	case "tenant_service":
+		return "tenant_service"
+	case "tenant_admin":
+		// Tenant admins map to authenticated - they respect RLS but have tenant context
+		// The tenant_id is set separately in the JWT claims for tenant-scoped access
+		return "authenticated"
 	case "anon", "":
 		// Anonymous or empty role maps to anon
 		return "anon"
@@ -130,11 +137,12 @@ func SetRLSContext(ctx context.Context, tx pgx.Tx, userID string, role string, c
 		Bool("has_claims", claims != nil).
 		Msg("SetRLSContext: Starting RLS context setup")
 
-	// Validate database role (defense in depth - should always be one of these three)
+	// Validate database role (defense in depth - should always be one of these)
 	validDBRoles := map[string]bool{
-		"anon":          true,
-		"authenticated": true,
-		"service_role":  true,
+		"anon":           true,
+		"authenticated":  true,
+		"service_role":   true,
+		"tenant_service": true,
 	}
 
 	if !validDBRoles[dbRole] {
@@ -181,6 +189,16 @@ func SetRLSContext(ctx context.Context, tx pgx.Tx, userID string, role string, c
 		if claims.IsAnonymous {
 			jwtClaims["is_anonymous"] = claims.IsAnonymous
 		}
+		// Multi-tenancy fields
+		if claims.TenantID != nil {
+			jwtClaims["tenant_id"] = *claims.TenantID
+		}
+		if claims.TenantRole != "" {
+			jwtClaims["tenant_role"] = claims.TenantRole
+		}
+		if claims.IsInstanceAdmin {
+			jwtClaims["is_instance_admin"] = true
+		}
 	}
 
 	// Marshal to JSON
@@ -196,11 +214,29 @@ func SetRLSContext(ctx context.Context, tx pgx.Tx, userID string, role string, c
 		log.Error().Err(err).Msg("Failed to set request.jwt.claims")
 		return fmt.Errorf("failed to set request.jwt.claims: %w", err)
 	}
-	log.Debug().Str("jwt_claims", string(jwtClaimsJSON)).Msg("Set request.jwt.claims using parameterized query")
+	// Log redacted claims (avoid leaking PII/metadata in debug logs)
+	log.Debug().
+		Str("user_id", userID).
+		Str("role", role).
+		Bool("has_tenant", claims != nil && claims.TenantID != nil).
+		Msg("Set request.jwt.claims using parameterized query")
+
+	// Set tenant context for multi-tenancy (app.current_tenant_id)
+	// This is used by RLS policies that check auth.has_tenant_access() and storage.has_tenant_access()
+	if claims != nil && claims.TenantID != nil {
+		tenantIDStr := *claims.TenantID
+		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantIDStr)
+		if err != nil {
+			log.Error().Err(err).Str("tenant_id", tenantIDStr).Msg("Failed to set app.current_tenant_id")
+			return fmt.Errorf("failed to set app.current_tenant_id: %w", err)
+		}
+		log.Debug().Str("tenant_id", tenantIDStr).Msg("Set app.current_tenant_id for tenant isolation")
+	}
 
 	log.Debug().
 		Str("user_id", userID).
 		Str("role", role).
+		Bool("has_tenant", claims != nil && claims.TenantID != nil).
 		Msg("RLS context set for transaction")
 
 	return nil
@@ -241,16 +277,12 @@ func WrapWithServiceRole(ctx context.Context, conn *database.Connection, fn func
 	return nil
 }
 
-// WrapWithRLS wraps a database operation with RLS context
-// This is a helper function for setting RLS context in queries
-// If a branch pool is set in context (by BranchContext middleware), it uses that pool instead
+// WrapWithRLS wraps a database operation with RLS context.
+// Pool selection priority: branch pool > tenant pool (for public schema) > main pool.
+// The target schema is determined by GetTargetSchema(c), which callers can set
+// via SetTargetSchema before calling this function.
 func WrapWithRLS(ctx context.Context, conn *database.Connection, c fiber.Ctx, fn func(tx pgx.Tx) error) error {
-	// Check for branch pool in context (set by BranchContext middleware)
-	pool := GetBranchPool(c)
-	if pool == nil {
-		// Fall back to main connection pool
-		pool = conn.Pool()
-	}
+	pool := GetPoolForSchema(c, GetTargetSchema(c), conn.Pool())
 
 	// Start transaction
 	tx, err := pool.Begin(ctx)

@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
-	"github.com/rs/zerolog/log"
 )
 
 // VectorManager manages the embedding service with support for dynamic configuration refresh

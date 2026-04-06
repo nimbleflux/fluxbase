@@ -4,8 +4,12 @@
 package testutil
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
+
+	"github.com/google/uuid"
 
 	test "github.com/nimbleflux/fluxbase/test"
 )
@@ -31,6 +35,7 @@ var (
 type IntegrationTestContext struct {
 	*test.TestContext // Embedded to provide all helper methods (NewRequest, CreateTestUser, etc.)
 	T                 *testing.T
+	Namespace         string // Unique namespace for test data isolation between packages
 }
 
 // NewIntegrationTestContext creates or returns a shared test context for integration tests.
@@ -51,6 +56,22 @@ type IntegrationTestContext struct {
 // IMPORTANT: Tests should NOT call Close() on the returned context.
 // The shared connection is automatically managed by the package-level singleton.
 func NewIntegrationTestContext(t *testing.T) *IntegrationTestContext {
+	return newIntegrationTestContext(t, "default")
+}
+
+// NewIntegrationTestContextWithNamespace creates a shared test context with a unique namespace.
+// The namespace isolates test data between packages so cleanup only affects this package's data.
+//
+// Example: testutil.NewIntegrationTestContextWithNamespace(t, "auth")
+//
+// This generates emails like "itest-auth-abc123@auth.test.local",
+// settings keys like "auth.itest.mykey", and secret names like "AUTH_ITEST_MYSECRET".
+func NewIntegrationTestContextWithNamespace(t *testing.T, namespace string) *IntegrationTestContext {
+	return newIntegrationTestContext(t, namespace)
+}
+
+// newIntegrationTestContext is the shared implementation for both constructors.
+func newIntegrationTestContext(t *testing.T, namespace string) *IntegrationTestContext {
 	sharedContextMu.Lock()
 	defer sharedContextMu.Unlock()
 
@@ -62,6 +83,7 @@ func NewIntegrationTestContext(t *testing.T) *IntegrationTestContext {
 		sharedContext = &IntegrationTestContext{
 			TestContext: test.NewTestContext(&testing.T{}),
 			T:           &testing.T{},
+			Namespace:   namespace,
 		}
 		sharedContextInitialized = true
 	})
@@ -97,6 +119,16 @@ func NewIntegrationTestContext(t *testing.T) *IntegrationTestContext {
 // IMPORTANT: Tests should NOT call Close() on the returned context.
 // The shared connection is automatically managed by the package-level singleton.
 func NewRLSIntegrationTestContext(t *testing.T) *IntegrationTestContext {
+	return newRLSIntegrationTestContext(t, "default")
+}
+
+// NewRLSIntegrationTestContextWithNamespace creates a shared RLS-enabled test context with a namespace.
+func NewRLSIntegrationTestContextWithNamespace(t *testing.T, namespace string) *IntegrationTestContext {
+	return newRLSIntegrationTestContext(t, namespace)
+}
+
+// newRLSIntegrationTestContext is the shared implementation for both RLS constructors.
+func newRLSIntegrationTestContext(t *testing.T, namespace string) *IntegrationTestContext {
 	sharedContextMu.Lock()
 	defer sharedContextMu.Unlock()
 
@@ -108,6 +140,7 @@ func NewRLSIntegrationTestContext(t *testing.T) *IntegrationTestContext {
 		sharedContext = &IntegrationTestContext{
 			TestContext: test.NewRLSTestContext(&testing.T{}),
 			T:           &testing.T{},
+			Namespace:   namespace,
 		}
 		sharedContextInitialized = true
 	})
@@ -134,34 +167,65 @@ func (tc *IntegrationTestContext) Close() {
 	// Connection cleanup happens automatically when the package's tests complete
 }
 
+// EmailDomain returns the email domain for this namespace.
+// Example: "auth.test.local"
+func (tc *IntegrationTestContext) EmailDomain() string {
+	return tc.Namespace + ".test.local"
+}
+
+// EmailPrefix returns the email prefix for this namespace.
+// Example: "itest-auth-"
+func (tc *IntegrationTestContext) EmailPrefix() string {
+	return "itest-" + tc.Namespace + "-"
+}
+
+// TestEmail generates a unique test email scoped to this namespace.
+// Example: "itest-auth-abc12345@auth.test.local"
+func (tc *IntegrationTestContext) TestEmail() string {
+	return fmt.Sprintf("%s%s@%s", tc.EmailPrefix(), uuid.New().String()[:8], tc.EmailDomain())
+}
+
+// SettingsPrefix returns the settings key prefix for this namespace.
+// Example: "auth.itest."
+func (tc *IntegrationTestContext) SettingsPrefix() string {
+	return tc.Namespace + ".itest."
+}
+
+// SecretPrefix returns the secret name prefix for this namespace (uppercase).
+// Example: "AUTH_ITEST_"
+func (tc *IntegrationTestContext) SecretPrefix() string {
+	return strings.ToUpper(tc.Namespace) + "_ITEST_"
+}
+
 // CleanupTestData cleans up test data from the database.
 // This should be called between tests to ensure test isolation.
 //
+// When a non-default namespace is set, cleanup runs BOTH namespace-scoped patterns
+// AND legacy broad patterns. This ensures backward compatibility during migration
+// while providing namespace isolation for packages that adopt namespaced data.
+//
 // It cleans up:
-// - Auth users with test email prefixes (e2e-test-*, test-*@example.com, test-*@test.com)
-// - Dashboard users with test email prefixes
+// - Auth/dashboard users with test email prefixes
+// - Password reset tokens and magic links
+// - Settings and secrets
 func (tc *IntegrationTestContext) CleanupTestData() {
-	// Clean up test users (cascade will handle sessions, etc.)
+	// Always clean up legacy patterns (backward compatible)
 	tc.ExecuteSQL(`DELETE FROM auth.users WHERE email LIKE 'e2e-test-%'`)
 	tc.ExecuteSQL(`DELETE FROM auth.users WHERE email LIKE 'test-%@example.com'`)
 	tc.ExecuteSQL(`DELETE FROM auth.users WHERE email LIKE 'test-%@test.com'`)
+	tc.ExecuteSQL(`DELETE FROM auth.users WHERE email LIKE '%@test.local'`)
 
-	// Clean up dashboard test users
-	tc.ExecuteSQL(`DELETE FROM dashboard.users WHERE email LIKE 'e2e-test-%'`)
-	tc.ExecuteSQL(`DELETE FROM dashboard.users WHERE email LIKE 'test-%@example.com'`)
-	tc.ExecuteSQL(`DELETE FROM dashboard.users WHERE email LIKE 'test-%@test.com'`)
+	tc.ExecuteSQL(`DELETE FROM platform.users WHERE email LIKE 'e2e-test-%'`)
+	tc.ExecuteSQL(`DELETE FROM platform.users WHERE email LIKE 'test-%@example.com'`)
+	tc.ExecuteSQL(`DELETE FROM platform.users WHERE email LIKE 'test-%@test.com'`)
 
-	// Clean up password reset tokens (orphaned from user deletion)
 	tc.ExecuteSQL(`DELETE FROM auth.password_reset_tokens WHERE user_id NOT IN (SELECT id FROM auth.users)`)
 
-	// Clean up magic links
 	tc.ExecuteSQL(`DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com'`)
 	tc.ExecuteSQL(`DELETE FROM auth.magic_links WHERE email LIKE 'test-%@test.com'`)
 
-	// Clean up test settings
 	tc.ExecuteSQL(`DELETE FROM app.settings WHERE key LIKE 'custom.%' OR key LIKE 'test.%' OR key LIKE 'secret.%'`)
 
-	// Clean up test secrets - catch all common test patterns
 	tc.ExecuteSQL(`DELETE FROM functions.secrets WHERE name LIKE ANY(ARRAY[
 		'TEST_%', 'DUPLICATE_%', 'GLOBAL_%', 'NS_%',
 		'API_KEY_%', 'EXPIRED_%', 'GET_%', 'TEMP_%',
@@ -171,4 +235,14 @@ func (tc *IntegrationTestContext) CleanupTestData() {
 		'WRONG_%', 'SHARED_NAME_%', 'CREATE_%',
 		'NEW_%', 'OLD_%', 'ANOTHER_%', 'SECOND_%'
 	])`)
+
+	// Also clean up namespace-scoped data when a non-default namespace is set
+	if tc.Namespace != "" && tc.Namespace != "default" {
+		emailPrefix := tc.EmailPrefix() + "%"
+		tc.ExecuteSQL(fmt.Sprintf(`DELETE FROM auth.users WHERE email LIKE '%s'`, emailPrefix))
+		tc.ExecuteSQL(fmt.Sprintf(`DELETE FROM platform.users WHERE email LIKE '%s'`, emailPrefix))
+		tc.ExecuteSQL(fmt.Sprintf(`DELETE FROM auth.magic_links WHERE email LIKE '%s'`, emailPrefix))
+		tc.ExecuteSQL(fmt.Sprintf(`DELETE FROM app.settings WHERE key LIKE '%s%%'`, tc.SettingsPrefix()))
+		tc.ExecuteSQL(fmt.Sprintf(`DELETE FROM functions.secrets WHERE name LIKE '%s%%'`, tc.SecretPrefix()))
+	}
 }

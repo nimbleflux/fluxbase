@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/nimbleflux/fluxbase/test"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/test"
 )
 
 // setupRLSTest prepares the test context for RLS tests
@@ -20,13 +21,14 @@ func setupRLSTest(t *testing.T) *test.TestContext {
 	// Must use superuser because RLS test user doesn't have DELETE permission on some tables
 	tc.ExecuteSQLAsSuperuser(`
 		-- Delete only test users (those with test email patterns)
-		DELETE FROM auth.users WHERE email LIKE '%@example.com' OR email LIKE '%@test.com';
+		DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com'
+			OR email IN ('user@example.com', 'admin@example.com', 'user1@example.com', 'user2@example.com');
 		-- Clean test-specific client_keys
 		DELETE FROM auth.client_keys WHERE name LIKE '%Test%' OR name LIKE '%test%';
 		-- Clean impersonation sessions for deleted users (will cascade)
 		DELETE FROM auth.impersonation_sessions WHERE admin_user_id NOT IN (SELECT id FROM auth.users);
 		-- Clean magic_links for deleted users
-		DELETE FROM auth.magic_links WHERE email LIKE '%@example.com' OR email LIKE '%@test.com';
+		DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com';
 		-- Clean password_reset_tokens for deleted users (will cascade)
 		DELETE FROM auth.password_reset_tokens WHERE user_id NOT IN (SELECT id FROM auth.users);
 		-- Clean tasks table used for RLS tests
@@ -510,7 +512,7 @@ func TestRLSRoleValidation(t *testing.T) {
 // TestRLSAuthUsersSelectRestriction tests that users can only see their own user record
 // This verifies that auth.users SELECT policy is properly tightened
 func TestRLSAuthUsersSelectRestriction(t *testing.T) {
-	t.Skip("RLS is disabled on auth.users - auth infrastructure tables don't use RLS because signup/signin happen before user context is established. Access control is enforced at the application level instead.")
+	t.Skip("auth.users uses tenant-scoped RLS (has_tenant_access) rather than per-user isolation. RLS is now ENABLE+FORCE, but the policy allows all rows within the same tenant (NULL tenant_id with no context). Per-user isolation is enforced at the application level instead. See TestTenantIsolation_AuthUsers for tenant-scoped isolation tests.")
 
 	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
@@ -559,7 +561,7 @@ func TestRLSAuthUsersSelectRestriction(t *testing.T) {
 
 // TestRLSAuthSessionsGranularPolicies tests the granular session policies
 func TestRLSAuthSessionsGranularPolicies(t *testing.T) {
-	t.Skip("RLS is disabled on auth.sessions - auth infrastructure tables don't use RLS because signup/signin happen before user context is established. Access control is enforced at the application level instead.")
+	t.Skip("RLS is disabled on auth.sessions - auth infrastructure tables use tenant-scoped RLS (has_tenant_access) rather than per-user isolation. Sessions for NULL tenant_id are visible to any tenant (NULL tenant_id with no context). Per-user isolation is enforced at the application level instead. See TestTenantIsolation_AuthUsers for tenant-scoped isolation tests.")
 
 	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
@@ -733,13 +735,13 @@ func TestRLSDashboardAdminTablesProtected(t *testing.T) {
 	// Use a unique test provider name to avoid conflicts with existing data
 	testProviderName := fmt.Sprintf("test_provider_%s", userID[:8])
 	tc.ExecuteSQLAsSuperuser(`
-		INSERT INTO dashboard.oauth_providers (id, provider_name, display_name, client_id, client_secret, redirect_url, enabled, created_at, updated_at)
+		INSERT INTO platform.oauth_providers (id, provider_name, display_name, client_id, client_secret, redirect_url, enabled, created_at, updated_at)
 		VALUES (gen_random_uuid(), $1, 'Test Provider', 'client123', 'secret456', 'http://localhost/callback', true, NOW(), NOW())
 		ON CONFLICT (provider_name) DO NOTHING
 	`, testProviderName)
 
 	providers := tc.QuerySQLAsRLSUser(`
-		SELECT * FROM dashboard.oauth_providers
+		SELECT * FROM platform.oauth_providers
 	`, userID)
 
 	require.Len(t, providers, 0, "Regular user should NOT see oauth_providers (dashboard admin only)")
@@ -751,17 +753,17 @@ func TestRLSDashboardAdminTablesProtected(t *testing.T) {
 
 	// Test 3: Activity log should be admin-read only
 	tc.ExecuteSQLAsSuperuser(`
-		INSERT INTO dashboard.activity_log (id, user_id, action, details, created_at)
+		INSERT INTO platform.activity_log (id, user_id, action, details, created_at)
 		VALUES (gen_random_uuid(), NULL, 'test.action', '{"message": "Test log entry"}'::jsonb, NOW())
 	`)
 
 	activityLog := tc.QuerySQLAsRLSUser(`
-		SELECT * FROM dashboard.activity_log
+		SELECT * FROM platform.activity_log
 	`, userID)
 
 	require.Len(t, activityLog, 0, "Regular user should NOT see activity_log (dashboard admin only)")
 
-	t.Log("Dashboard admin tables correctly restricted to dashboard_admin role")
+	t.Log("Dashboard admin tables correctly restricted to instance_admin role")
 }
 
 // TestRLSImpersonationSessionsAdminOnly tests that impersonation sessions are admin-only
@@ -803,7 +805,7 @@ func TestRLSImpersonationSessionsAdminOnly(t *testing.T) {
 	`, userID)
 	require.Len(t, sessionsSuper, 1, "Dashboard admin/service role should see impersonation_sessions")
 
-	t.Log("Impersonation sessions correctly restricted to dashboard_admin only")
+	t.Log("Impersonation sessions correctly restricted to instance_admin only")
 }
 
 // TestRLSAPIKeyUsageRestriction tests that users can only see usage for their own client keys
@@ -870,45 +872,66 @@ func TestRLSAPIKeyUsageRestriction(t *testing.T) {
 	t.Log("Client key usage correctly restricted to own keys only")
 }
 
-// TestRLSForceRowLevelSecurity tests that FORCE RLS prevents table owner bypass
+// TestRLSForceRowLevelSecurity tests that FORCE RLS is enabled on tenant-scoped tables
+// across all schemas. FORCE RLS prevents even the table owner from bypassing RLS policies.
 func TestRLSForceRowLevelSecurity(t *testing.T) {
-	t.Skip("FORCE RLS is not used - RLS is disabled on auth infrastructure tables (users, sessions) because auth operations happen before user context is established. Other tables use regular RLS with SET LOCAL ROLE for access control.")
-
 	// Use shared RLS context to avoid creating multiple connection pools
 	tc := setupRLSTest(t)
 	// NO defer tc.Close() - shared context is managed by TestMain
 
-	// This test verifies that FORCE ROW LEVEL SECURITY is enabled
-	// We check a few critical tables to ensure they have FORCE RLS
+	// Tables that should have both ENABLE and FORCE ROW LEVEL SECURITY.
+	// These are tenant-scoped tables where data isolation is critical.
+	expectedTables := []struct {
+		schema string
+		table  string
+	}{
+		// auth schema
+		{"auth", "users"},
+		{"auth", "sessions"},
+		{"auth", "service_keys"},
+		// logging schema
+		{"logging", "entries"},
+		// branching schema
+		{"branching", "branches"},
+		// functions schema
+		{"functions", "edge_functions"},
+		{"functions", "secrets"},
+		{"functions", "secret_versions"},
+		// jobs schema
+		{"jobs", "queue"},
+		// rpc schema
+		{"rpc", "procedures"},
+		// realtime schema
+		{"realtime", "schema_registry"},
+		// storage schema (reference implementation)
+		{"storage", "buckets"},
+		{"storage", "objects"},
+	}
 
-	// Query pg_class to check if FORCE RLS is enabled
-	result := tc.QuerySQLAsSuperuser(`
-		SELECT
-			c.relname as table_name,
-			c.relrowsecurity as rls_enabled,
-			c.relforcerowsecurity as force_rls_enabled
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE n.nspname = 'auth'
-		AND c.relname IN ('users', 'sessions', 'magic_links', 'password_reset_tokens', 'webhooks')
-		ORDER BY c.relname
-	`)
+	for _, expected := range expectedTables {
+		result := tc.QuerySQLAsSuperuser(`
+			SELECT
+				c.relname as table_name,
+				c.relrowsecurity as rls_enabled,
+				c.relforcerowsecurity as force_rls_enabled
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE n.nspname = $1 AND c.relname = $2
+		`, expected.schema, expected.table)
 
-	require.GreaterOrEqual(t, len(result), 5, "Should find at least 5 auth tables")
+		require.Len(t, result, 1, "Should find table %s.%s", expected.schema, expected.table)
 
-	// Verify each table has both RLS and FORCE RLS enabled
-	for _, row := range result {
-		tableName := row["table_name"]
+		row := result[0]
 		rlsEnabled := row["rls_enabled"]
 		forceRLSEnabled := row["force_rls_enabled"]
 
-		require.Equal(t, true, rlsEnabled, "Table %s should have RLS enabled", tableName)
-		require.Equal(t, true, forceRLSEnabled, "Table %s should have FORCE RLS enabled", tableName)
+		require.Equal(t, true, rlsEnabled, "Table %s.%s should have RLS enabled", expected.schema, expected.table)
+		require.Equal(t, true, forceRLSEnabled, "Table %s.%s should have FORCE RLS enabled", expected.schema, expected.table)
 
-		t.Logf("✓ Table auth.%s has FORCE ROW LEVEL SECURITY enabled", tableName)
+		t.Logf("Table %s.%s has FORCE ROW LEVEL SECURITY enabled", expected.schema, expected.table)
 	}
 
-	t.Log("FORCE ROW LEVEL SECURITY correctly enabled on critical tables")
+	t.Log("FORCE ROW LEVEL SECURITY correctly enabled on all tenant-scoped tables")
 }
 
 // TestRLSPerformanceIndexes tests that performance indexes for RLS policies exist
@@ -969,8 +992,8 @@ func TestRLSRoleMapping(t *testing.T) {
 			expectedDBRole: "authenticated",
 		},
 		{
-			name:           "dashboard_admin maps to authenticated",
-			appRole:        "dashboard_admin",
+			name:           "instance_admin maps to authenticated",
+			appRole:        "instance_admin",
 			expectedDBRole: "authenticated",
 		},
 		{

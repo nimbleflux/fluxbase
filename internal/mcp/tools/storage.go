@@ -9,9 +9,10 @@ import (
 	"io"
 	"strings"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/nimbleflux/fluxbase/internal/storage"
-	"github.com/rs/zerolog/log"
 )
 
 // ListObjectsTool implements the list_objects MCP tool

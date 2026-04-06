@@ -9,8 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // ConversationManager handles conversation state management
@@ -325,7 +326,7 @@ func (cm *ConversationManager) CloseConversation(ctx context.Context, conversati
 
 func (cm *ConversationManager) saveConversation(ctx context.Context, conv *Conversation) error {
 	// Validate user_id exists in auth.users before inserting
-	// Admin users (from dashboard.users) won't have entries in auth.users
+	// Admin users (from platform.users) won't have entries in auth.users
 	validUserID := conv.UserID
 	if validUserID != nil {
 		var exists bool

@@ -13,10 +13,11 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/crypto"
-	"github.com/rs/zerolog/log"
 )
 
 // OAuthProviderHandler handles OAuth provider configuration management
@@ -45,7 +46,7 @@ func (h *OAuthProviderHandler) EncryptExistingSecrets(ctx context.Context) error
 	// Find all providers with unencrypted secrets
 	query := `
 		SELECT id, provider_name, client_secret
-		FROM dashboard.oauth_providers
+		FROM platform.oauth_providers
 		WHERE (is_encrypted IS NULL OR is_encrypted = false)
 		  AND client_secret IS NOT NULL
 		  AND client_secret != ''
@@ -91,7 +92,7 @@ func (h *OAuthProviderHandler) EncryptExistingSecrets(ctx context.Context) error
 		}
 
 		_, updateErr := h.db.Exec(ctx, `
-			UPDATE dashboard.oauth_providers
+			UPDATE platform.oauth_providers
 			SET client_secret = $1, is_encrypted = true
 			WHERE id = $2
 		`, encryptedSecret, provider.ID)
@@ -217,7 +218,7 @@ func (h *OAuthProviderHandler) ListOAuthProviders(c fiber.Ctx) error {
 		       required_claims, denied_claims,
 		       created_at, updated_at,
 		       (client_secret IS NOT NULL AND client_secret != '') AS has_secret
-		FROM dashboard.oauth_providers
+		FROM platform.oauth_providers
 		ORDER BY display_name
 	`
 
@@ -337,7 +338,7 @@ func (h *OAuthProviderHandler) GetOAuthProvider(c fiber.Ctx) error {
 		       required_claims, denied_claims,
 		       created_at, updated_at,
 		       (client_secret IS NOT NULL AND client_secret != '') AS has_secret
-		FROM dashboard.oauth_providers
+		FROM platform.oauth_providers
 		WHERE id = $1
 	`
 
@@ -450,7 +451,7 @@ func (h *OAuthProviderHandler) CreateOAuthProvider(c fiber.Ctx) error {
 	}
 
 	query := `
-		INSERT INTO dashboard.oauth_providers (
+		INSERT INTO platform.oauth_providers (
 			provider_name, display_name, enabled, client_id, client_secret,
 			redirect_url, scopes, is_custom, authorization_url, token_url,
 			user_info_url, revocation_endpoint, end_session_endpoint,
@@ -631,7 +632,7 @@ func (h *OAuthProviderHandler) UpdateOAuthProvider(c fiber.Ctx) error {
 	args = append(args, userID)
 
 	query := fmt.Sprintf(
-		"UPDATE dashboard.oauth_providers SET %s WHERE id = $1 RETURNING display_name",
+		"UPDATE platform.oauth_providers SET %s WHERE id = $1 RETURNING display_name",
 		strings.Join(updates, ", "),
 	)
 
@@ -677,7 +678,7 @@ func (h *OAuthProviderHandler) DeleteOAuthProvider(c fiber.Ctx) error {
 		})
 	}
 
-	query := "DELETE FROM dashboard.oauth_providers WHERE id = $1 RETURNING display_name"
+	query := "	DELETE FROM platform.oauth_providers WHERE id = $1 RETURNING display_name"
 
 	var displayName string
 	err = h.db.QueryRow(ctx, query, providerID).Scan(&displayName)
@@ -930,7 +931,7 @@ func (h *OAuthProviderHandler) hasDashboardSSOProviders(ctx context.Context) (bo
 	// Check OAuth providers
 	var oauthCount int
 	err := h.db.QueryRow(ctx, `
-		SELECT COUNT(*) FROM dashboard.oauth_providers
+		SELECT COUNT(*) FROM platform.oauth_providers
 		WHERE enabled = true AND allow_dashboard_login = true
 	`).Scan(&oauthCount)
 	if err != nil {
@@ -958,7 +959,7 @@ func (h *OAuthProviderHandler) hasAppSSOProviders(ctx context.Context) (bool, er
 	// Check OAuth providers
 	var oauthCount int
 	err := h.db.QueryRow(ctx, `
-		SELECT COUNT(*) FROM dashboard.oauth_providers
+		SELECT COUNT(*) FROM platform.oauth_providers
 		WHERE enabled = true AND allow_app_login = true
 	`).Scan(&oauthCount)
 	if err != nil {
