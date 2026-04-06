@@ -337,6 +337,33 @@ test-integration: ## Run admin integration tests (requires running server)
 	@cd examples/admin-setup && unset NODE_OPTIONS && bun test
 	@echo "${GREEN}Integration tests complete!${NC}"
 
+test-e2e-ui: ## Run Playwright E2E tests. Resets DB, starts server, runs all tests.
+	@echo "${YELLOW}Running Playwright E2E tests (clean database)...${NC}"
+	@cd admin && bunx playwright test
+
+test-e2e-ui-headed: ## Run Playwright E2E tests with visible browser
+	@cd admin && bunx playwright test --headed
+
+test-e2e-ui-debug: ## Run Playwright E2E tests in debug mode
+	@cd admin && bunx playwright test --debug
+
+test-e2e-ui-dev: ## Run Playwright E2E tests reusing existing server (for dev iteration)
+	@./scripts/start-e2e-ui.sh --ensure
+	@echo "${YELLOW}Running Playwright E2E tests (reusing server)...${NC}"
+	@cd admin && PLAYWRIGHT_REUSE_SERVER=true bunx playwright test
+
+test-e2e-ui-server: ## Start E2E test servers (Go :8082 + Vite :5050). Ctrl+C to stop.
+	@./scripts/start-e2e-ui.sh
+
+test-e2e-ui-restart: ## Restart E2E test servers (kills existing, starts fresh)
+	@./scripts/start-e2e-ui.sh --restart
+
+test-e2e-ui-setup: ## Reset the Playwright test database (drop schemas, server re-applies on startup)
+	@echo "${YELLOW}Resetting Playwright test database...${NC}"
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d fluxbase_playwright -c "DO \$\$ DECLARE r RECORD; BEGIN FOR r IN SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast') LOOP EXECUTE 'DROP SCHEMA IF EXISTS ' || quote_ident(r.nspname) || ' CASCADE'; END LOOP; END \$\$;"
+	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d fluxbase_playwright -c "CREATE SCHEMA IF NOT EXISTS public; GRANT ALL ON SCHEMA public TO public;"
+	@echo "${GREEN}Playwright test database reset! Start server to re-apply schemas.${NC}"
+
 test-all: ## Run ALL tests (backend + SDK + React + integration)
 	@echo "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
 	@echo "${BLUE}║              FLUXBASE - COMPLETE TEST SUITE                ║${NC}"

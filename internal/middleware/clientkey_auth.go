@@ -112,6 +112,7 @@ func OptionalClientKeyAuth(authService *auth.Service, clientKeyService *auth.Cli
 				c.Locals("user_role", claims.Role)
 				c.Locals("session_id", claims.SessionID)
 				c.Locals("auth_type", "jwt")
+				c.Locals("claims", claims)
 				return c.Next()
 			}
 		}
@@ -182,6 +183,7 @@ func RequireEitherAuth(authService *auth.Service, clientKeyService *auth.ClientK
 				c.Locals("user_role", claims.Role)
 				c.Locals("session_id", claims.SessionID)
 				c.Locals("auth_type", "jwt")
+				c.Locals("claims", claims)
 				return c.Next()
 			}
 		}
@@ -386,6 +388,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 					// Set RLS context for platform admin
 					c.Locals("rls_user_id", claims.Subject)
 					c.Locals("rls_role", claims.Role)
+					c.Locals("claims", claims)
 
 					return c.Next()
 				}
@@ -419,6 +422,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 				c.Locals("rls_user_id", claims.UserID)
 				c.Locals("rls_role", claims.Role)
 
+				c.Locals("claims", claims)
 				// SECURITY: Log audit entry for impersonation tokens
 				// Impersonation tokens have an impersonated_by claim indicating the admin who issued them
 				if claims.ImpersonatedBy != "" {
@@ -449,6 +453,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 					c.Locals("rls_user_id", dashboardClaims.Subject)
 					c.Locals("rls_role", dashboardClaims.Role)
 
+					c.Locals("claims", dashboardClaims)
 					return c.Next()
 				}
 			}
@@ -492,6 +497,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 						c.Locals("jwt_claims", claims)
 						c.Locals("rls_role", claims.Role)
 
+						c.Locals("claims", claims)
 						log.Debug().
 							Str("role", claims.Role).
 							Str("issuer", claims.Issuer).
@@ -581,6 +587,7 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 					c.Locals("jwt_claims", claims)
 					c.Locals("rls_role", claims.Role)
 
+					c.Locals("claims", claims)
 					log.Debug().
 						Str("role", claims.Role).
 						Str("issuer", claims.Issuer).
@@ -650,6 +657,7 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				c.Locals("rls_user_id", claims.UserID)
 				c.Locals("rls_role", claims.Role)
 
+				c.Locals("claims", claims)
 				// SECURITY: Log audit entry for impersonation tokens
 				// Impersonation tokens have an impersonated_by claim indicating the admin who issued them
 				if claims.ImpersonatedBy != "" {
@@ -680,9 +688,9 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 					// Set RLS context for platform admin (maps to service_role in RLS middleware)
 					c.Locals("rls_user_id", dashboardClaims.Subject)
 					c.Locals("rls_role", dashboardClaims.Role)
+					c.Locals("claims", dashboardClaims)
 
 					log.Debug().
-						Str("user_id", dashboardClaims.Subject).
 						Str("role", dashboardClaims.Role).
 						Msg("Authenticated as platform.users via Bearer header")
 
@@ -726,6 +734,7 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 						c.Locals("user_role", claims.Role)
 						c.Locals("auth_type", "service_role_jwt")
 						c.Locals("jwt_claims", claims)
+						c.Locals("claims", claims)
 						c.Locals("rls_role", claims.Role)
 
 						log.Debug().
@@ -787,6 +796,7 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				c.Locals("rls_user_id", claims.UserID)
 				c.Locals("rls_role", claims.Role)
 
+				c.Locals("claims", claims)
 				return c.Next()
 			}
 
@@ -827,6 +837,7 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				// Set RLS context based on role claim
 				c.Locals("rls_role", srClaims.Role)
 				if srClaims.UserID != "" {
+					c.Locals("claims", srClaims)
 					c.Locals("user_id", srClaims.UserID)
 					c.Locals("rls_user_id", srClaims.UserID)
 				}

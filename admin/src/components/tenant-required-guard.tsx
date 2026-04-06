@@ -3,7 +3,6 @@ import { Building2, Check, ChevronsUpDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useTenantStore, type Tenant } from "@/stores/tenant-store";
 import { tenantsApi } from "@/lib/api";
-import { getStoredUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,16 +26,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-function checkIsInstanceAdmin(): boolean {
-  const user = getStoredUser();
-  if (!user) return false;
-  if ("role" in user && user.role) {
-    return Array.isArray(user.role)
-      ? user.role.includes("instance_admin")
-      : user.role === "instance_admin";
-  }
-  return false;
-}
+import { checkIsInstanceAdmin } from "@/lib/route-guards";
 
 interface TenantRequiredGuardProps {
   children: React.ReactNode;
