@@ -5,7 +5,6 @@ import {
   rawSubmitJob,
   rawListJobs,
   rawCancelJob,
-  rawApiRequest,
 } from "./helpers/api";
 
 test.describe("Background Jobs Execution", () => {

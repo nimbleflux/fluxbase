@@ -3,7 +3,6 @@ import { test as base, expect, type Page } from "@playwright/test";
 import { rawLogin, listTenants } from "./helpers/api";
 import { getUserByEmail } from "./helpers/db";
 import {
-  SETUP_TOKEN,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   SECOND_TENANT_SLUG,
@@ -84,9 +83,9 @@ async function browserLogin(
 /**
  * Start impersonation via the API and set tokens in localStorage.
  */
-async function setupImpersonation(
+async function _setupImpersonation(
   page: Page,
-  accessToken: string,
+  _accessToken: string,
   impersonationToken: string,
   type: "user" | "anon" | "service",
   targetUser?: { id: string; email: string },

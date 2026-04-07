@@ -1,6 +1,5 @@
 import { test, expect } from "./fixtures";
 import {
-  listTenants,
   rawCreateFunction,
   rawListFunctions,
   rawCreateSecret,
@@ -9,7 +8,6 @@ import {
   rawListKnowledgeBases,
   rawApiRequest,
 } from "./helpers/api";
-import { SECOND_TENANT_SLUG } from "./helpers/constants";
 
 const functionCode = `
 export default function handler(req: Request): Response {
@@ -34,7 +32,7 @@ test.describe("Tenant Admin Service Isolation", () => {
       email: "admin@fluxbase.test",
       password: "test-password-32chars!!",
     });
-    const adminToken = loginResult.body?.access_token;
+    const _adminToken = loginResult.body?.access_token;
 
     for (const resource of createdResources) {
       try {

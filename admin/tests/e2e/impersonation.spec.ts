@@ -1,7 +1,4 @@
 import { test, expect } from "./fixtures";
-import { rawStartUserImpersonation, rawStopImpersonation } from "./helpers/api";
-import { getUserByEmail } from "./helpers/db";
-import { SECOND_TENANT_SLUG } from "./helpers/constants";
 
 test.describe("Impersonation Flow", () => {
   // ── ImpersonationSelector (Header) ──
@@ -28,10 +25,7 @@ test.describe("Impersonation Flow", () => {
     }
   });
 
-  test("start user impersonation via dialog", async ({
-    adminPage,
-    adminToken,
-  }) => {
+  test("start user impersonation via dialog", async ({ adminPage }) => {
     // Click impersonate button to open dialog
     const button = adminPage.getByRole("button", { name: /impersonate/i });
     if (!(await button.isVisible().catch(() => false))) {
@@ -185,9 +179,6 @@ test.describe("Impersonation Flow", () => {
     await adminPage.goto("functions", { waitUntil: "networkidle" });
     // The page should have an impersonation-related element
     // Look for the popover button/badge
-    const impersonationBadge = adminPage.getByText(
-      /not impersonating|impersonating/i,
-    );
     // This may or may not be visible depending on the page state
     // Just verify the functions page loaded
     await expect(adminPage).toHaveURL(/functions/);

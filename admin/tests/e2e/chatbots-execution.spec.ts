@@ -254,10 +254,7 @@ test.describe("Chatbots Management", () => {
     }
   });
 
-  test("refresh button reloads chatbot list", async ({
-    adminPage,
-    adminToken,
-  }) => {
+  test("refresh button reloads chatbot list", async ({ adminPage }) => {
     await adminPage.goto("chatbots", { waitUntil: "networkidle" });
 
     // Click the Refresh button
@@ -302,7 +299,7 @@ test.describe("Chatbots Management", () => {
     expect(syncResponse.status()).toBeLessThan(500);
   });
 
-  test("chatbot list is tenant-scoped", async ({ adminPage, adminToken }) => {
+  test("chatbot list is tenant-scoped", async () => {
     // List chatbots for default tenant
     const resultA = await rawListChatbots(adminToken);
     expect(resultA.status).toBe(200);

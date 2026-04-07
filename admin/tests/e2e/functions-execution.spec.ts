@@ -1,10 +1,8 @@
 import { test, expect } from "./fixtures";
 import {
   rawCreateFunction,
-  rawListFunctions,
   rawDeleteFunction,
   rawInvokeFunction,
-  rawApiRequest,
 } from "./helpers/api";
 
 test.describe("Edge Functions Execution", () => {
@@ -71,7 +69,7 @@ export default function handler(req: Request): Response {
     });
   });
 
-  test("invoke function via API and verify response", async ({ adminPage }) => {
+  test("invoke function via API and verify response", async () => {
     const funcName = `e2e-invoke-${Date.now()}`;
     const code = `
 export default function handler(req: Request): Response {

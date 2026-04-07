@@ -24,7 +24,7 @@ test.describe("Tenant Service Isolation", () => {
       email: "admin@fluxbase.test",
       password: "test-password-32chars!!",
     });
-    const adminToken = loginResult.body?.access_token;
+    const _adminToken = loginResult.body?.access_token;
 
     for (const { type, id, token, tenantId } of createdResources) {
       const headers: Record<string, string> = {
