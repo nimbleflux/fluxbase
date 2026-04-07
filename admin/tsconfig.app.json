@@ -18,6 +18,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     /* Alias */
+    "ignoreDeprecations": "6.0",
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@/*": [

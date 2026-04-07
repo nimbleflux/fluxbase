@@ -139,7 +139,7 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
   // Fetch total count for pagination using Fluxbase SDK
   // Using SDK instead of axios to avoid AxiosError triggering logout in queryCache.onError
   const { data: countData } = useQuery<number>({
-    queryKey: ["table-count", tableName, tableApiPath],
+    queryKey: ["table-count", tableName, tableApiPath, fluxbaseClient],
     queryFn: async () => {
       const { count, error } = await fluxbaseClient
         .from(tableApiPath)

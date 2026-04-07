@@ -14,7 +14,7 @@ export function HealthIndicators() {
   const client = useFluxbaseClient();
 
   const { data: health, isLoading } = useQuery({
-    queryKey: ["health"],
+    queryKey: ["health", client.admin],
     queryFn: async () => {
       const { data, error } = await client.admin.getHealth();
       if (error) throw error;

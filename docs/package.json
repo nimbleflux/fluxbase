@@ -11,19 +11,19 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/sitemap": "^3.7.1",
-    "@astrojs/starlight": "^0.38.1",
-    "astro": "^6.0.3",
+    "@astrojs/sitemap": "^3.7.2",
+    "@astrojs/starlight": "^0.38.3",
+    "astro": "^6.1.4",
     "sharp": "^0.34.5",
     "starlight-typedoc": "0.21.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "typedoc": "0.28.17",
-    "typedoc-plugin-markdown": "4.10.0",
-    "typescript": "5.9.3"
+    "typedoc": "0.28.18",
+    "typedoc-plugin-markdown": "4.11.0",
+    "typescript": "6.0.2"
   },
   "engines": {
-    "node": ">=24.14.0"
+    "node": ">=24.14.1"
   }
 }
