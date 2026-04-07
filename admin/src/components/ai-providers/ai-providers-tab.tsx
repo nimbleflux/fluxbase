@@ -1,13 +1,13 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   AIProvider,
   CreateAIProviderRequest,
   UpdateAIProviderRequest,
-} from '@nimbleflux/fluxbase-sdk'
-import { useFluxbaseClient } from '@nimbleflux/fluxbase-sdk-react'
-import { Bot, Plus, Trash2, Star, Pencil, Sparkles } from 'lucide-react'
-import { toast } from 'sonner'
+} from "@nimbleflux/fluxbase-sdk";
+import { useFluxbaseClient } from "@nimbleflux/fluxbase-sdk-react";
+import { Bot, Plus, Trash2, Star, Pencil, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,16 +17,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -34,16 +34,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -51,101 +51,101 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from "@/components/ui/table";
 
 export function AIProvidersTab() {
-  const client = useFluxbaseClient()
-  const queryClient = useQueryClient()
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [editProvider, setEditProvider] = useState<AIProvider | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<AIProvider | null>(null)
+  const client = useFluxbaseClient();
+  const queryClient = useQueryClient();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editProvider, setEditProvider] = useState<AIProvider | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<AIProvider | null>(null);
 
   // Fetch providers using SDK
   const { data: providers = [], isLoading } = useQuery<AIProvider[]>({
-    queryKey: ['ai-providers'],
+    queryKey: ["ai-providers", client.admin.ai],
     queryFn: async () => {
-      const { data, error } = await client.admin.ai.listProviders()
-      if (error) throw error
-      return data ?? []
+      const { data, error } = await client.admin.ai.listProviders();
+      if (error) throw error;
+      return data ?? [];
     },
-  })
+  });
 
   // Set default provider mutation using SDK
   const setDefaultMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await client.admin.ai.setDefaultProvider(id)
-      if (error) throw error
+      const { error } = await client.admin.ai.setDefaultProvider(id);
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Default provider updated')
-      queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
+      toast.success("Default provider updated");
+      queryClient.invalidateQueries({ queryKey: ["ai-providers"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message)
+      toast.error(error.message);
     },
-  })
+  });
 
   // Delete provider mutation using SDK
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await client.admin.ai.deleteProvider(id)
-      if (error) throw error
+      const { error } = await client.admin.ai.deleteProvider(id);
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Provider deleted')
-      queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
-      setDeleteConfirm(null)
+      toast.success("Provider deleted");
+      queryClient.invalidateQueries({ queryKey: ["ai-providers"] });
+      setDeleteConfirm(null);
     },
     onError: (error: Error) => {
-      toast.error(error.message)
+      toast.error(error.message);
     },
-  })
+  });
 
   // Set embedding provider mutation using SDK
   const setEmbeddingMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await client.admin.ai.setEmbeddingProvider(id)
-      if (error) throw error
+      const { error } = await client.admin.ai.setEmbeddingProvider(id);
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Embedding provider updated')
-      queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
+      toast.success("Embedding provider updated");
+      queryClient.invalidateQueries({ queryKey: ["ai-providers"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message)
+      toast.error(error.message);
     },
-  })
+  });
 
   // Clear embedding provider mutation using SDK
   const clearEmbeddingMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await client.admin.ai.clearEmbeddingProvider(id)
-      if (error) throw error
+      const { error } = await client.admin.ai.clearEmbeddingProvider(id);
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Reverted to default provider for embeddings')
-      queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
+      toast.success("Reverted to default provider for embeddings");
+      queryClient.invalidateQueries({ queryKey: ["ai-providers"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message)
+      toast.error(error.message);
     },
-  })
+  });
 
   // Create provider mutation using SDK
   const createMutation = useMutation({
     mutationFn: async (data: CreateAIProviderRequest) => {
-      const { error } = await client.admin.ai.createProvider(data)
-      if (error) throw error
+      const { error } = await client.admin.ai.createProvider(data);
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Provider created')
-      queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
-      setCreateDialogOpen(false)
+      toast.success("Provider created");
+      queryClient.invalidateQueries({ queryKey: ["ai-providers"] });
+      setCreateDialogOpen(false);
     },
     onError: (error: Error) => {
-      toast.error(error.message)
+      toast.error(error.message);
     },
-  })
+  });
 
   // Update provider mutation using SDK
   const updateMutation = useMutation({
@@ -153,30 +153,30 @@ export function AIProvidersTab() {
       id,
       data,
     }: {
-      id: string
-      data: UpdateAIProviderRequest
+      id: string;
+      data: UpdateAIProviderRequest;
     }) => {
-      const { error } = await client.admin.ai.updateProvider(id, data)
-      if (error) throw error
+      const { error } = await client.admin.ai.updateProvider(id, data);
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Provider updated')
-      queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
-      setEditProvider(null)
+      toast.success("Provider updated");
+      queryClient.invalidateQueries({ queryKey: ["ai-providers"] });
+      setEditProvider(null);
     },
     onError: (error: Error) => {
-      toast.error(error.message)
+      toast.error(error.message);
     },
-  })
+  });
 
   return (
-    <div className='space-y-4'>
+    <div className="space-y-4">
       <Card>
         <CardHeader>
-          <div className='flex items-center justify-between'>
+          <div className="flex items-center justify-between">
             <div>
-              <CardTitle className='flex items-center gap-2'>
-                <Bot className='h-5 w-5' />
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
                 AI Providers
               </CardTitle>
               <CardDescription>
@@ -185,27 +185,27 @@ export function AIProvidersTab() {
               </CardDescription>
             </div>
             <Button onClick={() => setCreateDialogOpen(true)}>
-              <Plus className='mr-2 h-4 w-4' />
+              <Plus className="mr-2 h-4 w-4" />
               Add Provider
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className='py-8 text-center'>
-              <p className='text-muted-foreground'>Loading providers...</p>
+            <div className="py-8 text-center">
+              <p className="text-muted-foreground">Loading providers...</p>
             </div>
           ) : providers.length === 0 ? (
-            <div className='py-8 text-center'>
-              <Bot className='text-muted-foreground mx-auto mb-4 h-12 w-12' />
-              <p className='mb-1 text-lg font-medium'>
+            <div className="py-8 text-center">
+              <Bot className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
+              <p className="mb-1 text-lg font-medium">
                 No providers configured
               </p>
-              <p className='text-muted-foreground mb-4 text-sm'>
+              <p className="text-muted-foreground mb-4 text-sm">
                 Add an AI provider to enable chatbot functionality
               </p>
               <Button onClick={() => setCreateDialogOpen(true)}>
-                <Plus className='mr-2 h-4 w-4' />
+                <Plus className="mr-2 h-4 w-4" />
                 Add Provider
               </Button>
             </div>
@@ -217,81 +217,81 @@ export function AIProvidersTab() {
                   <TableHead>Type</TableHead>
                   <TableHead>Model</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className='text-right'>Actions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {providers.map((provider) => {
                   // Determine embedding provider state
                   const isEmbeddingProvider =
-                    provider.use_for_embeddings === true
+                    provider.use_for_embeddings === true;
                   const isAutoEmbedding =
-                    provider.use_for_embeddings === null && provider.is_default
+                    provider.use_for_embeddings === null && provider.is_default;
 
                   return (
                     <TableRow key={provider.id}>
-                      <TableCell className='font-medium'>
-                        <div className='flex items-center gap-2'>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
                           {provider.display_name}
                           {provider.is_default && (
-                            <Badge variant='default' className='text-xs'>
-                              <Star className='mr-1 h-3 w-3' />
+                            <Badge variant="default" className="text-xs">
+                              <Star className="mr-1 h-3 w-3" />
                               Default
                             </Badge>
                           )}
                           {(isEmbeddingProvider || isAutoEmbedding) && (
                             <Badge
                               variant={
-                                isEmbeddingProvider ? 'default' : 'outline'
+                                isEmbeddingProvider ? "default" : "outline"
                               }
-                              className='text-xs'
+                              className="text-xs"
                             >
-                              <Sparkles className='mr-1 h-3 w-3' />
-                              Embeddings {isAutoEmbedding && '(auto)'}
+                              <Sparkles className="mr-1 h-3 w-3" />
+                              Embeddings {isAutoEmbedding && "(auto)"}
                             </Badge>
                           )}
                           {provider.from_config && (
-                            <Badge variant='secondary' className='text-xs'>
+                            <Badge variant="secondary" className="text-xs">
                               Config
                             </Badge>
                           )}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant='outline'>
+                        <Badge variant="outline">
                           {provider.provider_type}
                         </Badge>
                       </TableCell>
-                      <TableCell className='text-muted-foreground text-sm'>
+                      <TableCell className="text-muted-foreground text-sm">
                         {provider.config.model ||
-                          (provider.provider_type === 'openai'
-                            ? 'gpt-4-turbo'
-                            : '-')}
+                          (provider.provider_type === "openai"
+                            ? "gpt-4-turbo"
+                            : "-")}
                       </TableCell>
                       <TableCell>
                         {provider.enabled ? (
                           <Badge
-                            variant='outline'
-                            className='border-green-500 text-green-500'
+                            variant="outline"
+                            className="border-green-500 text-green-500"
                           >
                             Enabled
                           </Badge>
                         ) : (
                           <Badge
-                            variant='outline'
-                            className='border-gray-500 text-gray-500'
+                            variant="outline"
+                            className="border-gray-500 text-gray-500"
                           >
                             Disabled
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className='text-right'>
-                        <div className='flex items-center justify-end gap-2'>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
                           {/* Default toggle - always visible for non-config providers */}
                           {!provider.from_config && (
                             <Button
-                              size='sm'
-                              variant='ghost'
+                              size="sm"
+                              variant="ghost"
                               onClick={() =>
                                 !provider.is_default &&
                                 setDefaultMutation.mutate(provider.id)
@@ -302,32 +302,32 @@ export function AIProvidersTab() {
                               }
                               title={
                                 provider.is_default
-                                  ? 'Current default'
-                                  : 'Set as default'
+                                  ? "Current default"
+                                  : "Set as default"
                               }
                               className={
                                 provider.is_default
-                                  ? 'text-yellow-500'
-                                  : 'text-muted-foreground hover:text-yellow-500'
+                                  ? "text-yellow-500"
+                                  : "text-muted-foreground hover:text-yellow-500"
                               }
                             >
                               <Star
-                                className={`h-4 w-4 ${provider.is_default ? 'fill-current' : ''}`}
+                                className={`h-4 w-4 ${provider.is_default ? "fill-current" : ""}`}
                               />
                             </Button>
                           )}
                           {/* Embedding provider toggle */}
                           {!provider.from_config && (
                             <Button
-                              size='sm'
-                              variant='ghost'
+                              size="sm"
+                              variant="ghost"
                               onClick={() => {
                                 if (isEmbeddingProvider) {
                                   // Clear explicit preference
-                                  clearEmbeddingMutation.mutate(provider.id)
+                                  clearEmbeddingMutation.mutate(provider.id);
                                 } else {
                                   // Set as embedding provider
-                                  setEmbeddingMutation.mutate(provider.id)
+                                  setEmbeddingMutation.mutate(provider.id);
                                 }
                               }}
                               disabled={
@@ -336,51 +336,51 @@ export function AIProvidersTab() {
                               }
                               title={
                                 isEmbeddingProvider
-                                  ? 'Clear embedding preference (use default)'
+                                  ? "Clear embedding preference (use default)"
                                   : isAutoEmbedding
-                                    ? 'Using default provider for embeddings'
-                                    : 'Set as embedding provider'
+                                    ? "Using default provider for embeddings"
+                                    : "Set as embedding provider"
                               }
                               className={
                                 isEmbeddingProvider
-                                  ? 'text-purple-500'
+                                  ? "text-purple-500"
                                   : isAutoEmbedding
-                                    ? 'text-purple-500 opacity-60'
-                                    : 'text-muted-foreground hover:text-purple-500'
+                                    ? "text-purple-500 opacity-60"
+                                    : "text-muted-foreground hover:text-purple-500"
                               }
                             >
                               <Sparkles
-                                className={`h-4 w-4 ${isEmbeddingProvider || isAutoEmbedding ? 'fill-current' : ''}`}
+                                className={`h-4 w-4 ${isEmbeddingProvider || isAutoEmbedding ? "fill-current" : ""}`}
                               />
                             </Button>
                           )}
                           {/* Edit button */}
                           {!provider.from_config && (
                             <Button
-                              size='sm'
-                              variant='ghost'
+                              size="sm"
+                              variant="ghost"
                               onClick={() => setEditProvider(provider)}
-                              title='Edit provider'
+                              title="Edit provider"
                             >
-                              <Pencil className='h-4 w-4' />
+                              <Pencil className="h-4 w-4" />
                             </Button>
                           )}
                           {/* Delete button */}
                           {!provider.from_config && (
                             <Button
-                              size='sm'
-                              variant='ghost'
+                              size="sm"
+                              variant="ghost"
                               onClick={() => setDeleteConfirm(provider)}
-                              className='text-destructive hover:text-destructive hover:bg-destructive/10'
-                              title='Delete provider'
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              title="Delete provider"
                             >
-                              <Trash2 className='h-4 w-4' />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
                         </div>
                       </TableCell>
                     </TableRow>
-                  )
+                  );
                 })}
               </TableBody>
             </Table>
@@ -418,7 +418,7 @@ export function AIProvidersTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Provider</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete{' '}
+              Are you sure you want to delete{" "}
               <strong>{deleteConfirm?.display_name}</strong>? This action cannot
               be undone.
             </AlertDialogDescription>
@@ -429,7 +429,7 @@ export function AIProvidersTab() {
               onClick={() =>
                 deleteConfirm && deleteMutation.mutate(deleteConfirm.id)
               }
-              className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>
@@ -437,36 +437,36 @@ export function AIProvidersTab() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
+  );
 }
 
 // Embedding models per provider type
 const EMBEDDING_MODELS = {
   openai: [
-    { value: '', label: 'Default (text-embedding-3-small)' },
-    { value: 'text-embedding-3-small', label: 'text-embedding-3-small' },
-    { value: 'text-embedding-3-large', label: 'text-embedding-3-large' },
-    { value: 'text-embedding-ada-002', label: 'text-embedding-ada-002' },
+    { value: "", label: "Default (text-embedding-3-small)" },
+    { value: "text-embedding-3-small", label: "text-embedding-3-small" },
+    { value: "text-embedding-3-large", label: "text-embedding-3-large" },
+    { value: "text-embedding-ada-002", label: "text-embedding-ada-002" },
   ],
   azure: [
-    { value: '', label: 'Default (text-embedding-ada-002)' },
-    { value: 'text-embedding-3-small', label: 'text-embedding-3-small' },
-    { value: 'text-embedding-3-large', label: 'text-embedding-3-large' },
-    { value: 'text-embedding-ada-002', label: 'text-embedding-ada-002' },
+    { value: "", label: "Default (text-embedding-ada-002)" },
+    { value: "text-embedding-3-small", label: "text-embedding-3-small" },
+    { value: "text-embedding-3-large", label: "text-embedding-3-large" },
+    { value: "text-embedding-ada-002", label: "text-embedding-ada-002" },
   ],
   ollama: [
-    { value: '', label: 'Default (nomic-embed-text)' },
-    { value: 'nomic-embed-text', label: 'nomic-embed-text' },
-    { value: 'mxbai-embed-large', label: 'mxbai-embed-large' },
-    { value: 'all-minilm', label: 'all-minilm' },
+    { value: "", label: "Default (nomic-embed-text)" },
+    { value: "nomic-embed-text", label: "nomic-embed-text" },
+    { value: "mxbai-embed-large", label: "mxbai-embed-large" },
+    { value: "all-minilm", label: "all-minilm" },
   ],
-}
+};
 
 interface CreateProviderDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSubmit: (data: CreateAIProviderRequest) => void
-  isPending: boolean
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (data: CreateAIProviderRequest) => void;
+  isPending: boolean;
 }
 
 function CreateProviderDialog({
@@ -475,59 +475,59 @@ function CreateProviderDialog({
   onSubmit,
   isPending,
 }: CreateProviderDialogProps) {
-  const [name, setName] = useState('')
-  const [displayName, setDisplayName] = useState('')
+  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [providerType, setProviderType] = useState<
-    'openai' | 'azure' | 'ollama'
-  >('openai')
-  const [apiKey, setApiKey] = useState('')
-  const [endpoint, setEndpoint] = useState('')
-  const [model, setModel] = useState('')
-  const [embeddingModel, setEmbeddingModel] = useState('')
-  const [organizationId, setOrganizationId] = useState('')
-  const [deploymentName, setDeploymentName] = useState('')
+    "openai" | "azure" | "ollama"
+  >("openai");
+  const [apiKey, setApiKey] = useState("");
+  const [endpoint, setEndpoint] = useState("");
+  const [model, setModel] = useState("");
+  const [embeddingModel, setEmbeddingModel] = useState("");
+  const [organizationId, setOrganizationId] = useState("");
+  const [deploymentName, setDeploymentName] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     if (!name || !displayName) {
-      toast.error('Name and display name are required')
-      return
+      toast.error("Name and display name are required");
+      return;
     }
 
-    const config: Record<string, string> = {}
+    const config: Record<string, string> = {};
 
-    if (providerType === 'openai') {
+    if (providerType === "openai") {
       if (!apiKey) {
-        toast.error('API key is required for OpenAI')
-        return
+        toast.error("API key is required for OpenAI");
+        return;
       }
-      config.api_key = apiKey
-      if (organizationId) config.organization_id = organizationId
-      if (endpoint) config.base_url = endpoint
-    } else if (providerType === 'azure') {
+      config.api_key = apiKey;
+      if (organizationId) config.organization_id = organizationId;
+      if (endpoint) config.base_url = endpoint;
+    } else if (providerType === "azure") {
       if (!apiKey || !endpoint || !deploymentName) {
         toast.error(
-          'API key, endpoint, and deployment name are required for Azure'
-        )
-        return
+          "API key, endpoint, and deployment name are required for Azure",
+        );
+        return;
       }
-      config.api_key = apiKey
-      config.endpoint = endpoint
-      config.deployment_name = deploymentName
-    } else if (providerType === 'ollama') {
+      config.api_key = apiKey;
+      config.endpoint = endpoint;
+      config.deployment_name = deploymentName;
+    } else if (providerType === "ollama") {
       if (!model) {
-        toast.error('Model is required for Ollama')
-        return
+        toast.error("Model is required for Ollama");
+        return;
       }
-      if (endpoint) config.endpoint = endpoint
+      if (endpoint) config.endpoint = endpoint;
     }
 
-    if (model) config.model = model
+    if (model) config.model = model;
 
     // Handle the _default_ sentinel value
     const effectiveEmbeddingModel =
-      embeddingModel && embeddingModel !== '_default_' ? embeddingModel : null
+      embeddingModel && embeddingModel !== "_default_" ? embeddingModel : null;
 
     onSubmit({
       name,
@@ -535,12 +535,12 @@ function CreateProviderDialog({
       provider_type: providerType,
       embedding_model: effectiveEmbeddingModel,
       config,
-    })
-  }
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-md'>
+      <DialogContent className="max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Add AI Provider</DialogTitle>
@@ -549,157 +549,157 @@ function CreateProviderDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className='space-y-4 py-4'>
-            <div className='space-y-2'>
-              <Label htmlFor='name'>Name (internal)</Label>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name (internal)</Label>
               <Input
-                id='name'
+                id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder='my-openai-provider'
+                placeholder="my-openai-provider"
                 required
               />
             </div>
 
-            <div className='space-y-2'>
-              <Label htmlFor='displayName'>Display Name</Label>
+            <div className="space-y-2">
+              <Label htmlFor="displayName">Display Name</Label>
               <Input
-                id='displayName'
+                id="displayName"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder='My OpenAI Provider'
+                placeholder="My OpenAI Provider"
                 required
               />
             </div>
 
-            <div className='space-y-2'>
-              <Label htmlFor='providerType'>Provider Type</Label>
+            <div className="space-y-2">
+              <Label htmlFor="providerType">Provider Type</Label>
               <Select
                 value={providerType}
                 onValueChange={(value) => {
-                  setProviderType(value as 'openai' | 'azure' | 'ollama')
-                  setEmbeddingModel('') // Reset embedding model when provider changes
+                  setProviderType(value as "openai" | "azure" | "ollama");
+                  setEmbeddingModel(""); // Reset embedding model when provider changes
                 }}
               >
-                <SelectTrigger id='providerType'>
+                <SelectTrigger id="providerType">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='openai'>OpenAI</SelectItem>
-                  <SelectItem value='azure'>Azure OpenAI</SelectItem>
-                  <SelectItem value='ollama'>Ollama</SelectItem>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="azure">Azure OpenAI</SelectItem>
+                  <SelectItem value="ollama">Ollama</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <div className='space-y-2'>
-              <Label htmlFor='embeddingModel'>Embedding Model</Label>
+            <div className="space-y-2">
+              <Label htmlFor="embeddingModel">Embedding Model</Label>
               <Select value={embeddingModel} onValueChange={setEmbeddingModel}>
-                <SelectTrigger id='embeddingModel'>
-                  <SelectValue placeholder='Select embedding model' />
+                <SelectTrigger id="embeddingModel">
+                  <SelectValue placeholder="Select embedding model" />
                 </SelectTrigger>
                 <SelectContent>
                   {EMBEDDING_MODELS[providerType].map((m) => (
-                    <SelectItem key={m.value} value={m.value || '_default_'}>
+                    <SelectItem key={m.value} value={m.value || "_default_"}>
                       {m.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className='text-muted-foreground text-xs'>
+              <p className="text-muted-foreground text-xs">
                 Model used for vector embeddings
               </p>
             </div>
 
-            {providerType === 'openai' && (
+            {providerType === "openai" && (
               <>
-                <div className='space-y-2'>
-                  <Label htmlFor='apiKey'>API Key</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="apiKey">API Key</Label>
                   <Input
-                    id='apiKey'
-                    type='password'
+                    id="apiKey"
+                    type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder='sk-...'
+                    placeholder="sk-..."
                     required
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='organizationId'>
+                <div className="space-y-2">
+                  <Label htmlFor="organizationId">
                     Organization ID (optional)
                   </Label>
                   <Input
-                    id='organizationId'
+                    id="organizationId"
                     value={organizationId}
                     onChange={(e) => setOrganizationId(e.target.value)}
-                    placeholder='org-...'
+                    placeholder="org-..."
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='endpoint'>Custom Base URL (optional)</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="endpoint">Custom Base URL (optional)</Label>
                   <Input
-                    id='endpoint'
+                    id="endpoint"
                     value={endpoint}
                     onChange={(e) => setEndpoint(e.target.value)}
-                    placeholder='https://api.openai.com/v1'
+                    placeholder="https://api.openai.com/v1"
                   />
                 </div>
               </>
             )}
 
-            {providerType === 'azure' && (
+            {providerType === "azure" && (
               <>
-                <div className='space-y-2'>
-                  <Label htmlFor='apiKey'>API Key</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="apiKey">API Key</Label>
                   <Input
-                    id='apiKey'
-                    type='password'
+                    id="apiKey"
+                    type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     required
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='endpoint'>Endpoint</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="endpoint">Endpoint</Label>
                   <Input
-                    id='endpoint'
+                    id="endpoint"
                     value={endpoint}
                     onChange={(e) => setEndpoint(e.target.value)}
-                    placeholder='https://your-resource.openai.azure.com'
+                    placeholder="https://your-resource.openai.azure.com"
                     required
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='deploymentName'>Deployment Name</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="deploymentName">Deployment Name</Label>
                   <Input
-                    id='deploymentName'
+                    id="deploymentName"
                     value={deploymentName}
                     onChange={(e) => setDeploymentName(e.target.value)}
-                    placeholder='gpt-4'
+                    placeholder="gpt-4"
                     required
                   />
                 </div>
               </>
             )}
 
-            {providerType === 'ollama' && (
+            {providerType === "ollama" && (
               <>
-                <div className='space-y-2'>
-                  <Label htmlFor='endpoint'>Endpoint (optional)</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="endpoint">Endpoint (optional)</Label>
                   <Input
-                    id='endpoint'
+                    id="endpoint"
                     value={endpoint}
                     onChange={(e) => setEndpoint(e.target.value)}
-                    placeholder='http://localhost:11434'
+                    placeholder="http://localhost:11434"
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='model'>Model</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="model">Model</Label>
                   <Input
-                    id='model'
+                    id="model"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    placeholder='llama2'
+                    placeholder="llama2"
                     required
                   />
                 </div>
@@ -709,28 +709,28 @@ function CreateProviderDialog({
 
           <DialogFooter>
             <Button
-              type='button'
-              variant='outline'
+              type="button"
+              variant="outline"
               onClick={() => onOpenChange(false)}
             >
               Cancel
             </Button>
-            <Button type='submit' disabled={isPending}>
-              {isPending ? 'Creating...' : 'Create Provider'}
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Creating..." : "Create Provider"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 interface EditProviderDialogProps {
-  provider: AIProvider
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSubmit: (data: UpdateAIProviderRequest) => void
-  isPending: boolean
+  provider: AIProvider;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (data: UpdateAIProviderRequest) => void;
+  isPending: boolean;
 }
 
 function EditProviderDialog({
@@ -740,57 +740,57 @@ function EditProviderDialog({
   onSubmit,
   isPending,
 }: EditProviderDialogProps) {
-  const [displayName, setDisplayName] = useState(provider.display_name)
-  const [apiKey, setApiKey] = useState(provider.config.api_key || '')
+  const [displayName, setDisplayName] = useState(provider.display_name);
+  const [apiKey, setApiKey] = useState(provider.config.api_key || "");
   const [endpoint, setEndpoint] = useState(
-    provider.config.endpoint || provider.config.base_url || ''
-  )
-  const [model, setModel] = useState(provider.config.model || '')
+    provider.config.endpoint || provider.config.base_url || "",
+  );
+  const [model, setModel] = useState(provider.config.model || "");
   const [embeddingModel, setEmbeddingModel] = useState(
-    provider.embedding_model || ''
-  )
+    provider.embedding_model || "",
+  );
   const [organizationId, setOrganizationId] = useState(
-    provider.config.organization_id || ''
-  )
+    provider.config.organization_id || "",
+  );
   const [deploymentName, setDeploymentName] = useState(
-    provider.config.deployment_name || ''
-  )
-  const [enabled, setEnabled] = useState(provider.enabled)
+    provider.config.deployment_name || "",
+  );
+  const [enabled, setEnabled] = useState(provider.enabled);
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
-    const config: Record<string, string> = {}
+    const config: Record<string, string> = {};
 
-    if (provider.provider_type === 'openai') {
-      if (apiKey) config.api_key = apiKey
-      if (organizationId) config.organization_id = organizationId
-      if (endpoint) config.base_url = endpoint
-    } else if (provider.provider_type === 'azure') {
-      if (apiKey) config.api_key = apiKey
-      if (endpoint) config.endpoint = endpoint
-      if (deploymentName) config.deployment_name = deploymentName
-    } else if (provider.provider_type === 'ollama') {
-      if (endpoint) config.endpoint = endpoint
+    if (provider.provider_type === "openai") {
+      if (apiKey) config.api_key = apiKey;
+      if (organizationId) config.organization_id = organizationId;
+      if (endpoint) config.base_url = endpoint;
+    } else if (provider.provider_type === "azure") {
+      if (apiKey) config.api_key = apiKey;
+      if (endpoint) config.endpoint = endpoint;
+      if (deploymentName) config.deployment_name = deploymentName;
+    } else if (provider.provider_type === "ollama") {
+      if (endpoint) config.endpoint = endpoint;
     }
 
-    if (model) config.model = model
+    if (model) config.model = model;
 
     // Handle the _default_ sentinel value
     const effectiveEmbeddingModel =
-      embeddingModel && embeddingModel !== '_default_' ? embeddingModel : null
+      embeddingModel && embeddingModel !== "_default_" ? embeddingModel : null;
 
     onSubmit({
       display_name: displayName,
       config,
       enabled,
       embedding_model: effectiveEmbeddingModel,
-    })
-  }
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-md'>
+      <DialogContent className="max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Edit AI Provider</DialogTitle>
@@ -799,173 +799,173 @@ function EditProviderDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className='space-y-4 py-4'>
-            <div className='space-y-2'>
-              <Label htmlFor='edit-displayName'>Display Name</Label>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-displayName">Display Name</Label>
               <Input
-                id='edit-displayName'
+                id="edit-displayName"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder='My OpenAI Provider'
+                placeholder="My OpenAI Provider"
                 required
               />
             </div>
 
-            <div className='space-y-2'>
-              <Label htmlFor='edit-enabled'>Status</Label>
+            <div className="space-y-2">
+              <Label htmlFor="edit-enabled">Status</Label>
               <Select
-                value={enabled ? 'enabled' : 'disabled'}
-                onValueChange={(value) => setEnabled(value === 'enabled')}
+                value={enabled ? "enabled" : "disabled"}
+                onValueChange={(value) => setEnabled(value === "enabled")}
               >
-                <SelectTrigger id='edit-enabled'>
+                <SelectTrigger id="edit-enabled">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='enabled'>Enabled</SelectItem>
-                  <SelectItem value='disabled'>Disabled</SelectItem>
+                  <SelectItem value="enabled">Enabled</SelectItem>
+                  <SelectItem value="disabled">Disabled</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <div className='space-y-2'>
-              <Label htmlFor='edit-embeddingModel'>Embedding Model</Label>
+            <div className="space-y-2">
+              <Label htmlFor="edit-embeddingModel">Embedding Model</Label>
               <Select
-                value={embeddingModel || '_default_'}
+                value={embeddingModel || "_default_"}
                 onValueChange={setEmbeddingModel}
               >
-                <SelectTrigger id='edit-embeddingModel'>
-                  <SelectValue placeholder='Select embedding model' />
+                <SelectTrigger id="edit-embeddingModel">
+                  <SelectValue placeholder="Select embedding model" />
                 </SelectTrigger>
                 <SelectContent>
                   {EMBEDDING_MODELS[
                     provider.provider_type as keyof typeof EMBEDDING_MODELS
                   ]?.map((m) => (
                     <SelectItem
-                      key={m.value || '_default_'}
-                      value={m.value || '_default_'}
+                      key={m.value || "_default_"}
+                      value={m.value || "_default_"}
                     >
                       {m.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className='text-muted-foreground text-xs'>
+              <p className="text-muted-foreground text-xs">
                 Model used for generating embeddings with this provider
               </p>
             </div>
 
-            {provider.provider_type === 'openai' && (
+            {provider.provider_type === "openai" && (
               <>
-                <div className='space-y-2'>
-                  <Label htmlFor='edit-apiKey'>API Key</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-apiKey">API Key</Label>
                   <Input
-                    id='edit-apiKey'
-                    type='password'
+                    id="edit-apiKey"
+                    type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder='sk-... (leave masked to keep existing)'
+                    placeholder="sk-... (leave masked to keep existing)"
                   />
-                  <p className='text-muted-foreground text-xs'>
+                  <p className="text-muted-foreground text-xs">
                     Leave as masked value to keep existing key
                   </p>
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='edit-organizationId'>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-organizationId">
                     Organization ID (optional)
                   </Label>
                   <Input
-                    id='edit-organizationId'
+                    id="edit-organizationId"
                     value={organizationId}
                     onChange={(e) => setOrganizationId(e.target.value)}
-                    placeholder='org-...'
+                    placeholder="org-..."
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='edit-endpoint'>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-endpoint">
                     Custom Base URL (optional)
                   </Label>
                   <Input
-                    id='edit-endpoint'
+                    id="edit-endpoint"
                     value={endpoint}
                     onChange={(e) => setEndpoint(e.target.value)}
-                    placeholder='https://api.openai.com/v1'
+                    placeholder="https://api.openai.com/v1"
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='edit-model'>Model (optional)</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-model">Model (optional)</Label>
                   <Input
-                    id='edit-model'
+                    id="edit-model"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    placeholder='gpt-4-turbo'
+                    placeholder="gpt-4-turbo"
                   />
                 </div>
               </>
             )}
 
-            {provider.provider_type === 'azure' && (
+            {provider.provider_type === "azure" && (
               <>
-                <div className='space-y-2'>
-                  <Label htmlFor='edit-apiKey'>API Key</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-apiKey">API Key</Label>
                   <Input
-                    id='edit-apiKey'
-                    type='password'
+                    id="edit-apiKey"
+                    type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder='Leave masked to keep existing'
+                    placeholder="Leave masked to keep existing"
                   />
-                  <p className='text-muted-foreground text-xs'>
+                  <p className="text-muted-foreground text-xs">
                     Leave as masked value to keep existing key
                   </p>
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='edit-endpoint'>Endpoint</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-endpoint">Endpoint</Label>
                   <Input
-                    id='edit-endpoint'
+                    id="edit-endpoint"
                     value={endpoint}
                     onChange={(e) => setEndpoint(e.target.value)}
-                    placeholder='https://your-resource.openai.azure.com'
+                    placeholder="https://your-resource.openai.azure.com"
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='edit-deploymentName'>Deployment Name</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-deploymentName">Deployment Name</Label>
                   <Input
-                    id='edit-deploymentName'
+                    id="edit-deploymentName"
                     value={deploymentName}
                     onChange={(e) => setDeploymentName(e.target.value)}
-                    placeholder='gpt-4'
+                    placeholder="gpt-4"
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='edit-model'>Model (optional)</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-model">Model (optional)</Label>
                   <Input
-                    id='edit-model'
+                    id="edit-model"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    placeholder='gpt-4'
+                    placeholder="gpt-4"
                   />
                 </div>
               </>
             )}
 
-            {provider.provider_type === 'ollama' && (
+            {provider.provider_type === "ollama" && (
               <>
-                <div className='space-y-2'>
-                  <Label htmlFor='edit-endpoint'>Endpoint (optional)</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-endpoint">Endpoint (optional)</Label>
                   <Input
-                    id='edit-endpoint'
+                    id="edit-endpoint"
                     value={endpoint}
                     onChange={(e) => setEndpoint(e.target.value)}
-                    placeholder='http://localhost:11434'
+                    placeholder="http://localhost:11434"
                   />
                 </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='edit-model'>Model</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-model">Model</Label>
                   <Input
-                    id='edit-model'
+                    id="edit-model"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    placeholder='llama2'
+                    placeholder="llama2"
                   />
                 </div>
               </>
@@ -974,18 +974,18 @@ function EditProviderDialog({
 
           <DialogFooter>
             <Button
-              type='button'
-              variant='outline'
+              type="button"
+              variant="outline"
               onClick={() => onOpenChange(false)}
             >
               Cancel
             </Button>
-            <Button type='submit' disabled={isPending}>
-              {isPending ? 'Saving...' : 'Save Changes'}
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

@@ -47,7 +47,7 @@ export function TenantSelector() {
 
   // Use React Query to fetch tenants - this will auto-refresh when invalidated
   const { data: fetchedTenants, isLoading } = useQuery({
-    queryKey: ["tenants"],
+    queryKey: ["tenants", setIsInstanceAdmin],
     queryFn: async () => {
       const admin = checkIsInstanceAdmin();
       setIsInstanceAdmin(admin);

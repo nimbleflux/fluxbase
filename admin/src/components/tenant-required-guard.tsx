@@ -72,7 +72,7 @@ function InlineTenantSelector() {
   const storeIsInstanceAdmin = checkIsInstanceAdmin();
 
   const { data: fetchedTenants } = useQuery({
-    queryKey: ["tenants", storeIsInstanceAdmin],
+    queryKey: ["tenants", storeIsInstanceAdmin, setIsInstanceAdmin],
     queryFn: async () => {
       setIsInstanceAdmin(storeIsInstanceAdmin);
       if (storeIsInstanceAdmin) {
