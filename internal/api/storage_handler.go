@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/time/rate"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
@@ -134,6 +136,16 @@ func (h *StorageHandler) getService(c fiber.Ctx) (*storage.Service, error) {
 	}
 	cfg := GetStorageConfig(c, h.baseConfig)
 	return h.storageManager.GetService(cfg)
+}
+
+// getPool returns the appropriate database pool for the current request context.
+// It uses the tenant-specific pool when available (database-per-tenant),
+// otherwise falls back to the main database pool.
+func (h *StorageHandler) getPool(c fiber.Ctx) *pgxpool.Pool {
+	if tenantPool := middleware.GetTenantPool(c); tenantPool != nil {
+		return tenantPool
+	}
+	return h.db.Pool()
 }
 
 // getTransformLimiter returns the rate limiter for a given key (IP:userID)

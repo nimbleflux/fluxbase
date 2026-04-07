@@ -511,6 +511,69 @@ make test-coverage-check  # Check coverage thresholds without running tests
 
 Coverage thresholds are enforced in CI via [go-test-coverage](https://github.com/vladopajic/go-test-coverage). Pull requests must meet minimum thresholds for affected files. The tool automatically excludes files that shouldn't be counted (pure type definitions, infrastructure code, etc.).
 
+### Playwright UI Tests
+
+Playwright tests cover the admin UI with a real browser. They run against a dedicated `fluxbase_playwright` database to avoid interfering with development data.
+
+**Test Structure:**
+
+Tests are in `admin/tests/e2e/` with a 3-phase pipeline:
+
+1. **Setup** (`setup.spec.ts`) — Creates the admin user on a fresh database
+2. **Provisioning** (`_provisioning.spec.ts`) — Creates tenants, tenant admin user, test data
+3. **E2E tests** (all other `*.spec.ts`) — Run with provisioned data
+
+**Running Tests:**
+
+```bash
+make test-e2e-ui           # Reset DB, start server, run all tests
+make test-e2e-ui-headed    # Run with visible browser
+make test-e2e-ui-debug     # Debug mode
+make test-e2e-ui-dev       # Reuse running server for fast iteration
+make test-e2e-ui-server    # Start test servers (Go :8082 + Vite :5050)
+```
+
+**Key Test Files:**
+
+| File | Coverage |
+|---|---|
+| `setup.spec.ts` | Initial setup/onboarding |
+| `login.spec.ts` | Login/logout flows |
+| `auth-guard.spec.ts` | Route protection, token expiry |
+| `middleware.spec.ts` | Auth headers, JS console errors |
+| `tenant-crud.spec.ts` | Create/edit/delete tenants via UI |
+| `tenant-switching.spec.ts` | Tenant selector, X-FB-Tenant propagation |
+| `tenant-default.spec.ts` | Default tenant behavior |
+| `tenant-keys.spec.ts` | Service key CRUD per tenant |
+| `tenant-keys-isolation.spec.ts` | Key visibility/usage/lifecycle isolation |
+| `tenant-admin-isolation.spec.ts` | Tenant admin JWT claims, route access, API isolation |
+| `tenant-service-isolation.spec.ts` | Cross-tenant isolation for functions, secrets, knowledge bases |
+| `tenant-service-admin-isolation.spec.ts` | Service isolation from tenant admin perspective |
+| `tenant-members.spec.ts` | Member add/list/remove |
+| `impersonation.spec.ts` | Impersonation UI flow (header selector + inline popover) |
+| `impersonation-tenant-isolation.spec.ts` | Impersonation + tenant isolation |
+| `functions-execution.spec.ts` | Edge function creation, invocation, deletion via UI |
+| `jobs-execution.spec.ts` | Background jobs management via UI |
+| `chatbots-execution.spec.ts` | Chatbot management via UI |
+
+**Test Infrastructure:**
+
+- `fixtures.ts` — Playwright fixtures (`adminPage`, `tenantAdminPage`, `adminToken`, `tenantAdminToken`, etc.)
+- `helpers/api.ts` — API request helpers with tenant-scoped variants (`rawXxx` for fetch, `xxx` for Playwright context)
+- `helpers/db.ts` — Direct PostgreSQL helpers for verifying database state
+- `helpers/constants.ts` — Shared test credentials and tenant slugs
+- `helpers/selectors.ts` — Common UI selectors and navigation helpers
+- `helpers/mailhog.ts` — Email testing helpers
+- `scripts/start-e2e-ui.sh` — Starts Go backend (:8082) + Vite (:5050) against `fluxbase_playwright` DB
+
+**Writing New Tests:**
+
+1. Add API helpers to `helpers/api.ts` if the endpoint isn't covered
+2. Add fixtures to `fixtures.ts` if you need new authenticated contexts
+3. Create `*.spec.ts` following the existing naming conventions
+4. Use `rawXxx` helpers for API setup/teardown, browser interactions for UI verification
+5. Track created resources for cleanup in `afterAll`
+
 ## Development Workflow Requirements
 
 ### Writing Tests

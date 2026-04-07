@@ -128,3 +128,7 @@ values.tmp.yml
 .husky/
 docs/plans/
 .opencode/
+
+**/test-results/
+admin/playwright-report/
+.tanstack/

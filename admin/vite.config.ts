@@ -35,6 +35,9 @@ const handleProxyError = (err: Error, res: ServerResponse) => {
   }
 }
 
+// Proxy target for API requests (configurable for E2E testing)
+// Used inline in proxy entries: process.env.VITE_PROXY_TARGET || 'http://localhost:8080'
+
 // https://vite.dev/config/
 export default defineConfig({
   // Always use /admin as base path for consistency between dev and prod
@@ -77,7 +80,7 @@ export default defineConfig({
     proxy: {
       // Proxy v1 storage API with special handling for file uploads
       '/api/v1/storage': {
-        target: 'http://localhost:8080',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true,
         timeout: 600000, // 10 minute timeout for large file uploads
         proxyTimeout: 600000,
@@ -93,7 +96,7 @@ export default defineConfig({
       },
       // Proxy v1 API requests to the backend
       '/api/v1': {
-        target: 'http://localhost:8080',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('error', (err, _req, res) => {
@@ -103,7 +106,7 @@ export default defineConfig({
       },
       // Keep non-versioned endpoints
       '/health': {
-        target: 'http://localhost:8080',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('error', (err, _req, res) => {
@@ -112,7 +115,7 @@ export default defineConfig({
         },
       },
       '/openapi.json': {
-        target: 'http://localhost:8080',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('error', (err, _req, res) => {
@@ -121,7 +124,7 @@ export default defineConfig({
         },
       },
       '/realtime': {
-        target: 'ws://localhost:8080',
+        target: process.env.VITE_PROXY_TARGET?.replace('http', 'ws') || 'ws://localhost:8080',
         ws: true,
         changeOrigin: true,
         configure: (proxy) => {
@@ -132,7 +135,7 @@ export default defineConfig({
       },
       // Proxy AI WebSocket for chatbot testing
       '/ai/ws': {
-        target: 'ws://localhost:8080',
+        target: process.env.VITE_PROXY_TARGET?.replace('http', 'ws') || 'ws://localhost:8080',
         ws: true,
         changeOrigin: true,
         configure: (proxy) => {
@@ -143,7 +146,7 @@ export default defineConfig({
       },
       // Proxy dashboard auth endpoints
       '/dashboard': {
-        target: 'http://localhost:8080',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('error', (err, _req, res) => {

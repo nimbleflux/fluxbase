@@ -372,9 +372,8 @@ func (h *TenantHandler) ListAdmins(c fiber.Ctx) error {
 
 	rows, err := h.DB.Pool().Query(ctx, `
 		SELECT ta.id, ta.tenant_id, ta.user_id, ta.created_at,
-		       u.email, du.role as dashboard_role
+		       du.email, du.role as dashboard_role
 		FROM platform.tenant_admin_assignments ta
-		INNER JOIN auth.users u ON u.id = ta.user_id
 		INNER JOIN platform.users du ON du.id = ta.user_id
 		WHERE ta.tenant_id = $1::uuid
 		ORDER BY ta.created_at ASC
@@ -423,7 +422,7 @@ func (h *TenantHandler) AssignAdmin(c fiber.Ctx) error {
 
 	var userExists bool
 	err := h.DB.Pool().QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1::uuid AND deleted_at IS NULL)`,
+		`SELECT EXISTS(SELECT 1 FROM platform.users WHERE id = $1::uuid AND deleted_at IS NULL)`,
 		req.UserID,
 	).Scan(&userExists)
 	if err != nil || !userExists {

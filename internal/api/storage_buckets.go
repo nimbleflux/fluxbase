@@ -46,7 +46,7 @@ func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
 
 	// Start database transaction
 	ctx := c.RequestCtx()
-	tx, err := h.db.Pool().Begin(ctx)
+	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for bucket creation")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -157,7 +157,7 @@ func (h *StorageHandler) UpdateBucketSettings(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Start database transaction
-	tx, err := h.db.Pool().Begin(ctx)
+	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for bucket update")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -299,9 +299,13 @@ func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
 // GET /api/v1/storage/buckets
 // Admin-only endpoint - non-admin users receive 403 Forbidden
 func (h *StorageHandler) ListBuckets(c fiber.Ctx) error {
-	// Check if user has admin role
+	// Check if user has admin role (including tenant admins)
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "instance_admin" && role != "service_role" {
+	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
+	tenantRole, _ := c.Locals("tenant_role").(string)
+	isAuthorized := role == "admin" || role == "instance_admin" || role == "service_role" ||
+		isInstanceAdmin || tenantRole == "tenant_admin"
+	if !isAuthorized {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to list buckets",
 		})
@@ -317,7 +321,7 @@ func (h *StorageHandler) ListBuckets(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Start database transaction
-	tx, err := h.db.Pool().Begin(ctx)
+	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for listing buckets")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

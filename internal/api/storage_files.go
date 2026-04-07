@@ -48,7 +48,7 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 	// H-19: Check if bucket exists before upload
 	// Use SECURITY DEFINER function to bypass RLS when checking bucket existence
 	var bucketExists bool
-	err = h.db.Pool().QueryRow(c.RequestCtx(),
+	err = h.getPool(c).QueryRow(c.RequestCtx(),
 		`SELECT storage.bucket_exists($1::text, $2::uuid)`,
 		bucket, getTenantIDArg(c),
 	).Scan(&bucketExists)
@@ -83,7 +83,7 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 	// Use SECURITY DEFINER function to bypass RLS when fetching bucket settings
 	var bucketMaxFileSize *int64
 	var bucketAllowedMimeTypes []string
-	err = h.db.Pool().QueryRow(c.RequestCtx(),
+	err = h.getPool(c).QueryRow(c.RequestCtx(),
 		`SELECT max_file_size, allowed_mime_types FROM storage.get_bucket_settings($1::text, $2::uuid)`,
 		bucket, getTenantIDArg(c),
 	).Scan(&bucketMaxFileSize, &bucketAllowedMimeTypes)
@@ -168,7 +168,7 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 	}
 
 	// Start database transaction to store metadata
-	tx, err := h.db.Pool().Begin(ctx)
+	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		// Delete from provider since DB insert failed
 		_ = svc.Provider.Delete(ctx, bucket, key)
@@ -295,7 +295,7 @@ func (h *StorageHandler) DownloadFile(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Start database transaction to check permissions
-	tx, err := h.db.Pool().Begin(ctx)
+	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for file download")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -546,7 +546,7 @@ func (h *StorageHandler) DeleteFile(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Start database transaction
-	tx, err := h.db.Pool().Begin(ctx)
+	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for file deletion")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -586,7 +586,7 @@ func (h *StorageHandler) DeleteFile(c fiber.Ctx) error {
 		// No rows affected - need to determine if it's 403 (RLS blocked) or 404 (not found)
 		// Check if file exists using superuser context to bypass RLS
 		var fileExists bool
-		err = h.db.Pool().QueryRow(ctx, `
+		err = h.getPool(c).QueryRow(ctx, `
 			SELECT EXISTS(SELECT 1 FROM storage.objects WHERE bucket_id = $1 AND path = $2)
 		`, bucket, key).Scan(&fileExists)
 		if err != nil {
@@ -657,7 +657,7 @@ func (h *StorageHandler) GetFileInfo(c fiber.Ctx) error {
 
 	ctx := c.RequestCtx()
 
-	tx, err := h.db.Pool().Begin(ctx)
+	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for getting file info")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -759,7 +759,7 @@ func (h *StorageHandler) ListFiles(c fiber.Ctx) error {
 
 	ctx := c.RequestCtx()
 
-	tx, err := h.db.Pool().Begin(ctx)
+	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for listing files")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
