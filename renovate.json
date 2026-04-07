@@ -8,6 +8,13 @@
   ],
   "labels": ["dependencies"],
   "rangeStrategy": "bump",
+  "minimumReleaseAge": "14 days",
+  "internalChecksFilter": "strict",
+  "prCreation": "not-pending",
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "labels": ["security"]
+  },
   "regexManagers": [
     {
       "description": "Update go-version in GitHub Actions workflows",
