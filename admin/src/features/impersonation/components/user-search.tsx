@@ -28,15 +28,9 @@ interface UserSearchProps {
   value?: string;
   onSelect: (userId: string, userEmail: string) => void;
   disabled?: boolean;
-  tenantId?: string;
 }
 
-export function UserSearch({
-  value,
-  onSelect,
-  disabled,
-  tenantId,
-}: UserSearchProps) {
+export function UserSearch({ value, onSelect, disabled }: UserSearchProps) {
   const [open, setOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,25 +38,21 @@ export function UserSearch({
 
   const selectedUser = users.find((user) => user.id === value);
 
-  const loadUsers = useCallback(
-    async (searchTerm: string) => {
-      try {
-        setLoading(true);
-        const response = await impersonationApi.listUsers(
-          searchTerm || undefined,
-          20,
-          false,
-          tenantId,
-        );
-        setUsers(response.users || []);
-      } catch {
-        setUsers([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [tenantId],
-  );
+  const loadUsers = useCallback(async (searchTerm: string) => {
+    try {
+      setLoading(true);
+      const response = await impersonationApi.listUsers(
+        searchTerm || undefined,
+        20,
+        false,
+      );
+      setUsers(response.users || []);
+    } catch {
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // Load initial users when opening
   useEffect(() => {

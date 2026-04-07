@@ -264,7 +264,6 @@ export function ImpersonationSelector() {
                 value={selectedUserId}
                 onSelect={handleUserSelect}
                 disabled={loading}
-                tenantId={currentTenant?.id}
               />
             </div>
           )}

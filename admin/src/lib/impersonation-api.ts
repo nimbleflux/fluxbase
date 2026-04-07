@@ -116,22 +116,21 @@ export const impersonationApi = {
   },
 
   /**
-   * List users available for impersonation
+   * List users available for impersonation.
+   *
+   * Tenant scoping is handled by the backend via the X-FB-Tenant header
+   * (set automatically by the apiClient interceptor), not via query params.
    */
   async listUsers(
     search?: string,
     limit = 20,
     excludeAdmins = false,
-    tenantId?: string,
   ): Promise<ListUsersResponse> {
     const params: Record<string, unknown> = {
       exclude_admins: excludeAdmins,
       search,
       limit,
     };
-    if (tenantId) {
-      params.tenant_id = tenantId;
-    }
     const response = await apiClient.get<ListUsersResponse>(
       "/api/v1/admin/users",
       { params },

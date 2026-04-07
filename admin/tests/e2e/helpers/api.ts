@@ -420,30 +420,10 @@ export async function rawRevokeServiceKey(
 }
 
 /**
- * Create a storage bucket.
- */
-export async function createBucket(
-  request: APIRequestContext,
-  bucketId: string,
-  accessToken: string,
-  tenantId?: string,
-) {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${accessToken}`,
-  };
-  if (tenantId) {
-    headers["X-FB-Tenant"] = tenantId;
-  }
-  return apiRequest(request, {
-    method: "POST",
-    path: "/api/v1/storage/buckets",
-    data: { id: bucketId, name: bucketId, public: false },
-    headers,
-  });
-}
-
-/**
  * Create a storage bucket using native fetch.
+ *
+ * The backend endpoint is POST /api/v1/storage/buckets/:bucket (name in URL path),
+ * with optional JSON body for {public, allowed_mime_types, max_file_size}.
  */
 export async function rawCreateBucket(
   bucketId: string,
@@ -536,5 +516,341 @@ export async function rawExecuteSQL(
     path: "/api/v1/admin/sql/execute",
     data: { sql },
     headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Functions (Edge Functions)
+// ────────────────────────────────────────────────────────────────
+
+export async function rawCreateFunction(
+  options: {
+    name: string;
+    code: string;
+    verifyJWT?: boolean;
+  },
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/functions",
+    data: {
+      name: options.name,
+      code: options.code,
+      verify_jwt: options.verifyJWT ?? false,
+    },
+    headers,
+  });
+}
+
+export async function rawListFunctions(accessToken: string, tenantId?: string) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/functions",
+    headers,
+  });
+}
+
+export async function rawDeleteFunction(
+  name: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "DELETE",
+    path: `/api/v1/functions/${name}`,
+    headers,
+  });
+}
+
+export async function rawInvokeFunction(
+  name: string,
+  accessToken: string,
+  tenantId?: string,
+  body?: unknown,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: `/api/v1/functions/${name}/invoke`,
+    data: body,
+    headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Jobs (Background Jobs)
+// ────────────────────────────────────────────────────────────────
+
+export async function rawSubmitJob(
+  options: {
+    name: string;
+    function_name: string;
+    payload?: unknown;
+    schedule?: string;
+  },
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/jobs/submit",
+    data: options,
+    headers,
+  });
+}
+
+export async function rawListJobs(accessToken: string, tenantId?: string) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/jobs",
+    headers,
+  });
+}
+
+export async function rawCancelJob(
+  jobId: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: `/api/v1/jobs/${jobId}/cancel`,
+    headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Chatbots (AI Chatbots - Admin)
+// ────────────────────────────────────────────────────────────────
+
+export async function rawListChatbots(accessToken: string, tenantId?: string) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/admin/ai/chatbots",
+    headers,
+  });
+}
+
+export async function rawDeleteChatbot(
+  chatbotId: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "DELETE",
+    path: `/api/v1/admin/ai/chatbots/${chatbotId}`,
+    headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Knowledge Bases
+// ────────────────────────────────────────────────────────────────
+
+export async function rawCreateKnowledgeBase(
+  options: {
+    name: string;
+    description?: string;
+  },
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/ai/knowledge-bases",
+    data: options,
+    headers,
+  });
+}
+
+export async function rawListKnowledgeBases(
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/ai/knowledge-bases",
+    headers,
+  });
+}
+
+export async function rawDeleteKnowledgeBase(
+  kbId: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "DELETE",
+    path: `/api/v1/ai/knowledge-bases/${kbId}`,
+    headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Secrets
+// ────────────────────────────────────────────────────────────────
+
+export async function rawCreateSecret(
+  options: {
+    name: string;
+    value: string;
+    description?: string;
+  },
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/secrets/",
+    data: options,
+    headers,
+  });
+}
+
+export async function rawListSecrets(accessToken: string, tenantId?: string) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/secrets/",
+    headers,
+  });
+}
+
+export async function rawDeleteSecret(
+  secretId: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "DELETE",
+    path: `/api/v1/secrets/${secretId}`,
+    headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Impersonation
+// ────────────────────────────────────────────────────────────────
+
+export async function rawStartUserImpersonation(
+  targetUserId: string,
+  reason: string,
+  accessToken: string,
+) {
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/auth/impersonate",
+    data: { target_user_id: targetUserId, reason },
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function rawStartAnonImpersonation(
+  reason: string,
+  accessToken: string,
+) {
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/auth/impersonate/anon",
+    data: { reason },
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function rawStopImpersonation(accessToken: string) {
+  return rawApiRequest({
+    method: "DELETE",
+    path: "/api/v1/auth/impersonate",
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 }

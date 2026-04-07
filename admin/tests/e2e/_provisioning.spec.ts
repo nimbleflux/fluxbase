@@ -14,16 +14,17 @@ import {
   getUserByEmail,
   query as dbQuery,
 } from "./helpers/db";
-
-const ADMIN_EMAIL = "admin@fluxbase.test";
-const ADMIN_PASSWORD = "test-password-32chars!!";
-const TENANT_ADMIN_EMAIL = "tenant-admin@fluxbase.test";
-const TENANT_ADMIN_PASSWORD = "tenant-admin-pass-32!!";
-const TENANT_ADMIN_NAME = "Tenant Admin";
-const SECOND_TENANT_NAME = "E2E Second Tenant";
-const SECOND_TENANT_SLUG = "e2e-second-tenant";
-const THIRD_TENANT_NAME = "E2E Third Tenant";
-const THIRD_TENANT_SLUG = "e2e-third-tenant";
+import {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
+  TENANT_ADMIN_EMAIL,
+  TENANT_ADMIN_PASSWORD,
+  TENANT_ADMIN_NAME,
+  SECOND_TENANT_NAME,
+  SECOND_TENANT_SLUG,
+  THIRD_TENANT_NAME,
+  THIRD_TENANT_SLUG,
+} from "./helpers/constants";
 
 test.describe("Provisioning", () => {
   test("provision test data for E2E tests", async () => {

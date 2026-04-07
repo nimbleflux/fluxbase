@@ -2,14 +2,14 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { rawLogin, listTenants } from "./helpers/api";
 import { getUserByEmail } from "./helpers/db";
-
-const SETUP_TOKEN =
-  process.env.FLUXBASE_SECURITY_SETUP_TOKEN ||
-  "test-setup-token-for-dev-environment-32chars";
-
-const ADMIN_EMAIL = "admin@fluxbase.test";
-const ADMIN_PASSWORD = "test-password-32chars!!";
-const ADMIN_NAME = "Test Admin";
+import {
+  SETUP_TOKEN,
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
+  SECOND_TENANT_SLUG,
+  TENANT_ADMIN_EMAIL,
+  TENANT_ADMIN_PASSWORD,
+} from "./helpers/constants";
 
 const BASE_URL =
   process.env.PLAYWRIGHT_BASE_URL || "http://localhost:5050/admin/";
@@ -37,10 +37,6 @@ interface Fixtures {
   thirdTenantId: string;
 }
 
-const TENANT_ADMIN_EMAIL = "tenant-admin@fluxbase.test";
-const TENANT_ADMIN_PASSWORD = "tenant-admin-pass-32!!";
-const SECOND_TENANT_NAME = "E2E Second Tenant";
-const SECOND_TENANT_SLUG = "e2e-second-tenant";
 const THIRD_TENANT_SLUG = "e2e-third-tenant";
 
 /**
@@ -83,6 +79,44 @@ async function browserLogin(
   expect(token).toBeTruthy();
 
   return page;
+}
+
+/**
+ * Start impersonation via the API and set tokens in localStorage.
+ */
+async function setupImpersonation(
+  page: Page,
+  accessToken: string,
+  impersonationToken: string,
+  type: "user" | "anon" | "service",
+  targetUser?: { id: string; email: string },
+) {
+  // Store impersonation tokens
+  await page.evaluate(
+    ({ token, type, user }) => {
+      localStorage.setItem("fluxbase_impersonation_token", token);
+      localStorage.setItem("fluxbase_impersonation_type", type);
+      if (user) {
+        localStorage.setItem(
+          "fluxbase_impersonated_user",
+          JSON.stringify({ id: user.id, email: user.email }),
+        );
+      }
+      localStorage.setItem(
+        "fluxbase_impersonation_session",
+        JSON.stringify({
+          id: "test-session",
+          admin_user_id: "admin",
+          impersonation_type: type,
+          reason: "E2E test",
+          started_at: new Date().toISOString(),
+          is_active: true,
+          ...(user ? { target_user_id: user.id } : {}),
+        }),
+      );
+    },
+    { token: impersonationToken, type, user: targetUser },
+  );
 }
 
 export const test = base.extend<Fixtures>({
@@ -183,17 +217,5 @@ export const test = base.extend<Fixtures>({
   },
 });
 
-export {
-  expect,
-  ADMIN_EMAIL,
-  ADMIN_PASSWORD,
-  ADMIN_NAME,
-  SETUP_TOKEN,
-  BASE_URL,
-  TENANT_ADMIN_EMAIL,
-  TENANT_ADMIN_PASSWORD,
-  SECOND_TENANT_NAME,
-  SECOND_TENANT_SLUG,
-  THIRD_TENANT_SLUG,
-};
+export { expect, BASE_URL };
 export type { TenantInfo };
