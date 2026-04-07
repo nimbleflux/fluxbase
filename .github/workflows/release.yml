@@ -675,12 +675,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.10
+          bun-version: 1.3.11
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.14.0"
+          node-version: "24.14.1"
 
       - name: Update version in files
         run: |
@@ -765,12 +765,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.10
+          bun-version: 1.3.11
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.14.0"
+          node-version: "24.14.1"
 
       - name: Install dependencies (workspace)
         run: bun install --frozen-lockfile
@@ -1031,12 +1031,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.10
+          bun-version: 1.3.11
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.14.0"
+          node-version: "24.14.1"
 
       - name: Install dependencies (workspace)
         run: bun install --frozen-lockfile
@@ -1099,12 +1099,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.10
+          bun-version: 1.3.11
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.14.0"
+          node-version: "24.14.1"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies (workspace)
@@ -1142,12 +1142,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.10
+          bun-version: 1.3.11
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.14.0"
+          node-version: "24.14.1"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies (workspace)
@@ -1515,7 +1515,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24.14.0"
+          node-version: "24.14.1"
 
       - name: Test Docker image availability
         if: needs.publish-docker-manifest.result == 'success'
