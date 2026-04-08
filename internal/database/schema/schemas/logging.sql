@@ -790,42 +790,42 @@ CREATE OR REPLACE VIEW execution_logs_migration_status AS
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entries_ai TO service_role;
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_ai TO fluxbase_app;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_ai TO {{APP_USER}};
 
 --
 -- Name: entries_custom; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entries_custom TO service_role;
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_custom TO fluxbase_app;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_custom TO {{APP_USER}};
 
 --
 -- Name: entries_execution; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entries_execution TO service_role;
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_execution TO fluxbase_app;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_execution TO {{APP_USER}};
 
 --
 -- Name: entries_http; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entries_http TO service_role;
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_http TO fluxbase_app;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_http TO {{APP_USER}};
 
 --
 -- Name: entries_security; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entries_security TO service_role;
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_security TO fluxbase_app;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_security TO {{APP_USER}};
 
 --
 -- Name: entries_system; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entries_system TO service_role;
-GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_system TO fluxbase_app;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_system TO {{APP_USER}};
 
 --
 -- Name: entries; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -833,7 +833,7 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_system TO fluxbase_app;
 
 -- Grant on parent partitioned table (required for INSERT routing to partitions)
 GRANT DELETE, INSERT, SELECT, TRUNCATE, UPDATE ON TABLE entries TO service_role;
-GRANT DELETE, INSERT, SELECT, TRUNCATE, UPDATE ON TABLE entries TO fluxbase_app;
+GRANT DELETE, INSERT, SELECT, TRUNCATE, UPDATE ON TABLE entries TO {{APP_USER}};
 
 -- ============================================================================
 -- ATTACH PARTITIONS

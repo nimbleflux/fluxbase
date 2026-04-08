@@ -196,13 +196,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE settings TO authenticated;
 -- Name: settings; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE settings TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE settings TO {{APP_USER}};
 
 --
 -- Name: settings; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE settings TO fluxbase_rls_test;
 
 --
 -- Name: settings; Type: PRIVILEGE; Schema: privileges; Owner: -

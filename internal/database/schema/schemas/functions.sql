@@ -835,13 +835,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE edge_executions TO authenticated;
 -- Name: edge_executions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_executions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_executions TO {{APP_USER}};
 
 --
 -- Name: edge_executions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_executions TO fluxbase_rls_test;
 
 --
 -- Name: edge_executions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -859,13 +858,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE edge_files TO authenticated;
 -- Name: edge_files; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_files TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_files TO {{APP_USER}};
 
 --
 -- Name: edge_files; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_files TO fluxbase_rls_test;
 
 --
 -- Name: edge_files; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -883,13 +881,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE edge_functions TO authenticated;
 -- Name: edge_functions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_functions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_functions TO {{APP_USER}};
 
 --
 -- Name: edge_functions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_functions TO fluxbase_rls_test;
 
 --
 -- Name: edge_functions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -907,13 +904,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE edge_triggers TO authenticated;
 -- Name: edge_triggers; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_triggers TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_triggers TO {{APP_USER}};
 
 --
 -- Name: edge_triggers; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE edge_triggers TO fluxbase_rls_test;
 
 --
 -- Name: edge_triggers; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -931,13 +927,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE function_dependencies TO authentic
 -- Name: function_dependencies; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE function_dependencies TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE function_dependencies TO {{APP_USER}};
 
 --
 -- Name: function_dependencies; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE function_dependencies TO fluxbase_rls_test;
 
 --
 -- Name: function_dependencies; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -955,13 +950,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE secret_versions TO authenticated;
 -- Name: secret_versions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE secret_versions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE secret_versions TO {{APP_USER}};
 
 --
 -- Name: secret_versions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE secret_versions TO fluxbase_rls_test;
 
 --
 -- Name: secret_versions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -979,13 +973,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE secrets TO authenticated;
 -- Name: secrets; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE secrets TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE secrets TO {{APP_USER}};
 
 --
 -- Name: secrets; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE secrets TO fluxbase_rls_test;
 
 --
 -- Name: secrets; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -1003,13 +996,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE shared_modules TO authenticated;
 -- Name: shared_modules; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE shared_modules TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE shared_modules TO {{APP_USER}};
 
 --
 -- Name: shared_modules; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE shared_modules TO fluxbase_rls_test;
 
 --
 -- Name: shared_modules; Type: PRIVILEGE; Schema: privileges; Owner: -

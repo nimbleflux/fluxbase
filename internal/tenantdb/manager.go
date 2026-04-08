@@ -138,7 +138,8 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 		bootstrapBaseURL = m.dbURL
 	}
 	tenantDBURL := replaceDBName(bootstrapBaseURL, dbName)
-	if err := bootstrap.RunBootstrapOnDB(ctx, tenantDBURL); err != nil {
+	appUser := extractDBUser(bootstrapBaseURL)
+	if err := bootstrap.RunBootstrapOnDB(ctx, tenantDBURL, appUser); err != nil {
 		log.Warn().Err(err).Str("tenant", req.Slug).Msg("Failed to bootstrap tenant database")
 		if statusErr := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusError); statusErr != nil {
 			log.Warn().Err(statusErr).Str("tenant_id", tenant.ID).Msg("Failed to update tenant status to error")

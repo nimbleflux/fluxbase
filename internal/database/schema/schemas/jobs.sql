@@ -467,13 +467,12 @@ GRANT SELECT ON TABLE function_files TO authenticated;
 -- Name: function_files; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE function_files TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE function_files TO {{APP_USER}};
 
 --
 -- Name: function_files; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE function_files TO fluxbase_rls_test;
 
 --
 -- Name: function_files; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -491,13 +490,12 @@ GRANT SELECT ON TABLE functions TO authenticated;
 -- Name: functions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE functions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE functions TO {{APP_USER}};
 
 --
 -- Name: functions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE functions TO fluxbase_rls_test;
 
 --
 -- Name: functions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -515,13 +513,12 @@ GRANT SELECT ON TABLE queue TO authenticated;
 -- Name: queue; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE queue TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE queue TO {{APP_USER}};
 
 --
 -- Name: queue; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE queue TO fluxbase_rls_test;
 
 --
 -- Name: queue; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -539,13 +536,12 @@ GRANT SELECT ON TABLE workers TO authenticated;
 -- Name: workers; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE workers TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE workers TO {{APP_USER}};
 
 --
 -- Name: workers; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE workers TO fluxbase_rls_test;
 
 --
 -- Name: workers; Type: PRIVILEGE; Schema: privileges; Owner: -

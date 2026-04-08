@@ -81,7 +81,7 @@ func setupRLSIntegrationTest(t *testing.T) *rlsTestEnv {
 
 	// Bootstrap the tenant database using admin credentials.
 	tenantAdminURL := buildTenantRLSDBURL(adminDBURL, tenantDBName)
-	err = bootstrap.RunBootstrapOnDB(ctx, tenantAdminURL)
+	err = bootstrap.RunBootstrapOnDB(ctx, tenantAdminURL, "fluxbase_app")
 	require.NoError(t, err, "Failed to bootstrap tenant database")
 
 	// Create Router.

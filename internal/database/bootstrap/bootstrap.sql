@@ -203,8 +203,8 @@ GRANT USAGE ON SCHEMA api TO service_role;
 -- Branching schema - service role only
 GRANT USAGE ON SCHEMA branching TO service_role;
 
--- Logging schema - service role and fluxbase_app (app needs access for direct pool queries)
-GRANT USAGE ON SCHEMA logging TO service_role, fluxbase_app;
+-- Logging schema - service role and {{APP_USER}} (app needs access for direct pool queries)
+GRANT USAGE ON SCHEMA logging TO service_role, {{APP_USER}};
 
 -- Migrations schema - service role only (for recording schema state)
 GRANT USAGE ON SCHEMA migrations TO service_role;
@@ -220,7 +220,7 @@ GRANT USAGE, CREATE ON SCHEMA public TO tenant_migration_role;
 -- These ensure future tables automatically get correct permissions.
 --
 -- Note: Default privileges are only set for `authenticated` and `service_role`.
--- Roles `fluxbase_app` and `fluxbase_rls_test` receive per-table GRANTs in the
+-- Roles `{{APP_USER}}` and `fluxbase_rls_test` receive per-table GRANTs in the
 -- declarative schema SQL files (internal/database/schema/schemas/*.sql) rather
 -- than default privileges, so pgschema can track them correctly.
 -- ============================================================================

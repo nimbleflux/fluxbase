@@ -157,13 +157,12 @@ COMMENT ON TABLE bootstrap_state IS 'Tracks bootstrap completion state';
 -- Name: app; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE app TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE app TO {{APP_USER}};
 
 --
 -- Name: app; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE app TO fluxbase_rls_test;
 
 --
 -- Name: app; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -175,13 +174,12 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 -- Name: execution_logs; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE execution_logs TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE execution_logs TO {{APP_USER}};
 
 --
 -- Name: execution_logs; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE execution_logs TO fluxbase_rls_test;
 
 --
 -- Name: execution_logs; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -193,13 +191,12 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 -- Name: fluxbase; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE fluxbase TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE fluxbase TO {{APP_USER}};
 
 --
 -- Name: fluxbase; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE fluxbase TO fluxbase_rls_test;
 
 --
 -- Name: fluxbase; Type: PRIVILEGE; Schema: privileges; Owner: -

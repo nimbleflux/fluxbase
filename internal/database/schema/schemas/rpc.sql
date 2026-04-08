@@ -338,25 +338,23 @@ CREATE OR REPLACE TRIGGER rpc_executions_set_tenant_id
 -- Name: notify_realtime_change(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION notify_realtime_change() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION notify_realtime_change() TO {{APP_USER}};
 
 --
 -- Name: notify_realtime_change(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION notify_realtime_change() TO fluxbase_rls_test;
 
 --
 -- Name: update_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_updated_at() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION update_updated_at() TO {{APP_USER}};
 
 --
 -- Name: update_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_updated_at() TO fluxbase_rls_test;
 
 --
 -- Name: executions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -368,13 +366,12 @@ GRANT SELECT ON TABLE executions TO authenticated;
 -- Name: executions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE executions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE executions TO {{APP_USER}};
 
 --
 -- Name: executions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE executions TO fluxbase_rls_test;
 
 --
 -- Name: executions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -398,13 +395,12 @@ GRANT SELECT ON TABLE procedures TO authenticated;
 -- Name: procedures; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE procedures TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE procedures TO {{APP_USER}};
 
 --
 -- Name: procedures; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE procedures TO fluxbase_rls_test;
 
 --
 -- Name: procedures; Type: PRIVILEGE; Schema: privileges; Owner: -

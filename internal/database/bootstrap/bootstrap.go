@@ -154,7 +154,8 @@ func (s *Service) RunBootstrap(ctx context.Context) error {
 		return fmt.Errorf("failed to get admin pool: %w", err)
 	}
 
-	_, err = adminPool.Exec(ctx, bootstrapSQL)
+	sql := SubstituteAppUser(bootstrapSQL, s.config.User)
+	_, err = adminPool.Exec(ctx, sql)
 	if err != nil {
 		return fmt.Errorf("failed to execute bootstrap SQL: %w", err)
 	}
@@ -180,14 +181,16 @@ func (s *Service) EnsureBootstrap(ctx context.Context) error {
 
 // RunBootstrapOnDB connects to a specific database and runs bootstrap SQL.
 // Used for bootstrapping newly created tenant databases.
-func RunBootstrapOnDB(ctx context.Context, dbURL string) error {
+// The appUser parameter is substituted into {{APP_USER}} placeholders in the SQL.
+func RunBootstrapOnDB(ctx context.Context, dbURL string, appUser string) error {
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 	defer pool.Close()
 
-	_, err = pool.Exec(ctx, bootstrapSQL)
+	sql := SubstituteAppUser(bootstrapSQL, appUser)
+	_, err = pool.Exec(ctx, sql)
 	if err != nil {
 		return fmt.Errorf("failed to execute bootstrap SQL: %w", err)
 	}

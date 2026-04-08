@@ -835,13 +835,12 @@ GRANT EXECUTE ON FUNCTION bucket_exists(bucket_name text) TO authenticated;
 -- Name: bucket_exists(bucket_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION bucket_exists(bucket_name text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION bucket_exists(bucket_name text) TO {{APP_USER}};
 
 --
 -- Name: bucket_exists(bucket_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION bucket_exists(bucket_name text) TO fluxbase_rls_test;
 
 --
 -- Name: bucket_exists(bucket_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -865,13 +864,12 @@ GRANT EXECUTE ON FUNCTION bucket_exists(p_bucket_name text, p_tenant_id uuid) TO
 -- Name: bucket_exists(p_bucket_name text, p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION bucket_exists(p_bucket_name text, p_tenant_id uuid) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION bucket_exists(p_bucket_name text, p_tenant_id uuid) TO {{APP_USER}};
 
 --
 -- Name: bucket_exists(p_bucket_name text, p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION bucket_exists(p_bucket_name text, p_tenant_id uuid) TO fluxbase_rls_test;
 
 --
 -- Name: bucket_exists(p_bucket_name text, p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -883,13 +881,12 @@ GRANT EXECUTE ON FUNCTION bucket_exists(p_bucket_name text, p_tenant_id uuid) TO
 -- Name: foldername(name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION foldername(name text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION foldername(name text) TO {{APP_USER}};
 
 --
 -- Name: foldername(name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION foldername(name text) TO fluxbase_rls_test;
 
 --
 -- Name: get_bucket_settings(bucket_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -907,13 +904,12 @@ GRANT EXECUTE ON FUNCTION get_bucket_settings(bucket_name text) TO authenticated
 -- Name: get_bucket_settings(bucket_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION get_bucket_settings(bucket_name text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION get_bucket_settings(bucket_name text) TO {{APP_USER}};
 
 --
 -- Name: get_bucket_settings(bucket_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION get_bucket_settings(bucket_name text) TO fluxbase_rls_test;
 
 --
 -- Name: get_bucket_settings(bucket_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -937,13 +933,12 @@ GRANT EXECUTE ON FUNCTION get_bucket_settings(p_bucket_name text, p_tenant_id uu
 -- Name: get_bucket_settings(p_bucket_name text, p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION get_bucket_settings(p_bucket_name text, p_tenant_id uuid) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION get_bucket_settings(p_bucket_name text, p_tenant_id uuid) TO {{APP_USER}};
 
 --
 -- Name: get_bucket_settings(p_bucket_name text, p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION get_bucket_settings(p_bucket_name text, p_tenant_id uuid) TO fluxbase_rls_test;
 
 --
 -- Name: get_bucket_settings(p_bucket_name text, p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -955,13 +950,12 @@ GRANT EXECUTE ON FUNCTION get_bucket_settings(p_bucket_name text, p_tenant_id uu
 -- Name: has_object_permission(p_object_id uuid, p_user_id uuid, p_permission text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION has_object_permission(p_object_id uuid, p_user_id uuid, p_permission text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION has_object_permission(p_object_id uuid, p_user_id uuid, p_permission text) TO {{APP_USER}};
 
 --
 -- Name: has_object_permission(p_object_id uuid, p_user_id uuid, p_permission text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION has_object_permission(p_object_id uuid, p_user_id uuid, p_permission text) TO fluxbase_rls_test;
 
 --
 -- Name: has_tenant_access(p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -979,13 +973,12 @@ GRANT EXECUTE ON FUNCTION has_tenant_access(p_tenant_id uuid) TO authenticated;
 -- Name: has_tenant_access(p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION has_tenant_access(p_tenant_id uuid) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION has_tenant_access(p_tenant_id uuid) TO {{APP_USER}};
 
 --
 -- Name: has_tenant_access(p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION has_tenant_access(p_tenant_id uuid) TO fluxbase_rls_test;
 
 --
 -- Name: has_tenant_access(p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -997,13 +990,12 @@ GRANT EXECUTE ON FUNCTION has_tenant_access(p_tenant_id uuid) TO service_role;
 -- Name: is_bucket_public(bucket_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION is_bucket_public(bucket_name text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION is_bucket_public(bucket_name text) TO {{APP_USER}};
 
 --
 -- Name: is_bucket_public(bucket_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION is_bucket_public(bucket_name text) TO fluxbase_rls_test;
 
 --
 -- Name: is_bucket_public(p_bucket_name text, p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -1021,13 +1013,12 @@ GRANT EXECUTE ON FUNCTION is_bucket_public(p_bucket_name text, p_tenant_id uuid)
 -- Name: is_bucket_public(p_bucket_name text, p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION is_bucket_public(p_bucket_name text, p_tenant_id uuid) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION is_bucket_public(p_bucket_name text, p_tenant_id uuid) TO {{APP_USER}};
 
 --
 -- Name: is_bucket_public(p_bucket_name text, p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION is_bucket_public(p_bucket_name text, p_tenant_id uuid) TO fluxbase_rls_test;
 
 --
 -- Name: is_bucket_public(p_bucket_name text, p_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -1039,25 +1030,23 @@ GRANT EXECUTE ON FUNCTION is_bucket_public(p_bucket_name text, p_tenant_id uuid)
 -- Name: set_tenant_id(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION set_tenant_id() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION set_tenant_id() TO {{APP_USER}};
 
 --
 -- Name: set_tenant_id(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION set_tenant_id() TO fluxbase_rls_test;
 
 --
 -- Name: user_can_access_object(p_object_id uuid, p_required_permission text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION user_can_access_object(p_object_id uuid, p_required_permission text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION user_can_access_object(p_object_id uuid, p_required_permission text) TO {{APP_USER}};
 
 --
 -- Name: user_can_access_object(p_object_id uuid, p_required_permission text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION user_can_access_object(p_object_id uuid, p_required_permission text) TO fluxbase_rls_test;
 
 --
 -- Name: buckets; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -1075,13 +1064,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE buckets TO authenticated;
 -- Name: buckets; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE buckets TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE buckets TO {{APP_USER}};
 
 --
 -- Name: buckets; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE buckets TO fluxbase_rls_test;
 
 --
 -- Name: buckets; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -1099,13 +1087,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE chunked_upload_sessions TO authent
 -- Name: chunked_upload_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chunked_upload_sessions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chunked_upload_sessions TO {{APP_USER}};
 
 --
 -- Name: chunked_upload_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chunked_upload_sessions TO fluxbase_rls_test;
 
 --
 -- Name: chunked_upload_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -1123,13 +1110,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE object_permissions TO authenticate
 -- Name: object_permissions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE object_permissions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE object_permissions TO {{APP_USER}};
 
 --
 -- Name: object_permissions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE object_permissions TO fluxbase_rls_test;
 
 --
 -- Name: object_permissions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -1153,13 +1139,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE objects TO authenticated;
 -- Name: objects; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE objects TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE objects TO {{APP_USER}};
 
 --
 -- Name: objects; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE objects TO fluxbase_rls_test;
 
 --
 -- Name: objects; Type: PRIVILEGE; Schema: privileges; Owner: -

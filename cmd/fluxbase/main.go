@@ -22,6 +22,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/database/bootstrap"
+	"github.com/nimbleflux/fluxbase/internal/database/schema"
 	"github.com/nimbleflux/fluxbase/internal/keys"
 	"github.com/nimbleflux/fluxbase/internal/migrations"
 	"github.com/nimbleflux/fluxbase/internal/storage"
@@ -185,22 +186,48 @@ func main() {
 	// Apply declarative schema (tables, indexes, functions, policies)
 	// This uses pgschema to apply the internal Fluxbase schema
 	log.Info().Msg("Applying declarative schema...")
+
+	// Extract embedded schema files to a temp directory so they work
+	// regardless of the deployment environment (Docker, bare metal, etc.)
+	schemaDir, err := schema.ExtractSchemas()
+	if err != nil {
+		if cleanupVips != nil {
+			cleanupVips()
+		}
+		db.Close()
+		log.Error().Err(err).Msg("Failed to extract embedded schemas")
+		os.Exit(1)
+	}
+	defer func() { _ = os.RemoveAll(schemaDir) }()
+
 	declarativeConfig := migrations.DeclarativeConfig{
-		SchemaDir:        "internal/database/schema/schemas",
+		SchemaDir:        schemaDir,
 		Schemas:          migrations.DefaultFluxbaseSchemas,
 		AllowDestructive: false,
 		LockTimeout:      30,
 	}
+	// Apply admin credential fallback: if admin user/password are not
+	// explicitly set, use the runtime user/password (same as connection.go).
+	adminUser := cfg.Database.AdminUser
+	if adminUser == "" {
+		adminUser = cfg.Database.User
+	}
+	adminPassword := cfg.Database.AdminPassword
+	if adminPassword == "" {
+		adminPassword = cfg.Database.Password
+	}
+
 	declarativeSvc := migrations.NewDeclarativeService(
 		"pgschema",
 		cfg.Database.Host,
 		cfg.Database.Port,
-		cfg.Database.AdminUser,
-		cfg.Database.AdminPassword,
+		adminUser,
+		adminPassword,
 		cfg.Database.Database,
 		declarativeConfig,
 	)
 	declarativeSvc.SetPool(db.Pool())
+	declarativeSvc.SetAppUser(cfg.Database.User)
 
 	// Detect migration state for smooth transition from imperative to declarative
 	validator := migrations.NewValidator(declarativeSvc, db.Pool())

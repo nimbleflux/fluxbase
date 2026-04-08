@@ -72,7 +72,7 @@ func (s *TransitionService) Transition(ctx context.Context, opts TransitionOptio
 	log.Info().Msg("Exporting current schema...")
 	schemaDir := opts.SchemaDir
 	if schemaDir == "" {
-		schemaDir = "internal/database/schema/schemas"
+		schemaDir = s.declarative.config.SchemaDir
 	}
 
 	if err := s.declarative.Dump(ctx, schemaDir); err != nil {

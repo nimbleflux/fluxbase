@@ -608,15 +608,6 @@ CREATE TABLE IF NOT EXISTS client_keys (
     CONSTRAINT api_keys_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
--- Add tenant_id column if it doesn't exist (for existing databases)
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'auth' AND table_name = 'client_keys' AND column_name = 'tenant_id') THEN
-        ALTER TABLE client_keys ADD COLUMN tenant_id uuid;
-    END IF;
-END $$;
-
-
 COMMENT ON COLUMN auth.client_keys.allowed_namespaces IS 'Allowed namespaces for this key. NULL = all namespaces (no restrictions), empty array = default namespace only, populated array = specific namespaces allowed.';
 
 --
@@ -1745,15 +1736,6 @@ CREATE TABLE IF NOT EXISTS webhooks (
     CONSTRAINT webhooks_created_by_fkey FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
     CONSTRAINT webhooks_scope_check CHECK (scope IN ('user'::text, 'global'::text))
 );
-
--- Add tenant_id column if it doesn't exist (for existing databases)
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'auth' AND table_name = 'webhooks' AND column_name = 'tenant_id') THEN
-        ALTER TABLE webhooks ADD COLUMN tenant_id uuid;
-    END IF;
-END $$;
-
 
 COMMENT ON COLUMN auth.webhooks.scope IS 'Scope determines which events trigger the webhook: user = only events on records owned by created_by, global = all events (admin only)';
 
@@ -3014,13 +2996,12 @@ CREATE OR REPLACE TRIGGER validate_app_metadata_trigger
 -- Name: cleanup_expired_captcha_data(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION cleanup_expired_captcha_data() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION cleanup_expired_captcha_data() TO {{APP_USER}};
 
 --
 -- Name: cleanup_expired_captcha_data(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION cleanup_expired_captcha_data() TO fluxbase_rls_test;
 
 --
 -- Name: cleanup_expired_captcha_data(); Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3032,265 +3013,243 @@ GRANT EXECUTE ON FUNCTION cleanup_expired_captcha_data() TO service_role;
 -- Name: create_webhook_trigger(schema_name text, table_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION create_webhook_trigger(schema_name text, table_name text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION create_webhook_trigger(schema_name text, table_name text) TO {{APP_USER}};
 
 --
 -- Name: create_webhook_trigger(schema_name text, table_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION create_webhook_trigger(schema_name text, table_name text) TO fluxbase_rls_test;
 
 --
 -- Name: current_user_id(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION current_user_id() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION current_user_id() TO {{APP_USER}};
 
 --
 -- Name: current_user_id(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION current_user_id() TO fluxbase_rls_test;
 
 --
 -- Name: current_user_role(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION current_user_role() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION current_user_role() TO {{APP_USER}};
 
 --
 -- Name: current_user_role(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION current_user_role() TO fluxbase_rls_test;
 
 --
 -- Name: decrement_webhook_table_count(p_schema text, p_table text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION decrement_webhook_table_count(p_schema text, p_table text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION decrement_webhook_table_count(p_schema text, p_table text) TO {{APP_USER}};
 
 --
 -- Name: decrement_webhook_table_count(p_schema text, p_table text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION decrement_webhook_table_count(p_schema text, p_table text) TO fluxbase_rls_test;
 
 --
 -- Name: disable_rls(table_name text, schema_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION disable_rls(table_name text, schema_name text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION disable_rls(table_name text, schema_name text) TO {{APP_USER}};
 
 --
 -- Name: disable_rls(table_name text, schema_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION disable_rls(table_name text, schema_name text) TO fluxbase_rls_test;
 
 --
 -- Name: enable_rls(table_name text, schema_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION enable_rls(table_name text, schema_name text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION enable_rls(table_name text, schema_name text) TO {{APP_USER}};
 
 --
 -- Name: enable_rls(table_name text, schema_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION enable_rls(table_name text, schema_name text) TO fluxbase_rls_test;
 
 --
 -- Name: has_tenant_access(resource_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION has_tenant_access(resource_tenant_id uuid) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION has_tenant_access(resource_tenant_id uuid) TO {{APP_USER}};
 
 --
 -- Name: has_tenant_access(resource_tenant_id uuid); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION has_tenant_access(resource_tenant_id uuid) TO fluxbase_rls_test;
 
 --
 -- Name: increment_webhook_table_count(p_schema text, p_table text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION increment_webhook_table_count(p_schema text, p_table text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION increment_webhook_table_count(p_schema text, p_table text) TO {{APP_USER}};
 
 --
 -- Name: increment_webhook_table_count(p_schema text, p_table text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION increment_webhook_table_count(p_schema text, p_table text) TO fluxbase_rls_test;
 
 --
 -- Name: is_admin(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION is_admin() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION is_admin() TO {{APP_USER}};
 
 --
 -- Name: is_admin(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION is_admin() TO fluxbase_rls_test;
 
 --
 -- Name: is_authenticated(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION is_authenticated() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION is_authenticated() TO {{APP_USER}};
 
 --
 -- Name: is_authenticated(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION is_authenticated() TO fluxbase_rls_test;
 
 --
 -- Name: jwt(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION jwt() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION jwt() TO {{APP_USER}};
 
 --
 -- Name: jwt(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION jwt() TO fluxbase_rls_test;
 
 --
 -- Name: queue_webhook_event(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION queue_webhook_event() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION queue_webhook_event() TO {{APP_USER}};
 
 --
 -- Name: queue_webhook_event(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION queue_webhook_event() TO fluxbase_rls_test;
 
 --
 -- Name: remove_webhook_trigger(schema_name text, table_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION remove_webhook_trigger(schema_name text, table_name text) TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION remove_webhook_trigger(schema_name text, table_name text) TO {{APP_USER}};
 
 --
 -- Name: remove_webhook_trigger(schema_name text, table_name text); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION remove_webhook_trigger(schema_name text, table_name text) TO fluxbase_rls_test;
 
 --
 -- Name: role(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION role() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION role() TO {{APP_USER}};
 
 --
 -- Name: role(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION role() TO fluxbase_rls_test;
 
 --
 -- Name: set_tenant_id_from_context(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION set_tenant_id_from_context() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION set_tenant_id_from_context() TO {{APP_USER}};
 
 --
 -- Name: set_tenant_id_from_context(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION set_tenant_id_from_context() TO fluxbase_rls_test;
 
 --
 -- Name: uid(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION uid() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION uid() TO {{APP_USER}};
 
 --
 -- Name: uid(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION uid() TO fluxbase_rls_test;
 
 --
 -- Name: update_mcp_oauth_clients_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_mcp_oauth_clients_updated_at() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION update_mcp_oauth_clients_updated_at() TO {{APP_USER}};
 
 --
 -- Name: update_mcp_oauth_clients_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_mcp_oauth_clients_updated_at() TO fluxbase_rls_test;
 
 --
 -- Name: update_saml_providers_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_saml_providers_updated_at() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION update_saml_providers_updated_at() TO {{APP_USER}};
 
 --
 -- Name: update_saml_providers_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_saml_providers_updated_at() TO fluxbase_rls_test;
 
 --
 -- Name: update_trust_signals_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_trust_signals_updated_at() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION update_trust_signals_updated_at() TO {{APP_USER}};
 
 --
 -- Name: update_trust_signals_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_trust_signals_updated_at() TO fluxbase_rls_test;
 
 --
 -- Name: update_webhook_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_webhook_updated_at() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION update_webhook_updated_at() TO {{APP_USER}};
 
 --
 -- Name: update_webhook_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_webhook_updated_at() TO fluxbase_rls_test;
 
 --
 -- Name: validate_app_metadata_update(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION validate_app_metadata_update() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION validate_app_metadata_update() TO {{APP_USER}};
 
 --
 -- Name: validate_app_metadata_update(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION validate_app_metadata_update() TO fluxbase_rls_test;
 
 --
 -- Name: emergency_revocation_id_seq; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT SELECT, UPDATE, USAGE ON SEQUENCE emergency_revocation_id_seq TO fluxbase_app;
+GRANT SELECT, UPDATE, USAGE ON SEQUENCE emergency_revocation_id_seq TO {{APP_USER}};
 
 --
 -- Name: emergency_revocation_id_seq; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT SELECT, UPDATE, USAGE ON SEQUENCE emergency_revocation_id_seq TO fluxbase_rls_test;
 
 --
 -- Name: emergency_revocation_id_seq; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3308,13 +3267,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE captcha_challenges TO authenticate
 -- Name: captcha_challenges; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE captcha_challenges TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE captcha_challenges TO {{APP_USER}};
 
 --
 -- Name: captcha_challenges; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE captcha_challenges TO fluxbase_rls_test;
 
 --
 -- Name: captcha_challenges; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3332,13 +3290,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE captcha_trust_tokens TO authentica
 -- Name: captcha_trust_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE captcha_trust_tokens TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE captcha_trust_tokens TO {{APP_USER}};
 
 --
 -- Name: captcha_trust_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE captcha_trust_tokens TO fluxbase_rls_test;
 
 --
 -- Name: captcha_trust_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3356,13 +3313,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE client_key_usage TO authenticated;
 -- Name: client_key_usage; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE client_key_usage TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE client_key_usage TO {{APP_USER}};
 
 --
 -- Name: client_key_usage; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE client_key_usage TO fluxbase_rls_test;
 
 --
 -- Name: client_key_usage; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3380,13 +3336,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE client_keys TO authenticated;
 -- Name: client_keys; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE client_keys TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE client_keys TO {{APP_USER}};
 
 --
 -- Name: client_keys; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE client_keys TO fluxbase_rls_test;
 
 --
 -- Name: client_keys; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3404,13 +3359,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE email_verification_tokens TO authe
 -- Name: email_verification_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE email_verification_tokens TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE email_verification_tokens TO {{APP_USER}};
 
 --
 -- Name: email_verification_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE email_verification_tokens TO fluxbase_rls_test;
 
 --
 -- Name: email_verification_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3428,13 +3382,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE emergency_revocation TO authentica
 -- Name: emergency_revocation; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE emergency_revocation TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE emergency_revocation TO {{APP_USER}};
 
 --
 -- Name: emergency_revocation; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE emergency_revocation TO fluxbase_rls_test;
 
 --
 -- Name: emergency_revocation; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3452,13 +3405,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE impersonation_sessions TO authenti
 -- Name: impersonation_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE impersonation_sessions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE impersonation_sessions TO {{APP_USER}};
 
 --
 -- Name: impersonation_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE impersonation_sessions TO fluxbase_rls_test;
 
 --
 -- Name: impersonation_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3476,13 +3428,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE magic_links TO authenticated;
 -- Name: magic_links; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE magic_links TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE magic_links TO {{APP_USER}};
 
 --
 -- Name: magic_links; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE magic_links TO fluxbase_rls_test;
 
 --
 -- Name: magic_links; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3500,13 +3451,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE mcp_oauth_clients TO authenticated
 -- Name: mcp_oauth_clients; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mcp_oauth_clients TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mcp_oauth_clients TO {{APP_USER}};
 
 --
 -- Name: mcp_oauth_clients; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mcp_oauth_clients TO fluxbase_rls_test;
 
 --
 -- Name: mcp_oauth_clients; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3524,13 +3474,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE mcp_oauth_codes TO authenticated;
 -- Name: mcp_oauth_codes; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mcp_oauth_codes TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mcp_oauth_codes TO {{APP_USER}};
 
 --
 -- Name: mcp_oauth_codes; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mcp_oauth_codes TO fluxbase_rls_test;
 
 --
 -- Name: mcp_oauth_codes; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3548,13 +3497,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE mcp_oauth_tokens TO authenticated;
 -- Name: mcp_oauth_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mcp_oauth_tokens TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mcp_oauth_tokens TO {{APP_USER}};
 
 --
 -- Name: mcp_oauth_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mcp_oauth_tokens TO fluxbase_rls_test;
 
 --
 -- Name: mcp_oauth_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3572,13 +3520,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE mfa_factors TO authenticated;
 -- Name: mfa_factors; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mfa_factors TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mfa_factors TO {{APP_USER}};
 
 --
 -- Name: mfa_factors; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE mfa_factors TO fluxbase_rls_test;
 
 --
 -- Name: mfa_factors; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3596,13 +3543,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE nonces TO authenticated;
 -- Name: nonces; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE nonces TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE nonces TO {{APP_USER}};
 
 --
 -- Name: nonces; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE nonces TO fluxbase_rls_test;
 
 --
 -- Name: nonces; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3620,13 +3566,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE oauth_links TO authenticated;
 -- Name: oauth_links; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_links TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_links TO {{APP_USER}};
 
 --
 -- Name: oauth_links; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_links TO fluxbase_rls_test;
 
 --
 -- Name: oauth_links; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3644,13 +3589,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE oauth_logout_states TO authenticat
 -- Name: oauth_logout_states; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_logout_states TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_logout_states TO {{APP_USER}};
 
 --
 -- Name: oauth_logout_states; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_logout_states TO fluxbase_rls_test;
 
 --
 -- Name: oauth_logout_states; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3668,13 +3612,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE oauth_states TO authenticated;
 -- Name: oauth_states; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_states TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_states TO {{APP_USER}};
 
 --
 -- Name: oauth_states; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_states TO fluxbase_rls_test;
 
 --
 -- Name: oauth_states; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3692,13 +3635,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE oauth_tokens TO authenticated;
 -- Name: oauth_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_tokens TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_tokens TO {{APP_USER}};
 
 --
 -- Name: oauth_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_tokens TO fluxbase_rls_test;
 
 --
 -- Name: oauth_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3716,13 +3658,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE otp_codes TO authenticated;
 -- Name: otp_codes; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE otp_codes TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE otp_codes TO {{APP_USER}};
 
 --
 -- Name: otp_codes; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE otp_codes TO fluxbase_rls_test;
 
 --
 -- Name: otp_codes; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3740,13 +3681,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE password_reset_tokens TO authentic
 -- Name: password_reset_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE password_reset_tokens TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE password_reset_tokens TO {{APP_USER}};
 
 --
 -- Name: password_reset_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE password_reset_tokens TO fluxbase_rls_test;
 
 --
 -- Name: password_reset_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3764,13 +3704,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE rls_audit_log TO authenticated;
 -- Name: rls_audit_log; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE rls_audit_log TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE rls_audit_log TO {{APP_USER}};
 
 --
 -- Name: rls_audit_log; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE rls_audit_log TO fluxbase_rls_test;
 
 --
 -- Name: rls_audit_log; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3788,13 +3727,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE saml_assertion_ids TO authenticate
 -- Name: saml_assertion_ids; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE saml_assertion_ids TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE saml_assertion_ids TO {{APP_USER}};
 
 --
 -- Name: saml_assertion_ids; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE saml_assertion_ids TO fluxbase_rls_test;
 
 --
 -- Name: saml_assertion_ids; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3812,13 +3750,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE saml_providers TO authenticated;
 -- Name: saml_providers; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE saml_providers TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE saml_providers TO {{APP_USER}};
 
 --
 -- Name: saml_providers; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE saml_providers TO fluxbase_rls_test;
 
 --
 -- Name: saml_providers; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3836,13 +3773,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE saml_sessions TO authenticated;
 -- Name: saml_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE saml_sessions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE saml_sessions TO {{APP_USER}};
 
 --
 -- Name: saml_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE saml_sessions TO fluxbase_rls_test;
 
 --
 -- Name: saml_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3860,13 +3796,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE service_key_revocations TO authent
 -- Name: service_key_revocations; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE service_key_revocations TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE service_key_revocations TO {{APP_USER}};
 
 --
 -- Name: service_key_revocations; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE service_key_revocations TO fluxbase_rls_test;
 
 --
 -- Name: service_key_revocations; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3884,13 +3819,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE service_keys TO authenticated;
 -- Name: service_keys; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE service_keys TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE service_keys TO {{APP_USER}};
 
 --
 -- Name: service_keys; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE service_keys TO fluxbase_rls_test;
 
 --
 -- Name: service_keys; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3914,13 +3848,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE sessions TO authenticated;
 -- Name: sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE sessions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE sessions TO {{APP_USER}};
 
 --
 -- Name: sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE sessions TO fluxbase_rls_test;
 
 --
 -- Name: sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3938,13 +3871,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE token_blacklist TO authenticated;
 -- Name: token_blacklist; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE token_blacklist TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE token_blacklist TO {{APP_USER}};
 
 --
 -- Name: token_blacklist; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE token_blacklist TO fluxbase_rls_test;
 
 --
 -- Name: token_blacklist; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3962,13 +3894,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE two_factor_recovery_attempts TO au
 -- Name: two_factor_recovery_attempts; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE two_factor_recovery_attempts TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE two_factor_recovery_attempts TO {{APP_USER}};
 
 --
 -- Name: two_factor_recovery_attempts; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE two_factor_recovery_attempts TO fluxbase_rls_test;
 
 --
 -- Name: two_factor_recovery_attempts; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -3986,13 +3917,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE two_factor_setups TO authenticated
 -- Name: two_factor_setups; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE two_factor_setups TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE two_factor_setups TO {{APP_USER}};
 
 --
 -- Name: two_factor_setups; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE two_factor_setups TO fluxbase_rls_test;
 
 --
 -- Name: two_factor_setups; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -4010,13 +3940,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE user_trust_signals TO authenticate
 -- Name: user_trust_signals; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_trust_signals TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_trust_signals TO {{APP_USER}};
 
 --
 -- Name: user_trust_signals; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_trust_signals TO fluxbase_rls_test;
 
 --
 -- Name: user_trust_signals; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -4034,13 +3963,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE users TO authenticated;
 -- Name: users; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE users TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE users TO {{APP_USER}};
 
 --
 -- Name: users; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE users TO fluxbase_rls_test;
 
 --
 -- Name: users; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -4064,13 +3992,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE webhook_deliveries TO authenticate
 -- Name: webhook_deliveries; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhook_deliveries TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhook_deliveries TO {{APP_USER}};
 
 --
 -- Name: webhook_deliveries; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhook_deliveries TO fluxbase_rls_test;
 
 --
 -- Name: webhook_deliveries; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -4088,13 +4015,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE webhook_events TO authenticated;
 -- Name: webhook_events; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhook_events TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhook_events TO {{APP_USER}};
 
 --
 -- Name: webhook_events; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhook_events TO fluxbase_rls_test;
 
 --
 -- Name: webhook_events; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -4112,13 +4038,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE webhook_monitored_tables TO authen
 -- Name: webhook_monitored_tables; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhook_monitored_tables TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhook_monitored_tables TO {{APP_USER}};
 
 --
 -- Name: webhook_monitored_tables; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhook_monitored_tables TO fluxbase_rls_test;
 
 --
 -- Name: webhook_monitored_tables; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -4136,13 +4061,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE webhooks TO authenticated;
 -- Name: webhooks; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhooks TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhooks TO {{APP_USER}};
 
 --
 -- Name: webhooks; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhooks TO fluxbase_rls_test;
 
 --
 -- Name: webhooks; Type: PRIVILEGE; Schema: privileges; Owner: -

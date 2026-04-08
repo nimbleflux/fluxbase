@@ -86,13 +86,12 @@ CREATE OR REPLACE TRIGGER realtime_schema_registry_set_tenant_id
 -- Name: schema_registry_id_seq; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT SELECT, UPDATE, USAGE ON SEQUENCE schema_registry_id_seq TO fluxbase_app;
+GRANT SELECT, UPDATE, USAGE ON SEQUENCE schema_registry_id_seq TO {{APP_USER}};
 
 --
 -- Name: schema_registry_id_seq; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT SELECT, UPDATE, USAGE ON SEQUENCE schema_registry_id_seq TO fluxbase_rls_test;
 
 --
 -- Name: schema_registry_id_seq; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -110,13 +109,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE schema_registry TO authenticated;
 -- Name: schema_registry; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE schema_registry TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE schema_registry TO {{APP_USER}};
 
 --
 -- Name: schema_registry; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE schema_registry TO fluxbase_rls_test;
 
 --
 -- Name: schema_registry; Type: PRIVILEGE; Schema: privileges; Owner: -

@@ -2305,13 +2305,12 @@ GRANT SELECT ON TABLE chatbot_knowledge_bases TO authenticated;
 -- Name: chatbot_knowledge_bases; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chatbot_knowledge_bases TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chatbot_knowledge_bases TO {{APP_USER}};
 
 --
 -- Name: chatbot_knowledge_bases; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chatbot_knowledge_bases TO fluxbase_rls_test;
 
 --
 -- Name: chatbot_knowledge_bases; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2329,13 +2328,12 @@ GRANT SELECT ON TABLE chatbots TO authenticated;
 -- Name: chatbots; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chatbots TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chatbots TO {{APP_USER}};
 
 --
 -- Name: chatbots; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chatbots TO fluxbase_rls_test;
 
 --
 -- Name: chatbots; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2353,13 +2351,12 @@ GRANT SELECT ON TABLE chunks TO authenticated;
 -- Name: chunks; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chunks TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chunks TO {{APP_USER}};
 
 --
 -- Name: chunks; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE chunks TO fluxbase_rls_test;
 
 --
 -- Name: chunks; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2377,13 +2374,12 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 -- Name: conversations; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE conversations TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE conversations TO {{APP_USER}};
 
 --
 -- Name: conversations; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE conversations TO fluxbase_rls_test;
 
 --
 -- Name: conversations; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2401,13 +2397,12 @@ GRANT SELECT ON TABLE document_entities TO authenticated;
 -- Name: document_entities; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE document_entities TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE document_entities TO {{APP_USER}};
 
 --
 -- Name: document_entities; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE document_entities TO fluxbase_rls_test;
 
 --
 -- Name: document_entities; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2425,13 +2420,12 @@ GRANT SELECT ON TABLE document_permissions TO authenticated;
 -- Name: document_permissions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE document_permissions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE document_permissions TO {{APP_USER}};
 
 --
 -- Name: document_permissions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE document_permissions TO fluxbase_rls_test;
 
 --
 -- Name: document_permissions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2449,13 +2443,12 @@ GRANT SELECT ON TABLE documents TO authenticated;
 -- Name: documents; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE documents TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE documents TO {{APP_USER}};
 
 --
 -- Name: documents; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE documents TO fluxbase_rls_test;
 
 --
 -- Name: documents; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2473,13 +2466,12 @@ GRANT SELECT ON TABLE entities TO authenticated;
 -- Name: entities; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entities TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entities TO {{APP_USER}};
 
 --
 -- Name: entities; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entities TO fluxbase_rls_test;
 
 --
 -- Name: entities; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2497,13 +2489,12 @@ GRANT SELECT ON TABLE entity_relationships TO authenticated;
 -- Name: entity_relationships; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entity_relationships TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entity_relationships TO {{APP_USER}};
 
 --
 -- Name: entity_relationships; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE entity_relationships TO fluxbase_rls_test;
 
 --
 -- Name: entity_relationships; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2521,13 +2512,12 @@ GRANT SELECT ON TABLE knowledge_base_permissions TO authenticated;
 -- Name: knowledge_base_permissions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE knowledge_base_permissions TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE knowledge_base_permissions TO {{APP_USER}};
 
 --
 -- Name: knowledge_base_permissions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE knowledge_base_permissions TO fluxbase_rls_test;
 
 --
 -- Name: knowledge_base_permissions; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2545,13 +2535,12 @@ GRANT SELECT ON TABLE knowledge_bases TO authenticated;
 -- Name: knowledge_bases; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE knowledge_bases TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE knowledge_bases TO {{APP_USER}};
 
 --
 -- Name: knowledge_bases; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE knowledge_bases TO fluxbase_rls_test;
 
 --
 -- Name: knowledge_bases; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2569,13 +2558,12 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 -- Name: messages; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE messages TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE messages TO {{APP_USER}};
 
 --
 -- Name: messages; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE messages TO fluxbase_rls_test;
 
 --
 -- Name: messages; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2593,13 +2581,12 @@ GRANT SELECT ON TABLE providers TO authenticated;
 -- Name: providers; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE providers TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE providers TO {{APP_USER}};
 
 --
 -- Name: providers; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE providers TO fluxbase_rls_test;
 
 --
 -- Name: providers; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2617,13 +2604,12 @@ GRANT SELECT ON TABLE query_audit_log TO authenticated;
 -- Name: query_audit_log; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE query_audit_log TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE query_audit_log TO {{APP_USER}};
 
 --
 -- Name: query_audit_log; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE query_audit_log TO fluxbase_rls_test;
 
 --
 -- Name: query_audit_log; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2641,13 +2627,12 @@ GRANT SELECT ON TABLE retrieval_log TO authenticated;
 -- Name: retrieval_log; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE retrieval_log TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE retrieval_log TO {{APP_USER}};
 
 --
 -- Name: retrieval_log; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE retrieval_log TO fluxbase_rls_test;
 
 --
 -- Name: retrieval_log; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2665,13 +2650,12 @@ GRANT SELECT ON TABLE table_export_sync_configs TO authenticated;
 -- Name: table_export_sync_configs; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE table_export_sync_configs TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE table_export_sync_configs TO {{APP_USER}};
 
 --
 -- Name: table_export_sync_configs; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE table_export_sync_configs TO fluxbase_rls_test;
 
 --
 -- Name: table_export_sync_configs; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2689,13 +2673,12 @@ GRANT SELECT ON TABLE user_chatbot_usage TO authenticated;
 -- Name: user_chatbot_usage; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_chatbot_usage TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_chatbot_usage TO {{APP_USER}};
 
 --
 -- Name: user_chatbot_usage; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_chatbot_usage TO fluxbase_rls_test;
 
 --
 -- Name: user_chatbot_usage; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2713,13 +2696,12 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 -- Name: user_provider_preferences; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_provider_preferences TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_provider_preferences TO {{APP_USER}};
 
 --
 -- Name: user_provider_preferences; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_provider_preferences TO fluxbase_rls_test;
 
 --
 -- Name: user_provider_preferences; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -2737,13 +2719,12 @@ GRANT SELECT ON TABLE user_quotas TO authenticated;
 -- Name: user_quotas; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_quotas TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_quotas TO {{APP_USER}};
 
 --
 -- Name: user_quotas; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_quotas TO fluxbase_rls_test;
 
 --
 -- Name: user_quotas; Type: PRIVILEGE; Schema: privileges; Owner: -

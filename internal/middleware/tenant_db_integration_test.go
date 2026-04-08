@@ -97,7 +97,7 @@ func setupMiddlewareIntegration(t *testing.T) *middlewareTestEnv {
 
 	// Bootstrap the separate DB using admin credentials (app user can't create extensions)
 	tenantAdminURL := buildTenantDBURL(adminDBURL, separateDBName)
-	err = bootstrap.RunBootstrapOnDB(ctx, tenantAdminURL)
+	err = bootstrap.RunBootstrapOnDB(ctx, tenantAdminURL, "fluxbase_app")
 	require.NoError(t, err, "Failed to bootstrap separate database")
 
 	// Create Router

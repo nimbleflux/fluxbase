@@ -168,13 +168,12 @@ CREATE OR REPLACE TRIGGER custom_tools_updated_at
 -- Name: update_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_updated_at() TO fluxbase_app;
+GRANT EXECUTE ON FUNCTION update_updated_at() TO {{APP_USER}};
 
 --
 -- Name: update_updated_at(); Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT EXECUTE ON FUNCTION update_updated_at() TO fluxbase_rls_test;
 
 --
 -- Name: custom_resources; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -186,13 +185,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE custom_resources TO authenticated;
 -- Name: custom_resources; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE custom_resources TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE custom_resources TO {{APP_USER}};
 
 --
 -- Name: custom_resources; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE custom_resources TO fluxbase_rls_test;
 
 --
 -- Name: custom_resources; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -210,13 +208,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE custom_tools TO authenticated;
 -- Name: custom_tools; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE custom_tools TO fluxbase_app;
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE custom_tools TO {{APP_USER}};
 
 --
 -- Name: custom_tools; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
-GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE custom_tools TO fluxbase_rls_test;
 
 --
 -- Name: custom_tools; Type: PRIVILEGE; Schema: privileges; Owner: -

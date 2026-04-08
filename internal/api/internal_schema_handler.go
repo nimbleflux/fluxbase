@@ -12,6 +12,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/database/bootstrap"
+	"github.com/nimbleflux/fluxbase/internal/database/schema"
 	"github.com/nimbleflux/fluxbase/internal/migrations"
 )
 
@@ -37,7 +38,11 @@ func (h *InternalSchemaHandler) Initialize(cfg *config.Config, db *database.Conn
 
 	// Set up declarative config
 	pgschemaPath := "pgschema"
-	schemaDir := "internal/database/schema/schemas"
+	schemaDir, err := schema.ExtractSchemas()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to extract embedded schemas for internal schema handler")
+		return
+	}
 
 	h.config = &migrations.DeclarativeConfig{
 		SchemaDir:        schemaDir,
@@ -56,6 +61,8 @@ func (h *InternalSchemaHandler) Initialize(cfg *config.Config, db *database.Conn
 		cfg.Database.Database,
 		*h.config,
 	)
+
+	h.declarative.SetAppUser(cfg.Database.User)
 
 	h.validator = migrations.NewValidator(h.declarative, db.Pool())
 	h.transition = migrations.NewTransitionService(h.declarative, db.Pool())

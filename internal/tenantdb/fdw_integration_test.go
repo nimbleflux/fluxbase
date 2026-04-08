@@ -61,7 +61,7 @@ func setupFDWTest(t *testing.T) (mainPool, tenantPool *pgxpool.Pool, cfg FDWConf
 
 	// Build tenant DB URL using admin credentials and bootstrap it
 	tenantAdminURL := buildTenantDBURL(adminDBURL, dbName)
-	err = bootstrap.RunBootstrapOnDB(ctx, tenantAdminURL)
+	err = bootstrap.RunBootstrapOnDB(ctx, tenantAdminURL, "fluxbase_app")
 	require.NoError(t, err, "Failed to bootstrap tenant database")
 
 	// Connect to the tenant database as admin (needed for FDW setup)
