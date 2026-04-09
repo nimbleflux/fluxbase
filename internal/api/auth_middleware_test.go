@@ -1,6 +1,8 @@
 package api
 
 import (
+	"io"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
@@ -337,6 +339,154 @@ func TestRoleConstants(t *testing.T) {
 			assert.NotEmpty(t, role, "role should not be empty: %s", description)
 		}
 	})
+}
+
+// =============================================================================
+// RequireRole Runtime Behavior Tests
+// =============================================================================
+
+func TestRequireRole_ServiceKeyTypes(t *testing.T) {
+	tests := []struct {
+		name           string
+		serviceKeyType string
+		allowedRoles   []string
+		expectedStatus int
+	}{
+		{
+			name:           "global service key bypasses admin-only route",
+			serviceKeyType: "service",
+			allowedRoles:   []string{"admin"},
+			expectedStatus: fiber.StatusOK,
+		},
+		{
+			name:           "global_service key bypasses admin-only route",
+			serviceKeyType: "global_service",
+			allowedRoles:   []string{"admin"},
+			expectedStatus: fiber.StatusOK,
+		},
+		{
+			name:           "tenant_service key rejected on admin-only route",
+			serviceKeyType: "tenant_service",
+			allowedRoles:   []string{"admin"},
+			expectedStatus: fiber.StatusForbidden,
+		},
+		{
+			name:           "tenant_service key allowed on route accepting tenant_admin",
+			serviceKeyType: "tenant_service",
+			allowedRoles:   []string{"admin", "tenant_admin"},
+			expectedStatus: fiber.StatusOK,
+		},
+		{
+			name:           "tenant_service key allowed on tenant_admin-only route",
+			serviceKeyType: "tenant_service",
+			allowedRoles:   []string{"tenant_admin"},
+			expectedStatus: fiber.StatusOK,
+		},
+		{
+			name:           "unset service_key_type treated as global (migrations middleware compat)",
+			serviceKeyType: "",
+			allowedRoles:   []string{"admin"},
+			expectedStatus: fiber.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := fiber.New()
+
+			// Simulate service key auth having already validated the key
+			app.Use(func(c fiber.Ctx) error {
+				c.Locals("auth_type", "service_key")
+				if tt.serviceKeyType != "" {
+					c.Locals("service_key_type", tt.serviceKeyType)
+				}
+				return c.Next()
+			})
+			app.Use(RequireRole(tt.allowedRoles...))
+			app.Get("/test", func(c fiber.Ctx) error {
+				return c.SendString("OK")
+			})
+
+			req := httptest.NewRequest(fiber.MethodGet, "/test", nil)
+			resp, err := app.Test(req)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
+		})
+	}
+}
+
+func TestRequireRole_JWTAuth(t *testing.T) {
+	tests := []struct {
+		name           string
+		userRole       interface{} // string or nil
+		allowedRoles   []string
+		expectedStatus int
+	}{
+		{
+			name:           "service_role JWT bypasses admin-only route",
+			userRole:       "service_role",
+			allowedRoles:   []string{"admin"},
+			expectedStatus: fiber.StatusOK,
+		},
+		{
+			name:           "service_role JWT bypasses tenant route",
+			userRole:       "service_role",
+			allowedRoles:   []string{"admin", "tenant_admin"},
+			expectedStatus: fiber.StatusOK,
+		},
+		{
+			name:           "tenant_admin rejected on admin-only route",
+			userRole:       "tenant_admin",
+			allowedRoles:   []string{"admin"},
+			expectedStatus: fiber.StatusForbidden,
+		},
+		{
+			name:           "admin allowed on admin route",
+			userRole:       "admin",
+			allowedRoles:   []string{"admin"},
+			expectedStatus: fiber.StatusOK,
+		},
+		{
+			name:           "nil user_role returns unauthorized",
+			userRole:       nil,
+			allowedRoles:   []string{"admin"},
+			expectedStatus: fiber.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := fiber.New()
+
+			app.Use(func(c fiber.Ctx) error {
+				c.Locals("auth_type", "jwt")
+				if tt.userRole != nil {
+					c.Locals("user_role", tt.userRole)
+				}
+				return c.Next()
+			})
+			app.Use(RequireRole(tt.allowedRoles...))
+			app.Get("/test", func(c fiber.Ctx) error {
+				return c.SendString("OK")
+			})
+
+			req := httptest.NewRequest(fiber.MethodGet, "/test", nil)
+			resp, err := app.Test(req)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
+
+			// Verify error response bodies
+			if tt.expectedStatus == fiber.StatusForbidden {
+				body, _ := io.ReadAll(resp.Body)
+				assert.Contains(t, string(body), "Insufficient permissions")
+			} else if tt.expectedStatus == fiber.StatusUnauthorized {
+				body, _ := io.ReadAll(resp.Body)
+				assert.Contains(t, string(body), "Unauthorized")
+			}
+		})
+	}
 }
 
 // =============================================================================

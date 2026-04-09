@@ -243,6 +243,12 @@ func migrationsValidateAuthAndScope(c fiber.Ctx, db *pgxpool.Pool, authService *
 		}
 
 		if migrationsValidateServiceKeyWithScope(c, db, serviceKey, "migrations:execute") {
+			// A tenant-scoped service key must not be used without a tenant header
+			keyType, _ := c.Locals("service_key_type").(string)
+			if keyType == "tenant_service" {
+				log.Warn().Str("key_type", keyType).Msg("Tenant-scoped service key used without tenant header")
+				return false
+			}
 			c.Locals("is_tenant_migration", false)
 			return true
 		}
@@ -295,11 +301,12 @@ func migrationsValidateServiceKeyWithScope(c fiber.Ctx, db *pgxpool.Pool, servic
 	var scopes []string
 	var enabled bool
 	var expiresAt *time.Time
+	var keyType string
 
 	err := db.QueryRow(c.RequestCtx(),
-		`SELECT id, name, key_hash, scopes, enabled, expires_at FROM auth.service_keys WHERE key_prefix = $1`,
+		`SELECT id, name, key_hash, COALESCE(key_type, 'service'), scopes, enabled, expires_at FROM auth.service_keys WHERE key_prefix = $1`,
 		keyPrefix,
-	).Scan(&keyID, &keyName, &keyHash, &scopes, &enabled, &expiresAt)
+	).Scan(&keyID, &keyName, &keyHash, &keyType, &scopes, &enabled, &expiresAt)
 	if err != nil {
 		return false
 	}
@@ -333,6 +340,7 @@ func migrationsValidateServiceKeyWithScope(c fiber.Ctx, db *pgxpool.Pool, servic
 	c.Locals("service_key_id", keyID)
 	c.Locals("service_key_name", keyName)
 	c.Locals("service_key_scopes", scopes)
+	c.Locals("service_key_type", keyType)
 	c.Locals("auth_type", "service_key")
 
 	return true

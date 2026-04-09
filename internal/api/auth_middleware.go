@@ -157,7 +157,29 @@ func OptionalAuthMiddleware(authService *auth.Service) fiber.Handler {
 // RequireRole creates a middleware that requires a specific role
 // Must be used after AuthMiddleware
 func RequireRole(allowedRoles ...string) fiber.Handler {
+	tenantAdminAllowed := false
+	for _, r := range allowedRoles {
+		if r == "tenant_admin" {
+			tenantAdminAllowed = true
+			break
+		}
+	}
+
 	return func(c fiber.Ctx) error {
+		// Service key auth: bypass role check for global keys.
+		// Tenant-scoped keys (tenant_service) may only bypass if the route
+		// accepts tenant_admin — otherwise they must not access global admin routes.
+		if authType, _ := c.Locals("auth_type").(string); authType == "service_key" {
+			keyType, _ := c.Locals("service_key_type").(string)
+			if keyType != "tenant_service" {
+				return c.Next()
+			}
+			if tenantAdminAllowed {
+				return c.Next()
+			}
+			return SendInsufficientPermissions(c)
+		}
+
 		userRole := c.Locals("user_role")
 		if userRole == nil {
 			return SendUnauthorized(c, "Unauthorized", ErrCodeAuthRequired)
@@ -168,6 +190,13 @@ func RequireRole(allowedRoles ...string) fiber.Handler {
 		if !ok {
 			return SendUnauthorized(c, "Invalid role type", ErrCodeInvalidRole)
 		}
+
+		// service_role JWT bypasses role checks — full access by design.
+		// This handles CLI clients that authenticate via service_role JWT.
+		if role == "service_role" {
+			return c.Next()
+		}
+
 		for _, allowedRole := range allowedRoles {
 			if role == allowedRole {
 				return c.Next()

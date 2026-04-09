@@ -1116,6 +1116,11 @@ func GetTestConfig() *config.Config {
 		Tenants: config.TenantsConfig{
 			Enabled: true,
 		},
+		Migrations: config.MigrationsConfig{
+			Enabled:           true,
+			RequireServiceKey: true,
+			AllowedIPRanges:   []string{"0.0.0.0/0"}, // Allow all IPs in tests
+		},
 		EncryptionKey: "test-encryption-key-32-bytes!!!!", // Exactly 32 bytes for AES-256
 		Debug:         getTestDebugMode(),
 	}
@@ -2432,6 +2437,7 @@ func (tc *TestContext) EnsureSystemSettings() {
 		"app.rpc.enabled":         true,
 		"app.jobs.enabled":        true,
 		"app.auth.signup_enabled": true,
+		"app.migrations.enabled":  true,
 	}
 
 	for key, value := range settings {

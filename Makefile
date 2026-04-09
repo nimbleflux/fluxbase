@@ -272,12 +272,13 @@ test-setup-db: ## Apply bootstrap + declarative schemas to match CI pipeline set
 	@echo "${YELLOW}Applying database schema for tests (matching CI pipeline)...${NC}"
 	@echo "${BLUE}Database:${NC} $(DATABASE_ADMIN_USER)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)"
 	@# 1. Apply bootstrap SQL (creates schemas, extensions, roles, default privileges)
-	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 -f internal/database/bootstrap/bootstrap.sql
+	@# Substitute {{APP_USER}} with $(DATABASE_USER) (Go runtime does this via SubstituteAppUser)
+	@sed "s/{{APP_USER}}/$(DATABASE_USER)/g" internal/database/bootstrap/bootstrap.sql | PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1
 	@# 2. Apply each declarative schema in dependency order (all use CREATE IF NOT EXISTS = idempotent)
 	@# Note: Some schemas use CREATE POLICY without IF NOT EXISTS, so we don't use ON_ERROR_STOP for re-runs
 	@for schema in platform auth storage jobs functions realtime ai rpc system migrations app api branching logging mcp; do \
 		echo "Applying schema: $$schema"; \
-		PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -f internal/database/schema/schemas/$$schema.sql || true; \
+		sed "s/{{APP_USER}}/$(DATABASE_USER)/g" internal/database/schema/schemas/$$schema.sql | PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 || true; \
 	done
 	@# 3. Apply cross-schema foreign keys (idempotent DO blocks)
 	@echo "Applying cross-schema foreign keys..."

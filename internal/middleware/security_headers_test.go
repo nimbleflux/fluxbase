@@ -108,11 +108,11 @@ func TestSecurityHeaders(t *testing.T) {
 			return c.SendString("OK")
 		})
 
-		req := httptest.NewRequest("GET", "http://example.com/test", nil)
+		req := httptest.NewRequest("GET", "/test", nil)
 		resp, err := app.Test(req)
 		require.NoError(t, err)
 
-		// HSTS should not be present on HTTP
+		// HSTS should not be present on non-HTTPS (default test request is HTTP)
 		assert.Empty(t, resp.Header.Get("Strict-Transport-Security"))
 	})
 }

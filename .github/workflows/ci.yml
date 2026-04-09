@@ -304,7 +304,8 @@ jobs:
           PGPASSWORD: postgres
         run: |
           # Run bootstrap SQL (creates schemas, extensions, roles, default privileges)
-          psql -h localhost -U postgres -d fluxbase_test -f internal/database/bootstrap/bootstrap.sql
+          # Substitute {{APP_USER}} with fluxbase_app (Go runtime does this via SubstituteAppUser)
+          sed "s/{{APP_USER}}/fluxbase_app/g" internal/database/bootstrap/bootstrap.sql | psql -h localhost -U postgres -d fluxbase_test -v ON_ERROR_STOP=1
 
           # Grant role memberships for SET ROLE support
           psql -h localhost -U postgres -d fluxbase_test -c "GRANT anon, authenticated, service_role, tenant_service TO fluxbase_app, fluxbase_rls_test;"
@@ -324,7 +325,7 @@ jobs:
           SCHEMA_DIR="internal/database/schema/schemas"
           for schema in platform auth storage jobs functions realtime ai rpc system migrations app api branching logging mcp; do
             echo "Applying schema: $schema"
-            psql -h localhost -U postgres -d fluxbase_test -v ON_ERROR_STOP=1 -f "${SCHEMA_DIR}/${schema}.sql"
+            sed "s/{{APP_USER}}/fluxbase_app/g" "${SCHEMA_DIR}/${schema}.sql" | psql -h localhost -U postgres -d fluxbase_test -v ON_ERROR_STOP=1
           done
 
           # Apply cross-schema foreign keys (idempotent DO blocks)

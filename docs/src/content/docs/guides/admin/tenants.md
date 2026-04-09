@@ -29,7 +29,7 @@ Configure OAuth providers specific to this tenant:
 - Set client ID and secret per provider
 - Override instance-level OAuth settings
 
-See: [OAuth Providers Guide](../oauth-providers)
+See: [OAuth Providers Guide](../../oauth-providers)
 
 ### SAML
 
@@ -39,7 +39,7 @@ Configure SAML SSO for enterprise authentication:
 - Configure attribute mappings
 - Set up sign-on URLs
 
-See: [SAML SSO Guide](../saml-sso)
+See: [SAML SSO Guide](../../saml-sso)
 
 ### Settings
 
@@ -53,5 +53,5 @@ Settings not marked as overridable are locked to instance values.
 
 ## Related
 
-- [Multi-Tenancy Guide](../multi-tenancy) - API usage and configuration
-- [Instance Settings](./index#instance-settings) - Configure what tenants can override
+- [Multi-Tenancy Guide](../../multi-tenancy) - API usage and configuration
+- [Instance Settings](./) - Configure what tenants can override
