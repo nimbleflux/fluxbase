@@ -54,38 +54,6 @@ func TestExtensionsList_APIError(t *testing.T) {
 	assert.Contains(t, err.Error(), "database error")
 }
 
-func TestExtensionsStatus_Success(t *testing.T) {
-	resetExtensionsFlags()
-	_, buf, cleanup := setupTestEnvWithHandler(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, http.MethodGet, r.Method)
-		assert.Contains(t, r.URL.Path, "/status")
-
-		respondJSON(w, http.StatusOK, map[string]interface{}{
-			"name": "pgcrypto", "installed": true, "version": "1.3",
-		})
-	})
-	defer cleanup()
-
-	err := runExtensionsStatus(nil, []string{"pgcrypto"})
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
-	assert.Equal(t, "pgcrypto", result["name"])
-}
-
-func TestExtensionsStatus_APIError(t *testing.T) {
-	resetExtensionsFlags()
-	_, _, cleanup := setupTestEnvWithHandler(t, func(w http.ResponseWriter, r *http.Request) {
-		respondError(w, http.StatusNotFound, "extension not found")
-	})
-	defer cleanup()
-
-	err := runExtensionsStatus(nil, []string{"nonexistent"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "extension not found")
-}
-
 func TestExtensionsEnable_Success(t *testing.T) {
 	resetExtensionsFlags()
 	_, _, cleanup := setupTestEnvWithHandler(t, func(w http.ResponseWriter, r *http.Request) {

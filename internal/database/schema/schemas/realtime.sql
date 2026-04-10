@@ -42,7 +42,7 @@ ALTER TABLE schema_registry FORCE ROW LEVEL SECURITY;
 -- Name: Admins can manage realtime configuration; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY "Admins can manage realtime configuration" ON schema_registry TO authenticated USING ((auth.current_user_role() = 'service_role') OR (auth.current_user_role() = 'dashboard_admin') OR auth.is_admin()) WITH CHECK ((auth.current_user_role() = 'service_role') OR (auth.current_user_role() = 'dashboard_admin') OR auth.is_admin());
+CREATE POLICY "Admins can manage realtime configuration" ON schema_registry TO authenticated USING ((auth.current_user_role() = 'service_role') OR (auth.current_user_role() = 'instance_admin') OR auth.is_admin()) WITH CHECK ((auth.current_user_role() = 'service_role') OR (auth.current_user_role() = 'instance_admin') OR auth.is_admin());
 
 --
 -- Name: Authenticated users can view realtime configuration; Type: POLICY; Schema: -; Owner: -

@@ -388,62 +388,6 @@ export function useStorageSignedUrlWithOptions(
 }
 
 /**
- * Hook to move a file
- */
-export function useStorageMove(bucket: string) {
-  const client = useFluxbaseClient();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (params: { fromPath: string; toPath: string }) => {
-      const { fromPath, toPath } = params;
-      const { data, error } = await client.storage
-        .from(bucket)
-        .move(fromPath, toPath);
-
-      if (error) {
-        throw error;
-      }
-
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["fluxbase", "storage", bucket, "list"],
-      });
-    },
-  });
-}
-
-/**
- * Hook to copy a file
- */
-export function useStorageCopy(bucket: string) {
-  const client = useFluxbaseClient();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (params: { fromPath: string; toPath: string }) => {
-      const { fromPath, toPath } = params;
-      const { data, error } = await client.storage
-        .from(bucket)
-        .copy(fromPath, toPath);
-
-      if (error) {
-        throw error;
-      }
-
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["fluxbase", "storage", bucket, "list"],
-      });
-    },
-  });
-}
-
-/**
  * Hook to manage buckets
  */
 export function useStorageBuckets() {

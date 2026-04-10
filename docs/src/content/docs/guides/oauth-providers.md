@@ -187,7 +187,7 @@ FLUXBASE_AUTH_OAUTH_PROVIDERS_2_CLIENT_SECRET=your-keycloak-secret
 | `/api/v1/auth/oauth/:provider/callback`  | GET    | OAuth callback handler                      |
 | `/api/v1/admin/oauth/providers`          | GET    | List all providers (admin)                  |
 | `/api/v1/admin/oauth/providers`          | POST   | Create new provider (admin)                 |
-| `/api/v1/admin/oauth/providers/:id`      | PATCH  | Update provider (admin)                     |
+| `/api/v1/admin/oauth/providers/:id`      | PUT    | Update provider (admin)                     |
 | `/api/v1/admin/oauth/providers/:id`      | DELETE | Delete provider (admin)                     |
 
 ## Setup Guide
@@ -530,7 +530,7 @@ Content-Type: application/json
 ### Update Provider (Admin)
 
 ```bash
-PATCH /api/v1/admin/oauth/providers/:id
+PUT /api/v1/admin/oauth/providers/:id
 Authorization: Bearer <admin-token>
 Content-Type: application/json
 
@@ -813,7 +813,7 @@ auth:
 Then via Admin API, enable dashboard login:
 
 ```bash
-PATCH /api/v1/admin/oauth/providers/:id
+PUT /api/v1/admin/oauth/providers/:id
 {
   "allow_dashboard_login": true
 }

@@ -30,8 +30,6 @@ var (
 	jobPayloadFile string
 	jobPriority    int
 	jobSchedule    string
-	jobTail        int
-	jobFollow      bool
 	jobSyncDir     string
 	jobDryRun      bool
 	jobKeep        bool
@@ -99,18 +97,6 @@ Examples:
 	RunE:    runJobsRetry,
 }
 
-var jobsLogsCmd = &cobra.Command{
-	Use:   "logs [id]",
-	Short: "View job execution logs",
-	Long: `View logs for a job execution.
-
-Examples:
-  fluxbase jobs logs abc123`,
-	Args:    cobra.ExactArgs(1),
-	PreRunE: requireAuth,
-	RunE:    runJobsLogs,
-}
-
 var jobsStatsCmd = &cobra.Command{
 	Use:   "stats",
 	Short: "Show job queue statistics",
@@ -144,10 +130,6 @@ func init() {
 	jobsSubmitCmd.Flags().IntVar(&jobPriority, "priority", 0, "Job priority (higher = more priority)")
 	jobsSubmitCmd.Flags().StringVar(&jobSchedule, "schedule", "", "Schedule job for later (RFC3339 format)")
 
-	// Logs flags
-	jobsLogsCmd.Flags().IntVar(&jobTail, "tail", 50, "Number of log lines to show")
-	jobsLogsCmd.Flags().BoolVar(&jobFollow, "follow", false, "Follow log output")
-
 	// Sync flags
 	jobsSyncCmd.Flags().StringVar(&jobSyncDir, "dir", "./jobs", "Directory containing job functions")
 	jobsSyncCmd.Flags().StringVar(&jobNamespace, "namespace", "default", "Target namespace")
@@ -159,7 +141,6 @@ func init() {
 	jobsCmd.AddCommand(jobsStatusCmd)
 	jobsCmd.AddCommand(jobsCancelCmd)
 	jobsCmd.AddCommand(jobsRetryCmd)
-	jobsCmd.AddCommand(jobsLogsCmd)
 	jobsCmd.AddCommand(jobsStatsCmd)
 	jobsCmd.AddCommand(jobsSyncCmd)
 }
@@ -304,35 +285,6 @@ func runJobsRetry(cmd *cobra.Command, args []string) error {
 
 	newID := getStringValue(result, "id")
 	fmt.Printf("Job retry submitted. New ID: %s\n", newID)
-	return nil
-}
-
-func runJobsLogs(cmd *cobra.Command, args []string) error {
-	id := args[0]
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	var logs []map[string]interface{}
-	if err := apiClient.DoGet(ctx, "/api/v1/admin/jobs/queue/"+url.PathEscape(id)+"/logs", nil, &logs); err != nil {
-		return err
-	}
-
-	formatter := GetFormatter()
-
-	if formatter.Format == output.FormatTable {
-		for _, log := range logs {
-			timestamp := getStringValue(log, "timestamp")
-			level := getStringValue(log, "level")
-			message := getStringValue(log, "message")
-			fmt.Printf("[%s] %s: %s\n", timestamp, level, message)
-		}
-	} else {
-		if err := formatter.Print(logs); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 

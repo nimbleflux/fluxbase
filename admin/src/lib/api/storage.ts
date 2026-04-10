@@ -99,7 +99,7 @@ export const storageApi = {
     expiresIn: number,
   ): Promise<{ url: string; expires_in: number }> => {
     const response = await api.post<{ url: string; expires_in: number }>(
-      `/api/v1/storage/${bucket}/${encodeURIComponent(key)}/signed-url`,
+      `/api/v1/storage/${bucket}/sign/${encodeURIComponent(key)}`,
       { expires_in: expiresIn },
     );
     return response.data;

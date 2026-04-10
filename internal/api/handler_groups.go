@@ -37,6 +37,7 @@ type AuthHandlers struct {
 	OAuthProvider    *OAuthProviderHandler
 	OAuth            *OAuthHandler
 	SAMLProvider     *SAMLProviderHandler
+	SAML             *SAMLHandler
 	SAMLService      *auth.SAMLService
 	AdminSession     *AdminSessionHandler
 	UserManagement   *UserManagementHandler

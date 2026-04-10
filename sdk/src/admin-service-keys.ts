@@ -51,7 +51,7 @@ export class ServiceKeysManager {
    */
   async list(): Promise<{ data: ServiceKey[] | null; error: Error | null }> {
     try {
-      const data = await this.fetch.get<ServiceKey[]>("/service-keys");
+      const data = await this.fetch.get<ServiceKey[]>("/api/v1/admin/service-keys");
       return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
@@ -73,7 +73,7 @@ export class ServiceKeysManager {
     id: string,
   ): Promise<{ data: ServiceKey | null; error: Error | null }> {
     try {
-      const data = await this.fetch.get<ServiceKey>(`/service-keys/${id}`);
+      const data = await this.fetch.get<ServiceKey>(`/api/v1/admin/service-keys/${id}`);
       return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
@@ -108,7 +108,7 @@ export class ServiceKeysManager {
   ): Promise<{ data: ServiceKeyWithKey | null; error: Error | null }> {
     try {
       const data = await this.fetch.post<ServiceKeyWithKey>(
-        "/service-keys",
+        "/api/v1/admin/service-keys",
         request,
       );
       return { data, error: null };
@@ -138,7 +138,7 @@ export class ServiceKeysManager {
   ): Promise<{ data: ServiceKey | null; error: Error | null }> {
     try {
       const data = await this.fetch.put<ServiceKey>(
-        `/service-keys/${id}`,
+        `/api/v1/admin/service-keys/${id}`,
         request,
       );
       return { data, error: null };
@@ -160,7 +160,7 @@ export class ServiceKeysManager {
    */
   async delete(id: string): Promise<{ error: Error | null }> {
     try {
-      await this.fetch.delete(`/service-keys/${id}`);
+      await this.fetch.delete(`/api/v1/admin/service-keys/${id}`);
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -180,7 +180,7 @@ export class ServiceKeysManager {
    */
   async disable(id: string): Promise<{ error: Error | null }> {
     try {
-      await this.fetch.post(`/service-keys/${id}/disable`, {});
+      await this.fetch.post(`/api/v1/admin/service-keys/${id}/disable`, {});
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -200,7 +200,7 @@ export class ServiceKeysManager {
    */
   async enable(id: string): Promise<{ error: Error | null }> {
     try {
-      await this.fetch.post(`/service-keys/${id}/enable`, {});
+      await this.fetch.post(`/api/v1/admin/service-keys/${id}/enable`, {});
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -231,7 +231,7 @@ export class ServiceKeysManager {
       const body = request?.reason
         ? new URLSearchParams({ reason: request.reason })
         : {};
-      await this.fetch.post(`/service-keys/${id}/revoke`, body);
+      await this.fetch.post(`/api/v1/admin/service-keys/${id}/revoke`, body);
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -273,7 +273,7 @@ export class ServiceKeysManager {
       const data = await this.fetch.post<{
         deprecated_at: string;
         grace_period_ends_at: string;
-      }>(`/service-keys/${id}/deprecate`, body);
+      }>(`/api/v1/admin/service-keys/${id}/deprecate`, body);
       return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
@@ -304,7 +304,7 @@ export class ServiceKeysManager {
   ): Promise<{ data: ServiceKeyWithKey | null; error: Error | null }> {
     try {
       const data = await this.fetch.post<ServiceKeyWithKey>(
-        `/service-keys/${id}/rotate`,
+        `/api/v1/admin/service-keys/${id}/rotate`,
         {},
       );
       return { data, error: null };
@@ -341,7 +341,7 @@ export class ServiceKeysManager {
         revoked_at: string;
         revoked_by: string;
         revocation_reason: string;
-      }>(`/service-keys/${id}/revocations`);
+      }>(`/api/v1/admin/service-keys/${id}/revocations`);
       return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };

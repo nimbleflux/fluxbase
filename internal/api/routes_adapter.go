@@ -134,6 +134,7 @@ func (s *Server) buildSettingsRouteDeps() *routes.SettingsDeps {
 		OptionalAuth: middleware.OptionalAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security),
 		GetSetting:   s.Settings.Handler.GetSetting,
 		GetSettings:  s.Settings.Handler.GetSettings,
+		BatchGet:     s.Settings.Handler.GetSettings,
 	}
 }
 
@@ -229,6 +230,12 @@ func (s *Server) buildAuthRouteDeps() *routes.AuthDeps {
 		OAuthAuthorize:            s.Auth.OAuth.Authorize,
 		OAuthCallback:             s.Auth.OAuth.Callback,
 		GetSPMetadata:             s.Auth.SAMLProvider.GetSPMetadata,
+		StartServiceImpersonation: s.Auth.Handler.StartServiceImpersonation,
+		GetProviderToken:          s.Auth.OAuth.GetProviderToken,
+		OAuthLogout:               s.Auth.OAuth.Logout,
+		ListSAMLProviders:         s.Auth.SAML.ListSAMLProviders,
+		InitiateSAMLLogin:         s.Auth.SAML.InitiateSAMLLogin,
+		HandleSAMLAssertion:       s.Auth.SAML.HandleSAMLAssertion,
 	}
 }
 
@@ -650,7 +657,7 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			CreateOAuthProvider: s.Auth.OAuthProvider.CreateOAuthProvider,
 			UpdateOAuthProvider: s.Auth.OAuthProvider.UpdateOAuthProvider,
 			DeleteOAuthProvider: s.Auth.OAuthProvider.DeleteOAuthProvider,
-			ListSAMLProviders:   s.Auth.SAMLProvider.ListSAMLProviders,
+			ListSAMLProviders:   s.Auth.SAML.ListSAMLProviders,
 			GetSAMLProvider:     s.Auth.SAMLProvider.GetSAMLProvider,
 			CreateSAMLProvider:  s.Auth.SAMLProvider.CreateSAMLProvider,
 			UpdateSAMLProvider:  s.Auth.SAMLProvider.UpdateSAMLProvider,

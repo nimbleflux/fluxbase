@@ -304,6 +304,9 @@ func (h *StorageHandler) DownloadFile(c fiber.Ctx) error {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// Resolve tenant context from the object itself for public/unauthenticated downloads
+	h.resolveTenantForObject(ctx, tx, c, bucket, key)
+
 	// Set RLS context
 	if err := h.setRLSContext(ctx, tx, c); err != nil {
 		log.Error().Err(err).Msg("Failed to set RLS context")
@@ -665,6 +668,9 @@ func (h *StorageHandler) GetFileInfo(c fiber.Ctx) error {
 		})
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Resolve tenant context from the object itself for public/unauthenticated access
+	h.resolveTenantForObject(ctx, tx, c, bucket, key)
 
 	if err := h.setRLSContext(ctx, tx, c); err != nil {
 		log.Error().Err(err).Msg("Failed to set RLS context")

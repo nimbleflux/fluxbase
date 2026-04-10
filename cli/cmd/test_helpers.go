@@ -105,8 +105,6 @@ func resetJobFlags() {
 	jobPayloadFile = ""
 	jobPriority = 0
 	jobSchedule = ""
-	jobTail = 50
-	jobFollow = false
 	jobSyncDir = ""
 	jobDryRun = false
 	jobKeep = false
@@ -169,35 +167,6 @@ func resetExtensionsFlags() {
 	extSchema = ""
 }
 
-func resetKBFlags() {
-	kbDescription = ""
-	kbEmbeddingModel = ""
-	kbChunkSize = 0
-	kbDocTitle = ""
-	kbDocMetadata = ""
-	kbSearchLimit = 0
-	kbSearchThreshold = 0
-	kbNamespace = ""
-	kbDocTags = ""
-	kbDocLanguage = ""
-	kbDocContent = ""
-	kbDocFromFile = ""
-	kbDocNewTitle = ""
-	kbDocNewTags = ""
-	kbDocNewMetadata = ""
-	kbDeleteFilterTags = ""
-	kbDeleteFilterMetadata = ""
-	kbTableSchema = ""
-	kbTableName = ""
-	kbTableColumns = ""
-	kbTableIncludeFKs = false
-	kbTableIncludeIdx = false
-	kbTableSampleRows = 0
-	kbEntityType = ""
-	kbEntitySearch = ""
-	kbStatusOutput = ""
-}
-
 func resetChatbotFlags() {
 	cbSystemPrompt = ""
 	cbModel = ""
@@ -243,10 +212,6 @@ func resetLogsFlags() {
 	logsTail = 0
 	logsFollow = false
 	logsSortAsc = false
-}
-
-func resetAdminFlags() {
-	adminResetEmail = ""
 }
 
 func resetAdminUsersFlags() {

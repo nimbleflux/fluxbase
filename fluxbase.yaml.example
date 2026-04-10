@@ -61,7 +61,7 @@ auth:
   magic_link_enabled: true              # FLUXBASE_AUTH_MAGIC_LINK_ENABLED - Enable magic link authentication
   totp_issuer: "Fluxbase"               # FLUXBASE_AUTH_TOTP_ISSUER - TOTP issuer name for 2FA (shown in authenticator apps)
   allow_user_client_keys: true          # FLUXBASE_AUTH_ALLOW_USER_CLIENT_KEYS - Allow users to create their own client keys
-                                        # When false, only admins (service_role or dashboard_admin) can create/manage client keys
+                                        # When false, only admins (service_role or instance_admin) can create/manage client keys
                                         # and existing user-created keys are blocked from authenticating
 
   # OAuth/OIDC Configuration (Social Login & Enterprise SSO)

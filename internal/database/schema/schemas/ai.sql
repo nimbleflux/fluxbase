@@ -164,7 +164,7 @@ ALTER TABLE knowledge_bases ENABLE ROW LEVEL SECURITY;
 -- Name: ai_kb_admin_all; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY ai_kb_admin_all ON knowledge_bases TO authenticated USING (auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.current_user_role() = 'dashboard_admin');
+CREATE POLICY ai_kb_admin_all ON knowledge_bases TO authenticated USING (auth.current_user_role() = 'instance_admin') WITH CHECK (auth.current_user_role() = 'instance_admin');
 
 --
 -- Name: ai_kb_manage_own; Type: POLICY; Schema: -; Owner: -
@@ -337,10 +337,10 @@ CREATE INDEX IF NOT EXISTS idx_ai_document_permissions_user ON document_permissi
 ALTER TABLE document_permissions ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: ai_doc_perms_dashboard_admin; Type: POLICY; Schema: -; Owner: -
+-- Name: ai_doc_perms_instance_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY ai_doc_perms_dashboard_admin ON document_permissions TO authenticated USING (auth.role() = 'dashboard_admin');
+CREATE POLICY ai_doc_perms_instance_admin ON document_permissions TO authenticated USING (auth.role() = 'instance_admin');
 
 --
 -- Name: ai_doc_perms_owner_manage; Type: POLICY; Schema: -; Owner: -
@@ -361,10 +361,10 @@ CREATE POLICY ai_doc_perms_user_read ON document_permissions FOR SELECT TO authe
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: ai_documents_dashboard_admin; Type: POLICY; Schema: -; Owner: -
+-- Name: ai_documents_instance_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY ai_documents_dashboard_admin ON documents TO authenticated USING (auth.role() = 'dashboard_admin');
+CREATE POLICY ai_documents_instance_admin ON documents TO authenticated USING (auth.role() = 'instance_admin');
 
 --
 -- Name: ai_documents_delete_own; Type: POLICY; Schema: -; Owner: -
@@ -501,10 +501,10 @@ CREATE INDEX IF NOT EXISTS idx_ai_chunks_metadata ON chunks USING gin (metadata)
 ALTER TABLE chunks ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: ai_chunks_dashboard_admin; Type: POLICY; Schema: -; Owner: -
+-- Name: ai_chunks_instance_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY ai_chunks_dashboard_admin ON chunks TO authenticated USING (auth.role() = 'dashboard_admin');
+CREATE POLICY ai_chunks_instance_admin ON chunks TO authenticated USING (auth.role() = 'instance_admin');
 
 --
 -- Name: ai_chunks_read_own_docs; Type: POLICY; Schema: -; Owner: -
@@ -1216,10 +1216,10 @@ CREATE INDEX IF NOT EXISTS idx_ai_retrieval_log_kb ON retrieval_log (knowledge_b
 ALTER TABLE retrieval_log ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: ai_retrieval_log_dashboard_admin; Type: POLICY; Schema: -; Owner: -
+-- Name: ai_retrieval_log_instance_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY ai_retrieval_log_dashboard_admin ON retrieval_log FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
+CREATE POLICY ai_retrieval_log_instance_admin ON retrieval_log FOR SELECT TO authenticated USING (auth.role() = 'instance_admin');
 
 --
 -- Name: table_export_sync_configs; Type: TABLE; Schema: -; Owner: -

@@ -107,10 +107,10 @@ CREATE INDEX IF NOT EXISTS idx_rpc_procedures_source ON procedures (source);
 ALTER TABLE procedures ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: rpc_procedures_dashboard_admin_read; Type: POLICY; Schema: -; Owner: -
+-- Name: rpc_procedures_instance_admin_read; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY rpc_procedures_dashboard_admin_read ON procedures FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
+CREATE POLICY rpc_procedures_instance_admin_read ON procedures FOR SELECT TO authenticated USING (auth.role() = 'instance_admin');
 
 --
 -- Name: rpc_procedures_read_anon; Type: POLICY; Schema: -; Owner: -
@@ -207,10 +207,10 @@ CREATE INDEX IF NOT EXISTS idx_rpc_executions_user ON executions (user_id);
 ALTER TABLE executions ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: rpc_executions_dashboard_admin_read; Type: POLICY; Schema: -; Owner: -
+-- Name: rpc_executions_instance_admin_read; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY rpc_executions_dashboard_admin_read ON executions FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
+CREATE POLICY rpc_executions_instance_admin_read ON executions FOR SELECT TO authenticated USING (auth.role() = 'instance_admin');
 
 --
 -- Name: rpc_executions_read_own; Type: POLICY; Schema: -; Owner: -

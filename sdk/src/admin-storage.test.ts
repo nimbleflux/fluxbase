@@ -5,7 +5,6 @@ import type {
   AdminListBucketsResponse,
   AdminListObjectsResponse,
   AdminStorageObject,
-  SignedUrlResponse,
 } from "./types";
 
 // Mock FluxbaseFetch
@@ -339,61 +338,6 @@ describe("FluxbaseAdminStorage", () => {
 
         const { error } = await storage.createFolder("my-bucket", "folder/");
 
-        expect(error).toBeDefined();
-      });
-    });
-
-    describe("generateSignedUrl()", () => {
-      it("should generate a signed URL", async () => {
-        const response: SignedUrlResponse = {
-          url: "https://storage.example.com/my-bucket/file.pdf?token=abc123",
-          expires_in: 3600,
-        };
-
-        vi.mocked(mockFetch.post).mockResolvedValue(response);
-
-        const { data, error } = await storage.generateSignedUrl(
-          "my-bucket",
-          "file.pdf",
-          3600
-        );
-
-        expect(mockFetch.post).toHaveBeenCalledWith(
-          "/api/v1/storage/my-bucket/file.pdf/signed-url",
-          { expires_in: 3600 }
-        );
-        expect(error).toBeNull();
-        expect(data!.url).toContain("file.pdf");
-        expect(data!.expires_in).toBe(3600);
-      });
-
-      it("should handle path with segments", async () => {
-        const response: SignedUrlResponse = {
-          url: "https://storage.example.com/signed",
-          expires_in: 7200,
-        };
-        vi.mocked(mockFetch.post).mockResolvedValue(response);
-
-        await storage.generateSignedUrl("my-bucket", "path/to/file.pdf", 7200);
-
-        expect(mockFetch.post).toHaveBeenCalledWith(
-          "/api/v1/storage/my-bucket/path/to/file.pdf/signed-url",
-          { expires_in: 7200 }
-        );
-      });
-
-      it("should handle error", async () => {
-        vi.mocked(mockFetch.post).mockRejectedValue(
-          new Error("Failed to generate URL")
-        );
-
-        const { data, error } = await storage.generateSignedUrl(
-          "my-bucket",
-          "file.pdf",
-          3600
-        );
-
-        expect(data).toBeNull();
         expect(error).toBeDefined();
       });
     });

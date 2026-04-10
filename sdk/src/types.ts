@@ -3536,41 +3536,9 @@ export interface DeleteDocumentsByFilterResponse {
   deleted_count: number;
 }
 
-/**
- * Knowledge base capabilities and limits
- */
-export interface KnowledgeBaseCapabilities {
-  ocr_enabled: boolean;
-  ocr_available: boolean;
-  ocr_languages: string[];
-  supported_file_types: string[];
-}
-
 // ============================================================================
 // Table Export Types
 // ============================================================================
-
-/**
- * Options for exporting a table to a knowledge base
- */
-export interface ExportTableOptions {
-  schema: string;
-  table: string;
-  columns?: string[];
-  include_sample_rows?: boolean;
-  sample_row_count?: number;
-  include_foreign_keys?: boolean;
-  include_indexes?: boolean;
-}
-
-/**
- * Result of exporting a table to a knowledge base
- */
-export interface ExportTableResult {
-  document_id: string;
-  entity_id: string;
-  relationship_ids?: string[];
-}
 
 /**
  * Column information for a table
@@ -3626,49 +3594,6 @@ export interface TableDetails {
   foreign_keys: TableForeignKey[];
   indexes: TableIndex[];
   rls_enabled: boolean;
-}
-
-// ============================================================================
-// Table Export Preset Types
-// ============================================================================
-
-/**
- * Saved export configuration (preset) for a table
- */
-export interface TableExportSyncConfig {
-  id: string;
-  knowledge_base_id: string;
-  schema_name: string;
-  table_name: string;
-  columns?: string[];
-  include_foreign_keys: boolean;
-  include_indexes: boolean;
-  last_sync_at?: string;
-  last_sync_status?: string;
-  last_sync_error?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-/**
- * Request to create a table export preset
- */
-export interface CreateTableExportSyncConfig {
-  schema_name: string;
-  table_name: string;
-  columns?: string[];
-  include_foreign_keys?: boolean;
-  include_indexes?: boolean;
-  export_now?: boolean;
-}
-
-/**
- * Request to update a table export preset
- */
-export interface UpdateTableExportSyncConfig {
-  columns?: string[];
-  include_foreign_keys?: boolean;
-  include_indexes?: boolean;
 }
 
 // ============================================================================
@@ -3745,24 +3670,6 @@ export interface AdminListObjectsResponse {
   objects: AdminStorageObject[] | null;
   prefixes: string[];
   truncated: boolean;
-}
-
-/**
- * Response from generating a signed URL
- */
-export interface SignedUrlResponse {
-  url: string;
-  expires_in: number;
-}
-
-/**
- * Request to send an email
- */
-export interface SendEmailRequest {
-  to: string | string[];
-  subject: string;
-  html?: string;
-  text?: string;
 }
 
 // ============================================================================

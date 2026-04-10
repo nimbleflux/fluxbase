@@ -164,18 +164,11 @@ func (s *Service) RunBootstrap(ctx context.Context) error {
 	return nil
 }
 
-// EnsureBootstrap checks if bootstrap is needed and runs it if necessary
+// EnsureBootstrap runs the bootstrap SQL unconditionally.
+// bootstrap.sql is fully idempotent (uses IF NOT EXISTS, DO $$ blocks with IF FOUND),
+// so it is safe to run on every startup. This ensures data migrations (e.g., legacy
+// role conversions) are applied before the declarative schema validates constraints.
 func (s *Service) EnsureBootstrap(ctx context.Context) error {
-	needs, err := s.NeedsBootstrap(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to check bootstrap status: %w", err)
-	}
-
-	if !needs {
-		log.Debug().Msg("Database already bootstrapped")
-		return nil
-	}
-
 	return s.RunBootstrap(ctx)
 }
 

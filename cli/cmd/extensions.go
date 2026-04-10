@@ -31,18 +31,6 @@ Examples:
 	RunE:    runExtensionsList,
 }
 
-var extensionsStatusCmd = &cobra.Command{
-	Use:   "status [name]",
-	Short: "Get extension status",
-	Long: `Get the status of a specific extension.
-
-Examples:
-  fluxbase extensions status pgvector`,
-	Args:    cobra.ExactArgs(1),
-	PreRunE: requireAuth,
-	RunE:    runExtensionsStatus,
-}
-
 var extensionsEnableCmd = &cobra.Command{
 	Use:   "enable [name]",
 	Short: "Enable an extension",
@@ -73,7 +61,6 @@ func init() {
 	extensionsEnableCmd.Flags().StringVar(&extSchema, "schema", "", "Schema to install extension in")
 
 	extensionsCmd.AddCommand(extensionsListCmd)
-	extensionsCmd.AddCommand(extensionsStatusCmd)
 	extensionsCmd.AddCommand(extensionsEnableCmd)
 	extensionsCmd.AddCommand(extensionsDisableCmd)
 }
@@ -120,21 +107,6 @@ func runExtensionsList(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func runExtensionsStatus(cmd *cobra.Command, args []string) error {
-	name := args[0]
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	var status map[string]interface{}
-	if err := apiClient.DoGet(ctx, "/api/v1/admin/extensions/"+url.PathEscape(name)+"/status", nil, &status); err != nil {
-		return err
-	}
-
-	formatter := GetFormatter()
-	return formatter.Print(status)
 }
 
 func runExtensionsEnable(cmd *cobra.Command, args []string) error {

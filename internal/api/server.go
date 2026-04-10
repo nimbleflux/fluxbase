@@ -201,9 +201,14 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	// Get base service for backward compatibility
 	storageService := storageManager.GetBaseService()
 
-	// Ensure default buckets exist
+	// Ensure default buckets exist (physical directories/S3 buckets)
 	if err := storageManager.EnsureDefaultBuckets(context.Background()); err != nil {
 		log.Warn().Err(err).Msg("Failed to ensure default buckets")
+	}
+
+	// Ensure default bucket records exist in storage.buckets for the default tenant
+	if err := EnsureDefaultBucketRecords(context.Background(), db.Pool(), storageService.DefaultBuckets()); err != nil {
+		log.Warn().Err(err).Msg("Failed to ensure default bucket DB records")
 	}
 
 	// Initialize central logging service
@@ -411,6 +416,11 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		}
 	}
 	samlProviderHandler = NewSAMLProviderHandler(db.Pool(), samlService)
+
+	var samlHandler *SAMLHandler
+	if samlService != nil {
+		samlHandler = NewSAMLHandler(samlService, authService)
+	}
 	// Initialize dashboard auth handler now that samlService and oauthHandler are available
 	dashboardAuthHandler := NewDashboardAuthHandler(dashboardAuthService, dashboardJWTManager, db, samlService, emailService, cfg.GetPublicBaseURL(), cfg.EncryptionKey, oauthHandler)
 	adminSessionHandler := NewAdminSessionHandler(auth.NewSessionRepository(db))
@@ -785,6 +795,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			OAuthProvider:    oauthProviderHandler,
 			OAuth:            oauthHandler,
 			SAMLProvider:     samlProviderHandler,
+			SAML:             samlHandler,
 			SAMLService:      samlService,
 			AdminSession:     adminSessionHandler,
 			UserManagement:   userMgmtHandler,

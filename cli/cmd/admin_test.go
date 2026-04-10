@@ -9,42 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- Admin Password Reset ---
-
-func TestAdminPasswordReset_Success(t *testing.T) {
-	resetAdminFlags()
-	adminResetEmail = "admin@example.com"
-
-	_, _, cleanup := setupTestEnvWithHandler(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, http.MethodPost, r.Method)
-		assert.Contains(t, r.URL.Path, "/api/v1/admin/password-reset/request")
-
-		var body map[string]interface{}
-		readRequestBody(t, r, &body)
-		assert.Equal(t, "admin@example.com", body["email"])
-
-		w.WriteHeader(http.StatusNoContent)
-	})
-	defer cleanup()
-
-	err := runAdminPasswordReset(nil, []string{})
-	require.NoError(t, err)
-}
-
-func TestAdminPasswordReset_APIError(t *testing.T) {
-	resetAdminFlags()
-	adminResetEmail = "admin@example.com"
-
-	_, _, cleanup := setupTestEnvWithHandler(t, func(w http.ResponseWriter, r *http.Request) {
-		respondError(w, http.StatusNotFound, "admin user not found")
-	})
-	defer cleanup()
-
-	err := runAdminPasswordReset(nil, []string{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "admin user not found")
-}
-
 // --- Admin Users List ---
 
 func TestAdminUsersList_Success(t *testing.T) {

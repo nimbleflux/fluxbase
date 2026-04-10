@@ -232,7 +232,7 @@ rate_limiting:
 
   # Per-endpoint limits
   endpoints:
-    - path: "/api/v1/auth/login"
+    - path: "/api/v1/auth/signin"
       per_minute: 5 # Stricter limit for sensitive endpoints
 ```
 

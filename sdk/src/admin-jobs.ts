@@ -6,8 +6,6 @@
 import type { FluxbaseFetch } from "./fetch";
 import type {
   JobFunction,
-  CreateJobFunctionRequest,
-  UpdateJobFunctionRequest,
   Job,
   JobStats,
   JobWorker,
@@ -44,26 +42,20 @@ export class FluxbaseAdminJobs {
   /**
    * Create a new job function
    *
-   * @param request - Job function configuration and code
-   * @returns Promise resolving to { data, error } tuple with created job function metadata
-   *
-   * @example
-   * ```typescript
-   * const { data, error } = await client.admin.jobs.create({
-   *   name: 'process-data',
-   *   code: 'export async function handler(req) { return { success: true } }',
-   *   enabled: true,
-   *   timeout_seconds: 300
-   * })
-   * ```
+   * @param params - Job function configuration
+   * @returns Promise resolving to { data, error } tuple with created job function
    */
-  async create(
-    request: CreateJobFunctionRequest,
-  ): Promise<{ data: JobFunction | null; error: Error | null }> {
+  async create(params: {
+    name: string;
+    code: string;
+    enabled?: boolean;
+    timeout_seconds?: number;
+    namespace?: string;
+  }): Promise<{ data: JobFunction | null; error: Error | null }> {
     try {
       const data = await this.fetch.post<JobFunction>(
         "/api/v1/admin/jobs/functions",
-        request,
+        params,
       );
       return { data, error: null };
     } catch (error) {
@@ -156,38 +148,6 @@ export class FluxbaseAdminJobs {
   }
 
   /**
-   * Update an existing job function
-   *
-   * @param namespace - Namespace
-   * @param name - Job function name
-   * @param updates - Fields to update
-   * @returns Promise resolving to { data, error } tuple with updated job function metadata
-   *
-   * @example
-   * ```typescript
-   * const { data, error } = await client.admin.jobs.update('default', 'process-data', {
-   *   enabled: false,
-   *   timeout_seconds: 600
-   * })
-   * ```
-   */
-  async update(
-    namespace: string,
-    name: string,
-    updates: UpdateJobFunctionRequest,
-  ): Promise<{ data: JobFunction | null; error: Error | null }> {
-    try {
-      const data = await this.fetch.put<JobFunction>(
-        `/api/v1/admin/jobs/functions/${namespace}/${name}`,
-        updates,
-      );
-      return { data, error: null };
-    } catch (error) {
-      return { data: null, error: error as Error };
-    }
-  }
-
-  /**
    * Delete a job function
    *
    * @param namespace - Namespace
@@ -208,6 +168,34 @@ export class FluxbaseAdminJobs {
         `/api/v1/admin/jobs/functions/${namespace}/${name}`,
       );
       return { data: null, error: null };
+    } catch (error) {
+      return { data: null, error: error as Error };
+    }
+  }
+
+  /**
+   * Update an existing job function
+   *
+   * @param namespace - Namespace
+   * @param name - Job function name
+   * @param updates - Fields to update
+   * @returns Promise resolving to { data, error } tuple with updated job function
+   */
+  async update(
+    namespace: string,
+    name: string,
+    updates: {
+      enabled?: boolean;
+      timeout_seconds?: number;
+      code?: string;
+    },
+  ): Promise<{ data: JobFunction | null; error: Error | null }> {
+    try {
+      const data = await this.fetch.put<JobFunction>(
+        `/api/v1/admin/jobs/functions/${namespace}/${name}`,
+        updates,
+      );
+      return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
     }

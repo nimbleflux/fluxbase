@@ -146,9 +146,6 @@ export class SystemSettingsManager {
  *     password_min_length: 12
  *   }
  * })
- *
- * // Reset to defaults
- * await settings.reset()
  * ```
  */
 export class AppSettingsManager {
@@ -204,26 +201,6 @@ export class AppSettingsManager {
     return await this.fetch.put<AppSettings>(
       "/api/v1/admin/app/settings",
       request,
-    );
-  }
-
-  /**
-   * Reset all application settings to defaults
-   *
-   * This will delete all custom settings and return to default values.
-   *
-   * @returns Promise resolving to AppSettings - Default settings
-   *
-   * @example
-   * ```typescript
-   * const defaults = await client.admin.settings.app.reset()
-   * console.log('Settings reset to defaults:', defaults)
-   * ```
-   */
-  async reset(): Promise<AppSettings> {
-    return await this.fetch.post<AppSettings>(
-      "/api/v1/admin/app/settings/reset",
-      {},
     );
   }
 
@@ -921,6 +898,15 @@ export class AppSettingsManager {
       `/api/v1/admin/settings/user/${encodeURIComponent(userId)}/secret/${encodeURIComponent(key)}/decrypt`,
     );
     return response.value;
+  }
+
+  /**
+   * Reset all application settings to their default values
+   *
+   * @returns Promise resolving to the default app settings
+   */
+  async reset(): Promise<AppSettings> {
+    return this.fetch.post<AppSettings>("/api/v1/admin/app/settings/reset", {});
   }
 }
 

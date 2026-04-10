@@ -8,7 +8,6 @@ import {
   Key,
   Link2,
   Settings,
-  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -17,7 +16,6 @@ import {
   type KnowledgeBase,
   type TableDetails,
   type TableColumn,
-  type TableExportSyncConfig,
 } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -86,7 +84,6 @@ function KnowledgeBaseTablesPage() {
   const currentTenantId = useTenantStore((state) => state.currentTenant?.id)
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(null)
   const [tables, setTables] = useState<TableSummary[]>([])
-  const [syncConfigs, setSyncConfigs] = useState<TableExportSyncConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [schemaFilter, setSchemaFilter] = useState<string>('all')
   const [exportDialog, setExportDialog] = useState<ExportDialogState>({
@@ -102,14 +99,12 @@ function KnowledgeBaseTablesPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [kb, tableData, syncs] = await Promise.all([
+      const [kb, tableData] = await Promise.all([
         knowledgeBasesApi.get(id),
         knowledgeBasesApi.listTables(id, schemaFilter === 'all' ? undefined : schemaFilter),
-        knowledgeBasesApi.listTableExportSyncs(id),
       ])
       setKnowledgeBase(kb)
       setTables(tableData)
-      setSyncConfigs(syncs)
     } catch {
       toast.error('Failed to fetch data')
     } finally {
@@ -212,34 +207,8 @@ function KnowledgeBaseTablesPage() {
     }
   }
 
-  const handleTriggerSync = async (sync: TableExportSyncConfig) => {
-    try {
-      await knowledgeBasesApi.triggerTableExportSync(id, sync.id)
-      toast.success(`Sync triggered for ${sync.schema_name}.${sync.table_name}`)
-      // Refresh to show updated last_sync_at
-      const syncs = await knowledgeBasesApi.listTableExportSyncs(id)
-      setSyncConfigs(syncs)
-    } catch {
-      toast.error('Failed to trigger sync')
-    }
-  }
-
-  const handleDeleteSync = async (sync: TableExportSyncConfig) => {
-    try {
-      await knowledgeBasesApi.deleteTableExportSync(id, sync.id)
-      toast.success(`Sync configuration deleted`)
-      setSyncConfigs((prev) => prev.filter((s) => s.id !== sync.id))
-    } catch {
-      toast.error('Failed to delete sync configuration')
-    }
-  }
-
   // Get unique schemas for filter
   const schemas = ['all', ...Array.from(new Set(tables.map((t) => t.schema))).sort()]
-
-  // Helper to get sync config for a table
-  const getSyncForTable = (schema: string, table: string) =>
-    syncConfigs.find((s) => s.schema_name === schema && s.table_name === table)
 
   if (!knowledgeBase && !loading) {
     return (
@@ -318,9 +287,6 @@ function KnowledgeBaseTablesPage() {
                   </TableHeader>
                   <TableBody>
                     {tables.map((table) => {
-                      const sync = getSyncForTable(table.schema, table.name)
-                      // Use last_export from table data (if exported) or last_sync_at from sync config
-                      const lastExportTime = table.last_export || sync?.last_sync_at
                       return (
                         <TableRow key={`${table.schema}.${table.name}`}>
                           <TableCell className="font-medium">
@@ -336,43 +302,23 @@ function KnowledgeBaseTablesPage() {
                             <Badge variant="secondary">{table.foreign_keys}</Badge>
                           </TableCell>
                           <TableCell>
-                            {lastExportTime ? (
+                            {table.last_export ? (
                               <span className="text-sm">
-                                {new Date(lastExportTime).toLocaleString()}
+                                {new Date(table.last_export).toLocaleString()}
                               </span>
                             ) : (
                               <span className="text-muted-foreground text-sm">-</span>
                             )}
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openExportDialog(table)}
-                              >
-                                <Settings className="mr-2 h-4 w-4" />
-                                Configure
-                              </Button>
-                              {sync && (
-                                <>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleTriggerSync(sync)}
-                                  >
-                                    Sync
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDeleteSync(sync)}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openExportDialog(table)}
+                            >
+                              <Settings className="mr-2 h-4 w-4" />
+                              Configure
+                            </Button>
                           </TableCell>
                         </TableRow>
                       )

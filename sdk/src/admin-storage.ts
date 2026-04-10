@@ -3,7 +3,6 @@ import type {
   AdminListBucketsResponse,
   AdminListObjectsResponse,
   AdminStorageObject,
-  SignedUrlResponse,
   DataResponse,
   VoidResponse,
 } from "./types";
@@ -249,19 +248,18 @@ export class FluxbaseAdminStorage {
   }
 
   /**
-   * Generate a signed URL for temporary access
+   * Generate a signed URL for a private object
    *
    * @param bucket - Bucket name
    * @param key - Object key (path)
-   * @param expiresIn - Expiration time in seconds
+   * @param expiresIn - URL expiration time in seconds
    * @returns Signed URL and expiration info
    *
    * @example
    * ```typescript
    * const { data } = await admin.storage.generateSignedUrl('my-bucket', 'file.pdf', 3600);
    * if (data) {
-   *   console.log(`Download at: ${data.url}`);
-   *   console.log(`Expires in: ${data.expires_in} seconds`);
+   *   window.open(data.url);
    * }
    * ```
    */
@@ -269,15 +267,15 @@ export class FluxbaseAdminStorage {
     bucket: string,
     key: string,
     expiresIn: number
-  ): Promise<DataResponse<SignedUrlResponse>> {
+  ): Promise<DataResponse<{ url: string; expires_in: number }>> {
     return wrapAsync(async () => {
       const encodedKey = key
         .split("/")
         .map((s) => encodeURIComponent(s))
         .join("/");
 
-      return await this.fetch.post<SignedUrlResponse>(
-        `/api/v1/storage/${encodeURIComponent(bucket)}/${encodedKey}/signed-url`,
+      return await this.fetch.post<{ url: string; expires_in: number }>(
+        `/api/v1/storage/${encodeURIComponent(bucket)}/sign/${encodedKey}`,
         { expires_in: expiresIn }
       );
     });

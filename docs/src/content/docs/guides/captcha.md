@@ -796,7 +796,7 @@ curl -X POST http://localhost:8080/api/v1/auth/signup \
   }'
 
 # Sign in with CAPTCHA
-curl -X POST http://localhost:8080/api/v1/auth/login \
+curl -X POST http://localhost:8080/api/v1/auth/signin \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",

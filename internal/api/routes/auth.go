@@ -33,6 +33,7 @@ type AuthDeps struct {
 	UpdateUser                fiber.Handler
 	StartImpersonation        fiber.Handler
 	StartAnonImpersonation    fiber.Handler
+	StartServiceImpersonation fiber.Handler
 	StopImpersonation         fiber.Handler
 	GetActiveImpersonation    fiber.Handler
 	ListImpersonationSessions fiber.Handler
@@ -47,7 +48,12 @@ type AuthDeps struct {
 	ListOAuthProviders        fiber.Handler
 	OAuthAuthorize            fiber.Handler
 	OAuthCallback             fiber.Handler
+	GetProviderToken          fiber.Handler
+	OAuthLogout               fiber.Handler
 	GetSPMetadata             fiber.Handler
+	ListSAMLProviders         fiber.Handler
+	InitiateSAMLLogin         fiber.Handler
+	HandleSAMLAssertion       fiber.Handler
 }
 
 func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
@@ -80,6 +86,7 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 		{Method: "PATCH", Path: "/user", Handler: deps.UpdateUser, Summary: "Update user", Auth: AuthRequired},
 		{Method: "POST", Path: "/impersonate", Handler: deps.StartImpersonation, Summary: "Start impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "POST", Path: "/impersonate/anon", Handler: deps.StartAnonImpersonation, Summary: "Start anon impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/impersonate/service", Handler: deps.StartServiceImpersonation, Summary: "Start service impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
 		{Method: "DELETE", Path: "/impersonate", Handler: deps.StopImpersonation, Summary: "Stop impersonation", Auth: AuthRequired},
 		{Method: "GET", Path: "/impersonate", Handler: deps.GetActiveImpersonation, Summary: "Get active impersonation", Auth: AuthRequired},
 		{Method: "GET", Path: "/impersonate/sessions", Handler: deps.ListImpersonationSessions, Summary: "List impersonation sessions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
@@ -97,7 +104,12 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 		{Method: "GET", Path: "/oauth/providers", Handler: deps.ListOAuthProviders, Summary: "List OAuth providers", Auth: AuthNone, Public: true},
 		{Method: "GET", Path: "/oauth/:provider/authorize", Handler: deps.OAuthAuthorize, Summary: "OAuth authorize", Auth: AuthNone, Public: true},
 		{Method: "GET", Path: "/oauth/:provider/callback", Handler: deps.OAuthCallback, Summary: "OAuth callback", Auth: AuthNone, Public: true},
+		{Method: "GET", Path: "/oauth/:provider/token", Handler: deps.GetProviderToken, Summary: "Get OAuth provider token", Auth: AuthRequired},
+		{Method: "POST", Path: "/oauth/:provider/logout", Handler: deps.OAuthLogout, Summary: "OAuth logout", Auth: AuthRequired},
 		{Method: "GET", Path: "/saml/metadata/:provider", Handler: deps.GetSPMetadata, Summary: "Get SAML SP metadata", Auth: AuthNone, Public: true},
+		{Method: "GET", Path: "/saml/providers", Handler: deps.ListSAMLProviders, Summary: "List SAML providers", Auth: AuthNone, Public: true},
+		{Method: "GET", Path: "/saml/login/:provider", Handler: deps.InitiateSAMLLogin, Summary: "Initiate SAML login", Auth: AuthNone, Public: true},
+		{Method: "POST", Path: "/saml/acs", Handler: deps.HandleSAMLAssertion, Summary: "SAML ACS callback", Auth: AuthNone, Public: true},
 	}...)
 
 	return &RouteGroup{

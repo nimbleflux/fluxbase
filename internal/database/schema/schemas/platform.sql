@@ -607,11 +607,11 @@ CREATE TABLE IF NOT EXISTS users (
     locked_until timestamptz,
     CONSTRAINT users_pkey PRIMARY KEY (id),
     CONSTRAINT users_email_key UNIQUE (email),
-    CONSTRAINT platform_users_role_check CHECK (role IN ('instance_admin'::text, 'tenant_admin'::text, 'dashboard_admin'::text, 'dashboard_user'::text))
+    CONSTRAINT platform_users_role_check CHECK (role IN ('instance_admin'::text, 'tenant_admin'::text, 'dashboard_user'::text))
 );
 
 
-COMMENT ON COLUMN platform.users.role IS 'User role: instance_admin (global admin managing all tenants), tenant_admin (admin for specific tenant), dashboard_admin (legacy, maps to tenant_admin), dashboard_user (limited read-only access)';
+COMMENT ON COLUMN platform.users.role IS 'User role: instance_admin (global admin managing all tenants), tenant_admin (admin for specific tenant), dashboard_user (limited read-only access)';
 
 
 COMMENT ON COLUMN platform.users.user_metadata IS 'User-editable metadata for dashboard users.';

@@ -56,7 +56,7 @@ export class FluxbaseTenant {
    */
   async list(): Promise<FluxbaseResponse<Tenant[]>> {
     try {
-      const data = await this.fetch.get<Tenant[]>("/tenants");
+      const data = await this.fetch.get<Tenant[]>("/api/v1/admin/tenants");
       return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
@@ -76,7 +76,7 @@ export class FluxbaseTenant {
    */
   async listMine(): Promise<FluxbaseResponse<TenantWithRole[]>> {
     try {
-      const data = await this.fetch.get<TenantWithRole[]>("/tenants/mine");
+      const data = await this.fetch.get<TenantWithRole[]>("/api/v1/admin/tenants/mine");
       return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
@@ -96,7 +96,7 @@ export class FluxbaseTenant {
    */
   async get(id: string): Promise<FluxbaseResponse<Tenant>> {
     try {
-      const data = await this.fetch.get<Tenant>(`/tenants/${id}`);
+      const data = await this.fetch.get<Tenant>(`/api/v1/admin/tenants/${id}`);
       return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
@@ -124,7 +124,7 @@ export class FluxbaseTenant {
     options: CreateTenantOptions,
   ): Promise<FluxbaseResponse<Tenant>> {
     try {
-      const data = await this.fetch.post<Tenant>("/tenants", options);
+      const data = await this.fetch.post<Tenant>("/api/v1/admin/tenants", options);
       return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
@@ -150,7 +150,7 @@ export class FluxbaseTenant {
     options: UpdateTenantOptions,
   ): Promise<FluxbaseResponse<Tenant>> {
     try {
-      const data = await this.fetch.patch<Tenant>(`/tenants/${id}`, options);
+      const data = await this.fetch.patch<Tenant>(`/api/v1/admin/tenants/${id}`, options);
       return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
@@ -173,7 +173,7 @@ export class FluxbaseTenant {
    */
   async delete(id: string): Promise<FluxbaseResponse<void>> {
     try {
-      await this.fetch.delete(`/tenants/${id}`);
+      await this.fetch.delete(`/api/v1/admin/tenants/${id}`);
       return { data: undefined, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
@@ -195,7 +195,7 @@ export class FluxbaseTenant {
   async migrate(id: string): Promise<FluxbaseResponse<{ status: string }>> {
     try {
       const data = await this.fetch.post<{ status: string }>(
-        `/tenants/${id}/migrate`,
+        `/api/v1/admin/tenants/${id}/migrate`,
         {},
       );
       return { data, error: null };
@@ -221,7 +221,7 @@ export class FluxbaseTenant {
   ): Promise<FluxbaseResponse<TenantAdminAssignment[]>> {
     try {
       const data = await this.fetch.get<TenantAdminAssignment[]>(
-        `/tenants/${tenantId}/admins`,
+        `/api/v1/admin/tenants/${tenantId}/admins`,
       );
       return { data, error: null };
     } catch (error) {
@@ -249,7 +249,7 @@ export class FluxbaseTenant {
   ): Promise<FluxbaseResponse<TenantAdminAssignment>> {
     try {
       const data = await this.fetch.post<TenantAdminAssignment>(
-        `/tenants/${tenantId}/admins`,
+        `/api/v1/admin/tenants/${tenantId}/admins`,
         options,
       );
       return { data, error: null };
@@ -275,7 +275,7 @@ export class FluxbaseTenant {
     userId: string,
   ): Promise<FluxbaseResponse<void>> {
     try {
-      await this.fetch.delete(`/tenants/${tenantId}/admins/${userId}`);
+      await this.fetch.delete(`/api/v1/admin/tenants/${tenantId}/admins/${userId}`);
       return { data: undefined, error: null };
     } catch (error) {
       return { data: null, error: error as Error };

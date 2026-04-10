@@ -103,8 +103,6 @@ export {
   useStorageTransformUrl,
   useStorageSignedUrl,
   useStorageSignedUrlWithOptions,
-  useStorageMove,
-  useStorageCopy,
   useStorageBuckets,
   useCreateBucket,
   useDeleteBucket,
@@ -133,21 +131,8 @@ export {
 // Table export hooks
 export {
   useTableDetails,
-  useExportTable,
-  useTableExportSyncs,
-  useCreateTableExportSync,
-  useUpdateTableExportSync,
-  useDeleteTableExportSync,
-  useTriggerTableExportSync,
   type UseTableDetailsOptions,
   type UseTableDetailsReturn,
-  type UseExportTableReturn,
-  type UseTableExportSyncsOptions,
-  type UseTableExportSyncsReturn,
-  type UseCreateTableExportSyncReturn,
-  type UseUpdateTableExportSyncReturn,
-  type UseDeleteTableExportSyncReturn,
-  type UseTriggerTableExportSyncReturn,
 } from "./use-table-export";
 
 // Re-export types from SDK

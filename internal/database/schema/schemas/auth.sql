@@ -2544,7 +2544,7 @@ BEGIN
     -- Check if app_metadata is being modified
     IF OLD.app_metadata IS DISTINCT FROM NEW.app_metadata THEN
         -- Only allow admins and dashboard admins to modify app_metadata
-        IF user_role != 'admin' AND user_role != 'dashboard_admin' THEN
+        IF user_role != 'admin' AND user_role != 'instance_admin' THEN
             -- Also check if user has admin privileges via is_admin() function
             IF NOT auth.is_admin() THEN
                 RAISE EXCEPTION 'Only admins can modify app_metadata'
@@ -2573,13 +2573,13 @@ COMMENT ON FUNCTION validate_app_metadata_update() IS 'Validates that only admin
 -- Name: Dashboard admin can manage saml_providers; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY "Dashboard admin can manage saml_providers" ON saml_providers TO authenticated USING (current_user_role() = 'dashboard_admin') WITH CHECK (current_user_role() = 'dashboard_admin');
+CREATE POLICY "Dashboard admin can manage saml_providers" ON saml_providers TO authenticated USING (current_user_role() = 'instance_admin') WITH CHECK (current_user_role() = 'instance_admin');
 
 --
 -- Name: auth_client_keys_policy; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_client_keys_policy ON client_keys TO PUBLIC USING (is_admin() OR (current_user_role() = 'dashboard_admin') OR (current_user_id()::text = (user_id)::text));
+CREATE POLICY auth_client_keys_policy ON client_keys TO PUBLIC USING (is_admin() OR (current_user_role() = 'instance_admin') OR (current_user_id()::text = (user_id)::text));
 
 --
 -- Name: auth_service_keys_delete; Type: POLICY; Schema: -; Owner: -
@@ -2609,13 +2609,13 @@ CREATE POLICY auth_service_keys_update ON service_keys FOR UPDATE TO PUBLIC USIN
 -- Name: auth_sessions_delete_own; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_sessions_delete_own ON sessions FOR DELETE TO authenticated USING ((user_id = current_user_id()) OR (current_user_role() = 'dashboard_admin'));
+CREATE POLICY auth_sessions_delete_own ON sessions FOR DELETE TO authenticated USING ((user_id = current_user_id()) OR (current_user_role() = 'instance_admin'));
 
 --
 -- Name: auth_sessions_select_own; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_sessions_select_own ON sessions FOR SELECT TO authenticated USING ((user_id = current_user_id()) OR (current_user_role() = 'dashboard_admin'));
+CREATE POLICY auth_sessions_select_own ON sessions FOR SELECT TO authenticated USING ((user_id = current_user_id()) OR (current_user_role() = 'instance_admin'));
 
 --
 -- Name: auth_sessions_update_own; Type: POLICY; Schema: -; Owner: -
@@ -2633,7 +2633,7 @@ CREATE POLICY auth_users_delete ON users FOR DELETE TO PUBLIC USING ((CURRENT_US
 -- Name: auth_users_delete_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_users_delete_admin ON users FOR DELETE TO authenticated USING (is_admin() OR (current_user_role() = 'dashboard_admin'));
+CREATE POLICY auth_users_delete_admin ON users FOR DELETE TO authenticated USING (is_admin() OR (current_user_role() = 'instance_admin'));
 
 --
 -- Name: auth_users_insert; Type: POLICY; Schema: -; Owner: -
@@ -2651,7 +2651,7 @@ CREATE POLICY auth_users_select ON users FOR SELECT TO PUBLIC USING ((CURRENT_US
 -- Name: auth_users_select_own; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_users_select_own ON users FOR SELECT TO authenticated USING ((id = current_user_id()) OR is_admin() OR (current_user_role() = 'dashboard_admin'));
+CREATE POLICY auth_users_select_own ON users FOR SELECT TO authenticated USING ((id = current_user_id()) OR is_admin() OR (current_user_role() = 'instance_admin'));
 
 --
 -- Name: auth_users_update; Type: POLICY; Schema: -; Owner: -
@@ -2663,7 +2663,7 @@ CREATE POLICY auth_users_update ON users FOR UPDATE TO PUBLIC USING ((CURRENT_US
 -- Name: auth_users_update_own; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_users_update_own ON users FOR UPDATE TO authenticated USING (is_admin() OR (current_user_role() = 'dashboard_admin') OR (current_user_id()::text = (id)::text)) WITH CHECK (is_admin() OR (current_user_role() = 'dashboard_admin') OR (current_user_id()::text = (id)::text));
+CREATE POLICY auth_users_update_own ON users FOR UPDATE TO authenticated USING (is_admin() OR (current_user_role() = 'instance_admin') OR (current_user_id()::text = (id)::text)) WITH CHECK (is_admin() OR (current_user_role() = 'instance_admin') OR (current_user_id()::text = (id)::text));
 
 --
 -- Name: client_key_usage_service_write; Type: POLICY; Schema: -; Owner: -
@@ -2675,7 +2675,7 @@ CREATE POLICY client_key_usage_service_write ON client_key_usage FOR INSERT TO P
 -- Name: client_key_usage_user_read; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY client_key_usage_user_read ON client_key_usage FOR SELECT TO PUBLIC USING ((client_key_id IN ( SELECT client_keys.id FROM client_keys WHERE (client_keys.user_id = current_user_id()))) OR is_admin() OR (current_user_role() = 'dashboard_admin') OR (current_user_role() = 'service_role'));
+CREATE POLICY client_key_usage_user_read ON client_key_usage FOR SELECT TO PUBLIC USING ((client_key_id IN ( SELECT client_keys.id FROM client_keys WHERE (client_keys.user_id = current_user_id()))) OR is_admin() OR (current_user_role() = 'instance_admin') OR (current_user_role() = 'service_role'));
 
 --
 -- Name: email_verification_tokens_service_only; Type: POLICY; Schema: -; Owner: -
@@ -2684,10 +2684,10 @@ CREATE POLICY client_key_usage_user_read ON client_key_usage FOR SELECT TO PUBLI
 CREATE POLICY email_verification_tokens_service_only ON email_verification_tokens TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
 
 --
--- Name: impersonation_sessions_dashboard_admin_only; Type: POLICY; Schema: -; Owner: -
+-- Name: impersonation_sessions_instance_admin_only; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY impersonation_sessions_dashboard_admin_only ON impersonation_sessions TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'dashboard_admin'));
+CREATE POLICY impersonation_sessions_instance_admin_only ON impersonation_sessions TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'instance_admin'));
 
 --
 -- Name: magic_links_service_only; Type: POLICY; Schema: -; Owner: -
@@ -2699,7 +2699,7 @@ CREATE POLICY magic_links_service_only ON magic_links TO PUBLIC USING (current_u
 -- Name: mfa_factors_admin_all; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY mfa_factors_admin_all ON mfa_factors TO PUBLIC USING (is_admin() OR (current_user_role() = 'dashboard_admin') OR (current_user_role() = 'service_role'));
+CREATE POLICY mfa_factors_admin_all ON mfa_factors TO PUBLIC USING (is_admin() OR (current_user_role() = 'instance_admin') OR (current_user_role() = 'service_role'));
 
 --
 -- Name: mfa_factors_delete_own; Type: POLICY; Schema: -; Owner: -
@@ -2765,7 +2765,7 @@ CREATE POLICY password_reset_tokens_service_only ON password_reset_tokens TO PUB
 -- Name: rls_audit_log_admin_select; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY rls_audit_log_admin_select ON rls_audit_log FOR SELECT TO authenticated USING (current_user_role() = ANY (ARRAY['admin', 'dashboard_admin', 'service_role']));
+CREATE POLICY rls_audit_log_admin_select ON rls_audit_log FOR SELECT TO authenticated USING (current_user_role() = ANY (ARRAY['admin', 'instance_admin', 'service_role']));
 
 --
 -- Name: rls_audit_log_service_insert; Type: POLICY; Schema: -; Owner: -
@@ -2783,13 +2783,13 @@ CREATE POLICY rls_audit_log_user_select ON rls_audit_log FOR SELECT TO authentic
 -- Name: token_blacklist_admin_only; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY token_blacklist_admin_only ON token_blacklist TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'dashboard_admin'));
+CREATE POLICY token_blacklist_admin_only ON token_blacklist TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'instance_admin'));
 
 --
 -- Name: two_factor_recovery_admin_select; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY two_factor_recovery_admin_select ON two_factor_recovery_attempts FOR SELECT TO PUBLIC USING (is_admin() OR (current_user_role() = 'dashboard_admin'));
+CREATE POLICY two_factor_recovery_admin_select ON two_factor_recovery_attempts FOR SELECT TO PUBLIC USING (is_admin() OR (current_user_role() = 'instance_admin'));
 
 --
 -- Name: two_factor_recovery_insert; Type: POLICY; Schema: -; Owner: -
@@ -2807,7 +2807,7 @@ CREATE POLICY two_factor_recovery_select ON two_factor_recovery_attempts FOR SEL
 -- Name: two_factor_setups_admin_select; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY two_factor_setups_admin_select ON two_factor_setups FOR SELECT TO PUBLIC USING (is_admin() OR (current_user_role() = 'dashboard_admin'));
+CREATE POLICY two_factor_setups_admin_select ON two_factor_setups FOR SELECT TO PUBLIC USING (is_admin() OR (current_user_role() = 'instance_admin'));
 
 --
 -- Name: two_factor_setups_delete; Type: POLICY; Schema: -; Owner: -
@@ -2837,7 +2837,7 @@ CREATE POLICY two_factor_setups_update ON two_factor_setups FOR UPDATE TO PUBLIC
 -- Name: webhook_deliveries_admin_read; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY webhook_deliveries_admin_read ON webhook_deliveries FOR SELECT TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'dashboard_admin') OR is_admin());
+CREATE POLICY webhook_deliveries_admin_read ON webhook_deliveries FOR SELECT TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'instance_admin') OR is_admin());
 
 --
 -- Name: webhook_deliveries_service_update; Type: POLICY; Schema: -; Owner: -
@@ -2855,7 +2855,7 @@ CREATE POLICY webhook_deliveries_service_write ON webhook_deliveries FOR INSERT 
 -- Name: webhook_events_admin_select; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY webhook_events_admin_select ON webhook_events FOR SELECT TO PUBLIC USING (is_admin() OR (current_user_role() = 'dashboard_admin'));
+CREATE POLICY webhook_events_admin_select ON webhook_events FOR SELECT TO PUBLIC USING (is_admin() OR (current_user_role() = 'instance_admin'));
 
 --
 -- Name: webhook_events_service; Type: POLICY; Schema: -; Owner: -
@@ -2873,7 +2873,7 @@ CREATE POLICY webhook_monitored_tables_service_only ON webhook_monitored_tables 
 -- Name: webhooks_admin_only; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY webhooks_admin_only ON webhooks TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'dashboard_admin') OR is_admin());
+CREATE POLICY webhooks_admin_only ON webhooks TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'instance_admin') OR is_admin());
 
 --
 -- Name: auth_service_keys_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -

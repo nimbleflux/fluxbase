@@ -1158,10 +1158,11 @@ const result = await knowledgeBasesApi.exportTable("kb-id", {
 GET /api/v1/admin/ai/tables?schema=auth
 
 # Export table to knowledge base
-POST /api/v1/admin/ai/knowledge-bases/{id}/tables/export
+POST /api/v1/admin/ai/tables/{schema}/{table}/export
 Content-Type: application/json
 
 {
+  "knowledge_base_id": "kb-uuid",
   "schema": "auth",
   "table": "users",
   "include_foreign_keys": true,

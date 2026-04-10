@@ -191,14 +191,6 @@ describe('Module Exports', () => {
       expect(exports.useStorageSignedUrlWithOptions).toBeDefined();
     });
 
-    it('should export useStorageMove', () => {
-      expect(exports.useStorageMove).toBeDefined();
-    });
-
-    it('should export useStorageCopy', () => {
-      expect(exports.useStorageCopy).toBeDefined();
-    });
-
     it('should export useStorageBuckets', () => {
       expect(exports.useStorageBuckets).toBeDefined();
     });

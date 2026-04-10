@@ -433,3 +433,62 @@ BEGIN
     END IF;
 END
 $$;
+
+-- ============================================================================
+-- MIGRATION: Backfill NULL tenant_id in storage tables to default tenant
+-- Idempotent — safe to run multiple times.
+-- ============================================================================
+DO $$
+DECLARE
+    v_default_tenant_id UUID;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'platform' AND table_name = 'tenants'
+    ) THEN
+        RAISE NOTICE 'platform.tenants does not exist yet, skipping storage tenant_id backfill';
+        RETURN;
+    END IF;
+
+    SELECT id INTO v_default_tenant_id
+    FROM platform.tenants
+    WHERE is_default = true AND deleted_at IS NULL
+    LIMIT 1;
+
+    IF v_default_tenant_id IS NULL THEN
+        RAISE NOTICE 'No default tenant found, skipping storage tenant_id backfill';
+        RETURN;
+    END IF;
+
+    UPDATE storage.buckets SET tenant_id = v_default_tenant_id WHERE tenant_id IS NULL;
+    UPDATE storage.objects SET tenant_id = v_default_tenant_id WHERE tenant_id IS NULL;
+    UPDATE storage.chunked_upload_sessions SET tenant_id = v_default_tenant_id WHERE tenant_id IS NULL;
+    UPDATE storage.object_permissions SET tenant_id = v_default_tenant_id WHERE tenant_id IS NULL;
+
+    RAISE NOTICE 'Backfilled storage tenant_id to default tenant %', v_default_tenant_id;
+END
+$$;
+
+-- ============================================================================
+-- MIGRATION: Update legacy dashboard_admin role to instance_admin
+-- Idempotent — safe to run multiple times.
+-- ============================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'platform' AND table_name = 'users'
+    ) THEN
+        RAISE NOTICE 'platform.users does not exist yet, skipping dashboard_admin migration';
+        RETURN;
+    END IF;
+
+    UPDATE platform.users
+    SET role = 'instance_admin', updated_at = NOW()
+    WHERE role = 'dashboard_admin';
+
+    IF FOUND THEN
+        RAISE NOTICE 'Migrated dashboard_admin users to instance_admin';
+    END IF;
+END
+$$;

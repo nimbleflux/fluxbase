@@ -299,10 +299,6 @@ export type {
   AdminListBucketsResponse,
   AdminStorageObject,
   AdminListObjectsResponse,
-  SignedUrlResponse,
-
-  // Email types
-  SendEmailRequest,
 
   // Admin types
   AdminSetupStatusResponse,
@@ -479,17 +475,10 @@ export type {
   UpdateConversationOptions,
 
   // Table export types
-  ExportTableOptions,
-  ExportTableResult,
   TableColumn,
   TableForeignKey,
   TableIndex,
   TableDetails,
-
-  // Table export preset types
-  TableExportSyncConfig,
-  CreateTableExportSyncConfig,
-  UpdateTableExportSyncConfig,
 
   // RPC types
   RPCProcedureSummary,

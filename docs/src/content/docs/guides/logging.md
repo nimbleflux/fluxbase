@@ -512,7 +512,7 @@ Every HTTP request is logged with details:
   "time": "2024-01-15T10:30:00Z",
   "message": "Rate limit exceeded",
   "ip": "192.168.1.100",
-  "path": "/api/v1/auth/login",
+  "path": "/api/v1/auth/signin",
   "limit": 10,
   "window": "1m"
 }

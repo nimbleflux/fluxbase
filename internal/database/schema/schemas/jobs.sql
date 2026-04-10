@@ -92,7 +92,7 @@ ALTER TABLE functions ENABLE ROW LEVEL SECURITY;
 -- Name: Dashboard admins can read all functions; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY "Dashboard admins can read all functions" ON functions FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
+CREATE POLICY "Dashboard admins can read all functions" ON functions FOR SELECT TO authenticated USING (auth.role() = 'instance_admin');
 
 --
 -- Name: function_files; Type: TABLE; Schema: -; Owner: -
@@ -129,7 +129,7 @@ ALTER TABLE function_files ENABLE ROW LEVEL SECURITY;
 -- Name: Dashboard admins can read all function files; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY "Dashboard admins can read all function files" ON function_files FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
+CREATE POLICY "Dashboard admins can read all function files" ON function_files FOR SELECT TO authenticated USING (auth.role() = 'instance_admin');
 
 --
 -- Name: workers; Type: TABLE; Schema: -; Owner: -
@@ -181,7 +181,7 @@ ALTER TABLE workers ENABLE ROW LEVEL SECURITY;
 -- Name: Dashboard admins can read all workers; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY "Dashboard admins can read all workers" ON workers FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
+CREATE POLICY "Dashboard admins can read all workers" ON workers FOR SELECT TO authenticated USING (auth.role() = 'instance_admin');
 
 --
 -- Name: queue; Type: TABLE; Schema: -; Owner: -
@@ -286,7 +286,7 @@ ALTER TABLE queue ENABLE ROW LEVEL SECURITY;
 -- Name: Dashboard admins can read all jobs; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY "Dashboard admins can read all jobs" ON queue FOR SELECT TO authenticated USING (auth.role() = 'dashboard_admin');
+CREATE POLICY "Dashboard admins can read all jobs" ON queue FOR SELECT TO authenticated USING (auth.role() = 'instance_admin');
 
 --
 -- Name: Users can cancel their own pending/running jobs; Type: POLICY; Schema: -; Owner: -

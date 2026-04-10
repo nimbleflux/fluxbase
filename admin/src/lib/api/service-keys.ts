@@ -282,14 +282,14 @@ export interface RotatePlatformServiceKeyRequest {
 export const platformServiceKeysApi = {
   list: async (): Promise<PlatformServiceKey[]> => {
     const response = await api.get<PlatformServiceKey[]>(
-      "/api/v1/admin/platform/service-keys",
+      "/api/v1/admin/service-keys",
     );
     return response.data;
   },
 
   get: async (id: string): Promise<PlatformServiceKey> => {
     const response = await api.get<PlatformServiceKey>(
-      `/api/v1/admin/platform/service-keys/${id}`,
+      `/api/v1/admin/service-keys/${id}`,
     );
     return response.data;
   },
@@ -298,7 +298,7 @@ export const platformServiceKeysApi = {
     request: CreatePlatformServiceKeyRequest,
   ): Promise<PlatformServiceKeyWithPlaintext> => {
     const response = await api.post<PlatformServiceKeyWithPlaintext>(
-      "/api/v1/admin/platform/service-keys",
+      "/api/v1/admin/service-keys",
       request,
     );
     return response.data;
@@ -309,21 +309,21 @@ export const platformServiceKeysApi = {
     request: UpdatePlatformServiceKeyRequest,
   ): Promise<{ success: boolean; message: string }> => {
     const response = await api.patch<{ success: boolean; message: string }>(
-      `/api/v1/admin/platform/service-keys/${id}`,
+      `/api/v1/admin/service-keys/${id}`,
       request,
     );
     return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    await api.delete(`/api/v1/admin/platform/service-keys/${id}`);
+    await api.delete(`/api/v1/admin/service-keys/${id}`);
   },
 
   disable: async (
     id: string,
   ): Promise<{ success: boolean; message: string }> => {
     const response = await api.post<{ success: boolean; message: string }>(
-      `/api/v1/admin/platform/service-keys/${id}/disable`,
+      `/api/v1/admin/service-keys/${id}/disable`,
     );
     return response.data;
   },
@@ -332,7 +332,7 @@ export const platformServiceKeysApi = {
     id: string,
   ): Promise<{ success: boolean; message: string }> => {
     const response = await api.post<{ success: boolean; message: string }>(
-      `/api/v1/admin/platform/service-keys/${id}/enable`,
+      `/api/v1/admin/service-keys/${id}/enable`,
     );
     return response.data;
   },
@@ -345,7 +345,7 @@ export const platformServiceKeysApi = {
   > => {
     const response = await api.post<
       PlatformServiceKeyWithPlaintext & { grace_period_ends_at: string }
-    >(`/api/v1/admin/platform/service-keys/${id}/rotate`, request);
+    >(`/api/v1/admin/service-keys/${id}/rotate`, request);
     return response.data;
   },
 };

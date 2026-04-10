@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS settings (
     description text,
     is_public boolean DEFAULT false,
     is_secret boolean DEFAULT false,
-    editable_by text[] DEFAULT ARRAY['dashboard_admin'] NOT NULL,
+    editable_by text[] DEFAULT ARRAY['instance_admin'] NOT NULL,
     metadata jsonb DEFAULT '{}',
     created_by uuid,
     updated_by uuid,

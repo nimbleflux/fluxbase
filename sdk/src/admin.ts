@@ -15,7 +15,6 @@ import type {
   ListUsersOptions,
   ListUsersResponse,
   ResetUserPasswordResponse,
-  SendEmailRequest,
   DataResponse,
   VoidResponse,
 } from "./types";
@@ -174,33 +173,6 @@ export class FluxbaseAdmin {
   async getHealth(): Promise<DataResponse<HealthResponse>> {
     return wrapAsync(async () => {
       return await this.fetch.get<HealthResponse>("/health");
-    });
-  }
-
-  // ============================================================================
-  // Email
-  // ============================================================================
-
-  /**
-   * Send an email
-   *
-   * @param request - Email details (to, subject, html/text)
-   *
-   * @example
-   * ```typescript
-   * const { error } = await admin.sendEmail({
-   *   to: 'user@example.com',
-   *   subject: 'Hello',
-   *   html: '<p>Your message here</p>'
-   * });
-   * if (!error) {
-   *   console.log('Email sent');
-   * }
-   * ```
-   */
-  async sendEmail(request: SendEmailRequest): Promise<VoidResponse> {
-    return wrapAsyncVoid(async () => {
-      await this.fetch.post("/api/v1/admin/email/send", request);
     });
   }
 

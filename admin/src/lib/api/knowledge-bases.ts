@@ -364,17 +364,6 @@ export interface KnowledgeBaseDocument {
   updated_at: string;
 }
 
-export type DocumentPermission = "viewer" | "editor";
-
-export interface DocumentPermissionGrant {
-  id: string;
-  document_id: string;
-  user_id: string;
-  permission: DocumentPermission;
-  granted_by: string;
-  granted_at: string;
-}
-
 export interface AddDocumentRequest {
   title?: string;
   content: string;
@@ -452,36 +441,6 @@ export interface TableDetails {
   foreign_keys: TableForeignKey[];
   indexes: TableIndex[];
   rls_enabled: boolean;
-}
-
-export interface TableExportSyncConfig {
-  id: string;
-  knowledge_base_id: string;
-  schema_name: string;
-  table_name: string;
-  columns?: string[];
-  include_foreign_keys: boolean;
-  include_indexes: boolean;
-  last_sync_at?: string;
-  last_sync_status?: string;
-  last_sync_error?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateTableExportSyncConfig {
-  schema_name: string;
-  table_name: string;
-  columns?: string[];
-  include_foreign_keys?: boolean;
-  include_indexes?: boolean;
-  export_now?: boolean;
-}
-
-export interface UpdateTableExportSyncConfig {
-  columns?: string[];
-  include_foreign_keys?: boolean;
-  include_indexes?: boolean;
 }
 
 export interface ChatbotKnowledgeBaseLink {
@@ -656,21 +615,6 @@ export const knowledgeBasesApi = {
     return response.data;
   },
 
-  getCapabilities: async (): Promise<{
-    ocr_enabled: boolean;
-    ocr_available: boolean;
-    ocr_languages: string[];
-    supported_file_types: string[];
-  }> => {
-    const response = await api.get<{
-      ocr_enabled: boolean;
-      ocr_available: boolean;
-      ocr_languages: string[];
-      supported_file_types: string[];
-    }>("/api/v1/ai/knowledge-bases/capabilities");
-    return response.data;
-  },
-
   uploadDocument: async (
     kbId: string,
     file: File,
@@ -796,39 +740,6 @@ export const knowledgeBasesApi = {
     );
   },
 
-  grantDocumentPermission: async (
-    kbId: string,
-    docId: string,
-    userId: string,
-    permission: DocumentPermission,
-  ): Promise<DocumentPermissionGrant> => {
-    const response = await api.post<DocumentPermissionGrant>(
-      `/api/v1/ai/knowledge-bases/${kbId}/documents/${docId}/permissions`,
-      { user_id: userId, permission },
-    );
-    return response.data;
-  },
-
-  listDocumentPermissions: async (
-    kbId: string,
-    docId: string,
-  ): Promise<DocumentPermissionGrant[]> => {
-    const response = await api.get<DocumentPermissionGrant[]>(
-      `/api/v1/ai/knowledge-bases/${kbId}/documents/${docId}/permissions`,
-    );
-    return response.data;
-  },
-
-  revokeDocumentPermission: async (
-    kbId: string,
-    docId: string,
-    userId: string,
-  ): Promise<void> => {
-    await api.delete(
-      `/api/v1/ai/knowledge-bases/${kbId}/documents/${docId}/permissions/${userId}`,
-    );
-  },
-
   listEntities: async (
     kbId: string,
     entityType?: string,
@@ -909,8 +820,8 @@ export const knowledgeBasesApi = {
     options: ExportTableOptions,
   ): Promise<ExportTableResult> => {
     const response = await api.post<ExportTableResult>(
-      `/api/v1/ai/knowledge-bases/${kbId}/tables/export`,
-      options,
+      `/api/v1/admin/ai/tables/${options.schema}/${options.table}/export`,
+      { ...options, knowledge_base_id: kbId },
     );
     return response.data;
   },
@@ -925,58 +836,6 @@ export const knowledgeBasesApi = {
     return response.data;
   },
 
-  createTableExportSync: async (
-    kbId: string,
-    config: CreateTableExportSyncConfig,
-  ): Promise<TableExportSyncConfig> => {
-    const response = await api.post<TableExportSyncConfig>(
-      `/api/v1/ai/knowledge-bases/${kbId}/sync-configs`,
-      config,
-    );
-    return response.data;
-  },
-
-  listTableExportSyncs: async (
-    kbId: string,
-  ): Promise<TableExportSyncConfig[]> => {
-    const response = await api.get<{
-      sync_configs: TableExportSyncConfig[];
-      count: number;
-    }>(`/api/v1/ai/knowledge-bases/${kbId}/sync-configs`);
-    return response.data.sync_configs || [];
-  },
-
-  updateTableExportSync: async (
-    kbId: string,
-    syncId: string,
-    updates: UpdateTableExportSyncConfig,
-  ): Promise<TableExportSyncConfig> => {
-    const response = await api.patch<TableExportSyncConfig>(
-      `/api/v1/ai/knowledge-bases/${kbId}/sync-configs/${syncId}`,
-      updates,
-    );
-    return response.data;
-  },
-
-  deleteTableExportSync: async (
-    kbId: string,
-    syncId: string,
-  ): Promise<void> => {
-    await api.delete(
-      `/api/v1/ai/knowledge-bases/${kbId}/sync-configs/${syncId}`,
-    );
-  },
-
-  triggerTableExportSync: async (
-    kbId: string,
-    syncId: string,
-  ): Promise<ExportTableResult> => {
-    const response = await api.post<ExportTableResult>(
-      `/api/v1/ai/knowledge-bases/${kbId}/sync-configs/${syncId}/trigger`,
-      {},
-    );
-    return response.data;
-  },
 };
 
 export const userKnowledgeBasesApi = {

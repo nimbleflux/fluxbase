@@ -154,7 +154,7 @@ ALTER TABLE edge_functions FORCE ROW LEVEL SECURITY;
 -- Name: functions_edge_functions_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY functions_edge_functions_admin ON edge_functions TO PUBLIC USING (auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.current_user_role() = 'dashboard_admin');
+CREATE POLICY functions_edge_functions_admin ON edge_functions TO PUBLIC USING (auth.current_user_role() = 'instance_admin') WITH CHECK (auth.current_user_role() = 'instance_admin');
 
 --
 -- Name: functions_edge_functions_owner; Type: POLICY; Schema: -; Owner: -
@@ -229,7 +229,7 @@ ALTER TABLE edge_executions FORCE ROW LEVEL SECURITY;
 -- Name: functions_edge_executions_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY functions_edge_executions_admin ON edge_executions TO PUBLIC USING (auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.current_user_role() = 'dashboard_admin');
+CREATE POLICY functions_edge_executions_admin ON edge_executions TO PUBLIC USING (auth.current_user_role() = 'instance_admin') WITH CHECK (auth.current_user_role() = 'instance_admin');
 
 --
 -- Name: functions_edge_executions_owner; Type: POLICY; Schema: -; Owner: -
@@ -286,7 +286,7 @@ ALTER TABLE edge_files FORCE ROW LEVEL SECURITY;
 -- Name: functions_edge_files_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY functions_edge_files_admin ON edge_files TO PUBLIC USING (auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.current_user_role() = 'dashboard_admin');
+CREATE POLICY functions_edge_files_admin ON edge_files TO PUBLIC USING (auth.current_user_role() = 'instance_admin') WITH CHECK (auth.current_user_role() = 'instance_admin');
 
 --
 -- Name: functions_edge_files_owner; Type: POLICY; Schema: -; Owner: -
@@ -353,7 +353,7 @@ ALTER TABLE edge_triggers FORCE ROW LEVEL SECURITY;
 -- Name: functions_edge_triggers_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY functions_edge_triggers_admin ON edge_triggers TO PUBLIC USING (auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.current_user_role() = 'dashboard_admin');
+CREATE POLICY functions_edge_triggers_admin ON edge_triggers TO PUBLIC USING (auth.current_user_role() = 'instance_admin') WITH CHECK (auth.current_user_role() = 'instance_admin');
 
 --
 -- Name: functions_edge_triggers_owner; Type: POLICY; Schema: -; Owner: -
@@ -460,7 +460,7 @@ ALTER TABLE secrets FORCE ROW LEVEL SECURITY;
 -- Name: secrets_tenant; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY secrets_tenant ON secrets TO PUBLIC USING (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'dashboard_admin');
+CREATE POLICY secrets_tenant ON secrets TO PUBLIC USING (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'instance_admin') WITH CHECK (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'instance_admin');
 
 --
 -- Name: secret_versions; Type: TABLE; Schema: -; Owner: -
@@ -510,7 +510,7 @@ ALTER TABLE secret_versions FORCE ROW LEVEL SECURITY;
 -- Name: secret_versions_tenant; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY secret_versions_tenant ON secret_versions TO PUBLIC USING (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'dashboard_admin');
+CREATE POLICY secret_versions_tenant ON secret_versions TO PUBLIC USING (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'instance_admin') WITH CHECK (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'instance_admin');
 
 --
 -- Name: shared_modules; Type: TABLE; Schema: -; Owner: -
@@ -556,7 +556,7 @@ ALTER TABLE shared_modules FORCE ROW LEVEL SECURITY;
 -- Name: functions_shared_modules_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY functions_shared_modules_admin ON shared_modules TO PUBLIC USING (auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.current_user_role() = 'dashboard_admin');
+CREATE POLICY functions_shared_modules_admin ON shared_modules TO PUBLIC USING (auth.current_user_role() = 'instance_admin') WITH CHECK (auth.current_user_role() = 'instance_admin');
 
 --
 -- Name: functions_shared_modules_owner; Type: POLICY; Schema: -; Owner: -
@@ -625,7 +625,7 @@ ALTER TABLE function_dependencies FORCE ROW LEVEL SECURITY;
 -- Name: functions_dependencies_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY functions_dependencies_admin ON function_dependencies TO PUBLIC USING (auth.current_user_role() = 'dashboard_admin') WITH CHECK (auth.current_user_role() = 'dashboard_admin');
+CREATE POLICY functions_dependencies_admin ON function_dependencies TO PUBLIC USING (auth.current_user_role() = 'instance_admin') WITH CHECK (auth.current_user_role() = 'instance_admin');
 
 --
 -- Name: functions_dependencies_owner; Type: POLICY; Schema: -; Owner: -

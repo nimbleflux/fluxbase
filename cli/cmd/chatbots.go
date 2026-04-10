@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net/url"
@@ -92,18 +91,6 @@ Examples:
 	RunE:    runChatbotsDelete,
 }
 
-var chatbotsChatCmd = &cobra.Command{
-	Use:   "chat [id]",
-	Short: "Start an interactive chat session",
-	Long: `Start an interactive chat session with a chatbot.
-
-Examples:
-  fluxbase chatbots chat abc123`,
-	Args:    cobra.ExactArgs(1),
-	PreRunE: requireAuth,
-	RunE:    runChatbotsChat,
-}
-
 var chatbotsSyncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Sync chatbots from a directory",
@@ -148,7 +135,6 @@ func init() {
 	chatbotsCmd.AddCommand(chatbotsCreateCmd)
 	chatbotsCmd.AddCommand(chatbotsUpdateCmd)
 	chatbotsCmd.AddCommand(chatbotsDeleteCmd)
-	chatbotsCmd.AddCommand(chatbotsChatCmd)
 	chatbotsCmd.AddCommand(chatbotsSyncCmd)
 }
 
@@ -288,72 +274,6 @@ func runChatbotsDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Chatbot '%s' deleted.\n", id)
-	return nil
-}
-
-func runChatbotsChat(cmd *cobra.Command, args []string) error {
-	chatbotID := args[0]
-
-	fmt.Println("Starting chat session. Type 'exit' or 'quit' to end.")
-	fmt.Println("---")
-
-	reader := bufio.NewReader(os.Stdin)
-
-	// Create a conversation
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	var convResult map[string]interface{}
-	if err := apiClient.DoPost(ctx, "/api/v1/ai/conversations", map[string]interface{}{
-		"chatbot_id": chatbotID,
-	}, &convResult); err != nil {
-		return fmt.Errorf("failed to create conversation: %w", err)
-	}
-
-	conversationID := getStringValue(convResult, "id")
-
-	for {
-		fmt.Print("You: ")
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			return err
-		}
-
-		input = strings.TrimSpace(input)
-		if input == "" {
-			continue
-		}
-
-		if input == "exit" || input == "quit" {
-			fmt.Println("Goodbye!")
-			break
-		}
-
-		// Send message
-		msgCtx, msgCancel := context.WithTimeout(context.Background(), 60*time.Second)
-
-		var msgResult map[string]interface{}
-		err = apiClient.DoPost(msgCtx, "/api/v1/ai/conversations/"+url.PathEscape(conversationID)+"/messages", map[string]interface{}{
-			"content": input,
-		}, &msgResult)
-		msgCancel()
-
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			continue
-		}
-
-		// Extract assistant response
-		if response, ok := msgResult["response"].(map[string]interface{}); ok {
-			content := getStringValue(response, "content")
-			fmt.Printf("Assistant: %s\n", content)
-		} else if content := getStringValue(msgResult, "content"); content != "" {
-			fmt.Printf("Assistant: %s\n", content)
-		}
-
-		fmt.Println()
-	}
-
 	return nil
 }
 

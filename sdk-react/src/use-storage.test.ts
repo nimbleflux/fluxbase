@@ -14,8 +14,6 @@ import {
   useStorageTransformUrl,
   useStorageSignedUrl,
   useStorageSignedUrlWithOptions,
-  useStorageMove,
-  useStorageCopy,
   useStorageBuckets,
   useCreateBucket,
   useDeleteBucket,
@@ -428,56 +426,6 @@ describe('useStorageSignedUrlWithOptions', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.data).toBe('http://example.com/signed');
     expect(createSignedUrlMock).toHaveBeenCalledWith('file.jpg', options);
-  });
-});
-
-describe('useStorageMove', () => {
-  it('should move file and invalidate queries', async () => {
-    const moveMock = vi.fn().mockResolvedValue({ data: { path: 'new.txt' }, error: null });
-    const fromMock = vi.fn().mockReturnValue({ move: moveMock });
-
-    const client = createMockClient({
-      storage: { from: fromMock },
-    } as any);
-
-    const queryClient = createTestQueryClient();
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-
-    const { result } = renderHook(() => useStorageMove('bucket'), {
-      wrapper: createWrapper(client, queryClient),
-    });
-
-    await act(async () => {
-      await result.current.mutateAsync({ fromPath: 'old.txt', toPath: 'new.txt' });
-    });
-
-    expect(moveMock).toHaveBeenCalledWith('old.txt', 'new.txt');
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['fluxbase', 'storage', 'bucket', 'list'] });
-  });
-});
-
-describe('useStorageCopy', () => {
-  it('should copy file and invalidate queries', async () => {
-    const copyMock = vi.fn().mockResolvedValue({ data: { path: 'copy.txt' }, error: null });
-    const fromMock = vi.fn().mockReturnValue({ copy: copyMock });
-
-    const client = createMockClient({
-      storage: { from: fromMock },
-    } as any);
-
-    const queryClient = createTestQueryClient();
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-
-    const { result } = renderHook(() => useStorageCopy('bucket'), {
-      wrapper: createWrapper(client, queryClient),
-    });
-
-    await act(async () => {
-      await result.current.mutateAsync({ fromPath: 'source.txt', toPath: 'copy.txt' });
-    });
-
-    expect(copyMock).toHaveBeenCalledWith('source.txt', 'copy.txt');
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['fluxbase', 'storage', 'bucket', 'list'] });
   });
 });
 

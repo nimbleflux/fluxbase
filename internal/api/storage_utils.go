@@ -149,6 +149,31 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 	return nil
 }
 
+// resolveTenantForObject ensures app.current_tenant_id is set for public file access.
+// When a file was uploaded under tenant context, its tenant_id is non-NULL.
+// For unauthenticated downloads, no tenant context is in the request, so
+// has_tenant_access() would reject the query. This resolves the tenant from
+// the object itself before RLS is enforced.
+// Runs as BYPASSRLS user (before SET LOCAL ROLE), so RLS does not apply.
+func (h *StorageHandler) resolveTenantForObject(ctx context.Context, tx pgx.Tx, c fiber.Ctx, bucket, key string) {
+	// Skip if request already has tenant context (authenticated with tenant header/JWT)
+	if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
+		return
+	}
+
+	var objectTenantID *string
+	err := tx.QueryRow(ctx, `
+		SELECT tenant_id::text FROM storage.objects
+		WHERE bucket_id = $1 AND path = $2
+	`, bucket, key).Scan(&objectTenantID)
+	if err != nil || objectTenantID == nil || *objectTenantID == "" {
+		return
+	}
+	if _, err := tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", *objectTenantID); err != nil {
+		log.Warn().Err(err).Msg("Failed to set tenant context from object")
+	}
+}
+
 // sanitizeFilename sanitizes uploaded filenames to prevent path traversal and control characters
 // H-20: Removes null bytes, control characters, and prevents path traversal attacks
 func sanitizeFilename(filename string) string {

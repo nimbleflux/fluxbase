@@ -294,11 +294,7 @@ SELECT * FROM pg_trigger
 WHERE tgrelid = 'your_table'::regclass;
 ```
 
-2. Restart the listener if stuck:
-```bash
-# API endpoint to reset realtime (if available)
-curl -X POST http://localhost:8080/api/v1/admin/realtime/restart
-```
+2. Restart the listener if stuck by restarting the Fluxbase service.
 
 ---
 

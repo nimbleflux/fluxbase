@@ -9,6 +9,7 @@ type SettingsDeps struct {
 	RequireAuth  fiber.Handler
 	GetSetting   fiber.Handler
 	GetSettings  fiber.Handler
+	BatchGet     fiber.Handler
 }
 
 type UserSettingsDeps struct {
@@ -43,6 +44,13 @@ func BuildSettingsRoutes(deps *SettingsDeps) *RouteGroup {
 				Path:    "/",
 				Handler: deps.GetSettings,
 				Summary: "List all settings",
+				Auth:    AuthOptional,
+			},
+			{
+				Method:  "POST",
+				Path:    "/batch",
+				Handler: deps.BatchGet,
+				Summary: "Batch get settings",
 				Auth:    AuthOptional,
 			},
 		},
@@ -109,7 +117,7 @@ func BuildUserSettingsRoutes(deps *UserSettingsDeps) *RouteGroup {
 func BuildUserSecretsRoutes(deps *UserSettingsDeps) *RouteGroup {
 	return &RouteGroup{
 		Name:   "user-secrets",
-		Prefix: "/api/v1/settings/user/secrets",
+		Prefix: "/api/v1/settings/secret",
 		Routes: []Route{
 			{
 				Method:  "POST",

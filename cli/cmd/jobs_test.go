@@ -163,27 +163,6 @@ func TestJobsRetry_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestJobsLogs_Success(t *testing.T) {
-	resetJobFlags()
-	_, buf, cleanup := setupTestEnvWithHandler(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, http.MethodGet, r.Method)
-		assert.Contains(t, r.URL.Path, "/api/v1/admin/jobs/queue/job-abc123/logs")
-
-		respondJSON(w, http.StatusOK, []map[string]interface{}{
-			{"timestamp": "2024-01-01T00:00:00Z", "level": "info", "message": "Processing started"},
-			{"timestamp": "2024-01-01T00:00:01Z", "level": "info", "message": "Processing completed"},
-		})
-	})
-	defer cleanup()
-
-	err := runJobsLogs(nil, []string{"job-abc123"})
-	require.NoError(t, err)
-
-	var result []map[string]interface{}
-	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
-	require.Len(t, result, 2)
-}
-
 func TestJobsStats_Success(t *testing.T) {
 	resetJobFlags()
 	_, buf, cleanup := setupTestEnvWithHandler(t, func(w http.ResponseWriter, r *http.Request) {

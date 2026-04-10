@@ -11,7 +11,6 @@ import {
   XCircle,
   Loader2,
   Upload,
-  AlertTriangle,
   Pencil,
   X,
   Bot,
@@ -25,7 +24,6 @@ import {
   type KnowledgeBaseDocument,
   type ChatbotKnowledgeBaseLink,
 } from '@/lib/api'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -84,13 +82,6 @@ const SUPPORTED_FILE_TYPES = [
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
-interface KnowledgeBaseCapabilities {
-  ocr_enabled: boolean
-  ocr_available: boolean
-  ocr_languages: string[]
-  supported_file_types: string[]
-}
-
 export const Route = createFileRoute('/_authenticated/knowledge-bases/$id/')({
   component: KnowledgeBaseDetailPage,
 })
@@ -113,8 +104,6 @@ function KnowledgeBaseDetailPage() {
   const [uploadMode, setUploadMode] = useState<'paste' | 'upload'>('paste')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
-  const [capabilities, setCapabilities] =
-    useState<KnowledgeBaseCapabilities | null>(null)
   const [linkedChatbots, setLinkedChatbots] = useState<ChatbotKnowledgeBaseLink[]>(
     []
   )
@@ -424,15 +413,7 @@ function KnowledgeBaseDetailPage() {
         open={addDialogOpen}
         onOpenChange={(open) => {
           setAddDialogOpen(open)
-          if (open) {
-            // Fetch capabilities when dialog opens
-            knowledgeBasesApi
-              .getCapabilities()
-              .then(setCapabilities)
-              .catch(() => {
-                // Silently fail - we'll just not show the warning
-              })
-          } else {
+          if (!open) {
             setNewDoc({ title: '', content: '' })
             setNewDocTags('')
             setNewDocMetadata([])
@@ -556,16 +537,6 @@ function KnowledgeBaseDetailPage() {
                 </TabsContent>
                 <TabsContent value='upload' className='mt-4'>
                   <div className='grid gap-4'>
-                    {capabilities && !capabilities.ocr_available && (
-                      <Alert className='border-amber-500/50 bg-amber-500/10'>
-                        <AlertTriangle className='h-4 w-4 text-amber-500' />
-                        <AlertDescription className='text-amber-700 dark:text-amber-400'>
-                          OCR is not available. Scanned or image-based PDFs may
-                          not be readable. Text-based documents will still work
-                          normally.
-                        </AlertDescription>
-                      </Alert>
-                    )}
                     <div className='grid gap-2'>
                       <Label htmlFor='file-title'>Title (optional)</Label>
                       <Input

@@ -42,7 +42,10 @@ export class StorageBucket {
     path: string,
     file: File | Blob | ArrayBuffer | ArrayBufferView,
     options?: UploadOptions,
-  ): Promise<{ data: { id: string; path: string; fullPath: string } | null; error: Error | null }> {
+  ): Promise<{
+    data: { id: string; path: string; fullPath: string } | null;
+    error: Error | null;
+  }> {
     try {
       // Prepare FormData (common to both code paths)
       const formData = new FormData();
@@ -80,7 +83,11 @@ export class StorageBucket {
 
       // Use XMLHttpRequest for progress tracking if callback is provided
       if (options?.onUploadProgress) {
-        response = await this.uploadWithProgress(path, formData, options.onUploadProgress);
+        response = await this.uploadWithProgress(
+          path,
+          formData,
+          options.onUploadProgress,
+        );
       } else {
         // Use standard fetch for uploads without progress tracking
         response = await this.fetch.request<any>(
@@ -98,9 +105,9 @@ export class StorageBucket {
         data: {
           id: response.id || response.key || path,
           path: path,
-          fullPath: `${this.bucketName}/${path}`
+          fullPath: `${this.bucketName}/${path}`,
         },
-        error: null
+        error: null,
       };
     } catch (error) {
       return { data: null, error: error as Error };
@@ -121,7 +128,7 @@ export class StorageBucket {
       const url = `${this.fetch["baseUrl"]}/api/v1/storage/${this.bucketName}/${path}`;
 
       // Track upload progress
-      xhr.upload.addEventListener('progress', (event) => {
+      xhr.upload.addEventListener("progress", (event) => {
         if (event.lengthComputable) {
           const percentage = Math.round((event.loaded / event.total) * 100);
           onProgress({
@@ -133,7 +140,7 @@ export class StorageBucket {
       });
 
       // Handle completion
-      xhr.addEventListener('load', () => {
+      xhr.addEventListener("load", () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const response = JSON.parse(xhr.responseText);
@@ -152,22 +159,22 @@ export class StorageBucket {
       });
 
       // Handle errors
-      xhr.addEventListener('error', () => {
-        reject(new Error('Upload failed'));
+      xhr.addEventListener("error", () => {
+        reject(new Error("Upload failed"));
       });
 
-      xhr.addEventListener('abort', () => {
-        reject(new Error('Upload aborted'));
+      xhr.addEventListener("abort", () => {
+        reject(new Error("Upload aborted"));
       });
 
       // Open and send request
-      xhr.open('POST', url);
+      xhr.open("POST", url);
 
       // Set authorization header if present
       const headers = this.fetch["defaultHeaders"];
       for (const [key, value] of Object.entries(headers)) {
         // Don't set Content-Type header - let browser handle it for FormData
-        if (key.toLowerCase() !== 'content-type') {
+        if (key.toLowerCase() !== "content-type") {
           xhr.setRequestHeader(key, value);
         }
       }
@@ -211,31 +218,37 @@ export class StorageBucket {
     stream: ReadableStream<Uint8Array>,
     size: number,
     options?: StreamUploadOptions,
-  ): Promise<{ data: { id: string; path: string; fullPath: string } | null; error: Error | null }> {
+  ): Promise<{
+    data: { id: string; path: string; fullPath: string } | null;
+    error: Error | null;
+  }> {
     try {
       if (size <= 0) {
-        return { data: null, error: new Error('size must be a positive number') };
+        return {
+          data: null,
+          error: new Error("size must be a positive number"),
+        };
       }
 
       // Build headers for streaming upload
       const headers: Record<string, string> = {
         ...this.fetch["defaultHeaders"],
-        'Content-Length': String(size),
+        "Content-Length": String(size),
       };
 
       // Set content type
       if (options?.contentType) {
-        headers['X-Storage-Content-Type'] = options.contentType;
+        headers["X-Storage-Content-Type"] = options.contentType;
       }
 
       // Set cache control
       if (options?.cacheControl) {
-        headers['X-Storage-Cache-Control'] = options.cacheControl;
+        headers["X-Storage-Cache-Control"] = options.cacheControl;
       }
 
       // Set metadata as JSON
       if (options?.metadata && Object.keys(options.metadata).length > 0) {
-        headers['X-Storage-Metadata'] = JSON.stringify(options.metadata);
+        headers["X-Storage-Metadata"] = JSON.stringify(options.metadata);
       }
 
       // Create a stream that tracks progress if callback provided
@@ -267,18 +280,22 @@ export class StorageBucket {
       const response = await fetch(
         `${this.fetch["baseUrl"]}/api/v1/storage/${this.bucketName}/stream/${path}`,
         {
-          method: 'POST',
+          method: "POST",
           headers,
           body: bodyStream,
           signal: options?.signal,
           // @ts-expect-error - duplex is not yet in TypeScript's RequestInit type
-          duplex: 'half',
+          duplex: "half",
         },
       );
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: response.statusText }));
-        throw new Error(errorData.error || `Upload failed: ${response.statusText}`);
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: response.statusText }));
+        throw new Error(
+          errorData.error || `Upload failed: ${response.statusText}`,
+        );
       }
 
       const result = await response.json();
@@ -319,11 +336,15 @@ export class StorageBucket {
     path: string,
     file: File | Blob,
     options?: StreamUploadOptions,
-  ): Promise<{ data: { id: string; path: string; fullPath: string } | null; error: Error | null }> {
+  ): Promise<{
+    data: { id: string; path: string; fullPath: string } | null;
+    error: Error | null;
+  }> {
     // Use file's type if contentType not specified
     const opts: StreamUploadOptions = {
       ...options,
-      contentType: options?.contentType || file.type || 'application/octet-stream',
+      contentType:
+        options?.contentType || file.type || "application/octet-stream",
     };
 
     return this.uploadStream(path, file.stream(), file.size, opts);
@@ -731,7 +752,8 @@ export class StorageBucket {
               path,
               total_size: totalSize,
               chunk_size: chunkSize,
-              content_type: options?.contentType || file.type || "application/octet-stream",
+              content_type:
+                options?.contentType || file.type || "application/octet-stream",
               metadata: options?.metadata,
               cache_control: options?.cacheControl,
             }),
@@ -742,7 +764,8 @@ export class StorageBucket {
         if (!initResponse.ok) {
           const errorData = await initResponse.json().catch(() => ({}));
           throw new Error(
-            errorData.error || `Failed to initialize upload: ${initResponse.statusText}`,
+            errorData.error ||
+              `Failed to initialize upload: ${initResponse.statusText}`,
           );
         }
 
@@ -774,7 +797,8 @@ export class StorageBucket {
         if (!statusResponse.ok) {
           const errorData = await statusResponse.json().catch(() => ({}));
           throw new Error(
-            errorData.error || `Failed to get session status: ${statusResponse.statusText}`,
+            errorData.error ||
+              `Failed to get session status: ${statusResponse.statusText}`,
           );
         }
 
@@ -823,7 +847,10 @@ export class StorageBucket {
 
             // Create per-chunk timeout controller
             const chunkController = new AbortController();
-            const timeoutId = setTimeout(() => chunkController.abort(), chunkTimeout);
+            const timeoutId = setTimeout(
+              () => chunkController.abort(),
+              chunkTimeout,
+            );
 
             // Forward external signal to chunk controller
             if (options?.signal) {
@@ -853,7 +880,8 @@ export class StorageBucket {
             if (!chunkResponse.ok) {
               const errorData = await chunkResponse.json().catch(() => ({}));
               throw new Error(
-                errorData.error || `Chunk upload failed: ${chunkResponse.statusText}`,
+                errorData.error ||
+                  `Chunk upload failed: ${chunkResponse.statusText}`,
               );
             }
 
@@ -914,7 +942,8 @@ export class StorageBucket {
       if (!completeResponse.ok) {
         const errorData = await completeResponse.json().catch(() => ({}));
         throw new Error(
-          errorData.error || `Failed to complete upload: ${completeResponse.statusText}`,
+          errorData.error ||
+            `Failed to complete upload: ${completeResponse.statusText}`,
         );
       }
 
@@ -987,7 +1016,8 @@ export class StorageBucket {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          errorData.error || `Failed to get upload status: ${response.statusText}`,
+          errorData.error ||
+            `Failed to get upload status: ${response.statusText}`,
         );
       }
 
@@ -1018,7 +1048,7 @@ export class StorageBucket {
       let prefix: string | undefined;
       let options: ListOptions | undefined;
 
-      if (typeof pathOrOptions === 'string') {
+      if (typeof pathOrOptions === "string") {
         // Supabase-style: list('path/', { limit: 10 })
         prefix = pathOrOptions;
         options = maybeOptions;
@@ -1066,7 +1096,9 @@ export class StorageBucket {
    * Remove files from the bucket
    * @param paths - Array of file paths to remove
    */
-  async remove(paths: string[]): Promise<{ data: FileObject[] | null; error: Error | null }> {
+  async remove(
+    paths: string[],
+  ): Promise<{ data: FileObject[] | null; error: Error | null }> {
     try {
       const removedFiles: FileObject[] = [];
 
@@ -1081,6 +1113,50 @@ export class StorageBucket {
       }
 
       return { data: removedFiles, error: null };
+    } catch (error) {
+      return { data: null, error: error as Error };
+    }
+  }
+
+  /**
+   * Copy a file to a new path
+   *
+   * @param fromPath - Source file path
+   * @param toPath - Destination file path
+   * @returns Promise resolving to { data, error } tuple
+   */
+  async copy(
+    fromPath: string,
+    toPath: string,
+  ): Promise<{ data: unknown; error: Error | null }> {
+    try {
+      const data = await this.fetch.post(
+        `/api/v1/storage/${this.bucketName}/copy`,
+        { from_path: fromPath, to_path: toPath },
+      );
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error: error as Error };
+    }
+  }
+
+  /**
+   * Move a file to a new path
+   *
+   * @param fromPath - Source file path
+   * @param toPath - Destination file path
+   * @returns Promise resolving to { data, error } tuple
+   */
+  async move(
+    fromPath: string,
+    toPath: string,
+  ): Promise<{ data: unknown; error: Error | null }> {
+    try {
+      const data = await this.fetch.post(
+        `/api/v1/storage/${this.bucketName}/move`,
+        { from_path: fromPath, to_path: toPath },
+      );
+      return { data, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
     }
@@ -1223,60 +1299,6 @@ export class StorageBucket {
   }
 
   /**
-   * Move a file to a new location
-   * @param fromPath - Current file path
-   * @param toPath - New file path
-   */
-  async move(
-    fromPath: string,
-    toPath: string,
-  ): Promise<{ data: { message: string } | null; error: Error | null }> {
-    try {
-      await this.fetch.post(
-        `/api/v1/storage/${this.bucketName}/move`,
-        {
-          from_path: fromPath,
-          to_path: toPath,
-        },
-      );
-
-      return {
-        data: { message: 'Successfully moved' },
-        error: null
-      };
-    } catch (error) {
-      return { data: null, error: error as Error };
-    }
-  }
-
-  /**
-   * Copy a file to a new location
-   * @param fromPath - Source file path
-   * @param toPath - Destination file path
-   */
-  async copy(
-    fromPath: string,
-    toPath: string,
-  ): Promise<{ data: { path: string } | null; error: Error | null }> {
-    try {
-      await this.fetch.post(
-        `/api/v1/storage/${this.bucketName}/copy`,
-        {
-          from_path: fromPath,
-          to_path: toPath,
-        },
-      );
-
-      return {
-        data: { path: toPath },
-        error: null
-      };
-    } catch (error) {
-      return { data: null, error: error as Error };
-    }
-  }
-
-  /**
    * Share a file with another user (RLS)
    * @param path - The file path
    * @param options - Share options (userId and permission)
@@ -1396,7 +1418,7 @@ export class FluxbaseStorage {
   ): Promise<{ data: { message: string } | null; error: Error | null }> {
     try {
       await this.fetch.delete(`/api/v1/storage/buckets/${bucketName}`);
-      return { data: { message: 'Successfully deleted' }, error: null };
+      return { data: { message: "Successfully deleted" }, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
     }
@@ -1427,7 +1449,7 @@ export class FluxbaseStorage {
         }
       }
 
-      return { data: { message: 'Successfully emptied' }, error: null };
+      return { data: { message: "Successfully emptied" }, error: null };
     } catch (error) {
       return { data: null, error: error as Error };
     }
