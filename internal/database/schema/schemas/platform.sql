@@ -53,6 +53,18 @@ CREATE INDEX IF NOT EXISTS idx_available_extensions_category ON available_extens
 CREATE INDEX IF NOT EXISTS idx_available_extensions_is_core ON available_extensions (is_core);
 
 --
+-- Name: available_extensions; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE available_extensions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: available_extensions; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE available_extensions FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: email_templates; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -467,6 +479,18 @@ CREATE INDEX IF NOT EXISTS idx_platform_service_keys_tenant_id ON service_keys (
 CREATE INDEX IF NOT EXISTS idx_platform_service_keys_user_id ON service_keys (user_id) WHERE (user_id IS NOT NULL);
 
 --
+-- Name: service_keys; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE service_keys ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: service_keys; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE service_keys FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: key_usage; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -501,6 +525,18 @@ CREATE INDEX IF NOT EXISTS idx_platform_key_usage_created_at ON key_usage (creat
 --
 
 CREATE INDEX IF NOT EXISTS idx_platform_key_usage_key_id ON key_usage (key_id);
+
+--
+-- Name: key_usage; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE key_usage ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: key_usage; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE key_usage FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: tenant_memberships; Type: TABLE; Schema: -; Owner: -
@@ -807,6 +843,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_enabled_extensions_active ON enabled_exten
 CREATE INDEX IF NOT EXISTS idx_enabled_extensions_name ON enabled_extensions (extension_name);
 
 --
+-- Name: enabled_extensions; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE enabled_extensions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: enabled_extensions; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE enabled_extensions FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: idx_enabled_extensions_tenant_id; Type: INDEX; Schema: -; Owner: -
 --
 
@@ -940,6 +988,18 @@ CREATE INDEX IF NOT EXISTS idx_dashboard_schema_migrations_applied_at ON schema_
 --
 
 CREATE INDEX IF NOT EXISTS idx_dashboard_schema_migrations_schema_name ON schema_migrations (schema_name);
+
+--
+-- Name: schema_migrations; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE schema_migrations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: schema_migrations; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE schema_migrations FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: sessions; Type: TABLE; Schema: -; Owner: -
@@ -1669,6 +1729,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE enabled_extensions TO authenticate
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE enabled_extensions TO service_role;
 
 --
+-- Name: enabled_extensions; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE enabled_extensions TO tenant_service;
+
+--
 -- Name: instance_settings; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
@@ -1697,6 +1763,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE invitation_tokens TO authenticated
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE invitation_tokens TO service_role;
+
+--
+-- Name: invitation_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE invitation_tokens TO tenant_service;
 
 --
 -- Name: key_usage; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -1759,6 +1831,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE service_keys TO authenticated;
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE service_keys TO service_role;
 
 --
+-- Name: service_keys; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE service_keys TO tenant_service;
+
+--
 -- Name: sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
@@ -1799,6 +1877,12 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE tenant_memberships TO service_role;
+
+--
+-- Name: tenant_memberships; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE tenant_memberships TO tenant_service;
 
 --
 -- Name: tenants; Type: PRIVILEGE; Schema: privileges; Owner: -

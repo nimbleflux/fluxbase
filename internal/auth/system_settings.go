@@ -54,12 +54,14 @@ func (s *SystemSettingsService) SetCache(cache *SettingsCache) {
 // IsSetupComplete checks if the initial setup has been completed
 func (s *SystemSettingsService) IsSetupComplete(ctx context.Context) (bool, error) {
 	var exists bool
-	err := s.db.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM app.settings
-			WHERE key = 'setup_completed'
-		)
-	`).Scan(&exists)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM app.settings
+				WHERE key = 'setup_completed'
+			)
+		`).Scan(&exists)
+	})
 	if err != nil {
 		return false, err
 	}
@@ -91,21 +93,24 @@ func (s *SystemSettingsService) MarkSetupComplete(ctx context.Context, adminID u
 		return err
 	}
 
-	_, err = s.db.Exec(ctx, `
-		INSERT INTO app.settings (key, value, description, category)
-		VALUES ($1, $2, $3, 'system')
-	`, "setup_completed", valueJSON, "Tracks initial setup completion")
-
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO app.settings (key, value, description, category)
+			VALUES ($1, $2, $3, 'system')
+		`, "setup_completed", valueJSON, "Tracks initial setup completion")
+		return err
+	})
 }
 
 // GetSetupInfo retrieves setup completion information
 func (s *SystemSettingsService) GetSetupInfo(ctx context.Context) (*SetupCompleteValue, error) {
 	var valueJSON []byte
-	err := s.db.QueryRow(ctx, `
-		SELECT value FROM app.settings
-		WHERE key = 'setup_completed'
-	`).Scan(&valueJSON)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT value FROM app.settings
+			WHERE key = 'setup_completed'
+		`).Scan(&valueJSON)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrSettingNotFound
@@ -126,18 +131,20 @@ func (s *SystemSettingsService) GetSetting(ctx context.Context, key string) (*Sy
 	var setting SystemSetting
 	var valueJSON []byte
 
-	err := s.db.QueryRow(ctx, `
-		SELECT id, key, value, description, created_at, updated_at
-		FROM app.settings
-		WHERE key = $1
-	`, key).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSON,
-		&setting.Description,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT id, key, value, description, created_at, updated_at
+			FROM app.settings
+			WHERE key = $1
+		`, key).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSON,
+			&setting.Description,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrSettingNotFound
@@ -165,46 +172,50 @@ func (s *SystemSettingsService) GetSettings(ctx context.Context, keys []string) 
 		return make(map[string]*SystemSetting), nil
 	}
 
-	rows, err := s.db.Query(ctx, `
-		SELECT id, key, value, description, created_at, updated_at
-		FROM app.settings
-		WHERE key = ANY($1)
-	`, keys)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	settings := make(map[string]*SystemSetting, len(keys))
-	for rows.Next() {
-		var setting SystemSetting
-		var valueJSON []byte
 
-		if err := rows.Scan(
-			&setting.ID,
-			&setting.Key,
-			&valueJSON,
-			&setting.Description,
-			&setting.CreatedAt,
-			&setting.UpdatedAt,
-		); err != nil {
-			return nil, err
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, key, value, description, created_at, updated_at
+			FROM app.settings
+			WHERE key = ANY($1)
+		`, keys)
+		if err != nil {
+			return err
 		}
+		defer rows.Close()
 
-		if err := json.Unmarshal(valueJSON, &setting.Value); err != nil {
-			// Handle legacy format where value is stored as raw primitive
-			var rawValue interface{}
-			if rawErr := json.Unmarshal(valueJSON, &rawValue); rawErr == nil {
-				setting.Value = map[string]interface{}{"value": rawValue}
-			} else {
-				return nil, err
+		for rows.Next() {
+			var setting SystemSetting
+			var valueJSON []byte
+
+			if err := rows.Scan(
+				&setting.ID,
+				&setting.Key,
+				&valueJSON,
+				&setting.Description,
+				&setting.CreatedAt,
+				&setting.UpdatedAt,
+			); err != nil {
+				return err
 			}
+
+			if err := json.Unmarshal(valueJSON, &setting.Value); err != nil {
+				// Handle legacy format where value is stored as raw primitive
+				var rawValue interface{}
+				if rawErr := json.Unmarshal(valueJSON, &rawValue); rawErr == nil {
+					setting.Value = map[string]interface{}{"value": rawValue}
+				} else {
+					return err
+				}
+			}
+
+			settings[setting.Key] = &setting
 		}
 
-		settings[setting.Key] = &setting
-	}
-
-	if err := rows.Err(); err != nil {
+		return rows.Err()
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -218,14 +229,17 @@ func (s *SystemSettingsService) SetSetting(ctx context.Context, key string, valu
 		return err
 	}
 
-	_, err = s.db.Exec(ctx, `
-		INSERT INTO app.settings (key, value, description, category)
-		VALUES ($1, $2, $3, 'system')
-		ON CONFLICT (key) WHERE user_id IS NULL DO UPDATE
-		SET value = EXCLUDED.value,
-		    description = EXCLUDED.description,
-		    updated_at = NOW()
-	`, key, valueJSON, description)
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO app.settings (key, value, description, category)
+			VALUES ($1, $2, $3, 'system')
+			ON CONFLICT (key) WHERE user_id IS NULL DO UPDATE
+			SET value = EXCLUDED.value,
+			    description = EXCLUDED.description,
+			    updated_at = NOW()
+		`, key, valueJSON, description)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -240,14 +254,23 @@ func (s *SystemSettingsService) SetSetting(ctx context.Context, key string, valu
 
 // DeleteSetting removes a system setting by key
 func (s *SystemSettingsService) DeleteSetting(ctx context.Context, key string) error {
-	result, err := s.db.Exec(ctx, `
-		DELETE FROM app.settings WHERE key = $1
-	`, key)
+	var rowsAffected int64
+
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			DELETE FROM app.settings WHERE key = $1
+		`, key)
+		if err != nil {
+			return err
+		}
+		rowsAffected = tag.RowsAffected()
+		return nil
+	})
 	if err != nil {
 		return err
 	}
 
-	if result.RowsAffected() == 0 {
+	if rowsAffected == 0 {
 		return ErrSettingNotFound
 	}
 
@@ -261,48 +284,56 @@ func (s *SystemSettingsService) DeleteSetting(ctx context.Context, key string) e
 
 // ListSettings retrieves all system settings
 func (s *SystemSettingsService) ListSettings(ctx context.Context) ([]SystemSetting, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT id, key, value, description, created_at, updated_at
-		FROM app.settings
-		ORDER BY key
-	`)
+	var settings []SystemSetting
+
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, key, value, description, created_at, updated_at
+			FROM app.settings
+			ORDER BY key
+		`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var setting SystemSetting
+			var valueJSON []byte
+
+			err := rows.Scan(
+				&setting.ID,
+				&setting.Key,
+				&valueJSON,
+				&setting.Description,
+				&setting.CreatedAt,
+				&setting.UpdatedAt,
+			)
+			if err != nil {
+				return err
+			}
+
+			if err := json.Unmarshal(valueJSON, &setting.Value); err != nil {
+				// Handle legacy format where value is stored as raw primitive (e.g., "true", "false")
+				// instead of the expected {"value": <primitive>} format
+				var rawValue interface{}
+				if rawErr := json.Unmarshal(valueJSON, &rawValue); rawErr == nil {
+					setting.Value = map[string]interface{}{"value": rawValue}
+				} else {
+					return err
+				}
+			}
+
+			settings = append(settings, setting)
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var settings []SystemSetting
-	for rows.Next() {
-		var setting SystemSetting
-		var valueJSON []byte
-
-		err := rows.Scan(
-			&setting.ID,
-			&setting.Key,
-			&valueJSON,
-			&setting.Description,
-			&setting.CreatedAt,
-			&setting.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(valueJSON, &setting.Value); err != nil {
-			// Handle legacy format where value is stored as raw primitive (e.g., "true", "false")
-			// instead of the expected {"value": <primitive>} format
-			var rawValue interface{}
-			if rawErr := json.Unmarshal(valueJSON, &rawValue); rawErr == nil {
-				setting.Value = map[string]interface{}{"value": rawValue}
-			} else {
-				return nil, err
-			}
-		}
-
-		settings = append(settings, setting)
-	}
-
-	return settings, rows.Err()
+	return settings, nil
 }
 
 // ErrInstanceSettingNotFound is returned when an instance-level setting is not found
@@ -327,20 +358,22 @@ type InstanceSetting struct {
 func (s *SystemSettingsService) GetInstanceSetting(ctx context.Context, key string) (*InstanceSetting, error) {
 	var setting InstanceSetting
 	var valueJSON []byte
-	err := s.db.QueryRow(ctx, `
-        SELECT id, key, value, description, is_public, category, created_at, updated_at
-        FROM app.instance_settings
-        WHERE key = $1
-    `, key).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSON,
-		&setting.Description,
-		&setting.IsPublic,
-		&setting.Category,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+	        SELECT id, key, value, description, is_public, category, created_at, updated_at
+	        FROM app.instance_settings
+	        WHERE key = $1
+	    `, key).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSON,
+			&setting.Description,
+			&setting.IsPublic,
+			&setting.Category,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInstanceSettingNotFound
@@ -359,14 +392,17 @@ func (s *SystemSettingsService) SetInstanceSetting(ctx context.Context, key stri
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(ctx, `
-        INSERT INTO app.instance_settings (key, value, description, category)
-        VALUES ($1, $2, $3, 'system')
-        ON CONFLICT (key) DO UPDATE
-        SET value = EXCLUDED.value,
-            description = EXCLUDED.description,
-            updated_at = NOW()
-    `, key, valueJSON, description)
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+	        INSERT INTO app.instance_settings (key, value, description, category)
+	        VALUES ($1, $2, $3, 'system')
+	        ON CONFLICT (key) DO UPDATE
+	        SET value = EXCLUDED.value,
+	            description = EXCLUDED.description,
+	            updated_at = NOW()
+	    `, key, valueJSON, description)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -379,13 +415,21 @@ func (s *SystemSettingsService) SetInstanceSetting(ctx context.Context, key stri
 
 // DeleteInstanceSetting removes an instance-level setting
 func (s *SystemSettingsService) DeleteInstanceSetting(ctx context.Context, key string) error {
-	result, err := s.db.Exec(ctx, `
-        DELETE FROM app.instance_settings WHERE key = $1
-    `, key)
+	var rowsAffected int64
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+	        DELETE FROM app.instance_settings WHERE key = $1
+	    `, key)
+		if err != nil {
+			return err
+		}
+		rowsAffected = tag.RowsAffected()
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	if result.RowsAffected() == 0 {
+	if rowsAffected == 0 {
 		return ErrInstanceSettingNotFound
 	}
 	// Invalidate cache for this key
@@ -431,18 +475,20 @@ func (s *SystemSettingsService) GetSettingWithInheritance(ctx context.Context, k
 func (s *SystemSettingsService) GetTenantSetting(ctx context.Context, key string, tenantID string) (*SystemSetting, error) {
 	var setting SystemSetting
 	var valueJSON []byte
-	err := s.db.QueryRow(ctx, `
-        SELECT id, key, value, description, created_at, updated_at
-        FROM app.settings
-        WHERE key = $1 AND tenant_id = $2
-    `, key, tenantID).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSON,
-		&setting.Description,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+	        SELECT id, key, value, description, created_at, updated_at
+	        FROM app.settings
+	        WHERE key = $1 AND tenant_id = $2
+	    `, key, tenantID).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSON,
+			&setting.Description,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrTenantSettingNotFound
@@ -467,14 +513,17 @@ func (s *SystemSettingsService) SetTenantSetting(ctx context.Context, key string
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(ctx, `
-        INSERT INTO app.settings (key, value, description, category, tenant_id)
-        VALUES ($1, $2, $3, 'custom', $4)
-        ON CONFLICT (key, tenant_id) DO UPDATE
-        SET value = EXCLUDED.value,
-            description = EXCLUDED.description,
-            updated_at = NOW()
-    `, key, valueJSON, description, tenantID)
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+	        INSERT INTO app.settings (key, value, description, category, tenant_id)
+	        VALUES ($1, $2, $3, 'custom', $4)
+	        ON CONFLICT (key, tenant_id) DO UPDATE
+	        SET value = EXCLUDED.value,
+	            description = EXCLUDED.description,
+	            updated_at = NOW()
+	    `, key, valueJSON, description, tenantID)
+		return err
+	})
 	if err != nil {
 		return err
 	}

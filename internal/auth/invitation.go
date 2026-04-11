@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
@@ -90,31 +91,33 @@ func (s *InvitationService) CreateInvitationWithTenant(ctx context.Context, emai
 		CreatedAt: time.Now(),
 	}
 
-	err = s.db.QueryRow(ctx, `
-		INSERT INTO platform.invitation_tokens (id, email, token, role, tenant_id, invited_by, expires_at, accepted, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id, email, token, role, tenant_id, invited_by, expires_at, accepted, created_at
-	`,
-		invitation.ID,
-		invitation.Email,
-		invitation.Token,
-		invitation.Role,
-		invitation.TenantID,
-		invitation.InvitedBy,
-		invitation.ExpiresAt,
-		invitation.Accepted,
-		invitation.CreatedAt,
-	).Scan(
-		&invitation.ID,
-		&invitation.Email,
-		&invitation.Token,
-		&invitation.Role,
-		&invitation.TenantID,
-		&invitation.InvitedBy,
-		&invitation.ExpiresAt,
-		&invitation.Accepted,
-		&invitation.CreatedAt,
-	)
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			INSERT INTO platform.invitation_tokens (id, email, token, role, tenant_id, invited_by, expires_at, accepted, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			RETURNING id, email, token, role, tenant_id, invited_by, expires_at, accepted, created_at
+		`,
+			invitation.ID,
+			invitation.Email,
+			invitation.Token,
+			invitation.Role,
+			invitation.TenantID,
+			invitation.InvitedBy,
+			invitation.ExpiresAt,
+			invitation.Accepted,
+			invitation.CreatedAt,
+		).Scan(
+			&invitation.ID,
+			&invitation.Email,
+			&invitation.Token,
+			&invitation.Role,
+			&invitation.TenantID,
+			&invitation.InvitedBy,
+			&invitation.ExpiresAt,
+			&invitation.Accepted,
+			&invitation.CreatedAt,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -126,22 +129,24 @@ func (s *InvitationService) CreateInvitationWithTenant(ctx context.Context, emai
 func (s *InvitationService) ValidateToken(ctx context.Context, token string) (*InvitationToken, error) {
 	invitation := &InvitationToken{}
 
-	err := s.db.QueryRow(ctx, `
-		SELECT id, email, token, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
-		FROM platform.invitation_tokens
-		WHERE token = $1
-	`, token).Scan(
-		&invitation.ID,
-		&invitation.Email,
-		&invitation.Token,
-		&invitation.Role,
-		&invitation.TenantID,
-		&invitation.InvitedBy,
-		&invitation.ExpiresAt,
-		&invitation.Accepted,
-		&invitation.AcceptedAt,
-		&invitation.CreatedAt,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT id, email, token, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
+			FROM platform.invitation_tokens
+			WHERE token = $1
+		`, token).Scan(
+			&invitation.ID,
+			&invitation.Email,
+			&invitation.Token,
+			&invitation.Role,
+			&invitation.TenantID,
+			&invitation.InvitedBy,
+			&invitation.ExpiresAt,
+			&invitation.Accepted,
+			&invitation.AcceptedAt,
+			&invitation.CreatedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvitationNotFound
@@ -166,11 +171,16 @@ func (s *InvitationService) ValidateToken(ctx context.Context, token string) (*I
 func (s *InvitationService) AcceptInvitation(ctx context.Context, token string) error {
 	now := time.Now()
 
-	result, err := s.db.Exec(ctx, `
-		UPDATE platform.invitation_tokens
-		SET accepted = true, accepted_at = $1
-		WHERE token = $2 AND accepted = false AND expires_at > $1
-	`, now, token)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		var err error
+		result, err = tx.Exec(ctx, `
+			UPDATE platform.invitation_tokens
+			SET accepted = true, accepted_at = $1
+			WHERE token = $2 AND accepted = false AND expires_at > $1
+		`, now, token)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -187,9 +197,14 @@ func (s *InvitationService) AcceptInvitation(ctx context.Context, token string) 
 
 // RevokeInvitation revokes (deletes) an invitation token
 func (s *InvitationService) RevokeInvitation(ctx context.Context, token string) error {
-	result, err := s.db.Exec(ctx, `
-		DELETE FROM platform.invitation_tokens WHERE token = $1
-	`, token)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		var err error
+		result, err = tx.Exec(ctx, `
+			DELETE FROM platform.invitation_tokens WHERE token = $1
+		`, token)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -203,39 +218,41 @@ func (s *InvitationService) RevokeInvitation(ctx context.Context, token string) 
 
 // GetInvitationByEmail retrieves pending invitations for an email
 func (s *InvitationService) GetInvitationByEmail(ctx context.Context, email string) ([]InvitationToken, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT id, email, token, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
-		FROM platform.invitation_tokens
-		WHERE email = $1 AND accepted = false AND expires_at > NOW()
-		ORDER BY created_at DESC
-	`, email)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var invitations []InvitationToken
-	for rows.Next() {
-		var inv InvitationToken
-		err := rows.Scan(
-			&inv.ID,
-			&inv.Email,
-			&inv.Token,
-			&inv.Role,
-			&inv.TenantID,
-			&inv.InvitedBy,
-			&inv.ExpiresAt,
-			&inv.Accepted,
-			&inv.AcceptedAt,
-			&inv.CreatedAt,
-		)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, email, token, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
+			FROM platform.invitation_tokens
+			WHERE email = $1 AND accepted = false AND expires_at > NOW()
+			ORDER BY created_at DESC
+		`, email)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		invitations = append(invitations, inv)
-	}
+		defer rows.Close()
 
-	return invitations, rows.Err()
+		for rows.Next() {
+			var inv InvitationToken
+			if err := rows.Scan(
+				&inv.ID,
+				&inv.Email,
+				&inv.Token,
+				&inv.Role,
+				&inv.TenantID,
+				&inv.InvitedBy,
+				&inv.ExpiresAt,
+				&inv.Accepted,
+				&inv.AcceptedAt,
+				&inv.CreatedAt,
+			); err != nil {
+				return err
+			}
+			invitations = append(invitations, inv)
+		}
+		return rows.Err()
+	})
+
+	return invitations, err
 }
 
 // ListInvitations retrieves all invitations (for admin panel)
@@ -258,42 +275,49 @@ func (s *InvitationService) ListInvitations(ctx context.Context, includeAccepted
 
 	query += " ORDER BY created_at DESC"
 
-	rows, err := s.db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var invitations []InvitationToken
-	for rows.Next() {
-		var inv InvitationToken
-		err := rows.Scan(
-			&inv.ID,
-			&inv.Email,
-			&inv.Token,
-			&inv.Role,
-			&inv.TenantID,
-			&inv.InvitedBy,
-			&inv.ExpiresAt,
-			&inv.Accepted,
-			&inv.AcceptedAt,
-			&inv.CreatedAt,
-		)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		invitations = append(invitations, inv)
-	}
+		defer rows.Close()
 
-	return invitations, rows.Err()
+		for rows.Next() {
+			var inv InvitationToken
+			if err := rows.Scan(
+				&inv.ID,
+				&inv.Email,
+				&inv.Token,
+				&inv.Role,
+				&inv.TenantID,
+				&inv.InvitedBy,
+				&inv.ExpiresAt,
+				&inv.Accepted,
+				&inv.AcceptedAt,
+				&inv.CreatedAt,
+			); err != nil {
+				return err
+			}
+			invitations = append(invitations, inv)
+		}
+		return rows.Err()
+	})
+
+	return invitations, err
 }
 
 // CleanupExpiredInvitations removes expired invitation tokens
 func (s *InvitationService) CleanupExpiredInvitations(ctx context.Context) (int64, error) {
-	result, err := s.db.Exec(ctx, `
-		DELETE FROM platform.invitation_tokens
-		WHERE expires_at < NOW() AND accepted = false
-	`)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		var err error
+		result, err = tx.Exec(ctx, `
+			DELETE FROM platform.invitation_tokens
+			WHERE expires_at < NOW() AND accepted = false
+		`)
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}

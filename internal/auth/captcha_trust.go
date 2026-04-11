@@ -12,10 +12,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // Trust-related errors
@@ -112,14 +112,14 @@ type UserTrustSignal struct {
 
 // CaptchaTrustService handles adaptive CAPTCHA trust evaluation
 type CaptchaTrustService struct {
-	db             *pgxpool.Pool
+	db             *database.Connection
 	config         *config.AdaptiveTrustConfig
 	captchaConfig  *config.CaptchaConfig
 	captchaService *CaptchaService
 }
 
 // NewCaptchaTrustService creates a new trust service
-func NewCaptchaTrustService(db *pgxpool.Pool, captchaConfig *config.CaptchaConfig, captchaService *CaptchaService) *CaptchaTrustService {
+func NewCaptchaTrustService(db *database.Connection, captchaConfig *config.CaptchaConfig, captchaService *CaptchaService) *CaptchaTrustService {
 	return &CaptchaTrustService{
 		db:             db,
 		config:         &captchaConfig.AdaptiveTrust,
@@ -444,8 +444,10 @@ func (s *CaptchaTrustService) storeChallenge(ctx context.Context, challengeID, e
 		(challenge_id, endpoint, email, ip_address, device_fingerprint, user_agent, trust_score, captcha_required, reason, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
-	_, err := s.db.Exec(ctx, query, challengeID, endpoint, email, ipAddress, deviceFingerprint, userAgent, trustScore, captchaRequired, reason, expiresAt)
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, challengeID, endpoint, email, ipAddress, deviceFingerprint, userAgent, trustScore, captchaRequired, reason, expiresAt)
+		return err
+	})
 }
 
 // ValidateChallenge checks if a challenge is valid and optionally consumes it
@@ -470,10 +472,12 @@ func (s *CaptchaTrustService) ValidateChallenge(ctx context.Context, challengeID
 		ConsumedAt      *time.Time
 	}
 
-	err := s.db.QueryRow(ctx, query, challengeID).Scan(
-		&challenge.ID, &challenge.Endpoint, &challenge.IPAddress,
-		&challenge.CaptchaRequired, &challenge.ExpiresAt, &challenge.ConsumedAt,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, challengeID).Scan(
+			&challenge.ID, &challenge.Endpoint, &challenge.IPAddress,
+			&challenge.CaptchaRequired, &challenge.ExpiresAt, &challenge.ConsumedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrChallengeNotFound
@@ -512,9 +516,11 @@ func (s *CaptchaTrustService) ValidateChallenge(ctx context.Context, challengeID
 		SET consumed_at = NOW(), captcha_verified = $2
 		WHERE challenge_id = $1
 	`
-	_, err = s.db.Exec(ctx, updateQuery, challengeID, captchaVerified)
-	if err != nil {
-		log.Warn().Err(err).Str("challenge_id", challengeID).Msg("Failed to mark challenge as consumed")
+	if updateErr := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, updateQuery, challengeID, captchaVerified)
+		return err
+	}); updateErr != nil {
+		log.Warn().Err(updateErr).Str("challenge_id", challengeID).Msg("Failed to mark challenge as consumed")
 	}
 
 	return nil
@@ -532,10 +538,12 @@ func (s *CaptchaTrustService) GetChallenge(ctx context.Context, challengeID stri
 	var c CaptchaChallenge
 	var id uuid.UUID
 	var ip net.IP
-	err := s.db.QueryRow(ctx, query, challengeID).Scan(
-		&id, &c.ChallengeID, &c.Endpoint, &c.Email, &ip, &c.DeviceFingerprint, &c.UserAgent,
-		&c.TrustScore, &c.CaptchaRequired, &c.Reason, &c.CreatedAt, &c.ExpiresAt, &c.ConsumedAt, &c.CaptchaVerified,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, challengeID).Scan(
+			&id, &c.ChallengeID, &c.Endpoint, &c.Email, &ip, &c.DeviceFingerprint, &c.UserAgent,
+			&c.TrustScore, &c.CaptchaRequired, &c.Reason, &c.CreatedAt, &c.ExpiresAt, &c.ConsumedAt, &c.CaptchaVerified,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrChallengeNotFound
@@ -562,7 +570,10 @@ func (s *CaptchaTrustService) IssueTrustToken(ctx context.Context, ipAddress, de
 		(token_hash, ip_address, device_fingerprint, user_agent, expires_at)
 		VALUES ($1, $2, $3, $4, $5)
 	`
-	_, err := s.db.Exec(ctx, query, tokenHash, ipAddress, deviceFingerprint, userAgent, expiresAt)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, tokenHash, ipAddress, deviceFingerprint, userAgent, expiresAt)
+		return err
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to store trust token: %w", err)
 	}
@@ -584,7 +595,9 @@ func (s *CaptchaTrustService) ValidateTrustToken(ctx context.Context, token, ipA
 	var storedFingerprint *string
 	var expiresAt time.Time
 
-	err := s.db.QueryRow(ctx, query, tokenHash).Scan(&storedIP, &storedFingerprint, &expiresAt)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, tokenHash).Scan(&storedIP, &storedFingerprint, &expiresAt)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, ErrTrustTokenInvalid
@@ -603,7 +616,10 @@ func (s *CaptchaTrustService) ValidateTrustToken(ctx context.Context, token, ipA
 		SET used_count = used_count + 1, last_used_at = NOW()
 		WHERE token_hash = $1
 	`
-	_, _ = s.db.Exec(ctx, updateQuery, tokenHash)
+	_ = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, updateQuery, tokenHash)
+		return err
+	})
 
 	return true, nil
 }
@@ -621,8 +637,10 @@ func (s *CaptchaTrustService) RecordSuccessfulLogin(ctx context.Context, userID 
 			last_seen_at = NOW(),
 			user_agent = EXCLUDED.user_agent
 	`
-	_, err := s.db.Exec(ctx, query, userID, ipAddress, deviceFingerprint, userAgent)
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, userID, ipAddress, deviceFingerprint, userAgent)
+		return err
+	})
 }
 
 // RecordFailedAttempt updates trust signals after a failed login attempt
@@ -641,8 +659,10 @@ func (s *CaptchaTrustService) RecordFailedAttempt(ctx context.Context, userID *u
 			failed_attempts = auth.user_trust_signals.failed_attempts + 1,
 			last_seen_at = NOW()
 	`
-	_, err := s.db.Exec(ctx, query, userID, ipAddress, deviceFingerprint, userAgent)
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, userID, ipAddress, deviceFingerprint, userAgent)
+		return err
+	})
 }
 
 // RecordCaptchaSolved updates trust signals after a successful CAPTCHA
@@ -660,8 +680,10 @@ func (s *CaptchaTrustService) RecordCaptchaSolved(ctx context.Context, userID *u
 			last_captcha_at = NOW(),
 			last_seen_at = NOW()
 	`
-	_, err := s.db.Exec(ctx, query, userID, ipAddress, deviceFingerprint, userAgent)
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, userID, ipAddress, deviceFingerprint, userAgent)
+		return err
+	})
 }
 
 // Helper functions
@@ -674,7 +696,9 @@ func (s *CaptchaTrustService) getUserByEmail(ctx context.Context, email string) 
 	`
 
 	var user User
-	err := s.db.QueryRow(ctx, query, email).Scan(&user.ID, &user.Email, &user.EmailVerified, &user.CreatedAt)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, email).Scan(&user.ID, &user.Email, &user.EmailVerified, &user.CreatedAt)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -697,11 +721,13 @@ func (s *CaptchaTrustService) getTrustSignal(ctx context.Context, userID uuid.UU
 	var id uuid.UUID
 	var uid uuid.UUID
 	var ip net.IP
-	err := s.db.QueryRow(ctx, query, userID, ipAddress).Scan(
-		&id, &uid, &ip, &signal.DeviceFingerprint, &signal.UserAgent,
-		&signal.FirstSeenAt, &signal.LastSeenAt, &signal.SuccessfulLogins, &signal.FailedAttempts,
-		&signal.LastCaptchaAt, &signal.IsTrusted, &signal.IsBlocked,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, userID, ipAddress).Scan(
+			&id, &uid, &ip, &signal.DeviceFingerprint, &signal.UserAgent,
+			&signal.FirstSeenAt, &signal.LastSeenAt, &signal.SuccessfulLogins, &signal.FailedAttempts,
+			&signal.LastCaptchaAt, &signal.IsTrusted, &signal.IsBlocked,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -723,7 +749,9 @@ func (s *CaptchaTrustService) userHasMFA(ctx context.Context, userID uuid.UUID) 
 		)
 	`
 	var hasMFA bool
-	_ = s.db.QueryRow(ctx, query, userID).Scan(&hasMFA)
+	_ = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, userID).Scan(&hasMFA)
+	})
 	return hasMFA
 }
 

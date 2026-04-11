@@ -584,11 +584,13 @@ func (h *TenantHandler) createServiceKey(ctx context.Context, req CreateServiceK
 
 	// Insert into database
 	var keyID uuid.UUID
-	err = h.DB.Pool().QueryRow(ctx, `
-		INSERT INTO platform.service_keys (name, description, key_hash, key_prefix, key_type, tenant_id, scopes, allowed_namespaces, is_active, rate_limit_per_minute, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10)
-		RETURNING id
-	`, req.Name, req.Description, string(keyHash), keyPrefix, req.KeyType, req.TenantID, scopes, req.AllowedNamespaces, req.RateLimitPerMin, req.CreatedBy).Scan(&keyID)
+	err = database.WrapWithServiceRole(ctx, h.DB, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			INSERT INTO platform.service_keys (name, description, key_hash, key_prefix, key_type, tenant_id, scopes, allowed_namespaces, is_active, rate_limit_per_minute, created_by)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10)
+			RETURNING id
+		`, req.Name, req.Description, string(keyHash), keyPrefix, req.KeyType, req.TenantID, scopes, req.AllowedNamespaces, req.RateLimitPerMin, req.CreatedBy).Scan(&keyID)
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to insert key: %w", err)
 	}

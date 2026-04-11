@@ -8,6 +8,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
@@ -159,7 +160,7 @@ func NewService(
 	var stateStore StateStorer
 	if cfg.OAuthStateStorage == "database" {
 		log.Info().Msg("Using database-backed OAuth state storage for multi-instance deployments")
-		stateStore = NewDBStateStore(db.Pool(), DefaultDBStateStoreConfig())
+		stateStore = NewDBStateStore(db, DefaultDBStateStoreConfig())
 	} else {
 		if cfg.OAuthStateStorage != "" && cfg.OAuthStateStorage != "memory" {
 			log.Warn().Str("storage", cfg.OAuthStateStorage).Msg("Unknown oauth_state_storage value, using default (memory)")
@@ -780,12 +781,14 @@ func (s *Service) RevokeAllUserTokens(ctx context.Context, userID, reason string
 func (s *Service) IsServiceRoleTokenRevoked(ctx context.Context, jti string) (bool, error) {
 	// First check if there's a global revocation (all service_role tokens revoked)
 	var globalRevocation bool
-	err := s.userRepo.db.Pool().QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM auth.emergency_revocation
-			WHERE revokes_all = TRUE AND expires_at > NOW()
-		)
-	`).Scan(&globalRevocation)
+	err := database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM auth.emergency_revocation
+				WHERE revokes_all = TRUE AND expires_at > NOW()
+			)
+		`).Scan(&globalRevocation)
+	})
 	if err != nil {
 		return false, fmt.Errorf("failed to check global revocation status: %w", err)
 	}
@@ -796,12 +799,14 @@ func (s *Service) IsServiceRoleTokenRevoked(ctx context.Context, jti string) (bo
 
 	// Check if this specific token (JTI) has been revoked
 	var tokenRevoked bool
-	err = s.userRepo.db.Pool().QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM auth.emergency_revocation
-			WHERE revoked_jti = $1 AND expires_at > NOW()
-		)
-	`, jti).Scan(&tokenRevoked)
+	err = database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM auth.emergency_revocation
+				WHERE revoked_jti = $1 AND expires_at > NOW()
+			)
+		`, jti).Scan(&tokenRevoked)
+	})
 	if err != nil {
 		return false, fmt.Errorf("failed to check token revocation status: %w", err)
 	}
@@ -814,11 +819,13 @@ func (s *Service) IsServiceRoleTokenRevoked(ctx context.Context, jti string) (bo
 // Returns the ID of the revocation record for audit purposes
 func (s *Service) EmergencyRevokeAllServiceRoleTokens(ctx context.Context, revokedBy, reason string) (int64, error) {
 	var id int64
-	err := s.userRepo.db.Pool().QueryRow(ctx, `
-		INSERT INTO auth.emergency_revocation (revokes_all, revoked_by, reason, expires_at)
-		VALUES (TRUE, $1, $2, NOW() + INTERVAL '7 days')
-		RETURNING id
-	`, revokedBy, reason).Scan(&id)
+	err := database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			INSERT INTO auth.emergency_revocation (revokes_all, revoked_by, reason, expires_at)
+			VALUES (TRUE, $1, $2, NOW() + INTERVAL '7 days')
+			RETURNING id
+		`, revokedBy, reason).Scan(&id)
+	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to create emergency revocation: %w", err)
 	}
@@ -839,11 +846,14 @@ func (s *Service) EmergencyRevokeAllServiceRoleTokens(ctx context.Context, revok
 // EmergencyRevokeServiceRoleToken revokes a specific service_role token by JTI
 // This allows selective revocation of individual compromised tokens
 func (s *Service) EmergencyRevokeServiceRoleToken(ctx context.Context, jti, revokedBy, reason string) error {
-	_, err := s.userRepo.db.Pool().Exec(ctx, `
-		INSERT INTO auth.emergency_revocation (revoked_jti, revoked_by, reason, expires_at)
-		VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')
-		ON CONFLICT (revoked_jti) DO NOTHING
-	`, jti, revokedBy, reason)
+	err := database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO auth.emergency_revocation (revoked_jti, revoked_by, reason, expires_at)
+			VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')
+			ON CONFLICT (revoked_jti) DO NOTHING
+		`, jti, revokedBy, reason)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create emergency revocation: %w", err)
 	}

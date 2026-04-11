@@ -11,16 +11,17 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // MCPOAuthHandler handles OAuth 2.1 authentication for MCP clients
 type MCPOAuthHandler struct {
-	db          *pgxpool.Pool
+	db          *database.Connection
 	config      *config.MCPConfig
 	authService *auth.Service
 	baseURL     string
@@ -28,7 +29,7 @@ type MCPOAuthHandler struct {
 }
 
 // NewMCPOAuthHandler creates a new MCP OAuth handler
-func NewMCPOAuthHandler(db *pgxpool.Pool, cfg *config.MCPConfig, authService *auth.Service, baseURL, publicURL string) *MCPOAuthHandler {
+func NewMCPOAuthHandler(db *database.Connection, cfg *config.MCPConfig, authService *auth.Service, baseURL, publicURL string) *MCPOAuthHandler {
 	return &MCPOAuthHandler{
 		db:          db,
 		config:      cfg,
@@ -157,12 +158,15 @@ func (h *MCPOAuthHandler) HandleClientRegistration(c fiber.Ctx) error {
 	}
 
 	// Insert client into database
-	_, err = h.db.Exec(c.RequestCtx(), `
-		INSERT INTO auth.mcp_oauth_clients (client_id, client_name, client_type, redirect_uris, scopes, metadata)
-		VALUES ($1, $2, 'public', $3, $4, $5)
-	`, clientID, req.ClientName, req.RedirectURIs, scopes, map[string]any{
-		"user_agent":    c.Get("User-Agent"),
-		"registered_at": time.Now().UTC(),
+	err = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(c.RequestCtx(), `
+			INSERT INTO auth.mcp_oauth_clients (client_id, client_name, client_type, redirect_uris, scopes, metadata)
+			VALUES ($1, $2, 'public', $3, $4, $5)
+		`, clientID, req.ClientName, req.RedirectURIs, scopes, map[string]any{
+			"user_agent":    c.Get("User-Agent"),
+			"registered_at": time.Now().UTC(),
+		})
+		return err
 	})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to register OAuth client")
@@ -248,11 +252,13 @@ func (h *MCPOAuthHandler) HandleAuthorize(c fiber.Ctx) error {
 		IsActive     bool     `db:"is_active"`
 	}
 
-	err := h.db.QueryRow(c.RequestCtx(), `
-		SELECT client_id, client_name, redirect_uris, scopes, is_active
-		FROM auth.mcp_oauth_clients
-		WHERE client_id = $1
-	`, clientID).Scan(&client.ClientID, &client.ClientName, &client.RedirectURIs, &client.Scopes, &client.IsActive)
+	err := database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(c.RequestCtx(), `
+			SELECT client_id, client_name, redirect_uris, scopes, is_active
+			FROM auth.mcp_oauth_clients
+			WHERE client_id = $1
+		`, clientID).Scan(&client.ClientID, &client.ClientName, &client.RedirectURIs, &client.Scopes, &client.IsActive)
+	})
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_client",
@@ -318,10 +324,13 @@ func (h *MCPOAuthHandler) HandleAuthorize(c fiber.Ctx) error {
 	}
 
 	// Store authorization code (now includes user_id)
-	_, err = h.db.Exec(c.RequestCtx(), `
-		INSERT INTO auth.mcp_oauth_codes (code, client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, state)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, code, clientID, userID, redirectURI, requestedScopes, codeChallenge, codeChallengeMethod, state)
+	err = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(c.RequestCtx(), `
+			INSERT INTO auth.mcp_oauth_codes (code, client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, state)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, code, clientID, userID, redirectURI, requestedScopes, codeChallenge, codeChallengeMethod, state)
+		return err
+	})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to store authorization code")
 		return h.redirectWithError(c, redirectURI, "server_error", "Failed to process authorization", state)
@@ -399,14 +408,16 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 		ExpiresAt           time.Time
 	}
 
-	err := h.db.QueryRow(c.RequestCtx(), `
-		SELECT client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, expires_at
-		FROM auth.mcp_oauth_codes
-		WHERE code = $1
-	`, code).Scan(
-		&authCode.ClientID, &authCode.UserID, &authCode.RedirectURI,
-		&authCode.Scopes, &authCode.CodeChallenge, &authCode.CodeChallengeMethod, &authCode.ExpiresAt,
-	)
+	err := database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(c.RequestCtx(), `
+			SELECT client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, expires_at
+			FROM auth.mcp_oauth_codes
+			WHERE code = $1
+		`, code).Scan(
+			&authCode.ClientID, &authCode.UserID, &authCode.RedirectURI,
+			&authCode.Scopes, &authCode.CodeChallenge, &authCode.CodeChallengeMethod, &authCode.ExpiresAt,
+		)
+	})
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_grant",
@@ -415,7 +426,10 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 	}
 
 	// Delete the code (one-time use)
-	_, _ = h.db.Exec(c.RequestCtx(), `DELETE FROM auth.mcp_oauth_codes WHERE code = $1`, code)
+	_ = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(c.RequestCtx(), `DELETE FROM auth.mcp_oauth_codes WHERE code = $1`, code)
+		return err
+	})
 
 	// Validate code hasn't expired
 	if time.Now().After(authCode.ExpiresAt) {
@@ -473,10 +487,13 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 	accessTokenHash := hashToken(accessToken)
 	refreshTokenHash := hashToken(refreshToken)
 
-	_, err = h.db.Exec(c.RequestCtx(), `
-		INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
-		VALUES ('access', $1, $2, $3, $4, $5)
-	`, accessTokenHash, clientID, authCode.UserID, authCode.Scopes, accessTokenExpiry)
+	err = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(c.RequestCtx(), `
+			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
+			VALUES ('access', $1, $2, $3, $4, $5)
+		`, accessTokenHash, clientID, authCode.UserID, authCode.Scopes, accessTokenExpiry)
+		return err
+	})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to store access token")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -485,10 +502,13 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 		})
 	}
 
-	_, err = h.db.Exec(c.RequestCtx(), `
-		INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
-		VALUES ('refresh', $1, $2, $3, $4, $5)
-	`, refreshTokenHash, clientID, authCode.UserID, authCode.Scopes, refreshTokenExpiry)
+	err = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(c.RequestCtx(), `
+			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
+			VALUES ('refresh', $1, $2, $3, $4, $5)
+		`, refreshTokenHash, clientID, authCode.UserID, authCode.Scopes, refreshTokenExpiry)
+		return err
+	})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to store refresh token")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -533,11 +553,13 @@ func (h *MCPOAuthHandler) handleRefreshTokenGrant(c fiber.Ctx) error {
 		Scopes   []string
 	}
 
-	err := h.db.QueryRow(c.RequestCtx(), `
-		SELECT id, client_id, user_id, scopes
-		FROM auth.mcp_oauth_tokens
-		WHERE token_hash = $1 AND token_type = 'refresh' AND NOT is_revoked AND expires_at > NOW()
-	`, refreshTokenHash).Scan(&token.ID, &token.ClientID, &token.UserID, &token.Scopes)
+	err := database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(c.RequestCtx(), `
+			SELECT id, client_id, user_id, scopes
+			FROM auth.mcp_oauth_tokens
+			WHERE token_hash = $1 AND token_type = 'refresh' AND NOT is_revoked AND expires_at > NOW()
+		`, refreshTokenHash).Scan(&token.ID, &token.ClientID, &token.UserID, &token.Scopes)
+	})
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":             "invalid_grant",
@@ -554,11 +576,14 @@ func (h *MCPOAuthHandler) handleRefreshTokenGrant(c fiber.Ctx) error {
 	}
 
 	// Revoke old refresh token (rotation)
-	_, _ = h.db.Exec(c.RequestCtx(), `
-		UPDATE auth.mcp_oauth_tokens
-		SET is_revoked = true, revoked_at = NOW(), revoked_reason = 'rotated'
-		WHERE id = $1
-	`, token.ID)
+	_ = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(c.RequestCtx(), `
+			UPDATE auth.mcp_oauth_tokens
+			SET is_revoked = true, revoked_at = NOW(), revoked_reason = 'rotated'
+			WHERE id = $1
+		`, token.ID)
+		return err
+	})
 
 	// Generate new tokens
 	newAccessToken, _ := generateSecureToken("mcp_at_", 32)
@@ -571,15 +596,21 @@ func (h *MCPOAuthHandler) handleRefreshTokenGrant(c fiber.Ctx) error {
 	accessTokenHash := hashToken(newAccessToken)
 	newRefreshTokenHash := hashToken(newRefreshToken)
 
-	_, _ = h.db.Exec(c.RequestCtx(), `
-		INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
-		VALUES ('access', $1, $2, $3, $4, $5)
-	`, accessTokenHash, clientID, token.UserID, token.Scopes, accessTokenExpiry)
+	_ = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(c.RequestCtx(), `
+			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
+			VALUES ('access', $1, $2, $3, $4, $5)
+		`, accessTokenHash, clientID, token.UserID, token.Scopes, accessTokenExpiry)
+		return err
+	})
 
-	_, _ = h.db.Exec(c.RequestCtx(), `
-		INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
-		VALUES ('refresh', $1, $2, $3, $4, $5)
-	`, newRefreshTokenHash, clientID, token.UserID, token.Scopes, refreshTokenExpiry)
+	_ = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(c.RequestCtx(), `
+			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
+			VALUES ('refresh', $1, $2, $3, $4, $5)
+		`, newRefreshTokenHash, clientID, token.UserID, token.Scopes, refreshTokenExpiry)
+		return err
+	})
 
 	return c.JSON(fiber.Map{
 		"access_token":  newAccessToken,
@@ -609,17 +640,24 @@ func (h *MCPOAuthHandler) HandleRevoke(c fiber.Ctx) error {
 	tokenHash := hashToken(token)
 
 	// Revoke the token (and any related refresh tokens)
-	result, err := h.db.Exec(c.RequestCtx(), `
-		UPDATE auth.mcp_oauth_tokens
-		SET is_revoked = true, revoked_at = NOW(), revoked_reason = 'user_revoked'
-		WHERE token_hash = $1
-	`, tokenHash)
+	var rowsAffected int64
+	err := database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(c.RequestCtx(), `
+			UPDATE auth.mcp_oauth_tokens
+			SET is_revoked = true, revoked_at = NOW(), revoked_reason = 'user_revoked'
+			WHERE token_hash = $1
+		`, tokenHash)
+		if err != nil {
+			return err
+		}
+		rowsAffected = tag.RowsAffected()
+		return nil
+	})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to revoke token")
 	}
 
 	// Per RFC 7009, always return 200 OK even if token wasn't found
-	rowsAffected := result.RowsAffected()
 	if rowsAffected > 0 {
 		log.Debug().Msg("MCP OAuth token revoked")
 	}
@@ -631,11 +669,13 @@ func (h *MCPOAuthHandler) HandleRevoke(c fiber.Ctx) error {
 func (h *MCPOAuthHandler) ValidateAccessToken(c fiber.Ctx, token string) (clientID string, userID *string, scopes []string, err error) {
 	tokenHash := hashToken(token)
 
-	err = h.db.QueryRow(c.RequestCtx(), `
-		SELECT client_id, user_id, scopes
-		FROM auth.mcp_oauth_tokens
-		WHERE token_hash = $1 AND token_type = 'access' AND NOT is_revoked AND expires_at > NOW()
-	`, tokenHash).Scan(&clientID, &userID, &scopes)
+	err = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(c.RequestCtx(), `
+			SELECT client_id, user_id, scopes
+			FROM auth.mcp_oauth_tokens
+			WHERE token_hash = $1 AND token_type = 'access' AND NOT is_revoked AND expires_at > NOW()
+		`, tokenHash).Scan(&clientID, &userID, &scopes)
+	})
 
 	return
 }

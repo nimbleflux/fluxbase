@@ -405,7 +405,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	var samlService *auth.SAMLService
 	var samlProviderHandler *SAMLProviderHandler
 	var samlErr error
-	samlService, samlErr = auth.NewSAMLService(db.Pool(), cfg.GetPublicBaseURL(), cfg.Auth.SAMLProviders)
+	samlService, samlErr = auth.NewSAMLService(db, cfg.GetPublicBaseURL(), cfg.Auth.SAMLProviders)
 	if samlErr != nil {
 		log.Warn().Err(samlErr).Msg("Failed to initialize SAML service from config")
 	}
@@ -846,7 +846,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		// MCP handlers group
 		MCP: &MCPHandlers{
 			Handler:       mcp.NewHandler(&cfg.MCP, db),
-			OAuth:         NewMCPOAuthHandler(db.Pool(), &cfg.MCP, authService, cfg.BaseURL, cfg.GetPublicBaseURL()),
+			OAuth:         NewMCPOAuthHandler(db, &cfg.MCP, authService, cfg.BaseURL, cfg.GetPublicBaseURL()),
 			CustomManager: nil, // Initialized later in setupMCPServer
 			CustomHandler: nil, // Initialized later in setupMCPServer
 		},

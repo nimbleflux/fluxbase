@@ -54,6 +54,18 @@ CREATE INDEX IF NOT EXISTS idx_captcha_challenges_expires ON captcha_challenges 
 CREATE INDEX IF NOT EXISTS idx_captcha_challenges_ip_created ON captcha_challenges (ip_address, created_at);
 
 --
+-- Name: captcha_challenges; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE captcha_challenges ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: captcha_challenges; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE captcha_challenges FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: captcha_trust_tokens; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -86,6 +98,18 @@ CREATE INDEX IF NOT EXISTS idx_captcha_trust_tokens_expires ON captcha_trust_tok
 --
 
 CREATE INDEX IF NOT EXISTS idx_captcha_trust_tokens_hash ON captcha_trust_tokens (token_hash);
+
+--
+-- Name: captcha_trust_tokens; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE captcha_trust_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: captcha_trust_tokens; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE captcha_trust_tokens FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: emergency_revocation; Type: TABLE; Schema: -; Owner: -
@@ -132,6 +156,18 @@ CREATE INDEX IF NOT EXISTS idx_emergency_revocation_all ON emergency_revocation 
 --
 
 CREATE INDEX IF NOT EXISTS idx_emergency_revocation_jti ON emergency_revocation (revoked_jti) WHERE (revoked_jti IS NOT NULL);
+
+--
+-- Name: emergency_revocation; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE emergency_revocation ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: emergency_revocation; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE emergency_revocation FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: magic_links; Type: TABLE; Schema: -; Owner: -
@@ -221,6 +257,18 @@ CREATE INDEX IF NOT EXISTS idx_oauth_states_expires_at ON oauth_states (expires_
 CREATE INDEX IF NOT EXISTS idx_oauth_states_provider ON oauth_states (provider);
 
 --
+-- Name: oauth_states; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE oauth_states ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: oauth_states; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE oauth_states FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: otp_codes; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -283,6 +331,18 @@ CREATE INDEX IF NOT EXISTS idx_auth_otp_codes_phone ON otp_codes (phone) WHERE (
 --
 
 CREATE INDEX IF NOT EXISTS idx_auth_otp_codes_type ON otp_codes (type);
+
+--
+-- Name: otp_codes; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: otp_codes; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE otp_codes FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: rls_audit_log; Type: TABLE; Schema: -; Owner: -
@@ -394,6 +454,12 @@ CREATE INDEX IF NOT EXISTS idx_saml_assertion_ids_expires ON saml_assertion_ids 
 --
 
 ALTER TABLE saml_assertion_ids ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: saml_assertion_ids; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE saml_assertion_ids FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: saml_providers; Type: TABLE; Schema: -; Owner: -
@@ -852,6 +918,18 @@ COMMENT ON TABLE mcp_oauth_clients IS 'OAuth 2.1 clients for MCP authentication 
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_clients_registered_by ON mcp_oauth_clients (registered_by) WHERE (registered_by IS NOT NULL);
 
 --
+-- Name: mcp_oauth_clients; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE mcp_oauth_clients ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mcp_oauth_clients; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE mcp_oauth_clients FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: mcp_oauth_codes; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -887,6 +965,18 @@ CREATE INDEX IF NOT EXISTS idx_mcp_oauth_codes_client_id ON mcp_oauth_codes (cli
 --
 
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_codes_expires_at ON mcp_oauth_codes (expires_at);
+
+--
+-- Name: mcp_oauth_codes; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE mcp_oauth_codes ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mcp_oauth_codes; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE mcp_oauth_codes FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: mcp_oauth_tokens; Type: TABLE; Schema: -; Owner: -
@@ -941,6 +1031,18 @@ CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_token_hash ON mcp_oauth_tokens (
 --
 
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_user_id ON mcp_oauth_tokens (user_id) WHERE (user_id IS NOT NULL);
+
+--
+-- Name: mcp_oauth_tokens; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE mcp_oauth_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: mcp_oauth_tokens; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE mcp_oauth_tokens FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: mfa_factors; Type: TABLE; Schema: -; Owner: -
@@ -1034,6 +1136,18 @@ CREATE INDEX IF NOT EXISTS idx_auth_nonces_expires_at ON nonces (expires_at);
 --
 
 CREATE INDEX IF NOT EXISTS idx_auth_nonces_user_id ON nonces (user_id);
+
+--
+-- Name: nonces; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE nonces ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: nonces; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE nonces FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: oauth_links; Type: TABLE; Schema: -; Owner: -
@@ -1259,6 +1373,12 @@ CREATE INDEX IF NOT EXISTS idx_saml_sessions_user_id ON saml_sessions (user_id);
 --
 
 ALTER TABLE saml_sessions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: saml_sessions; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE saml_sessions FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: service_keys; Type: TABLE; Schema: -; Owner: -
@@ -1683,6 +1803,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_user_trust_signals_unique ON user_trust_si
 --
 
 CREATE INDEX IF NOT EXISTS idx_user_trust_signals_user_ip ON user_trust_signals (user_id, ip_address);
+
+--
+-- Name: user_trust_signals; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE user_trust_signals ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_trust_signals; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE user_trust_signals FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: webhook_monitored_tables; Type: TABLE; Schema: -; Owner: -
@@ -2874,6 +3006,96 @@ CREATE POLICY webhook_monitored_tables_service_only ON webhook_monitored_tables 
 --
 
 CREATE POLICY webhooks_admin_only ON webhooks TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'instance_admin') OR is_admin());
+
+--
+-- Name: saml_assertion_ids_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY saml_assertion_ids_service ON saml_assertion_ids TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: saml_sessions_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY saml_sessions_service ON saml_sessions TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: captcha_challenges_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY captcha_challenges_service ON captcha_challenges TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: captcha_challenges_admin; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY captcha_challenges_admin ON captcha_challenges TO authenticated USING (is_admin() OR current_user_role() = 'instance_admin') WITH CHECK (is_admin() OR current_user_role() = 'instance_admin');
+
+--
+-- Name: captcha_trust_tokens_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY captcha_trust_tokens_service ON captcha_trust_tokens TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: captcha_trust_tokens_admin; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY captcha_trust_tokens_admin ON captcha_trust_tokens TO authenticated USING (is_admin() OR current_user_role() = 'instance_admin') WITH CHECK (is_admin() OR current_user_role() = 'instance_admin');
+
+--
+-- Name: emergency_revocation_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY emergency_revocation_service ON emergency_revocation TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: nonces_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY nonces_service ON nonces TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: user_trust_signals_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY user_trust_signals_service ON user_trust_signals TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: otp_codes_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY otp_codes_service ON otp_codes TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: oauth_states_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY oauth_states_service ON oauth_states TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: mcp_oauth_clients_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY mcp_oauth_clients_service ON mcp_oauth_clients TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: mcp_oauth_clients_admin; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY mcp_oauth_clients_admin ON mcp_oauth_clients TO authenticated USING (is_admin() OR current_user_role() = 'instance_admin') WITH CHECK (is_admin() OR current_user_role() = 'instance_admin');
+
+--
+-- Name: mcp_oauth_codes_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY mcp_oauth_codes_service ON mcp_oauth_codes TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
+
+--
+-- Name: mcp_oauth_tokens_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY mcp_oauth_tokens_service ON mcp_oauth_tokens TO PUBLIC USING (current_user_role() = 'service_role') WITH CHECK (current_user_role() = 'service_role');
 
 --
 -- Name: auth_service_keys_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -

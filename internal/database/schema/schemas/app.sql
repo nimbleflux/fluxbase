@@ -122,6 +122,12 @@ CREATE INDEX IF NOT EXISTS idx_app_settings_user_id ON settings (user_id) WHERE 
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: settings; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE settings FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: Authenticated users can read non-secret settings; Type: POLICY; Schema: -; Owner: -
 --
 

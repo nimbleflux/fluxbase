@@ -22,10 +22,10 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 var (
@@ -148,7 +148,7 @@ type ParsedLogoutResponse struct {
 
 // SAMLService manages SAML SSO functionality
 type SAMLService struct {
-	db         *pgxpool.Pool
+	db         *database.Connection
 	baseURL    string
 	providers  map[string]*SAMLProvider
 	spConfigs  map[string]*saml.ServiceProvider
@@ -157,7 +157,7 @@ type SAMLService struct {
 }
 
 // NewSAMLService creates a new SAML service
-func NewSAMLService(db *pgxpool.Pool, baseURL string, configs []config.SAMLProviderConfig) (*SAMLService, error) {
+func NewSAMLService(db *database.Connection, baseURL string, configs []config.SAMLProviderConfig) (*SAMLService, error) {
 	s := &SAMLService{
 		db:        db,
 		baseURL:   strings.TrimSuffix(baseURL, "/"),
@@ -727,23 +727,28 @@ func (s *SAMLService) ValidateGroupMembership(provider *SAMLProvider, groups []s
 // CheckAssertionReplay checks if an assertion ID has been used before (replay attack prevention)
 func (s *SAMLService) CheckAssertionReplay(ctx context.Context, assertionID string, expiresAt time.Time) (bool, error) {
 	// Try to insert the assertion ID
-	_, err := s.db.Exec(ctx, `
-		INSERT INTO auth.saml_assertion_ids (assertion_id, expires_at)
-		VALUES ($1, $2)
-		ON CONFLICT (assertion_id) DO NOTHING
-	`, assertionID, expiresAt)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO auth.saml_assertion_ids (assertion_id, expires_at)
+			VALUES ($1, $2)
+			ON CONFLICT (assertion_id) DO NOTHING
+		`, assertionID, expiresAt)
+		return err
+	})
 	if err != nil {
 		return false, err
 	}
 
 	// Check if it was inserted (new) or already existed (replay)
 	var exists bool
-	err = s.db.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM auth.saml_assertion_ids
-			WHERE assertion_id = $1 AND created_at < NOW() - INTERVAL '1 second'
-		)
-	`, assertionID).Scan(&exists)
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM auth.saml_assertion_ids
+				WHERE assertion_id = $1 AND created_at < NOW() - INTERVAL '1 second'
+			)
+		`, assertionID).Scan(&exists)
+	})
 	if err != nil {
 		return false, err
 	}
@@ -753,50 +758,56 @@ func (s *SAMLService) CheckAssertionReplay(ctx context.Context, assertionID stri
 
 // CreateSAMLSession creates a new SAML session for tracking
 func (s *SAMLService) CreateSAMLSession(ctx context.Context, session *SAMLSession) error {
-	_, err := s.db.Exec(ctx, `
-		INSERT INTO auth.saml_sessions (id, user_id, provider_id, provider_name, name_id, name_id_format, session_index, attributes, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`,
-		session.ID,
-		session.UserID,
-		session.ProviderID,
-		session.ProviderName,
-		session.NameID,
-		session.NameIDFormat,
-		session.SessionIndex,
-		session.Attributes,
-		session.ExpiresAt,
-	)
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO auth.saml_sessions (id, user_id, provider_id, provider_name, name_id, name_id_format, session_index, attributes, expires_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`,
+			session.ID,
+			session.UserID,
+			session.ProviderID,
+			session.ProviderName,
+			session.NameID,
+			session.NameIDFormat,
+			session.SessionIndex,
+			session.Attributes,
+			session.ExpiresAt,
+		)
+		return err
+	})
 }
 
 // DeleteSAMLSession deletes a SAML session (for logout)
 func (s *SAMLService) DeleteSAMLSession(ctx context.Context, sessionID string) error {
-	_, err := s.db.Exec(ctx, `DELETE FROM auth.saml_sessions WHERE id = $1`, sessionID)
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `DELETE FROM auth.saml_sessions WHERE id = $1`, sessionID)
+		return err
+	})
 }
 
 // GetSAMLSessionByUserID retrieves the most recent SAML session for a user (for SP-initiated logout)
 func (s *SAMLService) GetSAMLSessionByUserID(ctx context.Context, userID string) (*SAMLSession, error) {
 	var session SAMLSession
-	err := s.db.QueryRow(ctx, `
-		SELECT id, user_id, provider_id, provider_name, name_id, name_id_format, session_index, attributes, expires_at, created_at
-		FROM auth.saml_sessions
-		WHERE user_id = $1
-		ORDER BY created_at DESC
-		LIMIT 1
-	`, userID).Scan(
-		&session.ID,
-		&session.UserID,
-		&session.ProviderID,
-		&session.ProviderName,
-		&session.NameID,
-		&session.NameIDFormat,
-		&session.SessionIndex,
-		&session.Attributes,
-		&session.ExpiresAt,
-		&session.CreatedAt,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT id, user_id, provider_id, provider_name, name_id, name_id_format, session_index, attributes, expires_at, created_at
+			FROM auth.saml_sessions
+			WHERE user_id = $1
+			ORDER BY created_at DESC
+			LIMIT 1
+		`, userID).Scan(
+			&session.ID,
+			&session.UserID,
+			&session.ProviderID,
+			&session.ProviderName,
+			&session.NameID,
+			&session.NameIDFormat,
+			&session.SessionIndex,
+			&session.Attributes,
+			&session.ExpiresAt,
+			&session.CreatedAt,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -806,24 +817,26 @@ func (s *SAMLService) GetSAMLSessionByUserID(ctx context.Context, userID string)
 // GetSAMLSessionByNameID retrieves a SAML session by provider and NameID (for IdP-initiated logout)
 func (s *SAMLService) GetSAMLSessionByNameID(ctx context.Context, providerName, nameID string) (*SAMLSession, error) {
 	var session SAMLSession
-	err := s.db.QueryRow(ctx, `
-		SELECT id, user_id, provider_id, provider_name, name_id, name_id_format, session_index, attributes, expires_at, created_at
-		FROM auth.saml_sessions
-		WHERE provider_name = $1 AND name_id = $2
-		ORDER BY created_at DESC
-		LIMIT 1
-	`, providerName, nameID).Scan(
-		&session.ID,
-		&session.UserID,
-		&session.ProviderID,
-		&session.ProviderName,
-		&session.NameID,
-		&session.NameIDFormat,
-		&session.SessionIndex,
-		&session.Attributes,
-		&session.ExpiresAt,
-		&session.CreatedAt,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT id, user_id, provider_id, provider_name, name_id, name_id_format, session_index, attributes, expires_at, created_at
+			FROM auth.saml_sessions
+			WHERE provider_name = $1 AND name_id = $2
+			ORDER BY created_at DESC
+			LIMIT 1
+		`, providerName, nameID).Scan(
+			&session.ID,
+			&session.UserID,
+			&session.ProviderID,
+			&session.ProviderName,
+			&session.NameID,
+			&session.NameIDFormat,
+			&session.SessionIndex,
+			&session.Attributes,
+			&session.ExpiresAt,
+			&session.CreatedAt,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -833,24 +846,26 @@ func (s *SAMLService) GetSAMLSessionByNameID(ctx context.Context, providerName, 
 // GetSAMLSessionBySessionIndex retrieves a SAML session by provider and SessionIndex (for IdP-initiated logout)
 func (s *SAMLService) GetSAMLSessionBySessionIndex(ctx context.Context, providerName, sessionIndex string) (*SAMLSession, error) {
 	var session SAMLSession
-	err := s.db.QueryRow(ctx, `
-		SELECT id, user_id, provider_id, provider_name, name_id, name_id_format, session_index, attributes, expires_at, created_at
-		FROM auth.saml_sessions
-		WHERE provider_name = $1 AND session_index = $2
-		ORDER BY created_at DESC
-		LIMIT 1
-	`, providerName, sessionIndex).Scan(
-		&session.ID,
-		&session.UserID,
-		&session.ProviderID,
-		&session.ProviderName,
-		&session.NameID,
-		&session.NameIDFormat,
-		&session.SessionIndex,
-		&session.Attributes,
-		&session.ExpiresAt,
-		&session.CreatedAt,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT id, user_id, provider_id, provider_name, name_id, name_id_format, session_index, attributes, expires_at, created_at
+			FROM auth.saml_sessions
+			WHERE provider_name = $1 AND session_index = $2
+			ORDER BY created_at DESC
+			LIMIT 1
+		`, providerName, sessionIndex).Scan(
+			&session.ID,
+			&session.UserID,
+			&session.ProviderID,
+			&session.ProviderName,
+			&session.NameID,
+			&session.NameIDFormat,
+			&session.SessionIndex,
+			&session.Attributes,
+			&session.ExpiresAt,
+			&session.CreatedAt,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -859,14 +874,18 @@ func (s *SAMLService) GetSAMLSessionBySessionIndex(ctx context.Context, provider
 
 // DeleteSAMLSessionsByUserID deletes all SAML sessions for a user
 func (s *SAMLService) DeleteSAMLSessionsByUserID(ctx context.Context, userID string) error {
-	_, err := s.db.Exec(ctx, `DELETE FROM auth.saml_sessions WHERE user_id = $1`, userID)
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `DELETE FROM auth.saml_sessions WHERE user_id = $1`, userID)
+		return err
+	})
 }
 
 // DeleteSAMLSessionByNameID deletes SAML sessions by provider and NameID
 func (s *SAMLService) DeleteSAMLSessionByNameID(ctx context.Context, providerName, nameID string) error {
-	_, err := s.db.Exec(ctx, `DELETE FROM auth.saml_sessions WHERE provider_name = $1 AND name_id = $2`, providerName, nameID)
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `DELETE FROM auth.saml_sessions WHERE provider_name = $1 AND name_id = $2`, providerName, nameID)
+		return err
+	})
 }
 
 // GenerateLogoutRequest generates a signed SAML LogoutRequest for SP-initiated logout
@@ -1091,8 +1110,10 @@ func inflateBytes(data []byte) ([]byte, error) {
 
 // CleanupExpiredAssertions removes expired assertion IDs from the replay prevention table
 func (s *SAMLService) CleanupExpiredAssertions(ctx context.Context) error {
-	_, err := s.db.Exec(ctx, `DELETE FROM auth.saml_assertion_ids WHERE expires_at < NOW()`)
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `DELETE FROM auth.saml_assertion_ids WHERE expires_at < NOW()`)
+		return err
+	})
 }
 
 // parsePEMCertificate parses a PEM-encoded X.509 certificate
@@ -1263,181 +1284,181 @@ func (s *SAMLService) LoadProvidersFromDB(ctx context.Context) error {
 	// Ping the pool first to ensure at least one healthy connection is available.
 	// This prevents "conn closed" errors when the pool was recently recreated
 	// (e.g., after migrations) and connections haven't been fully established yet.
-	if pingErr := s.db.Ping(ctx); pingErr != nil {
+	if pingErr := s.db.Pool().Ping(ctx); pingErr != nil {
 		return fmt.Errorf("failed to ping database before loading SAML providers: %w", pingErr)
 	}
 
-	var rows pgx.Rows
-	var err error
-	rows, err = s.db.Query(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to query SAML providers: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var (
-			id                   string
-			name                 string
-			enabled              bool
-			entityID             string
-			acsURL               string
-			metadataURL          *string
-			metadataXML          *string
-			metadataCached       *string
-			attrMapping          map[string]string
-			autoCreateUsers      bool
-			defaultRole          string
-			allowDashboardLogin  bool
-			allowAppLogin        bool
-			allowIDPInitiated    bool
-			allowedRedirectHosts []string
-			createdAt            time.Time
-			updatedAt            time.Time
-		)
-
-		err := rows.Scan(
-			&id, &name, &enabled, &entityID, &acsURL,
-			&metadataURL, &metadataXML, &metadataCached,
-			&attrMapping, &autoCreateUsers, &defaultRole,
-			&allowDashboardLogin, &allowAppLogin,
-			&allowIDPInitiated, &allowedRedirectHosts,
-			&createdAt, &updatedAt,
-		)
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query)
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to scan SAML provider from database")
-			continue
+			return fmt.Errorf("failed to query SAML providers: %w", err)
 		}
+		defer rows.Close()
 
-		// Skip if already loaded from config
-		s.mu.RLock()
-		_, exists := s.providers[name]
-		s.mu.RUnlock()
-		if exists {
-			log.Debug().Str("provider", name).Msg("Skipping DB provider - already loaded from config")
-			continue
-		}
+		for rows.Next() {
+			var (
+				id                   string
+				name                 string
+				enabled              bool
+				entityID             string
+				acsURL               string
+				metadataURL          *string
+				metadataXML          *string
+				metadataCached       *string
+				attrMapping          map[string]string
+				autoCreateUsers      bool
+				defaultRole          string
+				allowDashboardLogin  bool
+				allowAppLogin        bool
+				allowIDPInitiated    bool
+				allowedRedirectHosts []string
+				createdAt            time.Time
+				updatedAt            time.Time
+			)
 
-		// Determine which metadata to use
-		var metadataToUse string
-		//nolint:gocritic // Conditions check different variables, not switch-compatible
-		if metadataCached != nil && *metadataCached != "" {
-			metadataToUse = *metadataCached
-		} else if metadataXML != nil && *metadataXML != "" {
-			metadataToUse = *metadataXML
-		} else if metadataURL != nil && *metadataURL != "" {
-			// Need to fetch metadata
-			xmlData, err := s.fetchMetadata(*metadataURL)
+			err := rows.Scan(
+				&id, &name, &enabled, &entityID, &acsURL,
+				&metadataURL, &metadataXML, &metadataCached,
+				&attrMapping, &autoCreateUsers, &defaultRole,
+				&allowDashboardLogin, &allowAppLogin,
+				&allowIDPInitiated, &allowedRedirectHosts,
+				&createdAt, &updatedAt,
+			)
 			if err != nil {
-				log.Warn().Err(err).Str("provider", name).Msg("Failed to fetch SAML metadata from URL")
+				log.Error().Err(err).Msg("Failed to scan SAML provider from database")
 				continue
 			}
-			metadataToUse = string(xmlData)
-		} else {
-			log.Warn().Str("provider", name).Msg("No SAML metadata available")
-			continue
-		}
 
-		// Parse metadata
-		metadata, err := samlsp.ParseMetadata([]byte(metadataToUse))
-		if err != nil {
-			log.Warn().Err(err).Str("provider", name).Msg("Failed to parse SAML metadata")
-			continue
-		}
+			// Skip if already loaded from config
+			s.mu.RLock()
+			_, exists := s.providers[name]
+			s.mu.RUnlock()
+			if exists {
+				log.Debug().Str("provider", name).Msg("Skipping DB provider - already loaded from config")
+				continue
+			}
 
-		// Find IdP descriptor
-		var idpDescriptor *saml.IDPSSODescriptor
-		for i := range metadata.IDPSSODescriptors {
-			desc := &metadata.IDPSSODescriptors[i]
-			for _, sso := range desc.SingleSignOnServices {
+			// Determine which metadata to use
+			var metadataToUse string
+			//nolint:gocritic // Conditions check different variables, not switch-compatible
+			if metadataCached != nil && *metadataCached != "" {
+				metadataToUse = *metadataCached
+			} else if metadataXML != nil && *metadataXML != "" {
+				metadataToUse = *metadataXML
+			} else if metadataURL != nil && *metadataURL != "" {
+				// Need to fetch metadata
+				xmlData, err := s.fetchMetadata(*metadataURL)
+				if err != nil {
+					log.Warn().Err(err).Str("provider", name).Msg("Failed to fetch SAML metadata from URL")
+					continue
+				}
+				metadataToUse = string(xmlData)
+			} else {
+				log.Warn().Str("provider", name).Msg("No SAML metadata available")
+				continue
+			}
+
+			// Parse metadata
+			metadata, err := samlsp.ParseMetadata([]byte(metadataToUse))
+			if err != nil {
+				log.Warn().Err(err).Str("provider", name).Msg("Failed to parse SAML metadata")
+				continue
+			}
+
+			// Find IdP descriptor
+			var idpDescriptor *saml.IDPSSODescriptor
+			for i := range metadata.IDPSSODescriptors {
+				desc := &metadata.IDPSSODescriptors[i]
+				for _, sso := range desc.SingleSignOnServices {
+					if sso.Binding == saml.HTTPPostBinding || sso.Binding == saml.HTTPRedirectBinding {
+						idpDescriptor = desc
+						break
+					}
+				}
+				if idpDescriptor != nil {
+					break
+				}
+			}
+			if idpDescriptor == nil {
+				log.Warn().Str("provider", name).Msg("No suitable IdP SSO descriptor found")
+				continue
+			}
+
+			// Extract SSO URL
+			var ssoURL string
+			for _, sso := range idpDescriptor.SingleSignOnServices {
 				if sso.Binding == saml.HTTPPostBinding || sso.Binding == saml.HTTPRedirectBinding {
-					idpDescriptor = desc
+					ssoURL = sso.Location
 					break
 				}
 			}
-			if idpDescriptor != nil {
-				break
-			}
-		}
-		if idpDescriptor == nil {
-			log.Warn().Str("provider", name).Msg("No suitable IdP SSO descriptor found")
-			continue
-		}
 
-		// Extract SSO URL
-		var ssoURL string
-		for _, sso := range idpDescriptor.SingleSignOnServices {
-			if sso.Binding == saml.HTTPPostBinding || sso.Binding == saml.HTTPRedirectBinding {
-				ssoURL = sso.Location
-				break
-			}
-		}
-
-		// Extract SLO URL
-		var sloURL string
-		for _, slo := range idpDescriptor.SingleLogoutServices {
-			if slo.Binding == saml.HTTPPostBinding || slo.Binding == saml.HTTPRedirectBinding {
-				sloURL = slo.Location
-				break
-			}
-		}
-
-		// Extract certificate
-		var certificate string
-		for _, kd := range idpDescriptor.KeyDescriptors {
-			if kd.Use == "signing" || kd.Use == "" {
-				for _, cert := range kd.KeyInfo.X509Data.X509Certificates {
-					certificate = cert.Data
+			// Extract SLO URL
+			var sloURL string
+			for _, slo := range idpDescriptor.SingleLogoutServices {
+				if slo.Binding == saml.HTTPPostBinding || slo.Binding == saml.HTTPRedirectBinding {
+					sloURL = slo.Location
 					break
 				}
-				break
 			}
+
+			// Extract certificate
+			var certificate string
+			for _, kd := range idpDescriptor.KeyDescriptors {
+				if kd.Use == "signing" || kd.Use == "" {
+					for _, cert := range kd.KeyInfo.X509Data.X509Certificates {
+						certificate = cert.Data
+						break
+					}
+					break
+				}
+			}
+
+			provider := &SAMLProvider{
+				ID:                   id,
+				Name:                 name,
+				Enabled:              enabled,
+				EntityID:             entityID,
+				AcsURL:               acsURL,
+				SsoURL:               ssoURL,
+				SloURL:               sloURL,
+				Certificate:          certificate,
+				AttributeMapping:     attrMapping,
+				AutoCreateUsers:      autoCreateUsers,
+				DefaultRole:          defaultRole,
+				AllowIDPInitiated:    allowIDPInitiated,
+				AllowedRedirectHosts: allowedRedirectHosts,
+				CreatedAt:            createdAt,
+				UpdatedAt:            updatedAt,
+				idpDescriptor:        idpDescriptor,
+				metadata:             metadata,
+				AllowDashboardLogin:  allowDashboardLogin,
+				AllowAppLogin:        allowAppLogin,
+			}
+
+			// Create SAML Service Provider config
+			acsURLParsed, _ := url.Parse(acsURL)
+			entityIDParsed, _ := url.Parse(entityID)
+			metadataURLParsed, _ := url.Parse(fmt.Sprintf("%s/auth/saml/metadata/%s", s.baseURL, name))
+
+			sp := &saml.ServiceProvider{
+				EntityID:          entityIDParsed.String(),
+				AcsURL:            *acsURLParsed,
+				MetadataURL:       *metadataURLParsed,
+				IDPMetadata:       metadata,
+				AllowIDPInitiated: allowIDPInitiated,
+			}
+
+			s.mu.Lock()
+			s.providers[name] = provider
+			s.spConfigs[name] = sp
+			s.mu.Unlock()
+
+			log.Info().Str("provider", name).Msg("Loaded SAML provider from database")
 		}
 
-		provider := &SAMLProvider{
-			ID:                   id,
-			Name:                 name,
-			Enabled:              enabled,
-			EntityID:             entityID,
-			AcsURL:               acsURL,
-			SsoURL:               ssoURL,
-			SloURL:               sloURL,
-			Certificate:          certificate,
-			AttributeMapping:     attrMapping,
-			AutoCreateUsers:      autoCreateUsers,
-			DefaultRole:          defaultRole,
-			AllowIDPInitiated:    allowIDPInitiated,
-			AllowedRedirectHosts: allowedRedirectHosts,
-			CreatedAt:            createdAt,
-			UpdatedAt:            updatedAt,
-			idpDescriptor:        idpDescriptor,
-			metadata:             metadata,
-			AllowDashboardLogin:  allowDashboardLogin,
-			AllowAppLogin:        allowAppLogin,
-		}
-
-		// Create SAML Service Provider config
-		acsURLParsed, _ := url.Parse(acsURL)
-		entityIDParsed, _ := url.Parse(entityID)
-		metadataURLParsed, _ := url.Parse(fmt.Sprintf("%s/auth/saml/metadata/%s", s.baseURL, name))
-
-		sp := &saml.ServiceProvider{
-			EntityID:          entityIDParsed.String(),
-			AcsURL:            *acsURLParsed,
-			MetadataURL:       *metadataURLParsed,
-			IDPMetadata:       metadata,
-			AllowIDPInitiated: allowIDPInitiated,
-		}
-
-		s.mu.Lock()
-		s.providers[name] = provider
-		s.spConfigs[name] = sp
-		s.mu.Unlock()
-
-		log.Info().Str("provider", name).Msg("Loaded SAML provider from database")
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // GetProvidersForDashboard returns providers that allow dashboard login
@@ -1492,14 +1513,16 @@ func (s *SAMLService) GetProviderForTenant(ctx context.Context, name string, ten
 			FROM auth.saml_providers
 			WHERE name = $1 AND tenant_id = $2::uuid AND enabled = true
 		`
-		err := s.db.QueryRow(ctx, query, name, tenantID).Scan(
-			&provider.ID, &provider.Name, &provider.Enabled, &provider.EntityID, &provider.AcsURL,
-			&metadataURL, &metadataXML, &metadataCached,
-			&attrMapping, &provider.AutoCreateUsers, &provider.DefaultRole,
-			&provider.AllowDashboardLogin, &provider.AllowAppLogin,
-			&provider.AllowIDPInitiated, &allowedRedirectHosts,
-			&provider.CreatedAt, &provider.UpdatedAt,
-		)
+		err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, query, name, tenantID).Scan(
+				&provider.ID, &provider.Name, &provider.Enabled, &provider.EntityID, &provider.AcsURL,
+				&metadataURL, &metadataXML, &metadataCached,
+				&attrMapping, &provider.AutoCreateUsers, &provider.DefaultRole,
+				&provider.AllowDashboardLogin, &provider.AllowAppLogin,
+				&provider.AllowIDPInitiated, &allowedRedirectHosts,
+				&provider.CreatedAt, &provider.UpdatedAt,
+			)
+		})
 		if err == nil {
 			// Found tenant-specific provider
 			provider.AttributeMapping = attrMapping
@@ -1531,8 +1554,11 @@ func (s *SAMLService) GetProvidersForAppWithTenant(ctx context.Context, tenantID
 			FROM auth.saml_providers
 			WHERE tenant_id = $1::uuid AND enabled = true AND COALESCE(allow_app_login, true) = true
 		`
-		rows, err := s.db.Query(ctx, query, tenantID)
-		if err == nil {
+		_ = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+			rows, err := tx.Query(ctx, query, tenantID)
+			if err != nil {
+				return err
+			}
 			defer rows.Close()
 			for rows.Next() {
 				var p SAMLProvider
@@ -1540,7 +1566,8 @@ func (s *SAMLService) GetProvidersForAppWithTenant(ctx context.Context, tenantID
 					providers = append(providers, &p)
 				}
 			}
-		}
+			return nil
+		})
 	}
 
 	// Also include platform-level providers (tenant_id IS NULL)
@@ -1577,8 +1604,11 @@ func (s *SAMLService) GetProvidersForDashboardWithTenant(ctx context.Context, te
 			FROM auth.saml_providers
 			WHERE tenant_id = $1::uuid AND enabled = true AND COALESCE(allow_dashboard_login, false) = true
 		`
-		rows, err := s.db.Query(ctx, query, tenantID)
-		if err == nil {
+		_ = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+			rows, err := tx.Query(ctx, query, tenantID)
+			if err != nil {
+				return err
+			}
 			defer rows.Close()
 			for rows.Next() {
 				var p SAMLProvider
@@ -1586,7 +1616,8 @@ func (s *SAMLService) GetProvidersForDashboardWithTenant(ctx context.Context, te
 					providers = append(providers, &p)
 				}
 			}
-		}
+			return nil
+		})
 	}
 
 	// Also include platform-level providers (tenant_id IS NULL)

@@ -3,16 +3,19 @@ package middleware
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/keys"
 )
 
 // ClientKeyAuth creates middleware that authenticates requests using client keys
@@ -906,14 +909,159 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 	}
 }
 
-// validateServiceKey validates a service key against auth.service_keys in the tenant's database
-// For database-per-tenant multi-tenancy, each tenant has their own service_keys table
-// Returns true if valid, false otherwise
+// serviceKeyInfo holds the result of a service key lookup from either key table.
+type serviceKeyInfo struct {
+	keyID              string
+	keyName            string
+	keyType            string
+	scopes             []string
+	allowedNamespaces  *[]string
+	isActive           bool
+	expiresAt          *time.Time
+	rateLimitPerMinute *int
+	tenantID           *string
+	lookupTable        string // "auth" or "platform"
+}
+
+// validateServiceKey validates a service key against auth.service_keys or platform.service_keys.
+// It routes to the correct table based on key prefix and uses SET LOCAL ROLE service_role
+// to bypass RLS during key lookup (necessary since no auth context exists yet).
+// Returns true if valid, false otherwise.
 func validateServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) bool {
-	// Extract key prefix (first 16 chars for identification)
-	// This includes "sk_test_" (8 chars) plus some random chars to ensure uniqueness
-	if len(serviceKey) < 16 || !strings.HasPrefix(serviceKey, "sk_") {
+	if len(serviceKey) < 8 {
 		return false
+	}
+
+	// Determine which table and prefix to use based on key format
+	prefix := keys.ExtractPrefix(serviceKey)
+	var keyInfo *serviceKeyInfo
+	var keyHash string
+
+	if prefix != "" {
+		// New-style key (fb_tsk_, fb_anon_, fb_gsk_, fb_pk_) -> platform.service_keys
+		info, hash, err := lookupPlatformServiceKey(c, db, serviceKey)
+		if err != nil {
+			log.Debug().Err(err).Str("prefix", prefix).Msg("Platform service key lookup failed")
+			return false
+		}
+		keyInfo = info
+		keyHash = hash
+	} else if strings.HasPrefix(serviceKey, "sk_") || strings.HasPrefix(serviceKey, "pk_") {
+		// Legacy key (sk_, pk_) -> auth.service_keys
+		info, hash, err := lookupAuthServiceKey(c, db, serviceKey)
+		if err != nil {
+			log.Debug().Err(err).Str("key_prefix", serviceKey[:min(16, len(serviceKey))]).Msg("Auth service key lookup failed")
+			return false
+		}
+		keyInfo = info
+		keyHash = hash
+	} else {
+		return false
+	}
+
+	// Verify the key is active
+	if !keyInfo.isActive {
+		log.Debug().Str("key_id", keyInfo.keyID).Msg("Service key is disabled")
+		return false
+	}
+
+	// Verify not expired
+	if keyInfo.expiresAt != nil && keyInfo.expiresAt.Before(time.Now()) {
+		log.Debug().Str("key_id", keyInfo.keyID).Msg("Service key has expired")
+		return false
+	}
+
+	// Verify the key hash
+	if err := bcrypt.CompareHashAndPassword([]byte(keyHash), []byte(serviceKey)); err != nil {
+		log.Debug().Err(err).Str("key_id", keyInfo.keyID).Msg("Invalid service key hash")
+		return false
+	}
+
+	// Map key type to application role
+	role := mapKeyTypetoRole(keyInfo.keyType)
+
+	// Fire-and-forget last_used_at update
+	updateLastUsedAt(c, db, keyInfo)
+
+	// Store service key information in context
+	c.Locals("service_key_id", keyInfo.keyID)
+	c.Locals("service_key_name", keyInfo.keyName)
+	c.Locals("service_key_scopes", keyInfo.scopes)
+	c.Locals("service_key_type", keyInfo.keyType)
+	c.Locals("auth_type", "service_key")
+	c.Locals("user_role", role)
+
+	// Store rate limits in context
+	c.Locals("service_key_rate_limit_per_minute", keyInfo.rateLimitPerMinute)
+
+	// Store allowed namespaces if present
+	if keyInfo.allowedNamespaces != nil {
+		c.Locals("allowed_namespaces", *keyInfo.allowedNamespaces)
+	}
+
+	// Store tenant_id from key if present (needed for tenant_service keys)
+	if keyInfo.tenantID != nil {
+		c.Locals("service_key_tenant_id", *keyInfo.tenantID)
+	}
+
+	// For RLS context
+	c.Locals("rls_role", role)
+	c.Locals("rls_user_id", nil)
+
+	log.Debug().
+		Str("key_id", keyInfo.keyID).
+		Str("key_name", keyInfo.keyName).
+		Str("key_type", keyInfo.keyType).
+		Str("role", role).
+		Str("lookup_table", keyInfo.lookupTable).
+		Interface("rate_limit_per_minute", keyInfo.rateLimitPerMinute).
+		Msg("Authenticated with service key")
+
+	return true
+}
+
+// lookupPlatformServiceKey looks up a key in platform.service_keys using SET LOCAL ROLE service_role
+// to bypass RLS (key validation happens before auth context is set).
+func lookupPlatformServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) (*serviceKeyInfo, string, error) {
+	keyPrefix := keys.ExtractPrefix(serviceKey)
+	if keyPrefix == "" || len(serviceKey) < len(keyPrefix)+8 {
+		return nil, "", errors.New("invalid platform key format")
+	}
+	prefixForLookup := serviceKey[:len(keyPrefix)+8]
+
+	// Use tenant pool if available (database-per-tenant), otherwise use main pool
+	pool := GetTenantPool(c)
+	if pool == nil {
+		pool = db
+	}
+
+	var info serviceKeyInfo
+	var keyHash string
+
+	err := queryWithServiceRole(c.RequestCtx(), pool, func(tx pgx.Tx) error {
+		return tx.QueryRow(c.RequestCtx(),
+			`SELECT id, name, key_hash, key_type, scopes, allowed_namespaces,
+			        is_active, expires_at, rate_limit_per_minute, tenant_id
+			 FROM platform.service_keys
+			 WHERE key_prefix = $1`,
+			prefixForLookup,
+		).Scan(&info.keyID, &info.keyName, &keyHash, &info.keyType, &info.scopes,
+			&info.allowedNamespaces, &info.isActive, &info.expiresAt,
+			&info.rateLimitPerMinute, &info.tenantID)
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("platform key lookup failed: %w", err)
+	}
+
+	info.lookupTable = "platform"
+	return &info, keyHash, nil
+}
+
+// lookupAuthServiceKey looks up a key in auth.service_keys using SET LOCAL ROLE service_role
+// to bypass RLS (key validation happens before auth context is set).
+func lookupAuthServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) (*serviceKeyInfo, string, error) {
+	if len(serviceKey) < 16 {
+		return nil, "", errors.New("auth key too short")
 	}
 	keyPrefix := serviceKey[:16]
 
@@ -923,109 +1071,116 @@ func validateServiceKey(c fiber.Ctx, db *pgxpool.Pool, serviceKey string) bool {
 		pool = db
 	}
 
-	// Look up service key in auth.service_keys table by prefix
+	var info serviceKeyInfo
 	var keyHash string
-	var keyID string
-	var keyName string
-	var keyType string
-	var scopes []string
-	var allowedNamespaces *[]string
-	var enabled bool
-	var expiresAt *time.Time
-	var rateLimitPerMinute *int
-	var rateLimitPerHour *int
 	var revokedAt *time.Time
+	var rateLimitPerHour *int
 
-	err := pool.QueryRow(c.RequestCtx(),
-		`SELECT id, name, key_hash, COALESCE(key_type, 'service'), scopes, allowed_namespaces,
-		        enabled, expires_at, rate_limit_per_minute, rate_limit_per_hour,
-		        revoked_at
-		 FROM auth.service_keys
-		 WHERE key_prefix = $1`,
-		keyPrefix,
-	).Scan(&keyID, &keyName, &keyHash, &keyType, &scopes, &allowedNamespaces,
-		&enabled, &expiresAt, &rateLimitPerMinute, &rateLimitPerHour, &revokedAt)
+	err := queryWithServiceRole(c.RequestCtx(), pool, func(tx pgx.Tx) error {
+		return tx.QueryRow(c.RequestCtx(),
+			`SELECT id, name, key_hash, COALESCE(key_type, 'service'), scopes, allowed_namespaces,
+			        enabled, expires_at, rate_limit_per_minute, rate_limit_per_hour,
+			        revoked_at, tenant_id
+			 FROM auth.service_keys
+			 WHERE key_prefix = $1`,
+			keyPrefix,
+		).Scan(&info.keyID, &info.keyName, &keyHash, &info.keyType, &info.scopes,
+			&info.allowedNamespaces, &info.isActive, &info.expiresAt,
+			&info.rateLimitPerMinute, &rateLimitPerHour, &revokedAt, &info.tenantID)
+	})
 	if err != nil {
-		log.Debug().Err(err).Str("prefix", keyPrefix).Msg("Service key not found")
-		return false
+		return nil, "", fmt.Errorf("auth key lookup failed: %w", err)
 	}
 
-	// Check if key is enabled
-	if !enabled {
-		log.Debug().Str("key_id", keyID).Msg("Service key is disabled")
-		return false
-	}
-
-	// Check if key has been revoked
+	// Check revoked (handled inline for legacy table)
 	if revokedAt != nil {
-		log.Debug().Str("key_id", keyID).Time("revoked_at", *revokedAt).Msg("Service key has been revoked")
-		return false
+		info.isActive = false
 	}
 
-	// Check if key has expired
-	if expiresAt != nil && expiresAt.Before(time.Now()) {
-		log.Debug().Str("key_id", keyID).Msg("Service key has expired")
-		return false
-	}
+	info.lookupTable = "auth"
+	return &info, keyHash, nil
+}
 
-	// Verify the key hash
-	err = bcrypt.CompareHashAndPassword([]byte(keyHash), []byte(serviceKey))
+// queryWithServiceRole executes a read query within a transaction with SET LOCAL ROLE service_role.
+// This bypasses RLS for key lookup operations that happen before auth context is established.
+func queryWithServiceRole(ctx context.Context, pool *pgxpool.Pool, fn func(tx pgx.Tx) error) error {
+	tx, err := pool.Begin(ctx)
 	if err != nil {
-		log.Debug().Err(err).Str("prefix", keyPrefix).Msg("Invalid service key hash")
-		return false
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	_, err = tx.Exec(ctx, `SET LOCAL ROLE "service_role"`)
+	if err != nil {
+		return fmt.Errorf("failed to SET LOCAL ROLE service_role: %w", err)
 	}
 
-	// Determine role based on key_type
-	var role string
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// mapKeyTypetoRole maps a service key type to the application role used for RLS.
+func mapKeyTypetoRole(keyType string) string {
 	switch keyType {
-	case "anon":
-		role = "anon"
-	case "service":
-		role = "service_role"
+	case keys.KeyTypeAnon:
+		return "anon"
+	case keys.KeyTypeTenantService:
+		return "tenant_service"
+	case keys.KeyTypeGlobalService, "service":
+		return "service_role"
+	case keys.KeyTypePublishable:
+		return "authenticated"
 	default:
-		role = "service_role"
+		return "service_role"
+	}
+}
+
+// updateLastUsedAt fires a background goroutine to update the last_used_at timestamp.
+// Uses SET LOCAL ROLE service_role to bypass RLS on both key tables.
+func updateLastUsedAt(c fiber.Ctx, db *pgxpool.Pool, info *serviceKeyInfo) {
+	table := "auth.service_keys"
+	if info.lookupTable == "platform" {
+		table = "platform.service_keys"
 	}
 
-	// Update last_used_at timestamp (fire and forget)
+	keyID := info.keyID
+	// Capture pool reference before spawning goroutine to avoid data race
+	// on fiber.Ctx (the context is not safe for concurrent access).
+	pool := GetTenantPool(c)
+	if pool == nil {
+		pool = db
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, _ = pool.Exec(ctx,
-			`UPDATE auth.service_keys SET last_used_at = NOW() WHERE id = $1`,
+
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			return
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		_, err = tx.Exec(ctx, `SET LOCAL ROLE "service_role"`)
+		if err != nil {
+			return
+		}
+
+		_, _ = tx.Exec(ctx,
+			`UPDATE `+table+` SET last_used_at = NOW() WHERE id = $1`,
 			keyID,
 		)
+		_ = tx.Commit(ctx)
 	}()
+}
 
-	// Store service key information in context
-	c.Locals("service_key_id", keyID)
-	c.Locals("service_key_name", keyName)
-	c.Locals("service_key_scopes", scopes)
-	c.Locals("service_key_type", keyType)
-	c.Locals("auth_type", "service_key")
-	c.Locals("user_role", role)
-
-	// Store rate limits in context
-	c.Locals("service_key_rate_limit_per_minute", rateLimitPerMinute)
-
-	// Store allowed namespaces if present
-	if allowedNamespaces != nil {
-		c.Locals("allowed_namespaces", *allowedNamespaces)
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
-
-	// For RLS context
-	c.Locals("rls_role", role)
-	c.Locals("rls_user_id", nil)
-
-	log.Debug().
-		Str("key_id", keyID).
-		Str("key_name", keyName).
-		Str("key_type", keyType).
-		Str("role", role).
-		Interface("rate_limit_per_minute", rateLimitPerMinute).
-		Bool("uses_tenant_db", pool != db).
-		Msg("Authenticated with service key")
-
-	return true
+	return b
 }
 
 // RequireAdmin middleware restricts access to admin users only

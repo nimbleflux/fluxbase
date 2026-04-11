@@ -82,78 +82,73 @@ func (s *Service) ListExtensionsForTenant(ctx context.Context, tenantID *string,
 		return nil, fmt.Errorf("error iterating pg extensions: %w", err)
 	}
 
-	// Query catalog metadata from the main database
-	metaRows, err := s.db.Query(ctx, `
-		SELECT id, name, display_name, COALESCE(description, ''), category,
-		       is_core, requires_restart, COALESCE(documentation_url, ''), created_at, updated_at
-		FROM platform.available_extensions
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query extension catalog: %w", err)
-	}
-	defer metaRows.Close()
-
-	type extMeta struct {
-		ID               string
-		Name             string
-		DisplayName      string
-		Description      string
-		Category         string
-		IsCore           bool
-		RequiresRestart  bool
-		DocumentationURL string
-		CreatedAt        time.Time
-		UpdatedAt        time.Time
-	}
-	metaMap := make(map[string]extMeta)
-	for metaRows.Next() {
-		var m extMeta
-		if err := metaRows.Scan(&m.ID, &m.Name, &m.DisplayName, &m.Description, &m.Category,
-			&m.IsCore, &m.RequiresRestart, &m.DocumentationURL, &m.CreatedAt, &m.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan extension metadata: %w", err)
+	// Query catalog metadata and enabled_extensions tracking from the main database
+	// using service_role to bypass RLS
+	var metaMap map[string]extMeta
+	var trackingMap map[string]trackInfo
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		// Query platform.available_extensions catalog
+		metaRows, err := tx.Query(ctx, `
+			SELECT id, name, display_name, COALESCE(description, ''), category,
+			       is_core, requires_restart, COALESCE(documentation_url, ''), created_at, updated_at
+			FROM platform.available_extensions
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to query extension catalog: %w", err)
 		}
-		metaMap[m.Name] = m
-	}
-	if err := metaRows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating extension metadata: %w", err)
-	}
+		defer metaRows.Close()
 
-	// Query enabled_extensions tracking from main database for this tenant
-	filter := mustTenantFilter(tenantID, 1)
-	var trackingRows pgx.Rows
-	if tenantID != nil {
-		trackingRows, err = s.db.Query(ctx, fmt.Sprintf(`
-			SELECT extension_name, enabled_at, enabled_by::text
-			FROM platform.enabled_extensions
-			WHERE is_active = true AND %s
-		`, filter), *tenantID)
-	} else {
-		trackingRows, err = s.db.Query(ctx, fmt.Sprintf(`
-			SELECT extension_name, enabled_at, enabled_by::text
-			FROM platform.enabled_extensions
-			WHERE is_active = true AND %s
-		`, filter))
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to query enabled extensions: %w", err)
-	}
-	defer trackingRows.Close()
-
-	type trackInfo struct {
-		EnabledAt time.Time
-		EnabledBy *string
-	}
-	trackingMap := make(map[string]trackInfo)
-	for trackingRows.Next() {
-		var tName string
-		var info trackInfo
-		if err := trackingRows.Scan(&tName, &info.EnabledAt, &info.EnabledBy); err != nil {
-			return nil, fmt.Errorf("failed to scan enabled extension tracking: %w", err)
+		metaMap = make(map[string]extMeta)
+		for metaRows.Next() {
+			var m extMeta
+			if err := metaRows.Scan(&m.ID, &m.Name, &m.DisplayName, &m.Description, &m.Category,
+				&m.IsCore, &m.RequiresRestart, &m.DocumentationURL, &m.CreatedAt, &m.UpdatedAt); err != nil {
+				return fmt.Errorf("failed to scan extension metadata: %w", err)
+			}
+			metaMap[m.Name] = m
 		}
-		trackingMap[tName] = info
-	}
-	if err := trackingRows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating enabled extensions: %w", err)
+		if err := metaRows.Err(); err != nil {
+			return fmt.Errorf("error iterating extension metadata: %w", err)
+		}
+
+		// Query platform.enabled_extensions tracking
+		filter := mustTenantFilter(tenantID, 1)
+		var trackingRows pgx.Rows
+		if tenantID != nil {
+			trackingRows, err = tx.Query(ctx, fmt.Sprintf(`
+				SELECT extension_name, enabled_at, enabled_by::text
+				FROM platform.enabled_extensions
+				WHERE is_active = true AND %s
+			`, filter), *tenantID)
+		} else {
+			trackingRows, err = tx.Query(ctx, fmt.Sprintf(`
+				SELECT extension_name, enabled_at, enabled_by::text
+				FROM platform.enabled_extensions
+				WHERE is_active = true AND %s
+			`, filter))
+		}
+		if err != nil {
+			return fmt.Errorf("failed to query enabled extensions: %w", err)
+		}
+		defer trackingRows.Close()
+
+		trackingMap = make(map[string]trackInfo)
+		for trackingRows.Next() {
+			var tName string
+			var info trackInfo
+			if err := trackingRows.Scan(&tName, &info.EnabledAt, &info.EnabledBy); err != nil {
+				return fmt.Errorf("failed to scan enabled extension tracking: %w", err)
+			}
+			trackingMap[tName] = info
+		}
+		if err := trackingRows.Err(); err != nil {
+			return fmt.Errorf("error iterating enabled extensions: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Merge results
@@ -241,6 +236,26 @@ func (s *Service) ListExtensionsForTenant(ctx context.Context, tenantID *string,
 	}, nil
 }
 
+// extMeta holds extension catalog metadata scanned from platform.available_extensions
+type extMeta struct {
+	ID               string
+	Name             string
+	DisplayName      string
+	Description      string
+	Category         string
+	IsCore           bool
+	RequiresRestart  bool
+	DocumentationURL string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// trackInfo holds enabled extension tracking info scanned from platform.enabled_extensions
+type trackInfo struct {
+	EnabledAt time.Time
+	EnabledBy *string
+}
+
 // mustTenantFilter returns a SQL WHERE fragment for filtering by tenant_id.
 func mustTenantFilter(tenantID *string, idx int) string {
 	if tenantID == nil {
@@ -259,23 +274,24 @@ func (s *Service) GetExtensionStatusForTenant(ctx context.Context, name string, 
 	filter := mustTenantFilter(tenantID, 2)
 	var isEnabled bool
 	var err error
-	if tenantID != nil {
-		err = s.db.QueryRow(ctx, fmt.Sprintf(`
-			SELECT COALESCE(
-				(SELECT is_active FROM platform.enabled_extensions
-				 WHERE extension_name = $1 AND is_active = true AND %s),
-				false
-			)
-		`, filter), name, *tenantID).Scan(&isEnabled)
-	} else {
-		err = s.db.QueryRow(ctx, fmt.Sprintf(`
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		if tenantID != nil {
+			return tx.QueryRow(ctx, fmt.Sprintf(`
+				SELECT COALESCE(
+					(SELECT is_active FROM platform.enabled_extensions
+					 WHERE extension_name = $1 AND is_active = true AND %s),
+					false
+				)
+			`, filter), name, *tenantID).Scan(&isEnabled)
+		}
+		return tx.QueryRow(ctx, fmt.Sprintf(`
 			SELECT COALESCE(
 				(SELECT is_active FROM platform.enabled_extensions
 				 WHERE extension_name = $1 AND is_active = true AND %s),
 				false
 			)
 		`, filter), name).Scan(&isEnabled)
-	}
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to check extension status: %w", err)
 	}
@@ -319,12 +335,15 @@ func (s *Service) EnableExtensionForTenant(ctx context.Context, name string, use
 	}
 	if status.IsInstalled {
 		// Extension is already installed in PostgreSQL, but ensure it's tracked
-		_, err = s.db.Exec(ctx, `
-			INSERT INTO platform.enabled_extensions (extension_name, tenant_id, enabled_by, is_active)
-			VALUES ($1, $2, $3, true)
-			ON CONFLICT (extension_name, tenant_id) WHERE is_active = true
-			DO UPDATE SET enabled_at = NOW(), enabled_by = $3, error_message = NULL
-		`, name, tenantID, userID)
+		err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `
+				INSERT INTO platform.enabled_extensions (extension_name, tenant_id, enabled_by, is_active)
+				VALUES ($1, $2, $3, true)
+				ON CONFLICT (extension_name, tenant_id) WHERE is_active = true
+				DO UPDATE SET enabled_at = NOW(), enabled_by = $3, error_message = NULL
+			`, name, tenantID, userID)
+			return err
+		})
 		if err != nil {
 			return nil, fmt.Errorf("extension is installed but failed to record in tracking table: %w", err)
 		}
@@ -389,12 +408,15 @@ func (s *Service) EnableExtensionForTenant(ctx context.Context, name string, use
 	_, version := s.checkExtensionInstalledForPool(ctx, name, nil)
 
 	// Record in enabled_extensions table
-	_, err = s.db.Exec(ctx, `
-		INSERT INTO platform.enabled_extensions (extension_name, tenant_id, enabled_by, is_active)
-		VALUES ($1, $2, $3, true)
-		ON CONFLICT (extension_name, tenant_id) WHERE is_active = true
-		DO UPDATE SET enabled_at = NOW(), enabled_by = $3, error_message = NULL
-	`, name, tenantID, userID)
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO platform.enabled_extensions (extension_name, tenant_id, enabled_by, is_active)
+			VALUES ($1, $2, $3, true)
+			ON CONFLICT (extension_name, tenant_id) WHERE is_active = true
+			DO UPDATE SET enabled_at = NOW(), enabled_by = $3, error_message = NULL
+		`, name, tenantID, userID)
+		return err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("extension created successfully but failed to record in tracking table: %w", err)
 	}
@@ -486,19 +508,22 @@ func (s *Service) DisableExtensionForTenant(ctx context.Context, name string, us
 
 	// Update enabled_extensions table
 	filter := mustTenantFilter(tenantID, 2)
-	if tenantID != nil {
-		_, err = s.db.Exec(ctx, fmt.Sprintf(`
-			UPDATE platform.enabled_extensions
-			SET is_active = false, disabled_at = NOW(), disabled_by = $3
-			WHERE extension_name = $1 AND is_active = true AND %s
-		`, filter), name, *tenantID, userID)
-	} else {
-		_, err = s.db.Exec(ctx, fmt.Sprintf(`
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		if tenantID != nil {
+			_, err := tx.Exec(ctx, fmt.Sprintf(`
+				UPDATE platform.enabled_extensions
+				SET is_active = false, disabled_at = NOW(), disabled_by = $3
+				WHERE extension_name = $1 AND is_active = true AND %s
+			`, filter), name, *tenantID, userID)
+			return err
+		}
+		_, err := tx.Exec(ctx, fmt.Sprintf(`
 			UPDATE platform.enabled_extensions
 			SET is_active = false, disabled_at = NOW(), disabled_by = $2
 			WHERE extension_name = $1 AND is_active = true AND %s
 		`, filter), name, userID)
-	}
+		return err
+	})
 	if err != nil {
 		log.Warn().Err(err).Str("extension", name).Msg("Failed to record extension disablement")
 	}
@@ -565,15 +590,17 @@ func (s *Service) checkExtensionInstalledForPool(ctx context.Context, name strin
 // getAvailableExtension retrieves an extension from the catalog
 func (s *Service) getAvailableExtension(ctx context.Context, name string) (*AvailableExtension, error) {
 	var ext AvailableExtension
-	err := s.db.QueryRow(ctx, `
-		SELECT id, name, display_name, COALESCE(description, ''), category,
-		       is_core, requires_restart, COALESCE(documentation_url, ''), created_at, updated_at
-		FROM platform.available_extensions
-		WHERE name = $1
-	`, name).Scan(
-		&ext.ID, &ext.Name, &ext.DisplayName, &ext.Description, &ext.Category,
-		&ext.IsCore, &ext.RequiresRestart, &ext.DocumentationURL, &ext.CreatedAt, &ext.UpdatedAt,
-	)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT id, name, display_name, COALESCE(description, ''), category,
+			       is_core, requires_restart, COALESCE(documentation_url, ''), created_at, updated_at
+			FROM platform.available_extensions
+			WHERE name = $1
+		`, name).Scan(
+			&ext.ID, &ext.Name, &ext.DisplayName, &ext.Description, &ext.Category,
+			&ext.IsCore, &ext.RequiresRestart, &ext.DocumentationURL, &ext.CreatedAt, &ext.UpdatedAt,
+		)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -585,12 +612,15 @@ func (s *Service) getAvailableExtension(ctx context.Context, name string) (*Avai
 
 // recordExtensionErrorForTenant records an error for a tenant's extension operation
 func (s *Service) recordExtensionErrorForTenant(ctx context.Context, name string, userID *string, errorMsg string, tenantID *string) {
-	_, err := s.db.Exec(ctx, `
-		INSERT INTO platform.enabled_extensions (extension_name, tenant_id, enabled_by, is_active, error_message)
-		VALUES ($1, $2, $3, false, $4)
-		ON CONFLICT (extension_name, tenant_id) WHERE is_active = true
-		DO UPDATE SET error_message = $4, updated_at = NOW()
-	`, name, tenantID, userID, errorMsg)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO platform.enabled_extensions (extension_name, tenant_id, enabled_by, is_active, error_message)
+			VALUES ($1, $2, $3, false, $4)
+			ON CONFLICT (extension_name, tenant_id) WHERE is_active = true
+			DO UPDATE SET error_message = $4, updated_at = NOW()
+		`, name, tenantID, userID, errorMsg)
+		return err
+	})
 	if err != nil {
 		log.Warn().Err(err).Str("extension", name).Msg("Failed to record extension error")
 	}
@@ -604,21 +634,27 @@ func (s *Service) InitializeCoreExtensions(ctx context.Context) error {
 // InitializeCoreExtensionsForTenant ensures core extensions are enabled for a tenant's database.
 // tenantDBName is the database name for separate-DB tenants (empty for default tenant).
 func (s *Service) InitializeCoreExtensionsForTenant(ctx context.Context, tenantID *string, tenantDBName string) error {
-	rows, err := s.db.Query(ctx, `
-		SELECT name FROM platform.available_extensions WHERE is_core = true
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to query core extensions: %w", err)
-	}
-	defer rows.Close()
-
 	var coreExtensions []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return fmt.Errorf("failed to scan core extension: %w", err)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT name FROM platform.available_extensions WHERE is_core = true
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to query core extensions: %w", err)
 		}
-		coreExtensions = append(coreExtensions, name)
+		defer rows.Close()
+
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				return fmt.Errorf("failed to scan core extension: %w", err)
+			}
+			coreExtensions = append(coreExtensions, name)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	for _, name := range coreExtensions {

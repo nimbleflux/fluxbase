@@ -13,10 +13,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 	"golang.org/x/oauth2/google"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 var (
@@ -340,23 +341,17 @@ func DefaultDBStateStoreConfig() DBStateStoreConfig {
 	}
 }
 
-// DBPool is the interface for database operations (subset of pgxpool.Pool)
-type DBPool interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 // DBStateStore provides database-backed OAuth state storage
 // Supports multi-instance deployments where OAuth callback may hit different instance
 type DBStateStore struct {
-	db          DBPool
+	db          *database.Connection
 	config      DBStateStoreConfig
 	stopCleanup chan struct{}
 	stopped     int32 // Atomic flag to prevent double-close (0=running, 1=stopped)
 }
 
 // NewDBStateStore creates a new database-backed state store
-func NewDBStateStore(db DBPool, config DBStateStoreConfig) *DBStateStore {
+func NewDBStateStore(db *database.Connection, config DBStateStoreConfig) *DBStateStore {
 	if config.DefaultTTL == 0 {
 		config.DefaultTTL = 10 * time.Minute
 	}
@@ -409,31 +404,40 @@ func (s *DBStateStore) Set(ctx context.Context, state string, metadata StateMeta
 		expiresAt = time.Now().Add(s.config.DefaultTTL)
 	}
 
-	_, err := s.db.Exec(ctx, `
-		INSERT INTO auth.oauth_states (state, provider, redirect_uri, code_verifier, nonce, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (state) DO UPDATE SET
-			provider = EXCLUDED.provider,
-			redirect_uri = EXCLUDED.redirect_uri,
-			code_verifier = EXCLUDED.code_verifier,
-			nonce = EXCLUDED.nonce,
-			expires_at = EXCLUDED.expires_at
-	`, state, metadata.Provider, metadata.RedirectURI, metadata.CodeVerifier, metadata.Nonce, expiresAt)
-
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO auth.oauth_states (state, provider, redirect_uri, code_verifier, nonce, expires_at)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (state) DO UPDATE SET
+				provider = EXCLUDED.provider,
+				redirect_uri = EXCLUDED.redirect_uri,
+				code_verifier = EXCLUDED.code_verifier,
+				nonce = EXCLUDED.nonce,
+				expires_at = EXCLUDED.expires_at
+		`, state, metadata.Provider, metadata.RedirectURI, metadata.CodeVerifier, metadata.Nonce, expiresAt)
+		return err
+	})
 }
 
 // Validate checks if a state token is valid and removes it
 func (s *DBStateStore) Validate(ctx context.Context, state string) bool {
-	result, err := s.db.Exec(ctx, `
-		DELETE FROM auth.oauth_states
-		WHERE state = $1 AND expires_at > NOW()
-	`, state)
+	var rowsAffected int64
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, `
+			DELETE FROM auth.oauth_states
+			WHERE state = $1 AND expires_at > NOW()
+		`, state)
+		if err != nil {
+			return err
+		}
+		rowsAffected = result.RowsAffected()
+		return nil
+	})
 	if err != nil {
 		return false
 	}
 
-	return result.RowsAffected() > 0
+	return rowsAffected > 0
 }
 
 // GetAndValidate validates a state token, removes it, and returns the metadata
@@ -441,12 +445,14 @@ func (s *DBStateStore) GetAndValidate(ctx context.Context, state string) (*State
 	var metadata StateMetadata
 	var expiresAt time.Time
 
-	// Use a transaction to atomically read and delete
-	err := s.db.QueryRow(ctx, `
-		DELETE FROM auth.oauth_states
-		WHERE state = $1 AND expires_at > NOW()
-		RETURNING provider, redirect_uri, code_verifier, nonce, expires_at
-	`, state).Scan(&metadata.Provider, &metadata.RedirectURI, &metadata.CodeVerifier, &metadata.Nonce, &expiresAt)
+	// WrapWithServiceRole already uses a transaction, so the read and delete are atomic
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			DELETE FROM auth.oauth_states
+			WHERE state = $1 AND expires_at > NOW()
+			RETURNING provider, redirect_uri, code_verifier, nonce, expires_at
+		`, state).Scan(&metadata.Provider, &metadata.RedirectURI, &metadata.CodeVerifier, &metadata.Nonce, &expiresAt)
+	})
 	if err != nil {
 		return nil, false
 	}
@@ -457,9 +463,11 @@ func (s *DBStateStore) GetAndValidate(ctx context.Context, state string) (*State
 
 // Cleanup removes expired state tokens from the database
 func (s *DBStateStore) Cleanup(ctx context.Context) error {
-	_, err := s.db.Exec(ctx, `
-		DELETE FROM auth.oauth_states
-		WHERE expires_at < NOW()
-	`)
-	return err
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			DELETE FROM auth.oauth_states
+			WHERE expires_at < NOW()
+		`)
+		return err
+	})
 }

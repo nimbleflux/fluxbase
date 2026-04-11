@@ -64,6 +64,18 @@ CREATE INDEX IF NOT EXISTS idx_custom_resources_namespace ON custom_resources (n
 CREATE INDEX IF NOT EXISTS idx_custom_resources_uri ON custom_resources (uri);
 
 --
+-- Name: custom_resources; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE custom_resources ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: custom_resources; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE custom_resources FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: custom_tools; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -125,6 +137,18 @@ CREATE INDEX IF NOT EXISTS idx_custom_tools_name ON custom_tools (name);
 --
 
 CREATE INDEX IF NOT EXISTS idx_custom_tools_namespace ON custom_tools (namespace);
+
+--
+-- Name: custom_tools; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE custom_tools ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: custom_tools; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE custom_tools FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: update_updated_at(); Type: FUNCTION; Schema: -; Owner: -

@@ -510,6 +510,7 @@ func grantRLSTestPermissions() {
 		GRANT USAGE, CREATE ON SCHEMA jobs TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA storage TO fluxbase_rls_test, fluxbase_app;
 		GRANT USAGE, CREATE ON SCHEMA realtime TO fluxbase_rls_test, fluxbase_app;
+		GRANT USAGE, CREATE ON SCHEMA mcp TO fluxbase_rls_test, fluxbase_app;
 	`, dbName))
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to grant schema permissions to test users")
@@ -534,6 +535,8 @@ func grantRLSTestPermissions() {
 		GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL TABLES IN SCHEMA realtime TO fluxbase_rls_test, fluxbase_app;
 		GRANT ALL ON ALL SEQUENCES IN SCHEMA realtime TO fluxbase_rls_test, fluxbase_app;
+		GRANT ALL ON ALL TABLES IN SCHEMA mcp TO fluxbase_rls_test, fluxbase_app;
+		GRANT ALL ON ALL SEQUENCES IN SCHEMA mcp TO fluxbase_rls_test, fluxbase_app;
 
 		-- Grant permissions on future tables/sequences (in case migrations add new ones)
 		ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
@@ -552,7 +555,9 @@ func grantRLSTestPermissions() {
 		ALTER DEFAULT PRIVILEGES IN SCHEMA storage GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA realtime GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA realtime GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
-	`)
+			ALTER DEFAULT PRIVILEGES IN SCHEMA mcp GRANT ALL ON TABLES TO fluxbase_rls_test, fluxbase_app;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA mcp GRANT ALL ON SEQUENCES TO fluxbase_rls_test, fluxbase_app;
+		`)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to grant table/sequence permissions to test users")
 		return

@@ -28,7 +28,7 @@ func setupRLSTest(t *testing.T) *test.TestContext {
 		-- Clean impersonation sessions for deleted users (will cascade)
 		DELETE FROM auth.impersonation_sessions WHERE admin_user_id NOT IN (SELECT id FROM auth.users);
 		-- Clean magic_links for deleted users
-		DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com';
+		DELETE FROM auth.magic_links WHERE email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com' OR email = 'user@example.com';
 		-- Clean password_reset_tokens for deleted users (will cascade)
 		DELETE FROM auth.password_reset_tokens WHERE user_id NOT IN (SELECT id FROM auth.users);
 		-- Clean tasks table used for RLS tests

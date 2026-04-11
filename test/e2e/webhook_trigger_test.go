@@ -26,8 +26,10 @@ func setupWebhookTriggerTest(t *testing.T) *test.TestContext {
 	tc.ExecuteSQL("DELETE FROM auth.webhook_events WHERE webhook_id IN (SELECT id FROM auth.webhooks WHERE name LIKE '%Test%' OR name LIKE '%test%' OR name LIKE '%Webhook%' OR name LIKE '%Debug%' OR name LIKE '%Auto%' OR name LIKE '%Global%' OR name LIKE '%User%' OR name LIKE '%Update%')")
 	tc.ExecuteSQL("DELETE FROM auth.webhook_deliveries WHERE webhook_id IN (SELECT id FROM auth.webhooks WHERE name LIKE '%Test%' OR name LIKE '%test%' OR name LIKE '%Webhook%' OR name LIKE '%Debug%' OR name LIKE '%Auto%' OR name LIKE '%Global%' OR name LIKE '%User%' OR name LIKE '%Update%')")
 	tc.ExecuteSQL("DELETE FROM auth.webhooks WHERE name LIKE '%Test%' OR name LIKE '%test%' OR name LIKE '%Webhook%' OR name LIKE '%Debug%' OR name LIKE '%Auto%' OR name LIKE '%Global%' OR name LIKE '%User%' OR name LIKE '%Update%'")
+	// Reset webhook reference counts so triggers get recreated on next webhook creation
+	tc.ExecuteSQL("DELETE FROM auth.webhook_monitored_tables")
 	// Delete only test users (those with test email patterns)
-	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com' OR email IN ('newuser@example.com', 'trigger@example.com', 'admin@example.com')")
+	tc.ExecuteSQL("DELETE FROM auth.users WHERE email LIKE 'e2e-test-%' OR email LIKE 'test-%@example.com' OR email LIKE 'test-%@test.com' OR email IN ('newuser@example.com', 'trigger@example.com', 'admin@example.com', 'debug@example.com', 'user1@example.com', 'user2@example.com')")
 
 	// Note: Triggers are now automatically created when webhooks are created
 	// No need to manually call auth.create_webhook_trigger
