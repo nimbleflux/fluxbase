@@ -36,7 +36,8 @@ func TestTenantDeletion_CascadeCleanup(t *testing.T) {
 
 	var tenantResp map[string]interface{}
 	resp.JSON(&tenantResp)
-	tenantID := tenantResp["id"].(string)
+	tenantData := tenantResp["tenant"].(map[string]interface{})
+	tenantID := tenantData["id"].(string)
 
 	// Insert data in multiple schemas for this tenant
 	// Jobs function
