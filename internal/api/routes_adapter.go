@@ -80,6 +80,9 @@ func (s *Server) buildGraphQLRouteDeps() *routes.GraphQLDeps {
 		OptionalAuth:     middleware.OptionalAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.DB(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
 		HandleGraphQL:    s.GraphQL.Handler.HandleGraphQL,
 		HandleIntrospect: s.GraphQL.Handler.HandleIntrospection,
+
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
 	}
 }
 
@@ -107,6 +110,9 @@ func (s *Server) buildRPCRouteDeps() *routes.RPCDeps {
 		Invoke:            s.RPC.Handler.Invoke,
 		GetExecution:      s.RPC.Handler.GetPublicExecution,
 		GetExecutionLogs:  s.RPC.Handler.GetPublicExecutionLogs,
+
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
 	}
 }
 
@@ -280,6 +286,9 @@ func (s *Server) buildWebhookRouteDeps() *routes.WebhookDeps {
 		UpdateWebhook:  s.Webhook.Handler.UpdateWebhook,
 		DeleteWebhook:  s.Webhook.Handler.DeleteWebhook,
 		TestWebhook:    s.Webhook.Handler.TestWebhook,
+
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
 	}
 }
 
@@ -332,6 +341,9 @@ func (s *Server) buildJobsRouteDeps() *routes.JobsDeps {
 		CancelJob:          s.Jobs.Handler.CancelJob,
 		RetryJob:           s.Jobs.Handler.RetryJob,
 		GetJobLogsUser:     s.Jobs.Handler.GetJobLogsUser,
+
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
 	}
 }
 

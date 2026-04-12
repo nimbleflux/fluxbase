@@ -260,7 +260,14 @@ func (h *GraphQLHandler) setupRLSContext(c fiber.Ctx, ctx context.Context) conte
 			}
 		}
 
-		return context.WithValue(ctx, GraphQLRLSContextKey, rlsCtx)
+		ctx = context.WithValue(ctx, GraphQLRLSContextKey, rlsCtx)
+
+		// Propagate tenant context from middleware
+		if tenantID, ok := c.Locals("tenant_id").(string); ok && tenantID != "" {
+			ctx = database.ContextWithTenant(ctx, tenantID)
+		}
+
+		return ctx
 	}
 
 	// Try individual locals (set by OptionalAuthOrServiceKey middleware)
@@ -277,6 +284,10 @@ func (h *GraphQLHandler) setupRLSContext(c fiber.Ctx, ctx context.Context) conte
 	// Service keys have a role but no user ID - still need RLS context
 	if userID == "" && userRole == "" {
 		// No user context available - anonymous access
+		// Propagate tenant context from middleware
+		if tenantID, ok := c.Locals("tenant_id").(string); ok && tenantID != "" {
+			ctx = database.ContextWithTenant(ctx, tenantID)
+		}
 		return ctx
 	}
 
@@ -296,7 +307,14 @@ func (h *GraphQLHandler) setupRLSContext(c fiber.Ctx, ctx context.Context) conte
 		}
 	}
 
-	return context.WithValue(ctx, GraphQLRLSContextKey, rlsCtx)
+	ctx = context.WithValue(ctx, GraphQLRLSContextKey, rlsCtx)
+
+	// Propagate tenant context from middleware
+	if tenantID, ok := c.Locals("tenant_id").(string); ok && tenantID != "" {
+		ctx = database.ContextWithTenant(ctx, tenantID)
+	}
+
+	return ctx
 }
 
 // HandleIntrospection handles GET /api/v1/graphql (returns introspection data)

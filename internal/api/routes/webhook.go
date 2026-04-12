@@ -14,12 +14,30 @@ type WebhookDeps struct {
 	UpdateWebhook  fiber.Handler
 	DeleteWebhook  fiber.Handler
 	TestWebhook    fiber.Handler
+
+	// Middleware for tenant context
+	TenantMiddleware   fiber.Handler
+	TenantDBMiddleware fiber.Handler
 }
 
 func BuildWebhookRoutes(deps *WebhookDeps) *RouteGroup {
+	// Build middlewares for tenant context
+	var middlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+	if deps.TenantDBMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantDBContext", Handler: deps.TenantDBMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name:   "webhooks",
-		Prefix: "/api/v1/webhooks",
+		Name:        "webhooks",
+		Prefix:      "/api/v1/webhooks",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "GET",

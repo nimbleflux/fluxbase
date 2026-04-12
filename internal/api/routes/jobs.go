@@ -14,17 +14,35 @@ type JobsDeps struct {
 	CancelJob          fiber.Handler
 	RetryJob           fiber.Handler
 	GetJobLogsUser     fiber.Handler
+
+	// Middleware for tenant context
+	TenantMiddleware   fiber.Handler
+	TenantDBMiddleware fiber.Handler
 }
 
 func BuildJobsRoutes(deps *JobsDeps) *RouteGroup {
 	if deps == nil {
 		return nil
 	}
+	// Build middlewares for tenant context
+	var middlewares []Middleware
+	middlewares = append(middlewares, Middleware{
+		Name: "RequireJobsEnabled", Handler: deps.RequireJobsEnabled,
+	})
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+	if deps.TenantDBMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantDBContext", Handler: deps.TenantDBMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name: "jobs",
-		Middlewares: []Middleware{
-			{Name: "RequireJobsEnabled", Handler: deps.RequireJobsEnabled},
-		},
+		Name:        "jobs",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "POST",

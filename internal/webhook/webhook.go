@@ -332,7 +332,8 @@ func (s *WebhookService) Create(ctx context.Context, webhook *Webhook) error {
 		RETURNING id, created_at, updated_at
 	`
 
-	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	tenantID := database.TenantFromContext(ctx)
+	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			webhook.Name,
 			webhook.Description,
@@ -437,18 +438,20 @@ func (s *WebhookService) List(ctx context.Context) ([]*Webhook, error) {
 
 // Get retrieves a webhook by ID
 func (s *WebhookService) Get(ctx context.Context, id uuid.UUID) (*Webhook, error) {
+	tenantID := database.TenantFromContext(ctx)
+
 	query := `
 		SELECT id, name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by, created_at, updated_at
 		FROM auth.webhooks
-		WHERE id = $1
+		WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 	`
 
 	var webhook Webhook
 	var eventsJSON, headersJSON []byte
 	var scope *string
 
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, id).Scan(
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id, tenantID).Scan(
 			&webhook.ID,
 			&webhook.Name,
 			&webhook.Description,
@@ -534,7 +537,8 @@ func (s *WebhookService) Update(ctx context.Context, id uuid.UUID, webhook *Webh
 		WHERE id = $12
 	`
 
-	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	tenantID := database.TenantFromContext(ctx)
+	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, query,
 			webhook.Name,
 			webhook.Description,
@@ -628,7 +632,8 @@ func (s *WebhookService) Delete(ctx context.Context, id uuid.UUID) error {
 
 	query := `DELETE FROM auth.webhooks WHERE id = $1`
 
-	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	tenantID := database.TenantFromContext(ctx)
+	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, query, id)
 		if err != nil {
 			return err
@@ -949,6 +954,11 @@ func (s *WebhookService) markDeliveryFailed(ctx context.Context, deliveryID uuid
 
 // ListDeliveries lists webhook deliveries
 func (s *WebhookService) ListDeliveries(ctx context.Context, webhookID uuid.UUID, limit int) ([]*WebhookDelivery, error) {
+	// Verify tenant access to the webhook first
+	if _, err := s.Get(ctx, webhookID); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT id, webhook_id, event, payload, status, status_code, response_body, error, attempt, delivered_at, created_at
 		FROM auth.webhook_deliveries
@@ -958,7 +968,8 @@ func (s *WebhookService) ListDeliveries(ctx context.Context, webhookID uuid.UUID
 	`
 
 	var deliveries []*WebhookDelivery
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	tenantID := database.TenantFromContext(ctx)
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, webhookID, limit)
 		if err != nil {
 			return err

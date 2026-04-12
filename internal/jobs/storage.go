@@ -149,14 +149,17 @@ func (s *Storage) GetJobFunction(ctx context.Context, namespace, name string) (*
 		WHERE namespace = $1 AND name = $2
 	`
 
+	tenantID := database.TenantFromContext(ctx)
 	var fn JobFunction
-	err := s.conn.Pool().QueryRow(ctx, query, namespace, name).Scan(
-		&fn.ID, &fn.Name, &fn.Namespace, &fn.Description, &fn.Code, &fn.OriginalCode,
-		&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
-		&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
-		&fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.RequireRoles, &fn.DisableExecutionLogs,
-		&fn.Version, &fn.CreatedBy, &fn.Source, &fn.CreatedAt, &fn.UpdatedAt,
-	)
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, namespace, name).Scan(
+			&fn.ID, &fn.Name, &fn.Namespace, &fn.Description, &fn.Code, &fn.OriginalCode,
+			&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
+			&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
+			&fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.RequireRoles, &fn.DisableExecutionLogs,
+			&fn.Version, &fn.CreatedBy, &fn.Source, &fn.CreatedAt, &fn.UpdatedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("job function not found: %s/%s", namespace, name)
@@ -240,29 +243,36 @@ func (s *Storage) ListJobFunctions(ctx context.Context, namespace string) ([]*Jo
 		ORDER BY name
 	`
 
-	rows, err := s.conn.Pool().Query(ctx, query, namespace)
+	tenantID := database.TenantFromContext(ctx)
+	var functions []*JobFunctionSummary
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, namespace)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var fn JobFunctionSummary
+			if err := rows.Scan(
+				&fn.ID, &fn.Name, &fn.Namespace, &fn.Description,
+				&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
+				&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
+				&fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.RequireRoles, &fn.DisableExecutionLogs,
+				&fn.Version, &fn.CreatedBy, &fn.Source, &fn.CreatedAt, &fn.UpdatedAt,
+			); err != nil {
+				return err
+			}
+			functions = append(functions, &fn)
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var functions []*JobFunctionSummary
-	for rows.Next() {
-		var fn JobFunctionSummary
-		err := rows.Scan(
-			&fn.ID, &fn.Name, &fn.Namespace, &fn.Description,
-			&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
-			&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
-			&fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.RequireRoles, &fn.DisableExecutionLogs,
-			&fn.Version, &fn.CreatedBy, &fn.Source, &fn.CreatedAt, &fn.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		functions = append(functions, &fn)
-	}
-
-	return functions, rows.Err()
+	return functions, nil
 }
 
 // ListAllJobFunctions lists all job functions across all namespaces (admin use)
@@ -687,14 +697,17 @@ func (s *Storage) GetJob(ctx context.Context, jobID uuid.UUID) (*Job, error) {
 		WHERE q.id = $1
 	`
 
+	tenantID := database.TenantFromContext(ctx)
 	var job Job
-	err := s.conn.Pool().QueryRow(ctx, query, jobID).Scan(
-		&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
-		&job.Payload, &job.Result, &job.Progress, &job.Priority,
-		&job.MaxDurationSeconds, &job.ProgressTimeoutSeconds, &job.MaxRetries,
-		&job.RetryCount, &job.ErrorMessage, &job.WorkerID, &job.CreatedBy, &job.UserRole, &job.UserEmail, &job.UserName,
-		&job.CreatedAt, &job.ScheduledAt, &job.StartedAt, &job.LastProgressAt, &job.CompletedAt,
-	)
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, jobID).Scan(
+			&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
+			&job.Payload, &job.Result, &job.Progress, &job.Priority,
+			&job.MaxDurationSeconds, &job.ProgressTimeoutSeconds, &job.MaxRetries,
+			&job.RetryCount, &job.ErrorMessage, &job.WorkerID, &job.CreatedBy, &job.UserRole, &job.UserEmail, &job.UserName,
+			&job.CreatedAt, &job.ScheduledAt, &job.StartedAt, &job.LastProgressAt, &job.CompletedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("job not found: %s", jobID)
@@ -781,42 +794,50 @@ func (s *Storage) ListJobs(ctx context.Context, filters *JobFilters) ([]*Job, er
 		}
 	}
 
-	rows, err := s.conn.Pool().Query(ctx, query, args...)
+	tenantID := database.TenantFromContext(ctx)
+	var jobs []*Job
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var job Job
+			var scanErr error
+			if includeResult {
+				// Scan with result field included
+				scanErr = rows.Scan(
+					&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
+					&job.Result, &job.Progress, &job.Priority,
+					&job.MaxDurationSeconds, &job.ProgressTimeoutSeconds, &job.MaxRetries,
+					&job.RetryCount, &job.ErrorMessage, &job.WorkerID, &job.CreatedBy, &job.UserRole, &job.UserEmail, &job.UserName,
+					&job.CreatedAt, &job.ScheduledAt, &job.StartedAt, &job.LastProgressAt, &job.CompletedAt,
+				)
+			} else {
+				// Scan without result field (payload, result are nil for performance)
+				scanErr = rows.Scan(
+					&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
+					&job.Progress, &job.Priority,
+					&job.MaxDurationSeconds, &job.ProgressTimeoutSeconds, &job.MaxRetries,
+					&job.RetryCount, &job.ErrorMessage, &job.WorkerID, &job.CreatedBy, &job.UserRole, &job.UserEmail, &job.UserName,
+					&job.CreatedAt, &job.ScheduledAt, &job.StartedAt, &job.LastProgressAt, &job.CompletedAt,
+				)
+			}
+			if scanErr != nil {
+				return scanErr
+			}
+			jobs = append(jobs, &job)
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var jobs []*Job
-	for rows.Next() {
-		var job Job
-		var scanErr error
-		if includeResult {
-			// Scan with result field included
-			scanErr = rows.Scan(
-				&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
-				&job.Result, &job.Progress, &job.Priority,
-				&job.MaxDurationSeconds, &job.ProgressTimeoutSeconds, &job.MaxRetries,
-				&job.RetryCount, &job.ErrorMessage, &job.WorkerID, &job.CreatedBy, &job.UserRole, &job.UserEmail, &job.UserName,
-				&job.CreatedAt, &job.ScheduledAt, &job.StartedAt, &job.LastProgressAt, &job.CompletedAt,
-			)
-		} else {
-			// Scan without result field (payload, result are nil for performance)
-			scanErr = rows.Scan(
-				&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
-				&job.Progress, &job.Priority,
-				&job.MaxDurationSeconds, &job.ProgressTimeoutSeconds, &job.MaxRetries,
-				&job.RetryCount, &job.ErrorMessage, &job.WorkerID, &job.CreatedBy, &job.UserRole, &job.UserEmail, &job.UserName,
-				&job.CreatedAt, &job.ScheduledAt, &job.StartedAt, &job.LastProgressAt, &job.CompletedAt,
-			)
-		}
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		jobs = append(jobs, &job)
-	}
-
-	return jobs, rows.Err()
+	return jobs, nil
 }
 
 // CreateJob creates a new job in the queue (alias for EnqueueJob for consistency)

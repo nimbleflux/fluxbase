@@ -12,14 +12,32 @@ type RPCDeps struct {
 	Invoke            fiber.Handler
 	GetExecution      fiber.Handler
 	GetExecutionLogs  fiber.Handler
+
+	// Middleware for tenant context
+	TenantMiddleware   fiber.Handler
+	TenantDBMiddleware fiber.Handler
 }
 
 func BuildRPCRoutes(deps *RPCDeps) *RouteGroup {
+	// Build middlewares for tenant context
+	var middlewares []Middleware
+	middlewares = append(middlewares, Middleware{
+		Name: "RequireRPCEnabled", Handler: deps.RequireRPCEnabled,
+	})
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+	if deps.TenantDBMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantDBContext", Handler: deps.TenantDBMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name: "rpc",
-		Middlewares: []Middleware{
-			{Name: "RequireRPCEnabled", Handler: deps.RequireRPCEnabled},
-		},
+		Name:        "rpc",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "GET",

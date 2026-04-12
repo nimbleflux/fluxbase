@@ -541,5 +541,118 @@ func (s *Storage) CleanupTenantData(ctx context.Context, tenantID string) error 
 		}
 	}
 
+	// Phase 3: Functions and jobs.
+	tables3 := []string{
+		"functions.edge_function_files",
+		"functions.edge_executions",
+		"functions.edge_functions",
+		"jobs.queue",
+		"jobs.function_files",
+		"jobs.functions",
+	}
+	for _, table := range tables3 {
+		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)
+		if err != nil {
+			log.Warn().Err(err).Str("table", table).Str("tenant_id", tenantID).
+				Msg("Failed to cleanup table for tenant (non-fatal)")
+		}
+	}
+
+	// Phase 4: RPC.
+	tables4 := []string{
+		"rpc.executions",
+		"rpc.procedures",
+	}
+	for _, table := range tables4 {
+		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)
+		if err != nil {
+			log.Warn().Err(err).Str("table", table).Str("tenant_id", tenantID).
+				Msg("Failed to cleanup table for tenant (non-fatal)")
+		}
+	}
+
+	// Phase 5: AI.
+	tables5 := []string{
+		"ai.conversations",
+		"ai.chatbot_knowledge_bases",
+		"ai.chatbots",
+		"ai.chunks",
+		"ai.documents",
+		"ai.knowledge_bases",
+	}
+	for _, table := range tables5 {
+		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)
+		if err != nil {
+			log.Warn().Err(err).Str("table", table).Str("tenant_id", tenantID).
+				Msg("Failed to cleanup table for tenant (non-fatal)")
+		}
+	}
+
+	// Phase 6: Webhooks (extended).
+	tables6 := []string{
+		"auth.webhook_deliveries",
+		"auth.webhook_events",
+		"auth.webhooks",
+	}
+	for _, table := range tables6 {
+		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)
+		if err != nil {
+			log.Warn().Err(err).Str("table", table).Str("tenant_id", tenantID).
+				Msg("Failed to cleanup table for tenant (non-fatal)")
+		}
+	}
+
+	// Phase 7: Secrets, keys, and settings.
+	tables7 := []string{
+		"auth.secrets",
+		"auth.service_keys",
+		"app.settings",
+	}
+	for _, table := range tables7 {
+		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)
+		if err != nil {
+			log.Warn().Err(err).Str("table", table).Str("tenant_id", tenantID).
+				Msg("Failed to cleanup table for tenant (non-fatal)")
+		}
+	}
+
+	// Phase 8: Logging and realtime.
+	tables8 := []string{
+		"logging.entries",
+		"realtime.schema_registry",
+	}
+	for _, table := range tables8 {
+		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)
+		if err != nil {
+			log.Warn().Err(err).Str("table", table).Str("tenant_id", tenantID).
+				Msg("Failed to cleanup table for tenant (non-fatal)")
+		}
+	}
+
+	// Phase 9: Migrations.
+	tables9 := []string{
+		"migrations.migrations",
+	}
+	for _, table := range tables9 {
+		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)
+		if err != nil {
+			log.Warn().Err(err).Str("table", table).Str("tenant_id", tenantID).
+				Msg("Failed to cleanup table for tenant (non-fatal)")
+		}
+	}
+
+	// Phase 10: Platform.
+	tables10 := []string{
+		"platform.tenant_admin_assignments",
+		"platform.tenant_memberships",
+	}
+	for _, table := range tables10 {
+		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)
+		if err != nil {
+			log.Warn().Err(err).Str("table", table).Str("tenant_id", tenantID).
+				Msg("Failed to cleanup table for tenant (non-fatal)")
+		}
+	}
+
 	return nil
 }
