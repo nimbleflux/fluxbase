@@ -163,13 +163,16 @@ func (s *Storage) GetProcedure(ctx context.Context, id string) (*Procedure, erro
 		WHERE id = $1
 	`
 
+	tenantID := database.TenantFromContext(ctx)
 	proc := &Procedure{}
-	err := s.db.Pool().QueryRow(ctx, query, id).Scan(
-		&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
-		&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
-		&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
-		&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
-	)
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id).Scan(
+			&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
+			&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
+			&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
+			&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -192,13 +195,16 @@ func (s *Storage) GetProcedureByName(ctx context.Context, namespace, name string
 		WHERE namespace = $1 AND name = $2
 	`
 
+	tenantID := database.TenantFromContext(ctx)
 	proc := &Procedure{}
-	err := s.db.Pool().QueryRow(ctx, query, namespace, name).Scan(
-		&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
-		&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
-		&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
-		&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
-	)
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, namespace, name).Scan(
+			&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
+			&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
+			&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
+			&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -237,25 +243,31 @@ func (s *Storage) ListProcedures(ctx context.Context, namespace string) ([]*Proc
 		`
 	}
 
-	rows, err := s.db.Pool().Query(ctx, query, args...)
+	tenantID := database.TenantFromContext(ctx)
+	var procedures []*Procedure
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, args...)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			proc := &Procedure{}
+			if scanErr := rows.Scan(
+				&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
+				&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
+				&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
+				&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
+			); scanErr != nil {
+				return scanErr
+			}
+			procedures = append(procedures, proc)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list procedures: %w", err)
-	}
-	defer rows.Close()
-
-	var procedures []*Procedure
-	for rows.Next() {
-		proc := &Procedure{}
-		err := rows.Scan(
-			&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
-			&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
-			&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
-			&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan procedure: %w", err)
-		}
-		procedures = append(procedures, proc)
 	}
 
 	return procedures, nil
@@ -287,24 +299,30 @@ func (s *Storage) ListPublicProcedures(ctx context.Context, namespace string) ([
 		`
 	}
 
-	rows, err := s.db.Pool().Query(ctx, query, args...)
+	tenantID := database.TenantFromContext(ctx)
+	var procedures []*ProcedureSummary
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, args...)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			proc := &ProcedureSummary{}
+			if scanErr := rows.Scan(
+				&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.AllowedTables, &proc.AllowedSchemas,
+				&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
+				&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedAt, &proc.UpdatedAt,
+			); scanErr != nil {
+				return scanErr
+			}
+			procedures = append(procedures, proc)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list public procedures: %w", err)
-	}
-	defer rows.Close()
-
-	var procedures []*ProcedureSummary
-	for rows.Next() {
-		proc := &ProcedureSummary{}
-		err := rows.Scan(
-			&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.AllowedTables, &proc.AllowedSchemas,
-			&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
-			&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedAt, &proc.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan procedure: %w", err)
-		}
-		procedures = append(procedures, proc)
 	}
 
 	return procedures, nil

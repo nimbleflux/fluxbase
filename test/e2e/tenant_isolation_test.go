@@ -35,6 +35,10 @@ func setupTenantIsolationTest(t *testing.T) *test.TestContext {
 	tc.ExecuteSQLAsSuperuser(`DELETE FROM ai.knowledge_bases WHERE tenant_id IN ($1::uuid, $2::uuid)`, tenantTestID1, tenantTestID2)
 	tc.ExecuteSQLAsSuperuser(`DELETE FROM ai.documents WHERE tenant_id IN ($1::uuid, $2::uuid)`, tenantTestID1, tenantTestID2)
 	tc.ExecuteSQLAsSuperuser(`DELETE FROM jobs.queue WHERE tenant_id IN ($1::uuid, $2::uuid)`, tenantTestID1, tenantTestID2)
+	tc.ExecuteSQLAsSuperuser(`DELETE FROM jobs.functions WHERE tenant_id IN ($1::uuid, $2::uuid)`, tenantTestID1, tenantTestID2)
+	tc.ExecuteSQLAsSuperuser(`DELETE FROM auth.webhook_events WHERE webhook_id IN (SELECT id FROM auth.webhooks WHERE tenant_id IN ($1::uuid, $2::uuid))`, tenantTestID1, tenantTestID2)
+	tc.ExecuteSQLAsSuperuser(`DELETE FROM auth.webhook_deliveries WHERE webhook_id IN (SELECT id FROM auth.webhooks WHERE tenant_id IN ($1::uuid, $2::uuid))`, tenantTestID1, tenantTestID2)
+	tc.ExecuteSQLAsSuperuser(`DELETE FROM auth.webhooks WHERE tenant_id IN ($1::uuid, $2::uuid)`, tenantTestID1, tenantTestID2)
 	tc.ExecuteSQLAsSuperuser(`DELETE FROM rpc.procedures WHERE tenant_id IN ($1::uuid, $2::uuid)`, tenantTestID1, tenantTestID2)
 	tc.ExecuteSQLAsSuperuser(`DELETE FROM realtime.schema_registry WHERE tenant_id IN ($1::uuid, $2::uuid)`, tenantTestID1, tenantTestID2)
 
@@ -525,4 +529,75 @@ func TestTenantIsolation_AutoPopulateTenantID(t *testing.T) {
 	// Convert to string for comparison (UUID comes as formatted string from convertPgTypeToGoType)
 	require.Contains(t, fmt.Sprintf("%v", tenantID), tenantTestID1[:8],
 		"Auto-populated tenant_id should match context tenant")
+}
+
+// ============================================================================
+// API-LEVEL TENANT ISOLATION
+// ============================================================================
+
+// TestTenantIsolation_RealtimeWebSocket documents that WebSocket connections
+// are not yet tenant-scoped and skips the test.
+func TestTenantIsolation_RealtimeWebSocket(t *testing.T) {
+	t.Skip("REALTIME TENANT ISOLATION NOT YET IMPLEMENTED: WebSocket connections are not tenant-scoped. " +
+		"See internal/realtime/manager.go - connections map is global. " +
+		"Per-record RLS in subscription.go filters payloads but not subscriptions. " +
+		"Adding per-tenant isolation requires significant architectural changes.")
+}
+
+// TestTenantIsolation_JobsAPI verifies that jobs.functions are isolated by tenant_id
+// at the RLS level. Job function definitions submitted for one tenant must not be
+// visible to another tenant.
+func TestTenantIsolation_JobsAPI(t *testing.T) {
+	tc := setupTenantIsolationTest(t)
+
+	// Insert job functions for both tenants as superuser.
+	// jobs.functions has a UNIQUE constraint on (name, namespace), so we use
+	// stable IDs with ON CONFLICT DO NOTHING to make the test idempotent.
+	tc.ExecuteSQLAsSuperuser(
+		`INSERT INTO jobs.functions (id, name, namespace, code, enabled, tenant_id)
+		 VALUES ($1, 'tenant1-job-api-test', 'isolation-test', 'export default function() {}', true, $2::uuid)
+		 ON CONFLICT (id) DO NOTHING`,
+		"10000000-0000-0000-0000-000000000001", tenantTestID1)
+
+	tc.ExecuteSQLAsSuperuser(
+		`INSERT INTO jobs.functions (id, name, namespace, code, enabled, tenant_id)
+		 VALUES ($1, 'tenant2-job-api-test', 'isolation-test', 'export default function() {}', true, $2::uuid)
+		 ON CONFLICT (id) DO NOTHING`,
+		"10000000-0000-0000-0000-000000000002", tenantTestID2)
+
+	// Query as tenant1 - should only see tenant1's job function
+	rows1 := tc.QuerySQLAsTenant(tenantTestID1,
+		"SELECT name FROM jobs.functions WHERE namespace = 'isolation-test'")
+	var names1 []string
+	for _, row := range rows1 {
+		names1 = append(names1, row["name"].(string))
+	}
+	require.Contains(t, names1, "tenant1-job-api-test")
+	require.NotContains(t, names1, "tenant2-job-api-test",
+		"tenant1 should NOT see tenant2's job functions")
+
+	// Query as tenant2 - should only see tenant2's job function
+	rows2 := tc.QuerySQLAsTenant(tenantTestID2,
+		"SELECT name FROM jobs.functions WHERE namespace = 'isolation-test'")
+	var names2 []string
+	for _, row := range rows2 {
+		names2 = append(names2, row["name"].(string))
+	}
+	require.Contains(t, names2, "tenant2-job-api-test")
+	require.NotContains(t, names2, "tenant1-job-api-test",
+		"tenant2 should NOT see tenant1's job functions")
+
+	// Superuser should see both
+	rowsAll := tc.QuerySQLAsSuperuser(
+		"SELECT name FROM jobs.functions WHERE namespace = 'isolation-test'")
+	require.Len(t, rowsAll, 2, "superuser should see both tenants' job functions")
+}
+
+// TestTenantIsolation_WebhooksAPI documents that auth.webhooks do not yet have
+// tenant-based RLS policies and skips the test.
+func TestTenantIsolation_WebhooksAPI(t *testing.T) {
+	t.Skip("WEBHOOKS TENANT ISOLATION NOT YET IMPLEMENTED: auth.webhooks has no tenant-based RLS policy. " +
+		"Current policy (webhooks_admin_only) only checks service_role/instance_admin/is_admin(). " +
+		"Tenant isolation for webhooks requires adding a tenant_id RLS policy and set_tenant_id trigger " +
+		"similar to jobs.functions and rpc.procedures.")
 }

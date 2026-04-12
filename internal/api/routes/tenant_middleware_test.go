@@ -181,6 +181,89 @@ func TestTenantMiddleware_RouteGroups(t *testing.T) {
 		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantDBContext"),
 			"storage group must have TenantDBContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
 	})
+
+	t.Run("Jobs", func(t *testing.T) {
+		deps := &JobsDeps{
+			RequireJobsEnabled: tenantAwareHandler,
+			RequireAuth:        tenantAwareHandler,
+			SubmitJob:          tenantAwareHandler,
+			GetJob:             tenantAwareHandler,
+			ListJobs:           tenantAwareHandler,
+			CancelJob:          tenantAwareHandler,
+			RetryJob:           tenantAwareHandler,
+			GetJobLogsUser:     tenantAwareHandler,
+			TenantMiddleware:   tenantAwareHandler,
+			TenantDBMiddleware: tenantAwareHandler,
+		}
+
+		group := BuildJobsRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"jobs group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantDBContext"),
+			"jobs group must have TenantDBContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
+
+	t.Run("Webhooks", func(t *testing.T) {
+		deps := &WebhookDeps{
+			RequireAuth:        tenantAwareHandler,
+			RequireScope:       func(...string) fiber.Handler { return tenantAwareHandler },
+			ListWebhooks:       tenantAwareHandler,
+			GetWebhook:         tenantAwareHandler,
+			ListDeliveries:     tenantAwareHandler,
+			CreateWebhook:      tenantAwareHandler,
+			UpdateWebhook:      tenantAwareHandler,
+			DeleteWebhook:      tenantAwareHandler,
+			TestWebhook:        tenantAwareHandler,
+			TenantMiddleware:   tenantAwareHandler,
+			TenantDBMiddleware: tenantAwareHandler,
+		}
+
+		group := BuildWebhookRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"webhooks group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantDBContext"),
+			"webhooks group must have TenantDBContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
+
+	t.Run("RPC", func(t *testing.T) {
+		deps := &RPCDeps{
+			RequireRPCEnabled:  tenantAwareHandler,
+			OptionalAuth:       tenantAwareHandler,
+			RequireScope:       func(...string) fiber.Handler { return tenantAwareHandler },
+			ListProcedures:     tenantAwareHandler,
+			Invoke:             tenantAwareHandler,
+			GetExecution:       tenantAwareHandler,
+			GetExecutionLogs:   tenantAwareHandler,
+			TenantMiddleware:   tenantAwareHandler,
+			TenantDBMiddleware: tenantAwareHandler,
+		}
+
+		group := BuildRPCRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"rpc group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantDBContext"),
+			"rpc group must have TenantDBContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
+
+	t.Run("GraphQL", func(t *testing.T) {
+		deps := &GraphQLDeps{
+			OptionalAuth:       tenantAwareHandler,
+			HandleGraphQL:      tenantAwareHandler,
+			HandleIntrospect:   tenantAwareHandler,
+			TenantMiddleware:   tenantAwareHandler,
+			TenantDBMiddleware: tenantAwareHandler,
+		}
+
+		group := BuildGraphQLRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"graphql group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantDBContext"),
+			"graphql group must have TenantDBContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
 }
 
 // TestTenantMiddleware_NilMiddlewareNoPanic verifies that route builders handle
@@ -240,6 +323,67 @@ func TestTenantMiddleware_NilMiddlewareNoPanic(t *testing.T) {
 			DeleteFile:             tenantAwareHandler,
 		}
 		group := BuildStorageRoutes(deps)
+		require.NotNil(t, group)
+		assert.Empty(t, group.Middlewares)
+	})
+
+	t.Run("Jobs_nil_tenant_middleware", func(t *testing.T) {
+		deps := &JobsDeps{
+			RequireJobsEnabled: tenantAwareHandler,
+			RequireAuth:        tenantAwareHandler,
+			SubmitJob:          tenantAwareHandler,
+			GetJob:             tenantAwareHandler,
+			ListJobs:           tenantAwareHandler,
+			CancelJob:          tenantAwareHandler,
+			RetryJob:           tenantAwareHandler,
+			GetJobLogsUser:     tenantAwareHandler,
+		}
+		group := BuildJobsRoutes(deps)
+		require.NotNil(t, group)
+		assert.Len(t, group.Middlewares, 1)
+		assert.Equal(t, "RequireJobsEnabled", group.Middlewares[0].Name)
+	})
+
+	t.Run("Webhooks_nil_tenant_middleware", func(t *testing.T) {
+		deps := &WebhookDeps{
+			RequireAuth:    tenantAwareHandler,
+			RequireScope:   func(...string) fiber.Handler { return tenantAwareHandler },
+			ListWebhooks:   tenantAwareHandler,
+			GetWebhook:     tenantAwareHandler,
+			ListDeliveries: tenantAwareHandler,
+			CreateWebhook:  tenantAwareHandler,
+			UpdateWebhook:  tenantAwareHandler,
+			DeleteWebhook:  tenantAwareHandler,
+			TestWebhook:    tenantAwareHandler,
+		}
+		group := BuildWebhookRoutes(deps)
+		require.NotNil(t, group)
+		assert.Empty(t, group.Middlewares)
+	})
+
+	t.Run("RPC_nil_tenant_middleware", func(t *testing.T) {
+		deps := &RPCDeps{
+			RequireRPCEnabled: tenantAwareHandler,
+			OptionalAuth:      tenantAwareHandler,
+			RequireScope:      func(...string) fiber.Handler { return tenantAwareHandler },
+			ListProcedures:    tenantAwareHandler,
+			Invoke:            tenantAwareHandler,
+			GetExecution:      tenantAwareHandler,
+			GetExecutionLogs:  tenantAwareHandler,
+		}
+		group := BuildRPCRoutes(deps)
+		require.NotNil(t, group)
+		assert.Len(t, group.Middlewares, 1)
+		assert.Equal(t, "RequireRPCEnabled", group.Middlewares[0].Name)
+	})
+
+	t.Run("GraphQL_nil_tenant_middleware", func(t *testing.T) {
+		deps := &GraphQLDeps{
+			OptionalAuth:     tenantAwareHandler,
+			HandleGraphQL:    tenantAwareHandler,
+			HandleIntrospect: tenantAwareHandler,
+		}
+		group := BuildGraphQLRoutes(deps)
 		require.NotNil(t, group)
 		assert.Empty(t, group.Middlewares)
 	})
