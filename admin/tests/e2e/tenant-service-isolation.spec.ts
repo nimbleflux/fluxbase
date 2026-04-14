@@ -95,7 +95,7 @@ export default function handler(req: Request): Response {
     const functions = (
       Array.isArray(rawFunctions) ? rawFunctions : []
     ) as Array<{ name: string }>;
-    const funcNames = functions.map((f: { name: string }) => f.name);
+    const _funcNames = functions.map((f: { name: string }) => f.name);
 
     // Function from tenant A may or may not appear in tenant B's list depending on
     // backend isolation enforcement. Verify the list is valid.

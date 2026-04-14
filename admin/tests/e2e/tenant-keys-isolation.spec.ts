@@ -429,7 +429,7 @@ test.describe("Tenant Service Key Isolation", () => {
         const keys = (
           Array.isArray(rawDefaultKeys) ? rawDefaultKeys : []
         ) as Array<{ name: string }>;
-        const keyNames = keys.map((k) => k.name);
+        const _keyNames = keys.map((k) => k.name);
         // The key may or may not appear in default tenant's list depending on backend behavior.
         // If the X-FB-Tenant header was silently ignored, the key was created in own tenant instead.
         // Just verify the response is valid.

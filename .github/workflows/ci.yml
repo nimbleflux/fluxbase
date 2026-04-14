@@ -27,11 +27,12 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Install native dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libvips-dev
+          sudo apt-get install -y libvips-dev libtesseract-dev libleptonica-dev
 
       - name: Get dependencies
         run: |
@@ -213,11 +214,12 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Install native dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libvips-dev
+          sudo apt-get install -y libvips-dev libtesseract-dev libleptonica-dev
 
       - name: Get dependencies
         run: |
@@ -472,11 +474,12 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Install native dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libvips-dev
+          sudo apt-get install -y libvips-dev libtesseract-dev libleptonica-dev
 
       - name: Get dependencies
         run: |
@@ -501,9 +504,17 @@ jobs:
       - name: Install workspace dependencies
         run: bun install --frozen-lockfile
 
+      - name: Build SDK
+        working-directory: ./sdk
+        run: bun run build
+
       - name: Generate embedded SDK for Jobs runtime
         working-directory: ./sdk
         run: bun run generate:embedded-sdk
+
+      - name: Build SDK React
+        working-directory: ./sdk-react
+        run: bun run build
 
       - name: Build Admin UI
         working-directory: ./admin
@@ -574,6 +585,19 @@ jobs:
           ./mc mb minio/fluxbase-test || true
           ./mc anonymous set public minio/fluxbase-test
 
+      - name: Reset database for fresh Playwright setup
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # Drop all non-system schemas so the server bootstraps fresh
+          # (no admin user → Playwright setup tests see /setup page)
+          psql -h localhost -U postgres -d fluxbase_test -c \
+            "DO \$\$ DECLARE r RECORD; BEGIN FOR r IN SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast') LOOP EXECUTE 'DROP SCHEMA IF EXISTS ' || quote_ident(r.nspname) || ' CASCADE'; END LOOP; END \$\$;"
+          psql -h localhost -U postgres -d fluxbase_test -c \
+            "CREATE SCHEMA IF NOT EXISTS public; GRANT ALL ON SCHEMA public TO public;"
+          psql -h localhost -U postgres -d fluxbase_test -c \
+            "ALTER USER fluxbase_app WITH BYPASSRLS;" 2>/dev/null || true
+
       - name: Build and start Go backend
         env:
           FLUXBASE_DATABASE_HOST: localhost
@@ -584,8 +608,11 @@ jobs:
           FLUXBASE_DATABASE_ADMIN_PASSWORD: postgres
           FLUXBASE_DATABASE_DATABASE: fluxbase_test
           FLUXBASE_SERVER_ADDRESS: ":8082"
+          FLUXBASE_BASE_URL: "http://localhost:8082"
           FLUXBASE_ADMIN_ENABLED: "true"
-          FLUXBASE_SECURITY_SETUP_TOKEN: test-setup-token-e2e-ci
+          FLUXBASE_AUTH_JWT_SECRET: Kx9vM2nR7pQ4wT8yB3fJ6hL0zA5cD1eG
+          FLUXBASE_ENCRYPTION_KEY: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+          FLUXBASE_SECURITY_SETUP_TOKEN: test-setup-token-e2e-ci-32chars-please
           FLUXBASE_EMAIL_SMTP_HOST: localhost
           FLUXBASE_EMAIL_SMTP_PORT: "1025"
           FLUXBASE_STORAGE_S3_ENDPOINT: localhost:9000
@@ -593,19 +620,30 @@ jobs:
           FLUXBASE_STORAGE_S3_SECRET_KEY: minioadmin
           FLUXBASE_STORAGE_S3_BUCKET: fluxbase-test
           FLUXBASE_STORAGE_S3_USE_SSL: "false"
+          FLUXBASE_FUNCTIONS_ENABLED: "true"
+          FLUXBASE_JOBS_ENABLED: "true"
+          FLUXBASE_REALTIME_ENABLED: "true"
+          FLUXBASE_AI_ENABLED: "true"
+          FLUXBASE_RPC_ENABLED: "true"
+          FLUXBASE_STORAGE_ENABLED: "true"
         run: |
           # Build the binary with embedded admin UI
-          go build -tags "ocr" -o /tmp/fluxbase-e2e-ui cmd/fluxbase/main.go
+          go build -o /tmp/fluxbase-e2e-ui cmd/fluxbase/main.go
 
           # Start in background
           GOGC=50 /tmp/fluxbase-e2e-ui >> /tmp/fluxbase-e2e-ui.log 2>&1 &
           echo $! > /tmp/fluxbase-e2e-ui.pid
 
-          # Wait for the server to be ready
+          # Wait for the server to be ready (health check + bootstrap complete)
           for i in $(seq 1 60); do
             if curl -sf http://localhost:8082/health > /dev/null 2>&1; then
-              echo "Go backend ready on :8082"
-              break
+              # Health is up — now wait for setup status API to confirm bootstrap is done
+              SETUP_STATUS=$(curl -sf http://localhost:8082/api/v1/admin/setup/status 2>/dev/null || echo "")
+              if echo "$SETUP_STATUS" | grep -q '"needs_setup"'; then
+                echo "Go backend ready on :8082 (bootstrap complete)"
+                break
+              fi
+              echo "Health OK, waiting for bootstrap to finish..."
             fi
             if [ "$i" -eq 60 ]; then
               echo "Backend failed to start within 120s"
@@ -627,7 +665,7 @@ jobs:
           PLAYWRIGHT_API_URL: http://localhost:8082
           PLAYWRIGHT_BACKEND_PORT: "8082"
           PLAYWRIGHT_DATABASE_NAME: fluxbase_test
-          FLUXBASE_SECURITY_SETUP_TOKEN: test-setup-token-e2e-ci
+          FLUXBASE_SECURITY_SETUP_TOKEN: test-setup-token-e2e-ci-32chars-please
         run: npx playwright test
 
       - name: Upload Playwright report
@@ -701,11 +739,12 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Install native dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libvips-dev
+          sudo apt-get install -y libvips-dev libtesseract-dev libleptonica-dev
 
       - name: Build server binary
         env:

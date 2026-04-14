@@ -442,7 +442,7 @@ test.describe("Tenant Admin Service Isolation", () => {
     const secrets = (Array.isArray(rawSecrets) ? rawSecrets : []) as Array<{
       name: string;
     }>;
-    const secretNames = secrets.map((s: { name: string }) => s.name);
+    const _secretNames = secrets.map((s: { name: string }) => s.name);
 
     // If the response succeeded, verify the response is a valid list.
     // The header may be silently ignored (returns own tenant data) or rejected.

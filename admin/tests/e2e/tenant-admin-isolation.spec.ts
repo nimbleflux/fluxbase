@@ -272,7 +272,7 @@ test.describe("Tenant Admin Data Isolation", () => {
       const keysResult = await rawListServiceKeys(tenantAdminToken);
       expect(keysResult.status).toBe(200);
       const keys = (keysResult.body || []) as Array<{ name: string }>;
-      const keyNames = keys.map((k: { name: string }) => k.name);
+      const _keyNames = keys.map((k: { name: string }) => k.name);
       // The backend may or may not filter keys by tenant for tenant admins.
       // Verify the response is valid and check for own tenant keys.
       expect(Array.isArray(keys)).toBeTruthy();
@@ -290,7 +290,7 @@ test.describe("Tenant Admin Data Isolation", () => {
       // List again — own key SHOULD be visible (but may not be due to tenant routing)
       const keysResult2 = await rawListServiceKeys(tenantAdminToken);
       const keys2 = (keysResult2.body || []) as Array<{ name: string }>;
-      const keyNames2 = keys2.map((k: { name: string }) => k.name);
+      const _keyNames2 = keys2.map((k: { name: string }) => k.name);
       // Verify the list is valid — key visibility depends on backend tenant routing
       expect(Array.isArray(keys2)).toBeTruthy();
     } finally {
