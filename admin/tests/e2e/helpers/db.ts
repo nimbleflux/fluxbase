@@ -10,8 +10,9 @@ const DB_CONFIG = {
   port: parseInt(process.env.FLUXBASE_DATABASE_PORT || "5432", 10),
   user: process.env.FLUXBASE_DATABASE_USER || "fluxbase_app",
   password: process.env.FLUXBASE_DATABASE_PASSWORD || "fluxbase_app_password",
-  // Always use the playwright database, not the dev database
-  database: "fluxbase_playwright",
+  // Use PLAYWRIGHT_DATABASE_NAME if set (CI uses fluxbase_test),
+  // otherwise default to fluxbase_playwright (local dev)
+  database: process.env.PLAYWRIGHT_DATABASE_NAME || "fluxbase_playwright",
 };
 
 let pool: pg.Pool | null;

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -15,6 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database/bootstrap"
+	"github.com/nimbleflux/fluxbase/internal/database/schema"
 )
 
 var (
@@ -148,34 +151,46 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 	}
 	log.Info().Str("tenant", req.Slug).Msg("Bootstrapped tenant database")
 
-	// Set up FDW so tenant can access auth.users from the main database.
-	// FDW requires elevated privileges, so use admin connection if available.
+	// Apply internal Fluxbase schemas (storage.buckets, functions.registry, etc.)
+	// This creates tables, functions, types, and extensions in the tenant database.
+	// When FDW is enabled, tables will be replaced by foreign imports in the next step.
+	if err := m.applyInternalSchemas(ctx, dbName, m.fdwConfig != nil); err != nil {
+		log.Warn().Err(err).Str("tenant", req.Slug).Msg("Failed to apply internal schemas to tenant database")
+	} else {
+		log.Info().Str("tenant", req.Slug).Msg("Applied internal schemas to tenant database")
+	}
+
+	// Set up FDW so tenant can access all tables from the main database.
+	// This replaces the local tables created by applyInternalSchemas with
+	// foreign table imports, providing access to real data with RLS enforcement.
 	if m.fdwConfig != nil && m.adminDBURL != "" {
-		fdwURL := replaceDBName(m.adminDBURL, dbName)
-		fdwPool, fdwPoolErr := pgxpool.New(ctx, fdwURL)
-		if fdwPoolErr != nil {
-			log.Warn().Err(fdwPoolErr).Str("tenant", req.Slug).Msg("Failed to create admin pool for FDW setup")
+		// Create per-tenant FDW role on main database for RLS enforcement
+		fdwRole, roleErr := CreateFDWRole(ctx, m.adminPool, tenant.ID)
+		if roleErr != nil {
+			log.Warn().Err(roleErr).Str("tenant", req.Slug).Msg("Failed to create FDW role")
 		} else {
-			defer fdwPool.Close()
-			if fdwErr := SetupFDW(ctx, fdwPool, *m.fdwConfig, nil); fdwErr != nil {
-				log.Warn().Err(fdwErr).Str("tenant", req.Slug).Msg("Failed to set up FDW for tenant database")
+			// Connect to tenant DB with admin privileges for FDW setup
+			fdwURL := replaceDBName(m.adminDBURL, dbName)
+			fdwPool, fdwPoolErr := pgxpool.New(ctx, fdwURL)
+			if fdwPoolErr != nil {
+				log.Warn().Err(fdwPoolErr).Str("tenant", req.Slug).Msg("Failed to create admin pool for FDW setup")
 			} else {
-				// Also create user mapping for the app user so queries via
-				// the router pool (app credentials) can use the foreign server.
-				if appUser := extractDBUser(m.dbURL); appUser != "" {
-					userMappingSQL := fmt.Sprintf(
-						`CREATE USER MAPPING IF NOT EXISTS FOR %s SERVER %s OPTIONS (user '%s'`,
-						quoteIdent(appUser), quoteIdent(fdwServerName), escapeSQLString(m.fdwConfig.User),
-					)
-					if m.fdwConfig.Password != "" {
-						userMappingSQL += fmt.Sprintf(`, password '%s'`, escapeSQLString(m.fdwConfig.Password))
+				defer fdwPool.Close()
+
+				// Import all schema tables via FDW (nil tables = all schemas)
+				if fdwErr := SetupFDW(ctx, fdwPool, *m.fdwConfig, nil); fdwErr != nil {
+					log.Warn().Err(fdwErr).Str("tenant", req.Slug).Msg("Failed to set up FDW for tenant database")
+				} else {
+					// Create user mapping for the app user with the per-tenant FDW role
+					// so queries via the router pool use the tenant-scoped role
+					appUser := extractDBUser(m.dbURL)
+					if appUser != "" {
+						if mapErr := CreateFDWUserMapping(ctx, fdwPool, appUser, fdwRole); mapErr != nil {
+							log.Warn().Err(mapErr).Str("tenant", req.Slug).Msg("Failed to create app user FDW mapping")
+						}
 					}
-					userMappingSQL += ")"
-					if _, mapErr := fdwPool.Exec(ctx, userMappingSQL); mapErr != nil {
-						log.Warn().Err(mapErr).Str("tenant", req.Slug).Msg("Failed to create app user mapping for FDW")
-					}
+					log.Info().Str("tenant", req.Slug).Msg("Set up FDW for tenant database")
 				}
-				log.Info().Str("tenant", req.Slug).Msg("Set up FDW for tenant database")
 			}
 		}
 	}
@@ -242,6 +257,9 @@ func (m *Manager) DeleteTenantDatabase(ctx context.Context, tenantID string) err
 		}
 		return fmt.Errorf("failed to drop database: %w", err)
 	}
+
+	// Drop the per-tenant FDW role from the main database
+	DropFDWRole(ctx, m.adminPool, tenantID)
 
 	if err := m.storage.HardDeleteTenant(ctx, tenantID); err != nil {
 		log.Warn().Err(err).Str("tenant_id", tenantID).Msg("Failed to hard delete tenant record")
@@ -370,6 +388,90 @@ func (m *Manager) runSystemMigrationsForDB(ctx context.Context, dbName string) e
 	return nil
 }
 
+// applyInternalSchemas applies Fluxbase internal schema SQL files (storage.sql,
+// auth.sql, etc.) to a tenant database. These create the tables, indexes,
+// functions, and policies needed for all features to work in tenant databases.
+// Schema files use CREATE IF NOT EXISTS so they are idempotent.
+func (m *Manager) applyInternalSchemas(ctx context.Context, dbName string, fdwEnabled bool) error {
+	// Extract embedded schemas to a temp directory
+	schemaDir, err := schema.ExtractSchemas()
+	if err != nil {
+		return fmt.Errorf("failed to extract embedded schemas: %w", err)
+	}
+	defer func() {
+		if removeErr := os.RemoveAll(schemaDir); removeErr != nil {
+			log.Warn().Err(removeErr).Msg("Failed to remove temp schema directory")
+		}
+	}()
+
+	// Determine app user from the dbURL for {{APP_USER}} substitution
+	appUser := extractDBUser(m.dbURL)
+
+	// Schemas must be applied in dependency order (platform first, then auth, etc.)
+	schemaOrder := []string{
+		"platform", "auth", "storage", "jobs", "functions", "realtime",
+		"ai", "rpc", "system", "migrations",
+		"app", "api", "branching", "logging", "mcp",
+	}
+
+	dbURL := replaceDBName(m.dbURL, dbName)
+	// Use admin URL if available (required for CREATE TABLE in system schemas)
+	if m.adminDBURL != "" {
+		dbURL = replaceDBName(m.adminDBURL, dbName)
+	}
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to tenant database %s: %w", dbName, err)
+	}
+	defer pool.Close()
+
+	for _, schemaName := range schemaOrder {
+		schemaFile := filepath.Join(schemaDir, schemaName+".sql")
+		data, err := os.ReadFile(schemaFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue // Skip missing schema files
+			}
+			return fmt.Errorf("failed to read schema file %s: %w", schemaFile, err)
+		}
+
+		sql := string(data)
+		if appUser != "" {
+			sql = strings.ReplaceAll(sql, "{{APP_USER}}", appUser)
+		}
+
+		if _, err := pool.Exec(ctx, sql); err != nil {
+			log.Warn().Err(err).Str("schema", schemaName).Str("db", dbName).
+				Msg("Failed to apply internal schema to tenant database")
+		}
+	}
+
+	// Apply cross-schema policies.
+	// Skip post-schema-fks.sql when FDW is enabled because FKs cannot
+	// reference foreign tables — they're already enforced on the main DB side.
+	extraFiles := []string{"post-schema.sql"}
+	if !fdwEnabled {
+		extraFiles = append([]string{"post-schema-fks.sql"}, extraFiles...)
+	}
+	for _, extraFile := range extraFiles {
+		extraPath := filepath.Join(schemaDir, extraFile)
+		data, err := os.ReadFile(extraPath)
+		if err != nil {
+			continue
+		}
+		sql := string(data)
+		if appUser != "" {
+			sql = strings.ReplaceAll(sql, "{{APP_USER}}", appUser)
+		}
+		if _, err := pool.Exec(ctx, sql); err != nil {
+			log.Warn().Err(err).Str("file", extraFile).Str("db", dbName).
+				Msg("Failed to apply post-schema file to tenant database")
+		}
+	}
+
+	return nil
+}
+
 func (m *Manager) GetStorage() *Storage {
 	if s, ok := m.storage.(*Storage); ok {
 		return s
@@ -443,6 +545,78 @@ func (m *Manager) GetTenantSchemaStatus(ctx context.Context, tenantID string) (*
 	}
 
 	return m.declarative.GetTenantSchemaStatus(ctx, tenant)
+}
+
+// UpgradeTenantFDW sets up FDW for an existing tenant database.
+// This is used to migrate tenant databases that were created before FDW was enabled.
+// It creates the per-tenant FDW role, applies schemas if needed, and imports foreign tables.
+func (m *Manager) UpgradeTenantFDW(ctx context.Context, tenantID string) error {
+	if m.fdwConfig == nil || m.adminDBURL == "" {
+		return fmt.Errorf("FDW not configured")
+	}
+
+	tenant, err := m.storage.GetTenant(ctx, tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to get tenant: %w", err)
+	}
+
+	if tenant.UsesMainDatabase() || tenant.DBName == nil {
+		return nil // Skip default tenants
+	}
+
+	// Create per-tenant FDW role on main database
+	fdwRole, roleErr := CreateFDWRole(ctx, m.adminPool, tenant.ID)
+	if roleErr != nil {
+		return fmt.Errorf("failed to create FDW role: %w", roleErr)
+	}
+
+	// Connect to tenant DB with admin privileges
+	fdwURL := replaceDBName(m.adminDBURL, *tenant.DBName)
+	fdwPool, fdwPoolErr := pgxpool.New(ctx, fdwURL)
+	if fdwPoolErr != nil {
+		return fmt.Errorf("failed to connect to tenant database: %w", fdwPoolErr)
+	}
+	defer fdwPool.Close()
+
+	// Import all schema tables via FDW
+	if fdwErr := SetupFDW(ctx, fdwPool, *m.fdwConfig, nil); fdwErr != nil {
+		return fmt.Errorf("failed to set up FDW: %w", fdwErr)
+	}
+
+	// Create user mapping for the app user with the per-tenant FDW role
+	appUser := extractDBUser(m.dbURL)
+	if appUser != "" {
+		if mapErr := CreateFDWUserMapping(ctx, fdwPool, appUser, fdwRole); mapErr != nil {
+			log.Warn().Err(mapErr).Str("tenant", tenant.Slug).Msg("Failed to create app user FDW mapping during upgrade")
+		}
+	}
+
+	log.Info().Str("tenant_id", tenantID).Str("slug", tenant.Slug).Msg("Upgraded tenant database with FDW")
+	return nil
+}
+
+// UpgradeAllTenantsFDW upgrades all existing tenant databases with FDW.
+// Called on startup when FDW is enabled to migrate pre-existing tenants.
+func (m *Manager) UpgradeAllTenantsFDW(ctx context.Context) {
+	if m.fdwConfig == nil || m.adminDBURL == "" {
+		return
+	}
+
+	tenants, err := m.storage.GetAllActiveTenants(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to list tenants for FDW upgrade")
+		return
+	}
+
+	for i := range tenants {
+		if tenants[i].UsesMainDatabase() {
+			continue
+		}
+
+		if err := m.UpgradeTenantFDW(ctx, tenants[i].ID); err != nil {
+			log.Error().Err(err).Str("tenant", tenants[i].Slug).Msg("Failed to upgrade tenant with FDW")
+		}
+	}
 }
 
 // replaceDBName constructs a database URL for a specific database name

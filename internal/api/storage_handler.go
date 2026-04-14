@@ -138,9 +138,10 @@ func (h *StorageHandler) getService(c fiber.Ctx) (*storage.Service, error) {
 	return h.storageManager.GetService(cfg)
 }
 
-// getPool returns the appropriate database pool for the current request context.
-// It uses the tenant-specific pool when available (database-per-tenant),
-// otherwise falls back to the main database pool.
+// getPool returns the database pool for storage operations.
+// When a tenant pool is available (non-default tenant with a separate database),
+// it routes through the tenant pool which uses FDW to access storage tables
+// in the main database. For the default tenant, it falls back to the main pool.
 func (h *StorageHandler) getPool(c fiber.Ctx) *pgxpool.Pool {
 	if tenantPool := middleware.GetTenantPool(c); tenantPool != nil {
 		return tenantPool
