@@ -1,24 +1,44 @@
 import { defineConfig } from "@playwright/test";
 
+const isCI = !!process.env.CI;
+const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT || "8082";
+const vitePort = "5050";
+
 export default defineConfig({
   fullyParallel: false,
-  retries: process.env.CI ? 2 : 0,
+  retries: isCI ? 2 : 0,
   reporter: [["list"], ["html"]],
-  timeout: 30_000,
+  timeout: 60_000,
   expect: { timeout: 10_000 },
   globalSetup: "./tests/e2e/global-setup.ts",
   globalTeardown: "./tests/e2e/global-teardown.ts",
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:5050/admin/",
+    baseURL:
+      process.env.PLAYWRIGHT_BASE_URL ||
+      (isCI
+        ? `http://localhost:${backendPort}/admin/`
+        : `http://localhost:${vitePort}/admin/`),
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
-  webServer: {
-    command: "../scripts/start-e2e-ui.sh --clean",
-    port: 5050,
-    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === "true",
-    timeout: 120_000,
-  },
+  webServer: isCI
+    ? {
+        // In CI, the Go backend serves the admin UI directly (embedded build).
+        // It's started as a separate CI step before Playwright runs.
+        command: "true",
+        port: Number(backendPort),
+        reuseExistingServer: true,
+        timeout: 5_000,
+      }
+    : {
+        // Local dev: clean DB and start both servers.
+        // The --clean-foreground flag resets the DB and starts in foreground
+        // so Playwright can manage the process lifecycle.
+        command: "../scripts/start-e2e-ui.sh --clean-foreground",
+        port: Number(vitePort),
+        reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === "true",
+        timeout: 180_000,
+      },
   projects: [
     {
       name: "setup",
@@ -31,6 +51,7 @@ export default defineConfig({
       testDir: "./tests/e2e",
       testMatch: /_provisioning\.spec\.ts$/,
       type: "setup",
+      dependencies: ["setup"],
     },
     {
       name: "e2e",

@@ -60,7 +60,7 @@ test.describe("Provisioning", () => {
         },
         adminToken,
       );
-      expect(createResult.status).toBeOneOf([200, 201]);
+      expect([200, 201]).toContain(createResult.status);
       secondTenantId = createResult.body.tenant.id;
       console.log(`Provisioning: second tenant created (${secondTenantId}).`);
     }

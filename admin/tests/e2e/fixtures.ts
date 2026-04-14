@@ -69,13 +69,35 @@ async function browserLogin(
   await page.fill("#password", password);
   await page.click('button[type="submit"]');
 
-  // Wait for dashboard to load
-  await expect(page).toHaveURL(/\/admin\/?$/, { timeout: 10_000 });
+  // Wait for dashboard to load (increased timeout for slow server under load)
+  await expect(page).toHaveURL(/\/admin\/?$/, { timeout: 20_000 });
 
   const token = await page.evaluate(() => {
     return localStorage.getItem("fluxbase_admin_access_token");
   });
   expect(token).toBeTruthy();
+
+  // Select the default tenant so tenant-scoped pages work.
+  // Only instance admins see the tenant selector — tenant admins don't.
+  // Wait briefly for the UI to render, then attempt tenant selection.
+  await page.waitForTimeout(1_500);
+  try {
+    const tenantCombo = page.getByRole("combobox", { name: /select tenant/i });
+    const comboCount = await tenantCombo.count();
+    if (comboCount > 0) {
+      const comboText = await tenantCombo.innerText().catch(() => "");
+      if (comboText.includes("Select tenant")) {
+        await tenantCombo.click();
+        const listbox = page.getByRole("listbox");
+        await expect(listbox).toBeVisible({ timeout: 3_000 });
+        const firstOption = page.getByRole("option").first();
+        await firstOption.click();
+        await page.waitForTimeout(500);
+      }
+    }
+  } catch {
+    // Tenant selection is optional — some roles or pages may not need it
+  }
 
   return page;
 }

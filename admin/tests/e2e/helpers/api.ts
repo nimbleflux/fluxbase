@@ -1,6 +1,10 @@
 import { type APIRequestContext } from "@playwright/test";
 
-const BASE_URL = process.env.PLAYWRIGHT_API_URL || "http://localhost:5050";
+const BASE_URL =
+  process.env.PLAYWRIGHT_API_URL ||
+  (process.env.CI
+    ? `http://localhost:${process.env.PLAYWRIGHT_BACKEND_PORT || "8082"}`
+    : "http://localhost:5050");
 
 /**
  * Make an API request to the Fluxbase server.
@@ -394,12 +398,19 @@ export async function revokeServiceKey(
   keyId: string,
   reason: string,
   accessToken: string,
+  tenantId?: string,
 ) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
   return apiRequest(request, {
     method: "POST",
     path: `/api/v1/admin/service-keys/${keyId}/revoke`,
     data: { reason },
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers,
   });
 }
 
@@ -410,12 +421,19 @@ export async function rawRevokeServiceKey(
   keyId: string,
   reason: string,
   accessToken: string,
+  tenantId?: string,
 ) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
   return rawApiRequest({
     method: "POST",
     path: `/api/v1/admin/service-keys/${keyId}/revoke`,
     data: { reason },
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers,
   });
 }
 

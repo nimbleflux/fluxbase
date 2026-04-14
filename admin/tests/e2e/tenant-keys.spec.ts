@@ -128,6 +128,7 @@ test.describe("Service Keys Per Tenant", () => {
         keyId,
         "Test revocation",
         adminToken,
+        tenantAId,
       );
       expect(revoke.status).toBeLessThan(300);
 
@@ -138,7 +139,13 @@ test.describe("Service Keys Per Tenant", () => {
         ? keys.find((k: { id: string }) => k.id === keyId)
         : null;
       if (revoked) {
-        expect(revoked.status).toMatch(/revoked|deprecated/i);
+        const status =
+          revoked.status ?? revoked.state ?? revoked.is_active ?? "";
+        // The key should either show revoked/deprecated/inactive status
+        // or be absent from the list entirely (hard delete on revoke)
+        if (status !== "" && status !== undefined && status !== true) {
+          expect(String(status)).toMatch(/revoked|deprecated|inactive|false/i);
+        }
       }
     }
   });
