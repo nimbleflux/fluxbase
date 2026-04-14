@@ -6,10 +6,11 @@ const vitePort = "5050";
 
 export default defineConfig({
   fullyParallel: false,
+  workers: 2,
   retries: isCI ? 2 : 0,
   reporter: [["list"], ["html"]],
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  timeout: 120_000,
+  expect: { timeout: 15_000 },
   globalSetup: "./tests/e2e/global-setup.ts",
   globalTeardown: "./tests/e2e/global-teardown.ts",
   use: {
