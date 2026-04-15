@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -274,12 +275,12 @@ func (s *Storage) UpdateTenantDBName(ctx context.Context, id string, dbName stri
 }
 
 func (s *Storage) UpdateTenant(ctx context.Context, id string, req UpdateTenantRequest) error {
-	updates := make(map[string]any)
+	var setClauses []string
 	args := make([]any, 0, 3)
 	argIdx := 1
 
 	if req.Name != nil {
-		updates["name"] = *req.Name
+		setClauses = append(setClauses, fmt.Sprintf("name = $%d", argIdx))
 		args = append(args, *req.Name)
 		argIdx++
 	}
@@ -289,32 +290,19 @@ func (s *Storage) UpdateTenant(ctx context.Context, id string, req UpdateTenantR
 		if err != nil {
 			return fmt.Errorf("failed to marshal metadata: %w", err)
 		}
-		updates["metadata"] = metadataBytes
+		setClauses = append(setClauses, fmt.Sprintf("metadata = $%d", argIdx))
 		args = append(args, metadataBytes)
 		argIdx++
 	}
 
-	if len(updates) == 0 {
+	if len(setClauses) == 0 {
 		return nil
 	}
 
 	args = append(args, id)
 
-	query := "UPDATE platform.tenants SET "
-	first := true
-	for field := range updates {
-		if !first {
-			query += ", "
-		}
-		query += fmt.Sprintf("%s = $%d", field, len(args)-len(updates)+1)
-		for i := range updates {
-			if i == field {
-				break
-			}
-		}
-		first = false
-	}
-	query += ", updated_at = NOW() WHERE id = $" + fmt.Sprint(argIdx) + "::uuid"
+	query := "UPDATE platform.tenants SET " + strings.Join(setClauses, ", ") +
+		", updated_at = NOW() WHERE id = $" + fmt.Sprint(argIdx) + "::uuid"
 
 	result, err := s.db.Exec(ctx, query, args...)
 	if err != nil {

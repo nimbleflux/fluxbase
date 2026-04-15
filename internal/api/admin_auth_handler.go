@@ -86,7 +86,13 @@ func (h *AdminAuthHandler) GetSetupStatus(c fiber.Ctx) error {
 	// Check if setup has been completed using system settings
 	setupComplete, err := h.systemSettings.IsSetupComplete(ctx)
 	if err != nil {
-		return SendOperationFailed(c, "check setup status")
+		// If settings table doesn't exist yet (e.g., during bootstrap),
+		// treat as needing setup rather than returning a 500.
+		log.Debug().Err(err).Msg("Failed to check setup status, assuming setup needed")
+		return c.JSON(SetupStatusResponse{
+			NeedsSetup: true,
+			HasAdmin:   false,
+		})
 	}
 
 	return c.JSON(SetupStatusResponse{

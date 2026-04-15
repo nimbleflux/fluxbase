@@ -981,11 +981,14 @@ func TestManager_checkAndDisconnectSlowClients(t *testing.T) {
 
 		conn, _ := manager.AddConnection("conn1", nil, nil, "anon", nil)
 
-		// Fill the queue beyond threshold - keep sending until queue is actually full
-		// to overcome the writer loop draining it concurrently
+		// Cancel the connection context to stop the writer goroutine from draining the queue
+		conn.cancel()
+		conn.wg.Wait()
+
+		// Fill the queue beyond threshold directly via the channel
 		stats := conn.GetQueueStats()
 		for conn.GetQueueStats().QueueLength < stats.QueueCapacity {
-			conn.SendMessage(map[string]interface{}{"fill": "queue"})
+			conn.sendCh <- map[string]interface{}{"fill": "queue"}
 		}
 
 		// Run check - should mark as slow but not disconnect yet

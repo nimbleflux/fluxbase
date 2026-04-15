@@ -334,6 +334,18 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		tenantManager = tenantdb.NewManager(tenantStorage, tenantCfg, db.Pool(), dbURL)
 		tenantManager.SetAdminDBURL(cfg.Database.AdminConnectionString())
 
+		// Enable FDW for tenant databases to access main DB tables.
+		// Uses admin connection string for the foreign server credentials.
+		if adminDBURL := cfg.Database.AdminConnectionString(); adminDBURL != "" {
+			fdwCfg, fdwErr := tenantdb.ParseFDWConfig(adminDBURL)
+			if fdwErr != nil {
+				log.Warn().Err(fdwErr).Msg("Failed to parse FDW config, FDW disabled for tenant databases")
+			} else {
+				tenantManager.SetFDWConfig(fdwCfg)
+				log.Info().Msg("FDW enabled for tenant databases")
+			}
+		}
+
 		// Create tenant pool router for per-tenant database connections
 		tenantRouter := tenantdb.NewRouter(tenantStorage, tenantCfg, db.Pool(), db.Pool(), dbURL)
 		tenantRouter.SetManager(tenantManager)

@@ -1,4 +1,5 @@
-import { test, expect, ADMIN_EMAIL, ADMIN_PASSWORD } from "./fixtures";
+import { test, expect } from "./fixtures";
+import { ADMIN_EMAIL, ADMIN_PASSWORD } from "./helpers/constants";
 
 test.describe("Login / Logout", () => {
   test("login with valid credentials redirects to dashboard", async ({

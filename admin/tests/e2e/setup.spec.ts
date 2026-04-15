@@ -1,4 +1,5 @@
-import { test, expect, SETUP_TOKEN } from "./fixtures";
+import { test, expect } from "./fixtures";
+import { SETUP_TOKEN } from "./helpers/constants";
 
 test.describe("Setup / Onboarding", () => {
   // Tests are ordered so validation tests run BEFORE the success test

@@ -35,9 +35,22 @@ reset_playwright_db() {
 
     export PGPASSWORD="$ADMIN_PASSWORD"
 
+    # Drop tenant databases created by previous test runs.
+    # These are separate PostgreSQL databases (e.g., tenant_e2e-second-tenant)
+    # that are NOT cleaned up by the schema-only reset below.
+    # DROP DATABASE cannot run inside a transaction, so we query names first
+    # and drop them individually.
+    TENANT_DBS=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d fluxbase_playwright -t -A -c \
+        "SELECT datname FROM pg_database WHERE datname LIKE 'tenant_%';" 2>/dev/null || true)
+    for db in $TENANT_DBS; do
+        psql -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d fluxbase_playwright -c \
+            "DROP DATABASE IF EXISTS \"$db\";" 2>/dev/null || true
+    done
+
     # Drop all non-system schemas (preserves extensions and roles)
+    # Redirect stderr to suppress NOTICE messages that confuse Playwright's webServer
     psql -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d fluxbase_playwright -c \
-        "DO \$\$ DECLARE r RECORD; BEGIN FOR r IN SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast') LOOP EXECUTE 'DROP SCHEMA IF EXISTS ' || quote_ident(r.nspname) || ' CASCADE'; END LOOP; END \$\$;" || {
+        "DO \$\$ DECLARE r RECORD; BEGIN FOR r IN SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast') LOOP EXECUTE 'DROP SCHEMA IF EXISTS ' || quote_ident(r.nspname) || ' CASCADE'; END LOOP; END \$\$;" 2>/dev/null || {
         unset PGPASSWORD
         echo -e "${RED}Failed to reset database${NC}"
         exit 1
@@ -45,7 +58,7 @@ reset_playwright_db() {
 
     # Recreate public schema with basic grants
     psql -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d fluxbase_playwright -c \
-        "CREATE SCHEMA IF NOT EXISTS public; GRANT ALL ON SCHEMA public TO public;"
+        "CREATE SCHEMA IF NOT EXISTS public; GRANT ALL ON SCHEMA public TO public;" 2>/dev/null
 
     # Ensure fluxbase_app has BYPASSRLS (server bootstrap expects this)
     psql -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d fluxbase_playwright -c \
@@ -70,25 +83,42 @@ is_running() {
 }
 
 stop_servers() {
+    # Send SIGTERM to tracked PIDs
     if [ -f "$PIDFILE" ]; then
         while IFS= read -r pid; do
             kill "$pid" 2>/dev/null || true
         done < "$PIDFILE"
         rm -f "$PIDFILE"
     fi
-    # Also kill anything on our ports as a fallback
+    # Also SIGTERM anything on our ports as a fallback
     lsof -ti:$BACKEND_PORT | xargs -r kill 2>/dev/null || true
     lsof -ti:$VITE_PORT | xargs -r kill 2>/dev/null || true
+
+    # Wait for ports to be freed (Go backend has a 15s graceful shutdown).
+    # If processes don't exit within 10s, force-kill them.
+    local waited=0
+    while [ $waited -lt 10 ]; do
+        if ! lsof -ti:$BACKEND_PORT >/dev/null 2>&1 && ! lsof -ti:$VITE_PORT >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    # Force-kill anything still alive
+    lsof -ti:$BACKEND_PORT | xargs -r kill -9 2>/dev/null || true
+    lsof -ti:$VITE_PORT | xargs -r kill -9 2>/dev/null || true
+    sleep 1
 }
 
 wait_for_backend() {
-    for i in $(seq 1 30); do
+    for i in $(seq 1 60); do
         if is_backend_running; then
             return 0
         fi
         sleep 2
     done
-    echo -e "${RED}Backend failed to start within 60 seconds${NC}"
+    echo -e "${RED}Backend failed to start within 120 seconds${NC}"
     return 1
 }
 
@@ -110,7 +140,13 @@ start_background() {
     cd "$(dirname "$0")/.."
 
     # Add Deno to PATH (required for edge functions)
-    export PATH="/home/vscode/.deno/bin:$PATH"
+    # Resolve Deno dynamically — fallback to devcontainer path for local dev
+    if command -v deno &>/dev/null; then
+        DENO_DIR="$(dirname "$(command -v deno)")"
+        export PATH="${DENO_DIR}:${PATH}"
+    else
+        export PATH="/home/vscode/.deno/bin:$PATH"
+    fi
 
     # Database configuration
     # Force playwright database — do NOT inherit from .env or parent shell.
@@ -128,7 +164,17 @@ start_background() {
     if ! is_backend_running; then
         echo -e "${YELLOW}Starting Go backend on :${BACKEND_PORT}...${NC}"
         echo -e "  Database: ${FLUXBASE_DATABASE_DATABASE}"
-        GOGC=50 go run -tags "ocr" cmd/fluxbase/main.go >> "$LOGFILE" 2>&1 &
+
+        # Build first, then run — avoids the slow `go run` compilation
+        # which can exceed health-check timeouts.
+        GO_BIN="/tmp/fluxbase-e2e-ui-server"
+        echo -e "${YELLOW}  Compiling...${NC}"
+        if ! go build -tags "ocr" -o "$GO_BIN" cmd/fluxbase/main.go 2>> "$LOGFILE"; then
+            echo -e "${RED}Go build failed. Check logs: ${LOGFILE}${NC}"
+            exit 1
+        fi
+
+        GOGC=50 "$GO_BIN" >> "$LOGFILE" 2>&1 &
         echo "$!" >> "$PIDFILE"
         if ! wait_for_backend; then
             echo -e "${RED}Check logs: ${LOGFILE}${NC}"
@@ -167,7 +213,14 @@ start_foreground() {
 
     trap stop_servers SIGINT SIGTERM
 
-    export PATH="/home/vscode/.deno/bin:$PATH"
+    # Add Deno to PATH (required for edge functions)
+    # Resolve Deno dynamically — fallback to devcontainer path for local dev
+    if command -v deno &>/dev/null; then
+        DENO_DIR="$(dirname "$(command -v deno)")"
+        export PATH="${DENO_DIR}:${PATH}"
+    else
+        export PATH="/home/vscode/.deno/bin:$PATH"
+    fi
     # Force playwright database — do NOT inherit from .env or parent shell.
     export FLUXBASE_DATABASE_DATABASE="fluxbase_playwright"
     export FLUXBASE_DATABASE_HOST="${FLUXBASE_DATABASE_HOST:-localhost}"
@@ -179,7 +232,17 @@ start_foreground() {
 
     echo -e "${YELLOW}Starting Go backend on :${BACKEND_PORT}...${NC}"
     echo -e "  Database: ${FLUXBASE_DATABASE_DATABASE}"
-    GOGC=50 go run -tags "ocr" cmd/fluxbase/main.go &
+
+    # Build first, then run — avoids the slow `go run` compilation
+    # which can exceed health-check timeouts.
+    GO_BIN="/tmp/fluxbase-e2e-ui-server"
+    echo -e "${YELLOW}  Compiling...${NC}"
+    if ! go build -tags "ocr" -o "$GO_BIN" cmd/fluxbase/main.go; then
+        echo -e "${RED}Go build failed.${NC}"
+        exit 1
+    fi
+
+    GOGC=50 "$GO_BIN" >> "$LOGFILE" 2>&1 &
     GO_PID=$!
     echo "$GO_PID" > "$PIDFILE"
 
@@ -192,7 +255,7 @@ start_foreground() {
     cd admin
     unset NODE_OPTIONS
     export VITE_PROXY_TARGET="http://localhost:${BACKEND_PORT}"
-    bun run dev --host 0.0.0.0 --port ${VITE_PORT} &
+    bun run dev --host 0.0.0.0 --port ${VITE_PORT} >> "$LOGFILE" 2>&1 &
     VITE_PID=$!
     cd ..
     echo "$VITE_PID" >> "$PIDFILE"
@@ -245,6 +308,16 @@ case "${1:-}" in
         echo -e "${GREEN}E2E servers ready with fresh database. Logs: ${LOGFILE}${NC}"
         echo -e "${GREEN}Frontend: http://localhost:${VITE_PORT}/admin/${NC}"
         ;;
+    --clean-foreground)
+        # Like --clean but runs in foreground so Playwright can manage the process.
+        echo -e "${YELLOW}Clean foreground: resetting database...${NC}"
+        stop_servers
+        sleep 2
+        rm -f "$PIDFILE" "$LOGFILE"
+        reset_playwright_db
+        # Drop through to foreground mode (which keeps the process alive)
+        start_foreground
+        ;;
     --stop)
         echo -e "${YELLOW}Stopping E2E servers...${NC}"
         stop_servers
@@ -255,7 +328,7 @@ case "${1:-}" in
         start_foreground
         ;;
     *)
-        echo "Usage: $0 [--ensure|--restart|--clean|--stop]"
+        echo "Usage: $0 [--ensure|--restart|--clean|--clean-foreground|--stop]"
         exit 1
         ;;
 esac

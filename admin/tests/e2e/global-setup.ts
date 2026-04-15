@@ -4,10 +4,11 @@ import { type FullConfig } from "@playwright/test";
 const API_BASE = process.env.PLAYWRIGHT_API_URL || "http://localhost:5050";
 
 async function globalSetup(_config: FullConfig) {
-  const healthURL = `${API_BASE}/health`.replace(
-    ":5050/health",
-    ":8082/health",
-  );
+  // In CI, the Go backend serves the admin UI directly on the backend port.
+  // In local dev, Vite proxies API calls from :5050 to :8082.
+  // The health endpoint is always on the backend port.
+  const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT || "8082";
+  const healthURL = API_BASE.replace(/:\d+/, `:${backendPort}`) + "/health";
 
   console.log(`Waiting for server at ${healthURL}...`);
   await waitForServer(healthURL, 60_000);

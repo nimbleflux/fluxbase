@@ -44,10 +44,10 @@ type TenantResponse struct {
 }
 
 type TenantAdminAssignment struct {
-	ID        string    `json:"id"`
-	TenantID  string    `json:"tenant_id"`
-	UserID    string    `json:"user_id"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         string    `json:"id"`
+	TenantID   string    `json:"tenant_id"`
+	UserID     string    `json:"user_id"`
+	AssignedAt time.Time `json:"assigned_at"`
 }
 
 type CreateTenantRequest struct {
@@ -371,12 +371,12 @@ func (h *TenantHandler) ListAdmins(c fiber.Ctx) error {
 	}
 
 	rows, err := h.DB.Pool().Query(ctx, `
-		SELECT ta.id, ta.tenant_id, ta.user_id, ta.created_at,
+		SELECT ta.id, ta.tenant_id, ta.user_id, ta.assigned_at,
 		       du.email, du.role as dashboard_role
 		FROM platform.tenant_admin_assignments ta
 		INNER JOIN platform.users du ON du.id = ta.user_id
 		WHERE ta.tenant_id = $1::uuid
-		ORDER BY ta.created_at ASC
+		ORDER BY ta.assigned_at ASC
 	`, tenantID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list admins")
@@ -394,7 +394,7 @@ func (h *TenantHandler) ListAdmins(c fiber.Ctx) error {
 	for rows.Next() {
 		var m AdminWithUser
 		err := rows.Scan(
-			&m.ID, &m.TenantID, &m.UserID, &m.CreatedAt,
+			&m.ID, &m.TenantID, &m.UserID, &m.AssignedAt,
 			&m.Email, &m.DashboardRole,
 		)
 		if err != nil {
@@ -434,18 +434,18 @@ func (h *TenantHandler) AssignAdmin(c fiber.Ctx) error {
 		INSERT INTO platform.tenant_admin_assignments (tenant_id, user_id)
 		VALUES ($1::uuid, $2::uuid)
 		ON CONFLICT (tenant_id, user_id) DO NOTHING
-		RETURNING id, tenant_id, user_id, created_at
+		RETURNING id, tenant_id, user_id, assigned_at
 	`, tenantID, req.UserID).Scan(
-		&assignment.ID, &assignment.TenantID, &assignment.UserID, &assignment.CreatedAt,
+		&assignment.ID, &assignment.TenantID, &assignment.UserID, &assignment.AssignedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			err := h.DB.Pool().QueryRow(ctx, `
-				SELECT id, tenant_id, user_id, created_at
+				SELECT id, tenant_id, user_id, assigned_at
 				FROM platform.tenant_admin_assignments
 				WHERE tenant_id = $1::uuid AND user_id = $2::uuid
 			`, tenantID, req.UserID).Scan(
-				&assignment.ID, &assignment.TenantID, &assignment.UserID, &assignment.CreatedAt,
+				&assignment.ID, &assignment.TenantID, &assignment.UserID, &assignment.AssignedAt,
 			)
 			if err != nil {
 				log.Error().Err(err).Msg("Failed to get existing assignment")

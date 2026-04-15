@@ -120,6 +120,12 @@ if [ -f /workspace/package.json ]; then
   echo "✅ Workspace dependencies installed"
 fi
 
+# Install Playwright Chromium for E2E UI tests
+echo "🎭 Installing Playwright Chromium for E2E UI tests..."
+cd /workspace/admin
+npx playwright install chromium
+echo "✅ Playwright Chromium installed"
+
 # Build the project to verify everything works (skip to avoid OOM during initial setup)
 # echo "🔨 Building project..."
 # cd /workspace
