@@ -362,7 +362,7 @@ Tenant management requires `instance_admin` role.
 ### List Tenants
 
 ```typescript
-const { tenants, total } = await client.admin.listTenants({
+const { tenants, total } = await client.tenant.list({
   limit: 50,
   offset: 0,
   include_deleted: false,
@@ -396,7 +396,7 @@ tenants.forEach((tenant) => {
 ### Create Tenant
 
 ```typescript
-const tenant = await client.admin.createTenant({
+const tenant = await client.tenant.create({
   slug: "acme-corp",
   name: "Acme Corporation",
   metadata: {
@@ -422,7 +422,7 @@ interface CreateTenantRequest {
 ### Update Tenant
 
 ```typescript
-const tenant = await client.admin.updateTenant("tenant-uuid", {
+const tenant = await client.tenant.update("tenant-uuid", {
   name: "Acme Corp Inc.",
   metadata: { plan: "pro" },
 });
@@ -432,7 +432,7 @@ const tenant = await client.admin.updateTenant("tenant-uuid", {
 
 ```typescript
 // Soft delete (sets deleted_at)
-await client.admin.deleteTenant("tenant-uuid");
+await client.tenant.delete("tenant-uuid");
 ```
 
 ---
@@ -445,10 +445,10 @@ Service key management requires `instance_admin` or `tenant_admin` role.
 
 ```typescript
 // List all keys (instance_admin only)
-const { keys, total } = await client.admin.listServiceKeys();
+const { keys, total } = await client.admin.serviceKeys.list();
 
 // List keys for specific tenant
-const { keys, total } = await client.admin.listServiceKeys({
+const { keys, total } = await client.admin.serviceKeys.list({
   tenant_id: "tenant-uuid",
   key_type: "tenant_service",
   is_active: true,
@@ -471,7 +471,7 @@ interface ListServiceKeysOptions {
 ### Create Service Key
 
 ```typescript
-const key = await client.admin.createServiceKey({
+const key = await client.admin.serviceKeys.create({
   name: "Production API Key",
   key_type: "tenant_service",
   tenant_id: "tenant-uuid",
@@ -507,7 +507,7 @@ interface CreateServiceKeyRequest {
 
 ```typescript
 // Rotate with grace period
-const newKey = await client.admin.rotateServiceKey("old-key-id", {
+const newKey = await client.admin.serviceKeys.rotate("old-key-id", {
   grace_period_hours: 24,
 });
 
@@ -518,14 +518,14 @@ console.log("Old key works until:", newKey.grace_period_ends_at);
 ### Revoke Service Key
 
 ```typescript
-await client.admin.revokeServiceKey("key-id", "Security incident");
+await client.admin.serviceKeys.revoke("key-id", "Security incident");
 ```
 
 ### Deprecate Service Key
 
 ```typescript
 // Mark for deprecation with grace period
-await client.admin.deprecateServiceKey("key-id", {
+await client.admin.serviceKeys.deprecate("key-id", {
   grace_period_hours: 48,
   replacement_key_id: "new-key-id",
 });

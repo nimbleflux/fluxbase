@@ -32,15 +32,11 @@ npm install @nimbleflux/fluxbase-sdk
 ## Quick Start
 
 ```typescript
-import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = new FluxbaseClient({
-  url: "http://localhost:8080",
-  apiKey: process.env.FLUXBASE_CLIENT_KEY,
-});
+const client = createClient("http://localhost:8080", "your-anon-key");
 
-// Create function
-await client.functions.create({
+await client.admin.functions.create({
   name: "hello-world",
   description: "My first edge function",
   code: `
@@ -58,23 +54,17 @@ await client.functions.create({
   enabled: true,
 });
 
-// Invoke function
 const result = await client.functions.invoke("hello-world", {
   name: "Alice",
 });
 
-console.log(result); // { message: "Hello Alice!" }
+console.log(result);
 
-// List functions
 const functions = await client.functions.list();
 
-// Get function details
 const details = await client.functions.get("hello-world");
 
-// View execution history
-const executions = await client.functions.getExecutions("hello-world", {
-  limit: 10,
-});
+const executions = await client.admin.functions.getExecutions("hello-world", 10);
 ```
 
 ## Writing Functions
@@ -541,22 +531,17 @@ Shared modules allow you to reuse code across multiple edge functions, similar t
 
 ### Creating Shared Modules
 
-**Via SDK:**
+**Via REST API:**
 
-```typescript
-await client.functions.createSharedModule({
-  module_path: "_shared/cors.ts",
-  description: "CORS headers helper",
-  content: `
-    export function corsHeaders(origin?: string) {
-      return {
-        'Access-Control-Allow-Origin': origin || '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE'
-      }
-    }
-  `,
-});
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/functions/shared-modules \
+  -H "Authorization: Bearer your-service-role-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "module_path": "_shared/cors.ts",
+    "description": "CORS headers helper",
+    "content": "export function corsHeaders(origin?: string) {\n  return {\n    \"Access-Control-Allow-Origin\": origin || \"*\",\n    \"Access-Control-Allow-Headers\": \"authorization, x-client-info, apikey, content-type\",\n    \"Access-Control-Allow-Methods\": \"POST, GET, OPTIONS, PUT, DELETE\"\n  }\n}"
+  }'
 ```
 
 **Via File System:**
@@ -738,39 +723,35 @@ export function successResponse(data: any, status = 200) {
 
 **List all shared modules:**
 
-```typescript
-const modules = await client.functions.listSharedModules();
-console.log(modules);
-// [
-//   { module_path: '_shared/cors.ts', version: 1, ... },
-//   { module_path: '_shared/validation.ts', version: 2, ... }
-// ]
+```bash
+curl http://localhost:8080/api/v1/admin/functions/shared-modules \
+  -H "Authorization: Bearer your-service-role-key"
 ```
 
 **Get a specific module:**
 
-```typescript
-const module = await client.functions.getSharedModule("_shared/cors.ts");
-console.log(module.content);
+```bash
+curl http://localhost:8080/api/v1/admin/functions/shared-modules/_shared/cors.ts \
+  -H "Authorization: Bearer your-service-role-key"
 ```
 
 **Update a shared module:**
 
-```typescript
-await client.functions.updateSharedModule("_shared/cors.ts", {
-  content: `
-    export function corsHeaders() {
-      // Updated implementation
-    }
-  `,
-  description: "Updated CORS helper",
-});
+```bash
+curl -X PUT http://localhost:8080/api/v1/admin/functions/shared-modules/_shared/cors.ts \
+  -H "Authorization: Bearer your-service-role-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "export function corsHeaders() {\n  // Updated implementation\n}",
+    "description": "Updated CORS helper"
+  }'
 ```
 
 **Delete a shared module:**
 
-```typescript
-await client.functions.deleteSharedModule("_shared/cors.ts");
+```bash
+curl -X DELETE http://localhost:8080/api/v1/admin/functions/shared-modules/_shared/cors.ts \
+  -H "Authorization: Bearer your-service-role-key"
 ```
 
 ### How Bundling Works with Shared Modules
@@ -806,14 +787,13 @@ await client.functions.deleteSharedModule("_shared/cors.ts");
 ### 1. SDK Deployment
 
 ```typescript
-await client.functions.create({
+await client.admin.functions.create({
   name: "my-function",
   code: `async function handler(req) { ... }`,
   enabled: true,
 });
 
-// Update existing function
-await client.functions.update("my-function", {
+await client.admin.functions.update("my-function", {
   code: `async function handler(req) { ... }`,
 });
 ```
@@ -940,12 +920,10 @@ await client.admin.functions.create({
 });
 
 // Invoke with namespace
-const result = await client.functions.invoke(
-  "payment-service/process-payment",
-  {
-    body: JSON.stringify({ amount: 100 }),
-  },
-);
+const result = await client.functions.invoke("process-payment", {
+  body: JSON.stringify({ amount: 100 }),
+  namespace: "payment-service",
+});
 
 // List functions by namespace
 const functions = await client.admin.functions.list("payment-service");
@@ -1020,11 +998,11 @@ console.log(result.summary);
 Set function-level configuration:
 
 ```typescript
-await client.functions.create({
+await client.admin.functions.create({
   name: "my-function",
   code: "...",
-  timeout: 30, // seconds
-  memory: 256, // MB
+  timeout: 30,
+  memory: 256,
   env: {
     API_KEY: "secret-key",
     API_URL: "https://api.example.com",
@@ -1272,7 +1250,7 @@ async function handler(req) {
 
 Configuration sources are applied in this order (highest to lowest priority):
 
-1. **API Request** - Explicit values in `functions.create()` or `functions.update()`
+1. **API Request** - Explicit values in `admin.functions.create()` or `admin.functions.update()`
 2. **Code Annotations** - `@fluxbase:` directives in function comments
 3. **Global Defaults** - `FLUXBASE_CORS_*` environment variables
 
@@ -1299,30 +1277,10 @@ When CORS is configured (via annotations, API, or global settings), Fluxbase aut
 
 ## Debugging
 
-### View Logs
-
-```typescript
-const logs = await client.functions.getLogs("my-function", {
-  limit: 50,
-});
-
-logs.forEach((log) => {
-  console.log(`${log.timestamp}: ${log.message}`);
-});
-```
-
-### Test Locally
-
-Use Deno CLI to test functions:
-
-```bash
-deno run --allow-net --allow-env my-function.ts
-```
-
 ### Execution History
 
 ```typescript
-const executions = await client.functions.getExecutions("my-function");
+const executions = await client.admin.functions.getExecutions("my-function");
 
 executions.forEach((exec) => {
   console.log("Status:", exec.status);
@@ -1344,14 +1302,14 @@ executions.forEach((exec) => {
 Functions run with restricted permissions. Enable only what's needed:
 
 ```typescript
-await client.functions.create({
+await client.admin.functions.create({
   name: "my-function",
   code: "...",
   permissions: {
-    net: true, // Allow network access
-    env: true, // Allow environment variables
-    read: false, // Deny filesystem read
-    write: false, // Deny filesystem write
+    net: true,
+    env: true,
+    read: false,
+    write: false,
   },
 });
 ```

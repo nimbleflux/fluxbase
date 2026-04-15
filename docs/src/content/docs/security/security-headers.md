@@ -50,42 +50,11 @@ Content-Security-Policy:
 
 ### Custom CSP Configuration
 
-**Via `fluxbase.yaml`:**
-
-```yaml
-security:
-  headers:
-    content_security_policy: >
-      default-src 'self';
-      script-src 'self' https://cdn.example.com;
-      style-src 'self' https://fonts.googleapis.com;
-      img-src 'self' https: data:;
-      font-src 'self' https://fonts.gstatic.com;
-      connect-src 'self' wss://realtime.example.com;
-      frame-ancestors 'none'
-```
-
-**Via Environment Variable:**
-
-```bash
-FLUXBASE_SECURITY_HEADERS_CSP="default-src 'self'; script-src 'self'"
-```
+Security headers use sensible defaults and are applied automatically. Custom headers can be added via a reverse proxy (nginx, Caddy, etc.).
 
 ### CSP for Single-Page Applications
 
-If you're hosting a React/Vue/Angular app, you may need to relax CSP:
-
-```yaml
-security:
-  headers:
-    content_security_policy: >
-      default-src 'self';
-      script-src 'self' 'unsafe-inline' 'unsafe-eval';
-      style-src 'self' 'unsafe-inline';
-      img-src 'self' https: data: blob:;
-      connect-src 'self' ws: wss: https:;
-      frame-ancestors 'none'
-```
+If you're hosting a React/Vue/Angular app, you may need a more relaxed CSP. Configure this via a reverse proxy.
 
 ⚠️ **Warning**: `'unsafe-inline'` and `'unsafe-eval'` reduce security. Use nonces or hashes for production:
 
@@ -105,15 +74,10 @@ Refused to load the script 'https://evil.com/script.js' because it violates
 the following Content Security Policy directive: "script-src 'self'"
 ```
 
-**CSP Report URI** (optional):
+**CSP Report URI** (optional, configure via reverse proxy):
 
-```yaml
-security:
-  headers:
-    content_security_policy: >
-      default-src 'self';
-      report-uri /api/v1/csp-report;
-      report-to csp-endpoint
+```
+Content-Security-Policy: default-src 'self'; report-uri /api/v1/csp-report; report-to csp-endpoint
 ```
 
 ---
@@ -128,18 +92,6 @@ Prevents your site from being embedded in an iframe, protecting against clickjac
 X-Frame-Options: DENY
 ```
 
-### Configuration Options
-
-```yaml
-security:
-  headers:
-    x_frame_options: "DENY"  # Never allow framing
-    # OR
-    x_frame_options: "SAMEORIGIN"  # Allow framing from same origin
-    # OR
-    x_frame_options: "ALLOW-FROM https://trusted.com"  # Allow specific origin
-```
-
 ### Use Cases
 
 - **DENY**: Most secure, use for most applications
@@ -148,15 +100,11 @@ security:
 
 ### Modern Alternative: CSP frame-ancestors
 
-```yaml
-security:
-  headers:
-    content_security_policy: "frame-ancestors 'none'"  # Equivalent to DENY
-    # OR
-    content_security_policy: "frame-ancestors 'self'"  # Equivalent to SAMEORIGIN
-    # OR
-    content_security_policy: "frame-ancestors https://trusted.com"  # Allow specific origin
-```
+Use the `frame-ancestors` CSP directive (configured via reverse proxy) instead of the deprecated `ALLOW-FROM`:
+
+- `frame-ancestors 'none'` — Equivalent to DENY
+- `frame-ancestors 'self'` — Equivalent to SAMEORIGIN
+- `frame-ancestors https://trusted.com` — Allow specific origin
 
 ---
 
@@ -182,14 +130,6 @@ Without this header, browsers might execute JavaScript disguised as images:
 
 With `nosniff`, the browser will only execute files with `Content-Type: application/javascript`.
 
-### Configuration
-
-```yaml
-security:
-  headers:
-    x_content_type_options: "nosniff" # Always use this
-```
-
 ---
 
 ## X-XSS-Protection
@@ -202,28 +142,9 @@ Legacy header for older browsers to enable XSS filtering. Modern browsers rely o
 X-XSS-Protection: 1; mode=block
 ```
 
-### Configuration Options
-
-```yaml
-security:
-  headers:
-    x_xss_protection: "1; mode=block"  # Enable XSS filter and block
-    # OR
-    x_xss_protection: "1"  # Enable XSS filter (sanitize)
-    # OR
-    x_xss_protection: "0"  # Disable XSS filter
-```
-
 ### Modern Approach
 
-Instead of relying on X-XSS-Protection, use a strong Content Security Policy:
-
-```yaml
-security:
-  headers:
-    content_security_policy: "default-src 'self'; script-src 'self'"
-    x_xss_protection: "0" # Disable legacy protection, rely on CSP
-```
+Instead of relying on X-XSS-Protection, use a strong Content Security Policy. Modern browsers rely on CSP instead.
 
 ---
 
@@ -237,14 +158,6 @@ Forces browsers to only connect via HTTPS, preventing protocol downgrade attacks
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
 
-### Configuration
-
-```yaml
-security:
-  headers:
-    strict_transport_security: "max-age=31536000; includeSubDomains; preload"
-```
-
 ### Parameters
 
 - **max-age**: Duration in seconds (31536000 = 1 year)
@@ -253,13 +166,7 @@ security:
 
 ### HSTS Preload List
 
-Submit your domain to the [HSTS Preload List](https://hstspreload.org/) to be hardcoded into browsers:
-
-```yaml
-security:
-  headers:
-    strict_transport_security: "max-age=63072000; includeSubDomains; preload"
-```
+Submit your domain to the [HSTS Preload List](https://hstspreload.org/) to be hardcoded into browsers.
 
 **Requirements:**
 
@@ -274,19 +181,7 @@ security:
 
 ### HTTPS-Only
 
-HSTS header is only sent on HTTPS connections:
-
-```yaml
-server:
-  tls:
-    enabled: true
-    cert_file: /path/to/cert.pem
-    key_file: /path/to/key.pem
-
-security:
-  headers:
-    strict_transport_security: "max-age=31536000; includeSubDomains"
-```
+HSTS header is only sent on HTTPS connections.
 
 ---
 
@@ -298,28 +193,6 @@ Controls how much referrer information is sent with requests.
 
 ```
 Referrer-Policy: strict-origin-when-cross-origin
-```
-
-### Configuration Options
-
-```yaml
-security:
-  headers:
-    referrer_policy: "no-referrer"  # Never send referrer
-    # OR
-    referrer_policy: "no-referrer-when-downgrade"  # Don't send on HTTPS→HTTP
-    # OR
-    referrer_policy: "same-origin"  # Only send to same origin
-    # OR
-    referrer_policy: "origin"  # Only send origin (not full URL)
-    # OR
-    referrer_policy: "strict-origin"  # Origin only, not on HTTPS→HTTP
-    # OR
-    referrer_policy: "origin-when-cross-origin"  # Full URL same-origin, origin cross-origin
-    # OR
-    referrer_policy: "strict-origin-when-cross-origin"  # Balanced approach (default)
-    # OR
-    referrer_policy: "unsafe-url"  # Always send full URL (not recommended)
 ```
 
 ### Policy Comparison
@@ -334,23 +207,9 @@ security:
 
 ### Use Cases
 
-**Maximum Privacy:**
-
-```yaml
-referrer_policy: "no-referrer"
-```
-
-**Analytics-Friendly:**
-
-```yaml
-referrer_policy: "strict-origin-when-cross-origin" # Default
-```
-
-**Internal Links Only:**
-
-```yaml
-referrer_policy: "same-origin"
-```
+- **Maximum Privacy**: `no-referrer` — never send referrer
+- **Analytics-Friendly**: `strict-origin-when-cross-origin` — default, balanced approach
+- **Internal Links Only**: `same-origin` — only send to same origin
 
 ---
 
@@ -364,146 +223,46 @@ Controls which browser features and APIs can be used (formerly Feature-Policy).
 Permissions-Policy: geolocation=(), microphone=(), camera=()
 ```
 
-### Configuration
-
-```yaml
-security:
-  headers:
-    permissions_policy: >
-      geolocation=(),
-      microphone=(),
-      camera=(),
-      payment=(),
-      usb=(),
-      magnetometer=(),
-      gyroscope=(),
-      accelerometer=()
-```
-
-### Available Features
-
-Common features you can control:
-
-- **geolocation**: GPS location
-- **camera**: Camera access
-- **microphone**: Microphone access
-- **payment**: Payment Request API
-- **usb**: WebUSB API
-- **bluetooth**: Web Bluetooth API
-- **midi**: Web MIDI API
-- **fullscreen**: Fullscreen API
-- **picture-in-picture**: Picture-in-Picture API
-- **display-capture**: Screen capture
-- **autoplay**: Media autoplay
-
 ### Policy Syntax
 
-```yaml
-# Deny all origins (most secure)
-permissions_policy: "geolocation=()"
-
-# Allow same origin only
-permissions_policy: "geolocation=(self)"
-
-# Allow specific origins
-permissions_policy: "geolocation=(self 'https://trusted.com')"
-
-# Allow all origins (not recommended)
-permissions_policy: "geolocation=*"
-```
+- Deny all origins (most secure): `geolocation=()`
+- Allow same origin only: `geolocation=(self)`
+- Allow specific origins: `geolocation=(self 'https://trusted.com')`
+- Allow all origins (not recommended): `geolocation=*`
 
 ### Example: Allow Specific Features
 
-```yaml
-security:
-  headers:
-    permissions_policy: >
-      geolocation=(self),
-      camera=(self),
-      microphone=(self),
-      payment=(self 'https://payment-provider.com'),
-      usb=(),
-      bluetooth=()
+Configure via reverse proxy:
+
+```
+Permissions-Policy: geolocation=(self), camera=(self), microphone=(self), payment=(self 'https://payment-provider.com'), usb=(), bluetooth=()
 ```
 
 ---
 
-## Complete Configuration Example
+## Adding Custom Headers
 
-### Production Configuration
+Security headers use sensible defaults and are applied automatically. Custom headers can be added via a reverse proxy (nginx, Caddy, etc.):
 
-```yaml
-# fluxbase.yaml
-server:
-  port: 443
-  tls:
-    enabled: true
-    cert_file: /etc/letsencrypt/live/example.com/fullchain.pem
-    key_file: /etc/letsencrypt/live/example.com/privkey.pem
+**Nginx example:**
 
-security:
-  headers:
-    # Content Security Policy
-    content_security_policy: >
-      default-src 'self';
-      script-src 'self';
-      style-src 'self' https://fonts.googleapis.com;
-      img-src 'self' https: data: blob:;
-      font-src 'self' data: https://fonts.gstatic.com;
-      connect-src 'self' wss://example.com;
-      frame-ancestors 'none';
-      base-uri 'self';
-      form-action 'self'
+```nginx
+server {
+    listen 443 ssl;
+    server_name example.com;
 
-    # Clickjacking protection
-    x_frame_options: "DENY"
-
-    # MIME sniffing protection
-    x_content_type_options: "nosniff"
-
-    # XSS protection (legacy)
-    x_xss_protection: "1; mode=block"
-
-    # Force HTTPS (1 year, include subdomains, preload)
-    strict_transport_security: "max-age=31536000; includeSubDomains; preload"
-
-    # Referrer policy (balanced)
-    referrer_policy: "strict-origin-when-cross-origin"
-
-    # Permissions policy (restrict sensitive features)
-    permissions_policy: >
-      geolocation=(),
-      microphone=(),
-      camera=(),
-      payment=(),
-      usb=(),
-      bluetooth=()
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.example.com" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+}
 ```
 
-### Development Configuration
+**Caddy example:**
 
-```yaml
-# fluxbase.yaml
-security:
-  headers:
-    # Relaxed CSP for development
-    content_security_policy: >
-      default-src 'self';
-      script-src 'self' 'unsafe-inline' 'unsafe-eval';
-      style-src 'self' 'unsafe-inline';
-      img-src 'self' https: data: blob:;
-      connect-src 'self' ws: wss: http: https:;
-      frame-ancestors 'self'
-
-    x_frame_options: "SAMEORIGIN"
-    x_content_type_options: "nosniff"
-    x_xss_protection: "1; mode=block"
-
-    # No HSTS in development (HTTP allowed)
-    strict_transport_security: ""
-
-    referrer_policy: "no-referrer-when-downgrade"
-    permissions_policy: "" # Allow all in development
+```
+example.com {
+    header Content-Security-Policy "default-src 'self'; script-src 'self'"
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+}
 ```
 
 ---
@@ -574,34 +333,13 @@ describe("Security Headers", () => {
 
 **Symptom**: Resources failing to load, console errors
 
-**Solution**: Add specific origins to CSP:
-
-```yaml
-security:
-  headers:
-    content_security_policy: >
-      default-src 'self';
-      script-src 'self' https://cdn.example.com;
-      style-src 'self' https://fonts.googleapis.com
-```
+**Solution**: Add specific origins to CSP via your reverse proxy.
 
 ### Issue: Admin UI Not Working
 
 **Symptom**: React/Vue app broken, CSP violations
 
-**Solution**: Use relaxed CSP for Admin UI:
-
-```yaml
-security:
-  headers:
-    # Admin UI needs 'unsafe-inline' and 'unsafe-eval'
-    content_security_policy: >
-      default-src 'self';
-      script-src 'self' 'unsafe-inline' 'unsafe-eval';
-      style-src 'self' 'unsafe-inline'
-```
-
-Or use route-specific headers:
+**Solution**: Use relaxed CSP for Admin UI via your reverse proxy, or use route-specific headers:
 
 ```go
 // Apply relaxed headers only to Admin UI routes
@@ -612,29 +350,13 @@ app.Use("/admin", AdminUISecurityHeaders())
 
 **Symptom**: iframes, embedded videos failing
 
-**Solution**: Update CSP frame-src:
-
-```yaml
-security:
-  headers:
-    content_security_policy: >
-      default-src 'self';
-      frame-src https://www.youtube.com https://player.vimeo.com
-```
+**Solution**: Update CSP `frame-src` via your reverse proxy.
 
 ### Issue: WebSocket Connections Failing
 
 **Symptom**: Realtime features not working
 
-**Solution**: Add ws: and wss: to connect-src:
-
-```yaml
-security:
-  headers:
-    content_security_policy: >
-      default-src 'self';
-      connect-src 'self' ws: wss:
-```
+**Solution**: Ensure `ws:` and `wss:` are in `connect-src` via your reverse proxy.
 
 ---
 
@@ -642,22 +364,11 @@ security:
 
 ### 1. Start Strict, Relax as Needed
 
-```yaml
-# Start with most restrictive policy
-content_security_policy: "default-src 'self'"
-
-# Add specific exceptions as needed
-content_security_policy: >
-  default-src 'self';
-  img-src 'self' https://cdn.example.com
-```
+Start with the most restrictive policy and add specific exceptions via your reverse proxy as needed.
 
 ### 2. Use CSP Report-Only Mode for Testing
 
-```yaml
-# Test CSP without breaking functionality
-Content-Security-Policy-Report-Only: default-src 'self'
-```
+Test CSP without breaking functionality using the `Content-Security-Policy-Report-Only` header via your reverse proxy.
 
 ### 3. Avoid 'unsafe-inline' and 'unsafe-eval'
 
@@ -670,19 +381,9 @@ Use nonces or hashes instead:
 </script>
 ```
 
-```yaml
-content_security_policy: "script-src 'nonce-2726c7f26c'"
-```
-
 ### 4. Monitor CSP Violations
 
-Set up reporting:
-
-```yaml
-content_security_policy: >
-  default-src 'self';
-  report-uri /api/v1/csp-report
-```
+Set up reporting via your reverse proxy to a CSP report endpoint.
 
 ```go
 // Log CSP violations
@@ -704,14 +405,7 @@ Different browsers have different CSP support:
 
 ### 6. Document Custom Headers
 
-```yaml
-# Document why each exception is needed
-content_security_policy: >
-  default-src 'self';
-  script-src 'self' https://cdn.example.com;  # Third-party analytics
-  style-src 'self' 'unsafe-inline';  # Required for Admin UI
-  img-src 'self' https:;  # User-uploaded images from CDN
-```
+Document why each header exception is needed when configuring via your reverse proxy.
 
 ---
 

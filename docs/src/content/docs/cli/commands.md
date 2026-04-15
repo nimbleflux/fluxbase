@@ -760,13 +760,13 @@ Execute a GraphQL query.
 
 ```bash
 # Simple query
-fluxbase graphql query '{ users { id email created_at } }'
+fluxbase graphql query '{ users { id email createdAt } }'
 
 # Query with filtering
-fluxbase graphql query '{ users(where: {role: {_eq: "admin"}}) { id email } }'
+fluxbase graphql query '{ users(filter: {role_eq: "admin"}) { id email } }'
 
 # Query with ordering and pagination
-fluxbase graphql query '{ users(limit: 10, order_by: {created_at: desc}) { id email } }'
+fluxbase graphql query '{ users(limit: 10, orderBy: [{createdAt: DESC}]) { id email } }'
 
 # Query from file
 fluxbase graphql query --file ./get-users.graphql
@@ -795,32 +795,37 @@ Execute a GraphQL mutation.
 ```bash
 # Insert a record
 fluxbase graphql mutation 'mutation {
-  insert_users(objects: [{email: "new@example.com", name: "New User"}]) {
-    returning { id email }
+  insertUser(data: {email: "new@example.com", name: "New User"}) {
+    id email
   }
 }'
 
-# Update records
+# Update a record
 fluxbase graphql mutation 'mutation {
-  update_users(where: {id: {_eq: "user-id"}}, _set: {name: "Updated Name"}) {
-    affected_rows
-    returning { id name }
+  updateUser(id: "user-id", data: {name: "Updated Name"}) {
+    id name
   }
 }'
 
-# Delete records
+# Delete a record
 fluxbase graphql mutation 'mutation {
-  delete_users(where: {id: {_eq: "user-id"}}) {
-    affected_rows
-  }
+  deleteUser(id: "user-id") { id }
+}'
+
+# Bulk update
+fluxbase graphql mutation 'mutation {
+  updateManyUser(filter: {status_eq: "active"}, data: {status: "archived"})
+}'
+
+# Bulk delete
+fluxbase graphql mutation 'mutation {
+  deleteManyUser(filter: {status_eq: "inactive"})
 }'
 
 # Mutation with variables
-fluxbase graphql mutation 'mutation CreateUser($email: String!, $name: String!) {
-  insert_users(objects: [{email: $email, name: $name}]) {
-    returning { id }
-  }
-}' --var 'email=test@example.com' --var 'name=Test User'
+fluxbase graphql mutation 'mutation CreateUser($data: UserInput!) {
+  insertUser(data: $data) { id }
+}' --var 'data={"email":"test@example.com","name":"Test User"}'
 
 # Mutation from file
 fluxbase graphql mutation --file ./create-user.graphql --var 'email=user@example.com'

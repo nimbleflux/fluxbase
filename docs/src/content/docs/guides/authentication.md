@@ -12,7 +12,6 @@ Fluxbase provides JWT-based authentication with support for email/password, magi
 - OAuth providers (Google, GitHub, Microsoft, etc.)
 - Anonymous authentication
 - Two-factor authentication (TOTP)
-- Session management
 - Password reset flows
 
 ## Configuration
@@ -53,11 +52,9 @@ npm install @nimbleflux/fluxbase-sdk
 ## Quick Start
 
 ```typescript
-import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = new FluxbaseClient({
-  url: "http://localhost:8080",
-});
+const client = createClient("http://localhost:8080", "your-anon-key");
 
 // Sign up with user metadata
 const { user, session } = await client.auth.signUp({
@@ -93,8 +90,8 @@ await client.auth.signOut();
 | `signOut()`              | End current session      | None                                 |
 | `getCurrentUser()`       | Get authenticated user   | None                                 |
 | `getSession()`           | Get session details      | None                                 |
-| `resetPassword()`        | Request password reset   | `email`                              |
-| `confirmPasswordReset()` | Confirm password reset   | `token`, `password`                  |
+| `sendPasswordReset()`    | Request password reset   | `email`                              |
+| `resetPassword()`        | Confirm password reset   | `token`, `newPassword`               |
 
 **Example:**
 
@@ -127,14 +124,9 @@ await client.auth.signOut();
 ## Password Reset
 
 ```typescript
-// Request reset (sends email with token)
-await client.auth.resetPassword({ email: "user@example.com" });
+await client.auth.sendPasswordReset("user@example.com");
 
-// Confirm reset (after user receives token)
-await client.auth.confirmPasswordReset({
-  token: "reset-token-from-email",
-  password: "NewSecurePassword123",
-});
+await client.auth.resetPassword("reset-token-from-email", "NewSecurePassword123");
 ```
 
 ## Magic Links
@@ -161,8 +153,7 @@ oauth:
 **Usage:**
 
 ```typescript
-const { url } = await client.auth.getOAuthUrl({
-  provider: "google",
+const { url } = await client.auth.getOAuthUrl("google", {
   redirectTo: "http://localhost:3000/dashboard",
 });
 window.location.href = url;
@@ -172,45 +163,30 @@ window.location.href = url;
 ## Anonymous Authentication
 
 ```typescript
-// Sign in without account
 const { user, session } = await client.auth.signInAnonymously();
-
-// Convert to permanent account later
-await client.auth.convertAnonymousUser({
-  email: "user@example.com",
-  password: "SecurePassword123",
-});
 ```
+
+> **Note:** Anonymous sessions cannot be converted to permanent accounts. Users must sign up separately and link manually.
 
 ## Two-Factor Authentication
 
 ```typescript
-// Enable 2FA
-const { secret, qr_code } = await client.auth.enable2FA();
-await client.auth.verify2FA({ code: "123456" });
+const { id, type, totp } = await client.auth.setup2FA();
+// totp.qr_code, totp.secret, totp.uri
 
-// Sign in with 2FA
+await client.auth.verify2FA({ user_id: "user-id", code: "123456" });
+
 const { requires_2fa } = await client.auth.signIn({ email, password });
 if (requires_2fa) {
-  await client.auth.verify2FACode({ code: "123456" });
+  await client.auth.verify2FA({ user_id: user.id, code: "123456" });
 }
 
-// Disable 2FA
-await client.auth.disable2FA({ code: "123456" });
+await client.auth.disable2FA("current-password");
 ```
 
 ## Session Management
 
-```typescript
-// List sessions
-const sessions = await client.auth.listSessions();
-
-// Revoke session
-await client.auth.revokeSession(session_id);
-
-// Revoke all other sessions (keep current)
-await client.auth.revokeAllSessions({ except_current: true });
-```
+Session management (listing, revoking sessions) is available through the Admin API, not the client SDK.
 
 ## Token Refresh
 
@@ -257,36 +233,28 @@ await client.auth.updateUser({
 });
 
 // Update email
-await client.auth.updateEmail({
+await client.auth.updateUser({
   email: "newemail@example.com",
-  password: "current",
 });
 
 // Update password
-await client.auth.updatePassword({
-  current_password: "OldPassword123",
-  new_password: "NewPassword123",
+await client.auth.updateUser({
+  password: "NewPassword123",
 });
 ```
 
 ## client keys
 
 ```typescript
-// Create API key for server-to-server auth
-const { key, id } = await client.auth.createApiKey({
+const { key, id } = await client.management.clientKeys.create({
   name: "Production API",
   expires_in: 86400 * 365,
 });
 
-// Use API key
-const client = new FluxbaseClient({
-  url: "http://localhost:8080",
-  apiKey: "your-api-key",
-});
+const adminClient = createClient("http://localhost:8080", "your-api-key");
 
-// Manage keys
-const keys = await client.auth.listApiKeys();
-await client.auth.revokeApiKey(key_id);
+const keys = await client.management.clientKeys.list();
+await client.management.clientKeys.revoke(key_id);
 ```
 
 ## Service Keys (Admin)
@@ -294,10 +262,7 @@ await client.auth.revokeApiKey(key_id);
 Service keys bypass Row-Level Security. Use only in backend services.
 
 ```typescript
-const adminClient = new FluxbaseClient({
-  url: "http://localhost:8080",
-  serviceKey: process.env.FLUXBASE_SERVICE_ROLE_KEY,
-});
+const adminClient = createClient("http://localhost:8080", process.env.FLUXBASE_SERVICE_ROLE_KEY);
 
 // Bypasses RLS
 const allUsers = await adminClient.from("users").select("*");
@@ -444,13 +409,11 @@ auth:
 ### Usage (Admin Dashboard)
 
 ```typescript
-// Start impersonation
-const { impersonation } = await client.auth.impersonateUser({
+const { impersonation } = await client.admin.impersonation.impersonateUser({
   userId: "target-user-id",
 });
 
-// Stop impersonation
-await client.auth.stopImpersonation();
+await client.admin.impersonation.stopImpersonation();
 ```
 
 ### Security Notes

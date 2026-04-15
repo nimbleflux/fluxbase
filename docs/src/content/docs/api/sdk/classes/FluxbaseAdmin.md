@@ -390,37 +390,6 @@ console.log(response.message);
 
 ---
 
-### sendEmail()
-
-> **sendEmail**(`request`): `Promise`\<[`VoidResponse`](/api/sdk/type-aliases/voidresponse/)\>
-
-Send an email
-
-#### Parameters
-
-| Parameter | Type                                                        | Description                            |
-| --------- | ----------------------------------------------------------- | -------------------------------------- |
-| `request` | [`SendEmailRequest`](/api/sdk/interfaces/sendemailrequest/) | Email details (to, subject, html/text) |
-
-#### Returns
-
-`Promise`\<[`VoidResponse`](/api/sdk/type-aliases/voidresponse/)\>
-
-#### Example
-
-```typescript
-const { error } = await admin.sendEmail({
-  to: "user@example.com",
-  subject: "Hello",
-  html: "<p>Your message here</p>",
-});
-if (!error) {
-  console.log("Email sent");
-}
-```
-
----
-
 ### setToken()
 
 > **setToken**(`token`): `void`

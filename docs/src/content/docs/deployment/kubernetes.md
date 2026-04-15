@@ -89,8 +89,8 @@ kubectl get secret my-fluxbase -n fluxbase -o jsonpath='{.data.jwt-secret}' | ba
 Create `production-values.yaml`:
 
 ```yaml
-# Replica count (minimum 3 for HA)
-replicaCount: 3
+# Replica count
+replicaCount: 1
 
 # Image configuration
 image:
@@ -164,8 +164,8 @@ ingress:
 autoscaling:
   enabled: true
   minReplicas: 3
-  maxReplicas: 10
-  targetCPU: 70
+  maxReplicas: 11
+  targetCPU: 80
   targetMemory: 80
 
 # Resource limits

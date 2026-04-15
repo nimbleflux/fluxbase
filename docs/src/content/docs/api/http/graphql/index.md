@@ -42,7 +42,9 @@ graphql:
   enabled: true
   max_depth: 10
   max_complexity: 1000
-  introspection: true  # Disable in production
+  introspection: true
+  allow_fragments: false
+  max_fields_per_lvl: 50
 ```
 
 | Setting | Env Variable | Default | Description |
@@ -51,6 +53,8 @@ graphql:
 | `max_depth` | `FLUXBASE_GRAPHQL_MAX_DEPTH` | `10` | Maximum query nesting depth |
 | `max_complexity` | `FLUXBASE_GRAPHQL_MAX_COMPLEXITY` | `1000` | Maximum query complexity score |
 | `introspection` | `FLUXBASE_GRAPHQL_INTROSPECTION` | `true` | Allow schema introspection |
+| `allow_fragments` | `FLUXBASE_GRAPHQL_ALLOW_FRAGMENTS` | `false` | Allow GraphQL fragments |
+| `max_fields_per_lvl` | `FLUXBASE_GRAPHQL_MAX_FIELDS_PER_LVL` | `50` | Maximum fields per nesting level |
 
 ## Query Syntax
 
@@ -62,7 +66,7 @@ query {
     id
     email
     name
-    created_at
+    createdAt
   }
 }
 ```
@@ -71,7 +75,7 @@ query {
 
 ```graphql
 query {
-  users(where: { email: { _eq: "john@example.com" } }) {
+  users(filter: { email_eq: "john@example.com" }) {
     id
     email
   }
@@ -83,13 +87,13 @@ query {
 ```graphql
 query {
   users(
-    order_by: { created_at: desc }
+    orderBy: [{ createdAt: DESC }]
     limit: 10
     offset: 0
   ) {
     id
     email
-    created_at
+    createdAt
   }
 }
 ```
@@ -118,22 +122,22 @@ query {
 
 ## Filter Operators
 
-The GraphQL API supports PostgREST-compatible filter operators:
+The GraphQL API supports PostgREST-compatible filter operators, specified as flat fields in the `filter` argument:
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `_eq` | Equal | `{ status: { _eq: "active" } }` |
-| `_neq` | Not equal | `{ status: { _neq: "deleted" } }` |
-| `_gt` | Greater than | `{ age: { _gt: 18 } }` |
-| `_gte` | Greater than or equal | `{ age: { _gte: 18 } }` |
-| `_lt` | Less than | `{ price: { _lt: 100 } }` |
-| `_lte` | Less than or equal | `{ price: { _lte: 100 } }` |
-| `_like` | Pattern match | `{ name: { _like: "John%" } }` |
-| `_ilike` | Case-insensitive match | `{ name: { _ilike: "john%" } }` |
-| `_in` | In list | `{ status: { _in: ["active", "pending"] } }` |
-| `_is_null` | Is null | `{ deleted_at: { _is_null: true } }` |
-| `_and` | Logical AND | `{ _and: [{ age: { _gte: 18 } }, { status: { _eq: "active" } }] }` |
-| `_or` | Logical OR | `{ _or: [{ role: { _eq: "admin" } }, { role: { _eq: "moderator" } }] }` |
+| `_eq` | Equal | `{ status_eq: "active" }` |
+| `_neq` | Not equal | `{ status_neq: "deleted" }` |
+| `_gt` | Greater than | `{ age_gt: 18 }` |
+| `_gte` | Greater than or equal | `{ age_gte: 18 }` |
+| `_lt` | Less than | `{ price_lt: 100 }` |
+| `_lte` | Less than or equal | `{ price_lte: 100 }` |
+| `_like` | Pattern match | `{ name_like: "John%" }` |
+| `_ilike` | Case-insensitive match | `{ name_ilike: "john%" }` |
+| `_in` | In list | `{ status_in: ["active", "pending"] }` |
+| `_is_null` | Is null | `{ deletedAt_is_null: true }` |
+
+Multiple conditions in a single filter object are combined with AND.
 
 ## Mutations
 
@@ -141,13 +145,9 @@ The GraphQL API supports PostgREST-compatible filter operators:
 
 ```graphql
 mutation {
-  insert_users(objects: [
-    { email: "new@example.com", name: "New User" }
-  ]) {
-    returning {
-      id
-      email
-    }
+  insertUser(data: { email: "new@example.com", name: "New User" }) {
+    id
+    email
   }
 }
 ```
@@ -156,47 +156,43 @@ mutation {
 
 ```graphql
 mutation {
-  update_users(
-    where: { id: { _eq: "user-uuid" } }
-    _set: { name: "Updated Name" }
-  ) {
-    affected_rows
-    returning {
-      id
-      name
-    }
+  updateUser(id: "user-uuid", data: { name: "Updated Name" }) {
+    id
+    name
   }
 }
 ```
+
+### Bulk Update
+
+```graphql
+mutation {
+  updateManyUser(filter: { status_eq: "active" }, data: { status: "archived" })
+}
+```
+
+`updateMany` returns an `Int` count of affected rows.
 
 ### Delete
 
 ```graphql
 mutation {
-  delete_users(where: { id: { _eq: "user-uuid" } }) {
-    affected_rows
+  deleteUser(id: "user-uuid") {
+    id
+    name
   }
 }
 ```
 
-### Upsert (Insert or Update)
+### Bulk Delete
 
 ```graphql
 mutation {
-  insert_users(
-    objects: [{ id: "existing-uuid", email: "user@example.com", name: "User" }]
-    on_conflict: {
-      constraint: users_pkey
-      update_columns: [name]
-    }
-  ) {
-    returning {
-      id
-      name
-    }
-  }
+  deleteManyUser(filter: { status_eq: "inactive" })
 }
 ```
+
+`deleteMany` returns an `Int` count of deleted rows.
 
 ## Type Mapping
 
@@ -206,14 +202,14 @@ PostgreSQL types are automatically mapped to GraphQL types:
 |------------|---------|
 | `text`, `varchar`, `char` | `String` |
 | `integer`, `smallint` | `Int` |
-| `bigint` | `String` (to preserve precision) |
+| `bigint` | `BigIntScalar` (custom) |
 | `boolean` | `Boolean` |
 | `numeric`, `real`, `double precision` | `Float` |
-| `uuid` | `ID` |
+| `uuid` | `UUIDScalar` (custom) |
 | `json`, `jsonb` | `JSON` (custom scalar) |
 | `timestamp`, `timestamptz` | `DateTime` (custom scalar) |
 | `date` | `Date` (custom scalar) |
-| `array` types | `[Type]` (List) |
+| `array` types | `JSONScalar` |
 
 ## Introspection
 
@@ -267,7 +263,7 @@ fluxbase graphql query 'query($id: ID!) { user(id: $id) { email } }' --var 'id=1
 fluxbase graphql query --file ./query.graphql
 
 # Execute a mutation
-fluxbase graphql mutation 'mutation { insert_users(objects: [{email: "new@example.com"}]) { returning { id } } }'
+fluxbase graphql mutation 'mutation { insertUser(data: {email: "new@example.com"}) { id } }'
 
 # Introspect the schema
 fluxbase graphql introspect
@@ -302,11 +298,9 @@ const { data, errors } = await client.graphql.query<UsersQuery>(`
 // Execute a mutation
 const { data, errors } = await client.graphql.mutation<CreateUserMutation>(`
   mutation CreateUser($data: UserInput!) {
-    insert_users(objects: [$data]) {
-      returning {
-        id
-        email
-      }
+    insertUser(data: $data) {
+      id
+      email
     }
   }
 `, { data: { email: 'new@example.com' } })
@@ -338,8 +332,9 @@ function UsersList() {
 function CreateUserForm() {
   const mutation = useGraphQLMutation<CreateUserMutation>(
     `mutation CreateUser($data: UserInput!) {
-      insert_users(objects: [$data]) {
-        returning { id email }
+      insertUser(data: $data) {
+        id
+        email
       }
     }`,
     {
@@ -386,10 +381,9 @@ The GraphQL API enforces Row Level Security (RLS) policies exactly like the REST
 Session variables are available in your RLS policies:
 
 ```sql
--- Example RLS policy
 CREATE POLICY "Users can view own data" ON users
   FOR SELECT
-  USING (id = current_setting('request.jwt.claim.sub')::uuid);
+  USING (id = (current_setting('request.jwt.claims', true)::json->>'sub')::uuid);
 ```
 
 ## Security Best Practices
@@ -399,9 +393,11 @@ CREATE POLICY "Users can view own data" ON users
 ```yaml
 graphql:
   enabled: true
-  max_depth: 5        # Reduce depth in production
-  max_complexity: 500  # Lower complexity limit
-  introspection: false # Disable introspection in production
+  max_depth: 5
+  max_complexity: 500
+  introspection: false
+  allow_fragments: false
+  max_fields_per_lvl: 50
 ```
 
 ### Query Depth Limiting

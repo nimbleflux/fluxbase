@@ -50,7 +50,7 @@ Endpoints for file storage operations.
 | `GET` | `/storage/{bucket}/{key}` | Download file |
 | `HEAD` | `/storage/{bucket}/{key}` | Get file metadata |
 | `DELETE` | `/storage/{bucket}/{key}` | Delete file |
-| `POST` | `/storage/{bucket}/{key}/signed-url` | Generate signed URL |
+| `POST` | `/storage/{bucket}/sign/{key}` | Generate signed URL |
 
 ### GraphQL
 

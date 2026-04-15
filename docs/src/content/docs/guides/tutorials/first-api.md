@@ -281,11 +281,10 @@ main();
 You can also use the REST API directly:
 
 ```bash
-# Get an access token (using your client key from Settings > Client Keys)
-TOKEN=$(curl -s -X POST http://localhost:8080/auth/v1/token \
+# Get an access token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/signin \
   -H "Content-Type: application/json" \
-  -H "X-Client-Key: your-client-key-here" \
-  -d '{"email":"user@example.com","password":"securepassword123","grant_type":"password"}' \
+  -d '{"email":"user@example.com","password":"securepassword123"}' \
   | jq -r '.access_token')
 
 # Create a task

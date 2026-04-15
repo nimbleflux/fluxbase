@@ -358,11 +358,8 @@ const { data: providers } = await client.auth.getOAuthProviders();
 // [{ name: 'google', display_name: 'Google' }, ...]
 
 // Get OAuth authorization URL
-const { data } = await client.auth.signInWithOAuth({
-  provider: "google",
-  options: {
-    redirectTo: `${window.location.origin}/auth/callback`,
-  },
+const { data } = await client.auth.signInWithOAuth("google", {
+  redirectTo: `${window.location.origin}/auth/callback`,
 });
 
 // Redirect to provider
@@ -376,10 +373,7 @@ window.location.href = data.url;
 const code = searchParams.get("code");
 const state = searchParams.get("state");
 
-const { user, session } = await client.auth.exchangeCodeForSession({
-  code,
-  state,
-});
+const { user, session } = await client.auth.exchangeCodeForSession(code, state);
 
 // User is now authenticated
 console.log("Logged in as:", user.email);
@@ -388,29 +382,21 @@ console.log("Logged in as:", user.email);
 ### React SDK
 
 ```tsx
-import {
-  useOAuthProviders,
-  useSignInWithOAuth,
-  useSession,
-} from "@nimbleflux/fluxbase-sdk-react";
+import { useSession } from "@nimbleflux/fluxbase-sdk-react";
 
 function OAuthLoginButtons() {
-  const { data: providers, isLoading } = useOAuthProviders();
-  const signIn = useSignInWithOAuth();
-
-  if (isLoading) return <div>Loading...</div>;
+  const { data: providers } = await client.auth.getOAuthProviders();
 
   return (
     <div>
       {providers?.map((provider) => (
         <button
           key={provider.name}
-          onClick={() =>
-            signIn.mutate({
-              provider: provider.name,
+          onClick={() => {
+            client.auth.signInWithOAuth(provider.name, {
               redirectTo: "/dashboard",
-            })
-          }
+            });
+          }}
         >
           Sign in with {provider.display_name || provider.name}
         </button>
@@ -868,7 +854,7 @@ window.location.href = url;
 ### Unlink OAuth Provider
 
 ```typescript
-await client.auth.unlinkIdentity({ provider: "github" });
+await client.auth.unlinkIdentity({ identity: { id: "identity-id" } });
 ```
 
 ## Troubleshooting

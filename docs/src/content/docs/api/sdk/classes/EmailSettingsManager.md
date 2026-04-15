@@ -249,3 +249,112 @@ await client.admin.settings.email.update({
   from_address: 'new-address@yourapp.com'
 })
 ```
+
+***
+
+### getForTenant()
+
+> **getForTenant**(): `Promise`\<[`TenantEmailProviderSettings`](/api/sdk/interfaces/tenantemailprovidersettings/)\>
+
+Get tenant-level email settings (resolved through cascade)
+
+Returns email settings resolved for the current tenant context, including source information for each field.
+
+#### Returns
+
+`Promise`\<[`TenantEmailProviderSettings`](/api/sdk/interfaces/tenantemailprovidersettings/)\>
+
+Promise resolving to TenantEmailProviderSettings
+
+#### Example
+
+```typescript
+const settings = await client.admin.settings.email.getForTenant()
+console.log('Provider:', settings.provider)
+```
+
+***
+
+### updateForTenant()
+
+> **updateForTenant**(`request`): `Promise`\<[`TenantEmailProviderSettings`](/api/sdk/interfaces/tenantemailprovidersettings/)\>
+
+Update tenant-level email settings
+
+Only provided fields are updated. These override instance-level defaults.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `request` | [`UpdateEmailProviderSettingsRequest`](/api/sdk/interfaces/updateemailprovidersettingsrequest/) | Settings to update (partial update supported) |
+
+#### Returns
+
+`Promise`\<[`TenantEmailProviderSettings`](/api/sdk/interfaces/tenantemailprovidersettings/)\>
+
+Promise resolving to TenantEmailProviderSettings
+
+#### Example
+
+```typescript
+await client.admin.settings.email.updateForTenant({
+  provider: 'smtp',
+  from_address: 'noreply@tenant.com',
+})
+```
+
+***
+
+### deleteTenantOverride()
+
+> **deleteTenantOverride**(`field`): `Promise`\<[`TenantEmailProviderSettings`](/api/sdk/interfaces/tenantemailprovidersettings/)\>
+
+Delete a tenant-level email setting override
+
+Removes the tenant override for a specific field, reverting to the instance default.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `field` | `string` | The field name to remove the override for |
+
+#### Returns
+
+`Promise`\<[`TenantEmailProviderSettings`](/api/sdk/interfaces/tenantemailprovidersettings/)\>
+
+Promise resolving to TenantEmailProviderSettings
+
+#### Example
+
+```typescript
+await client.admin.settings.email.deleteTenantOverride('from_address')
+```
+
+***
+
+### testForTenant()
+
+> **testForTenant**(`recipientEmail`): `Promise`\<[`TestEmailSettingsResponse`](/api/sdk/interfaces/testemailsettingsresponse/)\>
+
+Test tenant-level email configuration
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `recipientEmail` | `string` | Email address to send the test email to |
+
+#### Returns
+
+`Promise`\<[`TestEmailSettingsResponse`](/api/sdk/interfaces/testemailsettingsresponse/)\>
+
+Promise resolving to TestEmailSettingsResponse
+
+#### Example
+
+```typescript
+const result = await client.admin.settings.email.testForTenant('admin@tenant.com')
+console.log('Test email sent:', result.message)
+```

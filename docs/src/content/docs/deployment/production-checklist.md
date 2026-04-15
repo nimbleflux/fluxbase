@@ -23,12 +23,7 @@ Complete this checklist before deploying Fluxbase to production to ensure securi
   openssl rand -base64 24
   ```
 
-- [ ] **Admin Credentials**: Changed default admin email/password
-
-  ```bash
-  FLUXBASE_ADMIN_EMAIL=admin@yourdomain.com
-  FLUXBASE_ADMIN_PASSWORD=secure-password
-  ```
+- [ ] **Admin Credentials**: Admin user created through the web UI setup flow
 
 - [ ] **client keys**: Rotated and stored in secrets manager
 - [ ] **Row Level Security (RLS)**: Enabled and policies configured
@@ -65,8 +60,7 @@ Complete this checklist before deploying Fluxbase to production to ensure securi
 - [ ] **Rate Limiting**: Enabled
 
   ```bash
-  FLUXBASE_RATE_LIMIT_ENABLED=true
-  FLUXBASE_RATE_LIMIT_REQUESTS_PER_SECOND=100
+  FLUXBASE_SECURITY_ENABLE_GLOBAL_RATE_LIMIT=true
   ```
 
   > **⚠️ SECURITY WARNING: Multi-Instance Deployments**
@@ -75,12 +69,11 @@ Complete this checklist before deploying Fluxbase to production to ensure securi
   > tracks rate limits independently. In multi-instance/scaled deployments, attackers
   > can bypass rate limits by hitting different instances.
   >
-  > **For production with multiple instances, you MUST enable Redis:**
+  > **For production with multiple instances, you MUST configure Redis:**
   >
   > ```bash
-  > FLUXBASE_REDIS_ENABLED=true
-  > FLUXBASE_REDIS_HOST=your-redis-host
-  > FLUXBASE_REDIS_PORT=6379
+  > FLUXBASE_SCALING_BACKEND=redis
+  > FLUXBASE_SCALING_REDIS_URL=redis://your-redis-host:6379
   > ```
   >
   > Without Redis, rate limiting is ineffective against distributed attacks.
@@ -133,7 +126,7 @@ Complete this checklist before deploying Fluxbase to production to ensure securi
 - [ ] **Log Level**: Set to `info` or `warn`
 
   ```bash
-  FLUXBASE_LOG_LEVEL=info
+  FLUXBASE_LOGGING_CONSOLE_LEVEL=info
   ```
 
 - [ ] **Base URL**: Correct production URL
@@ -309,7 +302,7 @@ Complete this checklist before deploying Fluxbase to production to ensure securi
 
   ```bash
   FLUXBASE_TRACING_ENABLED=true
-  FLUXBASE_TRACING_EXPORTER=jaeger
+  FLUXBASE_TRACING_ENDPOINT=jaeger
   ```
 
 - [ ] **Sampling Rate**: Configured (10-100%)
@@ -386,7 +379,7 @@ Complete this checklist before deploying Fluxbase to production to ensure securi
 - [ ] **Caching**: Redis configured
 
   ```bash
-  FLUXBASE_REDIS_ENABLED=true
+  FLUXBASE_SCALING_BACKEND=redis
   ```
 
 - [ ] **CDN**: Configured for static assets

@@ -57,61 +57,7 @@ Client                          Server
 
 CSRF protection is **enabled by default** for state-changing methods (POST, PUT, PATCH, DELETE).
 
-**Configuration via `fluxbase.yaml`:**
-
-```yaml
-security:
-  csrf:
-    enabled: true
-    token_length: 32
-    token_lookup: "header:X-CSRF-Token"
-    cookie_name: "csrf_token"
-    cookie_secure: true # Set to true in production
-    cookie_http_only: true
-    cookie_same_site: "Strict"
-    expiration: "24h"
-```
-
-**Configuration via Environment Variables:**
-
-```bash
-FLUXBASE_SECURITY_CSRF_ENABLED=true
-FLUXBASE_SECURITY_CSRF_TOKEN_LENGTH=32
-FLUXBASE_SECURITY_CSRF_COOKIE_NAME=csrf_token
-FLUXBASE_SECURITY_CSRF_COOKIE_SECURE=true
-FLUXBASE_SECURITY_CSRF_COOKIE_SAME_SITE=Strict
-```
-
-### Configuration Options
-
-| Option             | Default               | Description                                  |
-| ------------------ | --------------------- | -------------------------------------------- |
-| `enabled`          | `true`                | Enable/disable CSRF protection               |
-| `token_length`     | `32`                  | Length of CSRF token in bytes                |
-| `token_lookup`     | `header:X-CSRF-Token` | Where to find the token in requests          |
-| `cookie_name`      | `csrf_token`          | Name of the CSRF cookie                      |
-| `cookie_secure`    | `false`               | Mark cookie as HTTPS-only                    |
-| `cookie_http_only` | `true`                | Prevent JavaScript access to cookie          |
-| `cookie_same_site` | `Strict`              | SameSite attribute (`Strict`, `Lax`, `None`) |
-| `expiration`       | `24h`                 | How long tokens are valid                    |
-
-### SameSite Cookie Attributes
-
-- **Strict**: Cookie only sent for same-site requests (most secure)
-- **Lax**: Cookie sent for same-site requests and top-level navigation
-- **None**: Cookie sent for all requests (requires `Secure` flag)
-
-```yaml
-# Recommended for most applications
-cookie_same_site: "Strict"
-
-# For cross-site authentication flows
-cookie_same_site: "Lax"
-
-# For third-party integrations (requires HTTPS)
-cookie_same_site: "None"
-cookie_secure: true
-```
+CSRF protection uses built-in defaults. The double-submit cookie pattern, excluded paths, and token settings are preconfigured.
 
 ---
 
@@ -418,13 +364,7 @@ describe("CSRF Protection", () => {
    });
    ```
 
-2. Check cookie domain matches:
-
-   ```yaml
-   security:
-     csrf:
-       cookie_domain: ".yourdomain.com" # Allows subdomain.yourdomain.com
-   ```
+2. Check cookie domain matches your application domain.
 
 3. Verify token is included in header:
    ```typescript
@@ -451,11 +391,10 @@ await client.admin.getHealth();
 **Solution**: Configure CORS properly:
 
 ```yaml
-server:
-  cors:
-    allowed_origins:
-      - "https://yourdomain.com"
-    allow_credentials: true # Required for cookies
+cors:
+  allowed_origins:
+    - "https://yourdomain.com"
+  allow_credentials: true
 ```
 
 ```typescript
@@ -481,26 +420,6 @@ const client = createClient("https://api.yourdomain.com", "your-anon-key");
 
 ---
 
-## Disable CSRF (Not Recommended)
-
-For development or specific use cases, you can disable CSRF:
-
-```yaml
-# fluxbase.yaml
-security:
-  csrf:
-    enabled: false
-```
-
-⚠️ **Warning**: Only disable CSRF if:
-
-- You're in development
-- Using API key authentication exclusively
-- Using a different CSRF protection mechanism
-- Building a non-browser client (mobile app, CLI)
-
----
-
 ## Best Practices
 
 ### 1. Always Use HTTPS in Production
@@ -511,27 +430,15 @@ server:
     enabled: true
     cert_file: /path/to/cert.pem
     key_file: /path/to/key.pem
-
-security:
-  csrf:
-    cookie_secure: true # Requires HTTPS
 ```
 
 ### 2. Use Strict SameSite Cookies
 
-```yaml
-security:
-  csrf:
-    cookie_same_site: "Strict" # Most secure
-```
+SameSite cookies are set to `Strict` by default, providing the highest level of CSRF protection.
 
 ### 3. Set Reasonable Expiration
 
-```yaml
-security:
-  csrf:
-    expiration: "24h" # Balance security and UX
-```
+CSRF tokens have a built-in expiration. The SDK handles token refresh automatically.
 
 ### 4. Rotate Tokens After Sensitive Actions
 

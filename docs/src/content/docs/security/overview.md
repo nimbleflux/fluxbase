@@ -106,7 +106,6 @@ Fluxbase implements multiple layers of security to protect your data and applica
 - IP-based rate limiting
 - User-based rate limiting
 - API key-based rate limiting
-- Distributed rate limiting with Redis
 - Configurable limits per endpoint
 
 [Learn more about Rate Limiting →](/guides/rate-limiting/)
@@ -204,10 +203,6 @@ server:
 ```yaml
 auth:
   password_min_length: 12
-  password_require_uppercase: true
-  password_require_lowercase: true
-  password_require_number: true
-  password_require_special: true
 ```
 
 #### 4. Enable Row Level Security
@@ -225,15 +220,8 @@ CREATE POLICY user_isolation ON public.my_table
 #### 5. Implement Rate Limiting
 
 ```yaml
-rate_limiting:
-  enabled: true
-  per_minute: 60 # Global limit
-  per_hour: 1000
-
-  # Per-endpoint limits
-  endpoints:
-    - path: "/api/v1/auth/signin"
-      per_minute: 5 # Stricter limit for sensitive endpoints
+security:
+  enable_global_rate_limit: true
 ```
 
 #### 6. Use client keys Securely
@@ -311,17 +299,7 @@ ufw allow from 10.0.0.0/8 to any port 5432
 ufw enable
 ```
 
-#### 3. Enable Audit Logging
-
-```yaml
-# fluxbase.yaml
-logging:
-  level: info
-  audit_enabled: true
-  audit_log_file: /var/log/fluxbase/audit.log
-```
-
-#### 4. Implement Backup Strategy
+#### 3. Implement Backup Strategy
 
 ```bash
 # Daily PostgreSQL backups
@@ -331,22 +309,7 @@ logging:
 0 3 * * 0 tar -czf /backups/fluxbase-full-$(date +\%Y\%m\%d).tar.gz /var/lib/fluxbase
 ```
 
-#### 5. Monitor Security Events
-
-```yaml
-# Configure alerts for security events
-monitoring:
-  alerts:
-    - name: "Failed Login Attempts"
-      condition: "failed_logins > 10 in 5m"
-      action: "notify_admin"
-
-    - name: "Unusual API Activity"
-      condition: "requests_per_minute > 1000"
-      action: "rate_limit"
-```
-
-#### 6. Use Secrets Management
+#### 4. Use Secrets Management
 
 ```bash
 # Use Docker secrets
@@ -358,7 +321,7 @@ kubectl create secret generic fluxbase-secrets \
   --from-literal=database-url=postgres://...
 ```
 
-#### 7. Restrict Database Access
+#### 5. Restrict Database Access
 
 ```sql
 -- Create read-only user for reporting

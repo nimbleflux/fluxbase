@@ -80,7 +80,7 @@ Fluxbase exposes Prometheus-compatible metrics at `/metrics` endpoint.
 scrape_configs:
   - job_name: "fluxbase"
     static_configs:
-      - targets: ["localhost:8080"]
+      - targets: ["localhost:9090"]
     metrics_path: "/metrics"
 ```
 

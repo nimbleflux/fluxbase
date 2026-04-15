@@ -237,12 +237,12 @@ const { data: session } = await client.auth.getSession()
 ```tsx
 import {
   useSAMLProviders,
-  useInitiateSAMLLogin
+  useSignInWithSAML
 } from '@nimbleflux/fluxbase-sdk-react'
 
 function SSOLoginButtons() {
   const { data: providers, isLoading } = useSAMLProviders()
-  const initiateSAML = useInitiateSAMLLogin()
+  const signInWithSAML = useSignInWithSAML()
 
   if (isLoading) return <div>Loading...</div>
 
@@ -251,9 +251,9 @@ function SSOLoginButtons() {
       {providers?.map(provider => (
         <button
           key={provider.name}
-          onClick={() => initiateSAML.mutate({
+          onClick={() => signInWithSAML.mutate({
             provider: provider.name,
-            redirectTo: '/dashboard'
+            redirectUrl: '/dashboard'
           })}
         >
           Sign in with {provider.name}

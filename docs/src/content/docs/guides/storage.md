@@ -160,22 +160,17 @@ await client.storage.from("avatars").remove(["user1.png"]);
 
 ## Bucket Operations
 
-| Method           | Purpose            | Parameters                                                      |
-| ---------------- | ------------------ | --------------------------------------------------------------- |
-| `createBucket()` | Create new bucket  | `name`, `options` (public, file_size_limit, allowed_mime_types) |
-| `listBuckets()`  | List all buckets   | None                                                            |
-| `getBucket()`    | Get bucket details | `name`                                                          |
-| `deleteBucket()` | Delete bucket      | `name`                                                          |
+| Method           | Purpose            | Parameters |
+| ---------------- | ------------------ | ---------- |
+| `createBucket()` | Create new bucket  | `name`     |
+| `listBuckets()`  | List all buckets   | None       |
+| `getBucket()`    | Get bucket details | `name`     |
+| `deleteBucket()` | Delete bucket      | `name`     |
 
 **Example:**
 
 ```typescript
-// Create bucket
-await client.storage.createBucket("avatars", {
-  public: false,
-  file_size_limit: 5242880,
-  allowed_mime_types: ["image/png", "image/jpeg"],
-});
+await client.storage.createBucket("avatars");
 
 // List/get/delete
 const { data: buckets } = await client.storage.listBuckets();
@@ -344,11 +339,11 @@ interface UploadProgress {
 
 ```typescript
 // Public bucket (no auth required)
-await client.storage.createBucket("public-images", { public: true });
+await client.storage.createBucket("public-images");
 const url = client.storage.from("public-images").getPublicUrl("logo.svg");
 
 // Private bucket (requires auth or signed URL)
-await client.storage.createBucket("private-docs", { public: false });
+await client.storage.createBucket("private-docs");
 ```
 
 ## Signed URLs (S3 Only)
@@ -356,21 +351,15 @@ await client.storage.createBucket("private-docs", { public: false });
 ```typescript
 const { data } = await client.storage
   .from("private-docs")
-  .createSignedUrl("document.pdf", 3600); // 1 hour expiry
+  .createSignedUrl("document.pdf", { expiresIn: 3600 }); // 1 hour expiry
 ```
 
 ## Metadata
 
 ```typescript
-// Upload with metadata
 await client.storage.from("avatars").upload("profile.png", file, {
   metadata: { user_id: "123", description: "Profile picture" },
 });
-
-// Get file info
-const { data } = await client.storage
-  .from("avatars")
-  .getFileInfo("profile.png");
 ```
 
 ## S3 Provider Setup

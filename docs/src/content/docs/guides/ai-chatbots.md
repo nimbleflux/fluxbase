@@ -380,34 +380,20 @@ Current user ID: {{user_id}}
 For more control over how knowledge bases are accessed, use the admin API:
 
 ```typescript
-// Tiered access - retrieve from KBs in priority order
-await client.admin.ai.linkKnowledgeBaseToChatbot("chatbot-id", {
+// Link a knowledge base with custom settings
+await client.admin.ai.linkKnowledgeBase("chatbot-id", {
   knowledge_base_id: "priority-kb",
-  access_level: "tiered",
-  priority: 1, // Lower number = higher priority
   max_chunks: 5,
-  context_weight: 1.0, // Higher weight = prioritize this KB's chunks
 });
 
-// Filtered access - retrieve chunks matching specific criteria
-await client.admin.ai.linkKnowledgeBaseToChatbot("chatbot-id", {
+// Link another knowledge base
+await client.admin.ai.linkKnowledgeBase("chatbot-id", {
   knowledge_base_id: "technical-docs",
-  access_level: "filtered",
-  filter_expression: {
-    category: "api",
-    level: "advanced",
-  },
 });
 
-// Intent-based routing - route queries to specific KBs
-await client.admin.ai.linkKnowledgeBaseToChatbot("chatbot-id", {
-  knowledge_base_id: "sales-kb",
-  intent_keywords: ["pricing", "sales", "quote"],
-});
-
-await client.admin.ai.linkKnowledgeBaseToChatbot("chatbot-id", {
+// Link a support knowledge base
+await client.admin.ai.linkKnowledgeBase("chatbot-id", {
   knowledge_base_id: "support-kb",
-  intent_keywords: ["help", "troubleshooting", "error"],
 });
 ```
 

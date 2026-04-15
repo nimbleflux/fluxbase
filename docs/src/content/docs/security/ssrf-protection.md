@@ -87,13 +87,7 @@ url: "https://api.example.com/webhook"
 # fluxbase.yaml
 webhook:
   # ⚠️ WARNING: Only disable in development/testing
-  allow_private_ips: false  # Default: false (SSRF protection enabled)
-```
-
-**Environment Variable:**
-
-```bash
-export FLUXBASE_WEBHOOK_ALLOW_PRIVATE_IPS=false
+  debug: false  # Default: false (SSRF protection enabled)
 ```
 
 ### Development/Testing
@@ -103,10 +97,10 @@ For local development with internal services:
 ```yaml
 # Development config (NOT for production)
 webhook:
-  allow_private_ips: true  # ⚠️ Only for local development!
+  debug: true  # ⚠️ Only for local development!
 ```
 
-**Never enable `allow_private_ips: true` in production.**
+**Never enable `debug: true` in production.**
 
 ## How Protection Works
 
@@ -361,21 +355,7 @@ function isAllowedWebhookURL(url: string): boolean {
 
 ### 4. Monitor Webhook Failures
 
-```yaml
-logging:
-  audit_enabled: true
-  audit_events:
-    - "webhook.ssrf_blocked"
-    - "webhook.delivery_failed"
-```
-
-### 5. Rate Limit Webhook Creation
-
-```yaml
-ratelimit:
-  webhook_create_per_minute: 10
-  webhook_create_per_hour: 50
-```
+Monitor webhook delivery failures through Fluxbase's built-in logging.
 
 ## Cloud Provider Considerations
 
@@ -434,7 +414,7 @@ ratelimit:
 
 ### Webhook Works Locally but Fails in Production
 
-**Cause:** Localhost only works with `allow_private_ips: true`
+**Cause:** Localhost only works with `debug: true`
 
 **Solution:** Use external webhook testing service:
 
@@ -448,7 +428,7 @@ const webhook = await client.webhook.create({
 
 ## Security Checklist
 
-- [ ] SSRF protection enabled (`allow_private_ips: false`)
+- [ ] SSRF protection enabled (`webhook.debug: false`)
 - [ ] Webhooks use HTTPS only
 - [ ] Custom headers validated
 - [ ] Webhook creation rate limited

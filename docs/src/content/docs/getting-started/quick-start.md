@@ -75,7 +75,7 @@ curl http://localhost:8080/health
 ```
 
 ```json
-{"status": "healthy", "database": "connected"}
+{"status":"ok","timestamp":"2026-04-15T12:00:00Z"}
 ```
 
 ## Explore the Admin Dashboard
@@ -106,7 +106,7 @@ Now that Fluxbase is running, here's what to do next:
 ### Build Your First API
 
 1. **Create a table** in the Tables Browser
-2. **Generate a client key** in Settings > Client Keys
+2. **Copy your anon key** — after setup, go to Settings > Client Keys to find or create one
 3. **Query your data** using the SDK or REST API
 
 For a complete walkthrough, see the [First API Tutorial](/guides/tutorials/first-api/).
@@ -129,11 +129,20 @@ pnpm add @nimbleflux/fluxbase-sdk
 ```typescript
 import { createClient } from '@nimbleflux/fluxbase-sdk'
 
-const fluxbase = createClient('http://localhost:8080', 'your-client-key')
+// Use the anon key from Settings > Client Keys (a JWT with anon role)
+const fluxbase = createClient('http://localhost:8080', 'your-anon-key')
 
 // Query data
 const { data, error } = await fluxbase.from('users').select('*')
 ```
+
+:::note[Authentication Types]
+Fluxbase uses different authentication types for different purposes:
+
+- **Anon Key (JWT)**: For SDK initialization. This is a JWT token with `{"role":"anon"}`. Use this as the second parameter to `createClient()`.
+- **Client Key (`fbk_...`)**: For authenticating specific users or services. Pass via `X-Client-Key` header.
+- **User JWT**: Obtained after user signs in via `auth.signIn()`. The SDK automatically uses this for authenticated requests.
+:::
 
 ### Set Up Authentication
 

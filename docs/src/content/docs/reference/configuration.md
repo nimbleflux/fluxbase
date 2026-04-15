@@ -66,7 +66,7 @@ auth:
   signup_enabled: true
   magic_link_enabled: true
   totp_issuer: Fluxbase # 2FA issuer name shown in authenticator apps
-  allow_user_client_keys: true # Allow users to create their own API client keys
+  allow_user_client_keys: false # Allow users to create their own API client keys
 
   # OAuth/OIDC Providers
   oauth_providers:
@@ -196,7 +196,7 @@ cors:
 # Security Configuration
 security:
   setup_token: "" # Required for admin dashboard (openssl rand -base64 32)
-  enable_global_rate_limit: false
+  enable_global_rate_limit: true
   admin_setup_rate_limit: 5
   admin_setup_rate_window: 15m
   auth_login_rate_limit: 10
@@ -247,7 +247,7 @@ mcp:
 
 # Branching (Database Branching)
 branching:
-  enabled: false
+  enabled: true
   max_branches_per_user: 5
   max_total_branches: 50
   default_data_clone_mode: schema_only # schema_only or full_clone
@@ -304,8 +304,8 @@ Environment variables take precedence over configuration file values.
 | `FLUXBASE_DATABASE_PASSWORD`             | Runtime user password                        | `postgres`         | `your-password`   |
 | `FLUXBASE_DATABASE_DATABASE`             | Database name                                | `fluxbase`         | `fluxbase`        |
 | `FLUXBASE_DATABASE_SSL_MODE`             | SSL mode                                     | `disable`          | `require`         |
-| `FLUXBASE_DATABASE_MAX_CONNECTIONS`      | Max connection pool size                     | `25`               | `100`             |
-| `FLUXBASE_DATABASE_MIN_CONNECTIONS`      | Min connections in pool                      | `5`                | `5`               |
+| `FLUXBASE_DATABASE_MAX_CONNECTIONS`      | Max connection pool size                     | `50`               | `100`             |
+| `FLUXBASE_DATABASE_MIN_CONNECTIONS`      | Min connections in pool                      | `10`               | `5`               |
 | `FLUXBASE_DATABASE_MAX_CONN_LIFETIME`    | Connection max lifetime                      | `1h`               | `1h`              |
 | `FLUXBASE_DATABASE_MAX_CONN_IDLE_TIME`   | Connection max idle time                     | `30m`              | `30m`             |
 | `FLUXBASE_DATABASE_HEALTH_CHECK_PERIOD`  | Health check interval                        | `1m`               | `1m`              |
@@ -338,7 +338,7 @@ Environment variables take precedence over configuration file values.
 | `FLUXBASE_AUTH_SIGNUP_ENABLED`         | Enable user registration               | `true`          | `true`, `false`           |
 | `FLUXBASE_AUTH_MAGIC_LINK_ENABLED`     | Enable magic link auth                 | `true`          | `true`, `false`           |
 | `FLUXBASE_AUTH_TOTP_ISSUER`            | 2FA TOTP issuer name                   | `Fluxbase`      | `MyApp`                   |
-| `FLUXBASE_AUTH_ALLOW_USER_CLIENT_KEYS` | Allow users to create API client keys  | `true`          | `true`, `false`           |
+| `FLUXBASE_AUTH_ALLOW_USER_CLIENT_KEYS` | Allow users to create API client keys  | `false`          | `true`, `false`           |
 
 :::note[JWT Secret Entropy Requirements]
 The JWT secret is validated for entropy (minimum 4.5 bits per character). This means:
@@ -352,16 +352,7 @@ If you see an error like `jwt_secret has insufficient entropy`, regenerate your 
 
 **OAuth/OIDC Providers:**
 
-OAuth providers are configured via YAML config file. For simple setups, use environment variables for well-known providers:
-
-| Variable                             | Description                  | Default | Example                   |
-| ------------------------------------ | ---------------------------- | ------- | ------------------------- |
-| `FLUXBASE_AUTH_GOOGLE_CLIENT_ID`     | Google OAuth client ID       | `""`    | Your Google client ID     |
-| `FLUXBASE_AUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client secret   | `""`    | Your Google client secret |
-| `FLUXBASE_AUTH_APPLE_CLIENT_ID`      | Apple Sign In client ID      | `""`    | Your Apple Services ID    |
-| `FLUXBASE_AUTH_MICROSOFT_CLIENT_ID`  | Microsoft/Azure AD client ID | `""`    | Your Microsoft client ID  |
-
-For custom OIDC providers, use the YAML config file with `oauth_providers` array (see YAML example above).
+OAuth providers are configured exclusively via the `auth.oauth_providers` YAML array (see YAML example above). There are no individual environment variables for OAuth providers.
 
 **SAML SSO Providers (Enterprise):**
 
@@ -487,13 +478,29 @@ The migrations API requires both IP allowlist and service key authentication. Th
 
 ### Multi-Tenancy
 
-| Variable                                    | Description                  | Default | Example                |
-| ------------------------------------------- | ---------------------------- | ------- | ---------------------- |
-| `FLUXBASE_TENANTS_DEFAULT_NAME`             | Default tenant display name  | `""`    | `Default Tenant`       |
-| `FLUXBASE_TENANTS_DEFAULT_ANON_KEY`         | Pre-configured anonymous key | `""`    | `fb_anon_...`          |
-| `FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY`      | Pre-configured service key   | `""`    | `fb_srv_...`           |
-| `FLUXBASE_TENANTS_DEFAULT_ANON_KEY_FILE`    | Path to anonymous key file   | `""`    | `/secrets/anon-key`    |
-| `FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY_FILE` | Path to service key file     | `""`    | `/secrets/service-key` |
+**Default Tenant:**
+
+| Variable                                    | Description                  | Default     | Example                |
+| ------------------------------------------- | ---------------------------- | ----------- | ---------------------- |
+| `FLUXBASE_TENANTS_DEFAULT_NAME`             | Default tenant display name  | `"default"` | `Default Tenant`       |
+| `FLUXBASE_TENANTS_DEFAULT_ANON_KEY`         | Pre-configured anonymous key | `""`        | `fb_anon_...`          |
+| `FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY`      | Pre-configured service key   | `""`        | `fb_srv_...`           |
+| `FLUXBASE_TENANTS_DEFAULT_ANON_KEY_FILE`    | Path to anonymous key file   | `""`        | `/secrets/anon-key`    |
+| `FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY_FILE` | Path to service key file     | `""`        | `/secrets/service-key` |
+
+**Tenant Infrastructure:**
+
+| Variable                                              | Description                            | Default   | Example         |
+| ----------------------------------------------------- | -------------------------------------- | --------- | --------------- |
+| `FLUXBASE_TENANTS_ENABLED`                            | Enable multi-tenancy                   | `true`    | `true`, `false` |
+| `FLUXBASE_TENANTS_DATABASE_PREFIX`                    | Database name prefix for tenant DBs    | `tenant_` | `tenant_`       |
+| `FLUXBASE_TENANTS_MAX_TENANTS`                        | Maximum number of tenants              | `100`     | `200`           |
+| `FLUXBASE_TENANTS_POOL_MAX_TOTAL_CONNECTIONS`         | Max total connections across pools     | `100`     | `200`           |
+| `FLUXBASE_TENANTS_POOL_EVICTION_AGE`                  | Evict idle pools after this duration   | `30m`     | `1h`            |
+| `FLUXBASE_TENANTS_MIGRATIONS_CHECK_INTERVAL`          | How often to check for pending migrations | `5m`   | `10m`           |
+| `FLUXBASE_TENANTS_MIGRATIONS_ON_CREATE`               | Run migrations on tenant creation      | `true`    | `true`, `false` |
+| `FLUXBASE_TENANTS_MIGRATIONS_ON_ACCESS`               | Run migrations on first access         | `true`    | `true`, `false` |
+| `FLUXBASE_TENANTS_MIGRATIONS_BACKGROUND`              | Run migrations in background           | `true`    | `true`, `false` |
 
 :::tip[Loading Keys from Files]
 In production environments, use `anon_key_file` and `service_key_file` to load keys from mounted secrets (Kubernetes Secrets, Docker Secrets, etc.) instead of hardcoding them in configuration.
@@ -569,7 +576,7 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 | `FLUXBASE_LOGGING_LOKI_USERNAME`      | Loki username      | `""`             | `loki`                     |
 | `FLUXBASE_LOGGING_LOKI_PASSWORD`      | Loki password      | `""`             | `${LOKI_PASSWORD}`         |
 | `FLUXBASE_LOGGING_LOKI_TENANT_ID`     | Loki tenant ID     | `""`             | `fluxbase-tenant`          |
-| `FLUXBASE_LOGGING_LOKI_STATIC_LABELS` | Static label names | `["app", "env"]` | `["app", "env", "region"]` |
+| `FLUXBASE_LOGGING_LOKI_LABELS` | Static label names | `["app", "env"]` | `["app", "env", "region"]` |
 
 :::tip[Choosing a Logging Backend]
 
@@ -591,12 +598,26 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 | `FLUXBASE_CORS_ALLOW_CREDENTIALS` | Allow credentials                 | `true`                                         | `true`, `false`                         |
 | `FLUXBASE_CORS_MAX_AGE`           | Preflight cache time (seconds)    | `300`                                          | `86400`                                 |
 
+### Email
+
+| Variable                          | Description        | Default          | Example                        |
+| --------------------------------- | ------------------ | ---------------- | ------------------------------ |
+| `FLUXBASE_EMAIL_ENABLED`          | Enable email service | `true`         | `true`, `false`                |
+| `FLUXBASE_EMAIL_PROVIDER`         | Email provider     | `smtp`           | `smtp`, `sendgrid`, `mailgun`, `ses` |
+| `FLUXBASE_EMAIL_FROM_ADDRESS`     | Default from address | `noreply@localhost` | `noreply@example.com`    |
+| `FLUXBASE_EMAIL_FROM_NAME`        | Default from name  | `Fluxbase`       | `My App`                       |
+| `FLUXBASE_EMAIL_SMTP_HOST`        | SMTP server host   | `""`             | `smtp.gmail.com`               |
+| `FLUXBASE_EMAIL_SMTP_PORT`        | SMTP server port   | `587`            | `465`                          |
+| `FLUXBASE_EMAIL_SMTP_USERNAME`    | SMTP username      | `""`             | `user@gmail.com`               |
+| `FLUXBASE_EMAIL_SMTP_PASSWORD`    | SMTP password      | `""`             | `${SMTP_PASSWORD}`             |
+| `FLUXBASE_EMAIL_SMTP_TLS`         | Use TLS            | `true`           | `true`, `false`                |
+
 ### Security
 
 | Variable                                     | Description                                                    | Default | Example                   |
 | -------------------------------------------- | -------------------------------------------------------------- | ------- | ------------------------- |
 | `FLUXBASE_SECURITY_SETUP_TOKEN`              | Token for admin dashboard setup (required to enable dashboard) | `""`    | `openssl rand -base64 32` |
-| `FLUXBASE_SECURITY_ENABLE_GLOBAL_RATE_LIMIT` | Enable global API rate limiting                                | `false` | `true`, `false`           |
+| `FLUXBASE_SECURITY_ENABLE_GLOBAL_RATE_LIMIT` | Enable global API rate limiting                                | `true`  | `true`, `false`           |
 | `FLUXBASE_SECURITY_ADMIN_SETUP_RATE_LIMIT`   | Max attempts for admin setup                                   | `5`     | `5`                       |
 | `FLUXBASE_SECURITY_ADMIN_SETUP_RATE_WINDOW`  | Time window for admin setup rate limit                         | `15m`   | `15m`                     |
 | `FLUXBASE_SECURITY_AUTH_LOGIN_RATE_LIMIT`    | Max attempts for auth login                                    | `10`    | `10`                      |
@@ -628,6 +649,23 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 - **reCAPTCHA v3** - Google's invisible CAPTCHA with risk scoring
 - **Turnstile** - Cloudflare's privacy-preserving alternative
 - **Cap** - Self-hosted proof-of-work CAPTCHA
+
+**Auth Rate Limits:**
+
+| Variable                                            | Description                      | Default | Example |
+| --------------------------------------------------- | -------------------------------- | ------- | ------- |
+| `FLUXBASE_SECURITY_AUTH_SIGNUP_RATE_LIMIT`          | Signup attempts per window       | `5`     | `10`    |
+| `FLUXBASE_SECURITY_AUTH_SIGNUP_RATE_WINDOW`         | Signup rate limit window         | `15m`   | `30m`   |
+| `FLUXBASE_SECURITY_AUTH_LOGIN_RATE_LIMIT`           | Login attempts per window        | `10`    | `20`    |
+| `FLUXBASE_SECURITY_AUTH_LOGIN_RATE_WINDOW`          | Login rate limit window          | `1m`    | `5m`    |
+| `FLUXBASE_SECURITY_AUTH_PASSWORD_RESET_RATE_LIMIT`  | Password reset attempts per window | `5`   | `10`    |
+| `FLUXBASE_SECURITY_AUTH_PASSWORD_RESET_RATE_WINDOW` | Password reset rate limit window | `15m`   | `30m`   |
+| `FLUXBASE_SECURITY_AUTH_2FA_RATE_LIMIT`             | 2FA attempts per window          | `5`     | `10`    |
+| `FLUXBASE_SECURITY_AUTH_2FA_RATE_WINDOW`            | 2FA rate limit window            | `5m`    | `10m`   |
+| `FLUXBASE_SECURITY_AUTH_REFRESH_RATE_LIMIT`         | Token refresh attempts per window | `30`   | `60`    |
+| `FLUXBASE_SECURITY_AUTH_REFRESH_RATE_WINDOW`        | Refresh rate limit window        | `5m`    | `10m`   |
+| `FLUXBASE_SECURITY_AUTH_MAGIC_LINK_RATE_LIMIT`      | Magic link attempts per window   | `5`     | `10`    |
+| `FLUXBASE_SECURITY_AUTH_MAGIC_LINK_RATE_WINDOW`     | Magic link rate limit window     | `15m`   | `30m`   |
 
 ### AI Chatbots
 
@@ -884,7 +922,7 @@ MCP OAuth is enabled by default with Dynamic Client Registration (DCR). This all
 
 | Variable                                     | Description                      | Default       | Example                     |
 | -------------------------------------------- | -------------------------------- | ------------- | --------------------------- |
-| `FLUXBASE_BRANCHING_ENABLED`                 | Enable database branching        | `false`       | `true`, `false`             |
+| `FLUXBASE_BRANCHING_ENABLED`                 | Enable database branching        | `true`        | `true`, `false`             |
 | `FLUXBASE_BRANCHING_MAX_BRANCHES_PER_USER`   | Max branches per user            | `5`           | `10`                        |
 | `FLUXBASE_BRANCHING_MAX_TOTAL_BRANCHES`      | Max total branches               | `50`          | `100`                       |
 | `FLUXBASE_BRANCHING_DEFAULT_DATA_CLONE_MODE` | Default data clone mode          | `schema_only` | `schema_only`, `full_clone` |
@@ -892,15 +930,11 @@ MCP OAuth is enabled by default with Dynamic Client Registration (DCR). This all
 | `FLUXBASE_BRANCHING_DATABASE_PREFIX`         | Prefix for branch database names | `branch_`     | `branch_`                   |
 | `FLUXBASE_BRANCHING_SEEDS_PATH`              | Path to seed data files          | `./seeds`     | `./seeds`                   |
 
-### TLS/HTTPS (Upcoming)
+### TLS/HTTPS
 
-| Variable               | Description          | Default | Example              |
-| ---------------------- | -------------------- | ------- | -------------------- |
-| `TLS_ENABLED`          | Enable TLS           | `false` | `true`, `false`      |
-| `TLS_CERT_FILE`        | Path to certificate  | -       | `/etc/certs/tls.crt` |
-| `TLS_KEY_FILE`         | Path to private key  | -       | `/etc/certs/tls.key` |
-| `TLS_AUTO_CERT`        | Enable Let's Encrypt | `false` | `true`, `false`      |
-| `TLS_AUTO_CERT_DOMAIN` | Domain for auto cert | -       | `example.com`        |
+:::caution[Not Yet Implemented]
+TLS termination is not yet implemented in Fluxbase. Use a reverse proxy (nginx, Caddy, Traefik) or a cloud load balancer for TLS/HTTPS in production.
+:::
 
 ## Production Configuration
 

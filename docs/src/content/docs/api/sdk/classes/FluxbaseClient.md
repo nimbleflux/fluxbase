@@ -103,6 +103,38 @@ This updates both the HTTP client and realtime connection with the new token.
 
 `void`
 
+### setBeforeRequestCallback()
+
+> **setBeforeRequestCallback**(`callback`): `void`
+
+Set a callback that runs before each request, allowing you to modify headers
+
+The callback runs after static headers are merged, so it can override them.
+
+#### Parameters
+
+| Parameter  | Type                                                       | Description                                              |
+| ---------- | ---------------------------------------------------------- | -------------------------------------------------------- |
+| `callback` | (`headers`: `Record`\<`string`, `string`\>) => `void` \| `null` | A function receiving the headers object, or null to clear |
+
+#### Returns
+
+`void`
+
+#### Example
+
+```typescript
+// Add a custom header to every request
+client.setBeforeRequestCallback((headers) => {
+  headers["X-Custom-Header"] = "my-value";
+});
+
+// Remove the callback
+client.setBeforeRequestCallback(null);
+```
+
+---
+
 ## Branching
 
 ### branching

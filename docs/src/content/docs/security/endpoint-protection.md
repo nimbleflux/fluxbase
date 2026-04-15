@@ -58,7 +58,7 @@ Fluxbase supports four authentication methods, each suited for different use cas
 **Token types**:
 | Type | Lifetime | Purpose |
 |------|----------|---------|
-| Access Token | 1 hour | API access |
+| Access Token | 15 minutes | API access |
 | Refresh Token | 7 days | Obtain new access tokens |
 
 **Claims extracted**:

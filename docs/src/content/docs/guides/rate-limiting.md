@@ -696,15 +696,15 @@ Fluxbase automatically uses `X-Forwarded-For` header when available.
 Rate limiting adds minimal overhead:
 
 - **In-memory storage**: < 1ms per request
-- **Redis storage**: < 5ms per request (network latency)
 - **Memory usage**: ~100 bytes per unique key
+
+**Note**: Fluxbase rate limiting is **in-memory only and per-instance**. There is no Redis or external storage backend. In multi-instance deployments, each instance maintains independent rate limit counters. Use a reverse proxy or API gateway for centralized rate limiting (see [Multi-Instance Deployments](#multi-instance-deployments)).
 
 **Benchmarks** (single instance):
 
 | Storage | Requests/sec | Avg Latency | p99 Latency |
 | ------- | ------------ | ----------- | ----------- |
 | Memory  | 10,000       | 0.5ms       | 2ms         |
-| Redis   | 8,000        | 2ms         | 10ms        |
 
 ---
 

@@ -129,17 +129,6 @@ const url = storage.from('images').getTransformUrl('photo.jpg', {
 })
 // Result: http://localhost:8080/api/v1/storage/images/photo.jpg?w=300&h=200&fmt=webp&q=85&fit=cover
 
-// Download transformed image
-const { data, error } = await storage
-  .from('images')
-  .download('photo.jpg', {
-    transform: {
-      width: 300,
-      height: 200,
-      format: 'webp'
-    }
-  })
-
 // Create signed URL with transforms
 const { data: signedUrl } = await storage
   .from('images')
@@ -157,7 +146,7 @@ const { data: signedUrl } = await storage
 ```tsx
 import {
   useStorageTransformUrl,
-  useStorageSignedUrl
+  useStorageSignedUrlWithOptions
 } from '@nimbleflux/fluxbase-sdk-react'
 
 function ImageGallery() {
@@ -174,7 +163,7 @@ function ImageGallery() {
 
 function ProtectedImage() {
   // Get signed URL with transforms
-  const { data: signedUrl, isLoading } = useStorageSignedUrl(
+  const { data: signedUrl, isLoading } = useStorageSignedUrlWithOptions(
     'private-images',
     'photo.jpg',
     {
@@ -199,7 +188,8 @@ Generate multiple sizes for responsive images:
 
 ```tsx
 function ResponsiveImage({ path }: { path: string }) {
-  const storage = useStorage()
+  const client = createClient('http://localhost:8080', 'your-anon-key')
+  const storage = client.storage
 
   const srcSet = [
     { width: 320, descriptor: '320w' },

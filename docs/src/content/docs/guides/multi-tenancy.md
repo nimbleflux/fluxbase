@@ -46,14 +46,16 @@ A tenant represents an organization or customer in your SaaS application:
 
 ```typescript
 interface Tenant {
-  id: string; // UUID
-  slug: string; // URL-friendly identifier
-  name: string; // Display name
-  is_default: boolean; // Whether this is the default tenant
-  metadata: Record<string, any> | null; // Custom metadata
+  id: string;
+  slug: string;
+  name: string;
+  is_default: boolean;
+  status: string;
+  db_name?: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
-  updated_at: string;
-  deleted_at: string | null; // Soft delete
+  updated_at?: string;
+  deleted_at: string | null;
 }
 ```
 
@@ -91,7 +93,7 @@ Use the Admin SDK to create tenant-scoped keys:
 
 ```typescript
 // Create a tenant service key
-const key = await client.admin.createServiceKey({
+const key = await client.admin.serviceKeys.create({
   tenant_id: "tenant-uuid",
   name: "Production API Key",
   key_type: "tenant_service",
@@ -106,9 +108,8 @@ Service keys support graceful rotation:
 
 ```typescript
 // Deprecate old key with grace period
-await client.admin.deprecateServiceKey("old-key-id", {
+await client.admin.serviceKeys.deprecate("old-key-id", {
   grace_period_hours: 24,
-  replacement_key_id: "new-key-id",
 });
 
 // During grace period, both keys work
@@ -347,10 +348,10 @@ import { createClient } from "@nimbleflux/fluxbase-sdk";
 const client = createClient("http://localhost:8080", "global-service-key");
 
 // List all tenants
-const tenants = await client.admin.listTenants();
+const tenants = await client.tenant.list();
 
 // Create a new tenant
-const tenant = await client.admin.createTenant({
+const tenant = await client.tenant.create({
   slug: "acme-corp",
   name: "Acme Corporation",
   metadata: {
@@ -360,25 +361,23 @@ const tenant = await client.admin.createTenant({
 });
 
 // Update tenant
-await client.admin.updateTenant(tenant.id, {
+await client.tenant.update(tenant.id, {
   name: "Acme Corp Inc.",
   metadata: { plan: "pro" },
 });
 
 // Soft delete tenant
-await client.admin.deleteTenant(tenant.id);
+await client.tenant.delete(tenant.id);
 ```
 
 ### Service Key Management
 
 ```typescript
 // List keys for a tenant
-const keys = await client.admin.listServiceKeys({
-  tenant_id: "tenant-uuid",
-});
+const keys = await client.admin.serviceKeys.list();
 
 // Create tenant service key
-const key = await client.admin.createServiceKey({
+const key = await client.admin.serviceKeys.create({
   tenant_id: "tenant-uuid",
   name: "Backend Service",
   key_type: "tenant_service",
@@ -386,12 +385,10 @@ const key = await client.admin.createServiceKey({
 });
 
 // Revoke a key
-await client.admin.revokeServiceKey(key.id, "Security incident");
+await client.admin.serviceKeys.revoke(key.id, {reason: "Security incident"});
 
 // Rotate keys
-const newKey = await client.admin.rotateServiceKey(oldKeyId, {
-  grace_period_hours: 48,
-});
+const newKey = await client.admin.serviceKeys.rotate(oldKeyId);
 ```
 
 ### Tenant Context in Queries
@@ -425,8 +422,8 @@ The `tenant_service` role is used for tenant-scoped operations:
 CREATE POLICY tenant_isolation ON public.posts
 FOR ALL
 TO tenant_service
-USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 ```
 
 ### Adding Tenant Columns
@@ -449,20 +446,20 @@ ALTER TABLE your_table ENABLE ROW LEVEL SECURITY;
 -- Tenant service can only see their tenant's data
 CREATE POLICY tenant_select ON your_table
 FOR SELECT TO tenant_service
-USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
 CREATE POLICY tenant_insert ON your_table
 FOR INSERT TO tenant_service
-WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
 CREATE POLICY tenant_update ON your_table
 FOR UPDATE TO tenant_service
-USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
 CREATE POLICY tenant_delete ON your_table
 FOR DELETE TO tenant_service
-USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 ```
 
 ## Database Schema
@@ -475,6 +472,8 @@ CREATE TABLE platform.tenants (
     slug TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     is_default BOOLEAN DEFAULT false,
+    status TEXT DEFAULT 'active' NOT NULL,
+    db_name TEXT,
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
@@ -488,6 +487,7 @@ CREATE TABLE platform.tenants (
 CREATE TABLE platform.service_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
+    description TEXT,
     key_type TEXT NOT NULL, -- anon, publishable, tenant_service, global_service
     tenant_id UUID REFERENCES platform.tenants(id) ON DELETE CASCADE,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -495,14 +495,20 @@ CREATE TABLE platform.service_keys (
     key_prefix TEXT NOT NULL,
     scopes TEXT[] DEFAULT '{}',
     allowed_namespaces TEXT[],
+    rate_limit_per_minute INTEGER DEFAULT 60,
     is_active BOOLEAN DEFAULT true,
     is_config_managed BOOLEAN DEFAULT false,
     revoked_at TIMESTAMPTZ,
+    revoked_by UUID,
+    revocation_reason TEXT,
     deprecated_at TIMESTAMPTZ,
     grace_period_ends_at TIMESTAMPTZ,
     replaced_by UUID REFERENCES platform.service_keys(id),
     created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    created_by UUID,
+    last_used_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ
 );
 ```
 
@@ -515,6 +521,19 @@ CREATE TABLE platform.tenant_admin_assignments (
     tenant_id UUID NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,
     assigned_by UUID REFERENCES platform.users(id) ON DELETE SET NULL,
     assigned_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(user_id, tenant_id)
+);
+```
+
+### platform.tenant_memberships
+
+```sql
+CREATE TABLE platform.tenant_memberships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES platform.users(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'tenant_member',
+    created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE(user_id, tenant_id)
 );
 ```
@@ -543,69 +562,23 @@ CREATE TABLE platform.tenant_admin_assignments (
 
 ## Instance-Level Settings & Tenant Settings
 
-Fluxbase supports a hierarchical settings system where instance-level settings can be overridden at the tenant level.
-
-### Settings Hierarchy
-
-Values are resolved in this order (highest priority last):
-
-1. **Hardcoded defaults** - Built-in default values
-2. **Config file** - `fluxbase.yaml` configuration
-3. **Instance settings (database)** - Stored in `platform.instance_settings`
-4. **Tenant settings (database)** - Stored in `platform.tenant_settings`
-
-### Overridable Settings
-
-Instance admins can control which settings tenants are allowed to override using the `overridable_settings` column in `platform.instance_settings`.
-
-```sql
--- View instance settings with override flags
-SELECT * FROM platform.instance_settings;
-
--- Configure which settings can be overridden
-UPDATE platform.instance_settings
-SET overridable_settings = ARRAY['storage.max_upload_size', 'email.from_address'];
-```
-
-When a setting is marked as overridable, tenants can customize their value:
-
-```sql
--- Set tenant-specific setting
-INSERT INTO platform.tenant_settings (tenant_id, path, value)
-VALUES ('tenant-uuid', 'storage.max_upload_size', 104857600);
-
--- Get effective setting (resolves tenant override)
-SELECT * FROM platform.get_effective_setting('tenant-uuid', 'storage.max_upload_size');
-```
-
-Settings not in `overridable_settings` cannot be changed at the tenant level.
+Instance-level settings are stored in `platform.instance_settings`. Tenant-specific overrides can be managed through the Admin API and dashboard.
 
 ### Managing Settings via API
 
-```typescript
-// Get tenant settings
-const settings = await client.admin.getTenantSettings("tenant-uuid");
+Use the tenant settings API endpoints to manage per-tenant configuration:
 
-// Update tenant setting
-await client.admin.updateTenantSettings("tenant-uuid", {
-  settings: {
-    "storage.max_upload_size": 104857600,
-    "email.from_address": "noreply@tenant.com",
-  },
-});
+```bash
+# Get tenant settings
+curl -H "Authorization: Bearer <service-key>" \
+  http://localhost:8080/api/v1/admin/tenants/<tenant-id>/settings
 
-// Reset to instance default
-await client.admin.resetTenantSetting("tenant-uuid", "storage.max_upload_size");
+# Update tenant setting
+curl -X PATCH -H "Authorization: Bearer <service-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"settings": {"storage.max_upload_size": 104857600}}' \
+  http://localhost:8080/api/v1/admin/tenants/<tenant-id>/settings
 ```
-
-### Settings in Admin UI
-
-Navigate to **Tenants > [Tenant Name] > Settings** tab to manage tenant-specific settings:
-
-- View all settings with source badges (Instance/Tenant)
-- Edit overridable settings
-- Reset settings to instance defaults
-- Lock non-overridable settings
 
 ## Tenant Declarative Schemas
 
@@ -669,11 +642,11 @@ ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 -- Create RLS policies
 CREATE POLICY users_tenant_isolation ON users
 FOR ALL TO tenant_service
-USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
 CREATE POLICY posts_tenant_isolation ON posts
 FOR ALL TO tenant_service
-USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 ```
 
 ### How It Works
@@ -719,7 +692,7 @@ When database branching is enabled alongside multi-tenancy, branches can be scop
 
 - Each branch record stores a `tenant_id` linking it to a tenant in `platform.tenants`
 - Tenant-scoped branches get their own PostgreSQL database with a naming pattern of `{prefix}{tenant_slug}_{branch_slug}`
-- The `max_branches_per_tenant` config option (default: 10) controls how many branches each tenant can create, independent of the global `max_total_branches` limit
+- The `max_branches_per_tenant` config option (default: 0, unlimited) controls how many branches each tenant can create, independent of the global `max_total_branches` limit
 - Deleting a tenant automatically cleans up all associated branches and their databases
 - Connection pool routing priority is: branch pool > tenant pool > main pool, meaning a branch request always routes to the branch database when present
 
@@ -733,7 +706,7 @@ If queries return empty results:
 
 1. Verify the key is active: `SELECT is_active FROM platform.service_keys WHERE id = 'key-id'`
 2. Check tenant_id column exists on the table
-3. Verify RLS policy exists and uses `app.tenant_id` setting
+3. Verify RLS policy exists and uses `app.current_tenant_id` setting
 
 ### Cross-Tenant Data Access
 

@@ -60,7 +60,6 @@ Before using knowledge bases, ensure:
 ### Installing pgvector
 
 ```sql
--- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
@@ -110,25 +109,6 @@ FLUXBASE_AI_EMBEDDING_MODEL=nomic-embed-text
    - **Chunk Overlap**: Overlap between chunks (default: 50)
 4. Click **Create**
 
-### Using the SDK
-
-```typescript
-import { createClient } from "@nimbleflux/fluxbase-sdk";
-
-const client = createClient("http://localhost:8080", "service-role-key");
-
-// Create a knowledge base
-const { data: kb, error } = await client.admin.ai.createKnowledgeBase({
-  name: "product-docs",
-  description: "Product documentation and FAQs",
-  chunk_size: 512,
-  chunk_overlap: 50,
-  chunk_strategy: "recursive", // or 'sentence', 'paragraph', 'fixed'
-});
-
-console.log("Created KB:", kb.id);
-```
-
 ### Using the REST API
 
 ```bash
@@ -147,71 +127,23 @@ curl -X POST http://localhost:8080/api/v1/admin/ai/knowledge-bases \
 
 Once you have a knowledge base, add documents to it. Documents are automatically chunked and embedded.
 
-### Using the SDK
+### Using the REST API
 
-```typescript
-// Add a document
-const { data, error } = await client.admin.ai.addDocument("kb-id", {
-  title: "Getting Started Guide",
-  content: `
-    # Getting Started with Our Product
-
-    Welcome to our product! This guide will help you get started.
-
-    ## Installation
-
-    1. Download the installer from our website
-    2. Run the installer
-    3. Follow the on-screen instructions
-
-    ## First Steps
-
-    After installation, launch the application and create an account...
-  `,
-  metadata: {
-    category: "guides",
-    version: "1.0",
-  },
-});
-
-console.log("Document ID:", data.document_id);
-console.log("Status:", data.status); // 'processing'
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/ai/knowledge-bases/KB_ID/documents \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Getting Started Guide",
+    "content": "# Getting Started\n\nWelcome to our product! This guide will help you get started.",
+    "metadata": {
+      "category": "guides",
+      "version": "1.0"
+    }
+  }'
 ```
 
-### Bulk Document Upload
-
-```typescript
-const documents = [
-  { title: "FAQ", content: faqContent },
-  { title: "API Reference", content: apiContent },
-  { title: "Troubleshooting", content: troubleshootingContent },
-];
-
-for (const doc of documents) {
-  const { data, error } = await client.admin.ai.addDocument("kb-id", doc);
-  if (error) {
-    console.error(`Failed to add ${doc.title}:`, error);
-  } else {
-    console.log(`Added ${doc.title}: ${data.document_id}`);
-  }
-}
-```
-
-### Document Status
-
-Documents are processed asynchronously. Check status:
-
-```typescript
-const { data: docs } = await client.admin.ai.listDocuments("kb-id");
-
-for (const doc of docs) {
-  console.log(`${doc.title}: ${doc.status}`);
-  // Status: 'pending' | 'processing' | 'indexed' | 'failed'
-  if (doc.status === "failed") {
-    console.error(`Error: ${doc.error_message}`);
-  }
-}
-```
+Documents are processed asynchronously. Status values: `pending`, `processing`, `indexed`, `failed`.
 
 ## Uploading Document Files
 
@@ -243,44 +175,6 @@ In addition to pasting text content, you can upload document files directly. Flu
 5. Optionally provide a custom title
 6. Click **Upload Document**
 
-### Upload via SDK
-
-```typescript
-// Browser environment
-const fileInput = document.getElementById("file") as HTMLInputElement;
-const file = fileInput.files?.[0];
-
-if (file) {
-  const { data, error } = await client.admin.ai.uploadDocument(
-    "kb-id",
-    file,
-    "Custom Document Title", // Optional
-  );
-
-  if (data) {
-    console.log("Document ID:", data.document_id);
-    console.log("Filename:", data.filename);
-    console.log("Extracted text length:", data.extracted_length);
-    console.log("MIME type:", data.mime_type);
-  }
-}
-```
-
-```typescript
-// Node.js environment
-import { readFile } from "fs/promises";
-import { Blob } from "buffer";
-
-const content = await readFile("document.pdf");
-const blob = new Blob([content], { type: "application/pdf" });
-
-const { data, error } = await client.admin.ai.uploadDocument(
-  "kb-id",
-  blob,
-  "My PDF Document",
-);
-```
-
 ### Upload via REST API
 
 ```bash
@@ -289,19 +183,6 @@ curl -X POST http://localhost:8080/api/v1/admin/ai/knowledge-bases/KB_ID/documen
   -F "file=@document.pdf" \
   -F "title=My Document"
 ```
-
-### Text Extraction Details
-
-Fluxbase uses specialized libraries to extract text from each file type:
-
-- **PDF**: Extracts text content from all pages, preserving paragraph structure
-- **DOCX**: Extracts text from Word documents including paragraphs and tables
-- **XLSX**: Extracts content from all sheets, preserving cell structure with tab delimiters
-- **HTML**: Strips tags and scripts, extracts visible text content
-- **CSV**: Preserves tabular structure with tab delimiters
-- **RTF**: Removes RTF formatting codes, extracts plain text
-- **EPUB**: Extracts text from all chapters in reading order
-- **Plain text/Markdown/JSON**: Used as-is without transformation
 
 ### Best Practices for File Uploads
 
@@ -326,24 +207,6 @@ Choose the chunking strategy that best fits your content:
 - **Smaller chunks (256-512)**: More precise retrieval, better for specific facts
 - **Larger chunks (1024-2048)**: More context per chunk, better for complex topics
 - **Overlap (10-20% of chunk size)**: Prevents losing context at chunk boundaries
-
-```typescript
-// For FAQ-style content (shorter, precise chunks)
-await client.admin.ai.createKnowledgeBase({
-  name: "faq",
-  chunk_size: 256,
-  chunk_overlap: 25,
-  chunk_strategy: "sentence",
-});
-
-// For technical documentation (larger chunks with context)
-await client.admin.ai.createKnowledgeBase({
-  name: "tech-docs",
-  chunk_size: 1024,
-  chunk_overlap: 100,
-  chunk_strategy: "recursive",
-});
-```
 
 ## Linking Knowledge Bases to Chatbots
 
@@ -381,14 +244,20 @@ Current user ID: {{user_id}}
 | `@fluxbase:rag-max-chunks`           | Maximum chunks to retrieve                           | `5`     |
 | `@fluxbase:rag-similarity-threshold` | Minimum similarity score (0.0-1.0)                   | `0.7`   |
 
-### Method 2: Using the Admin API
+### Method 2: Using the SDK
+
+The SDK provides methods to manage knowledge base links on chatbots:
 
 ```typescript
+import { createClient } from "@nimbleflux/fluxbase-sdk";
+
+const client = createClient("http://localhost:8080", "service-role-key");
+
 // Link a knowledge base to a chatbot
 const { data, error } = await client.admin.ai.linkKnowledgeBase("chatbot-id", {
   knowledge_base_id: "kb-id",
-  priority: 1, // Higher priority = searched first
-  max_chunks: 5, // Max chunks from this KB
+  priority: 1,
+  max_chunks: 5,
   similarity_threshold: 0.7,
 });
 
@@ -441,38 +310,25 @@ Use this context to answer the user's question. If the context doesn't contain r
 
 ## Testing Knowledge Base Search
 
-Test your knowledge base setup before deploying:
-
-### Using the SDK
-
-```typescript
-// Search a knowledge base directly
-const { data, error } = await client.admin.ai.searchKnowledgeBase(
-  "kb-id",
-  "how do I reset my password",
-  {
-    max_chunks: 5,
-    threshold: 0.5, // Lower threshold for testing
-  },
-);
-
-if (data) {
-  console.log(`Found ${data.count} results:`);
-  for (const result of data.results) {
-    console.log(
-      `\n--- ${result.document_title} (${result.similarity.toFixed(3)}) ---`,
-    );
-    console.log(result.content);
-  }
-}
-```
-
 ### Using the Admin Dashboard
 
 1. Navigate to **Knowledge Bases**
 2. Click on your knowledge base
 3. Use the **Search** tab to test queries
 4. Review similarity scores and retrieved content
+
+### Using the REST API
+
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/ai/knowledge-bases/KB_ID/search \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "how do I reset my password",
+    "max_chunks": 5,
+    "threshold": 0.5
+  }'
+```
 
 ## Best Practices
 
@@ -505,53 +361,38 @@ if (data) {
 
 ### Step 1: Create Knowledge Base
 
-```typescript
-const { data: kb } = await client.admin.ai.createKnowledgeBase({
-  name: "support-kb",
-  description: "Customer support documentation",
-  chunk_size: 512,
-  chunk_overlap: 50,
-});
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/ai/knowledge-bases \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "support-kb",
+    "description": "Customer support documentation",
+    "chunk_size": 512,
+    "chunk_overlap": 50
+  }'
 ```
 
 ### Step 2: Add Support Documentation
 
-```typescript
-// Add FAQ
-await client.admin.ai.addDocument(kb.id, {
-  title: "Frequently Asked Questions",
-  content: `
-    ## Account Questions
+```bash
+KB_ID="<knowledge-base-id-from-step-1>"
 
-    ### How do I create an account?
-    Visit signup.example.com and fill out the registration form...
+curl -X POST "http://localhost:8080/api/v1/admin/ai/knowledge-bases/${KB_ID}/documents" \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Frequently Asked Questions",
+    "content": "## Account Questions\n\n### How do I create an account?\nVisit signup.example.com and fill out the registration form...\n\n### How do I reset my password?\nClick \"Forgot Password\" on the login page..."
+  }'
 
-    ### How do I reset my password?
-    Click "Forgot Password" on the login page...
-
-    ## Billing Questions
-
-    ### How do I update my payment method?
-    Go to Settings > Billing > Payment Methods...
-  `,
-});
-
-// Add troubleshooting guide
-await client.admin.ai.addDocument(kb.id, {
-  title: "Troubleshooting Guide",
-  content: `
-    ## Common Issues
-
-    ### Error: Connection Failed
-    1. Check your internet connection
-    2. Verify the service is running
-    3. Clear browser cache...
-
-    ### Error: Authentication Failed
-    1. Verify your credentials
-    2. Check if your account is active...
-  `,
-});
+curl -X POST "http://localhost:8080/api/v1/admin/ai/knowledge-bases/${KB_ID}/documents" \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Troubleshooting Guide",
+    "content": "## Common Issues\n\n### Error: Connection Failed\n1. Check your internet connection\n2. Verify the service is running\n3. Clear browser cache..."
+  }'
 ```
 
 ### Step 3: Create RAG-Enabled Chatbot
@@ -601,93 +442,64 @@ Current user ID: {{user_id}}
 ```bash
 # Sync chatbot
 curl -X POST http://localhost:8080/api/v1/admin/ai/chatbots/sync \
-  -H "Authorization: Bearer SERVICE_ROLE_KEY"
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY"
 ```
 
-```typescript
-// Test the chatbot
-const chat = client.ai.createChat({
-  token: userJWT,
-  onContent: (delta) => process.stdout.write(delta),
-});
+Or using the SDK:
 
-await chat.connect();
-const convId = await chat.startChat("support-bot");
-chat.sendMessage(convId, "How do I reset my password?");
+```typescript
+import { createClient } from "@nimbleflux/fluxbase-sdk";
+
+const client = createClient("http://localhost:8080", "service-role-key");
+
+await client.admin.ai.sync();
 ```
 
 ## Monitoring & Analytics
 
 ### View Knowledge Base Stats
 
-```typescript
-const { data: kb } = await client.admin.ai.getKnowledgeBase("kb-id");
+Use the REST API to check knowledge base statistics:
 
-console.log("Documents:", kb.document_count);
-console.log("Total Chunks:", kb.total_chunks);
-console.log("Embedding Model:", kb.embedding_model);
+```bash
+curl http://localhost:8080/api/v1/admin/ai/knowledge-bases/KB_ID \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY"
 ```
 
 ### Track Document Processing
 
-```typescript
-const { data: docs } = await client.admin.ai.listDocuments("kb-id");
-
-const stats = {
-  total: docs.length,
-  indexed: docs.filter((d) => d.status === "indexed").length,
-  processing: docs.filter((d) => d.status === "processing").length,
-  failed: docs.filter((d) => d.status === "failed").length,
-};
-
-console.log("Document Stats:", stats);
+```bash
+curl http://localhost:8080/api/v1/admin/ai/knowledge-bases/KB_ID/documents \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY"
 ```
 
 ## Troubleshooting
 
 ### Documents Not Being Embedded
 
-**Check embedding provider configuration:**
-
 - Verify `FLUXBASE_AI_EMBEDDING_ENABLED=true`
-- Confirm client keys are valid
+- Confirm API keys are valid
 - Check provider endpoint is accessible
-
-**Check document status:**
-
-```typescript
-const { data: doc } = await client.admin.ai.getDocument("kb-id", "doc-id");
-console.log("Status:", doc.status);
-console.log("Error:", doc.error_message);
-```
 
 ### Poor Search Results
 
-**Lower similarity threshold for testing:**
-
-```typescript
-const { data } = await client.admin.ai.searchKnowledgeBase("kb-id", query, {
-  threshold: 0.3, // Lower threshold to see more results
-});
-```
-
-**Check chunk content:**
-
+- Lower the similarity threshold for testing (e.g., 0.3)
 - Ensure documents are properly chunked
 - Verify content is relevant to expected queries
 - Try different chunking strategies
 
 ### RAG Context Not Appearing
 
-**Verify chatbot has linked knowledge bases:**
+Verify the chatbot has linked knowledge bases:
 
 ```typescript
+const client = createClient("http://localhost:8080", "service-role-key");
 const { data: links } =
   await client.admin.ai.listChatbotKnowledgeBases("chatbot-id");
 console.log("Linked KBs:", links);
 ```
 
-**Check annotation syntax:**
+Check annotation syntax:
 
 ```typescript
 // Correct
@@ -695,330 +507,6 @@ console.log("Linked KBs:", links);
 
 // Wrong (no asterisk in multi-line comment)
 @fluxbase:knowledge-base my-kb-name
-```
-
-## Advanced Features
-
-### Knowledge Graph (Entities & Relationships)
-
-Fluxbase includes a built-in knowledge graph system that extracts entities and relationships from documents, enabling more intelligent context retrieval.
-
-#### Entity Extraction
-
-Entities are automatically extracted from documents when they are indexed. The system supports:
-
-- **Persons**: Names with titles (Dr. John Smith, Mr. Jane Doe) and capitalized multi-word names
-- **Organizations**: Company names with suffixes (Inc, Corp, LLC) and known tech companies
-- **Locations**: Cities, US states, and countries
-- **Products**: Common tech products and services
-
-#### Relationship Extraction
-
-The system infers relationships between entities based on text patterns:
-
-- `works_at`: "John Smith works at Google"
-- `founded_by`: "Steve Jobs founded Apple Inc"
-- `located_in`: "Google headquarters in California"
-
-#### Querying Entities
-
-```typescript
-// Search entities by name
-const { data: entities } = await client.admin.ai.searchEntities(
-  "kb-id",
-  "Google",
-);
-
-// Get relationships for an entity
-const { data: relationships } = await client.admin.ai.getEntityRelationships(
-  "kb-id",
-  "entity-id",
-);
-
-// Find related entities (graph traversal)
-const { data: related } = await client.admin.ai.findRelatedEntities(
-  "kb-id",
-  "entity-id",
-  {
-    max_depth: 2,
-    relationship_types: ["works_at", "located_in"],
-  },
-);
-```
-
-#### Entity Types
-
-| Type           | Description              | Examples                            |
-| -------------- | ------------------------ | ----------------------------------- |
-| `person`       | People                   | John Smith, Dr. Jane Doe            |
-| `organization` | Companies, organizations | Google, Apple Inc, Microsoft        |
-| `location`     | Places, cities, states   | New York, California, San Francisco |
-| `product`      | Products and services    | iPhone, AWS, Kubernetes             |
-| `concept`      | Abstract concepts        | Machine Learning, REST API          |
-| `event`        | Events                   | WWDC 2024, Product Launch           |
-| `other`        | Other entities           | Custom categories                   |
-
-### Document Transformation Pipelines
-
-Transform document content before chunking and embedding using SQL functions or Edge Functions (Deno).
-
-#### Pipeline Types
-
-| Type            | Description       | Use Case                                     |
-| --------------- | ----------------- | -------------------------------------------- |
-| `none`          | No transformation | Default behavior                             |
-| `sql`           | SQL function      | Data cleaning, PII redaction, custom parsing |
-| `edge_function` | Deno/TypeScript   | Complex transformations, external API calls  |
-| `webhook`       | HTTP webhook      | Integration with external services           |
-
-#### SQL Transformation
-
-Create a SQL function to transform documents:
-
-```sql
-CREATE OR REPLACE FUNCTION transform_document(doc_content TEXT, doc_metadata JSONB)
-RETURNS TABLE(transformed_content TEXT, metadata JSONB) AS $$
-BEGIN
-    -- Example: Remove PII, normalize text
-    RETURN QUERY SELECT
-        regexp_replace(doc_content, '\b\d{3}-\d{2}-\d{4}\b', 'XXX-XX-XXXX', 'g') AS transformed_content,
-        doc_metadata || '{"transformed": true}' AS metadata;
-END;
-$$ LANGUAGE plpgsql;
-```
-
-Configure the knowledge base to use it:
-
-```typescript
-const { data: kb } = await client.admin.ai.updateKnowledgeBase("kb-id", {
-  pipeline_type: "sql",
-  transformation_function: "transform_document",
-});
-```
-
-#### Edge Function Transformation
-
-Create a Deno edge function:
-
-```typescript
-// /edge-functions/transform-document.ts
-export default async function transformDocument(props: {
-  content: string;
-  metadata: Record<string, unknown>;
-}) {
-  const { content, metadata } = props;
-
-  // Example: Extract structured data, clean HTML, call external APIs
-  const cleaned = content
-    .replace(/<script[^>]*>.*?<\/script>/gs, "")
-    .replace(/<style[^>]*>.*?<\/style>/gs, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return {
-    transformed_content: cleaned,
-    metadata: {
-      ...metadata,
-      transformed: true,
-      cleaned_at: new Date().toISOString(),
-    },
-  };
-}
-```
-
-Configure:
-
-```typescript
-await client.admin.ai.updateKnowledgeBase("kb-id", {
-  pipeline_type: "edge_function",
-  pipeline_config: {
-    function_name: "transform-document",
-    timeout_ms: 5000,
-  },
-});
-```
-
-#### Chunking Override
-
-Functions can override the default chunking strategy:
-
-```typescript
-export default async function transformDocument(props: {
-  content: string;
-  metadata: Record<string, unknown>;
-}) {
-  return {
-    transformed_content: props.content,
-    chunking: {
-      chunk_size: 1024, // Override default
-      chunk_overlap: 100,
-    },
-  };
-}
-```
-
-### Quota Management
-
-Control resource usage with per-user and per-knowledge-base quotas.
-
-#### Quota Types
-
-| Resource  | Default User Quota | Default KB Quota |
-| --------- | ------------------ | ---------------- |
-| Documents | 10,000             | 1,000            |
-| Chunks    | 500,000            | 50,000           |
-| Storage   | 10 GB              | 1 GB             |
-
-#### Managing User Quotas
-
-```typescript
-// Set user quota
-await client.admin.ai.setUserQuota("user-id", {
-  max_documents: 5000,
-  max_chunks: 100000,
-  max_storage_bytes: 5 * 1024 * 1024 * 1024, // 5GB
-});
-
-// Get user quota usage
-const { data: usage } = await client.admin.ai.getUserQuotaUsage("user-id");
-
-console.log("Documents:", usage.documents_used, "/", usage.documents_limit);
-console.log("Can add document:", usage.can_add_document);
-```
-
-#### Quota Enforcement
-
-Quotas are enforced when adding documents:
-
-```typescript
-const { data, error } = await client.admin.ai.addDocument("kb-id", {
-  title: "My Document",
-  content: "...",
-});
-
-if (error && error.code === "quota_exceeded") {
-  console.error("Quota exceeded:", error.message);
-  // Error: quota exceeded for documents: used=1000, limit=1000
-}
-```
-
-### User-Owned Knowledge Bases
-
-Knowledge bases can be owned by users with visibility controls (private, shared, public).
-
-#### Visibility Levels
-
-| Level     | Access                  | Description                           |
-| --------- | ----------------------- | ------------------------------------- |
-| `private` | Owner only              | Default for user-created KBs          |
-| `shared`  | Explicit permissions    | Owner grants access to specific users |
-| `public`  | All authenticated users | Read-only access for everyone         |
-
-#### Creating User-Owned KBs
-
-```typescript
-// Create a private knowledge base (owned by current user)
-const { data: kb } = await client.ai.createKnowledgeBase({
-  name: "my-notes",
-  description: "My personal notes",
-  visibility: "private", // Owner only
-});
-
-// Create a shared knowledge base
-const { data: kb } = await client.ai.createKnowledgeBase({
-  name: "team-docs",
-  description: "Team documentation",
-  visibility: "shared", // Explicit permissions
-});
-
-// Create a public knowledge base
-const { data: kb } = await client.admin.ai.createKnowledgeBase({
-  name: "public-help",
-  description: "Public help docs",
-  visibility: "public", // All authenticated users
-});
-```
-
-#### Managing Permissions
-
-```typescript
-// Grant permission
-await client.admin.ai.grantKnowledgeBasePermission("kb-id", {
-  user_id: "other-user-id",
-  permission: "editor", // 'viewer' | 'editor' | 'owner'
-});
-
-// Revoke permission
-await client.admin.ai.revokeKnowledgeBasePermission("kb-id", "other-user-id");
-
-// List permissions
-const { data: permissions } =
-  await client.admin.ai.listKnowledgeBasePermissions("kb-id");
-```
-
-#### Permission Levels
-
-| Level    | Capabilities                               |
-| -------- | ------------------------------------------ |
-| `viewer` | Read-only access to KB and documents       |
-| `editor` | Read + write (add/update/delete documents) |
-| `owner`  | Full control + manage permissions          |
-
-### Enhanced Chatbot Integration
-
-Knowledge bases can be linked to chatbots with advanced options:
-
-#### Tiered Access
-
-Retrieve chunks from knowledge bases in priority order:
-
-```typescript
-// Link KB with priority
-await client.admin.ai.linkKnowledgeBaseToChatbot("chatbot-id", {
-  knowledge_base_id: "priority-kb-id",
-  access_level: "tiered",
-  priority: 1, // Lower number = higher priority
-  max_chunks: 5,
-});
-
-// Link secondary KB
-await client.admin.ai.linkKnowledgeBaseToChatbot("chatbot-id", {
-  knowledge_base_id: "secondary-kb-id",
-  access_level: "tiered",
-  priority: 10,
-  max_chunks: 3,
-});
-```
-
-#### Filtered Access
-
-Retrieve chunks that match a filter expression:
-
-```typescript
-await client.admin.ai.linkKnowledgeBaseToChatbot("chatbot-id", {
-  knowledge_base_id: "kb-id",
-  access_level: "filtered",
-  filter_expression: {
-    category: "technical", // Only retrieve technical docs
-    language: "en",
-  },
-});
-```
-
-#### Intent-Based Routing
-
-Route queries to specific knowledge bases based on keywords:
-
-```typescript
-await client.admin.ai.linkKnowledgeBaseToChatbot("chatbot-id", {
-  knowledge_base_id: "sales-kb-id",
-  intent_keywords: ["pricing", "sales", "quote", "purchase"],
-});
-
-await client.admin.ai.linkKnowledgeBaseToChatbot("chatbot-id", {
-  knowledge_base_id: "support-kb-id",
-  intent_keywords: ["help", "troubleshooting", "error", "bug"],
-});
 ```
 
 ## Entity Extraction
@@ -1072,157 +560,52 @@ Entities and relationships are extracted automatically when documents are proces
 4. Entities are stored in the knowledge graph
 5. Document-entity mentions are tracked
 
-### Knowledge Graph
-
-The knowledge graph enables:
-
-- **Graph Traversal**: Find related entities across multiple hops (up to depth 5)
-- **Entity Search**: Fuzzy search for entities by name
-- **Relationship Queries**: Get all relationships for an entity
-- **Document Links**: See which documents mention each entity
-
-### Use Case: Location Tracking Example
-
-For applications tracking user location data with JSON geodata:
-
-```json
-// Document content (location visits)
-[
-  {
-    "user_id": "123",
-    "location": { "lat": 40.7128, "lng": -74.006, "city": "New York" },
-    "timestamp": "2025-02-18T10:00:00Z"
-  },
-  {
-    "user_id": "456",
-    "location": { "lat": 51.5074, "lng": -0.1278, "city": "London" },
-    "timestamp": "2025-02-18T11:00:00Z"
-  }
-]
-```
-
-**What Gets Extracted:**
-
-- Entities: "New York" (location), "London" (location), "2025-02-18" (datetime)
-- Documents: JSON records stored as searchable chunks
-- Embeddings: Text representation enables semantic search
-
 ## Database Table Export
 
 ### Overview
 
 Export database tables as knowledge base documents with embedded schema information. This enables AI assistants to understand your database structure and answer schema-related questions.
 
-### Exporting Tables
-
-#### Using the Admin Dashboard
-
-1. Navigate to **Knowledge Bases** → Select a knowledge base
-2. Click the **Tables** tab
-3. Filter by schema (optional)
-4. Click **Export** on a table
-5. Configure export options:
-   - Include foreign keys
-   - Include indexes
-   - Include sample rows
-
-#### Using the API
+### Using the SDK
 
 ```typescript
-import { knowledgeBasesApi } from "@/lib/api";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-// List all exportable tables
-const tables = await knowledgeBasesApi.listTables("auth");
+const client = createClient("http://localhost:8080", "service-role-key");
 
-// Export a table
-const result = await knowledgeBasesApi.exportTable("kb-id", {
-  schema: "auth",
-  table: "users",
-  include_foreign_keys: true,
-  include_indexes: true,
-  include_sample_rows: false,
-});
-
-// Returns:
-// {
-//   document_id: "uuid",
-//   entity_id: "uuid",
-//   relationship_ids: ["uuid", "uuid"]
-// }
+const { data, error } = await client.admin.ai.getTableDetails("auth", "users");
+if (data) {
+  console.log("Columns:", data.columns.map((c) => c.name));
+  console.log("Primary key:", data.primary_key);
+}
 ```
 
-#### API Endpoints
+### Using the REST API
 
 ```bash
 # List exportable tables
-GET /api/v1/admin/ai/tables?schema=auth
+curl "http://localhost:8080/api/v1/admin/ai/tables?schema=auth" \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY"
 
 # Export table to knowledge base
-POST /api/v1/admin/ai/tables/{schema}/{table}/export
-Content-Type: application/json
-
-{
-  "knowledge_base_id": "kb-uuid",
-  "schema": "auth",
-  "table": "users",
-  "include_foreign_keys": true,
-  "include_indexes": true,
-  "include_sample_rows": false
-}
+curl -X POST http://localhost:8080/api/v1/admin/ai/tables/auth/users/export \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "knowledge_base_id": "kb-uuid",
+    "include_foreign_keys": true,
+    "include_indexes": true,
+    "include_sample_rows": false
+  }'
 ```
 
 ### What Gets Created
 
 For each exported table, three artifacts are created:
 
-1. **Document**: Markdown schema documentation
-
-   ```markdown
-   # Table: auth.users
-
-   ## Description
-
-   Database table in schema `auth`.
-
-   **Primary Key:** id
-
-   ## Columns
-
-   | Column | Type | Nullable | Default           |
-   | ------ | ---- | -------- | ----------------- |
-   | id     | uuid | NOT NULL | gen_random_uuid() |
-   | email  | text | NOT NULL |                   |
-
-   ...
-   ```
-
-2. **Entity**: Graph representation
-
-   ```json
-   {
-     "entity_type": "table",
-     "name": "auth.users",
-     "metadata": {
-       "schema": "auth",
-       "table": "users",
-       "column_count": 15,
-       "primary_key": ["id"]
-     }
-   }
-   ```
-
-3. **Relationships**: Foreign key connections
-   ```json
-   {
-     "relationship_type": "foreign_key",
-     "source_entity_id": "table-entity-id",
-     "target_entity_id": "referenced-table-entity-id",
-     "metadata": {
-       "column": "user_id",
-       "referenced_column": "id"
-     }
-   }
-   ```
+1. **Document**: Markdown schema documentation with columns, types, primary keys
+2. **Entity**: Graph representation of the table
+3. **Relationships**: Foreign key connections to other tables
 
 ### Use Cases
 
@@ -1256,24 +639,6 @@ Query entities in the knowledge graph with filtering:
 }
 ```
 
-**Response:**
-
-```json
-{
-  "knowledge_base_id": "kb-uuid",
-  "entities": [
-    {
-      "id": "entity-uuid",
-      "type": "location",
-      "name": "San Francisco",
-      "canonical_name": "San Francisco",
-      "relationships": [...]
-    }
-  ],
-  "count": 1
-}
-```
-
 #### 2. find_related_entities
 
 Find entities related to a starting entity using graph traversal:
@@ -1291,25 +656,6 @@ Find entities related to a starting entity using graph traversal:
 }
 ```
 
-**Response:**
-
-```json
-{
-  "knowledge_base_id": "kb-uuid",
-  "starting_entity_id": "entity-uuid",
-  "related_entities": [
-    {
-      "entity_id": "related-uuid",
-      "entity_type": "organization",
-      "name": "Google",
-      "depth": 1,
-      "relationship_type": "works_at"
-    }
-  ],
-  "count": 5
-}
-```
-
 #### 3. browse_knowledge_graph
 
 Browse the knowledge graph from a starting entity:
@@ -1322,33 +668,6 @@ Browse the knowledge graph from a starting entity:
     "start_entity": "entity-id-or-name",
     "direction": "both",
     "limit": 50
-  }
-}
-```
-
-**Response:**
-
-```json
-{
-  "knowledge_base_id": "kb-uuid",
-  "entity": {
-    "id": "entity-uuid",
-    "type": "person",
-    "name": "John Smith"
-  },
-  "neighborhood": {
-    "outgoing": [
-      {
-        "id": "rel-uuid",
-        "type": "works_at",
-        "target_entity": {
-          "id": "target-uuid",
-          "type": "organization",
-          "name": "Google"
-        }
-      }
-    ],
-    "incoming": [...]
   }
 }
 ```
@@ -1371,16 +690,18 @@ For multi-tenant applications, knowledge bases support user-scoped document isol
 
 ### Adding Documents with User Context
 
-```typescript
-// Add document for a specific user
-const { data, error } = await client.admin.ai.addDocument("kb-id", {
-  title: "User's Travel Notes",
-  content: "My favorite restaurants in Tokyo...",
-  metadata: {
-    user_id: "user-123", // User isolation key
-    category: "travel",
-  },
-});
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/ai/knowledge-bases/KB_ID/documents \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "User Travel Notes",
+    "content": "My favorite restaurants in Tokyo...",
+    "metadata": {
+      "user_id": "user-123",
+      "category": "travel"
+    }
+  }'
 ```
 
 ### Configuring Filtered Access
@@ -1388,23 +709,16 @@ const { data, error } = await client.admin.ai.addDocument("kb-id", {
 Link a knowledge base with filtered access to enable user-scoped retrieval:
 
 ```typescript
+import { createClient } from "@nimbleflux/fluxbase-sdk";
+
+const client = createClient("http://localhost:8080", "service-role-key");
+
 await client.admin.ai.linkKnowledgeBase("chatbot-id", {
   knowledge_base_id: "kb-id",
-  access_level: "filtered",
-  filter_expression: {
-    user_id: "$user_id", // Substituted at query time
-  },
   max_chunks: 5,
   similarity_threshold: 0.7,
 });
 ```
-
-**Special Variables:**
-
-| Variable | Description |
-|----------|-------------|
-| `$user_id` | Current authenticated user's ID |
-| `$conversation_id` | Current conversation ID |
 
 ### Automatic User Isolation
 
@@ -1419,70 +733,9 @@ When a user chats with a RAG-enabled chatbot:
 
 Delete all documents for a user (e.g., account deletion):
 
-```typescript
-const { data, error } = await client.admin.ai.deleteDocumentsByFilter("kb-id", {
-  metadata: {
-    user_id: "user-to-delete",
-  },
-});
-
-console.log(`Deleted ${data.deleted_count} documents`);
-```
-
-## Knowledge Graph UI
-
-### Dashboard Visualization
-
-The admin dashboard includes an interactive knowledge graph visualization:
-
-1. Navigate to **Knowledge Bases** → Select a knowledge base
-2. Click the **Knowledge Graph** tab
-3. View entities as interactive nodes with relationship edges
-
-### Features
-
-- **Entity Filtering**: Filter by entity type or search by name
-- **Interactive Navigation**: Click nodes to view entity details
-- **Mini-map**: Overview for large graphs
-- **Zoom & Pan**: Navigate complex graphs easily
-- **Linked Chatbots**: See which chatbots use this knowledge base
-
-### Graph Legend
-
-Entity types are color-coded:
-
-| Type | Color | Icon |
-|------|-------|------|
-| Person | Blue | User |
-| Organization | Purple | Building |
-| Location | Green | Map Pin |
-| Concept | Amber | Lightbulb |
-| Product | Red | Package |
-| Event | Pink | Calendar |
-| Table | Indigo | Table |
-| URL | Teal | Link |
-
-## Linked Chatbots
-
-### Viewing Linked Chatbots
-
-Each knowledge base detail page shows which chatbots are using it:
-
-1. Navigate to **Knowledge Bases** → Select a knowledge base
-2. Scroll to the **Linked Chatbots** section
-3. See chatbot name, priority, and max chunks settings
-
-### Reverse Lookup via API
-
-```typescript
-// List all chatbots using a knowledge base
-const { data, error } = await client.admin.ai.listChatbotsUsingKB("kb-id");
-
-if (data) {
-  for (const chatbot of data) {
-    console.log(`${chatbot.name} - Priority: ${chatbot.priority}`);
-  }
-}
+```bash
+curl -X DELETE "http://localhost:8080/api/v1/admin/ai/knowledge-bases/KB_ID/documents?user_id=user-to-delete" \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY"
 ```
 
 ## CLI Commands
@@ -1532,15 +785,11 @@ fluxbase kb add <kb-id> --content "..." --metadata '{"user_id":"user-123"}'
 # Get document details
 fluxbase kb documents get <kb-id> <doc-id>
 
-# Update document metadata
-fluxbase kb documents update <kb-id> <doc-id> --title "New Title" --tags "tag1,tag2"
-
 # Delete single document
 fluxbase kb documents delete <kb-id> <doc-id>
 
 # Bulk delete by filter
 fluxbase kb documents delete-by-filter <kb-id> --metadata-filter "user_id=user-123"
-fluxbase kb documents delete-by-filter <kb-id> --tags "archived,old"
 ```
 
 ### File Upload
@@ -1588,87 +837,6 @@ fluxbase kb entities <kb-id> --search "John"
 
 # List chatbots using KB
 fluxbase kb chatbots <kb-id>
-```
-
-### System Capabilities
-
-```bash
-# Show OCR status, supported file types
-fluxbase kb capabilities
-```
-
-## SDK Reference
-
-### Document Operations
-
-```typescript
-// Add document
-const { data, error } = await client.admin.ai.addDocument("kb-id", {
-  title: "Document Title",
-  content: "Document content...",
-  tags: ["tag1", "tag2"],
-  metadata: { category: "guides", user_id: "user-123" },
-});
-
-// Upload file
-const { data, error } = await client.admin.ai.uploadDocument("kb-id", file, "Optional Title");
-
-// Get document
-const { data, error } = await client.admin.ai.getDocument("kb-id", "doc-id");
-
-// Update document
-const { data, error } = await client.admin.ai.updateDocument("kb-id", "doc-id", {
-  title: "New Title",
-  tags: ["updated"],
-  metadata: { updated: true },
-});
-
-// Delete document
-const { data, error } = await client.admin.ai.deleteDocument("kb-id", "doc-id");
-
-// Bulk delete by filter
-const { data, error } = await client.admin.ai.deleteDocumentsByFilter("kb-id", {
-  tags: ["archived"],
-  metadata: { user_id: "user-123" },
-});
-```
-
-### Knowledge Graph Operations
-
-```typescript
-// List entities
-const { data, error } = await client.admin.ai.listEntities("kb-id", "person");
-
-// Search entities
-const { data, error } = await client.admin.ai.searchEntities(
-  "kb-id",
-  "John",
-  ["person", "organization"] // Optional type filter
-);
-
-// Get entity relationships
-const { data, error } = await client.admin.ai.getEntityRelationships("kb-id", "entity-id");
-
-// Get full knowledge graph
-const { data, error } = await client.admin.ai.getKnowledgeGraph("kb-id");
-// Returns: { entities, relationships, entity_count, relationship_count }
-
-// List chatbots using KB
-const { data, error } = await client.admin.ai.listChatbotsUsingKB("kb-id");
-```
-
-### System Capabilities
-
-```typescript
-const { data, error } = await client.admin.ai.getCapabilities();
-
-// Returns:
-// {
-//   ocr_enabled: boolean,
-//   ocr_available: boolean,
-//   ocr_languages: string[],
-//   supported_file_types: string[]
-// }
 ```
 
 ## Next Steps

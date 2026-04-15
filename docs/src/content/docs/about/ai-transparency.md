@@ -34,7 +34,7 @@ type Route struct {
 }
 ```
 
-Routes cannot exist without being in the registry. Auth is declared, not bolted on—middleware is auto-injected. Gap audits are trivial: `grep "Auth: AuthNone"` shows all public endpoints.
+All API routes are registered through the centralized registry. Auth is declared, not bolted on—middleware is auto-injected. Gap audits are trivial: the built-in `AuditRoutes()` method lists all public endpoints, or check both `Auth: AuthNone` and `Public: true` in the route definitions.
 
 ### Declarative Schema
 
@@ -79,6 +79,8 @@ graph TB
     style Admin fill:#fff3e0
     style Service fill:#fce4ec
 ```
+
+*(Selection of public endpoints shown — see [API Reference](/api/) for complete list)*
 
 All routes without explicit `Auth: AuthNone` require authentication. Public routes are the exception, not the rule.
 

@@ -123,21 +123,20 @@ func TestGraphQLMutation_Success(t *testing.T) {
 
 		var body map[string]interface{}
 		readRequestBody(t, r, &body)
-		assert.Contains(t, body["query"], "insert_users")
+		assert.Contains(t, body["query"], "insertUser")
 
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"data": map[string]interface{}{
-				"insert_users": map[string]interface{}{
-					"returning": []map[string]interface{}{
-						{"id": "1", "email": "new@example.com"},
-					},
+				"insertUser": map[string]interface{}{
+					"id":    "1",
+					"email": "new@example.com",
 				},
 			},
 		})
 	})
 	defer cleanup()
 
-	err := runGraphQLMutation(nil, []string{"mutation { insert_users(objects: [{email: \"new@example.com\"}]) { returning { id } } }"})
+	err := runGraphQLMutation(nil, []string{"mutation { insertUser(data: {email: \"new@example.com\"}) { id } }"})
 	require.NoError(t, err)
 
 	var result map[string]interface{}
@@ -154,7 +153,7 @@ func TestGraphQLMutation_APIError(t *testing.T) {
 	})
 	defer cleanup()
 
-	err := runGraphQLMutation(nil, []string{"mutation { insert_users(objects: []) { returning { id } } }"})
+	err := runGraphQLMutation(nil, []string{"mutation { insertUser(data: {}) { id } }"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unauthorized")
 }

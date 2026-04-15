@@ -30,14 +30,12 @@ docker pull ghcr.io/nimbleflux/fluxbase:latest
 Create `docker-compose.yml`:
 
 ```yaml
-version: "3.8"
-
 services:
   postgres:
     image: ghcr.io/nimbleflux/fluxbase-postgres:18
     container_name: fluxbase-postgres
     environment:
-      POSTGRES_USER: postgres
+      POSTGRES_USER: fluxbase
       POSTGRES_PASSWORD: your-secure-password
       POSTGRES_DB: fluxbase
     ports:
@@ -47,7 +45,7 @@ services:
     networks:
       - fluxbase-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U fluxbase"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -61,10 +59,12 @@ services:
     environment:
       FLUXBASE_DATABASE_HOST: postgres
       FLUXBASE_DATABASE_PORT: 5432
-      FLUXBASE_DATABASE_USER: postgres
+      FLUXBASE_DATABASE_USER: fluxbase
       FLUXBASE_DATABASE_PASSWORD: your-secure-password
       FLUXBASE_DATABASE_DATABASE: fluxbase
-      FLUXBASE_AUTH_JWT_SECRET: your-jwt-secret-change-in-production
+      FLUXBASE_AUTH_JWT_SECRET: "CHANGEME-at-least-32-random-characters"
+      FLUXBASE_ENCRYPTION_KEY: "CHANGEME-exactly-32-bytes-random"
+      FLUXBASE_SECURITY_SETUP_TOKEN: "CHANGEME-secure-random-token"
       FLUXBASE_BASE_URL: http://localhost:8080
       FLUXBASE_ENVIRONMENT: production
       FLUXBASE_DEBUG: "false"
@@ -108,21 +108,7 @@ curl http://localhost:8080/health
 
 ## Production Docker Compose
 
-For production, use the production compose file which includes Dragonfly for distributed state:
-
-```bash
-# Start production stack
-cd deploy
-docker compose -f docker-compose.production.yml up -d
-```
-
-**What's included:**
-
-- PostgreSQL with health checks
-- Dragonfly (Redis-compatible, 25x faster) for distributed rate limiting and pub/sub
-- MinIO for S3-compatible storage
-- Prometheus and Grafana for monitoring
-- Horizontal scaling support out of the box
+For production, use `docker-compose.yml` with production hardening. Below is a recommended configuration that includes Dragonfly for distributed state:
 
 **Key environment variables for scaling:**
 
@@ -135,13 +121,11 @@ FLUXBASE_SCALING_REDIS_URL=redis://:${DRAGONFLY_PASSWORD}@dragonfly:6379
 FLUXBASE_SCALING_ENABLE_SCHEDULER_LEADER_ELECTION=true
 ```
 
-### Custom Production Configuration
+### Production Configuration
 
-For custom production setups, use this enhanced configuration:
+Use this enhanced configuration with production hardening:
 
 ```yaml
-version: "3.8"
-
 services:
   postgres:
     image: ghcr.io/nimbleflux/fluxbase-postgres:18
@@ -213,15 +197,13 @@ services:
       FLUXBASE_DATABASE_MIN_CONNECTIONS: 5
 
       # Authentication
-      FLUXBASE_AUTH_JWT_SECRET: ${JWT_SECRET}
+      FLUXBASE_AUTH_JWT_SECRET: ${JWT_SECRET}  # Must be changed from default
       FLUXBASE_AUTH_JWT_EXPIRY: 15m
       FLUXBASE_AUTH_REFRESH_EXPIRY: 168h
 
-      # Dragonfly (Redis-compatible)
-      FLUXBASE_REDIS_ENABLED: "true"
-      FLUXBASE_REDIS_HOST: dragonfly
-      FLUXBASE_REDIS_PORT: 6379
-      FLUXBASE_REDIS_PASSWORD: ${DRAGONFLY_PASSWORD}
+      # Distributed state (Dragonfly/Redis)
+      FLUXBASE_SCALING_BACKEND: redis
+      FLUXBASE_SCALING_REDIS_URL: redis://:${DRAGONFLY_PASSWORD}@dragonfly:6379
 
       # Server
       FLUXBASE_BASE_URL: https://api.yourdomain.com
@@ -243,8 +225,7 @@ services:
       FLUXBASE_STORAGE_S3_SECRET_KEY: ${AWS_SECRET_KEY}
 
       # Rate Limiting
-      FLUXBASE_RATE_LIMIT_ENABLED: "true"
-      FLUXBASE_RATE_LIMIT_REQUESTS_PER_SECOND: 100
+      FLUXBASE_SECURITY_ENABLE_GLOBAL_RATE_LIMIT: "true"
 
       # Metrics
       FLUXBASE_METRICS_ENABLED: "true"
@@ -260,7 +241,7 @@ services:
       - fluxbase-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
       retries: 3

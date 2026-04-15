@@ -29,11 +29,6 @@ This guide provides comprehensive security best practices for deploying and main
 # fluxbase.yaml
 auth:
   password_min_length: 12
-  password_require_uppercase: true
-  password_require_lowercase: true
-  password_require_number: true
-  password_require_special: true
-  password_max_age_days: 90 # Force password rotation
 ```
 
 **Client-side validation:**
@@ -75,21 +70,16 @@ showQRCode(qr_code);
 await client.auth.enable2FA({ code: userEnteredCode });
 ```
 
-**Enforce 2FA for sensitive operations:**
+**Enforce 2FA for admin accounts:**
 
-```yaml
-auth:
-  require_2fa_for_admins: true
-  require_2fa_for_sensitive_ops: true
-```
+2FA can be required per-user through the admin UI. Bulk enforcement is handled at the application level by checking each user's 2FA status.
 
 ### 3. Use Short-Lived Tokens
 
 ```yaml
 auth:
-  access_token_expiry: "15m" # Short-lived access tokens
-  refresh_token_expiry: "7d" # Longer refresh tokens
-  refresh_token_rotation: true # Rotate on each use
+  jwt_expiry: "15m"
+  refresh_expiry: "7d"
 ```
 
 ### 4. Implement Token Blacklisting
@@ -105,16 +95,7 @@ if (isBlacklisted) {
 }
 ```
 
-### 5. Limit Failed Login Attempts
-
-```yaml
-auth:
-  max_login_attempts: 5
-  lockout_duration: "15m"
-  lockout_type: "ip_and_email" # Lock both IP and email
-```
-
-### 6. Implement Row Level Security
+### 5. Implement Row Level Security
 
 ```sql
 -- Enable RLS on ALL user tables
@@ -130,7 +111,7 @@ CREATE POLICY user_isolation ON public.user_data
 
 [Learn more about RLS →](/guides/row-level-security/)
 
-### 7. Service Role Security
+### 6. Service Role Security
 
 The `service_role`, `instance_admin`, and `tenant_admin` roles have elevated access to database operations. `service_role` and `instance_admin` bypass all RLS policies for full platform access, while `tenant_admin` is scoped to assigned tenants. This is necessary for administrative tasks but requires strict security measures.
 
@@ -143,19 +124,7 @@ The `service_role`, `instance_admin`, and `tenant_admin` roles have elevated acc
 
 **Safeguards for Service Role Usage:**
 
-```yaml
-# fluxbase.yaml - Environment-specific restrictions
-security:
-  # Restrict service role to specific IP addresses (if possible)
-  service_role_allowed_ips:
-    - "10.0.0.0/8" # Internal network only
-    - "172.16.0.0/12" # Private network
-
-  # Enable additional audit logging for service role operations
-  audit_service_role: true
-```
-
-**Best Practices:**
+Store credentials securely using environment variables or secrets management. Never expose service role tokens to client-side code.
 
 1. **Store credentials securely:**
 
@@ -213,15 +182,7 @@ security:
    CREATE INDEX idx_service_role_log_created_at ON audit.service_role_log(created_at DESC);
    ```
 
-4. **Implement rate limiting for service roles:**
-
-   ```yaml
-   # Even service roles should have rate limits to prevent abuse
-   rate_limiting:
-     service_role_per_minute: 1000 # Still limit, but higher than regular users
-   ```
-
-5. **Rotate service role secrets regularly:**
+4. **Rotate service role secrets regularly:**
 
    ```bash
    # Example: Rotate service role keys monthly
@@ -231,7 +192,7 @@ security:
    # 4. Revoke old key after 24 hours
    ```
 
-6. **Never expose service role tokens to clients:**
+5. **Never expose service role tokens to clients:**
 
    ```typescript
    // ❌ NEVER: Send service role token to client
@@ -562,24 +523,8 @@ iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 ```yaml
 # fluxbase.yaml
-rate_limiting:
-  enabled: true
-  per_minute: 60
-  per_hour: 1000
-
-  # Stricter limits for sensitive endpoints
-  endpoints:
-    - path: "/api/v1/auth/signin"
-      per_minute: 5
-      per_hour: 20
-
-    - path: "/api/v1/auth/signup"
-      per_minute: 3
-      per_hour: 10
-
-    - path: "/api/v1/auth/password/reset"
-      per_minute: 2
-      per_hour: 5
+security:
+  enable_global_rate_limit: true
 ```
 
 [Learn more about Rate Limiting →](/guides/rate-limiting/)
@@ -588,31 +533,24 @@ rate_limiting:
 
 ```yaml
 # fluxbase.yaml
-server:
-  cors:
-    # ✅ GOOD: Specific origins
-    allowed_origins:
-      - "https://yourdomain.com"
-      - "https://www.yourdomain.com"
+cors:
+  # ✅ GOOD: Specific origins
+  allowed_origins:
+    - "https://yourdomain.com"
+    - "https://www.yourdomain.com"
 
-    # ❌ BAD: Wildcard allows any origin
-    # allowed_origins: ["*"]
+  # ❌ BAD: Wildcard allows any origin
+  # allowed_origins: ["*"]
 
-    allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    allowed_headers: ["Content-Type", "Authorization", "X-CSRF-Token"]
-    allow_credentials: true # Required for cookies
-    max_age: 3600
+  allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allowed_headers: ["Content-Type", "Authorization", "X-CSRF-Token"]
+  allow_credentials: true
+  max_age: 3600
 ```
 
 ### 5. Implement Security Headers
 
-```yaml
-security:
-  headers:
-    content_security_policy: "default-src 'self'"
-    x_frame_options: "DENY"
-    strict_transport_security: "max-age=31536000; includeSubDomains"
-```
+Security headers are hardcoded in the Go middleware and applied automatically. Custom headers can be added via a reverse proxy (nginx, Caddy, etc.).
 
 [Learn more about Security Headers →](/security/security-headers/)
 
@@ -941,21 +879,7 @@ app.use((err: Error, req, res, next) => {
 
 ### 1. Enable Audit Logging
 
-```yaml
-# fluxbase.yaml
-logging:
-  level: "info"
-  audit_enabled: true
-  audit_log_file: "/var/log/fluxbase/audit.log"
-  audit_events:
-    - "auth.login"
-    - "auth.logout"
-    - "auth.signup"
-    - "auth.password_reset"
-    - "admin.user_create"
-    - "admin.user_delete"
-    - "admin.role_change"
-```
+Audit logging is built-in to Fluxbase and enabled by default. Auth events, admin actions, and data modifications are logged automatically.
 
 ### 2. Monitor Security Events
 
@@ -1005,19 +929,10 @@ logger.info("User logged in", {
 
 ```yaml
 # Enable Prometheus metrics
-monitoring:
-  enabled: true
-  port: 9090
-  path: "/metrics"
-
-# Monitor key metrics
-metrics:
-  - request_duration
-  - request_count
-  - error_rate
-  - active_connections
-  - database_query_time
-  - cache_hit_rate
+observability:
+  metrics:
+    enabled: true
+    port: 9090
 ```
 
 ---

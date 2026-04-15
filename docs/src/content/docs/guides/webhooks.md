@@ -34,7 +34,7 @@ const client = new FluxbaseClient({
 });
 
 // Create a webhook
-const webhook = await client.webhooks.create({
+const webhook = await client.management.webhooks.create({
   name: "User Events",
   description: "Notify external system of user changes",
   url: "https://example.com/webhooks/fluxbase",
@@ -53,13 +53,13 @@ const webhook = await client.webhooks.create({
 console.log("Webhook created:", webhook.id);
 
 // List all webhooks
-const webhooks = await client.webhooks.list();
+const webhooks = await client.management.webhooks.list();
 
 // Get webhook details
-const details = await client.webhooks.get(webhook.id);
+const details = await client.management.webhooks.get(webhook.id);
 
 // Update webhook
-await client.webhooks.update(webhook.id, {
+await client.management.webhooks.update(webhook.id, {
   enabled: false,
   events: [
     {
@@ -70,7 +70,7 @@ await client.webhooks.update(webhook.id, {
 });
 
 // Delete webhook
-await client.webhooks.delete(webhook.id);
+await client.management.webhooks.delete(webhook.id);
 ```
 ---
 
@@ -79,7 +79,7 @@ await client.webhooks.delete(webhook.id);
 #### Create a Webhook
 
 ```typescript
-const webhook = await client.webhooks.create({
+const webhook = await client.management.webhooks.create({
   name: "Order Notifications",
   description: "Send notifications when orders are created or updated",
   url: "https://api.myapp.com/webhooks/orders",
@@ -130,7 +130,7 @@ console.log("Webhook URL:", webhook.url);
 #### List Webhooks
 
 ```typescript
-const webhooks = await client.webhooks.list();
+const webhooks = await client.management.webhooks.list();
 
 webhooks.forEach((webhook) => {
   console.log(`${webhook.name}: ${webhook.enabled ? "Enabled" : "Disabled"}`);
@@ -142,7 +142,7 @@ webhooks.forEach((webhook) => {
 #### Get Webhook Details
 
 ```typescript
-const webhook = await client.webhooks.get("webhook-id");
+const webhook = await client.management.webhooks.get("webhook-id");
 
 console.log("Name:", webhook.name);
 console.log("Enabled:", webhook.enabled);
@@ -155,12 +155,12 @@ console.log("Created:", webhook.created_at);
 
 ```typescript
 // Enable/disable webhook
-await client.webhooks.update(webhookId, {
+await client.management.webhooks.update(webhookId, {
   enabled: false,
 });
 
 // Update events
-await client.webhooks.update(webhookId, {
+await client.management.webhooks.update(webhookId, {
   events: [
     {
       table: "users",
@@ -170,7 +170,7 @@ await client.webhooks.update(webhookId, {
 });
 
 // Update URL and secret
-await client.webhooks.update(webhookId, {
+await client.management.webhooks.update(webhookId, {
   url: "https://new-endpoint.com/webhooks",
   secret: "new-secret-key",
 });
@@ -179,14 +179,14 @@ await client.webhooks.update(webhookId, {
 #### Delete Webhook
 
 ```typescript
-await client.webhooks.delete(webhookId);
+await client.management.webhooks.delete(webhookId);
 console.log("Webhook deleted");
 ```
 
 #### View Delivery History
 
 ```typescript
-const deliveries = await client.webhooks.getDeliveries(webhookId, {
+const deliveries = await client.management.webhooks.getDeliveries(webhookId, {
   limit: 50,
   offset: 0,
 });
@@ -232,43 +232,7 @@ signature = HMAC-SHA256(signed_data, webhook_secret)
 
 The timestamp is included to prevent replay attacks - signatures older than 5 minutes should be rejected.
 
-#### Using the SDK (Recommended)
-
-```typescript
-import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
-import express from "express";
-
-const app = express();
-app.use(express.json());
-
-const WEBHOOK_SECRET = process.env.FLUXBASE_WEBHOOK_SECRET!;
-
-app.post("/webhooks/fluxbase", (req, res) => {
-  const signature = req.headers["x-fluxbase-signature"] as string;
-  const payload = req.body;
-
-  // Verify signature using SDK utility
-  const isValid = FluxbaseClient.verifyWebhookSignature(
-    payload,
-    signature,
-    WEBHOOK_SECRET
-  );
-
-  if (!isValid) {
-    return res.status(401).send("Invalid signature");
-  }
-
-  // Process the webhook event
-  const { event, table, record } = payload;
-  console.log(`Received ${event} event for ${table}`);
-
-  // Handle event...
-
-  res.status(200).send("OK");
-});
-
-app.listen(3000);
-```
+The TypeScript SDK does not include a built-in signature verification method. You should verify webhook signatures manually using HMAC-SHA256. See the [Manual Verification (Node.js)](#manual-verification-nodejs) example below.
 
 #### Manual Verification (Go)
 
@@ -390,8 +354,7 @@ When an event occurs, Fluxbase sends a POST request to your webhook URL with the
     "created_at": "2025-11-02T10:30:00Z"
   },
   "old_record": null,
-  "timestamp": "2025-11-02T10:30:00.123Z",
-  "webhook_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+  "timestamp": "2025-11-02T10:30:00.123Z"
 }
 ```
 
@@ -405,7 +368,6 @@ When an event occurs, Fluxbase sends a POST request to your webhook URL with the
 | `record`     | object       | The new/current state of the record             |
 | `old_record` | object\|null | Previous state (only for UPDATE and DELETE)     |
 | `timestamp`  | string       | ISO 8601 timestamp when the event occurred      |
-| `webhook_id` | string       | UUID of the webhook configuration               |
 
 ### Event-Specific Payloads
 
@@ -455,26 +417,21 @@ When an event occurs, Fluxbase sends a POST request to your webhook URL with the
 
 ```javascript
 const express = require("express");
-const { FluxbaseClient } = require("@nimbleflux/fluxbase-sdk");
+const crypto = require("crypto");
 
 const app = express();
-app.use(express.json());
 
-app.post("/webhooks/fluxbase", (req, res) => {
-  // Verify signature
+app.post("/webhooks/fluxbase", express.raw({ type: "application/json" }), (req, res) => {
   const signature = req.headers["x-fluxbase-signature"];
-  const isValid = FluxbaseClient.verifyWebhookSignature(
-    req.body,
-    signature,
-    process.env.FLUXBASE_WEBHOOK_SECRET
-  );
+  const secret = process.env.FLUXBASE_WEBHOOK_SECRET;
 
+  const isValid = verifyWebhookSignature(req.body, signature, secret);
   if (!isValid) {
     return res.status(401).send("Invalid signature");
   }
 
-  // Process event
-  const { event, table, record, old_record } = req.body;
+  const payload = JSON.parse(req.body);
+  const { event, table, record, old_record } = payload;
 
   switch (event) {
     case "INSERT":
@@ -490,6 +447,30 @@ app.post("/webhooks/fluxbase", (req, res) => {
 
   res.status(200).send("OK");
 });
+
+function verifyWebhookSignature(rawBody, header, secret, toleranceMs = 300000) {
+  const parts = header.split(",").reduce((acc, part) => {
+    const [key, value] = part.split("=");
+    if (key === "t") acc.timestamp = parseInt(value, 10);
+    if (key === "v1") acc.signatures = [...(acc.signatures || []), value];
+    return acc;
+  }, {});
+
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - parts.timestamp) > toleranceMs / 1000) {
+    return false;
+  }
+
+  const signedPayload = `${parts.timestamp}.${rawBody}`;
+  const expectedSig = crypto
+    .createHmac("sha256", secret)
+    .update(signedPayload)
+    .digest("hex");
+
+  return parts.signatures.some((sig) =>
+    crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))
+  );
+}
 
 app.listen(3000);
 ```
@@ -529,25 +510,25 @@ webhook:
 
 ```typescript
 // ❌ BLOCKED: Private IP
-await client.webhooks.create({
+await client.management.webhooks.create({
   url: 'http://192.168.1.1/webhook',
   // Error: "URL resolves to private IP address"
 });
 
 // ❌ BLOCKED: Cloud metadata
-await client.webhooks.create({
+await client.management.webhooks.create({
   url: 'http://169.254.169.254/latest/meta-data/',
   // Error: "URL resolves to private IP address"
 });
 
 // ❌ BLOCKED: Localhost
-await client.webhooks.create({
+await client.management.webhooks.create({
   url: 'http://localhost:3000/webhook',
   // Error: "localhost URLs are not allowed"
 });
 
 // ✅ ALLOWED: Public URLs
-await client.webhooks.create({
+await client.management.webhooks.create({
   url: 'https://api.example.com/webhook',
   // Success!
 });
@@ -575,10 +556,10 @@ For more details, see [SSRF Protection Guide](/security/ssrf-protection/).
 |----------|-------------|
 | **Respond quickly** | Return 200 status immediately, process asynchronously if needed (30s timeout) |
 | **Handle duplicates** | Use record IDs to ensure idempotent processing |
-| **Verify signatures** | Always verify webhook signatures using SDK utilities |
+| **Verify signatures** | Always verify webhook signatures using HMAC-SHA256 |
 | **Use HTTPS** | Secure webhook URLs with HTTPS in production |
 | **Log deliveries** | Keep detailed logs of events for debugging |
-| **Monitor failures** | Use `client.webhooks.getDeliveries()` to track failed deliveries |
+| **Monitor failures** | Use `client.management.webhooks.getDeliveries()` to track failed deliveries |
 
 **Example: Async processing**
 
@@ -604,7 +585,7 @@ app.post("/webhooks", async (req, res) => {
 
 ```typescript
 // Test via SDK
-await client.webhooks.test(webhookId, {
+await client.management.webhooks.test(webhookId, {
   event: "INSERT",
   table: "test_table",
   record: { id: "test-id", name: "Test Record" }
@@ -620,7 +601,7 @@ await client.webhooks.test(webhookId, {
 **Monitor deliveries:**
 
 ```typescript
-const deliveries = await client.webhooks.getDeliveries(webhookId, { limit: 100 });
+const deliveries = await client.management.webhooks.getDeliveries(webhookId, { limit: 100 });
 ```
 
 **Retry behavior:** Failed deliveries automatically retry (default: 3 attempts, exponential backoff, 30s timeout)
@@ -631,7 +612,7 @@ const deliveries = await client.webhooks.getDeliveries(webhookId, { limit: 100 }
 |-------|----------|
 | Webhook not triggering | Verify table name, operations configured, webhook enabled |
 | Delivery failures | Check endpoint is public, responds within timeout, valid SSL |
-| Signature failing | Use correct secret, SDK's `verifyWebhookSignature()`, raw body |
+| Signature failing | Use correct secret, verify with HMAC-SHA256 manually, use raw body |
 
 ---
 
