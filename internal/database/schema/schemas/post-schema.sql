@@ -293,7 +293,7 @@ CREATE POLICY chatbot_kb_links_service_all ON ai.chatbot_knowledge_bases TO auth
 -- Name: mcp_custom_resources_service; Type: POLICY; Schema: mcp; Owner: -
 --
 
-CREATE POLICY mcp_custom_resources_service ON mcp.custom_resources TO PUBLIC USING (CURRENT_USER = 'service_role'::name) WITH CHECK (CURRENT_USER = 'service_role'::name);
+CREATE POLICY mcp_custom_resources_service ON mcp.custom_resources TO authenticated USING (auth.current_user_role() = 'service_role') WITH CHECK (auth.current_user_role() = 'service_role');
 
 --
 -- Name: mcp_custom_resources_admin; Type: POLICY; Schema: mcp; Owner: -
@@ -317,7 +317,7 @@ CREATE POLICY mcp_custom_resources_authenticated_read ON mcp.custom_resources FO
 -- Name: mcp_custom_tools_service; Type: POLICY; Schema: mcp; Owner: -
 --
 
-CREATE POLICY mcp_custom_tools_service ON mcp.custom_tools TO PUBLIC USING (CURRENT_USER = 'service_role'::name) WITH CHECK (CURRENT_USER = 'service_role'::name);
+CREATE POLICY mcp_custom_tools_service ON mcp.custom_tools TO authenticated USING (auth.current_user_role() = 'service_role') WITH CHECK (auth.current_user_role() = 'service_role');
 
 --
 -- Name: mcp_custom_tools_admin; Type: POLICY; Schema: mcp; Owner: -

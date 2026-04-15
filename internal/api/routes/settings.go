@@ -34,7 +34,7 @@ func BuildSettingsRoutes(deps *SettingsDeps) *RouteGroup {
 		Routes: []Route{
 			{
 				Method:  "GET",
-				Path:    "/*",
+				Path:    "/:key",
 				Handler: deps.GetSetting,
 				Summary: "Get a setting",
 				Auth:    AuthOptional,
@@ -88,21 +88,21 @@ func BuildUserSettingsRoutes(deps *UserSettingsDeps) *RouteGroup {
 			},
 			{
 				Method:  "GET",
-				Path:    "/*",
+				Path:    "/:key",
 				Handler: deps.GetSetting,
 				Summary: "Get a user setting",
 				Auth:    AuthRequired,
 			},
 			{
 				Method:  "PUT",
-				Path:    "/*",
+				Path:    "/:key",
 				Handler: deps.SetSetting,
 				Summary: "Set a user setting",
 				Auth:    AuthRequired,
 			},
 			{
 				Method:  "DELETE",
-				Path:    "/*",
+				Path:    "/:key",
 				Handler: deps.DeleteSetting,
 				Summary: "Delete a user setting",
 				Auth:    AuthRequired,
