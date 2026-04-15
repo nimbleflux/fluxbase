@@ -349,9 +349,9 @@ auth:
 **Initiate OAuth flow:**
 
 ```typescript
-import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = new FluxbaseClient({ url: "https://api.example.com" });
+const client = createClient('http://localhost:8080', 'your-anon-key')
 
 // Get available OAuth providers
 const { data: providers } = await client.auth.getOAuthProviders();
@@ -833,13 +833,7 @@ fluxbase auth login --server https://api.example.com --token your-api-token
 
 ### Emergency Recovery
 
-If locked out due to misconfigured SSO:
-
-```bash
-FLUXBASE_DASHBOARD_FORCE_PASSWORD_LOGIN=true
-```
-
-This temporarily re-enables password login.
+If locked out due to misconfigured SSO, use the admin dashboard to temporarily re-enable password login.
 
 ## Linking Accounts
 

@@ -225,7 +225,7 @@ Before deploying to production, ensure:
 - [ ] Enabled rate limiting
 - [ ] Configured proper logging and monitoring
 - [ ] Set `FLUXBASE_DEBUG=false`
-- [ ] Set `FLUXBASE_ENVIRONMENT=production`
+ - [ ] Set `FLUXBASE_TRACING_ENVIRONMENT=production`
 - [ ] Implemented secrets management (not environment variables in code)
 - [ ] Set up health checks and alerts
 - [ ] Configured Row Level Security (RLS) policies

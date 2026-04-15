@@ -250,7 +250,7 @@ branching:
   enabled: true
   max_branches_per_user: 5
   max_total_branches: 50
-  default_data_clone_mode: schema_only # schema_only or full_clone
+  default_data_clone_mode: schema_only # schema_only, full_clone, or seed_data
   auto_delete_after: "0" # 0 = never, or duration like "24h"
   database_prefix: branch_
   admin_database_url: "" # Uses main database URL if empty
@@ -565,7 +565,7 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 | Variable                                      | Description                  | Default | Example         |
 | --------------------------------------------- | ---------------------------- | ------- | --------------- |
 | `FLUXBASE_LOGGING_TIMESCALEDB_ENABLED`        | Enable TimescaleDB extension | `true`  | `true`, `false` |
-| `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESS`       | Enable compression           | `true`  | `true`, `false` |
+| `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESSION`       | Enable compression           | `true`  | `true`, `false` |
 | `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESS_AFTER` | Compression delay            | `168h`  | `168h`, `72h`   |
 
 **Loki Configuration:**
@@ -684,7 +684,6 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 
 | Variable                       | Description                  | Default | Example                     |
 | ------------------------------ | ---------------------------- | ------- | --------------------------- |
-| `FLUXBASE_AI_PROVIDER_ENABLED` | Enable config-based provider | `false` | `true`, `false`             |
 | `FLUXBASE_AI_PROVIDER_TYPE`    | Provider type                | `""`    | `openai`, `azure`, `ollama` |
 | `FLUXBASE_AI_PROVIDER_NAME`    | Display name for provider    | `""`    | `Default Provider`          |
 | `FLUXBASE_AI_PROVIDER_MODEL`   | Default model                | `""`    | `gpt-4-turbo`               |
@@ -963,7 +962,7 @@ database:
   max_conn_lifetime: 30m
 
 auth:
-  jwt_secret: ${JWT_SECRET}
+  jwt_secret: ${FLUXBASE_AUTH_JWT_SECRET}
   jwt_expiry: 15m
   refresh_expiry: 168h # 7 days
   password_min_length: 12
@@ -1180,7 +1179,7 @@ Configuration is loaded in the following order (later sources override earlier o
 
 Fluxbase validates configuration on startup and will fail fast if:
 
-- Required values are missing (e.g., `DATABASE_URL`, `JWT_SECRET`)
+- Required values are missing (e.g., `FLUXBASE_AUTH_JWT_SECRET`, `FLUXBASE_DATABASE_HOST`)
 - Values are invalid (e.g., negative numbers, invalid formats)
 - Database connection fails
 - Storage backend is unreachable
@@ -1199,12 +1198,12 @@ Use environment variables or secret management tools:
 
 ```bash
 # Good: Load from environment
-export JWT_SECRET=$(openssl rand -hex 32)
-export DATABASE_URL="postgres://user:$(cat /run/secrets/db_password)@localhost/fluxbase"
+export FLUXBASE_AUTH_JWT_SECRET=$(openssl rand -base64 32 | head -c 32)
+export FLUXBASE_DATABASE_PASSWORD=$(cat /run/secrets/db_password)
 
 # Bad: Hardcode in config file
-jwt:
-  secret: my-secret-key  # ❌ Don't do this!
+auth:
+  jwt_secret: my-secret-key  # ❌ Don't do this!
 ```
 
 ### Production Secrets
@@ -1235,11 +1234,12 @@ env | grep FLUXBASE
 ### Database Connection Issues
 
 ```bash
-# Test connection
-psql "$DATABASE_URL"
+# Test connection using Fluxbase env vars
+psql "postgresql://$FLUXBASE_DATABASE_USER:$FLUXBASE_DATABASE_PASSWORD@$FLUXBASE_DATABASE_HOST:$FLUXBASE_DATABASE_PORT/$FLUXBASE_DATABASE_NAME"
 
-# Check connection string format
-echo $DATABASE_URL
+# Check individual settings
+echo $FLUXBASE_DATABASE_HOST
+echo $FLUXBASE_DATABASE_PORT
 ```
 
 ### CORS Issues

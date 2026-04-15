@@ -272,9 +272,9 @@ security:
 ### SDK Usage with Adaptive Trust
 
 ```typescript
-import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = new FluxbaseClient({ url: "http://localhost:8080" });
+const client = createClient('http://localhost:8080', 'your-anon-key')
 
 // Step 1: Check if CAPTCHA is required
 const { data: check } = await client.auth.checkCaptcha({
@@ -656,9 +656,9 @@ const config = await response.json();
 ### TypeScript SDK
 
 ```typescript
-import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = new FluxbaseClient({ url: "http://localhost:8080" });
+const client = createClient('http://localhost:8080', 'your-anon-key')
 
 // Get CAPTCHA configuration
 const { data: config } = await client.auth.getCaptchaConfig();

@@ -392,8 +392,7 @@ await client.admin.getHealth();
 
 ```yaml
 cors:
-  allowed_origins:
-    - "https://yourdomain.com"
+  allowed_origins: "https://yourdomain.com"
   allow_credentials: true
 ```
 
@@ -424,13 +423,7 @@ const client = createClient("https://api.yourdomain.com", "your-anon-key");
 
 ### 1. Always Use HTTPS in Production
 
-```yaml
-server:
-  tls:
-    enabled: true
-    cert_file: /path/to/cert.pem
-    key_file: /path/to/key.pem
-```
+TLS is not built into Fluxbase. Use a reverse proxy (nginx, Caddy, Traefik) for HTTPS.
 
 ### 2. Use Strict SameSite Cookies
 

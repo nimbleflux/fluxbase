@@ -211,9 +211,9 @@ auth:
 ### TypeScript SDK
 
 ```typescript
-import { FluxbaseClient } from '@nimbleflux/fluxbase-sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
-const client = new FluxbaseClient({ url: 'http://localhost:8080' })
+const client = createClient('http://localhost:8080', 'your-anon-key')
 
 // List available SAML providers
 const { data: providers } = await client.auth.getSAMLProviders()
@@ -883,13 +883,7 @@ The CLI automatically detects when password login is disabled and initiates SSO 
 
 ### Emergency Recovery
 
-If you're locked out due to misconfigured SSO, set the environment variable to bypass the setting:
-
-```bash
-FLUXBASE_DASHBOARD_FORCE_PASSWORD_LOGIN=true
-```
-
-This temporarily re-enables password login regardless of the database setting.
+If you're locked out due to misconfigured SSO, use the admin dashboard to temporarily re-enable password login.
 
 ### Security Considerations
 

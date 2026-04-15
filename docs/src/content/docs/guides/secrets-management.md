@@ -313,7 +313,7 @@ The TypeScript SDK provides a `secrets` manager with both name-based and UUID-ba
 ```typescript
 import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = createClient({ url: "http://localhost:8080" });
+const client = createClient('http://localhost:8080', 'your-service-role-key')
 
 // Create a secret
 const secret = await client.secrets.create({

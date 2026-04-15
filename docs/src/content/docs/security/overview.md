@@ -171,7 +171,8 @@ Fluxbase implements multiple layers of security to protect your data and applica
 ```yaml
 # ✅ GOOD: Use environment variables
 database:
-  url: ${DATABASE_URL}
+  host: ${DB_HOST}
+  password: ${DB_PASSWORD}
 
 auth:
   jwt_secret: ${JWT_SECRET}
@@ -180,7 +181,8 @@ auth:
 ```yaml
 # ❌ BAD: Don't hardcode secrets
 database:
-  url: "postgres://user:password@host/db"
+  host: "db.example.com"
+  password: "my-password-123"
 
 auth:
   jwt_secret: "my-secret-key-123"
@@ -188,15 +190,7 @@ auth:
 
 #### 2. Enable HTTPS in Production
 
-```yaml
-# fluxbase.yaml
-server:
-  port: 443
-  tls:
-    enabled: true
-    cert_file: /path/to/cert.pem
-    key_file: /path/to/key.pem
-```
+TLS is not built into Fluxbase. Use a reverse proxy (nginx, Caddy, Traefik) for HTTPS.
 
 #### 3. Configure Strong Password Policies
 

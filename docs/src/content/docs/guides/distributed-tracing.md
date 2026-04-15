@@ -21,24 +21,23 @@ Distributed tracing tracks a request as it moves through different services and 
 Enable OpenTelemetry tracing in your `fluxbase.yaml`:
 
 ```yaml
-observability:
-  tracing:
-    enabled: true
-    endpoint: "localhost:4317"        # OTLP collector endpoint
-    service_name: "fluxbase"           # Service name for traces
-    environment: "production"           # Environment (development, staging, production)
-    sample_rate: 1.0                   # Sample rate (0.0-1.0, 1.0 = 100%)
-    insecure: false                    # Use TLS for production
+tracing:
+  enabled: true
+  endpoint: "localhost:4317"        # OTLP collector endpoint
+  service_name: "fluxbase"           # Service name for traces
+  environment: "production"           # Environment (development, staging, production)
+  sample_rate: 1.0                   # Sample rate (0.0-1.0, 1.0 = 100%)
+  insecure: false                    # Use TLS for production
 ```
 
 **Environment Variables:**
 
 ```bash
-export FLUXBASE_OBSERVABILITY_TRACING_ENABLED=true
-export FLUXBASE_OBSERVABILITY_TRACING_ENDPOINT="collector.example.com:4317"
-export FLUXBASE_OBSERVABILITY_TRACING_SERVICE_NAME="fluxbase"
-export FLUXBASE_OBSERVABILITY_TRACING_ENVIRONMENT="production"
-export FLUXBASE_OBSERVABILITY_TRACING_SAMPLE_RATE=0.1  # Sample 10% of traces
+export FLUXBASE_TRACING_ENABLED=true
+export FLUXBASE_TRACING_ENDPOINT="collector.example.com:4317"
+export FLUXBASE_TRACING_SERVICE_NAME="fluxbase"
+export FLUXBASE_TRACING_ENVIRONMENT="production"
+export FLUXBASE_TRACING_SAMPLE_RATE=0.1  # Sample 10% of traces
 ```
 
 ## Setting Up Trace Backends
@@ -62,11 +61,10 @@ docker run -d --name jaeger \
 **Configure Fluxbase:**
 
 ```yaml
-observability:
-  tracing:
-    enabled: true
-    endpoint: "localhost:4317"
-    insecure: true  # For local development
+tracing:
+  enabled: true
+  endpoint: "localhost:4317"
+  insecure: true  # For local development
 ```
 
 **Access Jaeger UI:**
@@ -92,10 +90,9 @@ docker run -d --name tempo \
 **Configure Fluxbase:**
 
 ```yaml
-observability:
-  tracing:
-    enabled: true
-    endpoint: "localhost:4317"
+tracing:
+  enabled: true
+  endpoint: "localhost:4317"
 ```
 
 **Access Tempo UI:**
@@ -151,30 +148,27 @@ docker run -d --name otel-collector \
 
 ```yaml
 # Use AWS Distro for OpenTelemetry (ADOT) Collector
-observability:
-  tracing:
-    enabled: true
-    endpoint: "localhost:4317"  # ADOT Collector endpoint
+tracing:
+  enabled: true
+  endpoint: "localhost:4317"  # ADOT Collector endpoint
 ```
 
 **Google Cloud Trace:**
 
 ```yaml
 # Use OpenTelemetry Collector with Google Cloud Trace exporter
-observability:
-  tracing:
-    enabled: true
-    endpoint: "localhost:4317"
+tracing:
+  enabled: true
+  endpoint: "localhost:4317"
 ```
 
 **Azure Monitor:**
 
 ```yaml
 # Use Azure Monitor Application Insights exporter
-observability:
-  tracing:
-    enabled: true
-    endpoint: "localhost:4317"
+tracing:
+  enabled: true
+  endpoint: "localhost:4317"
 ```
 
 ## Automatic Instrumentation
@@ -362,19 +356,16 @@ Reduce tracing overhead with smart sampling:
 
 ```yaml
 # Sample all traces in development
-observability:
-  tracing:
-    sample_rate: 1.0  # 100% sampling
+tracing:
+  sample_rate: 1.0  # 100% sampling
 
 # Sample 10% of traces in production
-observability:
-  tracing:
-    sample_rate: 0.1  # 10% sampling
+tracing:
+  sample_rate: 0.1  # 10% sampling
 
 # Dynamic sampling based on route
-observability:
-  tracing:
-    sample_rate: 0.01  # 1% baseline
+tracing:
+  sample_rate: 0.01  # 1% baseline
 ```
 
 **Head-Based Sampling:**
@@ -484,10 +475,9 @@ span.AddLink(trace.Link{
 Identify the service generating traces:
 
 ```yaml
-observability:
-  tracing:
-    service_name: "fluxbase"
-    environment: "production"
+tracing:
+  service_name: "fluxbase"
+  environment: "production"
 ```
 
 Resource attributes added automatically:
@@ -518,9 +508,8 @@ telnet localhost 4317
 
 ```yaml
 # Ensure sample_rate > 0
-observability:
-  tracing:
-    sample_rate: 1.0  # Try 100% sampling for testing
+tracing:
+  sample_rate: 1.0  # Try 100% sampling for testing
 ```
 
 **Check 4: Verify collector configuration**
@@ -548,9 +537,8 @@ docker logs otel-collector
 
 1. **Reduce sample rate:**
    ```yaml
-   observability:
-     tracing:
-       sample_rate: 0.1  # Sample only 10%
+   tracing:
+     sample_rate: 0.1  # Sample only 10%
    ```
 
 2. **Use batch processing:**

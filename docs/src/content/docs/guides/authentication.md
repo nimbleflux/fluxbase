@@ -56,8 +56,7 @@ import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "your-anon-key");
 
-// Sign up with user metadata
-const { user, session } = await client.auth.signUp({
+const { data, error } = await client.auth.signUp({
   email: "user@example.com",
   password: "SecurePassword123",
   options: {
@@ -67,18 +66,19 @@ const { user, session } = await client.auth.signUp({
     },
   },
 });
+if (error) throw error;
 
-// Sign in
-const { user, session } = await client.auth.signIn({
+const { data: signInData, error: signInError } = await client.auth.signIn({
   email: "user@example.com",
   password: "SecurePassword123",
 });
+if (signInError) throw signInError;
 
-// Get current user
-const user = await client.auth.getCurrentUser();
+const { data: currentUser, error: userError } = await client.auth.getCurrentUser();
+if (userError) throw userError;
 
-// Sign out
-await client.auth.signOut();
+const { error: signOutError } = await client.auth.signOut();
+if (signOutError) throw signOutError;
 ```
 
 ## Core Authentication Methods
@@ -96,8 +96,7 @@ await client.auth.signOut();
 **Example:**
 
 ```typescript
-// Sign up with metadata (Supabase-compatible)
-const { user, session } = await client.auth.signUp({
+const { data, error } = await client.auth.signUp({
   email: "user@example.com",
   password: "SecurePassword123",
   options: {
@@ -107,33 +106,36 @@ const { user, session } = await client.auth.signUp({
     },
   },
 });
+if (error) throw error;
 
-// Sign in
-const { user, session } = await client.auth.signIn({
+const { data: signInData, error: signInError } = await client.auth.signIn({
   email: "user@example.com",
   password: "SecurePassword123",
 });
+if (signInError) throw signInError;
 
-// Get current user
-const user = await client.auth.getCurrentUser();
+const { data: currentUser, error: userError } = await client.auth.getCurrentUser();
+if (userError) throw userError;
 
-// Sign out
-await client.auth.signOut();
+const { error: signOutError } = await client.auth.signOut();
+if (signOutError) throw signOutError;
 ```
 
 ## Password Reset
 
 ```typescript
-await client.auth.sendPasswordReset("user@example.com");
+const { error } = await client.auth.sendPasswordReset("user@example.com");
+if (error) throw error;
 
-await client.auth.resetPassword("reset-token-from-email", "NewSecurePassword123");
+const { error: resetError } = await client.auth.resetPassword("reset-token-from-email", "NewSecurePassword123");
+if (resetError) throw resetError;
 ```
 
 ## Magic Links
 
 ```typescript
-await client.auth.sendMagicLink({ email: "user@example.com" });
-// User clicks link in email, automatically signed in
+const { error } = await client.auth.sendMagicLink("user@example.com");
+if (error) throw error;
 ```
 
 ## OAuth / Social Login
@@ -153,17 +155,18 @@ oauth:
 **Usage:**
 
 ```typescript
-const { url } = await client.auth.getOAuthUrl("google", {
-  redirectTo: "http://localhost:3000/dashboard",
+const { data, error } = await client.auth.getOAuthUrl("google", {
+  redirect_to: "http://localhost:3000/dashboard",
 });
-window.location.href = url;
-// User redirected back with session after authorization
+if (error) throw error;
+if (data) window.location.href = data.url;
 ```
 
 ## Anonymous Authentication
 
 ```typescript
-const { user, session } = await client.auth.signInAnonymously();
+const { data, error } = await client.auth.signInAnonymously();
+if (error) throw error;
 ```
 
 > **Note:** Anonymous sessions cannot be converted to permanent accounts. Users must sign up separately and link manually.
@@ -171,14 +174,18 @@ const { user, session } = await client.auth.signInAnonymously();
 ## Two-Factor Authentication
 
 ```typescript
-const { id, type, totp } = await client.auth.setup2FA();
-// totp.qr_code, totp.secret, totp.uri
+const { data: setupData, error: setupError } = await client.auth.setup2FA();
+if (setupError) throw setupError;
+const { id, type, totp } = setupData;
 
-await client.auth.verify2FA({ user_id: "user-id", code: "123456" });
+const { error: verifyError } = await client.auth.verify2FA({ user_id: "user-id", code: "123456" });
+if (verifyError) throw verifyError;
 
-const { requires_2fa } = await client.auth.signIn({ email, password });
-if (requires_2fa) {
-  await client.auth.verify2FA({ user_id: user.id, code: "123456" });
+const { data: signInData, error: signInError } = await client.auth.signIn({ email, password });
+if (signInError) throw signInError;
+if (signInData.requires_2fa) {
+  const { error: codeError } = await client.auth.verify2FA({ user_id: signInData.user.id, code: "123456" });
+  if (codeError) throw codeError;
 }
 
 await client.auth.disable2FA("current-password");
@@ -193,20 +200,20 @@ Session management (listing, revoking sessions) is available through the Admin A
 Tokens are automatically refreshed by the SDK. Manual refresh:
 
 ```typescript
-const { session } = await client.auth.refreshSession();
+const { data, error } = await client.auth.refreshSession();
+if (error) throw error;
 ```
 
 ## Auth State Changes
 
 ```typescript
-const subscription = client.auth.onAuthStateChange((event, session) => {
-  // Events: SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED
+const { data: listener } = client.auth.onAuthStateChange((event, session) => {
   if (event === "SIGNED_IN") {
     console.log("User signed in:", session.user);
   }
 });
 
-subscription.unsubscribe();
+listener.subscription.unsubscribe();
 ```
 
 ## User Metadata
@@ -214,8 +221,7 @@ subscription.unsubscribe();
 User metadata is stored during signup and can be updated at any time. Fluxbase uses a Supabase-compatible structure where metadata is passed via `options.data`.
 
 ```typescript
-// Sign up with metadata (stored in user_metadata column)
-const { user, session } = await client.auth.signUp({
+const { data, error } = await client.auth.signUp({
   email: "user@example.com",
   password: "SecurePassword123",
   options: {
@@ -226,21 +232,22 @@ const { user, session } = await client.auth.signUp({
     },
   },
 });
+if (error) throw error;
 
-// Update metadata (Supabase-compatible)
-await client.auth.updateUser({
+const { error: updateError } = await client.auth.updateUser({
   data: { name: "John Doe", avatar_url: "https://..." },
 });
+if (updateError) throw updateError;
 
-// Update email
-await client.auth.updateUser({
+const { error: emailError } = await client.auth.updateUser({
   email: "newemail@example.com",
 });
+if (emailError) throw emailError;
 
-// Update password
-await client.auth.updateUser({
+const { error: passwordError } = await client.auth.updateUser({
   password: "NewPassword123",
 });
+if (passwordError) throw passwordError;
 ```
 
 ## client keys
@@ -409,11 +416,13 @@ auth:
 ### Usage (Admin Dashboard)
 
 ```typescript
-const { impersonation } = await client.admin.impersonation.impersonateUser({
-  userId: "target-user-id",
+const { data, error } = await client.admin.impersonation.impersonateUser({
+  target_user_id: "target-user-id",
+  reason: "Customer support",
 });
+if (error) throw error;
 
-await client.admin.impersonation.stopImpersonation();
+await client.admin.impersonation.stop();
 ```
 
 ### Security Notes

@@ -1969,7 +1969,7 @@ func (lc *LoggingConfig) Validate() error {
 	}
 
 	// Validate backend
-	validBackends := []string{"postgres", "s3", "local"}
+	validBackends := []string{"postgres", "postgres-timescaledb", "timescaledb", "s3", "local", "elasticsearch", "opensearch", "clickhouse", "loki"}
 	backendValid := false
 	for _, backend := range validBackends {
 		if lc.Backend == backend {

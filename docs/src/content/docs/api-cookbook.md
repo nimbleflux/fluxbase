@@ -423,8 +423,7 @@ USING (current_setting('app.role', true) = 'admin');
 ### Create Function
 
 ```typescript
-await client.functions.create({
-  name: "send-email",
+await client.admin.functions.create({
   code: `
     async function handler(req) {
       const { to, subject, body } = JSON.parse(req.body || '{}')
@@ -455,12 +454,11 @@ const result = await client.functions.invoke("send-email", {
 ### Function with Database Access
 
 ```typescript
-await client.functions.create({
-  name: "get-stats",
+await client.admin.functions.create({
   code: `
     async function handler(req) {
       // Access database via client
-      const dbUrl = Deno.env.get('DATABASE_URL')
+      const dbUrl = Deno.env.get('FLUXBASE_URL')
 
       // Your logic here
 

@@ -397,9 +397,13 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_user;
 ```yaml
 # fluxbase.yaml
 database:
-  url: "postgres://user:pass@host:5432/db?sslmode=require"
-  max_connections: 50
+  host: postgres.example.com
+  port: 5432
+  user: fluxbase
+  password: ${DB_PASSWORD}
+  database: fluxbase
   ssl_mode: "require" # or "verify-full" for production
+  max_connections: 50
 ```
 
 **PostgreSQL SSL Configuration:**
@@ -470,16 +474,7 @@ const query = `SELECT * FROM users WHERE email = '${userEmail}'`;
 
 ### 1. Always Use HTTPS in Production
 
-```yaml
-# fluxbase.yaml
-server:
-  port: 443
-  tls:
-    enabled: true
-    cert_file: /etc/letsencrypt/live/example.com/fullchain.pem
-    key_file: /etc/letsencrypt/live/example.com/privkey.pem
-    min_version: "1.2" # TLS 1.2 minimum
-```
+TLS is not built into Fluxbase. Use a reverse proxy (nginx, Caddy, Traefik) for HTTPS.
 
 **Automatic certificate renewal with Let's Encrypt:**
 
@@ -534,10 +529,7 @@ security:
 ```yaml
 # fluxbase.yaml
 cors:
-  # ✅ GOOD: Specific origins
-  allowed_origins:
-    - "https://yourdomain.com"
-    - "https://www.yourdomain.com"
+  allowed_origins: "https://yourdomain.com,https://www.yourdomain.com"
 
   # ❌ BAD: Wildcard allows any origin
   # allowed_origins: ["*"]
@@ -929,10 +921,9 @@ logger.info("User logged in", {
 
 ```yaml
 # Enable Prometheus metrics
-observability:
-  metrics:
-    enabled: true
-    port: 9090
+metrics:
+  enabled: true
+  port: 9090
 ```
 
 ---
@@ -975,7 +966,7 @@ CMD ["node", "server.js"]
 # docker-compose.yml
 services:
   fluxbase:
-    image: ghcr.io/nimbleflux/fluxbase:latest:latest
+    image: ghcr.io/nimbleflux/fluxbase:latest
     read_only: true
     tmpfs:
       - /tmp

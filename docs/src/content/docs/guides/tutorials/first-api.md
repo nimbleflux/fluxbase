@@ -184,7 +184,7 @@ async function main() {
   }
 
   console.log("User created:", authData.user?.email);
-  console.log("Access token:", authData.access_token);
+  console.log("Access token:", authData.session?.access_token);
 }
 
 main();

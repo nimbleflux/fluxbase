@@ -362,11 +362,7 @@ Tenant management requires `instance_admin` role.
 ### List Tenants
 
 ```typescript
-const { tenants, total } = await client.tenant.list({
-  limit: 50,
-  offset: 0,
-  include_deleted: false,
-});
+const { tenants, total } = await client.tenant.list();
 
 tenants.forEach((tenant) => {
   console.log(
@@ -445,14 +441,7 @@ Service key management requires `instance_admin` or `tenant_admin` role.
 
 ```typescript
 // List all keys (instance_admin only)
-const { keys, total } = await client.admin.serviceKeys.list();
-
-// List keys for specific tenant
-const { keys, total } = await client.admin.serviceKeys.list({
-  tenant_id: "tenant-uuid",
-  key_type: "tenant_service",
-  is_active: true,
-});
+const { data: keys, error } = await client.admin.serviceKeys.list();
 ```
 
 **Options**:
@@ -460,7 +449,7 @@ const { keys, total } = await client.admin.serviceKeys.list({
 ```typescript
 interface ListServiceKeysOptions {
   tenant_id?: string;
-  key_type?: "anon" | "publishable" | "tenant_service" | "global_service";
+  key_type?: "anon" | "service";
   is_active?: boolean;
   user_id?: string;
   limit?: number;
@@ -471,16 +460,14 @@ interface ListServiceKeysOptions {
 ### Create Service Key
 
 ```typescript
-const key = await client.admin.serviceKeys.create({
+const { data: key, error } = await client.admin.serviceKeys.create({
   name: "Production API Key",
-  key_type: "tenant_service",
-  tenant_id: "tenant-uuid",
-  scopes: ["rest:read", "rest:write", "storage:read"],
-  allowed_namespaces: ["public", "app"],
+  key_type: "service",
+  scopes: ["*"],
 });
 
-console.log("Key prefix:", key.key_prefix);
-console.log("Full key (store securely):", key.key);
+console.log("Key prefix:", key?.key_prefix);
+console.log("Full key (store securely):", key?.key);
 ```
 
 **Request**:
@@ -488,37 +475,35 @@ console.log("Full key (store securely):", key.key);
 ```typescript
 interface CreateServiceKeyRequest {
   name: string;
-  key_type: "anon" | "publishable" | "tenant_service" | "global_service";
-  tenant_id?: string; // Required for tenant_service keys
-  user_id?: string; // For publishable keys
+  description?: string;
+  key_type: "anon" | "service";
   scopes?: string[];
   allowed_namespaces?: string[];
+  rate_limit_per_minute?: number;
+  rate_limit_per_hour?: number;
+  expires_at?: string;
 }
 ```
 
 **Key Types**:
 
 - `anon` - Anonymous access, no tenant context
-- `publishable` - User-scoped key
-- `tenant_service` - Tenant-scoped backend key
-- `global_service` - Platform-wide key (instance_admin only)
+- `service` - Backend service key (bypasses RLS)
 
 ### Rotate Service Key
 
 ```typescript
-// Rotate with grace period
-const newKey = await client.admin.serviceKeys.rotate("old-key-id", {
-  grace_period_hours: 24,
-});
+// Rotate key - creates a replacement and deprecates the old one
+const { data: newKey, error } = await client.admin.serviceKeys.rotate("old-key-id");
 
-console.log("New key:", newKey.key);
-console.log("Old key works until:", newKey.grace_period_ends_at);
+console.log("New key:", newKey?.key);
+console.log("Old key deprecated at:", newKey?.deprecated_at);
 ```
 
 ### Revoke Service Key
 
 ```typescript
-await client.admin.serviceKeys.revoke("key-id", "Security incident");
+await client.admin.serviceKeys.revoke("key-id", { reason: "Security incident" });
 ```
 
 ### Deprecate Service Key
@@ -527,7 +512,6 @@ await client.admin.serviceKeys.revoke("key-id", "Security incident");
 // Mark for deprecation with grace period
 await client.admin.serviceKeys.deprecate("key-id", {
   grace_period_hours: 48,
-  replacement_key_id: "new-key-id",
 });
 ```
 

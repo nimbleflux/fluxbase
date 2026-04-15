@@ -622,18 +622,21 @@ bump-patch: ## Bump patch version (0.1.0 -> 0.1.1)
 	@echo "${YELLOW}Bumping patch version...${NC}"
 	@NEW_VERSION=$$(echo $(VERSION) | awk -F. '{$$3 = $$3 + 1;} 1' | sed 's/ /./g'); \
 	echo $$NEW_VERSION > VERSION; \
+	sed -i '' 's/$${FLUXBASE_VERSION:-$(VERSION)}/$${FLUXBASE_VERSION:-'"$$NEW_VERSION"'}/g' deploy/docker-compose.minimal.yaml; \
 	echo "${GREEN}Version bumped to $$NEW_VERSION${NC}"
 
 bump-minor: ## Bump minor version (0.1.0 -> 0.2.0)
 	@echo "${YELLOW}Bumping minor version...${NC}"
 	@NEW_VERSION=$$(echo $(VERSION) | awk -F. '{$$2 = $$2 + 1; $$3 = 0;} 1' | sed 's/ /./g'); \
 	echo $$NEW_VERSION > VERSION; \
+	sed -i '' 's/$${FLUXBASE_VERSION:-$(VERSION)}/$${FLUXBASE_VERSION:-'"$$NEW_VERSION"'}/g' deploy/docker-compose.minimal.yaml; \
 	echo "${GREEN}Version bumped to $$NEW_VERSION${NC}"
 
 bump-major: ## Bump major version (0.1.0 -> 1.0.0)
 	@echo "${YELLOW}Bumping major version...${NC}"
 	@NEW_VERSION=$$(echo $(VERSION) | awk -F. '{$$1 = $$1 + 1; $$2 = 0; $$3 = 0;} 1' | sed 's/ /./g'); \
 	echo $$NEW_VERSION > VERSION; \
+	sed -i '' 's/$${FLUXBASE_VERSION:-$(VERSION)}/$${FLUXBASE_VERSION:-'"$$NEW_VERSION"'}/g' deploy/docker-compose.minimal.yaml; \
 	echo "${GREEN}Version bumped to $$NEW_VERSION${NC}"
 
 release-tag: ## Create and push git tag for current version

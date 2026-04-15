@@ -13,7 +13,7 @@ Client keys allow external services to authenticate without user credentials.
 ## Example
 
 ```typescript
-const client = createClient({ url: 'http://localhost:8080' })
+const client = createClient('http://localhost:8080', 'your-service-role-key')
 await client.auth.login({ email: 'user@example.com', password: 'password' })
 
 // Create a client key

@@ -67,10 +67,9 @@ const refreshToken = data.session.refresh_token;
 ```yaml
 # fluxbase.yaml
 auth:
-  jwt:
-    secret: "${JWT_SECRET}" # Use strong random secret (256+ bits)
-    expiry: "15m" # Access token lifetime
-    refresh_expiry: "168h" # Refresh token lifetime (7 days)
+  jwt_secret: "${JWT_SECRET}" # Use strong random secret (256+ bits)
+  jwt_expiry: "15m" # Access token lifetime
+  refresh_expiry: "168h" # Refresh token lifetime (7 days)
 ```
 
 **Token Revocation:**
@@ -89,11 +88,10 @@ Fluxbase encrypts secrets at rest using AES-256-GCM with a single encryption key
 
 ```yaml
 # fluxbase.yaml
-security:
-  encryption_key: "${ENCRYPTION_KEY}"
+encryption_key: "${ENCRYPTION_KEY}"
 ```
 
-The key is a 32-byte hex-encoded string. Set it via the `FLUXBASE_ENCRYPTION_KEY` environment variable.
+The key must be exactly 32 bytes long (e.g., a 32-character string generated with `openssl rand -base64 32 | head -c 32`). Set it via the `FLUXBASE_ENCRYPTION_KEY` environment variable.
 
 **Key rotation** is currently not automated. To rotate the key, generate a new one and update the environment variable, then restart Fluxbase.
 

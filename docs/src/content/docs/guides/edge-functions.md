@@ -55,7 +55,7 @@ await client.admin.functions.create({
 });
 
 const result = await client.functions.invoke("hello-world", {
-  name: "Alice",
+  body: { name: "Alice" },
 });
 
 console.log(result);

@@ -197,9 +197,12 @@ Fluxbase uses structured JSON logging (zerolog):
 **Configuration:**
 
 ```bash
-FLUXBASE_DEBUG=true   # Enable debug logging
-FLUXBASE_DEBUG=false  # Production (info+)
+FLUXBASE_DEBUG=true   # Enable debug mode (verbose output, not the same as log level)
+FLUXBASE_LOGGING_CONSOLE_LEVEL=debug  # Set log level to debug
+FLUXBASE_LOGGING_CONSOLE_LEVEL=info   # Production default
 ```
+
+`FLUXBASE_DEBUG` enables verbose debug mode in the application. For controlling the log level independently, use `FLUXBASE_LOGGING_CONSOLE_LEVEL` (trace, debug, info, warn, error).
 
 **Logged events:** HTTP requests, auth events, database queries, realtime connections, storage operations, webhooks, rate limits, security events
 
@@ -238,14 +241,13 @@ Distributed tracing tracks requests as they travel through:
 Enable tracing in your `fluxbase.yaml`:
 
 ```yaml
-observability:
-  tracing:
-    enabled: true
-    endpoint: "localhost:4317"        # OTLP collector endpoint
-    service_name: "fluxbase"
-    environment: "production"
-    sample_rate: 0.1                   # Sample 10% of traces
-    insecure: false                    # Use TLS for production
+tracing:
+  enabled: true
+  endpoint: "localhost:4317"        # OTLP collector endpoint
+  service_name: "fluxbase"
+  environment: "production"
+  sample_rate: 0.1                   # Sample 10% of traces
+  insecure: false                    # Use TLS for production
 ```
 
 ### Setting Up Trace Backends
@@ -262,11 +264,10 @@ docker run -d --name jaeger \
 
 Configure Fluxbase:
 ```yaml
-observability:
-  tracing:
-    enabled: true
-    endpoint: "localhost:4317"
-    insecure: true
+tracing:
+  enabled: true
+  endpoint: "localhost:4317"
+  insecure: true
 ```
 
 Access Jaeger UI: http://localhost:16686
@@ -274,10 +275,9 @@ Access Jaeger UI: http://localhost:16686
 #### Grafana Tempo (Production)
 
 ```yaml
-observability:
-  tracing:
-    enabled: true
-    endpoint: "tempo:4317"  # OTLP endpoint
+tracing:
+  enabled: true
+  endpoint: "tempo:4317"  # OTLP endpoint
 ```
 
 #### Cloud Providers

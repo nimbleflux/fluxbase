@@ -225,12 +225,15 @@ services:
   fluxbase-1:
     image: ghcr.io/nimbleflux/fluxbase:latest
     environment:
-      DATABASE_URL: postgres://fluxbase:secure-password@postgres:5432/fluxbase
+      FLUXBASE_DATABASE_HOST: postgres
+      FLUXBASE_DATABASE_PORT: 5432
+      FLUXBASE_DATABASE_USER: fluxbase
+      FLUXBASE_DATABASE_PASSWORD: secure-password
+      FLUXBASE_DATABASE_DATABASE: fluxbase
       FLUXBASE_STORAGE_PROVIDER: s3
       FLUXBASE_STORAGE_S3_ENDPOINT: minio:9000
       FLUXBASE_STORAGE_S3_ACCESS_KEY: minioadmin
       FLUXBASE_STORAGE_S3_SECRET_KEY: minioadmin
-      FLUXBASE_STORAGE_S3_USE_SSL: "false"
       FLUXBASE_STORAGE_S3_BUCKET: fluxbase
     depends_on:
       - postgres
@@ -239,12 +242,15 @@ services:
   fluxbase-2:
     image: ghcr.io/nimbleflux/fluxbase:latest
     environment:
-      DATABASE_URL: postgres://fluxbase:secure-password@postgres:5432/fluxbase
+      FLUXBASE_DATABASE_HOST: postgres
+      FLUXBASE_DATABASE_PORT: 5432
+      FLUXBASE_DATABASE_USER: fluxbase
+      FLUXBASE_DATABASE_PASSWORD: secure-password
+      FLUXBASE_DATABASE_DATABASE: fluxbase
       FLUXBASE_STORAGE_PROVIDER: s3
       FLUXBASE_STORAGE_S3_ENDPOINT: minio:9000
       FLUXBASE_STORAGE_S3_ACCESS_KEY: minioadmin
       FLUXBASE_STORAGE_S3_SECRET_KEY: minioadmin
-      FLUXBASE_STORAGE_S3_USE_SSL: "false"
       FLUXBASE_STORAGE_S3_BUCKET: fluxbase
     depends_on:
       - postgres
@@ -287,11 +293,22 @@ spec:
         - name: fluxbase
           image: ghcr.io/nimbleflux/fluxbase:latest
           env:
-            - name: DATABASE_URL
+            - name: FLUXBASE_DATABASE_HOST
+              value: "postgres.fluxbase.svc.cluster.local"
+            - name: FLUXBASE_DATABASE_PORT
+              value: "5432"
+            - name: FLUXBASE_DATABASE_USER
               valueFrom:
                 secretKeyRef:
                   name: fluxbase-secrets
-                  key: database-url
+                  key: database-user
+            - name: FLUXBASE_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fluxbase-secrets
+                  key: database-password
+            - name: FLUXBASE_DATABASE_DATABASE
+              value: "fluxbase"
             - name: FLUXBASE_STORAGE_PROVIDER
               value: "s3"
             - name: FLUXBASE_STORAGE_S3_ENDPOINT
@@ -614,15 +631,9 @@ CREATE USER replicator WITH REPLICATION ENCRYPTED PASSWORD 'secure-password';
 
 #### Fluxbase Read Replica Support (Future)
 
-```bash
-# Configure read replica endpoints
-FLUXBASE_DATABASE_READ_REPLICAS=replica1.example.com:5432,replica2.example.com:5432
+Read replica support is not yet available in Fluxbase. A future release will add support for routing read queries to PostgreSQL replica(s).
 
-# Read operations will be distributed across replicas
-# Writes always go to primary
-```
-
-**Current workaround**: Use PgBouncer or HAProxy for read replica routing.
+**Current workaround**: Use PgBouncer or HAProxy for read replica routing at the connection pool level. Configure your pooler to separate read and write traffic, pointing all Fluxbase instances at the pooler.
 
 ### Database Sharding (Advanced)
 
@@ -639,12 +650,7 @@ For massive scale (millions of users):
      FOR VALUES FROM (1000000) TO (2000000);
    ```
 
-2. **Separate Databases**: Different databases per tenant/region
-   ```bash
-   # Configure multiple databases
-   FLUXBASE_DATABASE_SHARD_0=postgres://db1.example.com/fluxbase
-   FLUXBASE_DATABASE_SHARD_1=postgres://db2.example.com/fluxbase
-   ```
+2. **Separate Databases**: Use Fluxbase's built-in multi-tenancy to route tenants to separate databases. See the [Multi-Tenancy guide](/guides/multi-tenancy) for configuring per-tenant database connections.
 
 ---
 
@@ -691,12 +697,7 @@ spec:
 #### Fluxbase Configuration
 
 ```bash
-FLUXBASE_REDIS_ENABLED=true
-FLUXBASE_REDIS_HOST=redis-cluster
-FLUXBASE_REDIS_PORT=6379
-FLUXBASE_REDIS_PASSWORD=secure-password
-FLUXBASE_REDIS_DB=0
-FLUXBASE_REDIS_POOL_SIZE=10
+FLUXBASE_SCALING_REDIS_URL=redis://:secure-password@redis-cluster:6379/0
 ```
 
 #### What to Cache

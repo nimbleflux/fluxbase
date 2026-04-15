@@ -66,7 +66,6 @@ services:
       FLUXBASE_ENCRYPTION_KEY: "CHANGEME-exactly-32-bytes-random"
       FLUXBASE_SECURITY_SETUP_TOKEN: "CHANGEME-secure-random-token"
       FLUXBASE_BASE_URL: http://localhost:8080
-      FLUXBASE_ENVIRONMENT: production
       FLUXBASE_DEBUG: "false"
     ports:
       - "8080:8080"
@@ -207,7 +206,6 @@ services:
 
       # Server
       FLUXBASE_BASE_URL: https://api.yourdomain.com
-      FLUXBASE_ENVIRONMENT: production
       FLUXBASE_DEBUG: "false"
 
       # Email (SendGrid example)

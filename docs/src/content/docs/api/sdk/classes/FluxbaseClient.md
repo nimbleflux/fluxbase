@@ -317,10 +317,9 @@ const { data } = await client.tenant.create({
 // Get tenant details
 const { data } = await client.tenant.get("tenant-id");
 
-// Add a member to a tenant (tenant admin only)
-await client.tenant.addMember("tenant-id", {
+// Assign an admin to a tenant (tenant admin only)
+await client.tenant.assignAdmin("tenant-id", {
   user_id: "user-id",
-  role: "tenant_member",
 });
 ```
 

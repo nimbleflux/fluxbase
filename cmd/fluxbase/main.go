@@ -719,7 +719,7 @@ func ensureServiceKey(ctx context.Context, pool *pgxpool.Pool, cfg *config.Confi
 	}
 
 	// Generate new key
-	fullKey, keyHash, keyPrefix, err := keys.GenerateKey(keyType)
+	_, keyHash, keyPrefix, err := keys.GenerateKey(keyType)
 	if err != nil {
 		return fmt.Errorf("failed to generate key: %w", err)
 	}
@@ -735,11 +735,10 @@ func ensureServiceKey(ctx context.Context, pool *pgxpool.Pool, cfg *config.Confi
 		return fmt.Errorf("failed to insert generated key: %w", err)
 	}
 
-	// Display generated key once at WARN level for visibility
-	log.Warn().
+	log.Info().
 		Str("type", keyType).
-		Str("key", fullKey).
-		Msg("Generated new service key - save this key securely, it will not be shown again")
+		Str("prefix", keyPrefix).
+		Msg("Generated new service key - configure via tenants.default.anon_key or tenants.default.service_key to persist")
 
 	return nil
 }

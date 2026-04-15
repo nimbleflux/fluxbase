@@ -111,10 +111,10 @@ Complete this checklist before deploying Fluxbase to production to ensure securi
 
 ### Application Settings
 
-- [ ] **Environment**: Set to production
+- [ ] **Tracing Environment**: Set to production
 
   ```bash
-  FLUXBASE_ENVIRONMENT=production
+  FLUXBASE_TRACING_ENVIRONMENT=production
   ```
 
 - [ ] **Debug Mode**: Disabled

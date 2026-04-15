@@ -523,9 +523,7 @@ The SDK automatically handles rate limit responses with exponential backoff:
 ```typescript
 import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-const client = createClient({
-  baseUrl: "http://localhost:8080",
-});
+const client = createClient('http://localhost:8080', 'your-anon-key')
 
 // The SDK automatically retries on 429 responses
 const { data: posts } = await client.from("posts").select();

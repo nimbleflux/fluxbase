@@ -63,12 +63,10 @@ interface Tenant {
 
 Fluxbase supports multiple key types for different use cases:
 
-| Key Type         | Scope       | Use Case                                         |
-| ---------------- | ----------- | ------------------------------------------------ |
-| `anon`           | Global      | Anonymous/public access, no tenant context       |
-| `publishable`    | User-scoped | User-specific operations, inherits user's tenant |
-| `tenant_service` | Tenant      | Backend services for a specific tenant           |
-| `global_service` | Instance    | Platform-wide operations, bypasses RLS           |
+| Key Type  | Scope       | Use Case                                         |
+| --------- | ----------- | ------------------------------------------------ |
+| `anon`    | Global      | Anonymous/public access, no tenant context       |
+| `service` | Instance    | Backend services, bypasses RLS                   |
 
 ## Tenant Service Keys
 
@@ -93,12 +91,10 @@ Use the Admin SDK to create tenant-scoped keys:
 
 ```typescript
 // Create a tenant service key
-const key = await client.admin.serviceKeys.create({
-  tenant_id: "tenant-uuid",
+const { data: key, error } = await client.admin.serviceKeys.create({
   name: "Production API Key",
-  key_type: "tenant_service",
-  scopes: ["rest:read", "rest:write"],
-  allowed_namespaces: ["public", "app"],
+  key_type: "service",
+  scopes: ["*"],
 });
 ```
 
@@ -348,10 +344,10 @@ import { createClient } from "@nimbleflux/fluxbase-sdk";
 const client = createClient("http://localhost:8080", "global-service-key");
 
 // List all tenants
-const tenants = await client.tenant.list();
+const { data: tenants, error } = await client.tenant.list();
 
 // Create a new tenant
-const tenant = await client.tenant.create({
+const { data: tenant, error: createError } = await client.tenant.create({
   slug: "acme-corp",
   name: "Acme Corporation",
   metadata: {
@@ -361,34 +357,33 @@ const tenant = await client.tenant.create({
 });
 
 // Update tenant
-await client.tenant.update(tenant.id, {
+await client.tenant.update(tenant!.id, {
   name: "Acme Corp Inc.",
   metadata: { plan: "pro" },
 });
 
 // Soft delete tenant
-await client.tenant.delete(tenant.id);
+await client.tenant.delete(tenant!.id);
 ```
 
 ### Service Key Management
 
 ```typescript
 // List keys for a tenant
-const keys = await client.admin.serviceKeys.list();
+const { data: keys, error } = await client.admin.serviceKeys.list();
 
 // Create tenant service key
-const key = await client.admin.serviceKeys.create({
-  tenant_id: "tenant-uuid",
+const { data: key, error: keyError } = await client.admin.serviceKeys.create({
   name: "Backend Service",
-  key_type: "tenant_service",
-  scopes: ["rest:read", "rest:write", "storage:read", "storage:write"],
+  key_type: "service",
+  scopes: ["*"],
 });
 
 // Revoke a key
-await client.admin.serviceKeys.revoke(key.id, {reason: "Security incident"});
+await client.admin.serviceKeys.revoke(key!.id, { reason: "Security incident" });
 
 // Rotate keys
-const newKey = await client.admin.serviceKeys.rotate(oldKeyId);
+const { data: newKey, error: rotateError } = await client.admin.serviceKeys.rotate(oldKeyId);
 ```
 
 ### Tenant Context in Queries
@@ -660,13 +655,14 @@ USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
 Manage tenant schemas via the Admin API:
 
-```typescript
-// Get schema status for a tenant
-const status = await client.admin.getTenantSchemaStatus("tenant-uuid");
-// Returns: { has_schema_file, has_pending_changes, schema_fingerprint, ... }
+```bash
+# Get schema status for a tenant
+curl -H "Authorization: Bearer <service-key>" \
+  http://localhost:8080/api/v1/admin/tenants/<tenant-id>/schema
 
-// Apply schema for a specific tenant
-await client.admin.applyTenantSchema("tenant-uuid");
+# Apply schema for a specific tenant
+curl -X POST -H "Authorization: Bearer <service-key>" \
+  http://localhost:8080/api/v1/admin/tenants/<tenant-id>/schema/apply
 ```
 
 ### Declarative Schema Best Practices

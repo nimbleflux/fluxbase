@@ -283,7 +283,7 @@ See the [CLI Command Reference](/cli/commands#graphql-commands) for complete doc
 ```typescript
 import { createClient } from '@nimbleflux/fluxbase-sdk'
 
-const client = createClient({ url: 'http://localhost:8080' })
+const client = createClient('http://localhost:8080', 'your-anon-key')
 
 // Execute a query
 const { data, errors } = await client.graphql.query<UsersQuery>(`

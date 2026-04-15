@@ -144,7 +144,7 @@ Enable debug logging for detailed traces:
 
 ```yaml
 logging:
-  level: debug
+  console_level: debug
 ```
 
 ## Best Practices

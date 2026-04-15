@@ -25,13 +25,9 @@ npm install @nimbleflux/fluxbase-sdk
 ### Quick Start
 
 ```typescript
-import { FluxbaseClient } from "@nimbleflux/fluxbase-sdk";
+import { createClient } from "@nimbleflux/fluxbase-sdk";
 
-// Initialize client (requires authentication)
-const client = new FluxbaseClient({
-  url: "http://localhost:8080",
-  apiKey: process.env.FLUXBASE_CLIENT_KEY, // Or use service key for backend
-});
+const client = createClient('http://localhost:8080', 'your-service-role-key')
 
 // Create a webhook
 const webhook = await client.management.webhooks.create({
@@ -186,10 +182,7 @@ console.log("Webhook deleted");
 #### View Delivery History
 
 ```typescript
-const deliveries = await client.management.webhooks.getDeliveries(webhookId, {
-  limit: 50,
-  offset: 0,
-});
+const deliveries = await client.management.webhooks.listDeliveries(webhookId, 50);
 
 deliveries.forEach((delivery) => {
   console.log(`${delivery.created_at}: ${delivery.status}`);
@@ -559,7 +552,7 @@ For more details, see [SSRF Protection Guide](/security/ssrf-protection/).
 | **Verify signatures** | Always verify webhook signatures using HMAC-SHA256 |
 | **Use HTTPS** | Secure webhook URLs with HTTPS in production |
 | **Log deliveries** | Keep detailed logs of events for debugging |
-| **Monitor failures** | Use `client.management.webhooks.getDeliveries()` to track failed deliveries |
+| **Monitor failures** | Use `client.management.webhooks.listDeliveries()` to track failed deliveries |
 
 **Example: Async processing**
 
@@ -585,11 +578,7 @@ app.post("/webhooks", async (req, res) => {
 
 ```typescript
 // Test via SDK
-await client.management.webhooks.test(webhookId, {
-  event: "INSERT",
-  table: "test_table",
-  record: { id: "test-id", name: "Test Record" }
-});
+await client.management.webhooks.test(webhookId);
 
 // Or use dashboard: Webhooks → Select webhook → Test
 ```
@@ -601,7 +590,7 @@ await client.management.webhooks.test(webhookId, {
 **Monitor deliveries:**
 
 ```typescript
-const deliveries = await client.management.webhooks.getDeliveries(webhookId, { limit: 100 });
+const deliveries = await client.management.webhooks.listDeliveries(webhookId, 100);
 ```
 
 **Retry behavior:** Failed deliveries automatically retry (default: 3 attempts, exponential backoff, 30s timeout)

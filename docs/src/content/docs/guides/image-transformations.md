@@ -114,9 +114,9 @@ Result: 267×200 (scaled to cover, not cropped)
 ### TypeScript SDK
 
 ```typescript
-import { FluxbaseClient } from '@nimbleflux/fluxbase-sdk'
+import { createClient } from '@nimbleflux/fluxbase-sdk'
 
-const client = new FluxbaseClient({ url: 'http://localhost:8080' })
+const client = createClient('http://localhost:8080', 'your-anon-key')
 const storage = client.storage
 
 // Get transform URL (synchronous)

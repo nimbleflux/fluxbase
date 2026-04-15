@@ -833,7 +833,7 @@ jobs:
           FLUXBASE_STORAGE_S3_ACCESS_KEY: minioadmin
           FLUXBASE_STORAGE_S3_SECRET_KEY: minioadmin
           FLUXBASE_STORAGE_S3_BUCKET: fluxbase-test
-          FLUXBASE_STORAGE_S3_USE_SSL: "false"
+
           FLUXBASE_FUNCTIONS_ENABLED: "true"
           FLUXBASE_JOBS_ENABLED: "true"
           FLUXBASE_REALTIME_ENABLED: "true"

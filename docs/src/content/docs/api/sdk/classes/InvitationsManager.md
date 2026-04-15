@@ -13,7 +13,7 @@ Invitations allow admins to invite new users to join the dashboard.
 ## Example
 
 ```typescript
-const client = createClient({ url: 'http://localhost:8080' })
+const client = createClient('http://localhost:8080', 'your-service-role-key')
 await client.admin.login({ email: 'admin@example.com', password: 'password' })
 
 // Create an invitation

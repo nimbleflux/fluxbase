@@ -150,7 +150,7 @@ Enable user signups in Settings > Authentication, then:
 
 ```typescript
 // Sign up a user
-const { user, error } = await fluxbase.auth.signUp({
+const { data, error } = await fluxbase.auth.signUp({
   email: 'user@example.com',
   password: 'securepassword123'
 })
