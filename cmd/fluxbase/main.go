@@ -573,15 +573,32 @@ func ensureDefaultTenantAndKeys(pool *pgxpool.Pool, cfg *config.Config) error {
 	var tenantID uuid.UUID
 	var tenantExists bool
 
-	// Check if default tenant exists
-	err := pool.QueryRow(ctx,
-		"SELECT id, true FROM platform.tenants WHERE slug = 'default' AND deleted_at IS NULL",
-	).Scan(&tenantID, &tenantExists)
-	if err != nil && err.Error() != "no rows in result set" {
-		// Try alternative error check for pgx
-		if !isNoRowsError(err) {
-			return fmt.Errorf("failed to check for default tenant: %w", err)
+	// Check if default tenant exists (with retry for transient connection errors
+	// that can occur right after pool recreation).
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		err = pool.QueryRow(ctx,
+			"SELECT id, true FROM platform.tenants WHERE slug = 'default' AND deleted_at IS NULL",
+		).Scan(&tenantID, &tenantExists)
+		if err == nil {
+			break
 		}
+		if isNoRowsError(err) {
+			err = nil
+			break
+		}
+		// Also check for the standard pgx "no rows" message
+		if strings.Contains(err.Error(), "no rows in result set") {
+			err = nil
+			break
+		}
+		if attempt < 2 {
+			log.Warn().Err(err).Msg("Retrying default tenant check due to connection error")
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+	if err != nil && !isNoRowsError(err) {
+		return fmt.Errorf("failed to check for default tenant: %w", err)
 	}
 
 	if !tenantExists {

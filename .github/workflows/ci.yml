@@ -17,8 +17,134 @@ env:
   GO_VERSION: "1.26.1"
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      go-core: ${{ steps.filter.outputs.go-core }}
+      go-areas: ${{ steps.go-areas.outputs.areas }}
+      admin-ui: ${{ steps.filter.outputs.admin-ui }}
+      sdk: ${{ steps.filter.outputs.sdk }}
+      e2e-ui: ${{ steps.filter.outputs.e2e-ui }}
+      docker: ${{ steps.filter.outputs.docker }}
+      ci-config: ${{ steps.filter.outputs.ci-config }}
+      code-any: ${{ steps.filter.outputs.code-any }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            go:
+              - '**.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'internal/**'
+              - 'cmd/**'
+              - 'cli/**'
+              - 'seeds/**'
+              - 'scripts/**'
+              - 'Makefile'
+              - 'lefthook.yml'
+              - '.testcoverage.yml'
+              - '.golangci.yml'
+            go-core:
+              - 'internal/config/**'
+              - 'internal/database/**'
+              - 'internal/auth/**'
+              - 'internal/middleware/**'
+              - 'go.mod'
+              - 'go.sum'
+            admin-ui:
+              - 'admin/src/**'
+              - 'admin/public/**'
+              - 'admin/index.html'
+              - 'admin/package.json'
+              - 'admin/vite.config.ts'
+              - 'admin/tsconfig*.json'
+              - 'admin/components.json'
+              - 'admin/eslint.config.js'
+              - 'package.json'
+              - 'bun.lock'
+            sdk:
+              - 'sdk/src/**'
+              - 'sdk/package.json'
+              - 'sdk/tsup.config.ts'
+              - 'sdk/tsconfig.json'
+              - 'sdk/vitest.config.ts'
+              - 'sdk/scripts/**'
+              - 'sdk-react/src/**'
+              - 'sdk-react/package.json'
+              - 'sdk-react/tsup.config.ts'
+              - 'sdk-react/tsconfig.json'
+              - 'package.json'
+              - 'bun.lock'
+            e2e-ui:
+              - 'admin/tests/**'
+              - 'admin/playwright.config.ts'
+              - 'admin/global-setup.ts'
+              - 'admin/global-teardown.ts'
+            docker:
+              - 'Dockerfile'
+              - 'Dockerfile.docs'
+              - 'docker-compose.yml'
+              - '.dockerignore'
+            ci-config:
+              - '.github/workflows/**'
+              - '.github/actions/**'
+            code-any:
+              - '**.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'internal/**'
+              - 'cmd/**'
+              - 'cli/**'
+              - 'admin/src/**'
+              - 'admin/public/**'
+              - 'admin/index.html'
+              - 'admin/package.json'
+              - 'admin/vite.config.ts'
+              - 'admin/tests/**'
+              - 'admin/playwright.config.ts'
+              - 'sdk/src/**'
+              - 'sdk/package.json'
+              - 'sdk/scripts/**'
+              - 'sdk-react/src/**'
+              - 'sdk-react/package.json'
+              - 'package.json'
+              - 'bun.lock'
+              - 'Dockerfile'
+              - 'Dockerfile.docs'
+              - 'Makefile'
+              - 'scripts/**'
+              - 'seeds/**'
+
+      - name: Detect changed Go areas
+        id: go-areas
+        if: steps.filter.outputs.go == 'true'
+        run: |
+          # If core packages changed, test everything
+          if [ "${{ steps.filter.outputs.go-core }}" = "true" ]; then
+            echo "areas=all" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # List changed internal modules
+          AREAS=$(git diff --name-only origin/main...HEAD -- 'internal/**/*.go' 'cmd/**/*.go' 'cli/**/*.go' | \
+            grep -oP 'internal/\K[^/]+|cmd|cli' | sort -u | tr '\n' ',' | sed 's/,$//')
+          echo "areas=${AREAS:-all}" >> "$GITHUB_OUTPUT"
+
   lint-go:
     name: Lint Go
+    needs: changes
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.go == 'true' ||
+      needs.changes.outputs.ci-config == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -86,6 +212,12 @@ jobs:
 
   lint-typescript:
     name: Lint TypeScript
+    needs: changes
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.admin-ui == 'true' ||
+      needs.changes.outputs.ci-config == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -109,6 +241,13 @@ jobs:
 
   test-sdk:
     name: Test SDK
+    needs: changes
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.sdk == 'true' ||
+      needs.changes.outputs.admin-ui == 'true' ||
+      needs.changes.outputs.ci-config == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -169,6 +308,12 @@ jobs:
 
   test-go:
     name: Test Go
+    needs: changes
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.go == 'true' ||
+      needs.changes.outputs.ci-config == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -366,11 +511,30 @@ jobs:
           FLUXBASE_DATABASE_DATABASE: fluxbase_test
           SKIP_MIGRATIONS: "true"
         run: |
-          # Run unit tests with -short flag to skip integration tests
-          # Integration tests require database setup and can be slow
-          # Note: We run go test directly here for coverage, not through test-runner.sh
-          # Skip migrations since they were already applied in the previous step
-          go test -v -short -race -timeout=10m -coverprofile=coverage-unit.out -covermode=atomic $(go list ./... | grep -v '/test/e2e' | grep -v '/test$')
+          if [ "${{ needs.changes.outputs.go-core }}" = "true" ] || \
+             [ "${{ needs.changes.outputs.go-areas }}" = "all" ] || \
+             [ -z "${{ needs.changes.outputs.go-areas }}" ]; then
+            echo "Core package changed — running full test suite"
+            go test -v -short -race -timeout=10m -coverprofile=coverage-unit.out -covermode=atomic $(go list ./... | grep -v '/test/e2e' | grep -v '/test$')
+          else
+            echo "Selective test — areas: ${{ needs.changes.outputs.go-areas }}"
+            # Build package list from changed areas
+            PKGS=""
+            IFS=',' read -ra AREAS <<< "${{ needs.changes.outputs.go-areas }}"
+            for area in "${AREAS[@]}"; do
+              case "$area" in
+                cmd)     PKGS="$PKGS ./cmd/..." ;;
+                cli)     PKGS="$PKGS ./cli/..." ;;
+                *)       PKGS="$PKGS ./internal/$area/..." ;;
+              esac
+            done
+
+            # Always include API tests (integration verifier)
+            PKGS="$PKGS ./internal/api/..."
+
+            echo "Testing packages: $PKGS"
+            go test -v -short -race -timeout=10m -coverprofile=coverage-unit.out -covermode=atomic $PKGS
+          fi
 
       - name: Run e2e tests with coverage
         timeout-minutes: 15
@@ -388,10 +552,52 @@ jobs:
           FLUXBASE_STORAGE_S3_BUCKET: fluxbase-test
           FLUXBASE_SECURITY_SETUP_TOKEN: test-setup-token-e2e-ci
         run: |
-          # Run e2e tests with fluxbase_app user for proper RLS testing
-          # Use -parallel=1 within each package to run test functions sequentially (avoid DB connection exhaustion)
-          # Run with coverage to include in combined coverage report
-          go test -tags=integration -v -race -parallel=1 -timeout=10m -coverprofile=coverage-e2e.out -covermode=atomic ./test/e2e/...
+          if [ "${{ needs.changes.outputs.go-core }}" = "true" ] || \
+             [ "${{ needs.changes.outputs.go-areas }}" = "all" ] || \
+             [ -z "${{ needs.changes.outputs.go-areas }}" ]; then
+            echo "Core package changed — running all e2e tests"
+            go test -tags=integration -v -race -parallel=1 -timeout=10m -coverprofile=coverage-e2e.out -covermode=atomic ./test/e2e/...
+          else
+            echo "Selective e2e — areas: ${{ needs.changes.outputs.go-areas }}"
+            # Map changed areas to e2e test file prefixes
+            PATTERNS=""
+            IFS=',' read -ra AREAS <<< "${{ needs.changes.outputs.go-areas }}"
+            for area in "${AREAS[@]}"; do
+              case "$area" in
+                auth)      PATTERNS="$PATTERNS auth_ two_factor_ oauth_" ;;
+                storage)   PATTERNS="$PATTERNS storage_ rls_ debug_storage" ;;
+                ai)        PATTERNS="$PATTERNS ai_" ;;
+                api)       PATTERNS="$PATTERNS rest_ graphql_ rpc_ sql_editor" ;;
+                branching) PATTERNS="$PATTERNS branching_" ;;
+                tenantdb)  PATTERNS="$PATTERNS tenant_" ;;
+                functions) PATTERNS="$PATTERNS functions_" ;;
+                realtime)  PATTERNS="$PATTERNS realtime_" ;;
+                ratelimit) PATTERNS="$PATTERNS ratelimit_" ;;
+                webhook)   PATTERNS="$PATTERNS webhook_" ;;
+                mcp)       PATTERNS="$PATTERNS mcp_" ;;
+                jobs)      PATTERNS="$PATTERNS logging_" ;;
+                *)         PATTERNS="$PATTERNS $area" ;;
+              esac
+            done
+
+            # Find matching e2e test files
+            E2E_PKGS=""
+            for pattern in $PATTERNS; do
+              matches=$(find test/e2e -name "${pattern}*_test.go" -exec dirname {} \; 2>/dev/null | sort -u)
+              E2E_PKGS="$E2E_PKGS $matches"
+            done
+
+            # Always include setup + health + admin
+            E2E_PKGS="./test/e2e $E2E_PKGS"
+
+            if [ -z "$(echo $E2E_PKGS | tr -d ' ')" ] || [ "$E2E_PKGS" = "./test/e2e" ]; then
+              echo "No specific e2e tests matched — running full suite"
+              go test -tags=integration -v -race -parallel=1 -timeout=10m -coverprofile=coverage-e2e.out -covermode=atomic ./test/e2e/...
+            else
+              echo "Running e2e packages: $(echo $E2E_PKGS | xargs)"
+              go test -tags=integration -v -race -parallel=1 -timeout=10m -coverprofile=coverage-e2e.out -covermode=atomic $(echo $E2E_PKGS | xargs)
+            fi
+          fi
 
       - name: Merge coverage reports
         run: |
@@ -430,6 +636,14 @@ jobs:
 
   test-e2e-ui:
     name: Test E2E UI
+    needs: changes
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.admin-ui == 'true' ||
+      needs.changes.outputs.e2e-ui == 'true' ||
+      needs.changes.outputs.go == 'true' ||
+      needs.changes.outputs.ci-config == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -686,7 +900,12 @@ jobs:
 
   build:
     name: Build
-    needs: [lint-go, lint-typescript, test-sdk, test-go, test-e2e-ui]
+    needs: [changes, lint-go, lint-typescript, test-sdk, test-go, test-e2e-ui]
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.code-any == 'true' ||
+      needs.changes.outputs.ci-config == 'true'
     strategy:
       matrix:
         include:
@@ -780,8 +999,12 @@ jobs:
   docker:
     name: Docker Build Test
     runs-on: ubuntu-latest
-    needs: [test-go]
-    if: github.event_name == 'push'
+    needs: [changes, test-go]
+    if: >-
+      github.event_name == 'push' &&
+      (needs.changes.outputs.docker == 'true' ||
+       needs.changes.outputs.go == 'true' ||
+       needs.changes.outputs.ci-config == 'true')
     steps:
       - uses: actions/checkout@v6
 
@@ -801,8 +1024,12 @@ jobs:
   docker-docs:
     name: Docker Docs Build Test
     runs-on: ubuntu-latest
-    needs: [test-sdk]
-    if: github.event_name == 'push'
+    needs: [changes, test-sdk]
+    if: >-
+      github.event_name == 'push' &&
+      (needs.changes.outputs.docker == 'true' ||
+       needs.changes.outputs.sdk == 'true' ||
+       needs.changes.outputs.ci-config == 'true')
     steps:
       - uses: actions/checkout@v6
 

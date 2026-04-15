@@ -186,27 +186,27 @@ test.describe("Tenant CRUD", () => {
       adminPage.getByText("Manage multi-tenant organizations"),
     ).toBeVisible({ timeout: 10_000 });
 
-    // Find the row containing a "Default" badge (inside a <Badge variant="default">)
-    // The badge text "Default" appears in a table cell, not the card header
+    // Find the row containing a "Default" badge (<span data-slot="badge">Default</span>)
     const defaultRow = adminPage.getByRole("row").filter({
-      has: adminPage.locator("td").locator("div", { hasText: /^Default$/ }),
+      has: adminPage.locator("td").locator("span", { hasText: /^Default$/ }),
     });
 
+    // Default tenant row must be visible
+    await expect(defaultRow).toBeVisible({ timeout: 5_000 });
+
     // Default tenant should NOT have a delete button, or the row should have limited actions
-    if (await defaultRow.isVisible()) {
-      const buttons = defaultRow.getByRole("button");
-      const count = await buttons.count();
-      // Should have only 1 button (edit), not 2 (edit + delete)
-      // But if there are 2, the delete should be disabled or hidden
-      if (count === 2) {
-        // If there are 2 buttons, the second (delete) should be disabled
-        const deleteBtn = buttons.nth(1);
-        const isDisabled = await deleteBtn.getAttribute("aria-disabled");
-        const isHidden = !(await deleteBtn.isVisible().catch(() => false));
-        expect(isDisabled || isHidden).toBeTruthy();
-      } else {
-        expect(count).toBe(1);
-      }
+    const buttons = defaultRow.getByRole("button");
+    const count = await buttons.count();
+    // Should have only 1 button (edit), not 2 (edit + delete)
+    // But if there are 2, the delete should be disabled or hidden
+    if (count === 2) {
+      // If there are 2 buttons, the second (delete) should be disabled
+      const deleteBtn = buttons.nth(1);
+      const isDisabled = await deleteBtn.getAttribute("aria-disabled");
+      const isHidden = !(await deleteBtn.isVisible().catch(() => false));
+      expect(isDisabled || isHidden).toBeTruthy();
+    } else {
+      expect(count).toBe(1);
     }
   });
 
