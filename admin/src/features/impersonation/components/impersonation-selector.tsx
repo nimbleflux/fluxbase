@@ -72,10 +72,28 @@ export function ImpersonationSelector() {
 
   const isInstanceAdmin = checkIsInstanceAdmin(user);
   const currentTenant = useTenantStore((state) => state.currentTenant);
+  const tenants = useTenantStore((state) => state.tenants);
+  const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant);
 
-  if (!checkIsAdmin(user) || !currentTenant) {
+  // For tenant admins (non-instance-admins), currentTenant should always be
+  // set by the TenantSelector's auto-selection logic. But as a fallback in
+  // case of a race condition (e.g. Zustand persist hydration), derive it from
+  // the tenants list.
+  const effectiveTenant =
+    currentTenant ||
+    (!isInstanceAdmin && tenants.length > 0 ? tenants[0] : null);
+
+  if (!checkIsAdmin(user) || !effectiveTenant) {
     return null;
   }
+
+  // Ensure the store's currentTenant is set before any API calls so the
+  // interceptor includes the X-FB-Tenant header.
+  const ensureTenantInStore = () => {
+    if (!currentTenant && effectiveTenant) {
+      setCurrentTenant(effectiveTenant);
+    }
+  };
 
   const handleStartImpersonation = async () => {
     if (!reason.trim()) {
@@ -90,6 +108,7 @@ export function ImpersonationSelector() {
 
     try {
       setLoading(true);
+      ensureTenantInStore();
       let response;
 
       switch (impersonationType) {

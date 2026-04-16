@@ -1039,7 +1039,7 @@ func (h *AuthHandler) StartImpersonation(c fiber.Ctx) error {
 	req.IPAddress = c.IP()
 	req.UserAgent = c.Get("User-Agent")
 
-	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantID := c.Get("X-FB-Tenant")
 
 	resp, err := h.authService.StartImpersonation(c.RequestCtx(), adminUserID.(string), tenantID, req)
 	if err != nil {
@@ -1160,7 +1160,7 @@ func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
 
 	ipAddress := c.IP()
 	userAgent := c.Get("User-Agent")
-	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantID := c.Get("X-FB-Tenant")
 
 	resp, err := h.authService.StartAnonImpersonation(c.RequestCtx(), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
 	if err != nil {
@@ -1201,7 +1201,7 @@ func (h *AuthHandler) StartServiceImpersonation(c fiber.Ctx) error {
 
 	ipAddress := c.IP()
 	userAgent := c.Get("User-Agent")
-	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantID := c.Get("X-FB-Tenant")
 
 	resp, err := h.authService.StartServiceImpersonation(c.RequestCtx(), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
 	if err != nil {

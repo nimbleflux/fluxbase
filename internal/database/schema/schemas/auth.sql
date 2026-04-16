@@ -2827,6 +2827,7 @@ CREATE POLICY impersonation_sessions_instance_admin_only ON impersonation_sessio
     OR (current_user_role() = 'instance_admin')
     OR (
         current_user_role() = 'authenticated'
+        AND tenant_id IS NOT NULL
         AND has_tenant_access(tenant_id)
     )
 );

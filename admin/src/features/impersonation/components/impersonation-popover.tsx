@@ -72,6 +72,8 @@ export function ImpersonationPopover({
 
   const isInstanceAdmin = checkIsInstanceAdmin(user);
   const currentTenant = useTenantStore((state) => state.currentTenant);
+  const tenants = useTenantStore((state) => state.tenants);
+  const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant);
 
   const {
     isImpersonating,
@@ -89,12 +91,25 @@ export function ImpersonationPopover({
     onStop: onImpersonationStop,
   });
 
-  if (!checkIsAdmin(user) || !currentTenant) {
+  // For tenant admins, derive tenant from the tenants list as a fallback
+  const effectiveTenant =
+    currentTenant ||
+    (!isInstanceAdmin && tenants.length > 0 ? tenants[0] : null);
+
+  if (!checkIsAdmin(user) || !effectiveTenant) {
     return null;
   }
 
+  // Ensure the store's currentTenant is set before any API calls
+  const ensureTenantInStore = () => {
+    if (!currentTenant && effectiveTenant) {
+      setCurrentTenant(effectiveTenant);
+    }
+  };
+
   const handleStartImpersonation = async () => {
     const reasonToUse = requireReason ? reason : defaultReason;
+    ensureTenantInStore();
 
     if (requireReason && !reason.trim()) {
       return;
