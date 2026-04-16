@@ -16,51 +16,11 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/observability"
 )
 
-var (
-	rateLimiterMetrics          *observability.Metrics
-	rateLimiterWarningDisplayed bool
-	rateLimiterWarningMu        sync.Once
-)
+var rateLimiterMetrics *observability.Metrics
 
 // SetRateLimiterMetrics sets the metrics instance for rate limiter
 func SetRateLimiterMetrics(m *observability.Metrics) {
 	rateLimiterMetrics = m
-}
-
-// logRateLimiterWarning logs a warning about in-memory rate limiting in multi-instance environments.
-// The warning is only logged once per process to avoid log spam.
-func logRateLimiterWarning() {
-	rateLimiterWarningMu.Do(func() {
-		// Check for indicators of multi-instance deployment
-		isKubernetes := os.Getenv("KUBERNETES_SERVICE_HOST") != ""
-		isPodName := os.Getenv("POD_NAME") != "" || os.Getenv("HOSTNAME") != ""
-		isDockerCompose := os.Getenv("COMPOSE_PROJECT_NAME") != ""
-		hasRedisURL := os.Getenv("FLUXBASE_REDIS_URL") != "" || os.Getenv("REDIS_URL") != ""
-		hasDragonflyURL := os.Getenv("FLUXBASE_DRAGONFLY_URL") != "" || os.Getenv("DRAGONFLY_URL") != ""
-
-		// If Redis/Dragonfly is configured, rate limiting can be distributed
-		if hasRedisURL || hasDragonflyURL {
-			return // Distributed rate limiting is likely configured
-		}
-
-		// Log warning if we detect multi-instance environment indicators
-		if isKubernetes || isPodName || isDockerCompose {
-			log.Warn().
-				Bool("kubernetes_detected", isKubernetes).
-				Bool("container_detected", isPodName).
-				Bool("compose_detected", isDockerCompose).
-				Msg("SECURITY WARNING: Using in-memory rate limiting in a multi-instance environment. " +
-					"Rate limits are per-instance only and can be bypassed by targeting different instances. " +
-					"For production, configure Redis/Dragonfly (FLUXBASE_REDIS_URL or FLUXBASE_DRAGONFLY_URL) " +
-					"for distributed rate limiting, or use a reverse proxy with centralized rate limiting.")
-			rateLimiterWarningDisplayed = true
-		}
-	})
-}
-
-// IsRateLimiterWarningDisplayed returns true if the rate limiter warning was displayed
-func IsRateLimiterWarningDisplayed() bool {
-	return rateLimiterWarningDisplayed
 }
 
 // RateLimiterConfig holds configuration for rate limiting
@@ -78,16 +38,7 @@ type RateLimiterConfig struct {
 // IMPORTANT: This middleware uses Fiber's native in-memory storage for rate limiting.
 // Rate limiting is per-instance only. In multi-instance deployments, each instance
 // maintains its own rate limit counters independently.
-//
-// SECURITY WARNING: In-memory rate limiting is per-instance only. In multi-instance deployments,
-// attackers can bypass rate limits by targeting different instances. For production environments
-// with horizontal scaling, consider using a reverse proxy (nginx, Traefik) with centralized
-// rate limiting, or implement custom middleware with Redis-backed storage.
-// See docs/deployment/production-checklist.md for details.
 func NewRateLimiter(config RateLimiterConfig) fiber.Handler {
-	// Log warning about in-memory rate limiting in multi-instance environments
-	logRateLimiterWarning()
-
 	// Use provided storage or create new one with test mode detection
 	var storage fiber.Storage
 	if config.Storage != nil {

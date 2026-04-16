@@ -32,7 +32,7 @@ func (l *Loader) LoadAll() ([]*Chatbot, error) {
 	info, err := os.Stat(l.chatbotsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Warn().Str("dir", l.chatbotsDir).Msg("Chatbots directory does not exist, skipping load")
+			log.Debug().Str("dir", l.chatbotsDir).Msg("Chatbots directory does not exist, skipping load")
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to stat chatbots directory: %w", err)

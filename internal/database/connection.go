@@ -333,7 +333,7 @@ func (c *Connection) Migrate() error {
 func (c *Connection) runUserMigrations() error {
 	// Check if directory exists
 	if _, err := os.Stat(c.config.UserMigrationsPath); os.IsNotExist(err) {
-		log.Warn().Str("path", c.config.UserMigrationsPath).Msg("User migrations directory does not exist, skipping")
+		log.Debug().Str("path", c.config.UserMigrationsPath).Msg("User migrations directory does not exist, skipping")
 		return nil
 	}
 

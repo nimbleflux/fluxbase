@@ -2,13 +2,10 @@ package ratelimit
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/rs/zerolog/log"
 )
 
 // MemoryStore implements Store using in-memory storage.
@@ -43,38 +40,7 @@ func NewMemoryStore(gcInterval time.Duration) *MemoryStore {
 	// Start garbage collection goroutine
 	go store.gc()
 
-	// Log warning about in-memory rate limiting in production
-	logMemoryStoreWarning()
-
 	return store
-}
-
-// logMemoryStoreWarning logs a warning about using in-memory rate limiting in production.
-// The warning is only logged once per process to avoid log spam.
-func logMemoryStoreWarning() {
-	// Check for indicators of multi-instance deployment
-	isKubernetes := os.Getenv("KUBERNETES_SERVICE_HOST") != ""
-	isPodName := os.Getenv("POD_NAME") != "" || os.Getenv("HOSTNAME") != ""
-	isDockerCompose := os.Getenv("COMPOSE_PROJECT_NAME") != ""
-	hasRedisURL := os.Getenv("FLUXBASE_REDIS_URL") != "" || os.Getenv("REDIS_URL") != ""
-	hasDragonflyURL := os.Getenv("FLUXBASE_DRAGONFLY_URL") != "" || os.Getenv("DRAGONFLY_URL") != ""
-
-	// If Redis/Dragonfly is configured, rate limiting can be distributed
-	if hasRedisURL || hasDragonflyURL {
-		return // Distributed rate limiting is likely configured
-	}
-
-	// Log warning if we detect multi-instance environment indicators
-	if isKubernetes || isPodName || isDockerCompose {
-		log.Warn().
-			Bool("kubernetes_detected", isKubernetes).
-			Bool("container_detected", isPodName).
-			Bool("compose_detected", isDockerCompose).
-			Msg("SECURITY WARNING: Using in-memory rate limiting in a multi-instance environment. " +
-				"Rate limits are per-instance only and can be bypassed by targeting different instances. " +
-				"For production, configure Redis/Dragonfly (FLUXBASE_REDIS_URL or FLUXBASE_DRAGONFLY_URL) " +
-				"for distributed rate limiting, or use PostgreSQL backend via FLUXBASE_SCALING_BACKEND=postgres.")
-	}
 }
 
 // Get retrieves the current count for a key.
