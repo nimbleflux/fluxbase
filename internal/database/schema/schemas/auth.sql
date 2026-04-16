@@ -847,6 +847,7 @@ CREATE TABLE IF NOT EXISTS impersonation_sessions (
     is_active boolean DEFAULT true,
     access_token_jti text,
     refresh_token_jti text,
+    tenant_id uuid,
     CONSTRAINT impersonation_sessions_pkey PRIMARY KEY (id),
     CONSTRAINT impersonation_sessions_target_user_id_fkey FOREIGN KEY (target_user_id) REFERENCES users (id) ON DELETE CASCADE
 );
@@ -874,6 +875,8 @@ CREATE INDEX IF NOT EXISTS idx_impersonation_sessions_admin_user_id ON impersona
 --
 
 CREATE INDEX IF NOT EXISTS idx_impersonation_sessions_target_user_id ON impersonation_sessions (target_user_id);
+
+CREATE INDEX IF NOT EXISTS idx_impersonation_sessions_tenant_id ON impersonation_sessions (tenant_id);
 
 --
 -- Name: impersonation_sessions; Type: RLS; Schema: -; Owner: -
@@ -2819,7 +2822,14 @@ CREATE POLICY email_verification_tokens_service_only ON email_verification_token
 -- Name: impersonation_sessions_instance_admin_only; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY impersonation_sessions_instance_admin_only ON impersonation_sessions TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'instance_admin'));
+CREATE POLICY impersonation_sessions_instance_admin_only ON impersonation_sessions TO PUBLIC USING (
+    (current_user_role() = 'service_role')
+    OR (current_user_role() = 'instance_admin')
+    OR (
+        current_user_role() = 'authenticated'
+        AND has_tenant_access(tenant_id)
+    )
+);
 
 --
 -- Name: magic_links_service_only; Type: POLICY; Schema: -; Owner: -

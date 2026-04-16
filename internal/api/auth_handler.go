@@ -1022,7 +1022,6 @@ func (h *AuthHandler) GetCSRFToken(c fiber.Ctx) error {
 
 // StartImpersonation starts an admin impersonation session
 func (h *AuthHandler) StartImpersonation(c fiber.Ctx) error {
-	// Get admin user ID from context (must be authenticated)
 	adminUserID := c.Locals("user_id")
 	if adminUserID == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -1037,17 +1036,20 @@ func (h *AuthHandler) StartImpersonation(c fiber.Ctx) error {
 		})
 	}
 
-	// Set IP and user agent from request
 	req.IPAddress = c.IP()
 	req.UserAgent = c.Get("User-Agent")
 
-	resp, err := h.authService.StartImpersonation(c.RequestCtx(), adminUserID.(string), req)
+	tenantID, _ := c.Locals("tenant_id").(string)
+
+	resp, err := h.authService.StartImpersonation(c.RequestCtx(), adminUserID.(string), tenantID, req)
 	if err != nil {
 		statusCode := fiber.StatusInternalServerError
-		if errors.Is(err, auth.ErrNotAdmin) {
+		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
 			statusCode = fiber.StatusForbidden
 		} else if errors.Is(err, auth.ErrSelfImpersonation) {
 			statusCode = fiber.StatusBadRequest
+		} else if errors.Is(err, auth.ErrTargetUserNotInTenant) {
+			statusCode = fiber.StatusForbidden
 		}
 		return c.Status(statusCode).JSON(fiber.Map{
 			"error": err.Error(),
@@ -1134,7 +1136,6 @@ func (h *AuthHandler) ListImpersonationSessions(c fiber.Ctx) error {
 
 // StartAnonImpersonation starts impersonation as anonymous user
 func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
-	// Get admin user ID from context (must be authenticated)
 	adminUserID := c.Locals("user_id")
 	if adminUserID == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -1157,14 +1158,14 @@ func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
 		})
 	}
 
-	// Set IP and user agent from request
 	ipAddress := c.IP()
 	userAgent := c.Get("User-Agent")
+	tenantID, _ := c.Locals("tenant_id").(string)
 
-	resp, err := h.authService.StartAnonImpersonation(c.RequestCtx(), adminUserID.(string), req.Reason, ipAddress, userAgent)
+	resp, err := h.authService.StartAnonImpersonation(c.RequestCtx(), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
 	if err != nil {
 		statusCode := fiber.StatusInternalServerError
-		if errors.Is(err, auth.ErrNotAdmin) {
+		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
 			statusCode = fiber.StatusForbidden
 		}
 		return c.Status(statusCode).JSON(fiber.Map{
@@ -1175,9 +1176,7 @@ func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(resp)
 }
 
-// StartServiceImpersonation starts impersonation with service role
 func (h *AuthHandler) StartServiceImpersonation(c fiber.Ctx) error {
-	// Get admin user ID from context (must be authenticated)
 	adminUserID := c.Locals("user_id")
 	if adminUserID == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -1200,14 +1199,14 @@ func (h *AuthHandler) StartServiceImpersonation(c fiber.Ctx) error {
 		})
 	}
 
-	// Set IP and user agent from request
 	ipAddress := c.IP()
 	userAgent := c.Get("User-Agent")
+	tenantID, _ := c.Locals("tenant_id").(string)
 
-	resp, err := h.authService.StartServiceImpersonation(c.RequestCtx(), adminUserID.(string), req.Reason, ipAddress, userAgent)
+	resp, err := h.authService.StartServiceImpersonation(c.RequestCtx(), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
 	if err != nil {
 		statusCode := fiber.StatusInternalServerError
-		if errors.Is(err, auth.ErrNotAdmin) {
+		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
 			statusCode = fiber.StatusForbidden
 		}
 		return c.Status(statusCode).JSON(fiber.Map{

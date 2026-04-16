@@ -13,6 +13,7 @@ export interface ImpersonationSession {
   ip_address?: string
   user_agent?: string
   is_active: boolean
+  tenant_id?: string
 }
 
 export interface ImpersonatedUser {
@@ -28,6 +29,7 @@ interface ImpersonationState {
   impersonationRefreshToken: string | null
   impersonatedUser: ImpersonatedUser | null
   session: ImpersonationSession | null
+  impersonationTenantId: string | null
 
   // Actions
   startImpersonation: (
@@ -47,9 +49,9 @@ const STORAGE_KEYS = {
   USER: 'fluxbase_impersonated_user',
   SESSION: 'fluxbase_impersonation_session',
   TYPE: 'fluxbase_impersonation_type',
+  TENANT_ID: 'fluxbase_impersonation_tenant_id',
 }
 
-// Load initial state from localStorage
 const loadFromStorage = () => {
   try {
     const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
@@ -57,6 +59,7 @@ const loadFromStorage = () => {
     const userStr = localStorage.getItem(STORAGE_KEYS.USER)
     const sessionStr = localStorage.getItem(STORAGE_KEYS.SESSION)
     const typeStr = localStorage.getItem(STORAGE_KEYS.TYPE)
+    const tenantId = localStorage.getItem(STORAGE_KEYS.TENANT_ID)
 
     if (token && userStr && sessionStr && typeStr) {
       return {
@@ -66,6 +69,7 @@ const loadFromStorage = () => {
         impersonationRefreshToken: refreshToken,
         impersonatedUser: JSON.parse(userStr),
         session: JSON.parse(sessionStr),
+        impersonationTenantId: tenantId,
       }
     }
   } catch {
@@ -79,6 +83,7 @@ const loadFromStorage = () => {
     impersonationRefreshToken: null,
     impersonatedUser: null,
     session: null,
+    impersonationTenantId: null,
   }
 }
 
@@ -86,7 +91,6 @@ export const useImpersonationStore = create<ImpersonationState>((set) => ({
   ...loadFromStorage(),
 
   startImpersonation: (token, refreshToken, user, session, type) => {
-    // Save to localStorage
     localStorage.setItem(STORAGE_KEYS.TOKEN, token)
     if (refreshToken) {
       localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
@@ -95,6 +99,11 @@ export const useImpersonationStore = create<ImpersonationState>((set) => ({
     localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session))
     localStorage.setItem(STORAGE_KEYS.TYPE, type)
 
+    const tenantId = session?.tenant_id || null
+    if (tenantId) {
+      localStorage.setItem(STORAGE_KEYS.TENANT_ID, tenantId)
+    }
+
     set({
       isImpersonating: true,
       impersonationType: type,
@@ -102,16 +111,17 @@ export const useImpersonationStore = create<ImpersonationState>((set) => ({
       impersonationRefreshToken: refreshToken,
       impersonatedUser: user,
       session,
+      impersonationTenantId: tenantId,
     })
   },
 
   stopImpersonation: () => {
-    // Clear from localStorage
     localStorage.removeItem(STORAGE_KEYS.TOKEN)
     localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
     localStorage.removeItem(STORAGE_KEYS.USER)
     localStorage.removeItem(STORAGE_KEYS.SESSION)
     localStorage.removeItem(STORAGE_KEYS.TYPE)
+    localStorage.removeItem(STORAGE_KEYS.TENANT_ID)
 
     set({
       isImpersonating: false,
@@ -120,6 +130,7 @@ export const useImpersonationStore = create<ImpersonationState>((set) => ({
       impersonationRefreshToken: null,
       impersonatedUser: null,
       session: null,
+      impersonationTenantId: null,
     })
   },
 

@@ -909,8 +909,8 @@ func (s *Service) SignInAnonymous(ctx context.Context) (*SignInAnonymousResponse
 // Impersonation wrapper methods
 
 // StartImpersonation starts an admin impersonation session
-func (s *Service) StartImpersonation(ctx context.Context, adminUserID string, req StartImpersonationRequest) (*StartImpersonationResponse, error) {
-	return s.impersonationService.StartImpersonation(ctx, adminUserID, req)
+func (s *Service) StartImpersonation(ctx context.Context, adminUserID string, tenantID string, req StartImpersonationRequest) (*StartImpersonationResponse, error) {
+	return s.impersonationService.StartImpersonation(ctx, adminUserID, tenantID, req)
 }
 
 // StopImpersonation stops the active impersonation session for an admin
@@ -929,13 +929,13 @@ func (s *Service) ListImpersonationSessions(ctx context.Context, adminUserID str
 }
 
 // StartAnonImpersonation starts an impersonation session as anonymous user
-func (s *Service) StartAnonImpersonation(ctx context.Context, adminUserID string, reason string, ipAddress string, userAgent string) (*StartImpersonationResponse, error) {
-	return s.impersonationService.StartAnonImpersonation(ctx, adminUserID, reason, ipAddress, userAgent)
+func (s *Service) StartAnonImpersonation(ctx context.Context, adminUserID string, tenantID string, reason string, ipAddress string, userAgent string) (*StartImpersonationResponse, error) {
+	return s.impersonationService.StartAnonImpersonation(ctx, adminUserID, tenantID, reason, ipAddress, userAgent)
 }
 
 // StartServiceImpersonation starts an impersonation session with service role
-func (s *Service) StartServiceImpersonation(ctx context.Context, adminUserID string, reason string, ipAddress string, userAgent string) (*StartImpersonationResponse, error) {
-	return s.impersonationService.StartServiceImpersonation(ctx, adminUserID, reason, ipAddress, userAgent)
+func (s *Service) StartServiceImpersonation(ctx context.Context, adminUserID string, tenantID string, reason string, ipAddress string, userAgent string) (*StartImpersonationResponse, error) {
+	return s.impersonationService.StartServiceImpersonation(ctx, adminUserID, tenantID, reason, ipAddress, userAgent)
 }
 
 // IsSignupEnabled returns whether user signup is enabled

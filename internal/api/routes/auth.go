@@ -6,6 +6,7 @@ import (
 
 type AuthDeps struct {
 	AuthMiddleware fiber.Handler
+	RequireRole    func(...string) fiber.Handler
 	RequireScope   func(...string) fiber.Handler
 	RateLimiters   map[string]fiber.Handler
 
@@ -84,12 +85,12 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 		{Method: "POST", Path: "/signout", Handler: deps.SignOut, Summary: "Sign out", Auth: AuthRequired},
 		{Method: "GET", Path: "/user", Handler: deps.GetUser, Summary: "Get user", Auth: AuthRequired},
 		{Method: "PATCH", Path: "/user", Handler: deps.UpdateUser, Summary: "Update user", Auth: AuthRequired},
-		{Method: "POST", Path: "/impersonate", Handler: deps.StartImpersonation, Summary: "Start impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-		{Method: "POST", Path: "/impersonate/anon", Handler: deps.StartAnonImpersonation, Summary: "Start anon impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
-		{Method: "POST", Path: "/impersonate/service", Handler: deps.StartServiceImpersonation, Summary: "Start service impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "POST", Path: "/impersonate", Handler: deps.StartImpersonation, Summary: "Start impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/impersonate/anon", Handler: deps.StartAnonImpersonation, Summary: "Start anon impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		{Method: "POST", Path: "/impersonate/service", Handler: deps.StartServiceImpersonation, Summary: "Start service impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		{Method: "DELETE", Path: "/impersonate", Handler: deps.StopImpersonation, Summary: "Stop impersonation", Auth: AuthRequired},
 		{Method: "GET", Path: "/impersonate", Handler: deps.GetActiveImpersonation, Summary: "Get active impersonation", Auth: AuthRequired},
-		{Method: "GET", Path: "/impersonate/sessions", Handler: deps.ListImpersonationSessions, Summary: "List impersonation sessions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin"}},
+		{Method: "GET", Path: "/impersonate/sessions", Handler: deps.ListImpersonationSessions, Summary: "List impersonation sessions", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		{Method: "POST", Path: "/2fa/setup", Handler: deps.SetupTOTP, Summary: "Setup 2FA", Auth: AuthRequired},
 		{Method: "POST", Path: "/2fa/enable", Handler: deps.EnableTOTP, Summary: "Enable 2FA", Auth: AuthRequired},
 		{Method: "POST", Path: "/2fa/disable", Handler: deps.DisableTOTP, Summary: "Disable 2FA", Auth: AuthRequired},
@@ -119,6 +120,7 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 		AuthMiddlewares: &AuthMiddlewares{
 			Required: deps.AuthMiddleware,
 		},
+		RequireRole: deps.RequireRole,
 	}
 }
 

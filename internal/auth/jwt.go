@@ -49,13 +49,25 @@ type TokenOption func(*tokenOptions)
 
 // tokenOptions holds options for token generation
 type tokenOptions struct {
-	impersonatedBy string
+	impersonatedBy  string
+	tenantID        *string
+	tenantRole      string
+	isInstanceAdmin bool
 }
 
 // WithImpersonatedBy sets the admin user ID who is impersonating
 func WithImpersonatedBy(adminID string) TokenOption {
 	return func(o *tokenOptions) {
 		o.impersonatedBy = adminID
+	}
+}
+
+// WithTenantContext sets tenant context for the generated token
+func WithTenantContext(tenantID, tenantRole string, isInstanceAdmin bool) TokenOption {
+	return func(o *tokenOptions) {
+		o.tenantID = &tenantID
+		o.tenantRole = tenantRole
+		o.isInstanceAdmin = isInstanceAdmin
 	}
 }
 
@@ -129,14 +141,17 @@ func (m *JWTManager) GenerateAccessToken(userID, email, role string, userMetadat
 	}
 
 	claims := &TokenClaims{
-		UserID:         userID,
-		Email:          email,
-		Role:           role,
-		SessionID:      sessionID,
-		TokenType:      "access",
-		UserMetadata:   userMetadata,
-		AppMetadata:    appMetadata,
-		ImpersonatedBy: options.impersonatedBy,
+		UserID:          userID,
+		Email:           email,
+		Role:            role,
+		SessionID:       sessionID,
+		TokenType:       "access",
+		UserMetadata:    userMetadata,
+		AppMetadata:     appMetadata,
+		ImpersonatedBy:  options.impersonatedBy,
+		TenantID:        options.tenantID,
+		TenantRole:      options.tenantRole,
+		IsInstanceAdmin: options.isInstanceAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
 			Audience:  []string{"fluxbase"},
@@ -168,14 +183,17 @@ func (m *JWTManager) GenerateRefreshToken(userID, email, role, sessionID string,
 	}
 
 	claims := &TokenClaims{
-		UserID:         userID,
-		Email:          email,
-		Role:           role,
-		SessionID:      sessionID,
-		TokenType:      "refresh",
-		UserMetadata:   userMetadata,
-		AppMetadata:    appMetadata,
-		ImpersonatedBy: options.impersonatedBy,
+		UserID:          userID,
+		Email:           email,
+		Role:            role,
+		SessionID:       sessionID,
+		TokenType:       "refresh",
+		UserMetadata:    userMetadata,
+		AppMetadata:     appMetadata,
+		ImpersonatedBy:  options.impersonatedBy,
+		TenantID:        options.tenantID,
+		TenantRole:      options.tenantRole,
+		IsInstanceAdmin: options.isInstanceAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    m.issuer,
 			Audience:  []string{"fluxbase"},

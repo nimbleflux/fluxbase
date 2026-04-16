@@ -3,6 +3,7 @@ import { UserCog, User, UserX, Shield, X } from "lucide-react";
 import type { ImpersonationType } from "@/stores/impersonation-store";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { useTenantStore } from "@/stores/tenant-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -23,20 +24,33 @@ import { useImpersonation } from "../hooks/use-impersonation";
 import { UserSearch } from "./user-search";
 
 export interface ImpersonationPopoverProps {
-  /** Context label shown in status badge (e.g., "Executing as", "Viewing as", "Running as") */
   contextLabel?: string;
-  /** Whether to require a reason before starting impersonation (default: false for inline use) */
   requireReason?: boolean;
-  /** Default reason if requireReason is false (for audit trail) */
   defaultReason?: string;
-  /** Callback fired after impersonation starts successfully */
   onImpersonationStart?: () => void;
-  /** Callback fired after impersonation stops */
   onImpersonationStop?: () => void;
-  /** Additional CSS classes for the container */
   className?: string;
-  /** Size variant for the trigger button */
   size?: "sm" | "default";
+}
+
+function checkIsAdmin(user: unknown): boolean {
+  if (!user || typeof user !== "object" || !("role" in user)) return false;
+  const u = user as { role: unknown };
+  if (Array.isArray(u.role)) {
+    return (
+      u.role.includes("instance_admin") || u.role.includes("tenant_admin")
+    );
+  }
+  return u.role === "instance_admin" || u.role === "tenant_admin";
+}
+
+function checkIsInstanceAdmin(user: unknown): boolean {
+  if (!user || typeof user !== "object" || !("role" in user)) return false;
+  const u = user as { role: unknown };
+  if (Array.isArray(u.role)) {
+    return u.role.includes("instance_admin");
+  }
+  return u.role === "instance_admin";
 }
 
 export function ImpersonationPopover({
@@ -56,9 +70,13 @@ export function ImpersonationPopover({
   const [selectedUserEmail, setSelectedUserEmail] = useState("");
   const [reason, setReason] = useState("");
 
+  const isInstanceAdmin = checkIsInstanceAdmin(user);
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+
   const {
     isImpersonating,
     impersonationType: activeType,
+    impersonatedUser,
     isLoading,
     startUserImpersonation,
     startAnonImpersonation,
@@ -71,15 +89,7 @@ export function ImpersonationPopover({
     onStop: onImpersonationStop,
   });
 
-  // Only show to instance_admin users
-  const isInstanceAdmin =
-    user && "role" in user
-      ? Array.isArray(user.role)
-        ? user.role.includes("instance_admin")
-        : user.role === "instance_admin"
-      : false;
-
-  if (!isInstanceAdmin) {
+  if (!checkIsAdmin(user) || !currentTenant) {
     return null;
   }
 
@@ -110,7 +120,6 @@ export function ImpersonationPopover({
         break;
     }
 
-    // Reset form and close popover on success
     setOpen(false);
     setSelectedUserId("");
     setSelectedUserEmail("");
@@ -149,7 +158,13 @@ export function ImpersonationPopover({
     }
   };
 
-  // When impersonating, show status badge with stop button
+  const resolveDisplayLabel = () => {
+    if (activeType === "service" && impersonatedUser?.role === "tenant_service") {
+      return "Tenant Service";
+    }
+    return getDisplayLabel();
+  };
+
   if (isImpersonating) {
     return (
       <div className={cn("flex items-center gap-2", className)}>
@@ -159,7 +174,7 @@ export function ImpersonationPopover({
         >
           {getTypeIcon(activeType!)}
           <span className="max-w-[200px] truncate">
-            {contextLabel}: {getDisplayLabel()}
+            {contextLabel}: {resolveDisplayLabel()}
           </span>
         </Badge>
         <Button
@@ -175,7 +190,6 @@ export function ImpersonationPopover({
     );
   }
 
-  // When not impersonating, show trigger button with popover
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -226,7 +240,7 @@ export function ImpersonationPopover({
                   <SelectItem value="service">
                     <div className="flex items-center gap-2">
                       <Shield className="h-4 w-4" />
-                      Service Role
+                      {isInstanceAdmin ? "Service Role" : "Tenant Service"}
                     </div>
                   </SelectItem>
                 </SelectContent>

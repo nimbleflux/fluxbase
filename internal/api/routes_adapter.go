@@ -195,6 +195,7 @@ func (s *Server) buildAuthRouteDeps() *routes.AuthDeps {
 
 	return &routes.AuthDeps{
 		AuthMiddleware:            AuthMiddleware(s.Auth.Handler.authService),
+		RequireRole:               RequireRole,
 		RequireScope:              middleware.RequireScope,
 		RateLimiters:              rateLimiters,
 		GetCSRFToken:              s.Auth.Handler.GetCSRFToken,

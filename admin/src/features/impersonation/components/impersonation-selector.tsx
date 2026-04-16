@@ -32,6 +32,26 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { UserSearch } from "./user-search";
 
+function checkIsAdmin(user: unknown): boolean {
+  if (!user || typeof user !== "object" || !("role" in user)) return false;
+  const u = user as { role: unknown };
+  if (Array.isArray(u.role)) {
+    return (
+      u.role.includes("instance_admin") || u.role.includes("tenant_admin")
+    );
+  }
+  return u.role === "instance_admin" || u.role === "tenant_admin";
+}
+
+function checkIsInstanceAdmin(user: unknown): boolean {
+  if (!user || typeof user !== "object" || !("role" in user)) return false;
+  const u = user as { role: unknown };
+  if (Array.isArray(u.role)) {
+    return u.role.includes("instance_admin");
+  }
+  return u.role === "instance_admin";
+}
+
 export function ImpersonationSelector() {
   const { user } = useAuth();
   const {
@@ -49,6 +69,13 @@ export function ImpersonationSelector() {
     useState<ImpersonationType>("user");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [reason, setReason] = useState("");
+
+  const isInstanceAdmin = checkIsInstanceAdmin(user);
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+
+  if (!checkIsAdmin(user) || !currentTenant) {
+    return null;
+  }
 
   const handleStartImpersonation = async () => {
     if (!reason.trim()) {
@@ -88,7 +115,6 @@ export function ImpersonationSelector() {
         impersonationType,
       );
 
-      // Update SDK client token to use impersonation token
       setSDKAuthToken(response.access_token);
 
       toast.success(
@@ -97,16 +123,16 @@ export function ImpersonationSelector() {
             ? response.target_user.email
             : impersonationType === "anon"
               ? "anonymous user"
-              : "service role"
+              : response.target_user.role === "tenant_service"
+                ? "tenant service"
+                : "service role"
         }`,
       );
 
-      // Reset form and close dialog
       setOpen(false);
       setSelectedUserId("");
       setReason("");
 
-      // Invalidate all queries to refetch data with new impersonation context
       queryClient.invalidateQueries();
     } catch (error: unknown) {
       const errorMessage =
@@ -130,7 +156,6 @@ export function ImpersonationSelector() {
       await impersonationApi.stopImpersonation();
       stopImpersonation();
 
-      // Reset SDK client token to admin token
       const adminToken = getAccessToken();
       if (adminToken) {
         setSDKAuthToken(adminToken);
@@ -138,7 +163,6 @@ export function ImpersonationSelector() {
 
       toast.success("Impersonation stopped");
 
-      // Invalidate all queries to refetch data with admin context
       queryClient.invalidateQueries();
     } catch (error: unknown) {
       const errorMessage =
@@ -159,7 +183,9 @@ export function ImpersonationSelector() {
       case "anon":
         return "Anonymous";
       case "service":
-        return "Service Role";
+        return impersonatedUser?.role === "tenant_service"
+          ? "Tenant Service"
+          : "Service Role";
       default:
         return "User";
     }
@@ -176,19 +202,6 @@ export function ImpersonationSelector() {
     }
   };
 
-  // Only show impersonation button to instance_admin users when a tenant is selected
-  const isInstanceAdmin =
-    user && "role" in user
-      ? Array.isArray(user.role)
-        ? user.role.includes("instance_admin")
-        : user.role === "instance_admin"
-      : false;
-  const currentTenant = useTenantStore((state) => state.currentTenant);
-  if (!isInstanceAdmin || !currentTenant) {
-    return null;
-  }
-
-  // Show cancel button when impersonating
   if (isImpersonating) {
     return (
       <Button
@@ -250,7 +263,7 @@ export function ImpersonationSelector() {
                 <SelectItem value="service">
                   <div className="flex items-center gap-2">
                     <Shield className="h-4 w-4" />
-                    Service Role
+                    {isInstanceAdmin ? "Service Role" : "Tenant Service"}
                   </div>
                 </SelectItem>
               </SelectContent>

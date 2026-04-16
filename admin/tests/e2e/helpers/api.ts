@@ -865,6 +865,25 @@ export async function rawStartAnonImpersonation(
   });
 }
 
+export async function rawStartServiceImpersonation(
+  reason: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/auth/impersonate/service",
+    data: { reason },
+    headers,
+  });
+}
+
 export async function rawStopImpersonation(accessToken: string) {
   return rawApiRequest({
     method: "DELETE",
