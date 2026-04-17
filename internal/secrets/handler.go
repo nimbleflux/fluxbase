@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
+	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
@@ -338,9 +339,20 @@ func getUserIDFromContext(c fiber.Ctx) *uuid.UUID {
 	return nil
 }
 
-// ctxWithTenant wraps the fasthttp request context with tenant ID from Fiber locals.
+// ctxWithTenant wraps the fasthttp request context with tenant ID.
+// Prefer JWT claims (set by auth middleware) over TenantMiddleware's default fallback,
+// since TenantMiddleware runs before auth and can't read JWT claims.
 func ctxWithTenant(c fiber.Ctx) context.Context {
 	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantSource, _ := c.Locals("tenant_source").(string)
+
+	// If tenant came from default fallback (not header or JWT), check JWT claims
+	// directly — auth middleware has already run by this point.
+	if tenantSource == "default" || tenantID == "" {
+		if claims, ok := c.Locals("claims").(*auth.TokenClaims); ok && claims != nil && claims.TenantID != nil {
+			tenantID = *claims.TenantID
+		}
+	}
 	return database.ContextWithTenant(c.RequestCtx(), tenantID)
 }
 

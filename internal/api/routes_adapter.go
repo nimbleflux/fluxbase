@@ -408,6 +408,9 @@ func (s *Server) buildSecretsRouteDeps() *routes.SecretsDeps {
 		UpdateSecret:       s.Secrets.Handler.UpdateSecret,
 		DeleteSecret:       s.Secrets.Handler.DeleteSecret,
 		RollbackToVersion:  s.Secrets.Handler.RollbackToVersion,
+
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
 	}
 }
 

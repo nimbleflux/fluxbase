@@ -13,6 +13,7 @@ import {
   createPlatformUser,
   getUserByEmail,
   query as dbQuery,
+  execute as dbExecute,
 } from "./helpers/db";
 import {
   ADMIN_EMAIL,
@@ -135,6 +136,41 @@ test.describe("Provisioning", () => {
         [tenantAdminUserId, secondTenantId, assignedBy],
       );
       console.log("Provisioning: tenant admin assigned to second tenant.");
+
+      // Set tenant_id on auth.users so impersonation can verify tenant membership.
+      // Direct UPDATE on auth.users triggers validate_app_metadata_update which
+      // calls current_user_role() — unavailable in direct DB context.
+      // Get a dedicated client and SET ROLE to bypass the trigger check.
+      {
+        const { Pool } = await import("pg");
+        const adminPool = new Pool({
+          host: process.env.FLUXBASE_DATABASE_HOST || "localhost",
+          port: parseInt(process.env.FLUXBASE_DATABASE_PORT || "5432"),
+          database:
+            process.env.PLAYWRIGHT_DATABASE_NAME || "fluxbase_playwright",
+          user:
+            process.env.FLUXBASE_DATABASE_ADMIN_USER ||
+            process.env.FLUXBASE_DATABASE_USER ||
+            "postgres",
+          password:
+            process.env.FLUXBASE_DATABASE_ADMIN_PASSWORD ||
+            process.env.FLUXBASE_DATABASE_PASSWORD ||
+            "postgres",
+        });
+        const client = await adminPool.connect();
+        try {
+          await client.query(`SET search_path TO auth, public, platform`);
+          await client.query(`SET ROLE service_role`);
+          await client.query(
+            `UPDATE auth.users SET tenant_id = $2::uuid WHERE id = $1::uuid AND tenant_id IS NULL`,
+            [tenantAdminUserId, secondTenantId],
+          );
+        } finally {
+          await client.query(`RESET ROLE`).catch(() => {});
+          client.release();
+          await adminPool.end();
+        }
+      }
     } else {
       console.log(
         "Provisioning: tenant admin already assigned to second tenant.",

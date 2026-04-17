@@ -844,12 +844,19 @@ export async function rawStartUserImpersonation(
   targetUserId: string,
   reason: string,
   accessToken: string,
+  tenantId?: string,
 ) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
   return rawApiRequest({
     method: "POST",
     path: "/api/v1/auth/impersonate",
     data: { target_user_id: targetUserId, reason },
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers,
   });
 }
 
