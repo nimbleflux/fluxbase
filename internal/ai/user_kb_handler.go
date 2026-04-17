@@ -72,7 +72,7 @@ func (h *UserKnowledgeBaseHandler) ListMyKnowledgeBases(c fiber.Ctx) error {
 	if userIDRaw == nil {
 		// Check if user is instance admin (service role or instance_admin role)
 		userRole := c.Locals("user_role")
-		if userRole == "instance_admin" || userRole == "service_role" {
+		if userRole == "instance_admin" || userRole == "service_role" || userRole == "tenant_service" {
 			// Instance admin without tenant context - return empty list
 			// A complete solution would fetch all KBs across tenants with tenant info
 			return c.JSON(fiber.Map{

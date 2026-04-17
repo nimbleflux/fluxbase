@@ -303,8 +303,8 @@ func (h *StorageHandler) ListBuckets(c fiber.Ctx) error {
 	role, _ := c.Locals("user_role").(string)
 	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
 	tenantRole, _ := c.Locals("tenant_role").(string)
-	isAuthorized := role == "admin" || role == "instance_admin" || role == "service_role" ||
-		isInstanceAdmin || tenantRole == "tenant_admin"
+	isAuthorized := role == "admin" || role == "instance_admin" || role == "service_role" || role == "tenant_service" ||
+		isInstanceAdmin || tenantRole == "tenant_admin" || tenantRole == "tenant_service"
 	if !isAuthorized {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to list buckets",

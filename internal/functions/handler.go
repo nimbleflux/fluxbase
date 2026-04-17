@@ -1940,7 +1940,7 @@ func normalizeSettingsKey(key string) string {
 
 // isAdminRole checks if the given role has admin privileges
 func isAdminRole(role string) bool {
-	return role == "admin" || role == "instance_admin" || role == "service_role"
+	return role == "admin" || role == "instance_admin" || role == "service_role" || role == "tenant_service"
 }
 
 func valueOr[T any](ptr *T, defaultVal T) T {

@@ -119,7 +119,7 @@ var startTime = time.Now()
 func (h *MonitoringHandler) GetMetrics(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "instance_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" && role != "tenant_service" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view system metrics",
 		})
@@ -266,7 +266,7 @@ func (h *MonitoringHandler) getStorageStats(c fiber.Ctx) (*StorageStats, error) 
 func (h *MonitoringHandler) GetHealth(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "instance_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" && role != "tenant_service" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view system health",
 		})
@@ -390,7 +390,7 @@ type LogEntry struct {
 func (h *MonitoringHandler) GetLogs(c fiber.Ctx) error {
 	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
-	if role != "admin" && role != "instance_admin" && role != "service_role" {
+	if role != "admin" && role != "instance_admin" && role != "service_role" && role != "tenant_service" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Admin access required to view logs",
 		})

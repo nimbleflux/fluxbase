@@ -263,7 +263,7 @@ func (v *Validator) ValidateAccess(proc *Procedure, userRole string, isAuthentic
 	// Service roles bypass all checks (check first, before authentication)
 	// This is important because service_role tokens don't have a user_id,
 	// so isAuthenticated will be false even though service_role should have full access
-	if userRole == "service_role" || userRole == "instance_admin" {
+	if userRole == "service_role" || userRole == "instance_admin" || userRole == "tenant_service" {
 		return nil
 	}
 
