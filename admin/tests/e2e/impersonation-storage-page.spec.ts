@@ -43,9 +43,13 @@ test.describe("Storage Page During Tenant Service Impersonation", () => {
 
     try {
       await adminPage.evaluate(
-        ({ token, type }) => {
+        ({ token, type, targetUser }) => {
           localStorage.setItem("fluxbase_impersonation_token", token);
           localStorage.setItem("fluxbase_impersonation_type", type);
+          localStorage.setItem(
+            "fluxbase_impersonated_user",
+            JSON.stringify(targetUser),
+          );
           localStorage.setItem(
             "fluxbase_impersonation_session",
             JSON.stringify({
@@ -58,7 +62,11 @@ test.describe("Storage Page During Tenant Service Impersonation", () => {
             }),
           );
         },
-        { token: impToken, type: "service" },
+        {
+          token: impToken,
+          type: "service",
+          targetUser: impResult.body.target_user,
+        },
       );
 
       await adminPage.goto("storage", { waitUntil: "networkidle" });

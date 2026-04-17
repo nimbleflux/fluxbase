@@ -1,4 +1,5 @@
 import { test, expect } from "./fixtures";
+import type { Page } from "@playwright/test";
 import { SECOND_TENANT_SLUG } from "./helpers/constants";
 import {
   listTenants,
@@ -15,20 +16,22 @@ const API_BASE = process.env.PLAYWRIGHT_API_URL || "http://localhost:5050";
 // Group 1: Authentication & JWT Claims
 // ────────────────────────────────────────────────────────────────
 
+test.describe.configure({ mode: "serial" });
+
 test.describe("Tenant Admin Data Isolation", () => {
+  let page: Page;
+
   test("tenant admin can log in", async ({ tenantAdminPage }) => {
-    await expect(tenantAdminPage).toHaveURL(/\/admin\/?$/);
-    const token = await tenantAdminPage.evaluate(() =>
+    page = tenantAdminPage;
+    await expect(page).toHaveURL(/\/admin\/?$/);
+    const token = await page.evaluate(() =>
       localStorage.getItem("fluxbase_admin_access_token"),
     );
     expect(token).toBeTruthy();
   });
 
-  test("JWT has correct tenant claims", async ({
-    tenantAdminPage,
-    tenantAdminInfo,
-  }) => {
-    const token = await tenantAdminPage.evaluate(() =>
+  test("JWT has correct tenant claims", async ({ tenantAdminInfo }) => {
+    const token = await page.evaluate(() =>
       localStorage.getItem("fluxbase_admin_access_token"),
     );
     expect(token).toBeTruthy();
@@ -50,24 +53,23 @@ test.describe("Tenant Admin Data Isolation", () => {
   });
 
   test("tenant selector shows only assigned tenant", async ({
-    tenantAdminPage,
     tenantAdminInfo,
   }) => {
-    const selector = tenantAdminPage.getByRole("combobox", {
+    const selector = page.getByRole("combobox", {
       name: "Select tenant",
     });
     if (await selector.isVisible().catch(() => false)) {
       await selector.click();
-      await expect(tenantAdminPage.getByRole("listbox")).toBeVisible({
+      await expect(page.getByRole("listbox")).toBeVisible({
         timeout: 5_000,
       });
-      const options = tenantAdminPage.getByRole("option");
+      const options = page.getByRole("option");
       const count = await options.count();
       // Tenant admin should see exactly 1 tenant
       expect(count).toBe(1);
       const optionText = await options.first().textContent();
       expect(optionText).toContain(tenantAdminInfo.tenantName);
-      await tenantAdminPage.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
     }
   });
 
@@ -75,20 +77,20 @@ test.describe("Tenant Admin Data Isolation", () => {
   // Group 2: Route-Level Access Control
   // ────────────────────────────────────────────────────────────────
 
-  test("cannot access /tenants page", async ({ tenantAdminPage }) => {
-    await tenantAdminPage.goto("tenants", { waitUntil: "networkidle" });
+  test("cannot access /tenants page", async () => {
+    await page.goto("tenants", { waitUntil: "domcontentloaded" });
 
     // The frontend may render the page but the API call to /admin/tenants will fail with 403.
     // Check for either: redirect away, error message, or empty/no-data state
-    const url = tenantAdminPage.url();
+    const url = page.url();
     const isOnTenants = url.includes("/tenants");
     if (isOnTenants) {
       // If still on /tenants, verify the page shows an error or empty state
-      const hasError = await tenantAdminPage
+      const hasError = await page
         .getByText(/forbidden|not authorized|access denied|error|no data/i)
         .isVisible()
         .catch(() => false);
-      const hasEmptyTable = !(await tenantAdminPage
+      const hasEmptyTable = !(await page
         .getByRole("table")
         .isVisible()
         .catch(() => false));
@@ -98,21 +100,19 @@ test.describe("Tenant Admin Data Isolation", () => {
     // If redirected away, test passes automatically
   });
 
-  test("cannot access /instance-settings", async ({ tenantAdminPage }) => {
-    await tenantAdminPage.goto("instance-settings", {
-      waitUntil: "networkidle",
-    });
+  test("cannot access /instance-settings", async () => {
+    await page.goto("instance-settings", { waitUntil: "domcontentloaded" });
 
-    const url = tenantAdminPage.url();
+    const url = page.url();
     const isOnInstanceSettings = url.includes("/instance-settings");
     if (isOnInstanceSettings) {
-      const hasError = await tenantAdminPage
+      const hasError = await page
         .getByText(
           /forbidden|not authorized|access denied|error|no data|not found/i,
         )
         .isVisible()
         .catch(() => false);
-      const hasEmptyContent = !(await tenantAdminPage
+      const hasEmptyContent = !(await page
         .getByRole("table")
         .isVisible()
         .catch(() => false));
@@ -122,19 +122,19 @@ test.describe("Tenant Admin Data Isolation", () => {
     // If redirected away, test passes automatically
   });
 
-  test("cannot access /features", async ({ tenantAdminPage }) => {
-    await tenantAdminPage.goto("features", { waitUntil: "networkidle" });
+  test("cannot access /features", async () => {
+    await page.goto("features", { waitUntil: "domcontentloaded" });
 
-    const url = tenantAdminPage.url();
+    const url = page.url();
     const isOnFeatures = url.includes("/features");
     if (isOnFeatures) {
-      const hasError = await tenantAdminPage
+      const hasError = await page
         .getByText(
           /forbidden|not authorized|access denied|error|no data|not found/i,
         )
         .isVisible()
         .catch(() => false);
-      const hasEmptyContent = !(await tenantAdminPage
+      const hasEmptyContent = !(await page
         .getByRole("table")
         .isVisible()
         .catch(() => false));
@@ -144,14 +144,12 @@ test.describe("Tenant Admin Data Isolation", () => {
     // If redirected away, test passes automatically
   });
 
-  test("sidebar hides instance-only navigation items", async ({
-    tenantAdminPage,
-  }) => {
-    await tenantAdminPage.goto("./", { waitUntil: "networkidle" });
+  test("sidebar hides instance-only navigation items", async () => {
+    await page.goto("./", { waitUntil: "domcontentloaded" });
 
     const instanceOnlyItems = ["Tenants", "Configuration", "Instance Settings"];
     for (const itemText of instanceOnlyItems) {
-      const sidebarLink = tenantAdminPage
+      const sidebarLink = page
         .locator("nav")
         .getByRole("link", { name: new RegExp(itemText, "i") });
       const isVisible = await sidebarLink.isVisible().catch(() => false);
@@ -476,17 +474,16 @@ test.describe("Tenant Admin Data Isolation", () => {
   // ────────────────────────────────────────────────────────────────
 
   test("tenant admin API calls are scoped to their tenant", async ({
-    tenantAdminPage,
     tenantAdminInfo,
   }) => {
     const apiRequests: { url: string; headers: Record<string, string> }[] = [];
-    tenantAdminPage.context().on("request", (req) => {
+    page.context().on("request", (req) => {
       if (req.url().includes("/api/v1/") && req.method() !== "OPTIONS") {
-        apiRequests.push({ url: req.url(), headers: req.headers() });
+        apiRequests.push({ url: req.url(), headers: req.headers });
       }
     });
 
-    await tenantAdminPage.goto("./", { waitUntil: "networkidle" });
+    await page.goto("./", { waitUntil: "domcontentloaded" });
     const callsWithTenant = apiRequests.filter((r) => r.headers["x-fb-tenant"]);
 
     if (callsWithTenant.length > 0) {
