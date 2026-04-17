@@ -70,7 +70,7 @@ async function browserLogin(
   await page.click('button[type="submit"]');
 
   // Wait for dashboard to load (increased timeout for slow server under load)
-  await expect(page).toHaveURL(/\/admin\/?$/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/admin\/?$/, { timeout: 60_000 });
 
   const token = await page.evaluate(() => {
     return localStorage.getItem("fluxbase_admin_access_token");
@@ -83,8 +83,7 @@ async function browserLogin(
   await page.waitForTimeout(500);
   try {
     const tenantCombo = page.getByRole("combobox", { name: /select tenant/i });
-    const comboCount = await tenantCombo.count();
-    if (comboCount > 0) {
+    if (await tenantCombo.isVisible({ timeout: 2_000 }).catch(() => false)) {
       const comboText = await tenantCombo.innerText().catch(() => "");
       if (comboText.includes("Select tenant")) {
         await tenantCombo.click();

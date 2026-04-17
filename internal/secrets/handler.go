@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -93,7 +94,7 @@ func (h *Handler) CreateSecret(c fiber.Ctx) error {
 		ExpiresAt:   req.ExpiresAt,
 	}
 
-	if err := h.storage.CreateSecret(c.RequestCtx(), secret, req.Value, userID); err != nil {
+	if err := h.storage.CreateSecret(ctxWithTenant(c), secret, req.Value, userID); err != nil {
 		// Check for duplicate key error
 		if isDuplicateKeyError(err) {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
@@ -121,7 +122,7 @@ func (h *Handler) ListSecrets(c fiber.Ctx) error {
 		namespace = &ns
 	}
 
-	secrets, err := h.storage.ListSecrets(c.RequestCtx(), scope, namespace)
+	secrets, err := h.storage.ListSecrets(ctxWithTenant(c), scope, namespace)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to list secrets",
@@ -145,7 +146,7 @@ func (h *Handler) GetSecret(c fiber.Ctx) error {
 		})
 	}
 
-	secret, err := h.storage.GetSecret(c.RequestCtx(), id)
+	secret, err := h.storage.GetSecret(ctxWithTenant(c), id)
 	if err != nil {
 		if isNotFoundError(err) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -186,7 +187,7 @@ func (h *Handler) UpdateSecret(c fiber.Ctx) error {
 
 	userID := getUserIDFromContext(c)
 
-	if err := h.storage.UpdateSecret(c.RequestCtx(), id, req.Value, req.Description, req.ExpiresAt, userID); err != nil {
+	if err := h.storage.UpdateSecret(ctxWithTenant(c), id, req.Value, req.Description, req.ExpiresAt, userID); err != nil {
 		if isNotFoundError(err) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "Secret not found",
@@ -198,7 +199,7 @@ func (h *Handler) UpdateSecret(c fiber.Ctx) error {
 	}
 
 	// Return updated secret
-	secret, err := h.storage.GetSecret(c.RequestCtx(), id)
+	secret, err := h.storage.GetSecret(ctxWithTenant(c), id)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Secret updated but failed to retrieve updated data",
@@ -218,7 +219,7 @@ func (h *Handler) DeleteSecret(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.storage.DeleteSecret(c.RequestCtx(), id); err != nil {
+	if err := h.storage.DeleteSecret(ctxWithTenant(c), id); err != nil {
 		if isNotFoundError(err) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "Secret not found",
@@ -244,7 +245,7 @@ func (h *Handler) GetVersions(c fiber.Ctx) error {
 		})
 	}
 
-	versions, err := h.storage.GetVersions(c.RequestCtx(), id)
+	versions, err := h.storage.GetVersions(ctxWithTenant(c), id)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to get versions",
@@ -278,7 +279,7 @@ func (h *Handler) RollbackToVersion(c fiber.Ctx) error {
 
 	userID := getUserIDFromContext(c)
 
-	if err := h.storage.RollbackToVersion(c.RequestCtx(), id, version, userID); err != nil {
+	if err := h.storage.RollbackToVersion(ctxWithTenant(c), id, version, userID); err != nil {
 		if isNotFoundError(err) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": fmt.Sprintf("Version %d not found", version),
@@ -290,7 +291,7 @@ func (h *Handler) RollbackToVersion(c fiber.Ctx) error {
 	}
 
 	// Return updated secret
-	secret, err := h.storage.GetSecret(c.RequestCtx(), id)
+	secret, err := h.storage.GetSecret(ctxWithTenant(c), id)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Rollback successful but failed to retrieve updated data",
@@ -302,7 +303,7 @@ func (h *Handler) RollbackToVersion(c fiber.Ctx) error {
 
 // GetStats returns statistics about secrets
 func (h *Handler) GetStats(c fiber.Ctx) error {
-	total, expiringSoon, expired, err := h.storage.GetStats(c.RequestCtx())
+	total, expiringSoon, expired, err := h.storage.GetStats(ctxWithTenant(c))
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to get stats",
@@ -337,6 +338,12 @@ func getUserIDFromContext(c fiber.Ctx) *uuid.UUID {
 	return nil
 }
 
+// ctxWithTenant wraps the fasthttp request context with tenant ID from Fiber locals.
+func ctxWithTenant(c fiber.Ctx) context.Context {
+	tenantID, _ := c.Locals("tenant_id").(string)
+	return database.ContextWithTenant(c.RequestCtx(), tenantID)
+}
+
 // GetSecretByName retrieves a secret by name (metadata only)
 func (h *Handler) GetSecretByName(c fiber.Ctx) error {
 	name := c.Params("name")
@@ -348,7 +355,7 @@ func (h *Handler) GetSecretByName(c fiber.Ctx) error {
 
 	namespace := getNamespaceFromQuery(c)
 
-	secret, err := h.storage.GetSecretByName(c.RequestCtx(), name, namespace)
+	secret, err := h.storage.GetSecretByName(ctxWithTenant(c), name, namespace)
 	if err != nil {
 		if isNotFoundError(err) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -389,7 +396,7 @@ func (h *Handler) UpdateSecretByName(c fiber.Ctx) error {
 
 	userID := getUserIDFromContext(c)
 
-	secret, err := h.storage.GetSecretByName(c.RequestCtx(), name, namespace)
+	secret, err := h.storage.GetSecretByName(ctxWithTenant(c), name, namespace)
 	if err != nil {
 		if isNotFoundError(err) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -401,13 +408,13 @@ func (h *Handler) UpdateSecretByName(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.storage.UpdateSecret(c.RequestCtx(), secret.ID, req.Value, req.Description, req.ExpiresAt, userID); err != nil {
+	if err := h.storage.UpdateSecret(ctxWithTenant(c), secret.ID, req.Value, req.Description, req.ExpiresAt, userID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to update secret",
 		})
 	}
 
-	updatedSecret, err := h.storage.GetSecret(c.RequestCtx(), secret.ID)
+	updatedSecret, err := h.storage.GetSecret(ctxWithTenant(c), secret.ID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Secret updated but failed to retrieve updated data",
@@ -428,7 +435,7 @@ func (h *Handler) DeleteSecretByName(c fiber.Ctx) error {
 
 	namespace := getNamespaceFromQuery(c)
 
-	secret, err := h.storage.GetSecretByName(c.RequestCtx(), name, namespace)
+	secret, err := h.storage.GetSecretByName(ctxWithTenant(c), name, namespace)
 	if err != nil {
 		if isNotFoundError(err) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -440,7 +447,7 @@ func (h *Handler) DeleteSecretByName(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.storage.DeleteSecret(c.RequestCtx(), secret.ID); err != nil {
+	if err := h.storage.DeleteSecret(ctxWithTenant(c), secret.ID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to delete secret",
 		})
@@ -462,7 +469,7 @@ func (h *Handler) GetVersionsByName(c fiber.Ctx) error {
 
 	namespace := getNamespaceFromQuery(c)
 
-	secret, err := h.storage.GetSecretByName(c.RequestCtx(), name, namespace)
+	secret, err := h.storage.GetSecretByName(ctxWithTenant(c), name, namespace)
 	if err != nil {
 		if isNotFoundError(err) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -474,7 +481,7 @@ func (h *Handler) GetVersionsByName(c fiber.Ctx) error {
 		})
 	}
 
-	versions, err := h.storage.GetVersions(c.RequestCtx(), secret.ID)
+	versions, err := h.storage.GetVersions(ctxWithTenant(c), secret.ID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to get versions",
@@ -508,7 +515,7 @@ func (h *Handler) RollbackByName(c fiber.Ctx) error {
 	namespace := getNamespaceFromQuery(c)
 	userID := getUserIDFromContext(c)
 
-	secret, err := h.storage.GetSecretByName(c.RequestCtx(), name, namespace)
+	secret, err := h.storage.GetSecretByName(ctxWithTenant(c), name, namespace)
 	if err != nil {
 		if isNotFoundError(err) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -520,7 +527,7 @@ func (h *Handler) RollbackByName(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.storage.RollbackToVersion(c.RequestCtx(), secret.ID, version, userID); err != nil {
+	if err := h.storage.RollbackToVersion(ctxWithTenant(c), secret.ID, version, userID); err != nil {
 		if isNotFoundError(err) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": fmt.Sprintf("Version %d not found", version),
@@ -531,7 +538,7 @@ func (h *Handler) RollbackByName(c fiber.Ctx) error {
 		})
 	}
 
-	updatedSecret, err := h.storage.GetSecret(c.RequestCtx(), secret.ID)
+	updatedSecret, err := h.storage.GetSecret(ctxWithTenant(c), secret.ID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Rollback successful but failed to retrieve updated data",
