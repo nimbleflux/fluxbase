@@ -400,14 +400,20 @@ func (h *OAuthHandler) ListEnabledProviders(c fiber.Ctx) error {
 	}
 
 	// SECURITY: Only list providers that allow app login
+	tenantID := middleware.GetTenantIDFromContext(c)
 	query := `
 		SELECT provider_name, display_name, redirect_url
 		FROM platform.oauth_providers
 		WHERE enabled = TRUE AND allow_app_login = TRUE
+		  AND (tenant_id = $1::uuid OR tenant_id IS NULL)
 		ORDER BY display_name
 	`
 
-	rows, err := h.db.Query(ctx, query)
+	var tenantUUID interface{}
+	if tenantID != "" {
+		tenantUUID = tenantID
+	}
+	rows, err := h.db.Query(ctx, query, tenantUUID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list enabled OAuth providers")
 		return c.Status(500).JSON(fiber.Map{
@@ -451,20 +457,22 @@ func (h *OAuthHandler) getProviderConfig(ctx context.Context, providerName strin
 	var allowAppLogin bool
 	var isEncrypted bool
 
-	// TODO: Add tenant_id column to platform.oauth_providers for full multi-tenant OAuth support.
-	// For now, query all enabled providers regardless of tenant context.
-
-	_ = tenantID // Will be used when tenant_id column is added
-
-	// Query platform-level provider
+	// Priority: tenant-specific provider > platform-level provider
 	query := `
 		SELECT client_id, client_secret, redirect_url, scopes,
 		       authorization_url, token_url, is_custom, allow_app_login,
 		       COALESCE(is_encrypted, false) AS is_encrypted
 		FROM platform.oauth_providers
 		WHERE provider_name = $1 AND enabled = TRUE
+		  AND (tenant_id = $2::uuid OR tenant_id IS NULL)
+		ORDER BY tenant_id IS NULL
+		LIMIT 1
 	`
-	err := h.db.QueryRow(ctx, query, providerName).Scan(
+	var tenantUUID interface{}
+	if tenantID != "" {
+		tenantUUID = tenantID
+	}
+	err := h.db.QueryRow(ctx, query, providerName, tenantUUID).Scan(
 		&clientID, &clientSecret, &redirectURL, &scopes,
 		&authURL, &tokenURL, &isCustom, &allowAppLogin, &isEncrypted,
 	)

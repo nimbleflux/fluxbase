@@ -495,6 +495,7 @@ CREATE TABLE IF NOT EXISTS saml_providers (
     required_groups_all text[],
     denied_groups text[],
     group_attribute text DEFAULT 'groups',
+    tenant_id uuid,
     CONSTRAINT saml_providers_pkey PRIMARY KEY (id),
     CONSTRAINT saml_providers_name_key UNIQUE (name)
 );
@@ -540,6 +541,12 @@ COMMENT ON COLUMN auth.saml_providers.denied_groups IS 'Reject users who are mem
 
 
 COMMENT ON COLUMN auth.saml_providers.group_attribute IS 'SAML attribute name containing group memberships (default: groups)';
+
+--
+-- Name: idx_saml_providers_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_saml_providers_tenant_id ON saml_providers (tenant_id);
 
 --
 -- Name: saml_providers; Type: RLS; Schema: -; Owner: -
@@ -2263,6 +2270,7 @@ CREATE OR REPLACE FUNCTION queue_webhook_event()
 RETURNS trigger
 LANGUAGE plpgsql
 VOLATILE
+SET search_path = auth
 AS $$
 DECLARE
     webhook_record RECORD;
@@ -2669,6 +2677,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
+SET search_path = auth
 AS $$
 DECLARE
     user_role TEXT;

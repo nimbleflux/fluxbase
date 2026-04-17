@@ -737,7 +737,7 @@ func TestRLSDashboardAdminTablesProtected(t *testing.T) {
 	tc.ExecuteSQLAsSuperuser(`
 		INSERT INTO platform.oauth_providers (id, provider_name, display_name, client_id, client_secret, redirect_url, enabled, created_at, updated_at)
 		VALUES (gen_random_uuid(), $1, 'Test Provider', 'client123', 'secret456', 'http://localhost/callback', true, NOW(), NOW())
-		ON CONFLICT (provider_name) DO NOTHING
+		ON CONFLICT (provider_name, tenant_id) DO NOTHING
 	`, testProviderName)
 
 	providers := tc.QuerySQLAsRLSUser(`

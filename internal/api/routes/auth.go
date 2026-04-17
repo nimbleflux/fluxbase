@@ -5,10 +5,11 @@ import (
 )
 
 type AuthDeps struct {
-	AuthMiddleware fiber.Handler
-	RequireRole    func(...string) fiber.Handler
-	RequireScope   func(...string) fiber.Handler
-	RateLimiters   map[string]fiber.Handler
+	AuthMiddleware  fiber.Handler
+	TenantMiddleware fiber.Handler
+	RequireRole     func(...string) fiber.Handler
+	RequireScope    func(...string) fiber.Handler
+	RateLimiters    map[string]fiber.Handler
 
 	GetCSRFToken              fiber.Handler
 	GetCaptchaConfig          fiber.Handler
@@ -51,10 +52,13 @@ type AuthDeps struct {
 	OAuthCallback             fiber.Handler
 	GetProviderToken          fiber.Handler
 	OAuthLogout               fiber.Handler
+	OAuthLogoutCallback       fiber.Handler
 	GetSPMetadata             fiber.Handler
 	ListSAMLProviders         fiber.Handler
 	InitiateSAMLLogin         fiber.Handler
 	HandleSAMLAssertion       fiber.Handler
+	HandleSAMLLogout          fiber.Handler
+	InitiateSAMLLogout        fiber.Handler
 }
 
 func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
@@ -107,16 +111,29 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 		{Method: "GET", Path: "/oauth/:provider/callback", Handler: deps.OAuthCallback, Summary: "OAuth callback", Auth: AuthNone, Public: true},
 		{Method: "GET", Path: "/oauth/:provider/token", Handler: deps.GetProviderToken, Summary: "Get OAuth provider token", Auth: AuthRequired},
 		{Method: "POST", Path: "/oauth/:provider/logout", Handler: deps.OAuthLogout, Summary: "OAuth logout", Auth: AuthRequired},
+		{Method: "GET", Path: "/oauth/:provider/logout/callback", Handler: deps.OAuthLogoutCallback, Summary: "OAuth logout callback", Auth: AuthNone, Public: true},
 		{Method: "GET", Path: "/saml/metadata/:provider", Handler: deps.GetSPMetadata, Summary: "Get SAML SP metadata", Auth: AuthNone, Public: true},
 		{Method: "GET", Path: "/saml/providers", Handler: deps.ListSAMLProviders, Summary: "List SAML providers", Auth: AuthNone, Public: true},
 		{Method: "GET", Path: "/saml/login/:provider", Handler: deps.InitiateSAMLLogin, Summary: "Initiate SAML login", Auth: AuthNone, Public: true},
 		{Method: "POST", Path: "/saml/acs", Handler: deps.HandleSAMLAssertion, Summary: "SAML ACS callback", Auth: AuthNone, Public: true},
+		{Method: "POST", Path: "/saml/slo", Handler: deps.HandleSAMLLogout, Summary: "SAML Single Logout", Auth: AuthNone, Public: true},
+		{Method: "GET", Path: "/saml/slo", Handler: deps.HandleSAMLLogout, Summary: "SAML Single Logout (GET)", Auth: AuthNone, Public: true},
+		{Method: "GET", Path: "/saml/logout/:provider", Handler: deps.InitiateSAMLLogout, Summary: "Initiate SAML logout", Auth: AuthRequired},
 	}...)
 
+	var middlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name:    "TenantContext",
+			Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name:   "auth",
-		Prefix: "/api/v1/auth",
-		Routes: r,
+		Name:        "auth",
+		Prefix:      "/api/v1/auth",
+		Routes:      r,
+		Middlewares: middlewares,
 		AuthMiddlewares: &AuthMiddlewares{
 			Required: deps.AuthMiddleware,
 		},

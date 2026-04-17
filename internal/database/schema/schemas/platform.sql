@@ -185,8 +185,9 @@ CREATE TABLE IF NOT EXISTS oauth_providers (
     is_encrypted boolean DEFAULT false,
     revocation_endpoint text,
     end_session_endpoint text,
+    tenant_id uuid,
     CONSTRAINT oauth_providers_pkey PRIMARY KEY (id),
-    CONSTRAINT oauth_providers_provider_name_key UNIQUE (provider_name)
+    CONSTRAINT oauth_providers_provider_name_tenant_id_key UNIQUE (provider_name, tenant_id)
 );
 
 
@@ -233,6 +234,12 @@ CREATE INDEX IF NOT EXISTS idx_oauth_providers_denied_claims ON oauth_providers 
 --
 
 CREATE INDEX IF NOT EXISTS idx_oauth_providers_required_claims ON oauth_providers USING gin (required_claims);
+
+--
+-- Name: idx_oauth_providers_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_oauth_providers_tenant_id ON oauth_providers (tenant_id);
 
 --
 -- Name: oauth_providers; Type: RLS; Schema: -; Owner: -

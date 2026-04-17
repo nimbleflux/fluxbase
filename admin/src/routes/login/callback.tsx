@@ -14,12 +14,15 @@ function SSOCallbackPage() {
   const { auth } = useAuthStore();
   const processedRef = useRef(false);
 
-  // Parse search params from URL
-  const params = new URLSearchParams(window.location.search);
-  const access_token = params.get("access_token");
-  const refresh_token = params.get("refresh_token");
-  const redirect_to = params.get("redirect_to");
-  const error = params.get("error");
+  // Parse tokens from URL hash (fragments) for OAuth/SAML callbacks,
+  // errors from query params (error redirects use ?error=...)
+  const hashParams = new URLSearchParams(window.location.hash.substring(1));
+  const searchParams = new URLSearchParams(window.location.search);
+
+  const access_token = hashParams.get("access_token");
+  const refresh_token = hashParams.get("refresh_token");
+  const redirect_to = hashParams.get("redirect_to");
+  const error = searchParams.get("error");
 
   useEffect(() => {
     // Prevent double processing
