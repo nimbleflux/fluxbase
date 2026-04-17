@@ -1,60 +1,60 @@
-import { useEffect, useRef } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
-import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
-import type { DashboardUser } from '@/lib/auth'
-import { setAuthToken } from '@/lib/fluxbase-client'
-import { decodeJWT } from '@/lib/jwt'
+import { useEffect, useRef } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { useAuthStore } from "@/stores/auth-store";
+import type { DashboardUser } from "@/lib/auth";
+import { setAuthToken } from "@/lib/fluxbase-client";
+import { decodeJWT } from "@/lib/jwt";
 
-export const Route = createFileRoute('/login/callback')({
+export const Route = createFileRoute("/login/callback")({
   component: SSOCallbackPage,
-})
+});
 
 function SSOCallbackPage() {
-  const { auth } = useAuthStore()
-  const processedRef = useRef(false)
+  const { auth } = useAuthStore();
+  const processedRef = useRef(false);
 
   // Parse search params from URL
-  const params = new URLSearchParams(window.location.search)
-  const access_token = params.get('access_token')
-  const refresh_token = params.get('refresh_token')
-  const redirect_to = params.get('redirect_to')
-  const error = params.get('error')
+  const params = new URLSearchParams(window.location.search);
+  const access_token = params.get("access_token");
+  const refresh_token = params.get("refresh_token");
+  const redirect_to = params.get("redirect_to");
+  const error = params.get("error");
 
   useEffect(() => {
     // Prevent double processing
-    if (processedRef.current) return
-    processedRef.current = true
+    if (processedRef.current) return;
+    processedRef.current = true;
 
     const handleCallback = async () => {
       // Handle error
       if (error) {
-        toast.error('SSO Login Failed', {
+        toast.error("SSO Login Failed", {
           description: error,
-        })
-        window.location.href = '/admin/login'
-        return
+        });
+        window.location.href = "/admin/login";
+        return;
       }
 
       // Handle missing tokens
       if (!access_token || !refresh_token) {
-        toast.error('SSO Login Failed', {
-          description: 'No authentication tokens received',
-        })
-        window.location.href = '/admin/login'
-        return
+        toast.error("SSO Login Failed", {
+          description: "No authentication tokens received",
+        });
+        window.location.href = "/admin/login";
+        return;
       }
 
       try {
         // Store access token in Zustand auth store (also sets cookie and syncs SDK)
-        auth.setAccessToken(access_token)
+        auth.setAccessToken(access_token);
 
         // Store tokens in localStorage (for route guards and persistence)
-        localStorage.setItem('fluxbase_admin_access_token', access_token)
-        localStorage.setItem('fluxbase_admin_refresh_token', refresh_token)
+        localStorage.setItem("fluxbase_admin_access_token", access_token);
+        localStorage.setItem("fluxbase_admin_refresh_token", refresh_token);
 
         // Decode JWT to extract user information
-        const tokenPayload = decodeJWT(access_token)
+        const tokenPayload = decodeJWT(access_token);
 
         // Construct user object for localStorage (matching DashboardUser type)
         const user: DashboardUser = {
@@ -71,39 +71,51 @@ function SSOCallbackPage() {
             ? new Date(tokenPayload.iat * 1000).toISOString()
             : new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        }
+          role: tokenPayload.role,
+        };
+
+        // Store user in Zustand auth store so useAuth().user is available
+        // immediately (the /dashboard/auth/me endpoint only allows instance_admin)
+        auth.setUser({
+          accountNo: tokenPayload.user_id,
+          email: tokenPayload.email,
+          role: [tokenPayload.role || "tenant_admin"],
+          exp: tokenPayload.exp
+            ? tokenPayload.exp * 1000
+            : Date.now() + 24 * 60 * 60 * 1000,
+        });
 
         // Store user object in localStorage
-        localStorage.setItem('fluxbase_admin_user', JSON.stringify(user))
+        localStorage.setItem("fluxbase_admin_user", JSON.stringify(user));
 
         // Also set token in Fluxbase SDK
-        setAuthToken(access_token)
+        setAuthToken(access_token);
 
-        toast.success('Welcome!', {
-          description: 'You have successfully logged in via SSO.',
-        })
+        toast.success("Welcome!", {
+          description: "You have successfully logged in via SSO.",
+        });
 
         // Redirect to the intended destination or dashboard
         const destination =
-          redirect_to && redirect_to !== '/' ? redirect_to : '/admin'
-        window.location.href = destination
+          redirect_to && redirect_to !== "/" ? redirect_to : "/admin";
+        window.location.href = destination;
       } catch (_error) {
-        toast.error('SSO Login Failed', {
-          description: 'Failed to complete authentication',
-        })
-        window.location.href = '/admin/login'
+        toast.error("SSO Login Failed", {
+          description: "Failed to complete authentication",
+        });
+        window.location.href = "/admin/login";
       }
-    }
+    };
 
-    handleCallback()
-  }, [access_token, refresh_token, redirect_to, error, auth])
+    handleCallback();
+  }, [access_token, refresh_token, redirect_to, error, auth]);
 
   return (
-    <div className='from-background to-muted flex min-h-screen flex-col items-center justify-center bg-gradient-to-br p-4'>
-      <div className='space-y-4 text-center'>
-        <div className='border-primary mx-auto h-12 w-12 animate-spin rounded-full border-b-2' />
-        <p className='text-muted-foreground'>Completing SSO login...</p>
+    <div className="from-background to-muted flex min-h-screen flex-col items-center justify-center bg-gradient-to-br p-4">
+      <div className="space-y-4 text-center">
+        <div className="border-primary mx-auto h-12 w-12 animate-spin rounded-full border-b-2" />
+        <p className="text-muted-foreground">Completing SSO login...</p>
       </div>
     </div>
-  )
+  );
 }
