@@ -1,6 +1,7 @@
 import { test, expect } from "./fixtures";
 import {
   rawStartUserImpersonation,
+  rawStartServiceImpersonation,
   rawStopImpersonation,
   rawCreateBucket,
   rawListBuckets,
@@ -360,5 +361,35 @@ test.describe("Impersonation Tenant Isolation", () => {
     } finally {
       await rawStopImpersonation(adminToken).catch(() => {});
     }
+  });
+
+  test("service impersonation with tenant context returns tenant_service role", async ({
+    adminToken,
+    defaultTenantId,
+  }) => {
+    const impResult = await rawStartServiceImpersonation(
+      "E2E tenant service test",
+      adminToken,
+      defaultTenantId,
+    );
+    expect(impResult.status).toBe(200);
+    expect(impResult.body.access_token).toBeTruthy();
+    expect(impResult.body.target_user.role).toBe("tenant_service");
+
+    await rawStopImpersonation(adminToken).catch(() => {});
+  });
+
+  test("service impersonation without tenant context returns service_role", async ({
+    adminToken,
+  }) => {
+    const impResult = await rawStartServiceImpersonation(
+      "E2E global service test",
+      adminToken,
+    );
+    expect(impResult.status).toBe(200);
+    expect(impResult.body.access_token).toBeTruthy();
+    expect(impResult.body.target_user.role).toBe("service_role");
+
+    await rawStopImpersonation(adminToken).catch(() => {});
   });
 });

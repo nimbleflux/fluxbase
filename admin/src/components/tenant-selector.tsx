@@ -1,7 +1,8 @@
-import { Building2, Check, ChevronsUpDown, Shield } from "lucide-react";
+import { Building2, Check, ChevronsUpDown, Shield, Lock } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTenantStore, type Tenant } from "@/stores/tenant-store";
+import { useImpersonationStore } from "@/stores/impersonation-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,13 +22,24 @@ import {
 import { tenantsApi } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 
-function checkIsInstanceAdmin(): boolean {
+function checkIsInstanceAdminUser(): boolean {
   const user = getStoredUser();
   if (!user) return false;
   if ("role" in user && user.role) {
     return Array.isArray(user.role)
       ? user.role.includes("instance_admin")
       : user.role === "instance_admin";
+  }
+  return false;
+}
+
+function checkIsTenantAdminUser(): boolean {
+  const user = getStoredUser();
+  if (!user) return false;
+  if ("role" in user && user.role) {
+    return Array.isArray(user.role)
+      ? user.role.includes("tenant_admin")
+      : user.role === "tenant_admin";
   }
   return false;
 }
@@ -43,13 +55,16 @@ export function TenantSelector() {
     actingAsTenantAdmin,
     setActingAsTenantAdmin,
   } = useTenantStore();
+  const { isImpersonating } = useImpersonationStore();
+  const isTenantAdmin = checkIsTenantAdminUser();
+  const tenantLocked = isImpersonating && isTenantAdmin;
   const [open, setOpen] = useState(false);
 
   // Use React Query to fetch tenants - this will auto-refresh when invalidated
   const { data: fetchedTenants, isLoading } = useQuery({
     queryKey: ["tenants", setIsInstanceAdmin],
     queryFn: async () => {
-      const admin = checkIsInstanceAdmin();
+      const admin = checkIsInstanceAdminUser();
       setIsInstanceAdmin(admin);
 
       if (admin) {
@@ -117,7 +132,7 @@ export function TenantSelector() {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={tenantLocked ? undefined : setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant={actingAsTenantAdmin ? "default" : "outline"}
@@ -125,20 +140,26 @@ export function TenantSelector() {
           aria-expanded={open}
           aria-label="Select tenant"
           size="sm"
+          disabled={tenantLocked}
           className={cn(
             "w-[200px] justify-between",
             !currentTenant && "text-muted-foreground",
             actingAsTenantAdmin &&
               "bg-orange-500 hover:bg-orange-600 text-white border-orange-500",
+            tenantLocked && "opacity-70 cursor-not-allowed",
           )}
         >
-          {actingAsTenantAdmin ? (
+          {tenantLocked ? (
+            <Lock className="mr-2 h-4 w-4" />
+          ) : actingAsTenantAdmin ? (
             <Shield className="mr-2 h-4 w-4" />
           ) : (
             <Building2 className="mr-2 h-4 w-4" />
           )}
           {currentTenant ? currentTenant.name : "Select tenant..."}
-          <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 opacity-50" />
+          {!tenantLocked && (
+            <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 opacity-50" />
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[240px] p-0">

@@ -3,14 +3,14 @@ import { test, expect } from "./fixtures";
 test.describe("Impersonation Flow", () => {
   // ── ImpersonationSelector (Header) ──
 
-  test("impersonation button is hidden for tenant admin", async ({
+  test("impersonation button is visible for tenant admin when tenant is selected", async ({
     tenantAdminPage,
   }) => {
-    // Tenant admin should NOT see the "Impersonate User" button
+    // Tenant admin should see the "Impersonate User" button since a tenant is auto-selected
     const button = tenantAdminPage.getByRole("button", {
       name: /impersonate/i,
     });
-    expect(await button.isVisible().catch(() => false)).toBe(false);
+    await expect(button).toBeVisible({ timeout: 10_000 });
   });
 
   test("impersonation button is visible for instance admin when tenant selected", async ({
@@ -18,8 +18,6 @@ test.describe("Impersonation Flow", () => {
   }) => {
     // Instance admin with tenant selected should see the button
     const button = adminPage.getByRole("button", { name: /impersonate/i });
-    // The button may or may not be visible depending on tenant selection state
-    // If a tenant is auto-selected (default tenant), it should be visible
     if (await button.isVisible().catch(() => false)) {
       expect(await button.textContent()).toContain("Impersonate");
     }
@@ -40,7 +38,6 @@ test.describe("Impersonation Flow", () => {
     });
 
     // Select "Specific User" type (should be default)
-    // The user search combobox should be visible
     await expect(adminPage.getByText("Select user...")).toBeVisible({
       timeout: 5_000,
     });
@@ -48,7 +45,7 @@ test.describe("Impersonation Flow", () => {
     // Fill reason
     await adminPage.fill("#reason", "E2E test impersonation");
 
-    // Close dialog without starting (we don't want to start real impersonation in this test)
+    // Close dialog without starting
     await adminPage.getByRole("button", { name: "Cancel" }).click();
     await expect(
       adminPage.getByText("Start User Impersonation"),
@@ -66,34 +63,30 @@ test.describe("Impersonation Flow", () => {
       timeout: 5_000,
     });
 
-    // Select "Anonymous" type
     await adminPage
       .getByRole("combobox", { name: /impersonation type/i })
       .click();
     await adminPage.getByText("Anonymous (anon key)").click();
 
-    // Fill reason
     await adminPage.fill("#reason", "E2E test anon impersonation");
 
-    // Start impersonation
     await adminPage
       .getByRole("button", { name: /start impersonation/i })
       .click();
 
-    // Should show "Cancel: Anonymous" button
     await expect(
       adminPage.getByRole("button", { name: /cancel.*anonymous/i }),
     ).toBeVisible({ timeout: 10_000 });
 
-    // Stop impersonation
     await adminPage.getByRole("button", { name: /cancel.*anonymous/i }).click();
-    // Should go back to "Impersonate User" button
     await expect(
       adminPage.getByRole("button", { name: /impersonate user/i }),
     ).toBeVisible({ timeout: 5_000 });
   });
 
-  test("start service role impersonation via dialog", async ({ adminPage }) => {
+  test("start tenant service impersonation via dialog", async ({
+    adminPage,
+  }) => {
     const button = adminPage.getByRole("button", { name: /impersonate/i });
     if (!(await button.isVisible().catch(() => false))) {
       test.skip();
@@ -104,28 +97,28 @@ test.describe("Impersonation Flow", () => {
       timeout: 5_000,
     });
 
-    // Select "Service Role" type
     await adminPage
       .getByRole("combobox", { name: /impersonation type/i })
       .click();
-    await adminPage.getByText("Service Role").click();
+    // When tenant is selected, the option may show "Service Role" or "Tenant Service"
+    const serviceOption =
+      adminPage.getByText("Service Role").first() ??
+      adminPage.getByText("Tenant Service").first();
+    await serviceOption.click();
 
-    // Fill reason
     await adminPage.fill("#reason", "E2E test service impersonation");
 
-    // Start
     await adminPage
       .getByRole("button", { name: /start impersonation/i })
       .click();
 
-    // Should show "Cancel: Service Role" button
+    // Should show cancel button with either "Service Role" or "Tenant Service"
     await expect(
-      adminPage.getByRole("button", { name: /cancel.*service role/i }),
+      adminPage.getByRole("button", { name: /cancel.*(service|tenant)/i }),
     ).toBeVisible({ timeout: 10_000 });
 
-    // Stop
     await adminPage
-      .getByRole("button", { name: /cancel.*service role/i })
+      .getByRole("button", { name: /cancel.*(service|tenant)/i })
       .click();
     await expect(
       adminPage.getByRole("button", { name: /impersonate user/i }),
@@ -145,7 +138,6 @@ test.describe("Impersonation Flow", () => {
       timeout: 5_000,
     });
 
-    // Start anonymous impersonation
     await adminPage
       .getByRole("combobox", { name: /impersonation type/i })
       .click();
@@ -159,16 +151,83 @@ test.describe("Impersonation Flow", () => {
       adminPage.getByRole("button", { name: /cancel.*anonymous/i }),
     ).toBeVisible({ timeout: 10_000 });
 
-    // Navigate to another page
     await adminPage.goto("storage", { waitUntil: "networkidle" });
 
-    // Impersonation should still be active
     await expect(
       adminPage.getByRole("button", { name: /cancel.*anonymous/i }),
     ).toBeVisible({ timeout: 5_000 });
 
-    // Clean up
     await adminPage.getByRole("button", { name: /cancel.*anonymous/i }).click();
+  });
+
+  test("tenant admin can impersonate anonymous within their tenant", async ({
+    tenantAdminPage,
+  }) => {
+    const button = tenantAdminPage.getByRole("button", {
+      name: /impersonate/i,
+    });
+    await expect(button).toBeVisible({ timeout: 10_000 });
+    await button.click();
+
+    await expect(
+      tenantAdminPage.getByText("Start User Impersonation"),
+    ).toBeVisible({ timeout: 5_000 });
+
+    await tenantAdminPage
+      .getByRole("combobox", { name: /impersonation type/i })
+      .click();
+    await tenantAdminPage.getByText("Anonymous (anon key)").click();
+
+    await tenantAdminPage.fill("#reason", "E2E tenant admin impersonation");
+
+    await tenantAdminPage
+      .getByRole("button", { name: /start impersonation/i })
+      .click();
+
+    await expect(
+      tenantAdminPage.getByRole("button", { name: /cancel.*anonymous/i }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    await tenantAdminPage
+      .getByRole("button", { name: /cancel.*anonymous/i })
+      .click();
+  });
+
+  test("tenant admin tenant selector is locked during impersonation", async ({
+    tenantAdminPage,
+  }) => {
+    const button = tenantAdminPage.getByRole("button", {
+      name: /impersonate/i,
+    });
+    await expect(button).toBeVisible({ timeout: 10_000 });
+    await button.click();
+
+    await tenantAdminPage
+      .getByRole("combobox", { name: /impersonation type/i })
+      .click();
+    await tenantAdminPage.getByText("Anonymous (anon key)").click();
+    await tenantAdminPage.fill("#reason", "E2E tenant lock test");
+
+    await tenantAdminPage
+      .getByRole("button", { name: /start impersonation/i })
+      .click();
+
+    await expect(
+      tenantAdminPage.getByRole("button", { name: /cancel.*anonymous/i }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    // Tenant selector should be disabled (locked)
+    const tenantSelector = tenantAdminPage.getByRole("combobox", {
+      name: /select tenant/i,
+    });
+    if (await tenantSelector.isVisible().catch(() => false)) {
+      expect(await tenantSelector.isDisabled()).toBe(true);
+    }
+
+    // Clean up
+    await tenantAdminPage
+      .getByRole("button", { name: /cancel.*anonymous/i })
+      .click();
   });
 
   // ── ImpersonationPopover (Inline in service pages) ──
@@ -177,14 +236,12 @@ test.describe("Impersonation Flow", () => {
     adminPage,
   }) => {
     await adminPage.goto("functions", { waitUntil: "networkidle" });
-    // The page should have an impersonation-related element
-    // Look for the popover button/badge
-    // This may or may not be visible depending on the page state
-    // Just verify the functions page loaded
     await expect(adminPage).toHaveURL(/functions/);
   });
 
-  test("impersonation popover appears on jobs page", async ({ adminPage }) => {
+  test("impersonation popover appears on jobs page", async ({
+    adminPage,
+  }) => {
     await adminPage.goto("jobs", { waitUntil: "networkidle" });
     await expect(adminPage).toHaveURL(/jobs/);
   });

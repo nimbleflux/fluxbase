@@ -77,7 +77,7 @@ func (l *Loader) LoadFromFilesystem(ctx context.Context, namespace string) error
 
 	// Check if jobs directory exists
 	if _, err := os.Stat(jobsDir); os.IsNotExist(err) {
-		log.Info().Str("dir", jobsDir).Msg("Jobs directory does not exist, skipping auto-load")
+		log.Debug().Str("dir", jobsDir).Msg("Jobs directory does not exist, skipping auto-load")
 		// If directory doesn't exist but we have existing filesystem-sourced functions, delete them
 		// Preserve API-created functions
 		if len(existingFunctions) > 0 {

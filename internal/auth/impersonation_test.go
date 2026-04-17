@@ -11,6 +11,7 @@ func TestImpersonationConstants(t *testing.T) {
 	t.Run("user ID constants are defined", func(t *testing.T) {
 		assert.Equal(t, "00000000-0000-0000-0000-000000000000", AnonUserID)
 		assert.Equal(t, "00000000-0000-0000-0000-000000000001", ServiceUserID)
+		assert.Equal(t, "00000000-0000-0000-0000-000000000002", TenantServiceUserID)
 	})
 }
 
@@ -19,12 +20,18 @@ func TestImpersonationErrors(t *testing.T) {
 		assert.NotNil(t, ErrNotAdmin)
 		assert.NotNil(t, ErrSelfImpersonation)
 		assert.NotNil(t, ErrNoActiveImpersonation)
+		assert.NotNil(t, ErrTenantRequired)
+		assert.NotNil(t, ErrTargetUserNotInTenant)
+		assert.NotNil(t, ErrNotTenantAdmin)
 	})
 
 	t.Run("error messages are meaningful", func(t *testing.T) {
 		assert.Contains(t, ErrNotAdmin.Error(), "admin")
 		assert.Contains(t, ErrSelfImpersonation.Error(), "impersonate yourself")
 		assert.Contains(t, ErrNoActiveImpersonation.Error(), "no active")
+		assert.Contains(t, ErrTenantRequired.Error(), "tenant context")
+		assert.Contains(t, ErrTargetUserNotInTenant.Error(), "does not belong")
+		assert.Contains(t, ErrNotTenantAdmin.Error(), "not an admin for the specified tenant")
 	})
 }
 
@@ -180,6 +187,64 @@ func TestImpersonationErrors_ExactMessages(t *testing.T) {
 	assert.Equal(t, "no active impersonation session found", ErrNoActiveImpersonation.Error())
 }
 
+func TestTenantIDPtr(t *testing.T) {
+	t.Run("returns nil for empty string", func(t *testing.T) {
+		assert.Nil(t, tenantIDPtr(""))
+	})
+
+	t.Run("returns pointer for non-empty string", func(t *testing.T) {
+		ptr := tenantIDPtr("tenant-123")
+		assert.NotNil(t, ptr)
+		assert.Equal(t, "tenant-123", *ptr)
+	})
+}
+
+func TestWithTenantContext(t *testing.T) {
+	t.Run("sets tenant fields on token options", func(t *testing.T) {
+		opts := &tokenOptions{}
+		WithTenantContext("tenant-123", "tenant_admin", false)(opts)
+		assert.NotNil(t, opts.tenantID)
+		assert.Equal(t, "tenant-123", *opts.tenantID)
+		assert.Equal(t, "tenant_admin", opts.tenantRole)
+		assert.False(t, opts.isInstanceAdmin)
+	})
+
+	t.Run("can be combined with WithImpersonatedBy", func(t *testing.T) {
+		opts := &tokenOptions{}
+		WithImpersonatedBy("admin-123")(opts)
+		WithTenantContext("tenant-456", "", true)(opts)
+		assert.Equal(t, "admin-123", opts.impersonatedBy)
+		assert.Equal(t, "tenant-456", *opts.tenantID)
+		assert.True(t, opts.isInstanceAdmin)
+	})
+}
+
+func TestImpersonationSession_TenantID(t *testing.T) {
+	t.Run("session with tenant ID", func(t *testing.T) {
+		tenantID := "tenant-123"
+		session := ImpersonationSession{
+			ID:                "session-123",
+			AdminUserID:       "admin-456",
+			ImpersonationType: ImpersonationTypeService,
+			IsActive:          true,
+			TenantID:          &tenantID,
+		}
+		assert.NotNil(t, session.TenantID)
+		assert.Equal(t, "tenant-123", *session.TenantID)
+	})
+
+	t.Run("session without tenant ID", func(t *testing.T) {
+		session := ImpersonationSession{
+			ID:                "session-456",
+			AdminUserID:       "admin-789",
+			ImpersonationType: ImpersonationTypeService,
+			IsActive:          true,
+			TenantID:          nil,
+		}
+		assert.Nil(t, session.TenantID)
+	})
+}
+
 func TestImpersonationErrors_Distinct(t *testing.T) {
 	errors := []error{
 		ErrNotAdmin,
@@ -213,6 +278,8 @@ func TestWellKnownUserIDs(t *testing.T) {
 
 	t.Run("well-known IDs are distinct", func(t *testing.T) {
 		assert.NotEqual(t, AnonUserID, ServiceUserID)
+		assert.NotEqual(t, AnonUserID, TenantServiceUserID)
+		assert.NotEqual(t, ServiceUserID, TenantServiceUserID)
 	})
 }
 

@@ -168,7 +168,9 @@ export function useImpersonation(
       case 'anon':
         return 'Anonymous'
       case 'service':
-        return 'Service Role'
+        return impersonatedUser?.role === 'tenant_service'
+          ? 'Tenant Service'
+          : 'Service Role'
       default:
         return impersonatedUser?.email || 'Unknown User'
     }
