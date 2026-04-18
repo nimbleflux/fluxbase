@@ -10,6 +10,7 @@ staticClients:
   - id: fluxbase-test
     redirectURIs:
       - "http://localhost:8082/api/v1/auth/oauth/dex/callback"
+      - "http://localhost:8080/api/v1/auth/oauth/dex/callback"
     name: "Fluxbase Test"
     secret: "test-client-secret"
 

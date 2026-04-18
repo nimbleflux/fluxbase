@@ -24,6 +24,17 @@ func dexHost() string {
 	return "dex"
 }
 
+// fluxbasePort returns the Fluxbase backend port: 8082 in CI, 8080 locally.
+func fluxbasePort() string {
+	if p := os.Getenv("FLUXBASE_SERVER_ADDRESS"); p != "" {
+		return strings.TrimPrefix(p, ":")
+	}
+	if os.Getenv("CI") == "true" {
+		return "8082"
+	}
+	return "8080"
+}
+
 const dexPort = "5556"
 
 func dexBaseURL() string {
@@ -49,7 +60,7 @@ func createDexProvider(t *testing.T, tc *test.TestContext, adminToken string) {
 		"enabled":           true,
 		"client_id":         "fluxbase-test",
 		"client_secret":     "test-client-secret",
-		"redirect_url":      "http://localhost:8080/api/v1/auth/oauth/dex/callback",
+		"redirect_url":      fmt.Sprintf("http://localhost:%s/api/v1/auth/oauth/dex/callback", fluxbasePort()),
 		"scopes":            []string{"openid", "email", "profile"},
 		"is_custom":         true,
 		"authorization_url": dexBaseURL() + "/auth",
