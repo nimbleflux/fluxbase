@@ -13,7 +13,6 @@ import {
   createPlatformUser,
   getUserByEmail,
   query as dbQuery,
-  execute as dbExecute,
 } from "./helpers/db";
 import {
   ADMIN_EMAIL,

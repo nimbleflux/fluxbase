@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -116,8 +115,8 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 	reqID := parsed.Query().Get("req")
 
 	approvalData := url.Values{
-		"req":       {reqID},
-		"approval":  {"approve"},
+		"req":      {reqID},
+		"approval": {"approve"},
 	}
 
 	phase3 := &http.Client{
@@ -356,22 +355,4 @@ func TestSAMLLogoutRoutesRegistered(t *testing.T) {
 		"SAML SLO GET route should be registered")
 
 	t.Logf("SAML SLO route registration verified")
-}
-
-// Helper to check if Dex is available
-func dexAvailable(t *testing.T) bool {
-	client := http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(dexBaseURL + "/healthz")
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
-}
-
-// extractBody reads the response body as a string
-func extractBody(t *testing.T, resp *http.Response) string {
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	return string(body)
 }

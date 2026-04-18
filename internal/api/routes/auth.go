@@ -5,11 +5,11 @@ import (
 )
 
 type AuthDeps struct {
-	AuthMiddleware  fiber.Handler
+	AuthMiddleware   fiber.Handler
 	TenantMiddleware fiber.Handler
-	RequireRole     func(...string) fiber.Handler
-	RequireScope    func(...string) fiber.Handler
-	RateLimiters    map[string]fiber.Handler
+	RequireRole      func(...string) fiber.Handler
+	RequireScope     func(...string) fiber.Handler
+	RateLimiters     map[string]fiber.Handler
 
 	GetCSRFToken              fiber.Handler
 	GetCaptchaConfig          fiber.Handler
