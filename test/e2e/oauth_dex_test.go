@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,30 @@ import (
 	"github.com/nimbleflux/fluxbase/test"
 )
 
-const dexBaseURL = "http://dex:5556/dex"
+// dexHost returns the Dex hostname: "dex" in devcontainer, "localhost" in CI.
+func dexHost() string {
+	if os.Getenv("CI") == "true" {
+		return "localhost"
+	}
+	return "dex"
+}
+
+const dexPort = "5556"
+
+func dexBaseURL() string {
+	return "http://" + dexHost() + ":" + dexPort + "/dex"
+}
+
+// requireDex skips the test if the Dex OIDC provider is not reachable.
+func requireDex(t *testing.T) {
+	t.Helper()
+	client := http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(dexBaseURL() + "/healthz")
+	if err != nil {
+		t.Skip("Dex OIDC provider not available — skipping Dex-dependent test")
+	}
+	resp.Body.Close()
+}
 
 // createDexProvider creates a Fluxbase OAuth provider configured for the Dex test instance.
 func createDexProvider(t *testing.T, tc *test.TestContext, adminToken string) {
@@ -28,9 +52,9 @@ func createDexProvider(t *testing.T, tc *test.TestContext, adminToken string) {
 		"redirect_url":      "http://localhost:8080/api/v1/auth/oauth/dex/callback",
 		"scopes":            []string{"openid", "email", "profile"},
 		"is_custom":         true,
-		"authorization_url": dexBaseURL + "/auth",
-		"token_url":         dexBaseURL + "/token",
-		"user_info_url":     dexBaseURL + "/userinfo",
+		"authorization_url": dexBaseURL() + "/auth",
+		"token_url":         dexBaseURL() + "/token",
+		"user_info_url":     dexBaseURL() + "/userinfo",
 	}
 
 	tc.NewRequest("POST", "/api/v1/admin/oauth/providers").
@@ -153,8 +177,12 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 	return callbackURL
 }
 
-// replaceDexHost replaces localhost:5556 with dex:5556 for container network access.
+// replaceDexHost replaces localhost:5556 with dex:5556 when running in devcontainer
+// where Dex is on a separate container. In CI (GitHub Actions), both run on localhost.
 func replaceDexHost(u string) string {
+	if os.Getenv("CI") == "true" {
+		return u
+	}
 	return strings.Replace(u, "localhost:5556", "dex:5556", 1)
 }
 
@@ -198,6 +226,7 @@ func completeDexOAuthFlow(t *testing.T, tc *test.TestContext) dexTokens {
 // TestDexOAuth_FullFlow tests the complete OAuth authorize -> callback flow against a real Dex OIDC provider.
 // Requires the Dex container to be running (added to .devcontainer/docker-compose.yml).
 func TestDexOAuth_FullFlow(t *testing.T) {
+	requireDex(t)
 	tc, adminToken := setupAdminTest(t)
 	defer tc.Close()
 
@@ -252,6 +281,7 @@ func TestDexOAuth_FullFlow(t *testing.T) {
 
 // TestDexOAuth_TokenRefresh tests that tokens obtained via Dex OAuth can be refreshed
 func TestDexOAuth_TokenRefresh(t *testing.T) {
+	requireDex(t)
 	tc, adminToken := setupAdminTest(t)
 	defer tc.Close()
 
@@ -277,6 +307,7 @@ func TestDexOAuth_TokenRefresh(t *testing.T) {
 
 // TestDexOAuth_ExistingUserLinking tests that Dex OAuth links to an existing user
 func TestDexOAuth_ExistingUserLinking(t *testing.T) {
+	requireDex(t)
 	tc, adminToken := setupAdminTest(t)
 	defer tc.Close()
 
