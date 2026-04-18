@@ -94,8 +94,10 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 			if len(via) >= 10 {
 				return fmt.Errorf("too many redirects")
 			}
-			// Capture state from the /dex/auth/local/login redirect
-			if s := req.URL.Query().Get("state"); s != "" && strings.Contains(req.URL.Path, "/login") {
+			// Capture state from any Dex auth redirect that carries a state parameter.
+			// Dex redirects through /dex/auth/local?... → /dex/auth/local/login?state=...
+			// The exact path varies by Dex version, so match any path under /dex/auth/.
+			if s := req.URL.Query().Get("state"); s != "" && strings.Contains(req.URL.Path, "/dex/auth/") {
 				dexLoginState = s
 			}
 			return nil
@@ -117,7 +119,7 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 		},
 	}
 
-	loginEndpoint := fmt.Sprintf("http://dex:5556/dex/auth/local/login?back=&state=%s", dexLoginState)
+	loginEndpoint := fmt.Sprintf("http://%s:%s/dex/auth/local/login?back=&state=%s", dexHost(), dexPort, dexLoginState)
 	loginData := url.Values{
 		"login":    {"testuser@fluxbase.test"},
 		"password": {"testpass"},
@@ -131,8 +133,9 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 	require.Contains(t, approvalURL, "/dex/approval", "Should redirect to approval")
 
 	// Phase 3: POST approval (grant access)
+	dexOrigin := fmt.Sprintf("http://%s:%s", dexHost(), dexPort)
 	if strings.HasPrefix(approvalURL, "/") {
-		approvalURL = "http://dex:5556" + approvalURL
+		approvalURL = dexOrigin + approvalURL
 	}
 
 	parsed, _ := url.Parse(approvalURL)
@@ -164,7 +167,7 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 	for i := 0; i < 5 && resp.StatusCode == http.StatusFound && !strings.Contains(callbackURL, "/api/v1/auth/oauth/dex/callback"); i++ {
 		resp.Body.Close()
 		if strings.HasPrefix(callbackURL, "/") {
-			callbackURL = "http://dex:5556" + callbackURL
+			callbackURL = dexOrigin + callbackURL
 		}
 		resp, err = phase3.Get(callbackURL)
 		require.NoError(t, err)
