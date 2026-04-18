@@ -87,6 +87,7 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 
 	// Phase 1: Follow redirects to login page, capture the Dex login state
 	var dexLoginState string
+	var redirectLog []string
 	phase1 := &http.Client{
 		Jar:     jar,
 		Timeout: 10 * time.Second,
@@ -94,10 +95,10 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 			if len(via) >= 10 {
 				return fmt.Errorf("too many redirects")
 			}
-			// Capture state from any Dex auth redirect that carries a state parameter.
-			// Dex redirects through /dex/auth/local?... → /dex/auth/local/login?state=...
-			// The exact path varies by Dex version, so match any path under /dex/auth/.
-			if s := req.URL.Query().Get("state"); s != "" && strings.Contains(req.URL.Path, "/dex/auth/") {
+			redirectLog = append(redirectLog, req.URL.String())
+			// Capture state from any redirect that carries a state parameter.
+			// Dex redirects through various paths; capture the last one with state.
+			if s := req.URL.Query().Get("state"); s != "" {
 				dexLoginState = s
 			}
 			return nil
@@ -108,7 +109,14 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 	resp, err := phase1.Get(loginURL)
 	require.NoError(t, err, "Should reach Dex authorize endpoint")
 	resp.Body.Close()
-	require.NotEmpty(t, dexLoginState, "Should have extracted Dex login state from redirect chain")
+
+	t.Logf("Phase 1: followed %d redirects from %s", len(redirectLog), loginURL)
+	for i, r := range redirectLog {
+		t.Logf("  redirect[%d]: %s", i, r)
+	}
+	t.Logf("Phase 1: final URL: %s, status: %d", resp.Request.URL.String(), resp.StatusCode)
+
+	require.NotEmpty(t, dexLoginState, "Should have extracted Dex login state from redirect chain (redirects: %v)", redirectLog)
 
 	// Phase 2: POST login credentials (don't follow redirects to preserve cookies)
 	phase2 := &http.Client{
