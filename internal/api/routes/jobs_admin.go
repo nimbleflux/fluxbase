@@ -47,20 +47,19 @@ func BuildJobsAdminRoutes(deps *JobsAdminDeps) *RouteGroup {
 			{Method: "POST", Path: "/jobs/sync", Handler: deps.SyncJobs, Summary: "Sync jobs"},
 
 			// Job queue (tenant_admin can access - override roles)
+			// Literal /queue paths MUST come before parameterized /:id to avoid "queue" matching :id
 			{Method: "GET", Path: "/jobs", Handler: deps.ListAllJobs, Summary: "List all jobs", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "GET", Path: "/jobs/:id", Handler: deps.GetJobAdmin, Summary: "Get job (admin)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "POST", Path: "/jobs/:id/terminate", Handler: deps.TerminateJob, Summary: "Terminate job", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "POST", Path: "/jobs/:id/cancel", Handler: deps.CancelJobAdmin, Summary: "Cancel job (admin)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "POST", Path: "/jobs/:id/retry", Handler: deps.RetryJobAdmin, Summary: "Retry job (admin)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-			{Method: "POST", Path: "/jobs/:id/resubmit", Handler: deps.ResubmitJobAdmin, Summary: "Resubmit job", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
-
-			// Job queue route aliases (frontend compatibility, tenant_admin can access)
 			{Method: "GET", Path: "/jobs/queue", Handler: deps.ListAllJobs, Summary: "List all jobs (queue alias)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 			{Method: "GET", Path: "/jobs/queue/:id", Handler: deps.GetJobAdmin, Summary: "Get job (queue alias)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 			{Method: "POST", Path: "/jobs/queue/:id/cancel", Handler: deps.CancelJobAdmin, Summary: "Cancel job (queue alias)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 			{Method: "POST", Path: "/jobs/queue/:id/terminate", Handler: deps.TerminateJob, Summary: "Terminate job (queue alias)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 			{Method: "POST", Path: "/jobs/queue/:id/retry", Handler: deps.RetryJobAdmin, Summary: "Retry job (queue alias)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 			{Method: "POST", Path: "/jobs/queue/:id/resubmit", Handler: deps.ResubmitJobAdmin, Summary: "Resubmit job (queue alias)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "GET", Path: "/jobs/:id", Handler: deps.GetJobAdmin, Summary: "Get job (admin)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "POST", Path: "/jobs/:id/terminate", Handler: deps.TerminateJob, Summary: "Terminate job", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "POST", Path: "/jobs/:id/cancel", Handler: deps.CancelJobAdmin, Summary: "Cancel job (admin)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "POST", Path: "/jobs/:id/retry", Handler: deps.RetryJobAdmin, Summary: "Retry job (admin)", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+			{Method: "POST", Path: "/jobs/:id/resubmit", Handler: deps.ResubmitJobAdmin, Summary: "Resubmit job", Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 		},
 	}
 }
