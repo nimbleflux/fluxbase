@@ -1,12 +1,7 @@
 import { test, expect } from "./fixtures";
 import {
   rawCreateFunction,
-  rawDeleteFunction,
-  rawListFunctions,
   rawCreateSecret,
-  rawListSecrets,
-  rawDeleteSecret,
-  rawSubmitJob,
   rawListJobs,
   rawListChatbots,
   rawGetSecretStats,
