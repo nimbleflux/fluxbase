@@ -1167,3 +1167,20 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE objects TO service_role;
 
+--
+-- Name: tenant_service grants; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA storage TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE buckets TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE chunked_upload_sessions TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE object_permissions TO tenant_service;
+GRANT SELECT ON TABLE objects TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE objects TO tenant_service;
+GRANT EXECUTE ON FUNCTION bucket_exists(bucket_name text) TO tenant_service;
+GRANT EXECUTE ON FUNCTION bucket_exists(p_bucket_name text, p_tenant_id uuid) TO tenant_service;
+GRANT EXECUTE ON FUNCTION get_bucket_settings(bucket_name text) TO tenant_service;
+GRANT EXECUTE ON FUNCTION get_bucket_settings(p_bucket_name text, p_tenant_id uuid) TO tenant_service;
+GRANT EXECUTE ON FUNCTION has_tenant_access(p_tenant_id uuid) TO tenant_service;
+GRANT EXECUTE ON FUNCTION is_bucket_public(p_bucket_name text, p_tenant_id uuid) TO tenant_service;
+
