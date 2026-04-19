@@ -97,7 +97,7 @@ function RPCContent() {
 
   const [executions, setExecutions] = useState<RPCExecution[]>([]);
   const [executionsLoading, setExecutionsLoading] = useState(false);
-  const [executionsOffset, setExecutionsOffset] = useState(0);
+  const executionsOffsetRef = useRef(0);
   const [hasMoreExecutions, setHasMoreExecutions] = useState(true);
   const [loadingMoreExecutions, setLoadingMoreExecutions] = useState(false);
   const [totalExecutions, setTotalExecutions] = useState(0);
@@ -148,13 +148,13 @@ function RPCContent() {
 
       if (isReset) {
         setExecutionsLoading(true);
-        setExecutionsOffset(0);
+        executionsOffsetRef.current = 0;
       } else {
         setLoadingMoreExecutions(true);
       }
 
       try {
-        const offset = isReset ? 0 : executionsOffset;
+        const offset = isReset ? 0 : executionsOffsetRef.current;
         const result = await rpcApi.listExecutions({
           namespace:
             selectedNamespace !== "all" ? selectedNamespace : undefined,
@@ -180,10 +180,10 @@ function RPCContent() {
         const execList = result.executions || [];
         if (isReset) {
           setExecutions(execList);
-          setExecutionsOffset(RPC_PAGE_SIZE);
+          executionsOffsetRef.current = RPC_PAGE_SIZE;
         } else {
           setExecutions((prev) => [...prev, ...execList]);
-          setExecutionsOffset((prev) => prev + RPC_PAGE_SIZE);
+          executionsOffsetRef.current += RPC_PAGE_SIZE;
         }
 
         setTotalExecutions(result.total || 0);
@@ -199,7 +199,7 @@ function RPCContent() {
         }
       }
     },
-    [selectedNamespace, searchQuery, statusFilter, executionsOffset],
+    [selectedNamespace, searchQuery, statusFilter],
   );
 
   const openExecutionDetails = (exec: RPCExecution) => {
