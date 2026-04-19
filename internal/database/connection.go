@@ -329,7 +329,7 @@ func (c *Connection) Migrate() error {
 }
 
 // runUserMigrations runs migrations from the user-specified directory
-// Migrations are tracked in migrations.app with namespace='filesystem'
+// Migrations are tracked in platform.migrations with namespace='filesystem'
 func (c *Connection) runUserMigrations() error {
 	// Check if directory exists
 	if _, err := os.Stat(c.config.UserMigrationsPath); os.IsNotExist(err) {
@@ -491,7 +491,7 @@ func (c *Connection) getAppliedMigrations(ctx context.Context, conn *pgx.Conn) (
 	applied := make(map[string]bool)
 
 	rows, err := conn.Query(ctx, `
-		SELECT name FROM migrations.app
+		SELECT name FROM platform.migrations
 		WHERE namespace = 'filesystem' AND status = 'applied'
 	`)
 	if err != nil {
@@ -521,7 +521,7 @@ func (c *Connection) applyFilesystemMigration(ctx context.Context, conn *pgx.Con
 
 	// Insert migration record
 	_, err = tx.Exec(ctx, `
-		INSERT INTO migrations.app (namespace, name, up_sql, down_sql, status, applied_at)
+		INSERT INTO platform.migrations (namespace, name, up_sql, down_sql, status, applied_at)
 		VALUES ('filesystem', $1, $2, $3, 'applied', NOW())
 		ON CONFLICT (namespace, name) DO UPDATE SET
 			status = 'applied',
@@ -548,9 +548,9 @@ func (c *Connection) applyFilesystemMigration(ctx context.Context, conn *pgx.Con
 // logMigrationExecution logs a migration execution to the execution_logs table
 func (c *Connection) logMigrationExecution(ctx context.Context, conn *pgx.Conn, migrationName, action, status string, duration time.Duration, errMsg string) {
 	_, err := conn.Exec(ctx, `
-		INSERT INTO migrations.execution_logs (migration_id, action, status, duration_ms, error_message, executed_at)
+		INSERT INTO platform.migration_execution_logs (migration_id, action, status, duration_ms, error_message, executed_at)
 		SELECT id, $2, $3, $4, $5, NOW()
-		FROM migrations.app
+		FROM platform.migrations
 		WHERE namespace = 'filesystem' AND name = $1
 	`, migrationName, action, status, duration.Milliseconds(), errMsg)
 	if err != nil {

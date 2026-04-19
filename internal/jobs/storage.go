@@ -1090,18 +1090,16 @@ func (s *Storage) GetJobStats(ctx context.Context, namespace *string) (*JobStats
 			return err
 		}
 
-			// Jobs by status
-			statusQuery := `
+		// Jobs by status
+		statusQuery := `
 				SELECT status, COUNT(*) as count
 				FROM jobs.queue
 				WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 			`
-			if namespace != nil {
-				statusQuery += " AND namespace = $2"
-			}
-			statusQuery += " GROUP BY status ORDER BY count DESC"
-
-
+		if namespace != nil {
+			statusQuery += " AND namespace = $2"
+		}
+		statusQuery += " GROUP BY status ORDER BY count DESC"
 
 		rows, err := tx.Query(ctx, statusQuery, args...)
 		if err != nil {
@@ -1121,7 +1119,7 @@ func (s *Storage) GetJobStats(ctx context.Context, namespace *string) (*JobStats
 		}
 
 		// Jobs by day (last 7 days)
-			dayQuery := `
+		dayQuery := `
 				SELECT DATE(created_at) as date, COUNT(*) as count
 				FROM jobs.queue
 				WHERE created_at >= NOW() - INTERVAL '7 days'
@@ -1152,15 +1150,15 @@ func (s *Storage) GetJobStats(ctx context.Context, namespace *string) (*JobStats
 		}
 
 		// Jobs by function (top 10)
-			funcQuery := `
+		funcQuery := `
 				SELECT job_name, COUNT(*) as count
 				FROM jobs.queue
 				WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 			`
-			if namespace != nil {
-				funcQuery += " AND namespace = $2"
-			}
-			funcQuery += " GROUP BY job_name ORDER BY count DESC LIMIT 10"
+		if namespace != nil {
+			funcQuery += " AND namespace = $2"
+		}
+		funcQuery += " GROUP BY job_name ORDER BY count DESC LIMIT 10"
 
 		rows, err = tx.Query(ctx, funcQuery, args...)
 		if err != nil {

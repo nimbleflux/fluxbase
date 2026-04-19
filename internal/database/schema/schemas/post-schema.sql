@@ -19,31 +19,31 @@ CREATE POLICY platform_tenants_instance_admin ON platform.tenants TO authenticat
 -- Name: instance_settings_insert; Type: POLICY; Schema: platform; Owner: -
 --
 
-CREATE POLICY instance_settings_insert ON platform.instance_settings FOR INSERT TO PUBLIC WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))));
+CREATE POLICY instance_settings_insert ON platform.instance_settings FOR INSERT TO PUBLIC WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((current_setting('request.jwt.claims', true) <> '' AND users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))));
 
 --
 -- Name: instance_settings_select; Type: POLICY; Schema: platform; Owner: -
 --
 
-CREATE POLICY instance_settings_select ON platform.instance_settings FOR SELECT TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (CURRENT_USER = 'tenant_service'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))) OR ((current_setting('app.current_tenant_id', true) IS NOT NULL) AND (current_setting('app.current_tenant_id', true) <> ''::text) AND (tenant_id IS NULL OR tenant_id::text = current_setting('app.current_tenant_id', true))) OR (tenant_id IS NOT NULL AND auth.has_tenant_access(tenant_id)));
+CREATE POLICY instance_settings_select ON platform.instance_settings FOR SELECT TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (CURRENT_USER = 'tenant_service'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((current_setting('request.jwt.claims', true) <> '' AND users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))) OR ((current_setting('app.current_tenant_id', true) IS NOT NULL) AND (current_setting('app.current_tenant_id', true) <> ''::text) AND (tenant_id IS NULL OR tenant_id::text = current_setting('app.current_tenant_id', true))) OR (tenant_id IS NOT NULL AND auth.has_tenant_access(tenant_id)));
 
 --
 -- Name: instance_settings_update; Type: POLICY; Schema: platform; Owner: -
 --
 
-CREATE POLICY instance_settings_update ON platform.instance_settings FOR UPDATE TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))) OR (tenant_id IS NOT NULL AND auth.has_tenant_access(tenant_id))) WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))) OR (tenant_id IS NOT NULL AND auth.has_tenant_access(tenant_id)));
+CREATE POLICY instance_settings_update ON platform.instance_settings FOR UPDATE TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((current_setting('request.jwt.claims', true) <> '' AND users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))) OR (tenant_id IS NOT NULL AND auth.has_tenant_access(tenant_id))) WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((current_setting('request.jwt.claims', true) <> '' AND users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))) OR (tenant_id IS NOT NULL AND auth.has_tenant_access(tenant_id)));
 
 --
 -- Name: instance_settings_insert_tenant; Type: POLICY; Schema: platform; Owner: -
 --
 
-CREATE POLICY instance_settings_insert_tenant ON platform.instance_settings FOR INSERT TO PUBLIC WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))) OR (tenant_id IS NOT NULL AND auth.has_tenant_access(tenant_id)));
+CREATE POLICY instance_settings_insert_tenant ON platform.instance_settings FOR INSERT TO PUBLIC WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((current_setting('request.jwt.claims', true) <> '' AND users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))) OR (tenant_id IS NOT NULL AND auth.has_tenant_access(tenant_id)));
 
 --
 -- Name: instance_settings_delete_tenant; Type: POLICY; Schema: platform; Owner: -
 --
 
-CREATE POLICY instance_settings_delete_tenant ON platform.instance_settings FOR DELETE TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))) OR (tenant_id IS NOT NULL AND auth.has_tenant_access(tenant_id)));
+CREATE POLICY instance_settings_delete_tenant ON platform.instance_settings FOR DELETE TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((current_setting('request.jwt.claims', true) <> '' AND users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))) OR (tenant_id IS NOT NULL AND auth.has_tenant_access(tenant_id)));
 
 --
 -- Name: platform_users_all; Type: POLICY; Schema: platform; Owner: -
@@ -61,13 +61,13 @@ CREATE POLICY platform_users_self ON platform.users FOR SELECT TO authenticated 
 -- Name: platform_sessions_admin; Type: POLICY; Schema: platform; Owner: -
 --
 
-CREATE POLICY platform_sessions_admin ON platform.sessions TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id))))) WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))));
+CREATE POLICY platform_sessions_admin ON platform.sessions TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((current_setting('request.jwt.claims', true) <> '' AND users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id))))) WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((current_setting('request.jwt.claims', true) <> '' AND users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))));
 
 --
 -- Name: sso_identities_admin; Type: POLICY; Schema: platform; Owner: -
 --
 
-CREATE POLICY sso_identities_admin ON platform.sso_identities TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id))))) WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))));
+CREATE POLICY sso_identities_admin ON platform.sso_identities TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((current_setting('request.jwt.claims', true) <> '' AND users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id))))) WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (EXISTS ( SELECT 1 FROM auth.users WHERE ((current_setting('request.jwt.claims', true) <> '' AND users.id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) AND platform.is_instance_admin(users.id)))));
 
 --
 -- Name: platform_tenant_admin_assignments_all; Type: POLICY; Schema: platform; Owner: -

@@ -1897,6 +1897,9 @@ func (h *Handler) ListUserConversations(c fiber.Ctx) error {
 		opts.ChatbotName = &chatbot
 	}
 	if namespace := c.Query("namespace"); namespace != "" {
+		if namespace == "default" {
+			namespace = ""
+		}
 		opts.Namespace = &namespace
 	}
 

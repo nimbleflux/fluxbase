@@ -2789,7 +2789,7 @@ CREATE POLICY auth_users_insert ON users FOR INSERT TO PUBLIC WITH CHECK ((CURRE
 -- Name: auth_users_select; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_users_select ON users FOR SELECT TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id));
+CREATE POLICY auth_users_select ON users FOR SELECT TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (current_setting('request.jwt.claims', true) <> '' AND id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id));
 
 --
 -- Name: auth_users_select_own; Type: POLICY; Schema: -; Owner: -
@@ -2801,7 +2801,7 @@ CREATE POLICY auth_users_select_own ON users FOR SELECT TO authenticated USING (
 -- Name: auth_users_update; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_users_update ON users FOR UPDATE TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id)) WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id));
+CREATE POLICY auth_users_update ON users FOR UPDATE TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (current_setting('request.jwt.claims', true) <> '' AND id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id)) WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (current_setting('request.jwt.claims', true) <> '' AND id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id));
 
 --
 -- Name: auth_users_update_own; Type: POLICY; Schema: -; Owner: -

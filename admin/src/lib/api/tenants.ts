@@ -30,6 +30,8 @@ export interface CreateTenantRequest {
   slug: string;
   name: string;
   metadata?: Record<string, unknown>;
+  db_mode?: "auto" | "existing";
+  db_name?: string;
   auto_generate_keys?: boolean;
   admin_email?: string;
   admin_user_id?: string;

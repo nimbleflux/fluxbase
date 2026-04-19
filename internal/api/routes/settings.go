@@ -14,6 +14,7 @@ type SettingsDeps struct {
 
 type UserSettingsDeps struct {
 	RequireAuth       fiber.Handler
+	TenantMiddleware  fiber.Handler
 	ListSettings      fiber.Handler
 	GetUserOwnSetting fiber.Handler
 	GetSystemSetting  fiber.Handler
@@ -61,9 +62,17 @@ func BuildSettingsRoutes(deps *SettingsDeps) *RouteGroup {
 }
 
 func BuildUserSettingsRoutes(deps *UserSettingsDeps) *RouteGroup {
+	var middlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name:   "user-settings",
-		Prefix: "/api/v1/settings/user",
+		Name:        "user-settings",
+		Prefix:      "/api/v1/settings/user",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "GET",
@@ -115,9 +124,17 @@ func BuildUserSettingsRoutes(deps *UserSettingsDeps) *RouteGroup {
 }
 
 func BuildUserSecretsRoutes(deps *UserSettingsDeps) *RouteGroup {
+	var middlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name:   "user-secrets",
-		Prefix: "/api/v1/settings/secret",
+		Name:        "user-secrets",
+		Prefix:      "/api/v1/settings/secret",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "POST",

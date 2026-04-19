@@ -465,7 +465,7 @@ func (s *DeclarativeService) recordApplyWithSource(ctx context.Context, result *
 	// Record to database if pool is available
 	if s.pool != nil {
 		_, err := s.pool.Exec(ctx, `
-			INSERT INTO migrations.declarative_state (schema_fingerprint, applied_by, source)
+			INSERT INTO platform.declarative_state (schema_fingerprint, applied_by, source)
 			VALUES ($1, 'fluxbase', $2)
 		`, fingerprint, source)
 		if err != nil {
@@ -1273,7 +1273,7 @@ func (s *DeclarativeService) GetSchemaStatus(ctx context.Context) (*SchemaStatus
 		var appliedAt time.Time
 		err := s.pool.QueryRow(ctx, `
 			SELECT schema_fingerprint, applied_at, source
-			FROM migrations.declarative_state
+			FROM platform.declarative_state
 			ORDER BY id DESC
 			LIMIT 1
 		`).Scan(&dbFingerprint, &appliedAt, &source)

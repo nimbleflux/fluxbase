@@ -397,7 +397,7 @@ func (s *Storage) ListNamespaces(ctx context.Context) ([]string, error) {
 	tenantID := database.TenantFromContext(ctx)
 	var namespaces []string
 	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
-		rows, queryErr := tx.Query(ctx, query)
+		rows, queryErr := tx.Query(ctx, query, tenantOrNil(tenantID))
 		if queryErr != nil {
 			return queryErr
 		}
@@ -434,7 +434,7 @@ func (s *Storage) ListScheduledProcedures(ctx context.Context) ([]*Procedure, er
 	tenantID := database.TenantFromContext(ctx)
 	var procedures []*Procedure
 	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
-		rows, queryErr := tx.Query(ctx, query)
+		rows, queryErr := tx.Query(ctx, query, tenantOrNil(tenantID))
 		if queryErr != nil {
 			return queryErr
 		}

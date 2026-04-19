@@ -9,17 +9,25 @@ type RealtimeDeps struct {
 	OptionalAuth           fiber.Handler
 	RequireAuth            fiber.Handler
 	RequireScope           func(...string) fiber.Handler
+	TenantMiddleware       fiber.Handler
 	HandleWebSocket        fiber.Handler
 	HandleStats            fiber.Handler
 	HandleBroadcast        fiber.Handler
 }
 
 func BuildRealtimeRoutes(deps *RealtimeDeps) *RouteGroup {
+	middlewares := []Middleware{
+		{Name: "RequireRealtimeEnabled", Handler: deps.RequireRealtimeEnabled},
+	}
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name: "realtime",
-		Middlewares: []Middleware{
-			{Name: "RequireRealtimeEnabled", Handler: deps.RequireRealtimeEnabled},
-		},
+		Name:        "realtime",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "GET",

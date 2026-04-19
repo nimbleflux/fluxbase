@@ -319,12 +319,12 @@ func validateMigrationSQL(sql string) error {
 		pattern string
 		message string
 	}{
-		{`drop\s+schema\s+(auth|storage|jobs|functions|branching|migrations)`, "Cannot drop system schemas"},
-		{`alter\s+schema\s+(auth|storage|jobs|functions|branching|migrations)`, "Cannot alter system schemas"},
+		{`drop\s+schema\s+(auth|storage|jobs|functions|branching|platform)`, "Cannot drop system schemas"},
+		{`alter\s+schema\s+(auth|storage|jobs|functions|branching|platform)`, "Cannot alter system schemas"},
 		{`drop\s+database`, "Cannot drop database via migrations"},
 		{`create\s+database`, "Cannot create database via migrations"},
-		{`truncate\s+(auth|storage|jobs|functions|branching|migrations)\.`, "Cannot truncate system tables"},
-		{`drop\s+table\s+(auth|storage|jobs|functions|branching|migrations)\.`, "Cannot drop system tables"},
+		{`truncate\s+(auth|storage|jobs|functions|branching|platform)\.`, "Cannot truncate system tables"},
+		{`drop\s+table\s+(auth|storage|jobs|functions|branching|platform)\.`, "Cannot drop system tables"},
 	}
 
 	for _, dp := range dangerousPatterns {

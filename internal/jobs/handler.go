@@ -641,6 +641,9 @@ func (h *Handler) ListJobs(c fiber.Ctx) error {
 	}
 
 	if namespace := c.Query("namespace"); namespace != "" {
+		if namespace == "default" {
+			namespace = ""
+		}
 		filters.Namespace = &namespace
 	}
 
@@ -1268,12 +1271,23 @@ func (h *Handler) ListNamespaces(c fiber.Ctx) error {
 		namespaces = []string{"default"}
 	}
 
+	// Normalize empty-string namespaces to "default" so the UI can present
+	// them meaningfully and use the value in subsequent queries.
+	for i := range namespaces {
+		if namespaces[i] == "" {
+			namespaces[i] = "default"
+		}
+	}
+
 	return c.JSON(fiber.Map{"namespaces": namespaces})
 }
 
 // ListJobFunctions lists all job functions (Admin only)
 func (h *Handler) ListJobFunctions(c fiber.Ctx) error {
 	namespace := c.Query("namespace")
+	if namespace == "default" {
+		namespace = ""
+	}
 
 	var functions []*JobFunctionSummary
 	var err error
@@ -1396,6 +1410,9 @@ func (h *Handler) DeleteJobFunction(c fiber.Ctx) error {
 func (h *Handler) GetJobStats(c fiber.Ctx) error {
 	var namespacePtr *string
 	if namespace := c.Query("namespace"); namespace != "" {
+		if namespace == "default" {
+			namespace = ""
+		}
 		namespacePtr = &namespace
 	}
 
@@ -1499,6 +1516,9 @@ func (h *Handler) ListAllJobs(c fiber.Ctx) error {
 	}
 
 	if namespace := c.Query("namespace"); namespace != "" {
+		if namespace == "default" {
+			namespace = ""
+		}
 		filters.Namespace = &namespace
 	}
 

@@ -728,41 +728,41 @@ END $$;
 -- migrations -> auth
 -- ============================================================================
 
--- migrations.app.applied_by -> auth.users.id
+-- platform.migrations.applied_by -> auth.users.id
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'app_applied_by_fkey'
-        AND conrelid = 'migrations.app'::regclass
+        AND conrelid = 'platform.migrations'::regclass
     ) THEN
-        ALTER TABLE migrations.app ADD CONSTRAINT app_applied_by_fkey
+        ALTER TABLE platform.migrations ADD CONSTRAINT app_applied_by_fkey
             FOREIGN KEY (applied_by) REFERENCES auth.users(id) ON DELETE SET NULL;
     END IF;
 END $$;
 
--- migrations.app.created_by -> auth.users.id
+-- platform.migrations.created_by -> auth.users.id
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'app_created_by_fkey'
-        AND conrelid = 'migrations.app'::regclass
+        AND conrelid = 'platform.migrations'::regclass
     ) THEN
-        ALTER TABLE migrations.app ADD CONSTRAINT app_created_by_fkey
+        ALTER TABLE platform.migrations ADD CONSTRAINT app_created_by_fkey
             FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
     END IF;
 END $$;
 
--- migrations.execution_logs.executed_by -> auth.users.id
+-- platform.migration_execution_logs.executed_by -> auth.users.id
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'execution_logs_executed_by_fkey'
-        AND conrelid = 'migrations.execution_logs'::regclass
+        AND conrelid = 'platform.migration_execution_logs'::regclass
     ) THEN
-        ALTER TABLE migrations.execution_logs ADD CONSTRAINT execution_logs_executed_by_fkey
+        ALTER TABLE platform.migration_execution_logs ADD CONSTRAINT execution_logs_executed_by_fkey
             FOREIGN KEY (executed_by) REFERENCES auth.users(id) ON DELETE SET NULL;
     END IF;
 END $$;

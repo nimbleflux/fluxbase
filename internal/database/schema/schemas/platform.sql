@@ -1921,3 +1921,315 @@ GRANT USAGE ON SCHEMA platform TO tenant_service;
 
 GRANT SELECT ON TABLE platform.available_extensions TO tenant_service;
 
+-- ============================================================================
+-- Consolidated tables from system, api, and migrations schemas
+-- ============================================================================
+
+SET search_path TO platform, public;
+
+
+--
+-- Name: rate_limits; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+    key text,
+    count bigint DEFAULT 1 NOT NULL,
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT rate_limits_pkey PRIMARY KEY (key)
+);
+
+
+COMMENT ON TABLE rate_limits IS 'Distributed rate limiting storage for multi-instance deployments';
+
+
+COMMENT ON COLUMN platform.rate_limits.key IS 'Rate limit key (e.g., "login:192.168.1.1")';
+
+
+COMMENT ON COLUMN platform.rate_limits.count IS 'Number of requests in the current window';
+
+
+COMMENT ON COLUMN platform.rate_limits.expires_at IS 'When this rate limit window expires';
+
+--
+-- Name: idx_rate_limits_expires_at; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_rate_limits_expires_at ON rate_limits (expires_at);
+
+--
+-- Name: rate_limits; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE rate_limits TO service_role;
+
+
+--
+-- Name: idempotency_keys; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    key text,
+    method text NOT NULL,
+    path text NOT NULL,
+    user_id uuid,
+    request_hash text,
+    status text DEFAULT 'processing' NOT NULL,
+    response_status integer,
+    response_headers jsonb,
+    response_body bytea,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    completed_at timestamptz,
+    expires_at timestamptz DEFAULT (now() + '24:00:00'::interval) NOT NULL,
+    CONSTRAINT idempotency_keys_pkey PRIMARY KEY (key),
+    CONSTRAINT idempotency_keys_status_check CHECK (status IN ('processing'::text, 'completed'::text, 'failed'::text))
+);
+
+
+COMMENT ON TABLE idempotency_keys IS 'Stores idempotency keys for safe request retries';
+
+
+COMMENT ON COLUMN platform.idempotency_keys.key IS 'Client-provided idempotency key (typically UUID)';
+
+
+COMMENT ON COLUMN platform.idempotency_keys.status IS 'processing: request in progress, completed: response cached, failed: error occurred';
+
+--
+-- Name: idx_idempotency_keys_expires_at; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires_at ON idempotency_keys (expires_at);
+
+--
+-- Name: idx_idempotency_keys_method_path; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_idempotency_keys_method_path ON idempotency_keys (method, path);
+
+--
+-- Name: idx_idempotency_keys_user_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_idempotency_keys_user_id ON idempotency_keys (user_id) WHERE (user_id IS NOT NULL);
+
+--
+-- Name: idempotency_keys; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE idempotency_keys TO service_role;
+
+
+--
+-- Name: migrations; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS migrations (
+    id uuid DEFAULT gen_random_uuid(),
+    namespace text DEFAULT 'default' NOT NULL,
+    name text NOT NULL,
+    description text,
+    up_sql text NOT NULL,
+    down_sql text,
+    version integer DEFAULT 1,
+    status text DEFAULT 'pending',
+    created_by uuid,
+    applied_by uuid,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    applied_at timestamptz,
+    rolled_back_at timestamptz,
+    CONSTRAINT migrations_pkey PRIMARY KEY (id),
+    CONSTRAINT unique_migration_namespace UNIQUE (namespace, name),
+    CONSTRAINT valid_status CHECK (status IN ('pending'::text, 'applied'::text, 'failed'::text, 'rolled_back'::text))
+);
+
+
+COMMENT ON TABLE migrations IS 'All user-facing migrations (filesystem and API-managed)';
+
+
+COMMENT ON COLUMN platform.migrations.namespace IS 'Namespace for isolation: filesystem for local files, or custom (default, staging, prod, etc.) for API';
+
+
+COMMENT ON COLUMN platform.migrations.name IS 'Migration name, should follow convention like 001_description for ordering';
+
+
+COMMENT ON COLUMN platform.migrations.up_sql IS 'SQL to apply the migration';
+
+
+COMMENT ON COLUMN platform.migrations.down_sql IS 'SQL to rollback the migration (optional)';
+
+
+COMMENT ON COLUMN platform.migrations.status IS 'Current status: pending (not applied), applied (successful), failed (error), rolled_back';
+
+--
+-- Name: idx_migrations_namespace; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_migrations_namespace ON migrations (namespace);
+
+--
+-- Name: idx_migrations_namespace_status; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_migrations_namespace_status ON migrations (namespace, status);
+
+--
+-- Name: idx_migrations_status; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_migrations_status ON migrations (status);
+
+--
+-- Name: migration_execution_logs; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS migration_execution_logs (
+    id uuid DEFAULT gen_random_uuid(),
+    migration_id uuid NOT NULL,
+    action text NOT NULL,
+    status text NOT NULL,
+    duration_ms integer,
+    error_message text,
+    logs text,
+    executed_at timestamptz DEFAULT now() NOT NULL,
+    executed_by uuid,
+    CONSTRAINT migration_execution_logs_pkey PRIMARY KEY (id),
+    CONSTRAINT migration_execution_logs_migration_id_fkey FOREIGN KEY (migration_id) REFERENCES migrations (id) ON DELETE CASCADE,
+    CONSTRAINT valid_action CHECK (action IN ('apply'::text, 'rollback'::text)),
+    CONSTRAINT valid_execution_status CHECK (status IN ('success'::text, 'failed'::text))
+);
+
+
+COMMENT ON TABLE migration_execution_logs IS 'Audit log of all migration apply/rollback attempts';
+
+--
+-- Name: idx_migration_execution_logs_executed_at; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_migration_execution_logs_executed_at ON migration_execution_logs (executed_at DESC);
+
+--
+-- Name: idx_migration_execution_logs_migration; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_migration_execution_logs_migration ON migration_execution_logs (migration_id);
+
+--
+-- Name: fluxbase_migrations; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS fluxbase_migrations (
+    version bigint,
+    dirty boolean NOT NULL,
+    CONSTRAINT fluxbase_migrations_pkey PRIMARY KEY (version)
+);
+
+
+COMMENT ON TABLE fluxbase_migrations IS 'Tracks Fluxbase system migration versions (managed by golang-migrate)';
+
+--
+-- Cross-schema FKs moved to post-schema-fks.sql
+-- migrations_applied_by_fkey, migrations_created_by_fkey, migration_execution_logs_executed_by_fkey
+--
+
+--
+-- Name: declarative_state; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS declarative_state (
+    id SERIAL PRIMARY KEY,
+    schema_fingerprint TEXT NOT NULL,
+    applied_at TIMESTAMPTZ DEFAULT NOW(),
+    applied_by TEXT,
+    source TEXT CHECK (source IN ('fresh_install', 'transitioned', 'schema_apply'))
+);
+
+
+COMMENT ON TABLE declarative_state IS 'Tracks declarative schema application state with fingerprints';
+
+
+COMMENT ON COLUMN platform.declarative_state.source IS 'Source of schema application: fresh_install (new DB), transitioned (migrated from imperative), schema_apply (normal startup)';
+
+--
+-- Name: bootstrap_state; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS bootstrap_state (
+    id SERIAL PRIMARY KEY,
+    bootstrapped_at TIMESTAMPTZ DEFAULT NOW(),
+    version TEXT NOT NULL,
+    checksum TEXT
+);
+
+
+COMMENT ON TABLE bootstrap_state IS 'Tracks bootstrap completion state';
+
+--
+-- Name: migrations; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE migrations TO {{APP_USER}};
+
+--
+-- Name: migrations; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+
+--
+-- Name: migrations; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE migrations TO service_role;
+
+--
+-- Name: migration_execution_logs; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE migration_execution_logs TO {{APP_USER}};
+
+--
+-- Name: migration_execution_logs; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+
+--
+-- Name: migration_execution_logs; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE migration_execution_logs TO service_role;
+
+--
+-- Name: fluxbase_migrations; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE fluxbase_migrations TO {{APP_USER}};
+
+--
+-- Name: fluxbase_migrations; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+
+--
+-- Name: fluxbase_migrations; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE fluxbase_migrations TO service_role;
+
+--
+-- Name: declarative_state; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT SELECT, INSERT, UPDATE ON TABLE declarative_state TO service_role;
+
+--
+-- Name: declarative_state_id_seq; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE, SELECT ON SEQUENCE declarative_state_id_seq TO service_role;
+
+--
+-- Name: bootstrap_state; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT SELECT, INSERT ON TABLE bootstrap_state TO service_role;

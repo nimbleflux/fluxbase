@@ -6,14 +6,23 @@ import (
 
 type VectorDeps struct {
 	RequireAuth        fiber.Handler
+	TenantMiddleware   fiber.Handler
 	HandleCapabilities fiber.Handler
 	HandleEmbed        fiber.Handler
 	HandleSearch       fiber.Handler
 }
 
 func BuildVectorRoutes(deps *VectorDeps) *RouteGroup {
+	var middlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name: "vector",
+		Name:        "vector",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "GET",

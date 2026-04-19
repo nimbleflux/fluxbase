@@ -13,10 +13,12 @@ import (
 type TenantsAdminDeps struct {
 	ListMyTenants             fiber.Handler
 	ListTenants               fiber.Handler
+	ListDeletedTenants        fiber.Handler
 	CreateTenant              fiber.Handler
 	GetTenant                 fiber.Handler
 	UpdateTenant              fiber.Handler
 	DeleteTenant              fiber.Handler
+	RecoverTenant             fiber.Handler
 	MigrateTenant             fiber.Handler
 	RepairTenant              fiber.Handler
 	ListAdmins                fiber.Handler
@@ -48,12 +50,14 @@ func BuildTenantsAdminRoutes(deps *TenantsAdminDeps) *RouteGroup {
 			// Tenant listing
 			{Method: "GET", Path: "/tenants/mine", Handler: deps.ListMyTenants, Summary: "List my tenants", Roles: nil}, // No role restriction
 			{Method: "GET", Path: "/tenants", Handler: deps.ListTenants, Summary: "List all tenants", Roles: []string{"admin", "instance_admin"}},
+			{Method: "GET", Path: "/tenants/deleted", Handler: deps.ListDeletedTenants, Summary: "List deleted tenants", Roles: []string{"admin", "instance_admin"}},
 
 			// Tenant CRUD - instance admin only for create/delete
 			{Method: "POST", Path: "/tenants", Handler: deps.CreateTenant, Summary: "Create tenant", Roles: []string{"admin", "instance_admin"}},
 			{Method: "GET", Path: "/tenants/:id", Handler: deps.GetTenant, Summary: "Get tenant", Roles: nil}, // No role restriction
 			{Method: "PATCH", Path: "/tenants/:id", Handler: deps.UpdateTenant, Summary: "Update tenant"},     // Uses default roles
-			{Method: "DELETE", Path: "/tenants/:id", Handler: deps.DeleteTenant, Summary: "Delete tenant", Roles: []string{"admin", "instance_admin"}},
+			{Method: "DELETE", Path: "/tenants/:id", Handler: deps.DeleteTenant, Summary: "Delete tenant (soft by default, ?hard=true for permanent)", Roles: []string{"admin", "instance_admin"}},
+			{Method: "POST", Path: "/tenants/:id/recover", Handler: deps.RecoverTenant, Summary: "Recover soft-deleted tenant", Roles: []string{"admin", "instance_admin"}},
 			{Method: "POST", Path: "/tenants/:id/migrate", Handler: deps.MigrateTenant, Summary: "Migrate tenant", Roles: []string{"admin", "instance_admin"}},
 
 			// Tenant Admins/Members (uses default roles)

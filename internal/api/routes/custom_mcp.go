@@ -3,8 +3,9 @@ package routes
 import "github.com/gofiber/fiber/v3"
 
 type CustomMCPDeps struct {
-	RequireAuth  fiber.Handler
-	RequireAdmin fiber.Handler
+	RequireAuth      fiber.Handler
+	RequireAdmin     fiber.Handler
+	TenantMiddleware fiber.Handler
 
 	GetConfig      fiber.Handler
 	ListTools      fiber.Handler
@@ -46,10 +47,18 @@ func BuildCustomMCPRoutes(deps *CustomMCPDeps) *RouteGroup {
 		{Method: "POST", Path: "/resources/:id/test", Handler: deps.TestResource, Summary: "Test custom MCP resource", Auth: AuthRequired, Middlewares: requireAdmin},
 	}
 
+	middlewares := []Middleware{}
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name:   "custom-mcp",
-		Prefix: "/api/v1/mcp",
-		Routes: routes,
+		Name:        "custom-mcp",
+		Prefix:      "/api/v1/mcp",
+		Routes:      routes,
+		Middlewares: middlewares,
 		AuthMiddlewares: &AuthMiddlewares{
 			Required: deps.RequireAuth,
 		},

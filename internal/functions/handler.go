@@ -592,6 +592,12 @@ func (h *Handler) ListFunctions(c fiber.Ctx) error {
 	// Check if namespace filter is provided
 	namespace := c.Query("namespace")
 
+	// Normalize "default" to empty string — functions without an explicit
+	// namespace are stored as namespace="" but the UI presents them as "default".
+	if namespace == "default" {
+		namespace = ""
+	}
+
 	var functions []EdgeFunctionSummary
 	var err error
 
@@ -639,6 +645,14 @@ func (h *Handler) ListNamespaces(c fiber.Ctx) error {
 	// Ensure we always return at least "default"
 	if len(namespaces) == 0 {
 		namespaces = []string{"default"}
+	}
+
+	// Normalize empty-string namespaces to "default" so the UI can present
+	// them meaningfully and use the value in subsequent queries.
+	for i := range namespaces {
+		if namespaces[i] == "" {
+			namespaces[i] = "default"
+		}
 	}
 
 	return c.JSON(fiber.Map{"namespaces": namespaces})
@@ -794,6 +808,9 @@ func (h *Handler) DeleteFunction(c fiber.Ctx) error {
 func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 	name := c.Params("name")
 	namespace := c.Query("namespace")
+	if namespace == "default" {
+		namespace = ""
+	}
 
 	// Get function - if namespace is provided, look up by namespace+name; otherwise find first match by name
 	var fn *EdgeFunction
@@ -1126,6 +1143,9 @@ func (h *Handler) ListAllExecutions(c fiber.Ctx) error {
 	limit := fiber.Query[int](c, "limit", 25)
 	offset := fiber.Query[int](c, "offset", 0)
 	namespace := c.Query("namespace")
+	if namespace == "default" {
+		namespace = ""
+	}
 	functionName := c.Query("function_name")
 	status := c.Query("status")
 

@@ -33,7 +33,7 @@ type FDWRoleCredentials struct {
 // accessed by tenant databases through foreign data wrappers.
 var fdwSchemas = []string{
 	"platform", "auth", "storage", "jobs", "functions", "realtime",
-	"ai", "rpc", "api", "branching", "logging", "mcp", "app",
+	"ai", "rpc", "branching", "logging", "mcp",
 }
 
 // fdwExcludeTables lists tables that should NOT be imported via FDW

@@ -9,6 +9,7 @@ type FunctionsDeps struct {
 	RequireAuth             fiber.Handler
 	OptionalAuth            fiber.Handler
 	RequireScope            func(...string) fiber.Handler
+	TenantMiddleware        fiber.Handler
 	ListFunctions           fiber.Handler
 	GetFunction             fiber.Handler
 	CreateFunction          fiber.Handler
@@ -24,11 +25,18 @@ type FunctionsDeps struct {
 }
 
 func BuildFunctionsRoutes(deps *FunctionsDeps) *RouteGroup {
+	middlewares := []Middleware{
+		{Name: "RequireFunctionsEnabled", Handler: deps.RequireFunctionsEnabled},
+	}
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name: "functions",
-		Middlewares: []Middleware{
-			{Name: "RequireFunctionsEnabled", Handler: deps.RequireFunctionsEnabled},
-		},
+		Name:        "functions",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "GET",

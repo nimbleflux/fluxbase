@@ -32,10 +32,12 @@ type StorageQuerier interface {
 	CreateTenant(ctx context.Context, tenant *Tenant) error
 	GetTenant(ctx context.Context, id string) (*Tenant, error)
 	GetAllActiveTenants(ctx context.Context) ([]Tenant, error)
+	GetDeletedTenants(ctx context.Context) ([]Tenant, error)
 	UpdateTenantStatus(ctx context.Context, id string, status TenantStatus) error
 	UpdateTenantDBName(ctx context.Context, id string, dbName string) error
 	SoftDeleteTenant(ctx context.Context, id string) error
 	HardDeleteTenant(ctx context.Context, id string) error
+	RecoverTenant(ctx context.Context, id string) error
 	CleanupTenantData(ctx context.Context, tenantID string) error
 }
 
@@ -239,15 +241,37 @@ func (m *Manager) DeleteTenantDatabase(ctx context.Context, tenantID string) err
 		return ErrCannotDeleteDefault
 	}
 
-	if tenant.DBName == nil {
-		return fmt.Errorf("tenant has no separate database")
-	}
-
 	if err := m.storage.SoftDeleteTenant(ctx, tenantID); err != nil {
 		return fmt.Errorf("failed to soft delete tenant: %w", err)
 	}
 
 	// Remove connection pool from cache so no new connections are created.
+	if m.router != nil {
+		m.router.RemovePool(tenantID)
+	}
+
+	log.Info().Str("tenant_id", tenantID).Str("slug", tenant.Slug).Msg("Tenant soft-deleted")
+	return nil
+}
+
+func (m *Manager) HardDeleteTenantDatabase(ctx context.Context, tenantID string) error {
+	tenant, err := m.storage.GetTenant(ctx, tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to get tenant: %w", err)
+	}
+
+	if tenant.IsDefault {
+		return ErrCannotDeleteDefault
+	}
+
+	// Soft delete first if not already done
+	if tenant.DeletedAt == nil {
+		if err := m.storage.SoftDeleteTenant(ctx, tenantID); err != nil {
+			return fmt.Errorf("failed to soft delete tenant: %w", err)
+		}
+	}
+
+	// Remove connection pool from cache
 	if m.router != nil {
 		m.router.RemovePool(tenantID)
 	}
@@ -262,13 +286,15 @@ func (m *Manager) DeleteTenantDatabase(ctx context.Context, tenantID string) err
 		return fmt.Errorf("failed to cleanup tenant data: %w", err)
 	}
 
-	// Atomically terminate connections and drop the database (PostgreSQL 13+).
-	_, err = m.adminPool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", quoteIdent(*tenant.DBName)))
-	if err != nil {
-		if statusErr := m.storage.UpdateTenantStatus(ctx, tenantID, TenantStatusError); statusErr != nil {
-			log.Warn().Err(statusErr).Str("tenant_id", tenantID).Msg("Failed to update tenant status to error")
+	// Drop the separate database if one exists.
+	if tenant.DBName != nil {
+		_, err = m.adminPool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", quoteIdent(*tenant.DBName)))
+		if err != nil {
+			if statusErr := m.storage.UpdateTenantStatus(ctx, tenantID, TenantStatusError); statusErr != nil {
+				log.Warn().Err(statusErr).Str("tenant_id", tenantID).Msg("Failed to update tenant status to error")
+			}
+			return fmt.Errorf("failed to drop database: %w", err)
 		}
-		return fmt.Errorf("failed to drop database: %w", err)
 	}
 
 	// Drop the per-tenant FDW role from the main database
@@ -278,8 +304,24 @@ func (m *Manager) DeleteTenantDatabase(ctx context.Context, tenantID string) err
 		log.Warn().Err(err).Str("tenant_id", tenantID).Msg("Failed to hard delete tenant record")
 	}
 
-	log.Info().Str("tenant_id", tenantID).Str("slug", tenant.Slug).Msg("Tenant database deleted successfully")
+	log.Info().Str("tenant_id", tenantID).Str("slug", tenant.Slug).Msg("Tenant hard-deleted")
 	return nil
+}
+
+func (m *Manager) RecoverTenantDatabase(ctx context.Context, tenantID string) error {
+	// Recovery only un-deletes the metadata row. The database (if it existed)
+	// was already dropped during hard delete, so this is only useful when the
+	// tenant was soft-deleted but not yet hard-deleted.
+	if err := m.storage.RecoverTenant(ctx, tenantID); err != nil {
+		return fmt.Errorf("failed to recover tenant: %w", err)
+	}
+
+	log.Info().Str("tenant_id", tenantID).Msg("Tenant recovered")
+	return nil
+}
+
+func (m *Manager) ListDeletedTenants(ctx context.Context) ([]Tenant, error) {
+	return m.storage.GetDeletedTenants(ctx)
 }
 
 func (m *Manager) MigrateTenant(ctx context.Context, tenantID string) error {
@@ -367,7 +409,7 @@ func (m *Manager) migrateAllTenants(ctx context.Context) {
 func (m *Manager) hasPendingMigrations(ctx context.Context, pool *pgxpool.Pool) (bool, error) {
 	var currentVersion int
 	err := pool.QueryRow(ctx, `
-		SELECT COALESCE(MAX(version), 0)::int FROM migrations.fluxbase
+		SELECT COALESCE(MAX(version), 0)::int FROM platform.fluxbase_migrations
 	`).Scan(&currentVersion)
 	if err != nil {
 		return true, nil
@@ -423,8 +465,7 @@ func (m *Manager) applyInternalSchemas(ctx context.Context, dbName string, fdwEn
 	// Schemas must be applied in dependency order (platform first, then auth, etc.)
 	schemaOrder := []string{
 		"platform", "auth", "storage", "jobs", "functions", "realtime",
-		"ai", "rpc", "system", "migrations",
-		"app", "api", "branching", "logging", "mcp",
+		"ai", "rpc", "branching", "logging", "mcp",
 	}
 
 	dbURL := replaceDBName(m.dbURL, dbName)

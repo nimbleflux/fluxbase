@@ -55,7 +55,7 @@ func NewStorage(db *database.Connection) *Storage {
 // CreateMigration creates a new migration
 func (s *Storage) CreateMigration(ctx context.Context, m *Migration) error {
 	query := `
-		INSERT INTO migrations.app (
+		INSERT INTO platform.migrations (
 			namespace, name, description, up_sql, down_sql, created_by
 		) VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, version, status, created_at, updated_at
@@ -78,7 +78,7 @@ func (s *Storage) GetMigration(ctx context.Context, namespace, name string) (*Mi
 	query := `
 		SELECT id, namespace, name, description, up_sql, down_sql, version, status,
 		       created_by, applied_by, created_at, updated_at, applied_at, rolled_back_at
-		FROM migrations.app
+		FROM platform.migrations
 		WHERE namespace = $1 AND name = $2
 	`
 
@@ -102,7 +102,7 @@ func (s *Storage) ListMigrations(ctx context.Context, namespace string, status *
 	query := `
 		SELECT id, namespace, name, description, up_sql, down_sql, version, status,
 		       created_by, applied_by, created_at, updated_at, applied_at, rolled_back_at
-		FROM migrations.app
+		FROM platform.migrations
 		WHERE namespace = $1
 	`
 
@@ -147,7 +147,7 @@ func (s *Storage) ListMigrations(ctx context.Context, namespace string, status *
 // UpdateMigration updates a migration (only allowed if status is pending or failed)
 func (s *Storage) UpdateMigration(ctx context.Context, namespace, name string, updates map[string]interface{}) error {
 	// Build dynamic UPDATE query
-	query := "UPDATE migrations.app SET updated_at = NOW()"
+	query := "UPDATE platform.migrations SET updated_at = NOW()"
 	args := []interface{}{}
 	argCount := 1
 
@@ -196,7 +196,7 @@ func (s *Storage) UpdateMigration(ctx context.Context, namespace, name string, u
 
 // DeleteMigration deletes a migration (only allowed if status is pending)
 func (s *Storage) DeleteMigration(ctx context.Context, namespace, name string) error {
-	query := "DELETE FROM migrations.app WHERE namespace = $1 AND name = $2 AND status = 'pending'"
+	query := "DELETE FROM platform.migrations WHERE namespace = $1 AND name = $2 AND status = 'pending'"
 
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, query, namespace, name)
@@ -222,13 +222,13 @@ func (s *Storage) UpdateMigrationStatus(ctx context.Context, id uuid.UUID, statu
 
 	switch status {
 	case "applied":
-		query = "UPDATE migrations.app SET status = $1, applied_at = NOW(), applied_by = $2, updated_at = NOW() WHERE id = $3"
+		query = "UPDATE platform.migrations SET status = $1, applied_at = NOW(), applied_by = $2, updated_at = NOW() WHERE id = $3"
 		args = []interface{}{status, appliedBy, id}
 	case "rolled_back":
-		query = "UPDATE migrations.app SET status = $1, rolled_back_at = NOW(), updated_at = NOW() WHERE id = $2"
+		query = "UPDATE platform.migrations SET status = $1, rolled_back_at = NOW(), updated_at = NOW() WHERE id = $2"
 		args = []interface{}{status, id}
 	case "failed":
-		query = "UPDATE migrations.app SET status = $1, updated_at = NOW() WHERE id = $2"
+		query = "UPDATE platform.migrations SET status = $1, updated_at = NOW() WHERE id = $2"
 		args = []interface{}{status, id}
 	default:
 		return fmt.Errorf("invalid status: %s", status)
@@ -248,7 +248,7 @@ func (s *Storage) UpdateMigrationStatus(ctx context.Context, id uuid.UUID, statu
 // LogExecution logs a migration execution attempt
 func (s *Storage) LogExecution(ctx context.Context, log *ExecutionLog) error {
 	query := `
-		INSERT INTO migrations.execution_logs (
+		INSERT INTO platform.migration_execution_logs (
 			migration_id, action, status, duration_ms, error_message, logs, executed_by
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, executed_at
@@ -271,7 +271,7 @@ func (s *Storage) LogExecution(ctx context.Context, log *ExecutionLog) error {
 func (s *Storage) GetExecutionLogs(ctx context.Context, migrationID uuid.UUID, limit int) ([]ExecutionLog, error) {
 	query := `
 		SELECT id, migration_id, action, status, duration_ms, error_message, logs, executed_at, executed_by
-		FROM migrations.execution_logs
+		FROM platform.migration_execution_logs
 		WHERE migration_id = $1
 		ORDER BY executed_at DESC
 		LIMIT $2

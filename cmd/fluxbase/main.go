@@ -280,6 +280,12 @@ func main() {
 		log.Warn().Err(err).Msg("Failed to initialize default tenant and keys - continuing startup")
 	}
 
+	// Backfill NULL tenant_id to default tenant for pre-multi-tenant data.
+	// Must run after ensureDefaultTenantAndKeys because the default tenant
+	// doesn't exist during bootstrap (which runs earlier in the startup).
+	if err := backfillTenantIDToDefault(db.Pool()); err != nil {
+		log.Warn().Err(err).Msg("Failed to backfill tenant_id for pre-tenant data - continuing startup")
+	}
 	// Initialize tenant config loader for multi-tenant configuration overrides
 	tenantConfigLoader, err := config.NewTenantConfigLoader(cfg)
 	if err != nil {
@@ -786,4 +792,123 @@ func getDefaultTenantID(pool *pgxpool.Pool) *string {
 // isNoRowsError checks if the error is a "no rows" error
 func isNoRowsError(err error) bool {
 	return err != nil && (err.Error() == "no rows in result set" || strings.Contains(err.Error(), "no rows"))
+}
+
+// backfillTenantIDToDefault assigns NULL tenant_id rows to the default tenant.
+// This handles the upgrade path from pre-multi-tenant Fluxbase where all data
+// was created without tenant context. Without this backfill, selecting the
+// default tenant in the admin UI makes all pre-existing data invisible because
+// has_tenant_access(NULL) returns FALSE when a tenant context is active.
+//
+// Tables where NULL is semantically meaningful (settings cascade, shared OAuth
+// providers, global service keys) are excluded from the backfill.
+func backfillTenantIDToDefault(pool *pgxpool.Pool) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Get default tenant ID
+	var defaultTenantID string
+	err := pool.QueryRow(ctx,
+		"SELECT id::text FROM platform.tenants WHERE is_default = true AND deleted_at IS NULL LIMIT 1",
+	).Scan(&defaultTenantID)
+	if err != nil {
+		if err.Error() == "no rows in result set" || strings.Contains(err.Error(), "no rows") {
+			log.Debug().Msg("No default tenant found, skipping tenant_id backfill")
+			return nil
+		}
+		return fmt.Errorf("failed to get default tenant: %w", err)
+	}
+
+	// Tables to backfill: user data that should belong to the default tenant.
+	// Excluded:
+	//   - platform.instance_settings (NULL = instance defaults shared with all tenants)
+	//   - platform.oauth_providers (NULL = shared SSO providers)
+	//   - platform.service_keys (NULL = global_service keys)
+	//   - platform.enabled_extensions (NULL = instance-level extensions)
+	//   - auth.service_keys (NULL = global_service keys)
+	//   - auth.saml_providers (NULL = shared SAML providers, like OAuth)
+	tables := []string{
+		"auth.users",
+		"auth.client_keys",
+		"auth.impersonation_sessions",
+		"auth.webhooks",
+		"functions.edge_functions",
+		"functions.edge_executions",
+		"functions.edge_files",
+		"functions.edge_triggers",
+		"functions.secrets",
+		"functions.secret_versions",
+		"functions.shared_modules",
+		"functions.function_dependencies",
+		"jobs.functions",
+		"jobs.function_files",
+		"jobs.workers",
+		"jobs.queue",
+		"ai.knowledge_bases",
+		"ai.knowledge_base_permissions",
+		"ai.documents",
+		"ai.document_permissions",
+		"ai.chunks",
+		"ai.entities",
+		"ai.document_entities",
+		"ai.entity_relationships",
+		"ai.providers",
+		"ai.chatbots",
+		"ai.chatbot_knowledge_bases",
+		"ai.conversations",
+		"ai.messages",
+		"ai.query_audit_log",
+		"ai.retrieval_log",
+		"ai.table_export_sync_configs",
+		"ai.user_chatbot_usage",
+		"ai.user_provider_preferences",
+		"ai.user_quotas",
+		"rpc.procedures",
+		"rpc.executions",
+		"realtime.schema_registry",
+		"storage.buckets",
+		"storage.objects",
+		"storage.chunked_upload_sessions",
+		"storage.object_permissions",
+		"branching.branches",
+		"branching.activity_log",
+		"branching.branch_access",
+		"branching.github_config",
+		"branching.migration_history",
+		"branching.seed_execution_log",
+		"logging.entries",
+		"logging.entries_ai",
+		"logging.entries_custom",
+		"logging.entries_execution",
+		"logging.entries_http",
+		"logging.entries_security",
+		"logging.entries_system",
+		"mcp.custom_resources",
+		"mcp.custom_tools",
+		"platform.invitation_tokens",
+	}
+
+	var totalBackfilled int
+	for _, table := range tables {
+		result, err := pool.Exec(ctx,
+			fmt.Sprintf("UPDATE %s SET tenant_id = $1::uuid WHERE tenant_id IS NULL", table),
+			defaultTenantID,
+		)
+		if err != nil {
+			log.Warn().Err(err).Str("table", table).Msg("Failed to backfill tenant_id")
+			continue
+		}
+		if n := result.RowsAffected(); n > 0 {
+			log.Info().Str("table", table).Int64("rows", n).Msg("Backfilled tenant_id to default tenant")
+			totalBackfilled += int(n)
+		}
+	}
+
+	if totalBackfilled > 0 {
+		log.Info().Int("total_rows", totalBackfilled).Msg("Tenant_id backfill complete")
+	} else {
+		log.Debug().Msg("No NULL tenant_id rows found to backfill")
+	}
+
+	return nil
 }

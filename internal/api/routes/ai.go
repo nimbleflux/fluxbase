@@ -8,6 +8,7 @@ type AIDeps struct {
 	RequireAIEnabled       fiber.Handler
 	OptionalAuth           fiber.Handler
 	RequireAuth            fiber.Handler
+	TenantMiddleware       fiber.Handler
 	HandleWebSocket        fiber.Handler
 	ListPublicChatbots     fiber.Handler
 	LookupChatbotByName    fiber.Handler
@@ -19,11 +20,18 @@ type AIDeps struct {
 }
 
 func BuildAIRoutes(deps *AIDeps) *RouteGroup {
+	middlewares := []Middleware{
+		{Name: "RequireAIEnabled", Handler: deps.RequireAIEnabled},
+	}
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name: "ai",
-		Middlewares: []Middleware{
-			{Name: "RequireAIEnabled", Handler: deps.RequireAIEnabled},
-		},
+		Name:        "ai",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "GET",

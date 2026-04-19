@@ -104,7 +104,7 @@ type MigrationState struct {
 	HasDirtyMigrations      bool // For informational logging only - not blocking
 }
 
-// DeclarativeState represents the state record in migrations.declarative_state
+// DeclarativeState represents the state record in platform.declarative_state
 type DeclarativeState struct {
 	ID                int       `json:"id"`
 	SchemaFingerprint string    `json:"schema_fingerprint"`

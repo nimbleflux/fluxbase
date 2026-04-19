@@ -32,13 +32,13 @@ func (v *Validator) ValidateSchema(ctx context.Context) (*ValidationResult, erro
 func (v *Validator) DetectMigrationState(ctx context.Context) (*MigrationState, error) {
 	state := &MigrationState{}
 
-	// Check for imperative migrations (migrations.fluxbase table)
+	// Check for imperative migrations (platform.fluxbase_migrations table)
 	var imperativeExists bool
 	err := v.pool.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT FROM information_schema.tables
-			WHERE table_schema = 'migrations'
-			AND table_name = 'fluxbase'
+			WHERE table_schema = 'platform'
+			AND table_name = 'fluxbase_migrations'
 		)
 	`).Scan(&imperativeExists)
 	if err != nil {
@@ -49,7 +49,7 @@ func (v *Validator) DetectMigrationState(ctx context.Context) (*MigrationState, 
 	// If imperative migrations exist, get the last version and check for dirty
 	if imperativeExists {
 		err := v.pool.QueryRow(ctx, `
-			SELECT COALESCE(MAX(version), 0) FROM migrations.fluxbase WHERE NOT dirty
+			SELECT COALESCE(MAX(version), 0) FROM platform.fluxbase_migrations WHERE NOT dirty
 		`).Scan(&state.LastAppliedVersion)
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to get last migration version")
@@ -58,19 +58,19 @@ func (v *Validator) DetectMigrationState(ctx context.Context) (*MigrationState, 
 		// Check for dirty migrations (for informational logging only, not blocking)
 		var dirtyCount int
 		err = v.pool.QueryRow(ctx, `
-			SELECT COUNT(*) FROM migrations.fluxbase WHERE dirty
+			SELECT COUNT(*) FROM platform.fluxbase_migrations WHERE dirty
 		`).Scan(&dirtyCount)
 		if err == nil {
 			state.HasDirtyMigrations = dirtyCount > 0
 		}
 	}
 
-	// Check for declarative state (migrations.declarative_state table)
+	// Check for declarative state (platform.declarative_state table)
 	var declarativeExists bool
 	err = v.pool.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT FROM information_schema.tables
-			WHERE table_schema = 'migrations'
+			WHERE table_schema = 'platform'
 			AND table_name = 'declarative_state'
 		)
 	`).Scan(&declarativeExists)
@@ -83,7 +83,7 @@ func (v *Validator) DetectMigrationState(ctx context.Context) (*MigrationState, 
 	if declarativeExists {
 		err := v.pool.QueryRow(ctx, `
 			SELECT schema_fingerprint
-			FROM migrations.declarative_state
+			FROM platform.declarative_state
 			ORDER BY applied_at DESC
 			LIMIT 1
 		`).Scan(&state.SchemaFingerprint)
@@ -110,7 +110,7 @@ func (v *Validator) ValidateForTransition(ctx context.Context) error {
 	// Check if there are dirty migrations
 	var dirtyCount int
 	err = v.pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM migrations.fluxbase WHERE dirty
+		SELECT COUNT(*) FROM platform.fluxbase_migrations WHERE dirty
 	`).Scan(&dirtyCount)
 	if err != nil {
 		return fmt.Errorf("failed to check dirty migrations: %w", err)

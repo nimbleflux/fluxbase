@@ -72,6 +72,9 @@ func (h *Handler) getConfig(c fiber.Ctx) *config.RPCConfig {
 func (h *Handler) ListProcedures(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 	namespace := c.Query("namespace")
+	if namespace == "default" {
+		namespace = ""
+	}
 
 	procedures, err := h.storage.ListProcedures(ctx, namespace)
 	if err != nil {
@@ -241,6 +244,18 @@ func (h *Handler) ListNamespaces(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to list namespaces",
 		})
+	}
+
+	// Ensure we always return at least "default"
+	if len(namespaces) == 0 {
+		namespaces = []string{"default"}
+	}
+
+	// Normalize empty-string namespaces to "default".
+	for i := range namespaces {
+		if namespaces[i] == "" {
+			namespaces[i] = "default"
+		}
 	}
 
 	return c.JSON(fiber.Map{
@@ -511,6 +526,9 @@ func (h *Handler) ListExecutions(c fiber.Ctx) error {
 		UserID:        c.Query("user_id"),
 		Limit:         100,
 	}
+	if opts.Namespace == "default" {
+		opts.Namespace = ""
+	}
 
 	if status := c.Query("status"); status != "" {
 		opts.Status = ExecutionStatus(status)
@@ -661,6 +679,9 @@ func (h *Handler) CancelExecution(c fiber.Ctx) error {
 func (h *Handler) ListPublicProcedures(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 	namespace := c.Query("namespace")
+	if namespace == "default" {
+		namespace = ""
+	}
 
 	procedures, err := h.storage.ListPublicProcedures(ctx, namespace)
 	if err != nil {

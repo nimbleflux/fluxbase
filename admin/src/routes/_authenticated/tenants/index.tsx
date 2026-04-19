@@ -14,6 +14,7 @@ import {
   Download,
   Mail,
   Key,
+  Database,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -54,6 +55,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -85,6 +87,8 @@ function TenantsPage() {
     auto_generate_keys: true,
     admin_email: "",
     send_keys_to_email: false,
+    db_mode: "auto" as "auto" | "existing",
+    db_name: "",
   });
   const [editTenant, setEditTenant] = useState({ name: "" });
   const [keysDialogOpen, setKeysDialogOpen] = useState(false);
@@ -118,6 +122,8 @@ function TenantsPage() {
         auto_generate_keys: true,
         admin_email: "",
         send_keys_to_email: false,
+        db_mode: "auto",
+        db_name: "",
       });
     },
   });
@@ -196,6 +202,11 @@ function TenantsPage() {
       auto_generate_keys: newTenant.auto_generate_keys,
       admin_email: newTenant.admin_email.trim() || undefined,
       send_keys_to_email: newTenant.send_keys_to_email,
+      db_mode: newTenant.db_mode === "existing" ? "existing" : undefined,
+      db_name:
+        newTenant.db_mode === "existing"
+          ? newTenant.db_name.trim() || undefined
+          : undefined,
     });
   };
 
@@ -500,6 +511,55 @@ function TenantsPage() {
                 Lowercase letters, numbers, and hyphens only. Must start with a
                 letter.
               </p>
+            </div>
+
+            <div className="border-t pt-4 mt-2">
+              <div className="flex items-center gap-2 mb-2">
+                <Database className="h-4 w-4 text-muted-foreground" />
+                <Label className="font-medium">Database</Label>
+              </div>
+              <RadioGroup
+                value={newTenant.db_mode}
+                onValueChange={(value) =>
+                  setNewTenant({
+                    ...newTenant,
+                    db_mode: value as "auto" | "existing",
+                  })
+                }
+                className="gap-2"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="auto" id="db-auto" />
+                  <Label htmlFor="db-auto" className="text-sm font-normal">
+                    Create new database
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="existing" id="db-existing" />
+                  <Label htmlFor="db-existing" className="text-sm font-normal">
+                    Use existing database
+                  </Label>
+                </div>
+              </RadioGroup>
+              {newTenant.db_mode === "existing" && (
+                <div className="mt-2 ml-6">
+                  <Input
+                    placeholder="database_name"
+                    value={newTenant.db_name}
+                    onChange={(e) =>
+                      setNewTenant({
+                        ...newTenant,
+                        db_name: e.target.value,
+                      })
+                    }
+                  />
+                  <p className="text-muted-foreground text-xs mt-1">
+                    The database must already exist on the same PostgreSQL
+                    server. Schemas and roles will be bootstrapped
+                    automatically.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="border-t pt-4 mt-2">

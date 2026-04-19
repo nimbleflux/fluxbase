@@ -119,6 +119,9 @@ func (h *Handler) ListSecrets(c fiber.Ctx) error {
 
 	var namespace *string
 	if ns := c.Query("namespace"); ns != "" {
+		if ns == "default" {
+			ns = ""
+		}
 		namespace = &ns
 	}
 
@@ -320,6 +323,9 @@ func (h *Handler) GetStats(c fiber.Ctx) error {
 // getNamespaceFromQuery extracts the optional namespace query parameter
 func getNamespaceFromQuery(c fiber.Ctx) *string {
 	if ns := c.Query("namespace"); ns != "" {
+		if ns == "default" {
+			ns = ""
+		}
 		return &ns
 	}
 	return nil

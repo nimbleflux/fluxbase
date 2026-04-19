@@ -118,10 +118,10 @@ func (s *TransitionService) Transition(ctx context.Context, opts TransitionOptio
 	return result, nil
 }
 
-// recordDeclarativeState records the transition in migrations.declarative_state
+// recordDeclarativeState records the transition in platform.declarative_state
 func (s *TransitionService) recordDeclarativeState(ctx context.Context, fingerprint, source string, lastVersion int64) error {
 	query := `
-		INSERT INTO migrations.declarative_state (schema_fingerprint, applied_by, source)
+		INSERT INTO platform.declarative_state (schema_fingerprint, applied_by, source)
 		VALUES ($1, 'transition', $2)
 	`
 	_, err := s.pool.Exec(ctx, query, fingerprint, source)
@@ -172,7 +172,7 @@ func (s *TransitionService) GetTransitionStatus(ctx context.Context) (*Transitio
 		var source string
 		query := `
 			SELECT applied_at, source
-			FROM migrations.declarative_state
+			FROM platform.declarative_state
 			ORDER BY applied_at DESC
 			LIMIT 1
 		`

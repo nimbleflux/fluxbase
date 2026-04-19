@@ -94,7 +94,7 @@ func (s *Service) NeedsBootstrap(ctx context.Context) (bool, error) {
 	err := s.pool.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT FROM information_schema.tables
-			WHERE table_schema = 'migrations'
+			WHERE table_schema = 'platform'
 			AND table_name = 'bootstrap_state'
 		)
 	`).Scan(&exists)
@@ -109,7 +109,7 @@ func (s *Service) NeedsBootstrap(ctx context.Context) (bool, error) {
 	// Check if we have a bootstrap record
 	var count int
 	err = s.pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM migrations.bootstrap_state
+		SELECT COUNT(*) FROM platform.bootstrap_state
 	`).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check bootstrap_state records: %w", err)
@@ -132,7 +132,7 @@ func (s *Service) GetState(ctx context.Context) (*State, error) {
 	var state State
 	err := s.pool.QueryRow(ctx, `
 		SELECT version, checksum, bootstrapped_at::text
-		FROM migrations.bootstrap_state
+		FROM platform.bootstrap_state
 		ORDER BY id DESC
 		LIMIT 1
 	`).Scan(&state.Version, &state.Checksum, &state.BootstrappedAt)

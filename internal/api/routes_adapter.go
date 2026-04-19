@@ -21,6 +21,7 @@ func (s *Server) buildRealtimeRouteDeps() *routes.RealtimeDeps {
 		OptionalAuth:           middleware.OptionalAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
 		RequireAuth:            middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
 		RequireScope:           middleware.RequireScope,
+		TenantMiddleware:       s.Middleware.Tenant,
 		HandleWebSocket:        s.Realtime.Handler.HandleWebSocket,
 		HandleStats:            s.handleRealtimeStats,
 		HandleBroadcast:        s.handleRealtimeBroadcast,
@@ -92,6 +93,7 @@ func (s *Server) buildVectorRouteDeps() *routes.VectorDeps {
 	}
 	return &routes.VectorDeps{
 		RequireAuth:        middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
+		TenantMiddleware:   s.Middleware.Tenant,
 		HandleCapabilities: s.AI.VectorHandler.HandleGetCapabilities,
 		HandleEmbed:        s.AI.VectorHandler.HandleEmbed,
 		HandleSearch:       s.AI.VectorHandler.HandleSearch,
@@ -124,6 +126,7 @@ func (s *Server) buildAIRouteDeps() *routes.AIDeps {
 		RequireAIEnabled:       middleware.RequireAIEnabled(s.Auth.Handler.authService.GetSettingsCache()),
 		OptionalAuth:           middleware.OptionalAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
 		RequireAuth:            middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
+		TenantMiddleware:       s.Middleware.Tenant,
 		HandleWebSocket:        s.AI.Chat.HandleWebSocket,
 		ListPublicChatbots:     s.AI.Handler.ListPublicChatbots,
 		LookupChatbotByName:    s.AI.Handler.LookupChatbotByName,
@@ -147,6 +150,7 @@ func (s *Server) buildSettingsRouteDeps() *routes.SettingsDeps {
 func (s *Server) buildUserSettingsRouteDeps() *routes.UserSettingsDeps {
 	return &routes.UserSettingsDeps{
 		RequireAuth:       middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
+		TenantMiddleware:  s.Middleware.Tenant,
 		ListSettings:      s.Settings.User.ListSettings,
 		GetUserOwnSetting: s.Settings.User.GetUserOwnSetting,
 		GetSystemSetting:  s.Settings.User.GetSystemSettingPublic,
@@ -318,6 +322,7 @@ func (s *Server) buildFunctionsRouteDeps() *routes.FunctionsDeps {
 		RequireAuth:             middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
 		OptionalAuth:            middleware.OptionalAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
 		RequireScope:            middleware.RequireScope,
+		TenantMiddleware:        s.Middleware.Tenant,
 		ListFunctions:           s.Functions.Handler.ListFunctions,
 		GetFunction:             s.Functions.Handler.GetFunction,
 		CreateFunction:          s.Functions.Handler.CreateFunction,
@@ -484,23 +489,24 @@ func (s *Server) buildCustomMCPRouteDeps() *routes.CustomMCPDeps {
 		return nil
 	}
 	return &routes.CustomMCPDeps{
-		RequireAuth:    middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
-		RequireAdmin:   middleware.RequireAdmin(),
-		GetConfig:      s.MCP.CustomHandler.GetConfig,
-		ListTools:      s.MCP.CustomHandler.ListTools,
-		CreateTool:     s.MCP.CustomHandler.CreateTool,
-		SyncTool:       s.MCP.CustomHandler.SyncTool,
-		GetTool:        s.MCP.CustomHandler.GetTool,
-		UpdateTool:     s.MCP.CustomHandler.UpdateTool,
-		DeleteTool:     s.MCP.CustomHandler.DeleteTool,
-		TestTool:       s.MCP.CustomHandler.TestTool,
-		ListResources:  s.MCP.CustomHandler.ListResources,
-		CreateResource: s.MCP.CustomHandler.CreateResource,
-		SyncResource:   s.MCP.CustomHandler.SyncResource,
-		GetResource:    s.MCP.CustomHandler.GetResource,
-		UpdateResource: s.MCP.CustomHandler.UpdateResource,
-		DeleteResource: s.MCP.CustomHandler.DeleteResource,
-		TestResource:   s.MCP.CustomHandler.TestResource,
+		RequireAuth:      middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
+		RequireAdmin:     middleware.RequireAdmin(),
+		TenantMiddleware: s.Middleware.Tenant,
+		GetConfig:        s.MCP.CustomHandler.GetConfig,
+		ListTools:        s.MCP.CustomHandler.ListTools,
+		CreateTool:       s.MCP.CustomHandler.CreateTool,
+		SyncTool:         s.MCP.CustomHandler.SyncTool,
+		GetTool:          s.MCP.CustomHandler.GetTool,
+		UpdateTool:       s.MCP.CustomHandler.UpdateTool,
+		DeleteTool:       s.MCP.CustomHandler.DeleteTool,
+		TestTool:         s.MCP.CustomHandler.TestTool,
+		ListResources:    s.MCP.CustomHandler.ListResources,
+		CreateResource:   s.MCP.CustomHandler.CreateResource,
+		SyncResource:     s.MCP.CustomHandler.SyncResource,
+		GetResource:      s.MCP.CustomHandler.GetResource,
+		UpdateResource:   s.MCP.CustomHandler.UpdateResource,
+		DeleteResource:   s.MCP.CustomHandler.DeleteResource,
+		TestResource:     s.MCP.CustomHandler.TestResource,
 	}
 }
 
@@ -509,11 +515,12 @@ func (s *Server) buildMCPRouteDeps() *routes.MCPDeps {
 		return nil
 	}
 	return &routes.MCPDeps{
-		BasePath:     s.config.MCP.BasePath,
-		MCPAuth:      s.createMCPAuthMiddleware(),
-		HandlePost:   s.MCP.Handler.HandlePost,
-		HandleGet:    s.MCP.Handler.HandleGet,
-		HandleHealth: s.MCP.Handler.HandleHealth,
+		BasePath:         s.config.MCP.BasePath,
+		MCPAuth:          s.createMCPAuthMiddleware(),
+		TenantMiddleware: s.Middleware.Tenant,
+		HandlePost:       s.MCP.Handler.HandlePost,
+		HandleGet:        s.MCP.Handler.HandleGet,
+		HandleHealth:     s.MCP.Handler.HandleHealth,
 	}
 }
 
@@ -579,6 +586,7 @@ func (s *Server) buildKnowledgeBaseRouteDeps() *routes.KnowledgeBaseDeps {
 	deps := &routes.KnowledgeBaseDeps{
 		RequireAIEnabled: middleware.RequireAIEnabled(s.Auth.Handler.authService.GetSettingsCache()),
 		RequireAuth:      middleware.RequireAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
+		TenantMiddleware: s.Middleware.Tenant,
 	}
 
 	// If AI/knowledge base storage is not available, use stub handlers
@@ -708,10 +716,12 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 		Tenants: &routes.TenantsAdminDeps{
 			ListMyTenants:             s.Tenancy.Tenant.ListMyTenants,
 			ListTenants:               s.Tenancy.Tenant.ListTenants,
+			ListDeletedTenants:        s.Tenancy.Tenant.ListDeletedTenants,
 			CreateTenant:              s.Tenancy.Tenant.CreateTenant,
 			GetTenant:                 s.Tenancy.Tenant.GetTenant,
 			UpdateTenant:              s.Tenancy.Tenant.UpdateTenant,
 			DeleteTenant:              s.Tenancy.Tenant.DeleteTenant,
+			RecoverTenant:             s.Tenancy.Tenant.RecoverTenant,
 			MigrateTenant:             s.Tenancy.Tenant.MigrateTenant,
 			ListAdmins:                s.Tenancy.Tenant.ListAdmins,
 			AssignAdmin:               s.Tenancy.Tenant.AssignAdmin,

@@ -214,6 +214,8 @@ func (h *TenantHandler) CreateTenant(c fiber.Ctx) error {
 		Slug:     req.Slug,
 		Name:     req.Name,
 		Metadata: metadata,
+		DBMode:   req.DBMode,
+		DBName:   req.DBName,
 	})
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrMaxTenantsReached) {
@@ -310,6 +312,7 @@ func (h *TenantHandler) UpdateTenant(c fiber.Ctx) error {
 func (h *TenantHandler) DeleteTenant(c fiber.Ctx) error {
 	ctx := c.Context()
 	tenantID := c.Params("id")
+	hard := c.Query("hard") == "true"
 
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
@@ -324,14 +327,55 @@ func (h *TenantHandler) DeleteTenant(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Cannot delete the default tenant")
 	}
 
-	if err := h.Manager.DeleteTenantDatabase(ctx, tenantID); err != nil {
-		log.Error().Err(err).Msg("Failed to delete tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete tenant")
+	if hard {
+		if err := h.Manager.HardDeleteTenantDatabase(ctx, tenantID); err != nil {
+			log.Error().Err(err).Msg("Failed to hard delete tenant")
+			return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete tenant")
+		}
+		log.Info().Str("tenant_id", tenantID).Msg("Tenant hard-deleted")
+	} else {
+		if err := h.Manager.DeleteTenantDatabase(ctx, tenantID); err != nil {
+			log.Error().Err(err).Msg("Failed to soft delete tenant")
+			return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete tenant")
+		}
+		log.Info().Str("tenant_id", tenantID).Msg("Tenant soft-deleted")
 	}
 
-	log.Info().Str("tenant_id", tenantID).Msg("Tenant deleted")
-
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (h *TenantHandler) RecoverTenant(c fiber.Ctx) error {
+	ctx := c.Context()
+	tenantID := c.Params("id")
+
+	if err := h.Manager.RecoverTenantDatabase(ctx, tenantID); err != nil {
+		if errors.Is(err, tenantdb.ErrTenantNotDeleted) {
+			return fiber.NewError(fiber.StatusBadRequest, "Tenant is not in a deleted state")
+		}
+		log.Error().Err(err).Msg("Failed to recover tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to recover tenant")
+	}
+
+	log.Info().Str("tenant_id", tenantID).Msg("Tenant recovered")
+
+	return c.JSON(fiber.Map{"status": "recovered"})
+}
+
+func (h *TenantHandler) ListDeletedTenants(c fiber.Ctx) error {
+	ctx := c.Context()
+
+	tenants, err := h.Manager.ListDeletedTenants(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to list deleted tenants")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to list deleted tenants")
+	}
+
+	result := make([]TenantResponse, len(tenants))
+	for i, t := range tenants {
+		result[i] = tenantToResponse(&t)
+	}
+
+	return c.JSON(result)
 }
 
 func (h *TenantHandler) MigrateTenant(c fiber.Ctx) error {
