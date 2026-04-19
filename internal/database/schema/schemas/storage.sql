@@ -694,7 +694,7 @@ COMMENT ON FUNCTION user_can_access_object(uuid, text) IS 'Checks if the current
 -- Name: storage_buckets_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY storage_buckets_admin ON buckets TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'instance_admin'])));
+CREATE POLICY storage_buckets_admin ON buckets TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin'])));
 
 --
 -- Name: storage_buckets_public_view; Type: POLICY; Schema: -; Owner: -
@@ -706,13 +706,13 @@ CREATE POLICY storage_buckets_public_view ON buckets FOR SELECT TO PUBLIC USING 
 -- Name: storage_chunked_sessions_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY storage_chunked_sessions_admin ON chunked_upload_sessions TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'instance_admin'])));
+CREATE POLICY storage_chunked_sessions_admin ON chunked_upload_sessions TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin'])));
 
 --
 -- Name: storage_chunked_sessions_insert; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY storage_chunked_sessions_insert ON chunked_upload_sessions FOR INSERT TO PUBLIC WITH CHECK (has_tenant_access(tenant_id) AND ((auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'instance_admin'])) OR ((auth.current_user_id() IS NOT NULL) AND (auth.current_user_id() = owner_id))));
+CREATE POLICY storage_chunked_sessions_insert ON chunked_upload_sessions FOR INSERT TO PUBLIC WITH CHECK (has_tenant_access(tenant_id) AND ((auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin'])) OR ((auth.current_user_id() IS NOT NULL) AND (auth.current_user_id() = owner_id))));
 
 --
 -- Name: storage_chunked_sessions_owner; Type: POLICY; Schema: -; Owner: -
@@ -724,7 +724,7 @@ CREATE POLICY storage_chunked_sessions_owner ON chunked_upload_sessions TO PUBLI
 -- Name: storage_object_permissions_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY storage_object_permissions_admin ON object_permissions TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'instance_admin'])));
+CREATE POLICY storage_object_permissions_admin ON object_permissions TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin'])));
 
 --
 -- Name: storage_object_permissions_owner_manage; Type: POLICY; Schema: -; Owner: -
@@ -742,13 +742,13 @@ CREATE POLICY storage_object_permissions_view_shared ON object_permissions FOR S
 -- Name: storage_objects_admin; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY storage_objects_admin ON objects TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'instance_admin'])));
+CREATE POLICY storage_objects_admin ON objects TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin'])));
 
 --
 -- Name: storage_objects_insert; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY storage_objects_insert ON objects FOR INSERT TO PUBLIC WITH CHECK (has_tenant_access(tenant_id) AND ((auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'instance_admin'])) OR ((auth.current_user_id() IS NOT NULL) AND (auth.current_user_id() = owner_id))));
+CREATE POLICY storage_objects_insert ON objects FOR INSERT TO PUBLIC WITH CHECK (has_tenant_access(tenant_id) AND ((auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin'])) OR ((auth.current_user_id() IS NOT NULL) AND (auth.current_user_id() = owner_id))));
 
 --
 -- Name: storage_objects_owner; Type: POLICY; Schema: -; Owner: -

@@ -123,20 +123,12 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 
-	t.Logf("Phase 1: followed %d redirects from %s", len(redirectLog), loginURL)
-	for i, r := range redirectLog {
-		t.Logf("  redirect[%d]: %s", i, r)
+	if resp.StatusCode != http.StatusOK || len(redirectLog) == 0 {
+		t.Logf("Phase 1: followed %d redirects, final status: %d", len(redirectLog), resp.StatusCode)
+		t.Logf("Phase 1: response body: %s", string(bodyBytes))
 	}
-	t.Logf("Phase 1: final URL: %s, status: %d", resp.Request.URL.String(), resp.StatusCode)
-	t.Logf("Phase 1: response body: %s", string(bodyBytes))
 
-	t.Logf("Phase 1: followed %d redirects from %s", len(redirectLog), loginURL)
-	for i, r := range redirectLog {
-		t.Logf("  redirect[%d]: %s", i, r)
-	}
-	t.Logf("Phase 1: final URL: %s, status: %d", resp.Request.URL.String(), resp.StatusCode)
-
-	require.NotEmpty(t, dexLoginState, "Should have extracted Dex login state from redirect chain (redirects: %v)", redirectLog)
+	require.NotEmpty(t, dexLoginState, "Should have extracted Dex login state from redirect chain (redirects: %d, status: %d)", len(redirectLog), resp.StatusCode)
 
 	// Phase 2: POST login credentials (don't follow redirects to preserve cookies)
 	phase2 := &http.Client{

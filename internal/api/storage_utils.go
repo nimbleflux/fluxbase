@@ -132,7 +132,7 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 	// The pool connects as fluxbase_app (BYPASSRLS), so without this,
 	// all RLS policies are bypassed regardless of FORCE ROW LEVEL SECURITY.
 	// Exception: instance_admin and service_role keep BYPASSRLS for full admin access.
-	if roleStr == "instance_admin" || roleStr == "service_role" || roleStr == "tenant_service" {
+	if roleStr == "instance_admin" || roleStr == "service_role" {
 		log.Debug().Str("user_id", userIDStr).Str("role", roleStr).Msg("Keeping BYPASSRLS for admin role")
 		return nil
 	}
@@ -140,6 +140,9 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 	dbRole := "authenticated"
 	if roleStr == "anon" {
 		dbRole = "anon"
+	}
+	if roleStr == "tenant_service" {
+		dbRole = "tenant_service"
 	}
 	if _, err := tx.Exec(ctx, fmt.Sprintf("SET LOCAL ROLE %s", quoteIdentifier(dbRole))); err != nil {
 		return fmt.Errorf("failed to SET LOCAL ROLE %s: %w", dbRole, err)
