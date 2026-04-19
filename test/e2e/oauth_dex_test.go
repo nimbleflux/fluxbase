@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -119,7 +120,15 @@ func authenticateWithDex(t *testing.T, authURL string) string {
 	loginURL := replaceDexHost(authURL)
 	resp, err := phase1.Get(loginURL)
 	require.NoError(t, err, "Should reach Dex authorize endpoint")
+	bodyBytes, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
+
+	t.Logf("Phase 1: followed %d redirects from %s", len(redirectLog), loginURL)
+	for i, r := range redirectLog {
+		t.Logf("  redirect[%d]: %s", i, r)
+	}
+	t.Logf("Phase 1: final URL: %s, status: %d", resp.Request.URL.String(), resp.StatusCode)
+	t.Logf("Phase 1: response body: %s", string(bodyBytes))
 
 	t.Logf("Phase 1: followed %d redirects from %s", len(redirectLog), loginURL)
 	for i, r := range redirectLog {
