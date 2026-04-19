@@ -549,3 +549,13 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE workers TO service_role;
 
+--
+-- Name: tenant_service grants; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA jobs TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE functions TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE function_files TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE workers TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE queue TO tenant_service;
+

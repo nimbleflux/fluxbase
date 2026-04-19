@@ -97,7 +97,7 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 			JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = t.table_schema
 			LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
 			WHERE t.table_schema = ANY($1)
-			AND t.table_type = 'BASE TABLE'
+			AND t.table_type IN ('BASE TABLE', 'FOREIGN TABLE')
 			AND d.objid IS NULL
 		),
 		columns_info AS (

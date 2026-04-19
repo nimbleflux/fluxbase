@@ -215,3 +215,15 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE settings TO service_role;
 
+--
+-- Name: app; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA app TO tenant_service;
+
+--
+-- Name: settings; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE app.settings TO tenant_service;
+

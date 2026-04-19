@@ -33,6 +33,9 @@ type CustomTool struct {
 	CreatedBy *uuid.UUID `json:"created_by,omitempty" db:"created_by"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+
+	// Tenant isolation
+	TenantID *uuid.UUID `json:"tenant_id,omitempty" db:"tenant_id"`
 }
 
 // CustomResource represents a user-defined MCP resource implemented in TypeScript.
@@ -59,6 +62,9 @@ type CustomResource struct {
 	CreatedBy *uuid.UUID `json:"created_by,omitempty" db:"created_by"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+
+	// Tenant isolation
+	TenantID *uuid.UUID `json:"tenant_id,omitempty" db:"tenant_id"`
 }
 
 // CreateToolRequest represents a request to create a custom tool.

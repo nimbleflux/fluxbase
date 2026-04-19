@@ -15,6 +15,12 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
+// withTenant wraps a function in a tenant-aware transaction for custom settings.
+func (s *CustomSettingsService) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tenantID := database.TenantFromContext(ctx)
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
+}
+
 var (
 	// ErrCustomSettingNotFound is returned when a custom setting is not found
 	ErrCustomSettingNotFound = errors.New("custom setting not found")
@@ -163,24 +169,26 @@ func (s *CustomSettingsService) CreateSetting(ctx context.Context, req CreateCus
 	var valueJSONResult, metadataJSONResult []byte
 	var editableByResult []string
 
-	err = s.db.QueryRow(ctx, `
-		INSERT INTO app.settings
-		(key, value, value_type, description, editable_by, metadata, created_by, updated_by, category)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 'custom')
-		RETURNING id, key, value, value_type, description, editable_by, metadata, created_by, updated_by, created_at, updated_at
-	`, req.Key, valueJSON, req.ValueType, req.Description, req.EditableBy, metadataJSON, createdBy).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSONResult,
-		&setting.ValueType,
-		&setting.Description,
-		&editableByResult,
-		&metadataJSONResult,
-		&setting.CreatedBy,
-		&setting.UpdatedBy,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			INSERT INTO app.settings
+			(key, value, value_type, description, editable_by, metadata, created_by, updated_by, category)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 'custom')
+			RETURNING id, key, value, value_type, description, editable_by, metadata, created_by, updated_by, created_at, updated_at
+		`, req.Key, valueJSON, req.ValueType, req.Description, req.EditableBy, metadataJSON, createdBy).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSONResult,
+			&setting.ValueType,
+			&setting.Description,
+			&editableByResult,
+			&metadataJSONResult,
+			&setting.CreatedBy,
+			&setting.UpdatedBy,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		// Check for unique constraint violation
 		if database.IsUniqueViolation(err) {
@@ -206,23 +214,25 @@ func (s *CustomSettingsService) GetSetting(ctx context.Context, key string) (*Cu
 	var valueJSON, metadataJSON []byte
 	var editableBy []string
 
-	err := s.db.QueryRow(ctx, `
-		SELECT id, key, value, value_type, description, editable_by, metadata, created_by, updated_by, created_at, updated_at
-		FROM app.settings
-		WHERE key = $1
-	`, key).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSON,
-		&setting.ValueType,
-		&setting.Description,
-		&editableBy,
-		&metadataJSON,
-		&setting.CreatedBy,
-		&setting.UpdatedBy,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT id, key, value, value_type, description, editable_by, metadata, created_by, updated_by, created_at, updated_at
+			FROM app.settings
+			WHERE key = $1
+		`, key).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSON,
+			&setting.ValueType,
+			&setting.Description,
+			&editableBy,
+			&metadataJSON,
+			&setting.CreatedBy,
+			&setting.UpdatedBy,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -284,29 +294,31 @@ func (s *CustomSettingsService) UpdateSetting(ctx context.Context, key string, r
 	var valueJSONResult, metadataJSONResult []byte
 	var editableByResult []string
 
-	err = s.db.QueryRow(ctx, `
-		UPDATE app.settings
-		SET value = $1,
-		    description = $2,
-		    editable_by = $3,
-		    metadata = $4,
-		    updated_by = $5,
-		    updated_at = NOW()
-		WHERE key = $6
-		RETURNING id, key, value, value_type, description, editable_by, metadata, created_by, updated_by, created_at, updated_at
-	`, valueJSON, description, editableBy, metadataJSON, updatedBy, key).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSONResult,
-		&setting.ValueType,
-		&setting.Description,
-		&editableByResult,
-		&metadataJSONResult,
-		&setting.CreatedBy,
-		&setting.UpdatedBy,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			UPDATE app.settings
+			SET value = $1,
+			    description = $2,
+			    editable_by = $3,
+			    metadata = $4,
+			    updated_by = $5,
+			    updated_at = NOW()
+			WHERE key = $6
+			RETURNING id, key, value, value_type, description, editable_by, metadata, created_by, updated_by, created_at, updated_at
+		`, valueJSON, description, editableBy, metadataJSON, updatedBy, key).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSONResult,
+			&setting.ValueType,
+			&setting.Description,
+			&editableByResult,
+			&metadataJSONResult,
+			&setting.CreatedBy,
+			&setting.UpdatedBy,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -335,9 +347,14 @@ func (s *CustomSettingsService) DeleteSetting(ctx context.Context, key string, u
 		return ErrCustomSettingPermissionDenied
 	}
 
-	result, err := s.db.Exec(ctx, `
-		DELETE FROM app.settings WHERE key = $1
-	`, key)
+	var result pgconn.CommandTag
+	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+		var err error
+		result, err = tx.Exec(ctx, `
+			DELETE FROM app.settings WHERE key = $1
+		`, key)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -351,52 +368,59 @@ func (s *CustomSettingsService) DeleteSetting(ctx context.Context, key string, u
 
 // ListSettings retrieves all custom settings, optionally filtered by user role permissions
 func (s *CustomSettingsService) ListSettings(ctx context.Context, userRole string) ([]CustomSetting, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT id, key, value, value_type, description, editable_by, metadata, created_by, updated_by, created_at, updated_at
-		FROM app.settings
-		WHERE category = 'custom'
-		ORDER BY key
-	`)
+	var settings []CustomSetting
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, key, value, value_type, description, editable_by, metadata, created_by, updated_by, created_at, updated_at
+			FROM app.settings
+			WHERE category = 'custom'
+			ORDER BY key
+		`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var setting CustomSetting
+			var valueJSON, metadataJSON []byte
+			var editableBy []string
+
+			err := rows.Scan(
+				&setting.ID,
+				&setting.Key,
+				&valueJSON,
+				&setting.ValueType,
+				&setting.Description,
+				&editableBy,
+				&metadataJSON,
+				&setting.CreatedBy,
+				&setting.UpdatedBy,
+				&setting.CreatedAt,
+				&setting.UpdatedAt,
+			)
+			if err != nil {
+				return err
+			}
+
+			if err := json.Unmarshal(valueJSON, &setting.Value); err != nil {
+				return err
+			}
+			if err := json.Unmarshal(metadataJSON, &setting.Metadata); err != nil {
+				return err
+			}
+			setting.EditableBy = editableBy
+
+			settings = append(settings, setting)
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var settings []CustomSetting
-	for rows.Next() {
-		var setting CustomSetting
-		var valueJSON, metadataJSON []byte
-		var editableBy []string
-
-		err := rows.Scan(
-			&setting.ID,
-			&setting.Key,
-			&valueJSON,
-			&setting.ValueType,
-			&setting.Description,
-			&editableBy,
-			&metadataJSON,
-			&setting.CreatedBy,
-			&setting.UpdatedBy,
-			&setting.CreatedAt,
-			&setting.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(valueJSON, &setting.Value); err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal(metadataJSON, &setting.Metadata); err != nil {
-			return nil, err
-		}
-		setting.EditableBy = editableBy
-
-		settings = append(settings, setting)
-	}
-
-	return settings, rows.Err()
+	return settings, nil
 }
 
 // CreateSecretSetting creates a new encrypted secret setting
@@ -427,21 +451,23 @@ func (s *CustomSettingsService) CreateSecretSetting(ctx context.Context, req Cre
 	valueJSON, _ := json.Marshal(placeholderValue)
 
 	var metadata SecretSettingMetadata
-	err = s.db.QueryRow(ctx, `
-		INSERT INTO app.settings
-		(key, value, value_type, description, is_secret, encrypted_value, user_id, editable_by, category, created_by, updated_by)
-		VALUES ($1, $2, 'string', $3, true, $4, $5, ARRAY['instance_admin']::TEXT[], 'custom', $6, $6)
-		RETURNING id, key, description, user_id, created_by, updated_by, created_at, updated_at
-	`, req.Key, valueJSON, req.Description, encryptedValue, userID, createdBy).Scan(
-		&metadata.ID,
-		&metadata.Key,
-		&metadata.Description,
-		&metadata.UserID,
-		&metadata.CreatedBy,
-		&metadata.UpdatedBy,
-		&metadata.CreatedAt,
-		&metadata.UpdatedAt,
-	)
+	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			INSERT INTO app.settings
+			(key, value, value_type, description, is_secret, encrypted_value, user_id, editable_by, category, created_by, updated_by)
+			VALUES ($1, $2, 'string', $3, true, $4, $5, ARRAY['instance_admin']::TEXT[], 'custom', $6, $6)
+			RETURNING id, key, description, user_id, created_by, updated_by, created_at, updated_at
+		`, req.Key, valueJSON, req.Description, encryptedValue, userID, createdBy).Scan(
+			&metadata.ID,
+			&metadata.Key,
+			&metadata.Description,
+			&metadata.UserID,
+			&metadata.CreatedBy,
+			&metadata.UpdatedBy,
+			&metadata.CreatedAt,
+			&metadata.UpdatedAt,
+		)
+	})
 	if err != nil {
 		if database.IsUniqueViolation(err) {
 			return nil, ErrCustomSettingDuplicate
@@ -471,16 +497,18 @@ func (s *CustomSettingsService) GetSecretSettingMetadata(ctx context.Context, ke
 		query += " AND user_id IS NULL"
 	}
 
-	err := s.db.QueryRow(ctx, query, args...).Scan(
-		&metadata.ID,
-		&metadata.Key,
-		&metadata.Description,
-		&metadata.UserID,
-		&metadata.CreatedBy,
-		&metadata.UpdatedBy,
-		&metadata.CreatedAt,
-		&metadata.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, args...).Scan(
+			&metadata.ID,
+			&metadata.Key,
+			&metadata.Description,
+			&metadata.UserID,
+			&metadata.CreatedBy,
+			&metadata.UpdatedBy,
+			&metadata.CreatedAt,
+			&metadata.UpdatedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -546,16 +574,18 @@ func (s *CustomSettingsService) UpdateSecretSetting(ctx context.Context, key str
 		args = []interface{}{description, updatedBy, existing.ID}
 	}
 
-	err = s.db.QueryRow(ctx, query, args...).Scan(
-		&metadata.ID,
-		&metadata.Key,
-		&metadata.Description,
-		&metadata.UserID,
-		&metadata.CreatedBy,
-		&metadata.UpdatedBy,
-		&metadata.CreatedAt,
-		&metadata.UpdatedAt,
-	)
+	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, args...).Scan(
+			&metadata.ID,
+			&metadata.Key,
+			&metadata.Description,
+			&metadata.UserID,
+			&metadata.CreatedBy,
+			&metadata.UpdatedBy,
+			&metadata.CreatedAt,
+			&metadata.UpdatedAt,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -575,7 +605,12 @@ func (s *CustomSettingsService) DeleteSecretSetting(ctx context.Context, key str
 		query += " AND user_id IS NULL"
 	}
 
-	result, err := s.db.Exec(ctx, query, args...)
+	var result pgconn.CommandTag
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		var err error
+		result, err = tx.Exec(ctx, query, args...)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -605,32 +640,39 @@ func (s *CustomSettingsService) ListSecretSettings(ctx context.Context, userID *
 
 	query += " ORDER BY key"
 
-	rows, err := s.db.Query(ctx, query, args...)
+	var secrets []SecretSettingMetadata
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var metadata SecretSettingMetadata
+			err := rows.Scan(
+				&metadata.ID,
+				&metadata.Key,
+				&metadata.Description,
+				&metadata.UserID,
+				&metadata.CreatedBy,
+				&metadata.UpdatedBy,
+				&metadata.CreatedAt,
+				&metadata.UpdatedAt,
+			)
+			if err != nil {
+				return err
+			}
+			secrets = append(secrets, metadata)
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var secrets []SecretSettingMetadata
-	for rows.Next() {
-		var metadata SecretSettingMetadata
-		err := rows.Scan(
-			&metadata.ID,
-			&metadata.Key,
-			&metadata.Description,
-			&metadata.UserID,
-			&metadata.CreatedBy,
-			&metadata.UpdatedBy,
-			&metadata.CreatedAt,
-			&metadata.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		secrets = append(secrets, metadata)
-	}
-
-	return secrets, rows.Err()
+	return secrets, nil
 }
 
 // ============================================================================
@@ -683,20 +725,22 @@ func (s *CustomSettingsService) CreateUserSetting(ctx context.Context, userID uu
 	var setting UserSetting
 	var valueJSONResult []byte
 
-	err = s.db.QueryRow(ctx, `
-		INSERT INTO app.settings
-		(key, value, value_type, description, is_secret, user_id, editable_by, category, created_by, updated_by)
-		VALUES ($1, $2, 'json', $3, false, $4, ARRAY['authenticated']::TEXT[], 'custom', $4, $4)
-		RETURNING id, key, value, description, user_id, created_at, updated_at
-	`, req.Key, valueJSON, req.Description, userID).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSONResult,
-		&setting.Description,
-		&setting.UserID,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			INSERT INTO app.settings
+			(key, value, value_type, description, is_secret, user_id, editable_by, category, created_by, updated_by)
+			VALUES ($1, $2, 'json', $3, false, $4, ARRAY['authenticated']::TEXT[], 'custom', $4, $4)
+			RETURNING id, key, value, description, user_id, created_at, updated_at
+		`, req.Key, valueJSON, req.Description, userID).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSONResult,
+			&setting.Description,
+			&setting.UserID,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		if database.IsUniqueViolation(err) {
 			return nil, ErrCustomSettingDuplicate
@@ -716,19 +760,21 @@ func (s *CustomSettingsService) GetUserOwnSetting(ctx context.Context, userID uu
 	var setting UserSetting
 	var valueJSON []byte
 
-	err := s.db.QueryRow(ctx, `
-		SELECT id, key, value, description, user_id, created_at, updated_at
-		FROM app.settings
-		WHERE key = $1 AND user_id = $2 AND is_secret = false
-	`, key, userID).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSON,
-		&setting.Description,
-		&setting.UserID,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT id, key, value, description, user_id, created_at, updated_at
+			FROM app.settings
+			WHERE key = $1 AND user_id = $2 AND is_secret = false
+		`, key, userID).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSON,
+			&setting.Description,
+			&setting.UserID,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -750,23 +796,25 @@ func (s *CustomSettingsService) GetSystemSetting(ctx context.Context, key string
 	var valueJSON, metadataJSON []byte
 	var editableBy []string
 
-	err := s.db.QueryRow(ctx, `
-		SELECT id, key, value, value_type, description, editable_by, metadata, created_by, updated_by, created_at, updated_at
-		FROM app.settings
-		WHERE key = $1 AND user_id IS NULL AND is_secret = false
-	`, key).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSON,
-		&setting.ValueType,
-		&setting.Description,
-		&editableBy,
-		&metadataJSON,
-		&setting.CreatedBy,
-		&setting.UpdatedBy,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT id, key, value, value_type, description, editable_by, metadata, created_by, updated_by, created_at, updated_at
+			FROM app.settings
+			WHERE key = $1 AND user_id IS NULL AND is_secret = false
+		`, key).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSON,
+			&setting.ValueType,
+			&setting.Description,
+			&editableBy,
+			&metadataJSON,
+			&setting.CreatedBy,
+			&setting.UpdatedBy,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCustomSettingNotFound
@@ -837,20 +885,22 @@ func (s *CustomSettingsService) UpdateUserSetting(ctx context.Context, userID uu
 	var setting UserSetting
 	var valueJSONResult []byte
 
-	err = s.db.QueryRow(ctx, `
-		UPDATE app.settings
-		SET value = $1, description = $2, updated_by = $3, updated_at = NOW()
-		WHERE key = $4 AND user_id = $5 AND is_secret = false
-		RETURNING id, key, value, description, user_id, created_at, updated_at
-	`, valueJSON, description, userID, key, userID).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSONResult,
-		&setting.Description,
-		&setting.UserID,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			UPDATE app.settings
+			SET value = $1, description = $2, updated_by = $3, updated_at = NOW()
+			WHERE key = $4 AND user_id = $5 AND is_secret = false
+			RETURNING id, key, value, description, user_id, created_at, updated_at
+		`, valueJSON, description, userID, key, userID).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSONResult,
+			&setting.Description,
+			&setting.UserID,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -876,26 +926,28 @@ func (s *CustomSettingsService) UpsertUserSetting(ctx context.Context, userID uu
 	var setting UserSetting
 	var valueJSONResult []byte
 
-	err = s.db.QueryRow(ctx, `
-		INSERT INTO app.settings
-		(key, value, value_type, description, is_secret, user_id, editable_by, category, created_by, updated_by)
-		VALUES ($1, $2, 'json', $3, false, $4, ARRAY['authenticated']::TEXT[], 'custom', $4, $4)
-		ON CONFLICT (key, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::UUID))
-		DO UPDATE SET
-			value = EXCLUDED.value,
-			description = COALESCE(EXCLUDED.description, app.settings.description),
-			updated_by = EXCLUDED.updated_by,
-			updated_at = NOW()
-		RETURNING id, key, value, description, user_id, created_at, updated_at
-	`, req.Key, valueJSON, req.Description, userID).Scan(
-		&setting.ID,
-		&setting.Key,
-		&valueJSONResult,
-		&setting.Description,
-		&setting.UserID,
-		&setting.CreatedAt,
-		&setting.UpdatedAt,
-	)
+	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			INSERT INTO app.settings
+			(key, value, value_type, description, is_secret, user_id, editable_by, category, created_by, updated_by)
+			VALUES ($1, $2, 'json', $3, false, $4, ARRAY['authenticated']::TEXT[], 'custom', $4, $4)
+			ON CONFLICT (key, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::UUID))
+			DO UPDATE SET
+				value = EXCLUDED.value,
+				description = COALESCE(EXCLUDED.description, app.settings.description),
+				updated_by = EXCLUDED.updated_by,
+				updated_at = NOW()
+			RETURNING id, key, value, description, user_id, created_at, updated_at
+		`, req.Key, valueJSON, req.Description, userID).Scan(
+			&setting.ID,
+			&setting.Key,
+			&valueJSONResult,
+			&setting.Description,
+			&setting.UserID,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -909,10 +961,15 @@ func (s *CustomSettingsService) UpsertUserSetting(ctx context.Context, userID uu
 
 // DeleteUserSetting removes a user's setting
 func (s *CustomSettingsService) DeleteUserSetting(ctx context.Context, userID uuid.UUID, key string) error {
-	result, err := s.db.Exec(ctx, `
-		DELETE FROM app.settings
-		WHERE key = $1 AND user_id = $2 AND is_secret = false
-	`, key, userID)
+	var result pgconn.CommandTag
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		var err error
+		result, err = tx.Exec(ctx, `
+			DELETE FROM app.settings
+			WHERE key = $1 AND user_id = $2 AND is_secret = false
+		`, key, userID)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -926,43 +983,50 @@ func (s *CustomSettingsService) DeleteUserSetting(ctx context.Context, userID uu
 
 // ListUserOwnSettings retrieves all non-encrypted settings for a user
 func (s *CustomSettingsService) ListUserOwnSettings(ctx context.Context, userID uuid.UUID) ([]UserSetting, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT id, key, value, description, user_id, created_at, updated_at
-		FROM app.settings
-		WHERE user_id = $1 AND is_secret = false
-		ORDER BY key
-	`, userID)
+	var settings []UserSetting
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, key, value, description, user_id, created_at, updated_at
+			FROM app.settings
+			WHERE user_id = $1 AND is_secret = false
+			ORDER BY key
+		`, userID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var setting UserSetting
+			var valueJSON []byte
+
+			err := rows.Scan(
+				&setting.ID,
+				&setting.Key,
+				&valueJSON,
+				&setting.Description,
+				&setting.UserID,
+				&setting.CreatedAt,
+				&setting.UpdatedAt,
+			)
+			if err != nil {
+				return err
+			}
+
+			if err := json.Unmarshal(valueJSON, &setting.Value); err != nil {
+				return err
+			}
+
+			settings = append(settings, setting)
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var settings []UserSetting
-	for rows.Next() {
-		var setting UserSetting
-		var valueJSON []byte
-
-		err := rows.Scan(
-			&setting.ID,
-			&setting.Key,
-			&valueJSON,
-			&setting.Description,
-			&setting.UserID,
-			&setting.CreatedAt,
-			&setting.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(valueJSON, &setting.Value); err != nil {
-			return nil, err
-		}
-
-		settings = append(settings, setting)
-	}
-
-	return settings, rows.Err()
+	return settings, nil
 }
 
 // ============================================================================

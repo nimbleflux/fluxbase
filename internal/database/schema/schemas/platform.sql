@@ -1909,3 +1909,15 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE users TO authenticated;
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE users TO service_role;
 
+--
+-- Name: platform; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA platform TO tenant_service;
+
+--
+-- Name: available_extensions; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT SELECT ON TABLE platform.available_extensions TO tenant_service;
+

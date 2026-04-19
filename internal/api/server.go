@@ -1501,7 +1501,7 @@ func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageServic
 	}
 
 	// Initialize custom MCP tools and resources
-	customStorage := custom.NewStorage(s.db.Pool())
+	customStorage := custom.NewStorage(s.db)
 	// Use BaseURL for internal communication, falling back to localhost with server address
 	mcpInternalURL := s.config.BaseURL
 	if mcpInternalURL == "" {

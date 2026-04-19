@@ -848,6 +848,45 @@ func WrapWithServiceRoleAndTenant(ctx context.Context, conn *Connection, tenantI
 	return nil
 }
 
+// WrapWithTenantAwareRole wraps a database operation with the appropriate role
+// based on tenant context. When a tenant context is active, it uses tenant_service
+// (NOBYPASSRLS) so RLS policies enforce tenant isolation. When no tenant context,
+// it uses service_role (BYPASSRLS) for full instance-admin access.
+func WrapWithTenantAwareRole(ctx context.Context, conn *Connection, tenantID string, fn func(tx pgx.Tx) error) error {
+	tx, err := conn.Pool().Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if tenantID != "" {
+		// Tenant context active: use tenant_service (respects RLS)
+		_, err = tx.Exec(ctx, "SET LOCAL ROLE tenant_service")
+		if err != nil {
+			return fmt.Errorf("failed to SET LOCAL ROLE tenant_service: %w", err)
+		}
+		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
+		if err != nil {
+			return fmt.Errorf("failed to set tenant context: %w", err)
+		}
+	} else {
+		// No tenant: use service_role (bypasses RLS for instance admin)
+		_, err = tx.Exec(ctx, "SET LOCAL ROLE service_role")
+		if err != nil {
+			return fmt.Errorf("failed to SET LOCAL ROLE service_role: %w", err)
+		}
+	}
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
+}
+
 // ExecuteWithAdminRole executes a database operation using admin credentials
 // Used for migrations that require DDL privileges (CREATE TABLE, ALTER, etc.)
 // Creates a temporary admin connection that is closed after execution

@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // KnowledgeGraph handles entity and relationship storage and queries
@@ -21,6 +23,11 @@ func NewKnowledgeGraph(storage *KnowledgeBaseStorage) *KnowledgeGraph {
 	return &KnowledgeGraph{
 		storage: storage,
 	}
+}
+
+func (kg *KnowledgeGraph) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tenantID := database.TenantFromContext(ctx)
+	return database.WrapWithTenantAwareRole(ctx, kg.storage.db, tenantID, fn)
 }
 
 // ============================================================================
@@ -50,13 +57,13 @@ func (kg *KnowledgeGraph) AddEntity(ctx context.Context, entity *Entity) error {
 		RETURNING id, created_at, updated_at
 	`
 
-	err := kg.storage.db.QueryRow(ctx, query,
-		entity.ID, entity.KnowledgeBaseID, entity.EntityType, entity.Name,
-		entity.CanonicalName, entity.Aliases, entity.Metadata,
-		entity.CreatedAt, entity.UpdatedAt,
-	).Scan(&entity.ID, &entity.CreatedAt, &entity.UpdatedAt)
-
-	return err
+	return kg.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			entity.ID, entity.KnowledgeBaseID, entity.EntityType, entity.Name,
+			entity.CanonicalName, entity.Aliases, entity.Metadata,
+			entity.CreatedAt, entity.UpdatedAt,
+		).Scan(&entity.ID, &entity.CreatedAt, &entity.UpdatedAt)
+	})
 }
 
 // GetEntity retrieves an entity by ID
@@ -69,11 +76,13 @@ func (kg *KnowledgeGraph) GetEntity(ctx context.Context, entityID string) (*Enti
 	`
 
 	var entity Entity
-	err := kg.storage.db.QueryRow(ctx, query, entityID).Scan(
-		&entity.ID, &entity.KnowledgeBaseID, &entity.EntityType, &entity.Name,
-		&entity.CanonicalName, &entity.Aliases, &entity.Metadata,
-		&entity.CreatedAt, &entity.UpdatedAt,
-	)
+	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, entityID).Scan(
+			&entity.ID, &entity.KnowledgeBaseID, &entity.EntityType, &entity.Name,
+			&entity.CanonicalName, &entity.Aliases, &entity.Metadata,
+			&entity.CreatedAt, &entity.UpdatedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("entity not found")
@@ -102,24 +111,31 @@ func (kg *KnowledgeGraph) ListEntities(ctx context.Context, kbID string, entityT
 
 	query += " ORDER BY canonical_name"
 
-	rows, err := kg.storage.db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list entities: %w", err)
-	}
-	defer rows.Close()
-
 	entities := make([]Entity, 0)
-	for rows.Next() {
-		var entity Entity
-		if err := rows.Scan(
-			&entity.ID, &entity.KnowledgeBaseID, &entity.EntityType, &entity.Name,
-			&entity.CanonicalName, &entity.Aliases, &entity.Metadata,
-			&entity.CreatedAt, &entity.UpdatedAt,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan entity")
-			continue
+	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, args...)
+		if queryErr != nil {
+			return fmt.Errorf("failed to list entities: %w", queryErr)
 		}
-		entities = append(entities, entity)
+		defer rows.Close()
+
+		for rows.Next() {
+			var entity Entity
+			if scanErr := rows.Scan(
+				&entity.ID, &entity.KnowledgeBaseID, &entity.EntityType, &entity.Name,
+				&entity.CanonicalName, &entity.Aliases, &entity.Metadata,
+				&entity.CreatedAt, &entity.UpdatedAt,
+			); scanErr != nil {
+				log.Warn().Err(scanErr).Msg("Failed to scan entity")
+				continue
+			}
+			entities = append(entities, entity)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return entities, nil
@@ -145,24 +161,31 @@ func (kg *KnowledgeGraph) SearchEntities(ctx context.Context, kbID string, query
 		typeStrings = &types
 	}
 
-	rows, err := kg.storage.db.Query(ctx, sqlQuery, kbID, query, typeStrings, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search entities: %w", err)
-	}
-	defer rows.Close()
-
 	entities := make([]Entity, 0)
-	for rows.Next() {
-		var entity Entity
-		if err := rows.Scan(
-			&entity.ID, &entity.KnowledgeBaseID, &entity.EntityType, &entity.Name,
-			&entity.CanonicalName, &entity.Aliases, &entity.Metadata,
-			&entity.CreatedAt, &entity.UpdatedAt,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan search result")
-			continue
+	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, sqlQuery, kbID, query, typeStrings, limit)
+		if queryErr != nil {
+			return fmt.Errorf("failed to search entities: %w", queryErr)
 		}
-		entities = append(entities, entity)
+		defer rows.Close()
+
+		for rows.Next() {
+			var entity Entity
+			if scanErr := rows.Scan(
+				&entity.ID, &entity.KnowledgeBaseID, &entity.EntityType, &entity.Name,
+				&entity.CanonicalName, &entity.Aliases, &entity.Metadata,
+				&entity.CreatedAt, &entity.UpdatedAt,
+			); scanErr != nil {
+				log.Warn().Err(scanErr).Msg("Failed to scan search result")
+				continue
+			}
+			entities = append(entities, entity)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return entities, nil
@@ -192,13 +215,14 @@ func (kg *KnowledgeGraph) AddRelationship(ctx context.Context, rel *EntityRelati
 		RETURNING created_at
 	`
 
-	_, err := kg.storage.db.Exec(ctx, query,
-		rel.ID, rel.KnowledgeBaseID, rel.SourceEntityID, rel.TargetEntityID,
-		rel.RelationshipType, rel.Direction, rel.Confidence, rel.Metadata,
-		rel.CreatedAt,
-	)
-
-	return err
+	return kg.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query,
+			rel.ID, rel.KnowledgeBaseID, rel.SourceEntityID, rel.TargetEntityID,
+			rel.RelationshipType, rel.Direction, rel.Confidence, rel.Metadata,
+			rel.CreatedAt,
+		)
+		return err
+	})
 }
 
 // GetRelationships gets all relationships for an entity
@@ -216,41 +240,48 @@ func (kg *KnowledgeGraph) GetRelationships(ctx context.Context, kbID string, ent
 		ORDER BY r.relationship_type, s_e.name, t_e.name
 	`
 
-	rows, err := kg.storage.db.Query(ctx, query, kbID, entityID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get relationships: %w", err)
-	}
-	defer rows.Close()
-
 	relationships := make([]EntityRelationship, 0)
-	for rows.Next() {
-		var rel EntityRelationship
-		var sourceID, sourceType, sourceName string
-		var targetID, targetType, targetName string
+	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, kbID, entityID)
+		if queryErr != nil {
+			return fmt.Errorf("failed to get relationships: %w", queryErr)
+		}
+		defer rows.Close()
 
-		if err := rows.Scan(
-			&rel.ID, &rel.KnowledgeBaseID, &rel.SourceEntityID, &rel.TargetEntityID,
-			&rel.RelationshipType, &rel.Direction, &rel.Confidence, &rel.Metadata,
-			&rel.CreatedAt,
-			&sourceID, &sourceType, &sourceName,
-			&targetID, &targetType, &targetName,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan relationship")
-			continue
+		for rows.Next() {
+			var rel EntityRelationship
+			var sourceID, sourceType, sourceName string
+			var targetID, targetType, targetName string
+
+			if scanErr := rows.Scan(
+				&rel.ID, &rel.KnowledgeBaseID, &rel.SourceEntityID, &rel.TargetEntityID,
+				&rel.RelationshipType, &rel.Direction, &rel.Confidence, &rel.Metadata,
+				&rel.CreatedAt,
+				&sourceID, &sourceType, &sourceName,
+				&targetID, &targetType, &targetName,
+			); scanErr != nil {
+				log.Warn().Err(scanErr).Msg("Failed to scan relationship")
+				continue
+			}
+
+			rel.SourceEntity = &Entity{
+				ID:         sourceID,
+				EntityType: EntityType(sourceType),
+				Name:       sourceName,
+			}
+			rel.TargetEntity = &Entity{
+				ID:         targetID,
+				EntityType: EntityType(targetType),
+				Name:       targetName,
+			}
+
+			relationships = append(relationships, rel)
 		}
 
-		rel.SourceEntity = &Entity{
-			ID:         sourceID,
-			EntityType: EntityType(sourceType),
-			Name:       sourceName,
-		}
-		rel.TargetEntity = &Entity{
-			ID:         targetID,
-			EntityType: EntityType(targetType),
-			Name:       targetName,
-		}
-
-		relationships = append(relationships, rel)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return relationships, nil
@@ -272,24 +303,31 @@ func (kg *KnowledgeGraph) FindRelatedEntities(ctx context.Context, kbID string, 
 		typeStrings = &types
 	}
 
-	rows, err := kg.storage.db.Query(ctx, query, kbID, entityID, maxDepth, typeStrings)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find related entities: %w", err)
-	}
-	defer rows.Close()
-
 	related := make([]RelatedEntity, 0)
-	for rows.Next() {
-		var r RelatedEntity
-		if err := rows.Scan(
-			&r.EntityID, &r.EntityType, &r.Name, &r.CanonicalName,
-			&r.RelationshipType, &r.Depth, &r.Path,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan related entity")
-			continue
+	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, kbID, entityID, maxDepth, typeStrings)
+		if queryErr != nil {
+			return fmt.Errorf("failed to find related entities: %w", queryErr)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var r RelatedEntity
+			if scanErr := rows.Scan(
+				&r.EntityID, &r.EntityType, &r.Name, &r.CanonicalName,
+				&r.RelationshipType, &r.Depth, &r.Path,
+			); scanErr != nil {
+				log.Warn().Err(scanErr).Msg("Failed to scan related entity")
+				continue
+			}
+
+			related = append(related, r)
 		}
 
-		related = append(related, r)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return related, nil
@@ -317,25 +355,27 @@ func (kg *KnowledgeGraph) AddDocumentEntities(ctx context.Context, docEntities [
 			context = EXCLUDED.context
 	`
 
-	for _, de := range docEntities {
-		if de.ID == "" {
-			de.ID = uuid.New().String()
-		}
-		de.CreatedAt = time.Now()
+	return kg.withTenant(ctx, func(tx pgx.Tx) error {
+		for _, de := range docEntities {
+			if de.ID == "" {
+				de.ID = uuid.New().String()
+			}
+			de.CreatedAt = time.Now()
 
-		_, err := kg.storage.db.Exec(ctx, query,
-			de.ID, de.DocumentID, de.EntityID, de.MentionCount,
-			de.FirstMentionOffset, de.Salience, de.Context, de.CreatedAt,
-		)
-		if err != nil {
-			log.Warn().Err(err).
-				Str("document_id", de.DocumentID).
-				Str("entity_id", de.EntityID).
-				Msg("Failed to add document-entity link")
+			_, err := tx.Exec(ctx, query,
+				de.ID, de.DocumentID, de.EntityID, de.MentionCount,
+				de.FirstMentionOffset, de.Salience, de.Context, de.CreatedAt,
+			)
+			if err != nil {
+				log.Warn().Err(err).
+					Str("document_id", de.DocumentID).
+					Str("entity_id", de.EntityID).
+					Msg("Failed to add document-entity link")
+			}
 		}
-	}
 
-	return nil
+		return nil
+	})
 }
 
 // GetDocumentEntities gets all entities mentioned in a document
@@ -350,28 +390,35 @@ func (kg *KnowledgeGraph) GetDocumentEntities(ctx context.Context, documentID st
 		ORDER BY de.salience DESC, e.name
 	`
 
-	rows, err := kg.storage.db.Query(ctx, query, documentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get document entities: %w", err)
-	}
-	defer rows.Close()
-
 	docEntities := make([]DocumentEntity, 0)
-	for rows.Next() {
-		var de DocumentEntity
-		var entity Entity
+	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, documentID)
+		if queryErr != nil {
+			return fmt.Errorf("failed to get document entities: %w", queryErr)
+		}
+		defer rows.Close()
 
-		if err := rows.Scan(
-			&de.ID, &de.DocumentID, &de.EntityID, &de.MentionCount,
-			&de.FirstMentionOffset, &de.Salience, &de.Context, &de.CreatedAt,
-			&entity.ID, &entity.EntityType, &entity.Name, &entity.CanonicalName,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan document entity")
-			continue
+		for rows.Next() {
+			var de DocumentEntity
+			var entity Entity
+
+			if scanErr := rows.Scan(
+				&de.ID, &de.DocumentID, &de.EntityID, &de.MentionCount,
+				&de.FirstMentionOffset, &de.Salience, &de.Context, &de.CreatedAt,
+				&entity.ID, &entity.EntityType, &entity.Name, &entity.CanonicalName,
+			); scanErr != nil {
+				log.Warn().Err(scanErr).Msg("Failed to scan document entity")
+				continue
+			}
+
+			de.Entity = &entity
+			docEntities = append(docEntities, de)
 		}
 
-		de.Entity = &entity
-		docEntities = append(docEntities, de)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return docEntities, nil
@@ -388,24 +435,31 @@ func (kg *KnowledgeGraph) GetEntitiesByDocument(ctx context.Context, documentID 
 		ORDER BY de.salience DESC, e.name
 	`
 
-	rows, err := kg.storage.db.Query(ctx, query, documentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get document entities: %w", err)
-	}
-	defer rows.Close()
-
 	entities := make([]Entity, 0)
-	for rows.Next() {
-		var entity Entity
-		if err := rows.Scan(
-			&entity.ID, &entity.KnowledgeBaseID, &entity.EntityType, &entity.Name,
-			&entity.CanonicalName, &entity.Aliases, &entity.Metadata,
-			&entity.CreatedAt, &entity.UpdatedAt,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan entity")
-			continue
+	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, documentID)
+		if queryErr != nil {
+			return fmt.Errorf("failed to get document entities: %w", queryErr)
 		}
-		entities = append(entities, entity)
+		defer rows.Close()
+
+		for rows.Next() {
+			var entity Entity
+			if scanErr := rows.Scan(
+				&entity.ID, &entity.KnowledgeBaseID, &entity.EntityType, &entity.Name,
+				&entity.CanonicalName, &entity.Aliases, &entity.Metadata,
+				&entity.CreatedAt, &entity.UpdatedAt,
+			); scanErr != nil {
+				log.Warn().Err(scanErr).Msg("Failed to scan entity")
+				continue
+			}
+			entities = append(entities, entity)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return entities, nil
@@ -416,9 +470,6 @@ func (kg *KnowledgeGraph) BatchAddEntities(ctx context.Context, entities []Entit
 	if len(entities) == 0 {
 		return nil
 	}
-
-	// Use pgx batch operation for efficiency
-	batch := &pgx.Batch{}
 
 	query := `
 		INSERT INTO ai.entities (
@@ -433,30 +484,34 @@ func (kg *KnowledgeGraph) BatchAddEntities(ctx context.Context, entities []Entit
 			updated_at = NOW()
 	`
 
-	for _, entity := range entities {
-		if entity.ID == "" {
-			entity.ID = uuid.New().String()
+	return kg.withTenant(ctx, func(tx pgx.Tx) error {
+		batch := &pgx.Batch{}
+
+		for _, entity := range entities {
+			if entity.ID == "" {
+				entity.ID = uuid.New().String()
+			}
+			entity.CreatedAt = time.Now()
+			entity.UpdatedAt = time.Now()
+
+			batch.Queue(query,
+				entity.ID, entity.KnowledgeBaseID, entity.EntityType, entity.Name,
+				entity.CanonicalName, entity.Aliases, entity.Metadata,
+				entity.CreatedAt, entity.UpdatedAt,
+			)
 		}
-		entity.CreatedAt = time.Now()
-		entity.UpdatedAt = time.Now()
 
-		batch.Queue(query,
-			entity.ID, entity.KnowledgeBaseID, entity.EntityType, entity.Name,
-			entity.CanonicalName, entity.Aliases, entity.Metadata,
-			entity.CreatedAt, entity.UpdatedAt,
-		)
-	}
+		br := tx.SendBatch(ctx, batch)
+		defer func() { _ = br.Close() }()
 
-	br := kg.storage.db.Pool().SendBatch(ctx, batch)
-	defer func() { _ = br.Close() }()
-
-	for range entities {
-		if _, err := br.Exec(); err != nil {
-			return fmt.Errorf("failed to insert entity: %w", err)
+		for range entities {
+			if _, err := br.Exec(); err != nil {
+				return fmt.Errorf("failed to insert entity: %w", err)
+			}
 		}
-	}
 
-	return nil
+		return nil
+	})
 }
 
 // DeleteOrphanedEntitiesByDocument deletes entities that are only referenced by a specific document
@@ -476,12 +531,20 @@ func (kg *KnowledgeGraph) DeleteOrphanedEntitiesByDocument(ctx context.Context, 
 			HAVING COUNT(DISTINCT de.document_id) = 1
 		)
 	`
-	result, err := kg.storage.db.Exec(ctx, query, documentID)
+
+	var rowsAffected int64
+	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+		result, execErr := tx.Exec(ctx, query, documentID)
+		if execErr != nil {
+			return fmt.Errorf("failed to delete orphaned entities: %w", execErr)
+		}
+		rowsAffected = result.RowsAffected()
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("failed to delete orphaned entities: %w", err)
+		return err
 	}
 
-	rowsAffected := result.RowsAffected()
 	if rowsAffected > 0 {
 		log.Info().
 			Str("document_id", documentID).

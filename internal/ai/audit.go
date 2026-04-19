@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
@@ -21,6 +22,11 @@ func NewAuditLogger(db *database.Connection) *AuditLogger {
 	return &AuditLogger{
 		db: db,
 	}
+}
+
+func (l *AuditLogger) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tenantID := database.TenantFromContext(ctx)
+	return database.WrapWithTenantAwareRole(ctx, l.db, tenantID, fn)
 }
 
 // AuditEntry represents a query audit log entry
@@ -62,7 +68,9 @@ func (l *AuditLogger) LogQuery(ctx context.Context, entry *AuditEntry) error {
 	validUserID := entry.UserID
 	if validUserID != nil && *validUserID != "" {
 		var exists bool
-		err := l.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)", *validUserID).Scan(&exists)
+		err := l.withTenant(ctx, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)", *validUserID).Scan(&exists)
+		})
 		if err != nil {
 			log.Warn().Err(err).Str("user_id", *validUserID).Msg("Failed to check if user exists for audit log, setting user_id to NULL")
 			validUserID = nil
@@ -94,16 +102,19 @@ func (l *AuditLogger) LogQuery(ctx context.Context, entry *AuditEntry) error {
 		)
 	`
 
-	_, err := l.db.Exec(ctx, query,
-		entry.ID, entry.ChatbotID, entry.ConversationID, entry.MessageID, validUserID,
-		entry.GeneratedSQL, entry.SanitizedSQL, entry.Executed,
-		entry.ValidationPassed, entry.ValidationErrors,
-		entry.Success, entry.ErrorMessage, entry.RowsReturned, entry.ExecutionDurationMs,
-		entry.TablesAccessed, entry.OperationsUsed,
-		entry.RLSUserID, entry.RLSRole,
-		entry.IPAddress, entry.UserAgent,
-		entry.CreatedAt,
-	)
+	err := l.withTenant(ctx, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query,
+			entry.ID, entry.ChatbotID, entry.ConversationID, entry.MessageID, validUserID,
+			entry.GeneratedSQL, entry.SanitizedSQL, entry.Executed,
+			entry.ValidationPassed, entry.ValidationErrors,
+			entry.Success, entry.ErrorMessage, entry.RowsReturned, entry.ExecutionDurationMs,
+			entry.TablesAccessed, entry.OperationsUsed,
+			entry.RLSUserID, entry.RLSRole,
+			entry.IPAddress, entry.UserAgent,
+			entry.CreatedAt,
+		)
+		return execErr
+	})
 	if err != nil {
 		log.Error().Err(err).Str("id", entry.ID).Msg("Failed to log AI query to audit table")
 		return err
@@ -203,30 +214,36 @@ func (l *AuditLogger) GetRecentQueries(ctx context.Context, limit int) ([]*Audit
 		LIMIT $1
 	`
 
-	rows, err := l.db.Query(ctx, query, limit)
+	var entries []*AuditEntry
+	err := l.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, limit)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			entry := &AuditEntry{}
+			if scanErr := rows.Scan(
+				&entry.ID, &entry.ChatbotID, &entry.ConversationID, &entry.MessageID, &entry.UserID,
+				&entry.GeneratedSQL, &entry.SanitizedSQL, &entry.Executed,
+				&entry.ValidationPassed, &entry.ValidationErrors,
+				&entry.Success, &entry.ErrorMessage, &entry.RowsReturned, &entry.ExecutionDurationMs,
+				&entry.TablesAccessed, &entry.OperationsUsed,
+				&entry.RLSUserID, &entry.RLSRole,
+				&entry.IPAddress, &entry.UserAgent,
+				&entry.CreatedAt,
+			); scanErr != nil {
+				log.Warn().Err(scanErr).Msg("Failed to scan audit entry")
+				continue
+			}
+			entries = append(entries, entry)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-
-	var entries []*AuditEntry
-	for rows.Next() {
-		entry := &AuditEntry{}
-		err := rows.Scan(
-			&entry.ID, &entry.ChatbotID, &entry.ConversationID, &entry.MessageID, &entry.UserID,
-			&entry.GeneratedSQL, &entry.SanitizedSQL, &entry.Executed,
-			&entry.ValidationPassed, &entry.ValidationErrors,
-			&entry.Success, &entry.ErrorMessage, &entry.RowsReturned, &entry.ExecutionDurationMs,
-			&entry.TablesAccessed, &entry.OperationsUsed,
-			&entry.RLSUserID, &entry.RLSRole,
-			&entry.IPAddress, &entry.UserAgent,
-			&entry.CreatedAt,
-		)
-		if err != nil {
-			log.Warn().Err(err).Msg("Failed to scan audit entry")
-			continue
-		}
-		entries = append(entries, entry)
 	}
 
 	return entries, nil
@@ -250,30 +267,36 @@ func (l *AuditLogger) GetQueriesByChatbot(ctx context.Context, chatbotID string,
 		LIMIT $2
 	`
 
-	rows, err := l.db.Query(ctx, query, chatbotID, limit)
+	var entries []*AuditEntry
+	err := l.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, chatbotID, limit)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			entry := &AuditEntry{}
+			if scanErr := rows.Scan(
+				&entry.ID, &entry.ChatbotID, &entry.ConversationID, &entry.MessageID, &entry.UserID,
+				&entry.GeneratedSQL, &entry.SanitizedSQL, &entry.Executed,
+				&entry.ValidationPassed, &entry.ValidationErrors,
+				&entry.Success, &entry.ErrorMessage, &entry.RowsReturned, &entry.ExecutionDurationMs,
+				&entry.TablesAccessed, &entry.OperationsUsed,
+				&entry.RLSUserID, &entry.RLSRole,
+				&entry.IPAddress, &entry.UserAgent,
+				&entry.CreatedAt,
+			); scanErr != nil {
+				log.Warn().Err(scanErr).Msg("Failed to scan audit entry")
+				continue
+			}
+			entries = append(entries, entry)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-
-	var entries []*AuditEntry
-	for rows.Next() {
-		entry := &AuditEntry{}
-		err := rows.Scan(
-			&entry.ID, &entry.ChatbotID, &entry.ConversationID, &entry.MessageID, &entry.UserID,
-			&entry.GeneratedSQL, &entry.SanitizedSQL, &entry.Executed,
-			&entry.ValidationPassed, &entry.ValidationErrors,
-			&entry.Success, &entry.ErrorMessage, &entry.RowsReturned, &entry.ExecutionDurationMs,
-			&entry.TablesAccessed, &entry.OperationsUsed,
-			&entry.RLSUserID, &entry.RLSRole,
-			&entry.IPAddress, &entry.UserAgent,
-			&entry.CreatedAt,
-		)
-		if err != nil {
-			log.Warn().Err(err).Msg("Failed to scan audit entry")
-			continue
-		}
-		entries = append(entries, entry)
 	}
 
 	return entries, nil
@@ -298,30 +321,36 @@ func (l *AuditLogger) GetFailedQueries(ctx context.Context, since time.Time, lim
 		LIMIT $2
 	`
 
-	rows, err := l.db.Query(ctx, query, since, limit)
+	var entries []*AuditEntry
+	err := l.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, since, limit)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			entry := &AuditEntry{}
+			if scanErr := rows.Scan(
+				&entry.ID, &entry.ChatbotID, &entry.ConversationID, &entry.MessageID, &entry.UserID,
+				&entry.GeneratedSQL, &entry.SanitizedSQL, &entry.Executed,
+				&entry.ValidationPassed, &entry.ValidationErrors,
+				&entry.Success, &entry.ErrorMessage, &entry.RowsReturned, &entry.ExecutionDurationMs,
+				&entry.TablesAccessed, &entry.OperationsUsed,
+				&entry.RLSUserID, &entry.RLSRole,
+				&entry.IPAddress, &entry.UserAgent,
+				&entry.CreatedAt,
+			); scanErr != nil {
+				log.Warn().Err(scanErr).Msg("Failed to scan audit entry")
+				continue
+			}
+			entries = append(entries, entry)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-
-	var entries []*AuditEntry
-	for rows.Next() {
-		entry := &AuditEntry{}
-		err := rows.Scan(
-			&entry.ID, &entry.ChatbotID, &entry.ConversationID, &entry.MessageID, &entry.UserID,
-			&entry.GeneratedSQL, &entry.SanitizedSQL, &entry.Executed,
-			&entry.ValidationPassed, &entry.ValidationErrors,
-			&entry.Success, &entry.ErrorMessage, &entry.RowsReturned, &entry.ExecutionDurationMs,
-			&entry.TablesAccessed, &entry.OperationsUsed,
-			&entry.RLSUserID, &entry.RLSRole,
-			&entry.IPAddress, &entry.UserAgent,
-			&entry.CreatedAt,
-		)
-		if err != nil {
-			log.Warn().Err(err).Msg("Failed to scan audit entry")
-			continue
-		}
-		entries = append(entries, entry)
 	}
 
 	return entries, nil
@@ -350,13 +379,15 @@ func (l *AuditLogger) GetStats(ctx context.Context, since time.Time) (*AuditStat
 	`
 
 	stats := &AuditStats{}
-	err := l.db.QueryRow(ctx, query, since).Scan(
-		&stats.TotalQueries,
-		&stats.ExecutedQueries,
-		&stats.FailedQueries,
-		&stats.RejectedQueries,
-		&stats.AverageDurationMs,
-	)
+	err := l.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, since).Scan(
+			&stats.TotalQueries,
+			&stats.ExecutedQueries,
+			&stats.FailedQueries,
+			&stats.RejectedQueries,
+			&stats.AverageDurationMs,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}

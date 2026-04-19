@@ -1388,22 +1388,21 @@ func (si *SchemaInspector) getAllTables(ctx context.Context, q querier, schemas 
 	}
 
 	query := `
-		SELECT
-			schemaname,
-			tablename,
-			CASE
-				WHEN relrowsecurity THEN true
-				ELSE false
-			END as rls_enabled
-		FROM pg_tables t
-		JOIN pg_class c ON c.relname = t.tablename AND c.relnamespace = (
-			SELECT oid FROM pg_namespace WHERE nspname = t.schemaname
-		)
-		WHERE schemaname = ANY($1)
-			AND tablename NOT LIKE 'pg_%'
-			AND tablename NOT LIKE '_fluxbase.%'
-			AND schemaname NOT IN ('information_schema', 'pg_catalog', '_fluxbase')
-		ORDER BY schemaname, tablename
+			SELECT
+				n.nspname as schemaname,
+				c.relname as tablename,
+				CASE
+					WHEN c.relrowsecurity THEN true
+					ELSE false
+				END as rls_enabled
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE n.nspname = ANY($1)
+				AND c.relkind IN ('r', 'f')
+				AND c.relname NOT LIKE 'pg_%'
+				AND c.relname NOT LIKE '_fluxbase.%'
+				AND n.nspname NOT IN ('information_schema', 'pg_catalog', '_fluxbase')
+			ORDER BY n.nspname, c.relname
 	`
 
 	rows, err := q.Query(ctx, query, schemas)

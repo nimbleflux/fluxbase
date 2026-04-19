@@ -535,3 +535,45 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE seed_execution_log TO service_role;
 
+--
+-- Name: branching; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA branching TO tenant_service;
+
+--
+-- Name: branches; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE branching.branches TO tenant_service;
+
+--
+-- Name: activity_log; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE branching.activity_log TO tenant_service;
+
+--
+-- Name: branch_access; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE branching.branch_access TO tenant_service;
+
+--
+-- Name: github_config; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE branching.github_config TO tenant_service;
+
+--
+-- Name: migration_history; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE branching.migration_history TO tenant_service;
+
+--
+-- Name: seed_execution_log; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE branching.seed_execution_log TO tenant_service;
+

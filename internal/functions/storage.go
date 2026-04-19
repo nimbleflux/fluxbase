@@ -155,7 +155,7 @@ func (s *Storage) CreateFunction(ctx context.Context, fn *EdgeFunction) error {
 	`
 
 	tenantID := database.TenantFromContext(ctx)
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			fn.Name, fn.Namespace, fn.Description, fn.Code, fn.OriginalCode, fn.IsBundled, fn.BundleError,
 			fn.Enabled, fn.TimeoutSeconds, fn.MemoryLimitMB,
@@ -487,7 +487,7 @@ func (s *Storage) LogExecution(ctx context.Context, exec *EdgeFunctionExecution)
 		RETURNING id, started_at
 	`
 
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			exec.FunctionID, exec.TriggerType, exec.Status, exec.StatusCode,
 			exec.DurationMs, exec.Result, exec.Logs, exec.ErrorMessage, exec.CompletedAt,
@@ -510,7 +510,7 @@ func (s *Storage) CreateExecution(ctx context.Context, id uuid.UUID, functionID 
 		VALUES ($1, $2, $3, 'running')
 	`
 
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, id, functionID, triggerType)
 		return err
 	})
@@ -729,7 +729,7 @@ func (s *Storage) CreateSharedModule(ctx context.Context, module *SharedModule) 
 		RETURNING id, version, created_at, updated_at
 	`
 
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			module.ModulePath, module.Content, module.Description, module.CreatedBy,
 		).Scan(&module.ID, &module.Version, &module.CreatedAt, &module.UpdatedAt)
@@ -851,7 +851,7 @@ func (s *Storage) SaveFunctionFiles(ctx context.Context, functionID uuid.UUID, f
 	// First, delete existing files for this function
 	deleteQuery := "DELETE FROM functions.edge_files WHERE function_id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))"
 
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, deleteQuery, functionID, tenantOrNil(tenantID))
 		if err != nil {
 			return err

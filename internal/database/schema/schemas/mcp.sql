@@ -26,11 +26,12 @@ CREATE TABLE IF NOT EXISTS custom_resources (
     cache_ttl_seconds integer DEFAULT 60 NOT NULL,
     enabled boolean DEFAULT true NOT NULL,
     version integer DEFAULT 1 NOT NULL,
+    tenant_id uuid,
     created_by uuid,
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
     CONSTRAINT custom_resources_pkey PRIMARY KEY (id),
-    CONSTRAINT custom_resources_uri_namespace_unique UNIQUE (uri, namespace)
+    CONSTRAINT custom_resources_uri_namespace_unique UNIQUE (uri, namespace, tenant_id)
 );
 
 
@@ -76,6 +77,24 @@ ALTER TABLE custom_resources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE custom_resources FORCE ROW LEVEL SECURITY;
 
 --
+-- Name: custom_resources_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY custom_resources_tenant ON custom_resources
+    FOR ALL TO tenant_service
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: custom_resources_admin; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY custom_resources_admin ON custom_resources
+    FOR ALL TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+--
 -- Name: custom_tools; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -95,11 +114,12 @@ CREATE TABLE IF NOT EXISTS custom_tools (
     allow_write boolean DEFAULT false NOT NULL,
     enabled boolean DEFAULT true NOT NULL,
     version integer DEFAULT 1 NOT NULL,
+    tenant_id uuid,
     created_by uuid,
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
     CONSTRAINT custom_tools_pkey PRIMARY KEY (id),
-    CONSTRAINT custom_tools_name_namespace_unique UNIQUE (name, namespace)
+    CONSTRAINT custom_tools_name_namespace_unique UNIQUE (name, namespace, tenant_id)
 );
 
 
@@ -149,6 +169,24 @@ ALTER TABLE custom_tools ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE custom_tools FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: custom_tools_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY custom_tools_tenant ON custom_tools
+    FOR ALL TO tenant_service
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: custom_tools_admin; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY custom_tools_admin ON custom_tools
+    FOR ALL TO service_role
+    USING (true)
+    WITH CHECK (true);
 
 --
 -- Name: update_updated_at(); Type: FUNCTION; Schema: -; Owner: -
@@ -244,4 +282,22 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE custom_tools TO service_role;
+
+--
+-- Name: mcp; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA mcp TO tenant_service;
+
+--
+-- Name: custom_resources; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE mcp.custom_resources TO tenant_service;
+
+--
+-- Name: custom_tools; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE mcp.custom_tools TO tenant_service;
 

@@ -38,8 +38,10 @@ func (s *Storage) SetConfig(cfg *config.AIConfig) {
 // UserExists checks if a user exists in auth.users
 func (s *Storage) UserExists(ctx context.Context, userID string) (bool, error) {
 	var exists bool
-	query := `SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)`
-	err := s.db.Pool().QueryRow(ctx, query, userID).Scan(&exists)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)`
+		return tx.QueryRow(ctx, query, userID).Scan(&exists)
+	})
 	if err != nil {
 		return false, fmt.Errorf("failed to check user existence: %w", err)
 	}
@@ -106,7 +108,7 @@ func (s *Storage) CreateChatbotWithTenant(ctx context.Context, tenantID string, 
 		}
 	}
 
-	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query,
 			chatbot.ID, chatbot.Name, chatbot.Namespace, chatbot.Description,
 			chatbot.Code, chatbot.OriginalCode, chatbot.IsBundled, chatbot.BundleError,
@@ -200,7 +202,7 @@ func (s *Storage) UpdateChatbotWithTenant(ctx context.Context, tenantID string, 
 	}
 
 	var result pgconn.CommandTag
-	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		var execErr error
 		result, execErr = tx.Exec(ctx, query,
 			chatbot.ID,
@@ -256,40 +258,40 @@ func (s *Storage) UpdateChatbotWithTenant(ctx context.Context, tenantID string, 
 
 // GetChatbot retrieves a chatbot by ID
 func (s *Storage) GetChatbot(ctx context.Context, id string) (*Chatbot, error) {
-	tenantID := database.TenantFromContext(ctx)
-
-	query := `
-		SELECT
-			id, name, namespace, description, code, original_code, is_bundled, bundle_error,
-			allowed_tables, allowed_operations, allowed_schemas, http_allowed_domains,
-			intent_rules, required_columns, default_table,
-			enabled, max_tokens, temperature, provider_id,
-			persist_conversations, conversation_ttl_hours, max_conversation_turns,
-			rate_limit_per_minute, daily_request_limit, daily_token_budget,
-			allow_unauthenticated, is_public, require_roles, response_language, disable_execution_logs,
-			mcp_tools, use_mcp_schema,
-			version, source, created_by, created_at, updated_at
-		FROM ai.chatbots
-		WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
-	`
-
 	chatbot := &Chatbot{}
 	var intentRulesJSON, requiredColumnsJSON []byte
 	var defaultTable *string
 	var responseLanguage *string
-	err := s.db.QueryRow(ctx, query, id, tenantOrNil(tenantID)).Scan(
-		&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
-		&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
-		&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
-		&intentRulesJSON, &requiredColumnsJSON, &defaultTable,
-		&chatbot.Enabled, &chatbot.MaxTokens, &chatbot.Temperature, &chatbot.ProviderID,
-		&chatbot.PersistConversations, &chatbot.ConversationTTLHours, &chatbot.MaxConversationTurns,
-		&chatbot.RateLimitPerMinute, &chatbot.DailyRequestLimit, &chatbot.DailyTokenBudget,
-		&chatbot.AllowUnauthenticated, &chatbot.IsPublic, &chatbot.RequireRoles, &responseLanguage, &chatbot.DisableExecutionLogs,
-		&chatbot.MCPTools, &chatbot.UseMCPSchema,
-		&chatbot.Version, &chatbot.Source,
-		&chatbot.CreatedBy, &chatbot.CreatedAt, &chatbot.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		tenantID := database.TenantFromContext(ctx)
+		query := `
+			SELECT
+				id, name, namespace, description, code, original_code, is_bundled, bundle_error,
+				allowed_tables, allowed_operations, allowed_schemas, http_allowed_domains,
+				intent_rules, required_columns, default_table,
+				enabled, max_tokens, temperature, provider_id,
+				persist_conversations, conversation_ttl_hours, max_conversation_turns,
+				rate_limit_per_minute, daily_request_limit, daily_token_budget,
+				allow_unauthenticated, is_public, require_roles, response_language, disable_execution_logs,
+				mcp_tools, use_mcp_schema,
+				version, source, created_by, created_at, updated_at
+			FROM ai.chatbots
+			WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
+		`
+		return tx.QueryRow(ctx, query, id, tenantOrNil(tenantID)).Scan(
+			&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
+			&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
+			&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
+			&intentRulesJSON, &requiredColumnsJSON, &defaultTable,
+			&chatbot.Enabled, &chatbot.MaxTokens, &chatbot.Temperature, &chatbot.ProviderID,
+			&chatbot.PersistConversations, &chatbot.ConversationTTLHours, &chatbot.MaxConversationTurns,
+			&chatbot.RateLimitPerMinute, &chatbot.DailyRequestLimit, &chatbot.DailyTokenBudget,
+			&chatbot.AllowUnauthenticated, &chatbot.IsPublic, &chatbot.RequireRoles, &responseLanguage, &chatbot.DisableExecutionLogs,
+			&chatbot.MCPTools, &chatbot.UseMCPSchema,
+			&chatbot.Version, &chatbot.Source,
+			&chatbot.CreatedBy, &chatbot.CreatedAt, &chatbot.UpdatedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -322,40 +324,40 @@ func (s *Storage) GetChatbot(ctx context.Context, id string) (*Chatbot, error) {
 
 // GetChatbotByName retrieves a chatbot by name and namespace
 func (s *Storage) GetChatbotByName(ctx context.Context, namespace, name string) (*Chatbot, error) {
-	tenantID := database.TenantFromContext(ctx)
-
-	query := `
-		SELECT
-			id, name, namespace, description, code, original_code, is_bundled, bundle_error,
-			allowed_tables, allowed_operations, allowed_schemas, http_allowed_domains,
-			intent_rules, required_columns, default_table,
-			enabled, max_tokens, temperature, provider_id,
-			persist_conversations, conversation_ttl_hours, max_conversation_turns,
-			rate_limit_per_minute, daily_request_limit, daily_token_budget,
-			allow_unauthenticated, is_public, require_roles, response_language, disable_execution_logs,
-			mcp_tools, use_mcp_schema,
-			version, source, created_by, created_at, updated_at
-		FROM ai.chatbots
-		WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))
-	`
-
 	chatbot := &Chatbot{}
 	var intentRulesJSON, requiredColumnsJSON []byte
 	var defaultTable *string
 	var responseLanguage *string
-	err := s.db.QueryRow(ctx, query, namespace, name, tenantOrNil(tenantID)).Scan(
-		&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
-		&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
-		&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
-		&intentRulesJSON, &requiredColumnsJSON, &defaultTable,
-		&chatbot.Enabled, &chatbot.MaxTokens, &chatbot.Temperature, &chatbot.ProviderID,
-		&chatbot.PersistConversations, &chatbot.ConversationTTLHours, &chatbot.MaxConversationTurns,
-		&chatbot.RateLimitPerMinute, &chatbot.DailyRequestLimit, &chatbot.DailyTokenBudget,
-		&chatbot.AllowUnauthenticated, &chatbot.IsPublic, &chatbot.RequireRoles, &responseLanguage, &chatbot.DisableExecutionLogs,
-		&chatbot.MCPTools, &chatbot.UseMCPSchema,
-		&chatbot.Version, &chatbot.Source,
-		&chatbot.CreatedBy, &chatbot.CreatedAt, &chatbot.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		tenantID := database.TenantFromContext(ctx)
+		query := `
+			SELECT
+				id, name, namespace, description, code, original_code, is_bundled, bundle_error,
+				allowed_tables, allowed_operations, allowed_schemas, http_allowed_domains,
+				intent_rules, required_columns, default_table,
+				enabled, max_tokens, temperature, provider_id,
+				persist_conversations, conversation_ttl_hours, max_conversation_turns,
+				rate_limit_per_minute, daily_request_limit, daily_token_budget,
+				allow_unauthenticated, is_public, require_roles, response_language, disable_execution_logs,
+				mcp_tools, use_mcp_schema,
+				version, source, created_by, created_at, updated_at
+			FROM ai.chatbots
+			WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))
+		`
+		return tx.QueryRow(ctx, query, namespace, name, tenantOrNil(tenantID)).Scan(
+			&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
+			&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
+			&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
+			&intentRulesJSON, &requiredColumnsJSON, &defaultTable,
+			&chatbot.Enabled, &chatbot.MaxTokens, &chatbot.Temperature, &chatbot.ProviderID,
+			&chatbot.PersistConversations, &chatbot.ConversationTTLHours, &chatbot.MaxConversationTurns,
+			&chatbot.RateLimitPerMinute, &chatbot.DailyRequestLimit, &chatbot.DailyTokenBudget,
+			&chatbot.AllowUnauthenticated, &chatbot.IsPublic, &chatbot.RequireRoles, &responseLanguage, &chatbot.DisableExecutionLogs,
+			&chatbot.MCPTools, &chatbot.UseMCPSchema,
+			&chatbot.Version, &chatbot.Source,
+			&chatbot.CreatedBy, &chatbot.CreatedAt, &chatbot.UpdatedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -388,76 +390,82 @@ func (s *Storage) GetChatbotByName(ctx context.Context, namespace, name string) 
 
 // ListChatbots lists all chatbots with optional filtering
 func (s *Storage) ListChatbots(ctx context.Context, enabledOnly bool) ([]*Chatbot, error) {
-	tenantID := database.TenantFromContext(ctx)
-
-	query := `
-		SELECT
-			id, name, namespace, description, code, original_code, is_bundled, bundle_error,
-			allowed_tables, allowed_operations, allowed_schemas, http_allowed_domains,
-			intent_rules, required_columns, default_table,
-			enabled, max_tokens, temperature, provider_id,
-			persist_conversations, conversation_ttl_hours, max_conversation_turns,
-			rate_limit_per_minute, daily_request_limit, daily_token_budget,
-			allow_unauthenticated, is_public, require_roles, response_language, disable_execution_logs,
-			mcp_tools, use_mcp_schema,
-			version, source, created_by, created_at, updated_at
-		FROM ai.chatbots
-		WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
-	`
-
-	args := []interface{}{tenantOrNil(tenantID)}
-
-	if enabledOnly {
-		query += " AND enabled = true"
-	}
-
-	query += " ORDER BY namespace, name"
-
-	rows, err := s.db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list chatbots: %w", err)
-	}
-	defer rows.Close()
-
 	var chatbots []*Chatbot
-	for rows.Next() {
-		chatbot := &Chatbot{}
-		var intentRulesJSON, requiredColumnsJSON []byte
-		var defaultTable *string
-		var responseLanguage *string
-		err := rows.Scan(
-			&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
-			&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
-			&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
-			&intentRulesJSON, &requiredColumnsJSON, &defaultTable,
-			&chatbot.Enabled, &chatbot.MaxTokens, &chatbot.Temperature, &chatbot.ProviderID,
-			&chatbot.PersistConversations, &chatbot.ConversationTTLHours, &chatbot.MaxConversationTurns,
-			&chatbot.RateLimitPerMinute, &chatbot.DailyRequestLimit, &chatbot.DailyTokenBudget,
-			&chatbot.AllowUnauthenticated, &chatbot.IsPublic, &chatbot.RequireRoles, &responseLanguage, &chatbot.DisableExecutionLogs,
-			&chatbot.MCPTools, &chatbot.UseMCPSchema,
-			&chatbot.Version, &chatbot.Source,
-			&chatbot.CreatedBy, &chatbot.CreatedAt, &chatbot.UpdatedAt,
-		)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		tenantID := database.TenantFromContext(ctx)
+		query := `
+			SELECT
+				id, name, namespace, description, code, original_code, is_bundled, bundle_error,
+				allowed_tables, allowed_operations, allowed_schemas, http_allowed_domains,
+				intent_rules, required_columns, default_table,
+				enabled, max_tokens, temperature, provider_id,
+				persist_conversations, conversation_ttl_hours, max_conversation_turns,
+				rate_limit_per_minute, daily_request_limit, daily_token_budget,
+				allow_unauthenticated, is_public, require_roles, response_language, disable_execution_logs,
+				mcp_tools, use_mcp_schema,
+				version, source, created_by, created_at, updated_at
+			FROM ai.chatbots
+			WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
+		`
+
+		args := []interface{}{tenantOrNil(tenantID)}
+
+		if enabledOnly {
+			query += " AND enabled = true"
+		}
+
+		query += " ORDER BY namespace, name"
+
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan chatbot row: %w", err)
+			return fmt.Errorf("failed to list chatbots: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			chatbot := &Chatbot{}
+			var intentRulesJSON, requiredColumnsJSON []byte
+			var defaultTable *string
+			var responseLanguage *string
+			err := rows.Scan(
+				&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
+				&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
+				&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
+				&intentRulesJSON, &requiredColumnsJSON, &defaultTable,
+				&chatbot.Enabled, &chatbot.MaxTokens, &chatbot.Temperature, &chatbot.ProviderID,
+				&chatbot.PersistConversations, &chatbot.ConversationTTLHours, &chatbot.MaxConversationTurns,
+				&chatbot.RateLimitPerMinute, &chatbot.DailyRequestLimit, &chatbot.DailyTokenBudget,
+				&chatbot.AllowUnauthenticated, &chatbot.IsPublic, &chatbot.RequireRoles, &responseLanguage, &chatbot.DisableExecutionLogs,
+				&chatbot.MCPTools, &chatbot.UseMCPSchema,
+				&chatbot.Version, &chatbot.Source,
+				&chatbot.CreatedBy, &chatbot.CreatedAt, &chatbot.UpdatedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to scan chatbot row: %w", err)
+			}
+
+			// Deserialize JSON fields
+			if len(intentRulesJSON) > 0 {
+				_ = json.Unmarshal(intentRulesJSON, &chatbot.IntentRules)
+			}
+			if len(requiredColumnsJSON) > 0 {
+				_ = json.Unmarshal(requiredColumnsJSON, &chatbot.RequiredColumns)
+			}
+			if defaultTable != nil {
+				chatbot.DefaultTable = *defaultTable
+			}
+			if responseLanguage != nil {
+				chatbot.ResponseLanguage = *responseLanguage
+			}
+
+			chatbot.PopulateDerivedFields()
+			chatbots = append(chatbots, chatbot)
 		}
 
-		// Deserialize JSON fields
-		if len(intentRulesJSON) > 0 {
-			_ = json.Unmarshal(intentRulesJSON, &chatbot.IntentRules)
-		}
-		if len(requiredColumnsJSON) > 0 {
-			_ = json.Unmarshal(requiredColumnsJSON, &chatbot.RequiredColumns)
-		}
-		if defaultTable != nil {
-			chatbot.DefaultTable = *defaultTable
-		}
-		if responseLanguage != nil {
-			chatbot.ResponseLanguage = *responseLanguage
-		}
-
-		chatbot.PopulateDerivedFields()
-		chatbots = append(chatbots, chatbot)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return chatbots, nil
@@ -465,69 +473,75 @@ func (s *Storage) ListChatbots(ctx context.Context, enabledOnly bool) ([]*Chatbo
 
 // ListChatbotsByNamespace lists chatbots filtered by namespace
 func (s *Storage) ListChatbotsByNamespace(ctx context.Context, namespace string) ([]*Chatbot, error) {
-	tenantID := database.TenantFromContext(ctx)
-
-	query := `
-		SELECT
-			id, name, namespace, description, code, original_code, is_bundled, bundle_error,
-			allowed_tables, allowed_operations, allowed_schemas, http_allowed_domains,
-			intent_rules, required_columns, default_table,
-			enabled, max_tokens, temperature, provider_id,
-			persist_conversations, conversation_ttl_hours, max_conversation_turns,
-			rate_limit_per_minute, daily_request_limit, daily_token_budget,
-			allow_unauthenticated, is_public, require_roles, response_language, disable_execution_logs,
-			mcp_tools, use_mcp_schema,
-			version, source, created_by, created_at, updated_at
-		FROM ai.chatbots
-		WHERE namespace = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
-		ORDER BY name
-	`
-
-	rows, err := s.db.Query(ctx, query, namespace, tenantOrNil(tenantID))
-	if err != nil {
-		return nil, fmt.Errorf("failed to list chatbots by namespace: %w", err)
-	}
-	defer rows.Close()
-
 	var chatbots []*Chatbot
-	for rows.Next() {
-		chatbot := &Chatbot{}
-		var intentRulesJSON, requiredColumnsJSON []byte
-		var defaultTable *string
-		var responseLanguage *string
-		err := rows.Scan(
-			&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
-			&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
-			&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
-			&intentRulesJSON, &requiredColumnsJSON, &defaultTable,
-			&chatbot.Enabled, &chatbot.MaxTokens, &chatbot.Temperature, &chatbot.ProviderID,
-			&chatbot.PersistConversations, &chatbot.ConversationTTLHours, &chatbot.MaxConversationTurns,
-			&chatbot.RateLimitPerMinute, &chatbot.DailyRequestLimit, &chatbot.DailyTokenBudget,
-			&chatbot.AllowUnauthenticated, &chatbot.IsPublic, &chatbot.RequireRoles, &responseLanguage, &chatbot.DisableExecutionLogs,
-			&chatbot.MCPTools, &chatbot.UseMCPSchema,
-			&chatbot.Version, &chatbot.Source,
-			&chatbot.CreatedBy, &chatbot.CreatedAt, &chatbot.UpdatedAt,
-		)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		tenantID := database.TenantFromContext(ctx)
+		query := `
+			SELECT
+				id, name, namespace, description, code, original_code, is_bundled, bundle_error,
+				allowed_tables, allowed_operations, allowed_schemas, http_allowed_domains,
+				intent_rules, required_columns, default_table,
+				enabled, max_tokens, temperature, provider_id,
+				persist_conversations, conversation_ttl_hours, max_conversation_turns,
+				rate_limit_per_minute, daily_request_limit, daily_token_budget,
+				allow_unauthenticated, is_public, require_roles, response_language, disable_execution_logs,
+				mcp_tools, use_mcp_schema,
+				version, source, created_by, created_at, updated_at
+			FROM ai.chatbots
+			WHERE namespace = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
+			ORDER BY name
+		`
+
+		rows, err := tx.Query(ctx, query, namespace, tenantOrNil(tenantID))
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan chatbot row: %w", err)
+			return fmt.Errorf("failed to list chatbots by namespace: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			chatbot := &Chatbot{}
+			var intentRulesJSON, requiredColumnsJSON []byte
+			var defaultTable *string
+			var responseLanguage *string
+			err := rows.Scan(
+				&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
+				&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
+				&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
+				&intentRulesJSON, &requiredColumnsJSON, &defaultTable,
+				&chatbot.Enabled, &chatbot.MaxTokens, &chatbot.Temperature, &chatbot.ProviderID,
+				&chatbot.PersistConversations, &chatbot.ConversationTTLHours, &chatbot.MaxConversationTurns,
+				&chatbot.RateLimitPerMinute, &chatbot.DailyRequestLimit, &chatbot.DailyTokenBudget,
+				&chatbot.AllowUnauthenticated, &chatbot.IsPublic, &chatbot.RequireRoles, &responseLanguage, &chatbot.DisableExecutionLogs,
+				&chatbot.MCPTools, &chatbot.UseMCPSchema,
+				&chatbot.Version, &chatbot.Source,
+				&chatbot.CreatedBy, &chatbot.CreatedAt, &chatbot.UpdatedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to scan chatbot row: %w", err)
+			}
+
+			// Deserialize JSON fields
+			if len(intentRulesJSON) > 0 {
+				_ = json.Unmarshal(intentRulesJSON, &chatbot.IntentRules)
+			}
+			if len(requiredColumnsJSON) > 0 {
+				_ = json.Unmarshal(requiredColumnsJSON, &chatbot.RequiredColumns)
+			}
+			if defaultTable != nil {
+				chatbot.DefaultTable = *defaultTable
+			}
+			if responseLanguage != nil {
+				chatbot.ResponseLanguage = *responseLanguage
+			}
+
+			chatbot.PopulateDerivedFields()
+			chatbots = append(chatbots, chatbot)
 		}
 
-		// Deserialize JSON fields
-		if len(intentRulesJSON) > 0 {
-			_ = json.Unmarshal(intentRulesJSON, &chatbot.IntentRules)
-		}
-		if len(requiredColumnsJSON) > 0 {
-			_ = json.Unmarshal(requiredColumnsJSON, &chatbot.RequiredColumns)
-		}
-		if defaultTable != nil {
-			chatbot.DefaultTable = *defaultTable
-		}
-		if responseLanguage != nil {
-			chatbot.ResponseLanguage = *responseLanguage
-		}
-
-		chatbot.PopulateDerivedFields()
-		chatbots = append(chatbots, chatbot)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return chatbots, nil
@@ -537,76 +551,82 @@ func (s *Storage) ListChatbotsByNamespace(ctx context.Context, namespace string)
 // Returns multiple chatbots if the name exists in multiple namespaces
 // Used for smart chatbot lookup when namespace is not specified
 func (s *Storage) FindChatbotsByName(ctx context.Context, name string, enabledOnly bool) ([]*Chatbot, error) {
-	tenantID := database.TenantFromContext(ctx)
-
-	query := `
-		SELECT
-			id, name, namespace, description, code, original_code, is_bundled, bundle_error,
-			allowed_tables, allowed_operations, allowed_schemas, http_allowed_domains,
-			intent_rules, required_columns, default_table,
-			enabled, max_tokens, temperature, provider_id,
-			persist_conversations, conversation_ttl_hours, max_conversation_turns,
-			rate_limit_per_minute, daily_request_limit, daily_token_budget,
-			allow_unauthenticated, is_public, require_roles, response_language, disable_execution_logs,
-			mcp_tools, use_mcp_schema,
-			version, source, created_by, created_at, updated_at
-		FROM ai.chatbots
-		WHERE name = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
-	`
-
-	args := []interface{}{name, tenantOrNil(tenantID)}
-
-	if enabledOnly {
-		query += " AND enabled = true"
-	}
-
-	query += " ORDER BY namespace"
-
-	rows, err := s.db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find chatbots by name: %w", err)
-	}
-	defer rows.Close()
-
 	var chatbots []*Chatbot
-	for rows.Next() {
-		chatbot := &Chatbot{}
-		var intentRulesJSON, requiredColumnsJSON []byte
-		var defaultTable *string
-		var responseLanguage *string
-		err := rows.Scan(
-			&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
-			&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
-			&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
-			&intentRulesJSON, &requiredColumnsJSON, &defaultTable,
-			&chatbot.Enabled, &chatbot.MaxTokens, &chatbot.Temperature, &chatbot.ProviderID,
-			&chatbot.PersistConversations, &chatbot.ConversationTTLHours, &chatbot.MaxConversationTurns,
-			&chatbot.RateLimitPerMinute, &chatbot.DailyRequestLimit, &chatbot.DailyTokenBudget,
-			&chatbot.AllowUnauthenticated, &chatbot.IsPublic, &chatbot.RequireRoles, &responseLanguage, &chatbot.DisableExecutionLogs,
-			&chatbot.MCPTools, &chatbot.UseMCPSchema,
-			&chatbot.Version, &chatbot.Source,
-			&chatbot.CreatedBy, &chatbot.CreatedAt, &chatbot.UpdatedAt,
-		)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		tenantID := database.TenantFromContext(ctx)
+		query := `
+			SELECT
+				id, name, namespace, description, code, original_code, is_bundled, bundle_error,
+				allowed_tables, allowed_operations, allowed_schemas, http_allowed_domains,
+				intent_rules, required_columns, default_table,
+				enabled, max_tokens, temperature, provider_id,
+				persist_conversations, conversation_ttl_hours, max_conversation_turns,
+				rate_limit_per_minute, daily_request_limit, daily_token_budget,
+				allow_unauthenticated, is_public, require_roles, response_language, disable_execution_logs,
+				mcp_tools, use_mcp_schema,
+				version, source, created_by, created_at, updated_at
+			FROM ai.chatbots
+			WHERE name = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
+		`
+
+		args := []interface{}{name, tenantOrNil(tenantID)}
+
+		if enabledOnly {
+			query += " AND enabled = true"
+		}
+
+		query += " ORDER BY namespace"
+
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan chatbot row: %w", err)
+			return fmt.Errorf("failed to find chatbots by name: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			chatbot := &Chatbot{}
+			var intentRulesJSON, requiredColumnsJSON []byte
+			var defaultTable *string
+			var responseLanguage *string
+			err := rows.Scan(
+				&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
+				&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
+				&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
+				&intentRulesJSON, &requiredColumnsJSON, &defaultTable,
+				&chatbot.Enabled, &chatbot.MaxTokens, &chatbot.Temperature, &chatbot.ProviderID,
+				&chatbot.PersistConversations, &chatbot.ConversationTTLHours, &chatbot.MaxConversationTurns,
+				&chatbot.RateLimitPerMinute, &chatbot.DailyRequestLimit, &chatbot.DailyTokenBudget,
+				&chatbot.AllowUnauthenticated, &chatbot.IsPublic, &chatbot.RequireRoles, &responseLanguage, &chatbot.DisableExecutionLogs,
+				&chatbot.MCPTools, &chatbot.UseMCPSchema,
+				&chatbot.Version, &chatbot.Source,
+				&chatbot.CreatedBy, &chatbot.CreatedAt, &chatbot.UpdatedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to scan chatbot row: %w", err)
+			}
+
+			// Deserialize JSON fields
+			if len(intentRulesJSON) > 0 {
+				_ = json.Unmarshal(intentRulesJSON, &chatbot.IntentRules)
+			}
+			if len(requiredColumnsJSON) > 0 {
+				_ = json.Unmarshal(requiredColumnsJSON, &chatbot.RequiredColumns)
+			}
+			if defaultTable != nil {
+				chatbot.DefaultTable = *defaultTable
+			}
+			if responseLanguage != nil {
+				chatbot.ResponseLanguage = *responseLanguage
+			}
+
+			chatbot.PopulateDerivedFields()
+			chatbots = append(chatbots, chatbot)
 		}
 
-		// Deserialize JSON fields
-		if len(intentRulesJSON) > 0 {
-			_ = json.Unmarshal(intentRulesJSON, &chatbot.IntentRules)
-		}
-		if len(requiredColumnsJSON) > 0 {
-			_ = json.Unmarshal(requiredColumnsJSON, &chatbot.RequiredColumns)
-		}
-		if defaultTable != nil {
-			chatbot.DefaultTable = *defaultTable
-		}
-		if responseLanguage != nil {
-			chatbot.ResponseLanguage = *responseLanguage
-		}
-
-		chatbot.PopulateDerivedFields()
-		chatbots = append(chatbots, chatbot)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return chatbots, nil
@@ -624,7 +644,7 @@ func (s *Storage) DeleteChatbotWithTenant(ctx context.Context, tenantID string, 
 	query := `DELETE FROM ai.chatbots WHERE id = $1`
 
 	var result pgconn.CommandTag
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		var execErr error
 		result, execErr = tx.Exec(ctx, query, id)
 		return execErr
@@ -714,7 +734,7 @@ func (s *Storage) CreateProviderWithTenant(ctx context.Context, tenantID string,
 	}
 	provider.UpdatedAt = time.Now()
 
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query,
 			provider.ID, provider.Name, provider.DisplayName, provider.ProviderType,
 			provider.IsDefault, provider.UseForEmbeddings, provider.EmbeddingModel, provider.Config, provider.Enabled, provider.CreatedBy,
@@ -759,7 +779,7 @@ func (s *Storage) UpdateProviderWithTenant(ctx context.Context, tenantID string,
 	provider.UpdatedAt = time.Now()
 
 	var result pgconn.CommandTag
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		var execErr error
 		result, execErr = tx.Exec(ctx, query,
 			provider.ID,
@@ -791,20 +811,20 @@ func (s *Storage) UpdateProviderWithTenant(ctx context.Context, tenantID string,
 
 // GetProvider retrieves a provider by ID
 func (s *Storage) GetProvider(ctx context.Context, id string) (*ProviderRecord, error) {
-	tenantID := database.TenantFromContext(ctx)
-
-	query := `
-		SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
-		FROM ai.providers
-		WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
-	`
-
 	provider := &ProviderRecord{}
-	err := s.db.QueryRow(ctx, query, id, tenantOrNil(tenantID)).Scan(
-		&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
-		&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
-		&provider.CreatedAt, &provider.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		tenantID := database.TenantFromContext(ctx)
+		query := `
+			SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
+			FROM ai.providers
+			WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
+		`
+		return tx.QueryRow(ctx, query, id, tenantOrNil(tenantID)).Scan(
+			&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
+			&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
+			&provider.CreatedAt, &provider.UpdatedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -826,20 +846,20 @@ func (s *Storage) GetProviderByName(ctx context.Context, name string) (*Provider
 		}
 	}
 
-	tenantID := database.TenantFromContext(ctx)
-
-	query := `
-		SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
-		FROM ai.providers
-		WHERE name = $1 AND enabled = true AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
-	`
-
 	provider := &ProviderRecord{}
-	err := s.db.QueryRow(ctx, query, name, tenantOrNil(tenantID)).Scan(
-		&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
-		&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
-		&provider.CreatedAt, &provider.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		tenantID := database.TenantFromContext(ctx)
+		query := `
+			SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
+			FROM ai.providers
+			WHERE name = $1 AND enabled = true AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
+		`
+		return tx.QueryRow(ctx, query, name, tenantOrNil(tenantID)).Scan(
+			&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
+			&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
+			&provider.CreatedAt, &provider.UpdatedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("provider not found: %s", name)
@@ -853,21 +873,21 @@ func (s *Storage) GetProviderByName(ctx context.Context, name string) (*Provider
 
 // GetDefaultProvider retrieves the default provider
 func (s *Storage) GetDefaultProvider(ctx context.Context) (*ProviderRecord, error) {
-	tenantID := database.TenantFromContext(ctx)
-
-	query := `
-		SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
-		FROM ai.providers
-		WHERE is_default = true AND enabled = true AND (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
-		LIMIT 1
-	`
-
 	provider := &ProviderRecord{}
-	err := s.db.QueryRow(ctx, query, tenantOrNil(tenantID)).Scan(
-		&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
-		&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
-		&provider.CreatedAt, &provider.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		tenantID := database.TenantFromContext(ctx)
+		query := `
+			SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
+			FROM ai.providers
+			WHERE is_default = true AND enabled = true AND (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
+			LIMIT 1
+		`
+		return tx.QueryRow(ctx, query, tenantOrNil(tenantID)).Scan(
+			&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
+			&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
+			&provider.CreatedAt, &provider.UpdatedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -1031,8 +1051,6 @@ func (s *Storage) buildConfigBasedProvider() *ProviderRecord {
 
 // ListProviders lists all AI providers
 func (s *Storage) ListProviders(ctx context.Context, enabledOnly bool) ([]*ProviderRecord, error) {
-	tenantID := database.TenantFromContext(ctx)
-
 	var providers []*ProviderRecord
 
 	// Check if config-based provider exists and should be included
@@ -1042,39 +1060,47 @@ func (s *Storage) ListProviders(ctx context.Context, enabledOnly bool) ([]*Provi
 	}
 
 	// Query database providers
-	query := `
-		SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
-		FROM ai.providers
-		WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
-	`
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		tenantID := database.TenantFromContext(ctx)
+		query := `
+			SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
+			FROM ai.providers
+			WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
+		`
 
-	args := []interface{}{tenantOrNil(tenantID)}
+		args := []interface{}{tenantOrNil(tenantID)}
 
-	if enabledOnly {
-		query += " AND enabled = true"
-	}
-
-	query += " ORDER BY is_default DESC, name"
-
-	rows, err := s.db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list providers: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		provider := &ProviderRecord{}
-		err := rows.Scan(
-			&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
-			&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
-			&provider.CreatedAt, &provider.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan provider row: %w", err)
+		if enabledOnly {
+			query += " AND enabled = true"
 		}
-		// Set ReadOnly to false for database providers
-		provider.ReadOnly = false
-		providers = append(providers, provider)
+
+		query += " ORDER BY is_default DESC, name"
+
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("failed to list providers: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			provider := &ProviderRecord{}
+			err := rows.Scan(
+				&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
+				&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
+				&provider.CreatedAt, &provider.UpdatedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to scan provider row: %w", err)
+			}
+			// Set ReadOnly to false for database providers
+			provider.ReadOnly = false
+			providers = append(providers, provider)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return providers, nil
@@ -1084,7 +1110,7 @@ func (s *Storage) ListProviders(ctx context.Context, enabledOnly bool) ([]*Provi
 func (s *Storage) SetDefaultProvider(ctx context.Context, id string) error {
 	tenantID := database.TenantFromContext(ctx)
 
-	return database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		// Clear existing default
 		_, err := tx.Exec(ctx, "UPDATE ai.providers SET is_default = false WHERE is_default = true")
 		if err != nil {
@@ -1118,7 +1144,7 @@ func (s *Storage) DeleteProviderWithTenant(ctx context.Context, tenantID string,
 	query := `DELETE FROM ai.providers WHERE id = $1`
 
 	var result pgconn.CommandTag
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		var execErr error
 		result, execErr = tx.Exec(ctx, query, id)
 		return execErr
@@ -1139,21 +1165,21 @@ func (s *Storage) DeleteProviderWithTenant(ctx context.Context, tenantID string,
 // GetEmbeddingProviderPreference returns the provider explicitly set for embeddings (if any)
 // Returns nil if no explicit preference is set (use default provider in auto mode)
 func (s *Storage) GetEmbeddingProviderPreference(ctx context.Context) (*ProviderRecord, error) {
-	tenantID := database.TenantFromContext(ctx)
-
-	query := `
-		SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
-		FROM ai.providers
-		WHERE use_for_embeddings = true AND enabled = true AND (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
-		LIMIT 1
-	`
-
 	provider := &ProviderRecord{}
-	err := s.db.QueryRow(ctx, query, tenantOrNil(tenantID)).Scan(
-		&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
-		&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
-		&provider.CreatedAt, &provider.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		tenantID := database.TenantFromContext(ctx)
+		query := `
+			SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
+			FROM ai.providers
+			WHERE use_for_embeddings = true AND enabled = true AND (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
+			LIMIT 1
+		`
+		return tx.QueryRow(ctx, query, tenantOrNil(tenantID)).Scan(
+			&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
+			&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
+			&provider.CreatedAt, &provider.UpdatedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		// No explicit preference set - return nil without error (auto mode)
@@ -1174,7 +1200,7 @@ func (s *Storage) GetEmbeddingProviderPreference(ctx context.Context) (*Provider
 func (s *Storage) SetEmbeddingProviderPreference(ctx context.Context, id string) error {
 	tenantID := database.TenantFromContext(ctx)
 
-	return database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		// Clear any existing embedding preference (set to NULL for auto mode)
 		_, err := tx.Exec(ctx, "UPDATE ai.providers SET use_for_embeddings = NULL WHERE use_for_embeddings = true")
 		if err != nil {
@@ -1534,7 +1560,7 @@ func (s *Storage) GetUserConversation(ctx context.Context, userID, conversationI
 func (s *Storage) DeleteUserConversation(ctx context.Context, userID, conversationID string) error {
 	tenantID := database.TenantFromContext(ctx)
 
-	return database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, `
 			UPDATE ai.conversations
 			SET status = 'deleted', updated_at = NOW()
@@ -1561,7 +1587,7 @@ func (s *Storage) DeleteUserConversation(ctx context.Context, userID, conversati
 func (s *Storage) UpdateConversationTitle(ctx context.Context, userID, conversationID, title string) error {
 	tenantID := database.TenantFromContext(ctx)
 
-	return database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, `
 			UPDATE ai.conversations
 			SET title = $3, updated_at = NOW()
@@ -1588,7 +1614,7 @@ func (s *Storage) UpdateConversationTitle(ctx context.Context, userID, conversat
 func (s *Storage) SetConversationTitle(ctx context.Context, conversationID, title string) error {
 	tenantID := database.TenantFromContext(ctx)
 
-	return database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			UPDATE ai.conversations
 			SET title = $2, updated_at = NOW()
@@ -1600,6 +1626,12 @@ func (s *Storage) SetConversationTitle(ctx context.Context, conversationID, titl
 
 		return nil
 	})
+}
+
+// withTenant executes fn inside a transaction with the tenant-aware role set via RLS.
+func (s *Storage) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tenantID := database.TenantFromContext(ctx)
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
 }
 
 // tenantOrNil converts a tenant ID string to a value suitable for SQL queries.

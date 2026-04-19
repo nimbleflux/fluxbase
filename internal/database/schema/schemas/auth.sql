@@ -4316,3 +4316,39 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhooks TO service_role;
 
+--
+-- Name: auth; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA auth TO tenant_service;
+
+--
+-- Name: webhooks; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.webhooks TO tenant_service;
+
+--
+-- Name: webhook_deliveries; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.webhook_deliveries TO tenant_service;
+
+--
+-- Name: webhook_events; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.webhook_events TO tenant_service;
+
+--
+-- Name: increment_webhook_table_count(text, text); Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT EXECUTE ON FUNCTION auth.increment_webhook_table_count(text, text) TO tenant_service;
+
+--
+-- Name: decrement_webhook_table_count(text, text); Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT EXECUTE ON FUNCTION auth.decrement_webhook_table_count(text, text) TO tenant_service;
+

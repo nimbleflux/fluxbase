@@ -142,7 +142,7 @@ func (s *Server) GetTablesWithRLS(c fiber.Ctx) error {
 		JOIN pg_namespace n ON n.oid = c.relnamespace
 		LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
 		WHERE n.nspname = $1
-		AND c.relkind = 'r'
+		AND c.relkind IN ('r', 'f')
 		AND c.relname NOT LIKE 'pg_%'
 		AND d.objid IS NULL
 		ORDER BY c.relname
@@ -513,7 +513,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 		JOIN pg_namespace n ON n.oid = c.relnamespace
 		LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
 		WHERE n.nspname = 'public'
-		AND c.relkind = 'r'
+		AND c.relkind IN ('r', 'f')
 		AND NOT c.relrowsecurity
 		AND c.relname NOT LIKE 'pg_%'
 		AND c.relname NOT LIKE '_pg_%'
@@ -546,7 +546,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 		JOIN pg_namespace n ON n.oid = c.relnamespace
 		LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
 		WHERE c.relrowsecurity = true
-		AND c.relkind = 'r'
+		AND c.relkind IN ('r', 'f')
 		AND NOT EXISTS (
 			SELECT 1 FROM pg_policies p
 			WHERE p.schemaname = n.nspname AND p.tablename = c.relname
@@ -671,7 +671,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 		JOIN pg_namespace pn ON pn.oid = pc.relnamespace AND pn.nspname = t.table_schema
 		LEFT JOIN pg_depend pd ON pd.objid = pc.oid AND pd.deptype = 'e'
 		WHERE t.table_schema = 'public'
-		AND t.table_type = 'BASE TABLE'
+		AND t.table_type IN ('BASE TABLE', 'FOREIGN TABLE')
 		AND NOT pc.relrowsecurity
 		AND c.column_name ~* '(password|secret|token|api_key|apikey|private_key|credit_card|ssn|social_security)'
 		AND pd.objid IS NULL

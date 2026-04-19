@@ -333,7 +333,7 @@ func (s *WebhookService) Create(ctx context.Context, webhook *Webhook) error {
 	`
 
 	tenantID := database.TenantFromContext(ctx)
-	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			webhook.Name,
 			webhook.Description,
@@ -454,7 +454,7 @@ func (s *WebhookService) Get(ctx context.Context, id uuid.UUID) (*Webhook, error
 			FROM auth.webhooks
 			WHERE id = $1 AND tenant_id = $2
 		`
-		err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 			return tx.QueryRow(ctx, query, id, tenantID).Scan(
 				&webhook.ID,
 				&webhook.Name,
@@ -574,7 +574,7 @@ func (s *WebhookService) Update(ctx context.Context, id uuid.UUID, webhook *Webh
 	`
 
 	tenantID := database.TenantFromContext(ctx)
-	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, query,
 			webhook.Name,
 			webhook.Description,
@@ -669,7 +669,7 @@ func (s *WebhookService) Delete(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM auth.webhooks WHERE id = $1`
 
 	tenantID := database.TenantFromContext(ctx)
-	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, query, id)
 		if err != nil {
 			return err
@@ -1005,7 +1005,7 @@ func (s *WebhookService) ListDeliveries(ctx context.Context, webhookID uuid.UUID
 
 	var deliveries []*WebhookDelivery
 	tenantID := database.TenantFromContext(ctx)
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, webhookID, limit)
 		if err != nil {
 			return err
