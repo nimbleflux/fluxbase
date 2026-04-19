@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/webhook"
 )
 
@@ -107,7 +108,7 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 		}
 	}
 
-	err := h.webhookService.Create(c.RequestCtx(), &req)
+	err := h.webhookService.Create(middleware.CtxWithTenant(c), &req)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -120,7 +121,7 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 
 // ListWebhooks lists all webhooks
 func (h *WebhookHandler) ListWebhooks(c fiber.Ctx) error {
-	webhooks, err := h.webhookService.List(c.RequestCtx())
+	webhooks, err := h.webhookService.List(middleware.CtxWithTenant(c))
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -145,7 +146,7 @@ func (h *WebhookHandler) GetWebhook(c fiber.Ctx) error {
 		})
 	}
 
-	wh, err := h.webhookService.Get(c.RequestCtx(), id)
+	wh, err := h.webhookService.Get(middleware.CtxWithTenant(c), id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Webhook not found",
@@ -172,7 +173,7 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 		})
 	}
 
-	err = h.webhookService.Update(c.RequestCtx(), id, &req)
+	err = h.webhookService.Update(middleware.CtxWithTenant(c), id, &req)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -193,7 +194,7 @@ func (h *WebhookHandler) DeleteWebhook(c fiber.Ctx) error {
 		})
 	}
 
-	err = h.webhookService.Delete(c.RequestCtx(), id)
+	err = h.webhookService.Delete(middleware.CtxWithTenant(c), id)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -214,7 +215,7 @@ func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
 		})
 	}
 
-	wh, err := h.webhookService.Get(c.RequestCtx(), id)
+	wh, err := h.webhookService.Get(middleware.CtxWithTenant(c), id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Webhook not found",
@@ -230,7 +231,7 @@ func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
 		Timestamp: c.RequestCtx().Time(),
 	}
 
-	err = h.webhookService.Deliver(c.RequestCtx(), wh, testPayload)
+	err = h.webhookService.Deliver(middleware.CtxWithTenant(c), wh, testPayload)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -258,7 +259,7 @@ func (h *WebhookHandler) ListDeliveries(c fiber.Ctx) error {
 		limit = parsedLimit
 	}
 
-	deliveries, err := h.webhookService.ListDeliveries(c.RequestCtx(), id, limit)
+	deliveries, err := h.webhookService.ListDeliveries(middleware.CtxWithTenant(c), id, limit)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),

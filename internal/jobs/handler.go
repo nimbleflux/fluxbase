@@ -16,6 +16,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/logging"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 /*
@@ -327,7 +328,7 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 		// Verify user exists in auth.users
 		var exists bool
 		checkQuery := "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)"
-		if err := h.storage.conn.Pool().QueryRow(c.RequestCtx(), checkQuery, parsed).Scan(&exists); err != nil || !exists {
+		if err := h.storage.conn.Pool().QueryRow(middleware.CtxWithTenant(c), checkQuery, parsed).Scan(&exists); err != nil || !exists {
 			return c.Status(400).JSON(fiber.Map{
 				"error": "User not found in on_behalf_of.user_id",
 			})
@@ -382,7 +383,7 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 					// Dashboard admins are in platform.users, not auth.users
 					var exists bool
 					checkQuery := "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)"
-					if err := h.storage.conn.Pool().QueryRow(c.RequestCtx(), checkQuery, parsed).Scan(&exists); err == nil && exists {
+					if err := h.storage.conn.Pool().QueryRow(middleware.CtxWithTenant(c), checkQuery, parsed).Scan(&exists); err == nil && exists {
 						userID = &parsed
 					}
 					// If user doesn't exist in auth.users, leave userID as nil
@@ -409,9 +410,9 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 	var jobFunction *JobFunction
 	var err error
 	if req.Namespace != "" {
-		jobFunction, err = h.storage.GetJobFunction(c.RequestCtx(), req.Namespace, req.JobName)
+		jobFunction, err = h.storage.GetJobFunction(middleware.CtxWithTenant(c), req.Namespace, req.JobName)
 	} else {
-		jobFunction, err = h.storage.GetJobFunctionByName(c.RequestCtx(), req.JobName)
+		jobFunction, err = h.storage.GetJobFunctionByName(middleware.CtxWithTenant(c), req.JobName)
 	}
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{
@@ -474,7 +475,7 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 		ScheduledAt:            req.Scheduled,
 	}
 
-	if err := h.storage.CreateJob(c.RequestCtx(), job); err != nil {
+	if err := h.storage.CreateJob(middleware.CtxWithTenant(c), job); err != nil {
 		reqID := getRequestID(c)
 		log.Error().
 			Err(err).
@@ -504,7 +505,7 @@ func (h *Handler) GetJob(c fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid job ID"})
 	}
 
-	job, err := h.storage.GetJob(c.RequestCtx(), jobID)
+	job, err := h.storage.GetJob(middleware.CtxWithTenant(c), jobID)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Job not found"})
 	}
@@ -523,7 +524,7 @@ func (h *Handler) GetJobAdmin(c fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid job ID"})
 	}
 
-	job, err := h.storage.GetJobByIDAdmin(c.RequestCtx(), jobID)
+	job, err := h.storage.GetJobByIDAdmin(middleware.CtxWithTenant(c), jobID)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Job not found"})
 	}
@@ -551,7 +552,7 @@ func (h *Handler) GetJobLogs(c fiber.Ctx) error {
 	}
 
 	// Query logs from central logging using job ID as execution ID
-	entries, err := h.loggingService.GetExecutionLogs(c.RequestCtx(), jobID.String(), afterLine)
+	entries, err := h.loggingService.GetExecutionLogs(middleware.CtxWithTenant(c), jobID.String(), afterLine)
 	if err != nil {
 		log.Error().Err(err).Str("job_id", jobID.String()).Msg("Failed to get job logs")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -580,7 +581,7 @@ func (h *Handler) GetJobLogsUser(c fiber.Ctx) error {
 	}
 
 	// Get job to verify ownership
-	job, err := h.storage.GetJob(c.RequestCtx(), jobID)
+	job, err := h.storage.GetJob(middleware.CtxWithTenant(c), jobID)
 	if err != nil {
 		log.Error().Err(err).Str("job_id", jobID.String()).Msg("Failed to get job")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -611,7 +612,7 @@ func (h *Handler) GetJobLogsUser(c fiber.Ctx) error {
 	}
 
 	// Query logs from central logging using job ID as execution ID
-	entries, err := h.loggingService.GetExecutionLogs(c.RequestCtx(), jobID.String(), afterLine)
+	entries, err := h.loggingService.GetExecutionLogs(middleware.CtxWithTenant(c), jobID.String(), afterLine)
 	if err != nil {
 		log.Error().Err(err).Str("job_id", jobID.String()).Msg("Failed to get job logs")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -654,7 +655,7 @@ func (h *Handler) ListJobs(c fiber.Ctx) error {
 	filters.Limit = &limit
 	filters.Offset = &offset
 
-	jobs, err := h.storage.ListJobs(c.RequestCtx(), filters)
+	jobs, err := h.storage.ListJobs(middleware.CtxWithTenant(c), filters)
 	if err != nil {
 		reqID := getRequestID(c)
 		log.Error().
@@ -688,7 +689,7 @@ func (h *Handler) CancelJob(c fiber.Ctx) error {
 	}
 
 	// Get job to check status
-	job, err := h.storage.GetJob(c.RequestCtx(), jobID)
+	job, err := h.storage.GetJob(middleware.CtxWithTenant(c), jobID)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Job not found"})
 	}
@@ -701,7 +702,7 @@ func (h *Handler) CancelJob(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.storage.CancelJob(c.RequestCtx(), jobID); err != nil {
+	if err := h.storage.CancelJob(middleware.CtxWithTenant(c), jobID); err != nil {
 		reqID := getRequestID(c)
 		log.Error().
 			Err(err).
@@ -733,7 +734,7 @@ func (h *Handler) RetryJob(c fiber.Ctx) error {
 	}
 
 	// Get job to check status
-	job, err := h.storage.GetJob(c.RequestCtx(), jobID)
+	job, err := h.storage.GetJob(middleware.CtxWithTenant(c), jobID)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Job not found"})
 	}
@@ -746,7 +747,7 @@ func (h *Handler) RetryJob(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.storage.RequeueJob(c.RequestCtx(), jobID); err != nil {
+	if err := h.storage.RequeueJob(middleware.CtxWithTenant(c), jobID); err != nil {
 		reqID := getRequestID(c)
 		log.Error().
 			Err(err).
@@ -773,7 +774,7 @@ func (h *Handler) CancelJobAdmin(c fiber.Ctx) error {
 	}
 
 	// Get job to check status (admin access)
-	job, err := h.storage.GetJobByIDAdmin(c.RequestCtx(), jobID)
+	job, err := h.storage.GetJobByIDAdmin(middleware.CtxWithTenant(c), jobID)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Job not found"})
 	}
@@ -786,7 +787,7 @@ func (h *Handler) CancelJobAdmin(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.storage.CancelJob(c.RequestCtx(), jobID); err != nil {
+	if err := h.storage.CancelJob(middleware.CtxWithTenant(c), jobID); err != nil {
 		reqID := getRequestID(c)
 		log.Error().
 			Err(err).
@@ -818,7 +819,7 @@ func (h *Handler) RetryJobAdmin(c fiber.Ctx) error {
 	}
 
 	// Get job to check status (admin access)
-	job, err := h.storage.GetJobByIDAdmin(c.RequestCtx(), jobID)
+	job, err := h.storage.GetJobByIDAdmin(middleware.CtxWithTenant(c), jobID)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Job not found"})
 	}
@@ -831,7 +832,7 @@ func (h *Handler) RetryJobAdmin(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.storage.RequeueJob(c.RequestCtx(), jobID); err != nil {
+	if err := h.storage.RequeueJob(middleware.CtxWithTenant(c), jobID); err != nil {
 		reqID := getRequestID(c)
 		log.Error().
 			Err(err).
@@ -859,7 +860,7 @@ func (h *Handler) ResubmitJobAdmin(c fiber.Ctx) error {
 	}
 
 	// Create new job based on the original
-	newJob, err := h.storage.ResubmitJob(c.RequestCtx(), jobID)
+	newJob, err := h.storage.ResubmitJob(middleware.CtxWithTenant(c), jobID)
 	if err != nil {
 		reqID := getRequestID(c)
 		log.Error().
@@ -922,7 +923,7 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 		namespace = "default"
 	}
 
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Get user ID from context (if authenticated)
 	var createdBy *uuid.UUID
@@ -1248,7 +1249,7 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 
 // ListNamespaces lists all unique namespaces that have job functions (Admin only)
 func (h *Handler) ListNamespaces(c fiber.Ctx) error {
-	namespaces, err := h.storage.ListJobNamespaces(c.RequestCtx())
+	namespaces, err := h.storage.ListJobNamespaces(middleware.CtxWithTenant(c))
 	if err != nil {
 		reqID := getRequestID(c)
 		log.Error().
@@ -1279,10 +1280,10 @@ func (h *Handler) ListJobFunctions(c fiber.Ctx) error {
 
 	if namespace != "" {
 		// If namespace is specified, list functions in that namespace
-		functions, err = h.storage.ListJobFunctions(c.RequestCtx(), namespace)
+		functions, err = h.storage.ListJobFunctions(middleware.CtxWithTenant(c), namespace)
 	} else {
 		// Otherwise, list all job functions across all namespaces
-		functions, err = h.storage.ListAllJobFunctions(c.RequestCtx())
+		functions, err = h.storage.ListAllJobFunctions(middleware.CtxWithTenant(c))
 	}
 
 	if err != nil {
@@ -1306,7 +1307,7 @@ func (h *Handler) GetJobFunction(c fiber.Ctx) error {
 	namespace := c.Params("namespace")
 	name := c.Params("name")
 
-	function, err := h.storage.GetJobFunction(c.RequestCtx(), namespace, name)
+	function, err := h.storage.GetJobFunction(middleware.CtxWithTenant(c), namespace, name)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Job function not found"})
 	}
@@ -1320,7 +1321,7 @@ func (h *Handler) UpdateJobFunction(c fiber.Ctx) error {
 	name := c.Params("name")
 
 	// Get existing function
-	fn, err := h.storage.GetJobFunction(c.RequestCtx(), namespace, name)
+	fn, err := h.storage.GetJobFunction(middleware.CtxWithTenant(c), namespace, name)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Job function not found"})
 	}
@@ -1339,7 +1340,7 @@ func (h *Handler) UpdateJobFunction(c fiber.Ctx) error {
 	}
 
 	// Save changes
-	if err := h.storage.UpdateJobFunction(c.RequestCtx(), fn); err != nil {
+	if err := h.storage.UpdateJobFunction(middleware.CtxWithTenant(c), fn); err != nil {
 		reqID := getRequestID(c)
 		log.Error().
 			Err(err).
@@ -1368,7 +1369,7 @@ func (h *Handler) DeleteJobFunction(c fiber.Ctx) error {
 	namespace := c.Params("namespace")
 	name := c.Params("name")
 
-	if err := h.storage.DeleteJobFunction(c.RequestCtx(), namespace, name); err != nil {
+	if err := h.storage.DeleteJobFunction(middleware.CtxWithTenant(c), namespace, name); err != nil {
 		reqID := getRequestID(c)
 		log.Error().
 			Err(err).
@@ -1398,7 +1399,7 @@ func (h *Handler) GetJobStats(c fiber.Ctx) error {
 		namespacePtr = &namespace
 	}
 
-	stats, err := h.storage.GetJobStats(c.RequestCtx(), namespacePtr)
+	stats, err := h.storage.GetJobStats(middleware.CtxWithTenant(c), namespacePtr)
 	if err != nil {
 		reqID := getRequestID(c)
 		log.Error().
@@ -1417,7 +1418,7 @@ func (h *Handler) GetJobStats(c fiber.Ctx) error {
 
 // ListWorkers lists all workers (Admin only)
 func (h *Handler) ListWorkers(c fiber.Ctx) error {
-	workers, err := h.storage.ListWorkers(c.RequestCtx())
+	workers, err := h.storage.ListWorkers(middleware.CtxWithTenant(c))
 	if err != nil {
 		reqID := getRequestID(c)
 		log.Error().
@@ -1442,7 +1443,7 @@ func (h *Handler) TerminateJob(c fiber.Ctx) error {
 	}
 
 	// Get job to check status (use service role context to bypass RLS)
-	job, err := h.storage.GetJobByIDAdmin(c.RequestCtx(), jobID)
+	job, err := h.storage.GetJobByIDAdmin(middleware.CtxWithTenant(c), jobID)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Job not found"})
 	}
@@ -1456,7 +1457,7 @@ func (h *Handler) TerminateJob(c fiber.Ctx) error {
 	}
 
 	// Cancel the job in database
-	if err := h.storage.CancelJob(c.RequestCtx(), jobID); err != nil {
+	if err := h.storage.CancelJob(middleware.CtxWithTenant(c), jobID); err != nil {
 		reqID := getRequestID(c)
 		log.Error().
 			Err(err).
@@ -1520,7 +1521,7 @@ func (h *Handler) ListAllJobs(c fiber.Ctx) error {
 	filters.Offset = &offset
 
 	// Use admin method to bypass RLS
-	jobs, err := h.storage.ListJobsAdmin(c.RequestCtx(), filters)
+	jobs, err := h.storage.ListJobsAdmin(middleware.CtxWithTenant(c), filters)
 	if err != nil {
 		reqID := getRequestID(c)
 		log.Error().

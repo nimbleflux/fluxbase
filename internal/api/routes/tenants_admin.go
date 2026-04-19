@@ -18,6 +18,7 @@ type TenantsAdminDeps struct {
 	UpdateTenant              fiber.Handler
 	DeleteTenant              fiber.Handler
 	MigrateTenant             fiber.Handler
+	RepairTenant              fiber.Handler
 	ListAdmins                fiber.Handler
 	AssignAdmin               fiber.Handler
 	RemoveAdmin               fiber.Handler

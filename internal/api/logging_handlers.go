@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/nimbleflux/fluxbase/internal/logging"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
@@ -117,7 +118,7 @@ func (h *LoggingHandler) QueryLogs(c fiber.Ctx) error {
 	opts.HideStaticAssets = c.Query("hide_static_assets") == "true"
 
 	// Query logs
-	result, err := h.loggingService.Query(c.RequestCtx(), opts)
+	result, err := h.loggingService.Query(middleware.CtxWithTenant(c), opts)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -165,7 +166,7 @@ func (h *LoggingHandler) GetExecutionLogs(c fiber.Ctx) error {
 		}
 	}
 
-	entries, err := h.loggingService.GetExecutionLogs(c.RequestCtx(), executionID, afterLine)
+	entries, err := h.loggingService.GetExecutionLogs(middleware.CtxWithTenant(c), executionID, afterLine)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -195,7 +196,7 @@ func (h *LoggingHandler) GetLogStats(c fiber.Ctx) error {
 		})
 	}
 
-	stats, err := h.loggingService.Stats(c.RequestCtx())
+	stats, err := h.loggingService.Stats(middleware.CtxWithTenant(c))
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -222,7 +223,7 @@ func (h *LoggingHandler) FlushLogs(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.loggingService.Flush(c.RequestCtx()); err != nil {
+	if err := h.loggingService.Flush(middleware.CtxWithTenant(c)); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -285,7 +286,7 @@ func (h *LoggingHandler) GenerateTestLogs(c fiber.Ctx) error {
 	}
 
 	// Log each test entry
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	for _, logEntry := range testLogs {
 		h.loggingService.Log(ctx, logEntry)
 	}

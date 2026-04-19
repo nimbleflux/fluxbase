@@ -393,19 +393,26 @@ func (s *Storage) DeleteProcedureByNameWithTenant(ctx context.Context, tenantID 
 func (s *Storage) ListNamespaces(ctx context.Context) ([]string, error) {
 	query := `SELECT DISTINCT namespace FROM rpc.procedures ORDER BY namespace ASC`
 
-	rows, err := s.db.Pool().Query(ctx, query)
+	tenantID := database.TenantFromContext(ctx)
+	var namespaces []string
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var ns string
+			if scanErr := rows.Scan(&ns); scanErr != nil {
+				return scanErr
+			}
+			namespaces = append(namespaces, ns)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list namespaces: %w", err)
-	}
-	defer rows.Close()
-
-	var namespaces []string
-	for rows.Next() {
-		var ns string
-		if err := rows.Scan(&ns); err != nil {
-			return nil, fmt.Errorf("failed to scan namespace: %w", err)
-		}
-		namespaces = append(namespaces, ns)
 	}
 
 	return namespaces, nil
@@ -423,25 +430,31 @@ func (s *Storage) ListScheduledProcedures(ctx context.Context) ([]*Procedure, er
 		ORDER BY namespace ASC, name ASC
 	`
 
-	rows, err := s.db.Pool().Query(ctx, query)
+	tenantID := database.TenantFromContext(ctx)
+	var procedures []*Procedure
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			proc := &Procedure{}
+			if scanErr := rows.Scan(
+				&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
+				&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
+				&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
+				&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
+			); scanErr != nil {
+				return scanErr
+			}
+			procedures = append(procedures, proc)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list scheduled procedures: %w", err)
-	}
-	defer rows.Close()
-
-	var procedures []*Procedure
-	for rows.Next() {
-		proc := &Procedure{}
-		err := rows.Scan(
-			&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
-			&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
-			&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
-			&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan procedure: %w", err)
-		}
-		procedures = append(procedures, proc)
 	}
 
 	return procedures, nil
@@ -474,12 +487,16 @@ func (s *Storage) CreateExecution(ctx context.Context, exec *Execution) error {
 		exec.CreatedAt = time.Now()
 	}
 
-	_, err := s.db.Exec(ctx, query,
-		exec.ID, exec.ProcedureID, exec.ProcedureName, exec.Namespace, exec.Status,
-		exec.InputParams, exec.Result, exec.ErrorMessage, exec.RowsReturned, exec.DurationMs,
-		exec.UserID, exec.UserRole, exec.UserEmail, exec.IsAsync,
-		exec.CreatedAt, exec.StartedAt, exec.CompletedAt,
-	)
+	tenantID := database.TenantFromContext(ctx)
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query,
+			exec.ID, exec.ProcedureID, exec.ProcedureName, exec.Namespace, exec.Status,
+			exec.InputParams, exec.Result, exec.ErrorMessage, exec.RowsReturned, exec.DurationMs,
+			exec.UserID, exec.UserRole, exec.UserEmail, exec.IsAsync,
+			exec.CreatedAt, exec.StartedAt, exec.CompletedAt,
+		)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create execution: %w", err)
 	}
@@ -501,16 +518,22 @@ func (s *Storage) UpdateExecution(ctx context.Context, exec *Execution) error {
 		WHERE id = $1
 	`
 
-	result, err := s.db.Exec(ctx, query,
-		exec.ID,
-		exec.Status,
-		exec.Result,
-		exec.ErrorMessage,
-		exec.RowsReturned,
-		exec.DurationMs,
-		exec.StartedAt,
-		exec.CompletedAt,
-	)
+	tenantID := database.TenantFromContext(ctx)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query,
+			exec.ID,
+			exec.Status,
+			exec.Result,
+			exec.ErrorMessage,
+			exec.RowsReturned,
+			exec.DurationMs,
+			exec.StartedAt,
+			exec.CompletedAt,
+		)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to update execution: %w", err)
 	}
@@ -531,7 +554,13 @@ func (s *Storage) CancelExecution(ctx context.Context, id string) error {
 		WHERE id = $1 AND status IN ($3, $4)
 	`
 
-	result, err := s.db.Exec(ctx, query, id, StatusCancelled, StatusPending, StatusRunning)
+	tenantID := database.TenantFromContext(ctx)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, id, StatusCancelled, StatusPending, StatusRunning)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to cancel execution: %w", err)
 	}
@@ -554,13 +583,16 @@ func (s *Storage) GetExecution(ctx context.Context, id string) (*Execution, erro
 		WHERE id = $1
 	`
 
+	tenantID := database.TenantFromContext(ctx)
 	exec := &Execution{}
-	err := s.db.Pool().QueryRow(ctx, query, id).Scan(
-		&exec.ID, &exec.ProcedureID, &exec.ProcedureName, &exec.Namespace, &exec.Status,
-		&exec.InputParams, &exec.Result, &exec.ErrorMessage, &exec.RowsReturned, &exec.DurationMs,
-		&exec.UserID, &exec.UserRole, &exec.UserEmail, &exec.IsAsync,
-		&exec.CreatedAt, &exec.StartedAt, &exec.CompletedAt,
-	)
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id).Scan(
+			&exec.ID, &exec.ProcedureID, &exec.ProcedureName, &exec.Namespace, &exec.Status,
+			&exec.InputParams, &exec.Result, &exec.ErrorMessage, &exec.RowsReturned, &exec.DurationMs,
+			&exec.UserID, &exec.UserRole, &exec.UserEmail, &exec.IsAsync,
+			&exec.CreatedAt, &exec.StartedAt, &exec.CompletedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -624,25 +656,31 @@ func (s *Storage) ListExecutions(ctx context.Context, opts ListExecutionsOptions
 		args = append(args, opts.Offset)
 	}
 
-	rows, err := s.db.Pool().Query(ctx, query, args...)
+	tenantID := database.TenantFromContext(ctx)
+	var executions []*Execution
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, args...)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			exec := &Execution{}
+			if scanErr := rows.Scan(
+				&exec.ID, &exec.ProcedureID, &exec.ProcedureName, &exec.Namespace, &exec.Status,
+				&exec.InputParams, &exec.Result, &exec.ErrorMessage, &exec.RowsReturned, &exec.DurationMs,
+				&exec.UserID, &exec.UserRole, &exec.UserEmail, &exec.IsAsync,
+				&exec.CreatedAt, &exec.StartedAt, &exec.CompletedAt,
+			); scanErr != nil {
+				return scanErr
+			}
+			executions = append(executions, exec)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list executions: %w", err)
-	}
-	defer rows.Close()
-
-	var executions []*Execution
-	for rows.Next() {
-		exec := &Execution{}
-		err := rows.Scan(
-			&exec.ID, &exec.ProcedureID, &exec.ProcedureName, &exec.Namespace, &exec.Status,
-			&exec.InputParams, &exec.Result, &exec.ErrorMessage, &exec.RowsReturned, &exec.DurationMs,
-			&exec.UserID, &exec.UserRole, &exec.UserEmail, &exec.IsAsync,
-			&exec.CreatedAt, &exec.StartedAt, &exec.CompletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan execution: %w", err)
-		}
-		executions = append(executions, exec)
 	}
 
 	return executions, nil

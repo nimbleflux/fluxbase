@@ -56,6 +56,10 @@ type CreateTenantRequest struct {
 	Name     string                 `json:"name" validate:"required,min=1,max=255"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 
+	// Database selection
+	DBMode string  `json:"db_mode,omitempty"` // "auto" (default) or "existing"
+	DBName *string `json:"db_name,omitempty"` // Required when db_mode is "existing"
+
 	// Key generation
 	AutoGenerateKeys bool `json:"auto_generate_keys"` // default: true
 
@@ -970,4 +974,29 @@ func (h *TenantHandler) DeleteStoredSchema(c fiber.Ctx) error {
 	log.Info().Str("tenant_id", tenantID).Str("tenant_slug", t.Slug).Msg("Tenant stored schema deleted")
 
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// RepairTenant re-runs schema application and FDW setup for an existing tenant.
+func (h *TenantHandler) RepairTenant(c fiber.Ctx) error {
+	tenantID := c.Params("id")
+	if tenantID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "Tenant ID is required")
+	}
+
+	t, err := h.Storage.GetTenant(c.Context(), tenantID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+	}
+
+	if t.UsesMainDatabase() {
+		return fiber.NewError(fiber.StatusBadRequest, "Cannot repair default tenant (uses main database)")
+	}
+
+	if err := h.Manager.RepairTenant(c.Context(), t); err != nil {
+		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to repair tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to repair tenant: %s", err.Error()))
+	}
+
+	log.Info().Str("tenant_id", tenantID).Msg("Tenant repaired successfully")
+	return c.JSON(fiber.Map{"message": "Tenant repaired successfully"})
 }

@@ -23,8 +23,12 @@ import {
   DialogHeader,
 } from "@/components/ui/dialog";
 import { instanceSettingsApi } from "@/lib/api";
+import { requireInstanceAdmin } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/instance-settings/")({
+  beforeLoad: () => {
+    requireInstanceAdmin();
+  },
   component: InstanceSettingsPage,
 });
 

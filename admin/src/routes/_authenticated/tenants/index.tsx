@@ -23,6 +23,7 @@ import {
   type UpdateTenantRequest as UpdateTenantReq,
   type CreateTenantResponse,
 } from "@/lib/api";
+import { requireInstanceAdmin } from "@/lib/route-guards";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,6 +65,9 @@ import {
 } from "@/components/ui/table";
 
 export const Route = createFileRoute("/_authenticated/tenants/")({
+  beforeLoad: () => {
+    requireInstanceAdmin();
+  },
   component: TenantsPage,
 });
 

@@ -19,6 +19,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/logging"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/ratelimit"
 	"github.com/nimbleflux/fluxbase/internal/runtime"
 	"github.com/nimbleflux/fluxbase/internal/secrets"
@@ -285,7 +286,7 @@ func (h *Handler) checkRateLimit(c fiber.Ctx, fn *EdgeFunction) error {
 		}
 
 		key := baseKey + check.suffix
-		result, err := ratelimit.Check(c.RequestCtx(), store, key, int64(*check.limit), check.window)
+		result, err := ratelimit.Check(middleware.CtxWithTenant(c), store, key, int64(*check.limit), check.window)
 		if err != nil {
 			// Fail open on rate limit errors
 			log.Error().Err(err).Str("key", key).Msg("Rate limit check failed")
@@ -470,10 +471,10 @@ func (h *Handler) CreateFunction(c fiber.Ctx) error {
 
 			if hasSharedImports {
 				// Load all shared modules from database
-				sharedModules, err := h.storage.ListSharedModules(c.RequestCtx())
+				sharedModules, err := h.storage.ListSharedModules(middleware.CtxWithTenant(c))
 				if err != nil {
 					log.Warn().Err(err).Msg("Failed to load shared modules, proceeding with regular bundle")
-					result, bundleErr = bundler.Bundle(c.RequestCtx(), req.Code)
+					result, bundleErr = bundler.Bundle(middleware.CtxWithTenant(c), req.Code)
 				} else {
 					// Build map of shared module paths to content
 					sharedModulesMap := make(map[string]string)
@@ -483,11 +484,11 @@ func (h *Handler) CreateFunction(c fiber.Ctx) error {
 
 					// Bundle with shared modules (no supporting files for now)
 					supportingFiles := make(map[string]string)
-					result, bundleErr = bundler.BundleWithFiles(c.RequestCtx(), req.Code, supportingFiles, sharedModulesMap)
+					result, bundleErr = bundler.BundleWithFiles(middleware.CtxWithTenant(c), req.Code, supportingFiles, sharedModulesMap)
 				}
 			} else {
 				// No shared imports - use regular bundling
-				result, bundleErr = bundler.Bundle(c.RequestCtx(), req.Code)
+				result, bundleErr = bundler.Bundle(middleware.CtxWithTenant(c), req.Code)
 			}
 
 			if bundleErr != nil {
@@ -558,7 +559,7 @@ func (h *Handler) CreateFunction(c fiber.Ctx) error {
 		Source:               "api",
 	}
 
-	if err := h.storage.CreateFunction(c.RequestCtx(), fn); err != nil {
+	if err := h.storage.CreateFunction(middleware.CtxWithTenant(c), fn); err != nil {
 		reqID := getRequestID(c)
 		log.Error().
 			Err(err).
@@ -596,10 +597,10 @@ func (h *Handler) ListFunctions(c fiber.Ctx) error {
 
 	if namespace != "" {
 		// If namespace is specified, list functions in that namespace
-		functions, err = h.storage.ListFunctionsByNamespace(c.RequestCtx(), namespace)
+		functions, err = h.storage.ListFunctionsByNamespace(middleware.CtxWithTenant(c), namespace)
 	} else {
 		// Otherwise, list all functions (admin can see all)
-		functions, err = h.storage.ListAllFunctions(c.RequestCtx())
+		functions, err = h.storage.ListAllFunctions(middleware.CtxWithTenant(c))
 	}
 
 	if err != nil {
@@ -621,7 +622,7 @@ func (h *Handler) ListFunctions(c fiber.Ctx) error {
 
 // ListNamespaces lists all unique namespaces with edge functions
 func (h *Handler) ListNamespaces(c fiber.Ctx) error {
-	namespaces, err := h.storage.ListFunctionNamespaces(c.RequestCtx())
+	namespaces, err := h.storage.ListFunctionNamespaces(middleware.CtxWithTenant(c))
 	if err != nil {
 		reqID := getRequestID(c)
 		log.Error().
@@ -656,7 +657,7 @@ func (h *Handler) GetFunction(c fiber.Ctx) error {
 
 	name := c.Params("name")
 
-	fn, err := h.storage.GetFunction(c.RequestCtx(), name)
+	fn, err := h.storage.GetFunction(middleware.CtxWithTenant(c), name)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Function not found"})
 	}
@@ -692,10 +693,10 @@ func (h *Handler) UpdateFunction(c fiber.Ctx) error {
 
 			if hasSharedImports {
 				// Load all shared modules from database
-				sharedModules, err := h.storage.ListSharedModules(c.RequestCtx())
+				sharedModules, err := h.storage.ListSharedModules(middleware.CtxWithTenant(c))
 				if err != nil {
 					log.Warn().Err(err).Msg("Failed to load shared modules for update, proceeding with regular bundle")
-					result, bundleErr = bundler.Bundle(c.RequestCtx(), codeUpdate)
+					result, bundleErr = bundler.Bundle(middleware.CtxWithTenant(c), codeUpdate)
 				} else {
 					// Build map of shared module paths to content
 					sharedModulesMap := make(map[string]string)
@@ -705,11 +706,11 @@ func (h *Handler) UpdateFunction(c fiber.Ctx) error {
 
 					// Bundle with shared modules
 					supportingFiles := make(map[string]string)
-					result, bundleErr = bundler.BundleWithFiles(c.RequestCtx(), codeUpdate, supportingFiles, sharedModulesMap)
+					result, bundleErr = bundler.BundleWithFiles(middleware.CtxWithTenant(c), codeUpdate, supportingFiles, sharedModulesMap)
 				}
 			} else {
 				// No shared imports - use regular bundling
-				result, bundleErr = bundler.Bundle(c.RequestCtx(), codeUpdate)
+				result, bundleErr = bundler.Bundle(middleware.CtxWithTenant(c), codeUpdate)
 			}
 
 			if bundleErr != nil {
@@ -734,7 +735,7 @@ func (h *Handler) UpdateFunction(c fiber.Ctx) error {
 	}
 
 	reqID := getRequestID(c)
-	if err := h.storage.UpdateFunction(c.RequestCtx(), name, updates); err != nil {
+	if err := h.storage.UpdateFunction(middleware.CtxWithTenant(c), name, updates); err != nil {
 		log.Error().
 			Err(err).
 			Str("function_name", name).
@@ -749,7 +750,7 @@ func (h *Handler) UpdateFunction(c fiber.Ctx) error {
 	}
 
 	// Return updated function
-	fn, err := h.storage.GetFunction(c.RequestCtx(), name)
+	fn, err := h.storage.GetFunction(middleware.CtxWithTenant(c), name)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -771,7 +772,7 @@ func (h *Handler) UpdateFunction(c fiber.Ctx) error {
 func (h *Handler) DeleteFunction(c fiber.Ctx) error {
 	name := c.Params("name")
 
-	if err := h.storage.DeleteFunction(c.RequestCtx(), name); err != nil {
+	if err := h.storage.DeleteFunction(middleware.CtxWithTenant(c), name); err != nil {
 		reqID := getRequestID(c)
 		log.Error().
 			Err(err).
@@ -798,9 +799,9 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 	var fn *EdgeFunction
 	var err error
 	if namespace != "" {
-		fn, err = h.storage.GetFunctionByNamespace(c.RequestCtx(), name, namespace)
+		fn, err = h.storage.GetFunctionByNamespace(middleware.CtxWithTenant(c), name, namespace)
 	} else {
-		fn, err = h.storage.GetFunction(c.RequestCtx(), name)
+		fn, err = h.storage.GetFunction(middleware.CtxWithTenant(c), name)
 	}
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Function not found"})
@@ -892,7 +893,7 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 		// Limit: 5 attempts per 5 minutes per IP address
 		store := ratelimit.GetGlobalStore()
 		rateLimitKey := "impersonation:" + c.IP()
-		result, err := ratelimit.Check(c.RequestCtx(), store, rateLimitKey, 5, 5*time.Minute)
+		result, err := ratelimit.Check(middleware.CtxWithTenant(c), store, rateLimitKey, 5, 5*time.Minute)
 		if err != nil {
 			log.Error().Err(err).Str("ip", c.IP()).Msg("Failed to check impersonation rate limit")
 			// Continue on rate limit check error to avoid blocking legitimate requests
@@ -972,7 +973,7 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 	// Create execution record BEFORE running to enable real-time logging
 	// Skip if execution logs are disabled for this function
 	if !fn.DisableExecutionLogs {
-		if err := h.storage.CreateExecution(c.RequestCtx(), executionID, fn.ID, "http"); err != nil {
+		if err := h.storage.CreateExecution(middleware.CtxWithTenant(c), executionID, fn.ID, "http"); err != nil {
 			log.Error().Err(err).Str("execution_id", executionID.String()).Msg("Failed to create execution record")
 			// Continue anyway - logging will still work via stderr fallback
 		}
@@ -994,7 +995,7 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 	var functionSecrets map[string]string
 	if h.secretsStorage != nil {
 		var err error
-		functionSecrets, err = h.secretsStorage.GetSecretsForNamespace(c.RequestCtx(), fn.Namespace)
+		functionSecrets, err = h.secretsStorage.GetSecretsForNamespace(middleware.CtxWithTenant(c), fn.Namespace)
 		if err != nil {
 			log.Warn().Err(err).Str("namespace", fn.Namespace).Msg("Failed to load secrets for function execution")
 			// Continue without secrets - don't fail the function invocation
@@ -1009,7 +1010,7 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 			userIDPtr = &parsed
 		}
 	}
-	settingsSecrets := h.loadSettingsSecrets(c.RequestCtx(), userIDPtr)
+	settingsSecrets := h.loadSettingsSecrets(middleware.CtxWithTenant(c), userIDPtr)
 
 	// Merge all secrets: function secrets first, then settings secrets (which include the env var prefix already)
 	allSecrets := make(map[string]string)
@@ -1021,7 +1022,7 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 	}
 
 	// Execute function (nil cancel signal for basic invocation - streaming endpoint will use actual signal)
-	result, err := h.runtime.Execute(c.RequestCtx(), fn.Code, req, perms, nil, timeoutOverride, allSecrets)
+	result, err := h.runtime.Execute(middleware.CtxWithTenant(c), fn.Code, req, perms, nil, timeoutOverride, allSecrets)
 
 	// Complete execution record
 	durationMs := int(result.DurationMs)
@@ -1100,7 +1101,7 @@ func (h *Handler) GetExecutions(c fiber.Ctx) error {
 		limit = 100
 	}
 
-	executions, err := h.storage.GetExecutions(c.RequestCtx(), name, limit)
+	executions, err := h.storage.GetExecutions(middleware.CtxWithTenant(c), name, limit)
 	if err != nil {
 		reqID := getRequestID(c)
 		log.Error().
@@ -1140,7 +1141,7 @@ func (h *Handler) ListAllExecutions(c fiber.Ctx) error {
 		Offset:       offset,
 	}
 
-	executions, total, err := h.storage.ListAllExecutions(c.RequestCtx(), filters)
+	executions, total, err := h.storage.ListAllExecutions(middleware.CtxWithTenant(c), filters)
 	if err != nil {
 		reqID := getRequestID(c)
 		log.Error().
@@ -1182,7 +1183,7 @@ func (h *Handler) GetExecutionLogs(c fiber.Ctx) error {
 	}
 
 	// Query logs from central logging
-	entries, err := h.loggingService.GetExecutionLogs(c.RequestCtx(), executionIDStr, afterLine)
+	entries, err := h.loggingService.GetExecutionLogs(middleware.CtxWithTenant(c), executionIDStr, afterLine)
 	if err != nil {
 		log.Error().Err(err).Str("execution_id", executionIDStr).Msg("Failed to get execution logs")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -1259,7 +1260,7 @@ func (h *Handler) bundleFunctionFromFilesystem(ctx context.Context, functionName
 // ReloadFunctions scans the functions directory and syncs with database
 // Admin-only endpoint - requires authentication and admin role
 func (h *Handler) ReloadFunctions(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Scan functions directory for all .ts files
 	functionFiles, err := ListFunctionFiles(h.functionsDir)
@@ -1431,7 +1432,7 @@ func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 		namespace = "default"
 	}
 
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Get user ID from context (if authenticated)
 	var createdBy *uuid.UUID
@@ -2015,7 +2016,7 @@ func (h *Handler) CreateSharedModule(c fiber.Ctx) error {
 		CreatedBy:   userID,
 	}
 
-	if err := h.storage.CreateSharedModule(c.RequestCtx(), module); err != nil {
+	if err := h.storage.CreateSharedModule(middleware.CtxWithTenant(c), module); err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "already exists") {
 			return c.Status(409).JSON(fiber.Map{"error": "Shared module already exists"})
 		}
@@ -2033,7 +2034,7 @@ func (h *Handler) CreateSharedModule(c fiber.Ctx) error {
 
 // ListSharedModules returns all shared modules
 func (h *Handler) ListSharedModules(c fiber.Ctx) error {
-	modules, err := h.storage.ListSharedModules(c.RequestCtx())
+	modules, err := h.storage.ListSharedModules(middleware.CtxWithTenant(c))
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list shared modules")
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to list shared modules"})
@@ -2052,7 +2053,7 @@ func (h *Handler) GetSharedModule(c fiber.Ctx) error {
 		modulePath = "_shared/" + modulePath
 	}
 
-	module, err := h.storage.GetSharedModule(c.RequestCtx(), modulePath)
+	module, err := h.storage.GetSharedModule(middleware.CtxWithTenant(c), modulePath)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return c.Status(404).JSON(fiber.Map{"error": "Shared module not found"})
@@ -2083,7 +2084,7 @@ func (h *Handler) UpdateSharedModule(c fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
-	if err := h.storage.UpdateSharedModule(c.RequestCtx(), modulePath, req.Content, req.Description); err != nil {
+	if err := h.storage.UpdateSharedModule(middleware.CtxWithTenant(c), modulePath, req.Content, req.Description); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return c.Status(404).JSON(fiber.Map{"error": "Shared module not found"})
 		}
@@ -2092,7 +2093,7 @@ func (h *Handler) UpdateSharedModule(c fiber.Ctx) error {
 	}
 
 	// Get updated module
-	module, err := h.storage.GetSharedModule(c.RequestCtx(), modulePath)
+	module, err := h.storage.GetSharedModule(middleware.CtxWithTenant(c), modulePath)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Module updated but failed to retrieve"})
 	}
@@ -2115,7 +2116,7 @@ func (h *Handler) DeleteSharedModule(c fiber.Ctx) error {
 		modulePath = "_shared/" + modulePath
 	}
 
-	if err := h.storage.DeleteSharedModule(c.RequestCtx(), modulePath); err != nil {
+	if err := h.storage.DeleteSharedModule(middleware.CtxWithTenant(c), modulePath); err != nil {
 		log.Error().Err(err).Str("module_path", modulePath).Msg("Failed to delete shared module")
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to delete shared module"})
 	}

@@ -101,7 +101,16 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 		}
 	}
 
-	dbName := fmt.Sprintf("%s%s", m.config.DatabasePrefix, req.Slug)
+	// Determine database name based on mode
+	var dbName string
+	if req.DBMode == "existing" {
+		if req.DBName == nil || *req.DBName == "" {
+			return nil, fmt.Errorf("db_name is required when db_mode is 'existing'")
+		}
+		dbName = *req.DBName
+	} else {
+		dbName = fmt.Sprintf("%s%s", m.config.DatabasePrefix, req.Slug)
+	}
 
 	tenant := &Tenant{
 		Slug:     req.Slug,
@@ -118,21 +127,23 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 		return nil, fmt.Errorf("failed to create tenant record: %w", err)
 	}
 
-	_, err := m.adminPool.Exec(ctx, fmt.Sprintf(
-		"CREATE DATABASE %s ENCODING 'UTF8'",
-		quoteIdent(dbName),
-	))
-	if err != nil {
-		if statusErr := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusError); statusErr != nil {
-			log.Warn().Err(statusErr).Str("tenant_id", tenant.ID).Msg("Failed to update tenant status to error")
+	if req.DBMode != "existing" {
+		_, err := m.adminPool.Exec(ctx, fmt.Sprintf(
+			"CREATE DATABASE %s ENCODING 'UTF8'",
+			quoteIdent(dbName),
+		))
+		if err != nil {
+			if statusErr := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusError); statusErr != nil {
+				log.Warn().Err(statusErr).Str("tenant_id", tenant.ID).Msg("Failed to update tenant status to error")
+			}
+			if deleteErr := m.storage.HardDeleteTenant(ctx, tenant.ID); deleteErr != nil {
+				log.Warn().Err(deleteErr).Str("tenant_id", tenant.ID).Msg("Failed to hard delete tenant record")
+			}
+			return nil, fmt.Errorf("failed to create database: %w", err)
 		}
-		if deleteErr := m.storage.HardDeleteTenant(ctx, tenant.ID); deleteErr != nil {
-			log.Warn().Err(deleteErr).Str("tenant_id", tenant.ID).Msg("Failed to hard delete tenant record")
-		}
-		return nil, fmt.Errorf("failed to create database: %w", err)
-	}
 
-	log.Info().Str("tenant", req.Slug).Str("db", dbName).Msg("Created tenant database")
+		log.Info().Str("tenant", req.Slug).Str("db", dbName).Msg("Created tenant database")
+	}
 
 	// Bootstrap tenant database (create schemas, roles, privileges)
 	// Use admin URL if available (required for CREATE EXTENSION), otherwise app URL
@@ -155,10 +166,12 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 	// This creates tables, functions, types, and extensions in the tenant database.
 	// When FDW is enabled, tables will be replaced by foreign imports in the next step.
 	if err := m.applyInternalSchemas(ctx, dbName, m.fdwConfig != nil); err != nil {
-		log.Warn().Err(err).Str("tenant", req.Slug).Msg("Failed to apply internal schemas to tenant database")
-	} else {
-		log.Info().Str("tenant", req.Slug).Msg("Applied internal schemas to tenant database")
+		if statusErr := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusError); statusErr != nil {
+			log.Warn().Err(statusErr).Str("tenant_id", tenant.ID).Msg("Failed to update tenant status to error")
+		}
+		return nil, fmt.Errorf("failed to apply internal schemas: %w", err)
 	}
+	log.Info().Str("tenant", req.Slug).Msg("Applied internal schemas to tenant database")
 
 	// Set up FDW so tenant can access all tables from the main database.
 	// This replaces the local tables created by applyInternalSchemas with
@@ -441,8 +454,7 @@ func (m *Manager) applyInternalSchemas(ctx context.Context, dbName string, fdwEn
 		}
 
 		if _, err := pool.Exec(ctx, sql); err != nil {
-			log.Warn().Err(err).Str("schema", schemaName).Str("db", dbName).
-				Msg("Failed to apply internal schema to tenant database")
+			return fmt.Errorf("failed to apply schema %s to tenant database %s: %w", schemaName, dbName, err)
 		}
 	}
 
@@ -464,11 +476,73 @@ func (m *Manager) applyInternalSchemas(ctx context.Context, dbName string, fdwEn
 			sql = strings.ReplaceAll(sql, "{{APP_USER}}", appUser)
 		}
 		if _, err := pool.Exec(ctx, sql); err != nil {
-			log.Warn().Err(err).Str("file", extraFile).Str("db", dbName).
-				Msg("Failed to apply post-schema file to tenant database")
+			return fmt.Errorf("failed to apply %s to tenant database %s: %w", extraFile, dbName, err)
 		}
 	}
 
+	return nil
+}
+
+// RepairTenant re-runs schema application and FDW setup for an existing tenant.
+// This is useful when a tenant was partially created due to errors.
+func (m *Manager) RepairTenant(ctx context.Context, tenant *Tenant) error {
+	if tenant.UsesMainDatabase() {
+		return fmt.Errorf("cannot repair default tenant (uses main database)")
+	}
+
+	dbName := *tenant.DBName
+	log.Info().Str("tenant_id", tenant.ID).Str("slug", tenant.Slug).Str("db", dbName).Msg("Repairing tenant database")
+
+	// Re-run bootstrap
+	bootstrapBaseURL := m.adminDBURL
+	if bootstrapBaseURL == "" {
+		bootstrapBaseURL = m.dbURL
+	}
+	tenantDBURL := replaceDBName(bootstrapBaseURL, dbName)
+	appUser := extractDBUser(bootstrapBaseURL)
+	if err := bootstrap.RunBootstrapOnDB(ctx, tenantDBURL, appUser); err != nil {
+		return fmt.Errorf("failed to bootstrap tenant database: %w", err)
+	}
+
+	// Re-apply internal schemas
+	if err := m.applyInternalSchemas(ctx, dbName, m.fdwConfig != nil); err != nil {
+		return fmt.Errorf("failed to apply internal schemas: %w", err)
+	}
+
+	// Re-setup FDW if configured
+	if m.fdwConfig != nil && m.adminDBURL != "" {
+		fdwRole, roleErr := CreateFDWRole(ctx, m.adminPool, tenant.ID)
+		if roleErr != nil {
+			log.Warn().Err(roleErr).Str("tenant", tenant.Slug).Msg("Failed to create FDW role during repair")
+		} else {
+			fdwURL := replaceDBName(m.adminDBURL, dbName)
+			fdwPool, fdwPoolErr := pgxpool.New(ctx, fdwURL)
+			if fdwPoolErr != nil {
+				log.Warn().Err(fdwPoolErr).Str("tenant", tenant.Slug).Msg("Failed to create admin pool for FDW repair")
+			} else {
+				defer fdwPool.Close()
+				if fdwErr := SetupFDW(ctx, fdwPool, *m.fdwConfig, nil); fdwErr != nil {
+					log.Warn().Err(fdwErr).Str("tenant", tenant.Slug).Msg("Failed to repair FDW")
+				} else {
+					appUser := extractDBUser(m.dbURL)
+					if appUser != "" {
+						if mapErr := CreateFDWUserMapping(ctx, fdwPool, appUser, fdwRole); mapErr != nil {
+							log.Warn().Err(mapErr).Str("tenant", tenant.Slug).Msg("Failed to repair FDW user mapping")
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Ensure tenant is marked active
+	if tenant.Status != TenantStatusActive {
+		if err := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusActive); err != nil {
+			log.Warn().Err(err).Str("tenant_id", tenant.ID).Msg("Failed to update tenant status after repair")
+		}
+	}
+
+	log.Info().Str("tenant_id", tenant.ID).Str("slug", tenant.Slug).Msg("Tenant database repaired successfully")
 	return nil
 }
 
