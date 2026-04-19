@@ -193,7 +193,7 @@ func roleSatisfiesRequirements(userRole string, requiredRoles []string) bool {
 	}
 
 	// Service roles bypass all checks
-	if userRole == "service_role" || userRole == "instance_admin" {
+	if userRole == "service_role" || userRole == "instance_admin" || userRole == "tenant_service" {
 		return true
 	}
 
@@ -204,6 +204,7 @@ func roleSatisfiesRequirements(userRole string, requiredRoles []string) bool {
 		"admin":          2,
 		"instance_admin": 3,
 		"service_role":   3,
+		"tenant_service": 3,
 	}
 
 	userLevel, userOk := roleLevel[userRole]
@@ -309,7 +310,7 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 	if req.OnBehalfOf != nil {
 		// Only service_role can use on_behalf_of
 		callerRole := c.Locals("user_role")
-		if callerRole == nil || callerRole.(string) != "service_role" {
+		if callerRole == nil || (callerRole.(string) != "service_role" && callerRole.(string) != "tenant_service") {
 			return c.Status(403).JSON(fiber.Map{
 				"error": "on_behalf_of requires service_role",
 			})
@@ -593,7 +594,7 @@ func (h *Handler) GetJobLogsUser(c fiber.Ctx) error {
 
 	// Check ownership (unless service_role)
 	role, _ := c.Locals("user_role").(string)
-	if role != "service_role" {
+	if role != "service_role" && role != "tenant_service" {
 		// Parse userID for comparison
 		userUUID, err := uuid.Parse(userID)
 		if err != nil || job.CreatedBy == nil || *job.CreatedBy != userUUID {

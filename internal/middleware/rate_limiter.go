@@ -309,7 +309,7 @@ func DynamicGlobalAPILimiter(settingsCache *auth.SettingsCache, storage ...fiber
 		role := c.Locals("user_role")
 		if role != nil {
 			roleStr, ok := role.(string)
-			if ok && (roleStr == "admin" || roleStr == "instance_admin") {
+			if ok && (roleStr == "admin" || roleStr == "instance_admin" || roleStr == "tenant_service") {
 				log.Debug().
 					Str("role", roleStr).
 					Str("path", c.Path()).

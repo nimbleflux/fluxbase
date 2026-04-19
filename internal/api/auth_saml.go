@@ -134,7 +134,8 @@ func (h *SAMLHandler) InitiateSAMLLogin(c fiber.Ctx) error {
 	}
 
 	// SECURITY: Validate that provider allows app login
-	provider, err := h.samlService.GetProvider(providerName)
+	tenantID := middleware.GetTenantIDFromContext(c)
+	provider, err := h.samlService.GetProviderForTenant(c.RequestCtx(), providerName, tenantID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "SAML provider not found",
@@ -216,7 +217,8 @@ func (h *SAMLHandler) HandleSAMLAssertion(c fiber.Ctx) error {
 	var provider *auth.SAMLProvider
 	var err error
 
-	for _, p := range h.samlService.GetProvidersForApp() {
+	tenantID := middleware.GetTenantIDFromContext(c)
+	for _, p := range h.samlService.GetProvidersForAppWithTenant(c.RequestCtx(), tenantID) {
 		assertion, err = h.samlService.ParseAssertion(p.Name, samlResponse)
 		if err == nil {
 			providerName = p.Name

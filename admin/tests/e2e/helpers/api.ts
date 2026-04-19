@@ -844,12 +844,19 @@ export async function rawStartUserImpersonation(
   targetUserId: string,
   reason: string,
   accessToken: string,
+  tenantId?: string,
 ) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
   return rawApiRequest({
     method: "POST",
     path: "/api/v1/auth/impersonate",
     data: { target_user_id: targetUserId, reason },
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers,
   });
 }
 
@@ -888,6 +895,66 @@ export async function rawStopImpersonation(accessToken: string) {
   return rawApiRequest({
     method: "DELETE",
     path: "/api/v1/auth/impersonate",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// OAuth Providers
+// ---------------------------------------------------------------------------
+
+export async function rawCreateOAuthProvider(
+  options: {
+    provider_name: string;
+    display_name: string;
+    client_id: string;
+    client_secret: string;
+    redirect_url: string;
+    scopes: string[];
+    is_custom: boolean;
+    authorization_url: string;
+    token_url: string;
+    user_info_url: string;
+    allow_dashboard_login?: boolean;
+  },
+  accessToken: string,
+) {
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/admin/oauth/providers",
+    data: {
+      provider_name: options.provider_name,
+      display_name: options.display_name,
+      enabled: true,
+      client_id: options.client_id,
+      client_secret: options.client_secret,
+      redirect_url: options.redirect_url,
+      scopes: options.scopes,
+      is_custom: options.is_custom,
+      authorization_url: options.authorization_url,
+      token_url: options.token_url,
+      user_info_url: options.user_info_url,
+      allow_dashboard_login: options.allow_dashboard_login ?? false,
+    },
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function rawDeleteOAuthProvider(
+  providerId: string,
+  accessToken: string,
+) {
+  return rawApiRequest({
+    method: "DELETE",
+    path: `/api/v1/admin/oauth/providers/${providerId}`,
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function rawListOAuthProviders(accessToken: string) {
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/admin/oauth/providers",
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }

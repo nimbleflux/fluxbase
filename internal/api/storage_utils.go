@@ -141,6 +141,9 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 	if roleStr == "anon" {
 		dbRole = "anon"
 	}
+	if roleStr == "tenant_service" {
+		dbRole = "tenant_service"
+	}
 	if _, err := tx.Exec(ctx, fmt.Sprintf("SET LOCAL ROLE %s", quoteIdentifier(dbRole))); err != nil {
 		return fmt.Errorf("failed to SET LOCAL ROLE %s: %w", dbRole, err)
 	}

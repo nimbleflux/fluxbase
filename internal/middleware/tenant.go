@@ -196,6 +196,10 @@ func ValidateTenantMembership(ctx context.Context, db *database.Connection, user
 // GetUserTenantRole gets the user's role for the specified tenant
 // Returns 'tenant_admin' if assigned to the tenant, 'instance_admin' if instance admin
 func GetUserTenantRole(ctx context.Context, db *database.Connection, userID, tenantID string) (string, error) {
+	if userID == auth.TenantServiceUserID {
+		return "tenant_service", nil
+	}
+
 	var isAdmin bool
 	err := db.Pool().QueryRow(ctx,
 		`SELECT EXISTS(

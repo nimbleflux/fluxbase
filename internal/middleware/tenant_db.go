@@ -45,6 +45,8 @@ func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		userID, _ := c.Locals("user_id").(string)
 		isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
+		userRole, _ := c.Locals("user_role").(string)
+		tenantRole, _ := c.Locals("tenant_role").(string)
 
 		var claims *auth.TokenClaims
 		if c, ok := c.Locals("claims").(*auth.TokenClaims); ok {
@@ -64,7 +66,7 @@ func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
 			tenantID, tenantSource = resolveTenantID(c, userID, isInstanceAdmin, claims, cfg.Storage)
 		}
 
-		if tenantID != "" && !isInstanceAdmin && userID != "" {
+		if tenantID != "" && !isInstanceAdmin && userRole != "tenant_service" && tenantRole != "tenant_service" && userID != "" {
 			hasAccess, err := cfg.Storage.IsUserAssignedToTenant(c.Context(), userID, tenantID)
 			if err != nil {
 				log.Debug().Err(err).Msg("Failed to check tenant access")

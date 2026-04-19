@@ -20,12 +20,29 @@ type SecretsDeps struct {
 	UpdateSecret       fiber.Handler
 	DeleteSecret       fiber.Handler
 	RollbackToVersion  fiber.Handler
+
+	// Middleware for tenant context
+	TenantMiddleware   fiber.Handler
+	TenantDBMiddleware fiber.Handler
 }
 
 func BuildSecretsRoutes(deps *SecretsDeps) *RouteGroup {
+	var middlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+	if deps.TenantDBMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantDBContext", Handler: deps.TenantDBMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name:   "secrets",
-		Prefix: "/api/v1/secrets",
+		Name:        "secrets",
+		Prefix:      "/api/v1/secrets",
+		Middlewares: middlewares,
 		Routes: []Route{
 			{
 				Method:  "GET",

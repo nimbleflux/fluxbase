@@ -195,6 +195,7 @@ func (s *Server) buildAuthRouteDeps() *routes.AuthDeps {
 
 	return &routes.AuthDeps{
 		AuthMiddleware:            AuthMiddleware(s.Auth.Handler.authService),
+		TenantMiddleware:          s.Middleware.Tenant,
 		RequireRole:               RequireRole,
 		RequireScope:              middleware.RequireScope,
 		RateLimiters:              rateLimiters,
@@ -240,9 +241,12 @@ func (s *Server) buildAuthRouteDeps() *routes.AuthDeps {
 		StartServiceImpersonation: s.Auth.Handler.StartServiceImpersonation,
 		GetProviderToken:          s.Auth.OAuth.GetProviderToken,
 		OAuthLogout:               s.Auth.OAuth.Logout,
+		OAuthLogoutCallback:       s.Auth.OAuth.LogoutCallback,
 		ListSAMLProviders:         s.Auth.SAML.ListSAMLProviders,
 		InitiateSAMLLogin:         s.Auth.SAML.InitiateSAMLLogin,
 		HandleSAMLAssertion:       s.Auth.SAML.HandleSAMLAssertion,
+		HandleSAMLLogout:          s.Auth.SAML.HandleSAMLLogout,
+		InitiateSAMLLogout:        s.Auth.SAML.InitiateSAMLLogout,
 	}
 }
 
@@ -408,6 +412,9 @@ func (s *Server) buildSecretsRouteDeps() *routes.SecretsDeps {
 		UpdateSecret:       s.Secrets.Handler.UpdateSecret,
 		DeleteSecret:       s.Secrets.Handler.DeleteSecret,
 		RollbackToVersion:  s.Secrets.Handler.RollbackToVersion,
+
+		TenantMiddleware:   s.Middleware.Tenant,
+		TenantDBMiddleware: s.Middleware.TenantDB,
 	}
 }
 
@@ -449,6 +456,7 @@ func (s *Server) buildSyncRouteDeps() *routes.SyncDeps {
 func (s *Server) buildDashboardUserAuthRouteDeps() *routes.DashboardUserAuthDeps {
 	return &routes.DashboardUserAuthDeps{
 		RequireDashboardAuth:     s.Auth.DashboardHandler.RequireDashboardAuth,
+		TenantMiddleware:         s.Middleware.Tenant,
 		Signup:                   s.Auth.DashboardHandler.Signup,
 		Login:                    s.Auth.DashboardHandler.Login,
 		RefreshToken:             s.Auth.DashboardHandler.RefreshToken,

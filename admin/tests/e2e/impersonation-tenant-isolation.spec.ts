@@ -178,6 +178,7 @@ test.describe("Impersonation Tenant Isolation", () => {
       tenantAdminInfo.userId,
       "E2E secret isolation test",
       adminToken,
+      tenantAdminInfo.tenantId,
     );
     expect(impResult.status).toBe(200);
     expect(impResult.body.access_token).toBeTruthy();

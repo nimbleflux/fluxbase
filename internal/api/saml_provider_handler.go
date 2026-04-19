@@ -887,10 +887,11 @@ func (h *SAMLProviderHandler) validateMetadata(ctx context.Context, metadataURL,
 
 // reloadSAMLProvider reloads a provider into the SAML service from the database
 func (h *SAMLProviderHandler) reloadSAMLProvider(ctx context.Context, name string) error {
-	// For now, just log that we need to implement this
-	// The full implementation would reload the provider from DB into the SAML service
-	log.Info().Str("provider", name).Msg("SAML provider needs reload (not yet implemented)")
-	return nil
+	if h.samlService == nil {
+		log.Warn().Str("provider", name).Msg("Cannot reload SAML provider: service not available")
+		return nil
+	}
+	return h.samlService.ReloadProviderFromDB(ctx, name)
 }
 
 // fiber:context-methods migrated

@@ -1,0 +1,23 @@
+issuer: http://localhost:5556/dex
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+staticClients:
+  - id: fluxbase-test
+    redirectURIs:
+      - "http://localhost:8082/api/v1/auth/oauth/dex/callback"
+      - "http://localhost:8080/api/v1/auth/oauth/dex/callback"
+    name: "Fluxbase Test"
+    secret: "test-client-secret"
+
+enablePasswordDB: true
+
+staticPasswords:
+  - email: "testuser@fluxbase.test"
+    hash: "$2a$10$hlsOIeeoxxT0aAo3m1ez7uc53.rwdQ9RD5XOG3tUhvcuUD1uRACWy"
+    username: "testuser"
+    userID: "08a8684b-db88-4b73-90a9-3cd1661f2001"

@@ -529,7 +529,7 @@ func (s *ImpersonationService) StartServiceImpersonation(
 		email = "tenant-service@fluxbase.local"
 		jwtRole = "tenant_service"
 		targetRole = "tenant_service"
-		tenantOpts = append(tenantOpts, WithTenantContext(tenantID, "", false))
+		tenantOpts = append(tenantOpts, WithTenantContext(tenantID, "tenant_service", false))
 	} else {
 		userID = ServiceUserID
 		email = "service@fluxbase.local"

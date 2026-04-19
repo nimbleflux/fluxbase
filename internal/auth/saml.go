@@ -1461,6 +1461,109 @@ func (s *SAMLService) LoadProvidersFromDB(ctx context.Context) error {
 	})
 }
 
+// ReloadProviderFromDB reloads a single SAML provider from the database.
+// If the provider is disabled or not found, it is removed from memory.
+func (s *SAMLService) ReloadProviderFromDB(ctx context.Context, name string) error {
+	query := `
+		SELECT id, name, enabled, entity_id, acs_url,
+		       idp_metadata_url, idp_metadata_xml, idp_metadata_cached,
+		       attribute_mapping, auto_create_users, default_role,
+		       COALESCE(allow_dashboard_login, false), COALESCE(allow_app_login, true),
+		       COALESCE(allow_idp_initiated, false), COALESCE(allowed_redirect_hosts, ARRAY[]::TEXT[]),
+		       created_at, updated_at
+		FROM auth.saml_providers
+		WHERE name = $1
+	`
+
+	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		var (
+			id                   string
+			providerName         string
+			enabled              bool
+			entityID             string
+			acsURL               string
+			metadataURL          *string
+			metadataXML          *string
+			metadataCached       *string
+			attrMapping          map[string]string
+			autoCreateUsers      bool
+			defaultRole          string
+			allowDashboardLogin  bool
+			allowAppLogin        bool
+			allowIDPInitiated    bool
+			allowedRedirectHosts []string
+			createdAt            time.Time
+			updatedAt            time.Time
+		)
+
+		err := tx.QueryRow(ctx, query, name).Scan(
+			&id, &providerName, &enabled, &entityID, &acsURL,
+			&metadataURL, &metadataXML, &metadataCached,
+			&attrMapping, &autoCreateUsers, &defaultRole,
+			&allowDashboardLogin, &allowAppLogin,
+			&allowIDPInitiated, &allowedRedirectHosts,
+			&createdAt, &updatedAt,
+		)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				s.RemoveProvider(name)
+				return nil
+			}
+			return fmt.Errorf("failed to query SAML provider: %w", err)
+		}
+
+		if !enabled {
+			s.RemoveProvider(name)
+			return nil
+		}
+
+		provider := &SAMLProvider{
+			ID:                   id,
+			Name:                 providerName,
+			Enabled:              enabled,
+			EntityID:             entityID,
+			AcsURL:               acsURL,
+			AttributeMapping:     attrMapping,
+			AutoCreateUsers:      autoCreateUsers,
+			DefaultRole:          defaultRole,
+			AllowDashboardLogin:  allowDashboardLogin,
+			AllowAppLogin:        allowAppLogin,
+			AllowIDPInitiated:    allowIDPInitiated,
+			AllowedRedirectHosts: allowedRedirectHosts,
+			CreatedAt:            createdAt,
+			UpdatedAt:            updatedAt,
+		}
+
+		if provider.DefaultRole == "" {
+			provider.DefaultRole = "authenticated"
+		}
+
+		if err := s.loadProviderMetadata(provider, metadataCached, metadataXML, metadataURL); err != nil {
+			return fmt.Errorf("failed to load SAML metadata for provider %s: %w", name, err)
+		}
+
+		acsURLParsed, _ := url.Parse(acsURL)
+		entityIDParsed, _ := url.Parse(entityID)
+		metadataURLParsed, _ := url.Parse(fmt.Sprintf("%s/auth/saml/metadata/%s", s.baseURL, providerName))
+
+		sp := &saml.ServiceProvider{
+			EntityID:          entityIDParsed.String(),
+			AcsURL:            *acsURLParsed,
+			MetadataURL:       *metadataURLParsed,
+			IDPMetadata:       provider.metadata,
+			AllowIDPInitiated: allowIDPInitiated,
+		}
+
+		s.mu.Lock()
+		s.providers[providerName] = provider
+		s.spConfigs[providerName] = sp
+		s.mu.Unlock()
+
+		log.Info().Str("provider", providerName).Msg("Reloaded SAML provider from database")
+		return nil
+	})
+}
+
 // GetProvidersForDashboard returns providers that allow dashboard login
 func (s *SAMLService) GetProvidersForDashboard() []*SAMLProvider {
 	s.mu.RLock()

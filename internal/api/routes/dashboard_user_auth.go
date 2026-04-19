@@ -4,6 +4,7 @@ import "github.com/gofiber/fiber/v3"
 
 type DashboardUserAuthDeps struct {
 	RequireDashboardAuth fiber.Handler
+	TenantMiddleware     fiber.Handler
 
 	Signup                   fiber.Handler
 	Login                    fiber.Handler
@@ -31,9 +32,18 @@ func BuildDashboardUserAuthRoutes(deps *DashboardUserAuthDeps) *RouteGroup {
 		{Name: "RequireDashboardAuth", Handler: deps.RequireDashboardAuth},
 	}
 
+	var groupMiddlewares []Middleware
+	if deps.TenantMiddleware != nil {
+		groupMiddlewares = append(groupMiddlewares, Middleware{
+			Name:    "TenantContext",
+			Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name:   "dashboard-user-auth",
-		Prefix: "/dashboard/auth",
+		Name:        "dashboard-user-auth",
+		Prefix:      "/dashboard/auth",
+		Middlewares: groupMiddlewares,
 		Routes: []Route{
 			{Method: "POST", Path: "/signup", Handler: deps.Signup, Summary: "Dashboard user signup", Auth: AuthNone, Public: true},
 			{Method: "POST", Path: "/login", Handler: deps.Login, Summary: "Dashboard user login", Auth: AuthNone, Public: true},

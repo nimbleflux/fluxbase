@@ -162,6 +162,24 @@ services:
       timeout: 10s
       retries: 5
 
+  # Dex - OIDC provider for OAuth E2E testing
+  dex:
+    image: ghcr.io/dexidp/dex:latest
+    container_name: fluxbase-dex-dev
+    restart: unless-stopped
+    command: dex serve /etc/dex/config.yaml
+    volumes:
+      - ./dex-config.yaml:/etc/dex/config.yaml:ro
+    ports:
+      - "5556:5556"
+    networks:
+      - fluxbase-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:5556/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   go-modules:
   vscode-extensions:

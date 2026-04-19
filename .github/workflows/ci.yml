@@ -499,6 +499,27 @@ jobs:
           ./mc mb minio/fluxbase-test || true
           ./mc anonymous set public minio/fluxbase-test
 
+      - name: Start Dex OIDC provider
+        run: |
+          docker run -d --name dex \
+            -p 5556:5556 \
+            -v "$(pwd)/test/e2e/dex-config-ci.yaml:/etc/dex/config.yaml:ro" \
+            ghcr.io/dexidp/dex:latest \
+            dex serve /etc/dex/config.yaml
+          # Wait for Dex to be healthy
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5556/dex/healthz > /dev/null 2>&1; then
+              echo "Dex is ready"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Dex failed to start"
+              docker logs dex
+              exit 1
+            fi
+            sleep 1
+          done
+
       - name: Run unit tests with coverage
         timeout-minutes: 20
         env:
@@ -798,6 +819,26 @@ jobs:
           ./mc alias set minio http://localhost:9000 minioadmin minioadmin
           ./mc mb minio/fluxbase-test || true
           ./mc anonymous set public minio/fluxbase-test
+
+      - name: Start Dex OIDC provider
+        run: |
+          docker run -d --name dex \
+            -p 5556:5556 \
+            -v "$(pwd)/test/e2e/dex-config-ci.yaml:/etc/dex/config.yaml:ro" \
+            ghcr.io/dexidp/dex:latest \
+            dex serve /etc/dex/config.yaml
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5556/dex/healthz > /dev/null 2>&1; then
+              echo "Dex is ready"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Dex failed to start"
+              docker logs dex
+              exit 1
+            fi
+            sleep 1
+          done
 
       - name: Reset database for fresh Playwright setup
         env:

@@ -621,7 +621,7 @@ func (h *KnowledgeBaseHandler) DeleteDocumentsByFilter(c fiber.Ctx) error {
 	if userID != nil {
 		isAdmin := false
 		if role := c.Locals("role"); role != nil {
-			isAdmin = role == "service_role" || role == "instance_admin"
+			isAdmin = role == "service_role" || role == "instance_admin" || role == "tenant_service"
 		}
 		if !isAdmin {
 			filter.UserID = userID

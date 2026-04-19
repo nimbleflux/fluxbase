@@ -49,6 +49,8 @@ func mapAppRoleToDatabaseRole(appRole string) string {
 	switch appRole {
 	case "service_role", "instance_admin":
 		return "service_role"
+	case "tenant_service":
+		return "tenant_service"
 	case "anon", "":
 		return "anon"
 	default:

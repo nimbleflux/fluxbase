@@ -76,7 +76,7 @@ test.describe("Tenant Admin Data Isolation", () => {
   // ────────────────────────────────────────────────────────────────
 
   test("cannot access /tenants page", async ({ tenantAdminPage }) => {
-    await tenantAdminPage.goto("tenants", { waitUntil: "networkidle" });
+    await tenantAdminPage.goto("tenants", { waitUntil: "domcontentloaded" });
 
     // The frontend may render the page but the API call to /admin/tenants will fail with 403.
     // Check for either: redirect away, error message, or empty/no-data state
@@ -100,7 +100,7 @@ test.describe("Tenant Admin Data Isolation", () => {
 
   test("cannot access /instance-settings", async ({ tenantAdminPage }) => {
     await tenantAdminPage.goto("instance-settings", {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
     });
 
     const url = tenantAdminPage.url();
@@ -123,7 +123,7 @@ test.describe("Tenant Admin Data Isolation", () => {
   });
 
   test("cannot access /features", async ({ tenantAdminPage }) => {
-    await tenantAdminPage.goto("features", { waitUntil: "networkidle" });
+    await tenantAdminPage.goto("features", { waitUntil: "domcontentloaded" });
 
     const url = tenantAdminPage.url();
     const isOnFeatures = url.includes("/features");
@@ -147,7 +147,7 @@ test.describe("Tenant Admin Data Isolation", () => {
   test("sidebar hides instance-only navigation items", async ({
     tenantAdminPage,
   }) => {
-    await tenantAdminPage.goto("./", { waitUntil: "networkidle" });
+    await tenantAdminPage.goto("./", { waitUntil: "domcontentloaded" });
 
     const instanceOnlyItems = ["Tenants", "Configuration", "Instance Settings"];
     for (const itemText of instanceOnlyItems) {
@@ -482,11 +482,11 @@ test.describe("Tenant Admin Data Isolation", () => {
     const apiRequests: { url: string; headers: Record<string, string> }[] = [];
     tenantAdminPage.context().on("request", (req) => {
       if (req.url().includes("/api/v1/") && req.method() !== "OPTIONS") {
-        apiRequests.push({ url: req.url(), headers: req.headers() });
+        apiRequests.push({ url: req.url(), headers: req.headers });
       }
     });
 
-    await tenantAdminPage.goto("./", { waitUntil: "networkidle" });
+    await tenantAdminPage.goto("./", { waitUntil: "domcontentloaded" });
     const callsWithTenant = apiRequests.filter((r) => r.headers["x-fb-tenant"]);
 
     if (callsWithTenant.length > 0) {

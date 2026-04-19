@@ -25,6 +25,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/email"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // DashboardAuthHandler handles platform authentication endpoints
@@ -708,7 +709,8 @@ func (h *DashboardAuthHandler) GetSSOProviders(c fiber.Ctx) error {
 	providers := []SSOProvider{}
 
 	// Get OAuth providers with allow_dashboard_login = true
-	oauthProviders, err := h.getOAuthProvidersForDashboard(ctx)
+	tenantID := middleware.GetTenantIDFromContext(c)
+	oauthProviders, err := h.getOAuthProvidersForDashboard(ctx, tenantID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to fetch OAuth providers")
 	}
@@ -716,7 +718,7 @@ func (h *DashboardAuthHandler) GetSSOProviders(c fiber.Ctx) error {
 
 	// Get SAML providers with allow_dashboard_login = true
 	if h.samlService != nil {
-		samlProviders := h.samlService.GetProvidersForDashboard()
+		samlProviders := h.samlService.GetProvidersForDashboardWithTenant(c.RequestCtx(), middleware.GetTenantIDFromContext(c))
 		for _, sp := range samlProviders {
 			providers = append(providers, SSOProvider{
 				ID:   sp.Name,
@@ -736,7 +738,7 @@ func (h *DashboardAuthHandler) GetSSOProviders(c fiber.Ctx) error {
 }
 
 // getOAuthProvidersForDashboard fetches OAuth providers enabled for dashboard login
-func (h *DashboardAuthHandler) getOAuthProvidersForDashboard(ctx context.Context) ([]SSOProvider, error) {
+func (h *DashboardAuthHandler) getOAuthProvidersForDashboard(ctx context.Context, tenantID string) ([]SSOProvider, error) {
 	providers := []SSOProvider{}
 
 	err := database.WrapWithServiceRole(ctx, h.db, func(tx pgx.Tx) error {
@@ -958,14 +960,43 @@ func (h *DashboardAuthHandler) OAuthCallback(c fiber.Ctx) error {
 		Str("provider", providerID).
 		Msg("Dashboard OAuth callback received")
 
-	// Validate state using app OAuth handler's state store
-	// This is where the state was stored when dashboard called app OAuth authorize endpoint
-	stateMetadata, valid := h.oauthHandler.GetAndValidateState(state)
-	if !valid {
+	// Validate state from dashboard's own state store
+	h.oauthStatesMu.Lock()
+	dashState, stateExists := h.oauthStates[state]
+	if stateExists {
+		delete(h.oauthStates, state)
+	}
+	h.oauthStatesMu.Unlock()
+
+	if !stateExists || dashState == nil {
 		log.Warn().
 			Str("state", state).
 			Msg("Invalid or missing OAuth state in dashboard callback")
 		return c.Redirect().To("/admin/login?error=" + url.QueryEscape("Invalid or expired state"))
+	}
+
+	// Retrieve stored OAuth config
+	h.oauthConfigsMu.Lock()
+	config, configExists := h.oauthConfigs[state]
+	if configExists {
+		delete(h.oauthConfigs, state)
+	}
+	h.oauthConfigsMu.Unlock()
+
+	if !configExists || config == nil {
+		log.Warn().
+			Str("state", state).
+			Msg("Missing OAuth config for dashboard callback")
+		return c.Redirect().To("/admin/login?error=" + url.QueryEscape("OAuth configuration not found"))
+	}
+
+	// Verify provider matches the one from the initiation
+	if providerID != "" && dashState.Provider != providerID {
+		log.Warn().
+			Str("url_provider", providerID).
+			Str("state_provider", dashState.Provider).
+			Msg("Provider mismatch in dashboard OAuth callback")
+		return c.Redirect().To("/admin/login?error=" + url.QueryEscape("Provider mismatch"))
 	}
 
 	// This is a dashboard OAuth callback, process it
@@ -974,86 +1005,11 @@ func (h *DashboardAuthHandler) OAuthCallback(c fiber.Ctx) error {
 		return c.Redirect().To("/admin/login?error=" + url.QueryEscape(errorDesc))
 	}
 
-	if code == "" || state == "" {
-		return c.Redirect().To("/admin/login?error=" + url.QueryEscape("Missing authorization code or state"))
+	if code == "" {
+		return c.Redirect().To("/admin/login?error=" + url.QueryEscape("Missing authorization code"))
 	}
 
-	// Build OAuth config using provider from database and redirect_uri from state metadata
-	var config *oauth2.Config
-	var userInfoURL *string
-	err := database.WrapWithServiceRole(ctx, h.db, func(tx pgx.Tx) error {
-		var clientID, clientSecret string
-		var scopes []string
-		var isCustom bool
-		var isEncrypted bool
-		var authzURL, tokenURL, userInfoURLStr string
-		var authzURLNull, tokenURLNull, userInfoURLNull bool
-
-		err := tx.QueryRow(ctx, `
-			SELECT client_id, client_secret, scopes, is_custom,
-				   authorization_url IS NOT NULL, COALESCE(authorization_url, ''),
-				   token_url IS NOT NULL, COALESCE(token_url, ''),
-				   user_info_url IS NOT NULL, COALESCE(user_info_url, ''),
-				   COALESCE(is_encrypted, false) AS is_encrypted
-		FROM platform.oauth_providers
-		WHERE (id::text = $1 OR provider_name = $1) AND enabled = true AND allow_dashboard_login = true
-		`, providerID).Scan(&clientID, &clientSecret, &scopes, &isCustom,
-			&authzURLNull, &authzURL, &tokenURLNull, &tokenURL, &userInfoURLNull, &userInfoURLStr, &isEncrypted)
-		if err != nil {
-			return err
-		}
-
-		// Decrypt client secret if encrypted
-		if isEncrypted && clientSecret != "" {
-			decryptedSecret, decErr := crypto.Decrypt(clientSecret, h.encryptionKey)
-			if decErr != nil {
-				log.Error().Err(decErr).Str("provider", providerID).Msg("Failed to decrypt client secret")
-				return fmt.Errorf("failed to decrypt client secret: %w", decErr)
-			}
-			clientSecret = decryptedSecret
-		}
-
-		if userInfoURLNull && userInfoURLStr != "" {
-			userInfoURL = &userInfoURLStr
-		}
-
-		log.Debug().
-			Str("provider", providerID).
-			Str("client_id", clientID).
-			Bool("has_client_secret", clientSecret != "").
-			Bool("is_encrypted", isEncrypted).
-			Msg("OAuth provider credentials loaded from database")
-
-		// Build OAuth config with redirect_uri from state metadata
-		config = &oauth2.Config{
-			ClientID:     clientID,
-			ClientSecret: clientSecret,
-			RedirectURL:  stateMetadata.RedirectURI, // Use the redirect_uri that was passed to authorize
-			Scopes:       scopes,
-		}
-
-		// Set endpoint based on provider type
-		if isCustom && authzURL != "" && tokenURL != "" {
-			// For custom providers with configured URLs
-			config.Endpoint = oauth2.Endpoint{
-				AuthURL:  authzURL,
-				TokenURL: tokenURL,
-			}
-		} else if !isCustom {
-			// Use built-in provider manager for standard providers
-			manager := auth.NewOAuthManager()
-			config.Endpoint = manager.GetEndpoint(auth.OAuthProvider(providerID))
-		}
-
-		return nil
-	})
-	if err != nil {
-		log.Warn().
-			Err(err).
-			Str("provider", providerID).
-			Msg("Failed to fetch OAuth provider configuration")
-		return c.Redirect().To("/admin/login?error=" + url.QueryEscape("OAuth provider not found"))
-	}
+	userInfoURL := dashState.UserInfoURL
 
 	// Log OAuth config details for debugging
 	log.Debug().
@@ -1070,7 +1026,7 @@ func (h *DashboardAuthHandler) OAuthCallback(c fiber.Ctx) error {
 		log.Error().
 			Err(err).
 			Str("provider", providerID).
-			Str("redirect_uri", stateMetadata.RedirectURI).
+			Str("redirect_uri", config.RedirectURL).
 			Str("config_redirect_uri", config.RedirectURL).
 			Msg("Failed to exchange OAuth authorization code")
 		return c.Redirect().To("/admin/login?error=" + url.QueryEscape("Failed to exchange authorization code"))
@@ -1192,7 +1148,7 @@ func (h *DashboardAuthHandler) OAuthCallback(c fiber.Ctx) error {
 	// Redirect with tokens in URL fragment (for SPA to capture)
 	// Always redirect to /admin after dashboard OAuth login
 	redirectURL := "/admin"
-	return c.Redirect().To(fmt.Sprintf("/admin/login/callback?access_token=%s&refresh_token=%s&redirect_to=%s",
+	return c.Redirect().To(fmt.Sprintf("/admin/login/callback#access_token=%s&refresh_token=%s&redirect_to=%s",
 		url.QueryEscape(loginResp.AccessToken),
 		url.QueryEscape(loginResp.RefreshToken),
 		url.QueryEscape(redirectURL)))
@@ -1367,7 +1323,7 @@ func (h *DashboardAuthHandler) SAMLACSCallback(c fiber.Ctx) error {
 	var parseErr error
 
 	// Get all dashboard-enabled SAML providers
-	dashboardProviders := h.samlService.GetProvidersForDashboard()
+	dashboardProviders := h.samlService.GetProvidersForDashboardWithTenant(c.RequestCtx(), middleware.GetTenantIDFromContext(c))
 
 	// If no dashboard providers configured
 	if len(dashboardProviders) == 0 {
@@ -1495,7 +1451,7 @@ func (h *DashboardAuthHandler) SAMLACSCallback(c fiber.Ctx) error {
 	if redirectURL == "" || redirectURL == "/" {
 		redirectURL = "/admin"
 	}
-	return c.Redirect().To(fmt.Sprintf("/admin/login/callback?access_token=%s&refresh_token=%s&redirect_to=%s",
+	return c.Redirect().To(fmt.Sprintf("/admin/login/callback#access_token=%s&refresh_token=%s&redirect_to=%s",
 		url.QueryEscape(loginResp.AccessToken),
 		url.QueryEscape(loginResp.RefreshToken),
 		url.QueryEscape(redirectURL)))
