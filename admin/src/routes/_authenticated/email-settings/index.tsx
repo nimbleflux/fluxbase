@@ -65,7 +65,7 @@ function EmailSettingsPage() {
   const queryClient = useQueryClient();
   const search = route.useSearch();
   const navigate = route.useNavigate();
-  const { currentTenant, isInstanceAdmin } = useTenantStore();
+  const { currentTenant, isInstanceAdmin, clearTenant } = useTenantStore();
   const isDefaultTenant = currentTenant?.is_default ?? false;
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [editingTemplate, setEditingTemplate] =
@@ -474,12 +474,13 @@ function EmailSettingsPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() =>
+              onClick={() => {
+                clearTenant();
                 navigate({
                   to: "/email-settings",
                   search: { tab: search.tab },
-                })
-              }
+                });
+              }}
             >
               <ArrowLeft className="mr-1 h-4 w-4" />
               Instance Settings

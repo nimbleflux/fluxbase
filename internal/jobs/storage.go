@@ -1090,15 +1090,18 @@ func (s *Storage) GetJobStats(ctx context.Context, namespace *string) (*JobStats
 			return err
 		}
 
-		// Jobs by status
-		statusQuery := `
-			SELECT status, COUNT(*) as count
-			FROM jobs.queue
-		`
-		if namespace != nil {
-			statusQuery += " WHERE namespace = $1"
-		}
-		statusQuery += " GROUP BY status ORDER BY count DESC"
+			// Jobs by status
+			statusQuery := `
+				SELECT status, COUNT(*) as count
+				FROM jobs.queue
+				WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
+			`
+			if namespace != nil {
+				statusQuery += " AND namespace = $2"
+			}
+			statusQuery += " GROUP BY status ORDER BY count DESC"
+
+
 
 		rows, err := tx.Query(ctx, statusQuery, args...)
 		if err != nil {
@@ -1118,13 +1121,14 @@ func (s *Storage) GetJobStats(ctx context.Context, namespace *string) (*JobStats
 		}
 
 		// Jobs by day (last 7 days)
-		dayQuery := `
-			SELECT DATE(created_at) as date, COUNT(*) as count
-			FROM jobs.queue
-			WHERE created_at >= NOW() - INTERVAL '7 days'
-		`
+			dayQuery := `
+				SELECT DATE(created_at) as date, COUNT(*) as count
+				FROM jobs.queue
+				WHERE created_at >= NOW() - INTERVAL '7 days'
+				AND (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
+			`
 		if namespace != nil {
-			dayQuery += " AND namespace = $1"
+			dayQuery += " AND namespace = $2"
 		}
 		dayQuery += " GROUP BY DATE(created_at) ORDER BY date DESC"
 
@@ -1148,14 +1152,15 @@ func (s *Storage) GetJobStats(ctx context.Context, namespace *string) (*JobStats
 		}
 
 		// Jobs by function (top 10)
-		funcQuery := `
-			SELECT job_name, COUNT(*) as count
-			FROM jobs.queue
-		`
-		if namespace != nil {
-			funcQuery += " WHERE namespace = $1"
-		}
-		funcQuery += " GROUP BY job_name ORDER BY count DESC LIMIT 10"
+			funcQuery := `
+				SELECT job_name, COUNT(*) as count
+				FROM jobs.queue
+				WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
+			`
+			if namespace != nil {
+				funcQuery += " AND namespace = $2"
+			}
+			funcQuery += " GROUP BY job_name ORDER BY count DESC LIMIT 10"
 
 		rows, err = tx.Query(ctx, funcQuery, args...)
 		if err != nil {
@@ -1253,7 +1258,8 @@ func (s *Storage) ListWorkers(ctx context.Context) ([]*WorkerRecord, error) {
 		SELECT id, name, hostname, status, max_concurrent_jobs, current_job_count,
 		       last_heartbeat_at, started_at, metadata
 		FROM jobs.workers
-		ORDER BY started_at DESC
+		WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
+			ORDER BY started_at DESC
 	`
 
 	var workers []*WorkerRecord
