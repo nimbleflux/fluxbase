@@ -40,6 +40,7 @@ var fdwSchemas = []string{
 // because they hold per-database local state.
 var fdwExcludeTables = map[string][]string{
 	"platform": {"schema_migrations"},
+	"logging":  {"execution_logs_migration_status"},
 }
 
 // ParseFDWConfig extracts FDW connection details from a database URL.

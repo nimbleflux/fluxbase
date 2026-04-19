@@ -218,6 +218,7 @@ func (s *Storage) GetProcedureByName(ctx context.Context, namespace, name string
 
 // ListProcedures lists all procedures, optionally filtered by namespace
 func (s *Storage) ListProcedures(ctx context.Context, namespace string) ([]*Procedure, error) {
+	tenantID := database.TenantFromContext(ctx)
 	var query string
 	var args []interface{}
 
@@ -228,10 +229,10 @@ func (s *Storage) ListProcedures(ctx context.Context, namespace string) ([]*Proc
 				max_execution_time_seconds, require_roles, is_public, disable_execution_logs, schedule,
 				enabled, version, source, created_by, created_at, updated_at
 			FROM rpc.procedures
-			WHERE namespace = $1
+			WHERE namespace = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 			ORDER BY name ASC
 		`
-		args = []interface{}{namespace}
+		args = []interface{}{namespace, tenantOrNil(tenantID)}
 	} else {
 		query = `
 			SELECT id, name, namespace, description, sql_query, original_code,
@@ -239,11 +240,11 @@ func (s *Storage) ListProcedures(ctx context.Context, namespace string) ([]*Proc
 				max_execution_time_seconds, require_roles, is_public, disable_execution_logs, schedule,
 				enabled, version, source, created_by, created_at, updated_at
 			FROM rpc.procedures
+			WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 			ORDER BY namespace ASC, name ASC
 		`
+		args = []interface{}{tenantOrNil(tenantID)}
 	}
-
-	tenantID := database.TenantFromContext(ctx)
 	var procedures []*Procedure
 	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, args...)
@@ -275,6 +276,7 @@ func (s *Storage) ListProcedures(ctx context.Context, namespace string) ([]*Proc
 
 // ListPublicProcedures lists all public and enabled procedures
 func (s *Storage) ListPublicProcedures(ctx context.Context, namespace string) ([]*ProcedureSummary, error) {
+	tenantID := database.TenantFromContext(ctx)
 	var query string
 	var args []interface{}
 
@@ -284,22 +286,21 @@ func (s *Storage) ListPublicProcedures(ctx context.Context, namespace string) ([
 				max_execution_time_seconds, require_roles, is_public, disable_execution_logs, schedule,
 				enabled, version, source, created_at, updated_at
 			FROM rpc.procedures
-			WHERE namespace = $1 AND enabled = true AND is_public = true
+			WHERE namespace = $1 AND enabled = true AND is_public = true AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 			ORDER BY name ASC
 		`
-		args = []interface{}{namespace}
+		args = []interface{}{namespace, tenantOrNil(tenantID)}
 	} else {
 		query = `
 			SELECT id, name, namespace, description, allowed_tables, allowed_schemas,
 				max_execution_time_seconds, require_roles, is_public, disable_execution_logs, schedule,
 				enabled, version, source, created_at, updated_at
 			FROM rpc.procedures
-			WHERE enabled = true AND is_public = true
+			WHERE enabled = true AND is_public = true AND (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 			ORDER BY namespace ASC, name ASC
 		`
+		args = []interface{}{tenantOrNil(tenantID)}
 	}
-
-	tenantID := database.TenantFromContext(ctx)
 	var procedures []*ProcedureSummary
 	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, args...)
@@ -336,12 +337,12 @@ func (s *Storage) DeleteProcedure(ctx context.Context, id string) error {
 
 // DeleteProcedureWithTenant deletes a procedure by ID with tenant context
 func (s *Storage) DeleteProcedureWithTenant(ctx context.Context, tenantID string, id string) error {
-	query := `DELETE FROM rpc.procedures WHERE id = $1`
+	query := `DELETE FROM rpc.procedures WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))`
 
 	var result pgconn.CommandTag
 	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		var execErr error
-		result, execErr = tx.Exec(ctx, query, id)
+		result, execErr = tx.Exec(ctx, query, id, tenantOrNil(tenantID))
 		return execErr
 	})
 	if err != nil {
@@ -364,12 +365,12 @@ func (s *Storage) DeleteProcedureByName(ctx context.Context, namespace, name str
 
 // DeleteProcedureByNameWithTenant deletes a procedure by namespace and name with tenant context
 func (s *Storage) DeleteProcedureByNameWithTenant(ctx context.Context, tenantID string, namespace, name string) error {
-	query := `DELETE FROM rpc.procedures WHERE namespace = $1 AND name = $2`
+	query := `DELETE FROM rpc.procedures WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))`
 
 	var result pgconn.CommandTag
 	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		var execErr error
-		result, execErr = tx.Exec(ctx, query, namespace, name)
+		result, execErr = tx.Exec(ctx, query, namespace, name, tenantOrNil(tenantID))
 		return execErr
 	})
 	if err != nil {
@@ -391,7 +392,7 @@ func (s *Storage) DeleteProcedureByNameWithTenant(ctx context.Context, tenantID 
 
 // ListNamespaces lists all unique namespaces
 func (s *Storage) ListNamespaces(ctx context.Context) ([]string, error) {
-	query := `SELECT DISTINCT namespace FROM rpc.procedures ORDER BY namespace ASC`
+	query := `SELECT DISTINCT namespace FROM rpc.procedures WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL)) ORDER BY namespace ASC`
 
 	tenantID := database.TenantFromContext(ctx)
 	var namespaces []string
@@ -606,6 +607,7 @@ func (s *Storage) GetExecution(ctx context.Context, id string) (*Execution, erro
 
 // ListExecutions lists executions with optional filters
 func (s *Storage) ListExecutions(ctx context.Context, opts ListExecutionsOptions) ([]*Execution, error) {
+	tenantID := database.TenantFromContext(ctx)
 	query := `
 		SELECT id, procedure_id, procedure_name, namespace, status,
 			input_params, result, error_message, rows_returned, duration_ms,
@@ -616,6 +618,11 @@ func (s *Storage) ListExecutions(ctx context.Context, opts ListExecutionsOptions
 	`
 	args := []interface{}{}
 	argIndex := 1
+
+	// Tenant filter (first dynamic filter)
+	query += fmt.Sprintf(" AND (tenant_id = $%d OR ($%d IS NULL AND tenant_id IS NULL))", argIndex, argIndex)
+	args = append(args, tenantOrNil(tenantID))
+	argIndex++
 
 	if opts.Namespace != "" {
 		query += fmt.Sprintf(" AND namespace = $%d", argIndex)
@@ -656,7 +663,6 @@ func (s *Storage) ListExecutions(ctx context.Context, opts ListExecutionsOptions
 		args = append(args, opts.Offset)
 	}
 
-	tenantID := database.TenantFromContext(ctx)
 	var executions []*Execution
 	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, args...)
@@ -687,3 +693,11 @@ func (s *Storage) ListExecutions(ctx context.Context, opts ListExecutionsOptions
 }
 
 // Note: Execution logs are now stored in the central logging schema (logging.entries)
+
+// tenantOrNil converts an empty tenant string to nil for UUID column compatibility
+func tenantOrNil(tenantID string) interface{} {
+	if tenantID == "" {
+		return nil
+	}
+	return tenantID
+}
