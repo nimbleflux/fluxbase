@@ -283,6 +283,11 @@ func (h *EmailSettingsHandler) UpdateSettings(c fiber.Ctx) error {
 			}
 		}
 
+		// Invalidate settings cache so GetSettings reflects the change
+		if h.settingsCache != nil {
+			h.settingsCache.Invalidate(key)
+		}
+
 		updatedKeys = append(updatedKeys, key)
 		return nil
 	}
