@@ -293,6 +293,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	}
 	dashboardAuthService := auth.NewDashboardAuthService(db, dashboardJWTManager, cfg.Auth.TOTPIssuer)
 	systemSettingsService := auth.NewSystemSettingsService(db)
+	systemSettingsService.SetCache(authService.GetSettingsCache())
 	adminAuthHandler := NewAdminAuthHandler(authService, auth.NewUserRepository(db), dashboardAuthService, systemSettingsService, cfg)
 	// Note: dashboardAuthHandler is initialized later after samlService is created
 	clientKeyHandler := NewClientKeyHandler(clientKeyService)
