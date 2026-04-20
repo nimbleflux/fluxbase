@@ -159,14 +159,14 @@ func TestMCPTables_RLS(t *testing.T) {
 		INSERT INTO mcp.custom_resources (id, uri, name, code, enabled, created_by)
 		VALUES ('d0000000-0000-0000-0000-000000000001', 'fluxbase://custom/res-a', 'Resource A', 'return "A"', true, $1),
 		       ('d0000000-0000-0000-0000-000000000002', 'fluxbase://custom/res-a-disabled', 'Resource A Disabled', 'return "AD"', false, $1)
-		ON CONFLICT (uri, namespace) DO NOTHING
+		ON CONFLICT (id) DO NOTHING
 	`, userA)
 
 	// Create resource owned by user B
 	tc.ExecuteSQLAsSuperuser(`
 		INSERT INTO mcp.custom_resources (id, uri, name, code, enabled, created_by)
 		VALUES ('d0000000-0000-0000-0000-000000000003', 'fluxbase://custom/res-b', 'Resource B', 'return "B"', true, $1)
-		ON CONFLICT (uri, namespace) DO NOTHING
+		ON CONFLICT (id) DO NOTHING
 	`, userB)
 
 	// Create tools owned by user A
@@ -174,7 +174,7 @@ func TestMCPTables_RLS(t *testing.T) {
 		INSERT INTO mcp.custom_tools (id, name, code, enabled, created_by)
 		VALUES ('e0000000-0000-0000-0000-000000000001', 'tool-a', 'return "A"', true, $1),
 		       ('e0000000-0000-0000-0000-000000000002', 'tool-a-disabled', 'return "AD"', false, $1)
-		ON CONFLICT (name, namespace) DO NOTHING
+		ON CONFLICT (id) DO NOTHING
 	`, userA)
 
 	// Test 1: User A should see own resources + enabled resources from others

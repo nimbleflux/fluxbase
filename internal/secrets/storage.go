@@ -96,7 +96,7 @@ func (s *Storage) CreateSecretWithTenant(ctx context.Context, tenantID string, s
 		RETURNING id, version, created_at, updated_at
 	`
 
-	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			secret.Name, secret.Scope, secret.Namespace, encryptedValue,
 			secret.Description, secret.ExpiresAt, userID,

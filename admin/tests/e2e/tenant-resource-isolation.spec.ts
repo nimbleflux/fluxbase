@@ -170,9 +170,9 @@ test.describe("Tenant Resource Isolation", () => {
     const chatbotsB = await rawListChatbots(adminToken, thirdTenantId);
     expect(chatbotsB.status).toBeLessThan(300);
 
-    // Both should return arrays (may be empty)
-    expect(Array.isArray(chatbotsA.body)).toBe(true);
-    expect(Array.isArray(chatbotsB.body)).toBe(true);
+    // Both should return valid responses with chatbots arrays
+    expect(Array.isArray(chatbotsA.body?.chatbots)).toBe(true);
+    expect(Array.isArray(chatbotsB.body?.chatbots)).toBe(true);
   });
 
   // ────────────────────────────────────────────────────────────────
