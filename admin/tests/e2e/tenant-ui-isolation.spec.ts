@@ -399,7 +399,7 @@ export default function handler(req: Request): Response {
     await switchTenantAndWait(adminPage, tenantAName, tenantAId);
 
     await adminPage.goto("ai/knowledge-bases", {
-      waitUntil: "networkidle",
+      waitUntil: "load",
     });
 
     // Tenant A's KB should be visible, B's should not
@@ -409,7 +409,7 @@ export default function handler(req: Request): Response {
     // Switch to tenant B
     await switchTenantAndWait(adminPage, tenantBName, tenantBId);
     await adminPage.goto("ai/knowledge-bases", {
-      waitUntil: "networkidle",
+      waitUntil: "load",
     });
 
     await expect(adminPage.getByText(kbB)).toBeVisible({ timeout: 10_000 });

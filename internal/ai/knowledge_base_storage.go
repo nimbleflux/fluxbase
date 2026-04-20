@@ -2189,6 +2189,9 @@ func (s *KnowledgeBaseStorage) CreateKnowledgeBaseFromRequest(ctx context.Contex
 		kb.ChunkStrategy = defaults.ChunkStrategy
 	}
 
+	// Set owner from request if provided
+	kb.OwnerID = req.OwnerID
+
 	if err := s.CreateKnowledgeBase(ctx, kb); err != nil {
 		return nil, err
 	}

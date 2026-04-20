@@ -1875,7 +1875,7 @@ CREATE TABLE IF NOT EXISTS webhooks (
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
     CONSTRAINT webhooks_pkey PRIMARY KEY (id),
-    CONSTRAINT webhooks_created_by_fkey FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
+    CONSTRAINT webhooks_created_by_fkey FOREIGN KEY (created_by) REFERENCES platform.users (id) ON DELETE SET NULL,
     CONSTRAINT webhooks_scope_check CHECK (scope IN ('user'::text, 'global'::text))
 );
 

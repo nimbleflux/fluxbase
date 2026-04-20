@@ -340,30 +340,16 @@ END $$;
 -- ai -> auth, storage
 -- ============================================================================
 
--- ai.knowledge_bases.created_by -> auth.users.id
+-- ai.knowledge_bases.created_by -> removed FK (users may be in auth.users or platform.users)
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'knowledge_bases_created_by_fkey'
-        AND conrelid = 'ai.knowledge_bases'::regclass
-    ) THEN
-        ALTER TABLE ai.knowledge_bases ADD CONSTRAINT knowledge_bases_created_by_fkey
-            FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
-    END IF;
+    ALTER TABLE ai.knowledge_bases DROP CONSTRAINT IF EXISTS knowledge_bases_created_by_fkey;
 END $$;
 
--- ai.knowledge_bases.owner_id -> auth.users.id
+-- ai.knowledge_bases.owner_id -> removed FK (users may be in auth.users or platform.users)
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'knowledge_bases_owner_id_fkey'
-        AND conrelid = 'ai.knowledge_bases'::regclass
-    ) THEN
-        ALTER TABLE ai.knowledge_bases ADD CONSTRAINT knowledge_bases_owner_id_fkey
-            FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE SET NULL;
-    END IF;
+    ALTER TABLE ai.knowledge_bases DROP CONSTRAINT IF EXISTS knowledge_bases_owner_id_fkey;
 END $$;
 
 -- ai.documents.created_by -> auth.users.id
