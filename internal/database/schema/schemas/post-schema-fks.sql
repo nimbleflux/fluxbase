@@ -336,6 +336,12 @@ BEGIN
     END IF;
 END $$;
 
+-- auth.webhooks.created_by -> removed FK (users may be in auth.users or platform.users)
+DO $$
+BEGIN
+    ALTER TABLE auth.webhooks DROP CONSTRAINT IF EXISTS webhooks_created_by_fkey;
+END $$;
+
 -- ============================================================================
 -- ai -> auth, storage
 -- ============================================================================
