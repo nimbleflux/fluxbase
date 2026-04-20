@@ -120,8 +120,7 @@ export default function handler(req: Request): Response {
       {
         name: webhookA,
         url: "https://example.com/a",
-        events: ["INSERT"],
-        "table-name": "public.test_ui_iso",
+        events: [{ table: "public.test_ui_iso", operations: ["INSERT"] }],
       },
       adminToken,
       tenantAId,
@@ -192,8 +191,7 @@ export default function handler(req: Request): Response {
       {
         name: webhookB,
         url: "https://example.com/b",
-        events: ["INSERT"],
-        "table-name": "public.test_ui_iso",
+        events: [{ table: "public.test_ui_iso", operations: ["INSERT"] }],
       },
       adminToken,
       tenantBId,

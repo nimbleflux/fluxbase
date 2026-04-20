@@ -195,7 +195,7 @@ test.describe("Tenant Resource Isolation", () => {
       {
         name: `isolation-wh-${Date.now()}`,
         url: "https://example.com/webhook",
-        events: ["INSERT"],
+        events: [{ table: "public.test_table", operations: ["INSERT"] }],
       },
       adminToken,
       defaultTenantId,

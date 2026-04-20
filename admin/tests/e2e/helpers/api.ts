@@ -988,7 +988,7 @@ export async function rawCreateWebhook(
   options: {
     name: string;
     url: string;
-    events: string[];
+    events?: Array<{ table: string; operations: string[] }>;
   },
   accessToken: string,
   tenantId?: string,
@@ -999,10 +999,17 @@ export async function rawCreateWebhook(
   if (tenantId) {
     headers["X-FB-Tenant"] = tenantId;
   }
+  const data: Record<string, unknown> = {
+    name: options.name,
+    url: options.url,
+    events: options.events || [
+      { table: "public.test_table", operations: ["INSERT"] },
+    ],
+  };
   return rawApiRequest({
     method: "POST",
     path: "/api/v1/webhooks",
-    data: options,
+    data,
     headers,
   });
 }

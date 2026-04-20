@@ -2431,7 +2431,7 @@ func (s *KnowledgeBaseStorage) ListUserKnowledgeBases(ctx context.Context, userI
 			var userPermission string
 			if err := rows.Scan(
 				&kb.ID, &kb.Name, &kb.Namespace, &kb.Description,
-				&kb.Enabled, &kb.DocumentCount, &kb.TotalChunks,
+				&kb.Enabled, &kb.DocumentCount, &kb.TotalChunks, &kb.Visibility,
 				&kb.UpdatedAt,
 				&userPermission,
 			); err != nil {
