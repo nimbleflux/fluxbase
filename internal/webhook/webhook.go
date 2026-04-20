@@ -327,12 +327,16 @@ func (s *WebhookService) Create(ctx context.Context, webhook *Webhook) error {
 	}
 
 	query := `
-		INSERT INTO auth.webhooks (name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		INSERT INTO auth.webhooks (name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by, tenant_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id, created_at, updated_at
 	`
 
 	tenantID := database.TenantFromContext(ctx)
+	var tenantIDVal interface{}
+	if tenantID != "" {
+		tenantIDVal = uuid.MustParse(tenantID)
+	}
 	err = database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			webhook.Name,
@@ -347,6 +351,7 @@ func (s *WebhookService) Create(ctx context.Context, webhook *Webhook) error {
 			headersJSON,
 			webhook.Scope,
 			webhook.CreatedBy,
+			tenantIDVal,
 		).Scan(&webhook.ID, &webhook.CreatedAt, &webhook.UpdatedAt)
 	})
 	if err != nil {
@@ -452,7 +457,7 @@ func (s *WebhookService) Get(ctx context.Context, id uuid.UUID) (*Webhook, error
 		query := `
 			SELECT id, name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by, created_at, updated_at
 			FROM auth.webhooks
-			WHERE id = $1 AND tenant_id = $2
+			WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
 		`
 		err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 			return tx.QueryRow(ctx, query, id, tenantID).Scan(
