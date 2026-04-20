@@ -2407,6 +2407,7 @@ func (s *KnowledgeBaseStorage) ListUserKnowledgeBases(ctx context.Context, userI
 				   kb.document_count, kb.total_chunks, kb.visibility,
 				   kb.updated_at,
 				   CASE
+					   WHEN kb.owner_id = $1 THEN 'owner'
 					   WHEN kbp.permission IS NOT NULL THEN kbp.permission
 					   WHEN kb.visibility = 'public' THEN 'viewer'
 					   ELSE NULL
@@ -2415,7 +2416,7 @@ func (s *KnowledgeBaseStorage) ListUserKnowledgeBases(ctx context.Context, userI
 			LEFT JOIN ai.knowledge_base_permissions kbp
 				   ON kbp.knowledge_base_id = kb.id AND kbp.user_id = $1
 			WHERE kb.enabled = true
-			  AND (kbp.user_id = $1 OR kb.visibility = 'public')
+			  AND (kb.owner_id = $1 OR kbp.user_id = $1 OR kb.visibility = 'public')
 			ORDER BY kb.name
 		`
 
