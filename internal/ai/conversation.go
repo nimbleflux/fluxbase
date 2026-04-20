@@ -81,6 +81,11 @@ type ConversationMessage struct {
 	SequenceNumber   int                      `json:"sequence_number"`
 }
 
+func (cm *ConversationManager) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tenantID := database.TenantFromContext(ctx)
+	return database.WrapWithTenantAwareRole(ctx, cm.db, tenantID, fn)
+}
+
 // NewConversationManager creates a new conversation manager
 func NewConversationManager(db *database.Connection, cacheTTL time.Duration, maxTurns int) *ConversationManager {
 	cm := &ConversationManager{
@@ -311,8 +316,11 @@ func (cm *ConversationManager) CloseConversation(ctx context.Context, conversati
 
 	// Update database status if persisted
 	if state.PersistToDatabase {
-		query := `UPDATE ai.conversations SET status = 'archived', updated_at = NOW() WHERE id = $1`
-		_, err := cm.db.Exec(ctx, query, conversationID)
+		err := cm.withTenant(ctx, func(tx pgx.Tx) error {
+			query := `UPDATE ai.conversations SET status = 'archived', updated_at = NOW() WHERE id = $1`
+			_, execErr := tx.Exec(ctx, query, conversationID)
+			return execErr
+		})
 		if err != nil {
 			log.Error().Err(err).Str("id", conversationID).Msg("Failed to archive conversation")
 			return err
@@ -330,7 +338,9 @@ func (cm *ConversationManager) saveConversation(ctx context.Context, conv *Conve
 	validUserID := conv.UserID
 	if validUserID != nil {
 		var exists bool
-		err := cm.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)", *validUserID).Scan(&exists)
+		err := cm.withTenant(ctx, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)", *validUserID).Scan(&exists)
+		})
 		if err != nil {
 			log.Warn().Err(err).Str("user_id", *validUserID).Msg("Failed to check if user exists, setting user_id to NULL")
 			validUserID = nil
@@ -350,13 +360,14 @@ func (cm *ConversationManager) saveConversation(ctx context.Context, conv *Conve
 		)
 	`
 
-	_, err := cm.db.Exec(ctx, query,
-		conv.ID, conv.ChatbotID, validUserID, conv.SessionID, conv.Title, conv.Status,
-		conv.TurnCount, conv.TotalPromptTokens, conv.TotalCompletionTokens,
-		conv.CreatedAt, conv.UpdatedAt, conv.LastMessageAt, conv.ExpiresAt,
-	)
-
-	return err
+	return cm.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query,
+			conv.ID, conv.ChatbotID, validUserID, conv.SessionID, conv.Title, conv.Status,
+			conv.TurnCount, conv.TotalPromptTokens, conv.TotalCompletionTokens,
+			conv.CreatedAt, conv.UpdatedAt, conv.LastMessageAt, conv.ExpiresAt,
+		)
+		return err
+	})
 }
 
 func (cm *ConversationManager) loadConversation(ctx context.Context, id string) (*Conversation, error) {
@@ -368,12 +379,14 @@ func (cm *ConversationManager) loadConversation(ctx context.Context, id string) 
 		WHERE id = $1 AND status = 'active'
 	`
 
-	conv := &Conversation{}
-	err := cm.db.QueryRow(ctx, query, id).Scan(
-		&conv.ID, &conv.ChatbotID, &conv.UserID, &conv.SessionID, &conv.Title, &conv.Status,
-		&conv.TurnCount, &conv.TotalPromptTokens, &conv.TotalCompletionTokens,
-		&conv.CreatedAt, &conv.UpdatedAt, &conv.LastMessageAt, &conv.ExpiresAt,
-	)
+	var conv Conversation
+	err := cm.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id).Scan(
+			&conv.ID, &conv.ChatbotID, &conv.UserID, &conv.SessionID, &conv.Title, &conv.Status,
+			&conv.TurnCount, &conv.TotalPromptTokens, &conv.TotalCompletionTokens,
+			&conv.CreatedAt, &conv.UpdatedAt, &conv.LastMessageAt, &conv.ExpiresAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -382,7 +395,7 @@ func (cm *ConversationManager) loadConversation(ctx context.Context, id string) 
 		return nil, err
 	}
 
-	return conv, nil
+	return &conv, nil
 }
 
 func (cm *ConversationManager) loadMessages(ctx context.Context, conversationID string) ([]Message, error) {
@@ -393,30 +406,37 @@ func (cm *ConversationManager) loadMessages(ctx context.Context, conversationID 
 		ORDER BY sequence_number
 	`
 
-	rows, err := cm.db.Query(ctx, query, conversationID)
+	var messages []Message
+	err := cm.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, conversationID)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var role string
+			var content string
+			var toolCallID *string
+
+			if scanErr := rows.Scan(&role, &content, &toolCallID); scanErr != nil {
+				continue
+			}
+
+			msg := Message{
+				Role:    Role(role),
+				Content: content,
+			}
+			if toolCallID != nil {
+				msg.ToolCallID = *toolCallID
+			}
+			messages = append(messages, msg)
+		}
+
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-
-	var messages []Message
-	for rows.Next() {
-		var role string
-		var content string
-		var toolCallID *string
-
-		if err := rows.Scan(&role, &content, &toolCallID); err != nil {
-			continue
-		}
-
-		msg := Message{
-			Role:    Role(role),
-			Content: content,
-		}
-		if toolCallID != nil {
-			msg.ToolCallID = *toolCallID
-		}
-		messages = append(messages, msg)
 	}
 
 	return messages, nil
@@ -433,13 +453,14 @@ func (cm *ConversationManager) saveMessage(ctx context.Context, msg *Conversatio
 		)
 	`
 
-	_, err := cm.db.Exec(ctx, query,
-		msg.ID, msg.ConversationID, msg.Role, msg.Content, msg.ToolCallID, msg.ToolName,
-		msg.ExecutedSQL, msg.SQLResultSummary, msg.SQLRowCount, msg.SQLError, msg.SQLDurationMs,
-		msg.QueryResults, msg.PromptTokens, msg.CompletionTokens, msg.CreatedAt, msg.SequenceNumber,
-	)
-
-	return err
+	return cm.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query,
+			msg.ID, msg.ConversationID, msg.Role, msg.Content, msg.ToolCallID, msg.ToolName,
+			msg.ExecutedSQL, msg.SQLResultSummary, msg.SQLRowCount, msg.SQLError, msg.SQLDurationMs,
+			msg.QueryResults, msg.PromptTokens, msg.CompletionTokens, msg.CreatedAt, msg.SequenceNumber,
+		)
+		return err
+	})
 }
 
 func (cm *ConversationManager) updateConversationStats(ctx context.Context, conversationID string, state *ConversationState) error {
@@ -453,14 +474,15 @@ func (cm *ConversationManager) updateConversationStats(ctx context.Context, conv
 		WHERE id = $1
 	`
 
-	_, err := cm.db.Exec(ctx, query,
-		conversationID,
-		state.TurnCount,
-		state.TotalPromptTokens,
-		state.TotalCompletionTokens,
-	)
-
-	return err
+	return cm.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query,
+			conversationID,
+			state.TurnCount,
+			state.TotalPromptTokens,
+			state.TotalCompletionTokens,
+		)
+		return err
+	})
 }
 
 // cleanupLoop periodically cleans up expired conversations from cache
@@ -528,14 +550,15 @@ func generateTitle(content string) string {
 
 // autoGenerateTitleIfNeeded generates a title for a conversation if not already set
 func (cm *ConversationManager) autoGenerateTitleIfNeeded(conversationID, content string) {
-	// Use a separate context with timeout
+	// Use a separate context with timeout (no tenant context available in background goroutine)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Check if title is already set
 	var existingTitle *string
-	query := `SELECT title FROM ai.conversations WHERE id = $1`
-	err := cm.db.QueryRow(ctx, query, conversationID).Scan(&existingTitle)
+	err := cm.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT title FROM ai.conversations WHERE id = $1`, conversationID).Scan(&existingTitle)
+	})
 	if err != nil {
 		log.Warn().Err(err).Str("conversation_id", conversationID).Msg("Failed to check existing title")
 		return
@@ -547,8 +570,10 @@ func (cm *ConversationManager) autoGenerateTitleIfNeeded(conversationID, content
 
 	// Generate and set title
 	title := generateTitle(content)
-	updateQuery := `UPDATE ai.conversations SET title = $2, updated_at = NOW() WHERE id = $1`
-	_, err = cm.db.Exec(ctx, updateQuery, conversationID, title)
+	err = cm.withTenant(ctx, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, `UPDATE ai.conversations SET title = $2, updated_at = NOW() WHERE id = $1`, conversationID, title)
+		return execErr
+	})
 	if err != nil {
 		log.Warn().Err(err).Str("conversation_id", conversationID).Msg("Failed to set auto-generated title")
 		return

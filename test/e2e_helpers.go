@@ -1881,6 +1881,10 @@ func (tc *TestContext) QuerySQLAsRLSUser(sql string, userID string, args ...inte
 	require.NoError(tc.T, err, "Failed to begin transaction")
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// Restrict to authenticated role so service_role admin policies don't apply
+	_, err = tx.Exec(ctx, "SET LOCAL ROLE authenticated")
+	require.NoError(tc.T, err, "Failed to set role to authenticated")
+
 	// Set RLS context variables (these affect RLS policy checks)
 	// Set request.jwt.claims with user ID and role (Supabase/Fluxbase format)
 	jwtClaims := fmt.Sprintf(`{"sub":"%s","role":"authenticated"}`, userID)

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api'
+import { requireInstanceAdmin } from '@/lib/route-guards'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,9 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 export const Route = createFileRoute('/_authenticated/extensions/')({
+  beforeLoad: () => {
+    requireInstanceAdmin();
+  },
   component: ExtensionsPage,
 })
 

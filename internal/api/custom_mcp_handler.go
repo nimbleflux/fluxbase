@@ -48,6 +48,9 @@ func (h *CustomMCPHandler) ListTools(c fiber.Ctx) error {
 		Namespace:   c.Query("namespace"),
 		EnabledOnly: c.Query("enabled_only") == "true",
 	}
+	if filter.Namespace == "default" {
+		filter.Namespace = ""
+	}
 
 	if limit := fiber.Query[int](c, "limit", 0); limit > 0 {
 		filter.Limit = limit
@@ -366,6 +369,9 @@ func (h *CustomMCPHandler) ListResources(c fiber.Ctx) error {
 	filter := custom.ListResourcesFilter{
 		Namespace:   c.Query("namespace"),
 		EnabledOnly: c.Query("enabled_only") == "true",
+	}
+	if filter.Namespace == "default" {
+		filter.Namespace = ""
 	}
 
 	if limit := fiber.Query[int](c, "limit", 0); limit > 0 {

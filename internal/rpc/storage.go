@@ -60,7 +60,7 @@ func (s *Storage) CreateProcedureWithTenant(ctx context.Context, tenantID string
 	}
 	proc.UpdatedAt = time.Now()
 
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query,
 			proc.ID, proc.Name, proc.Namespace, proc.Description, proc.SQLQuery, proc.OriginalCode,
 			proc.InputSchema, proc.OutputSchema, proc.AllowedTables, proc.AllowedSchemas,
@@ -114,7 +114,7 @@ func (s *Storage) UpdateProcedureWithTenant(ctx context.Context, tenantID string
 	proc.UpdatedAt = time.Now()
 
 	var result pgconn.CommandTag
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		var execErr error
 		result, execErr = tx.Exec(ctx, query,
 			proc.ID,
@@ -165,7 +165,7 @@ func (s *Storage) GetProcedure(ctx context.Context, id string) (*Procedure, erro
 
 	tenantID := database.TenantFromContext(ctx)
 	proc := &Procedure{}
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id).Scan(
 			&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
 			&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
@@ -197,7 +197,7 @@ func (s *Storage) GetProcedureByName(ctx context.Context, namespace, name string
 
 	tenantID := database.TenantFromContext(ctx)
 	proc := &Procedure{}
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, namespace, name).Scan(
 			&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
 			&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
@@ -218,6 +218,7 @@ func (s *Storage) GetProcedureByName(ctx context.Context, namespace, name string
 
 // ListProcedures lists all procedures, optionally filtered by namespace
 func (s *Storage) ListProcedures(ctx context.Context, namespace string) ([]*Procedure, error) {
+	tenantID := database.TenantFromContext(ctx)
 	var query string
 	var args []interface{}
 
@@ -228,10 +229,10 @@ func (s *Storage) ListProcedures(ctx context.Context, namespace string) ([]*Proc
 				max_execution_time_seconds, require_roles, is_public, disable_execution_logs, schedule,
 				enabled, version, source, created_by, created_at, updated_at
 			FROM rpc.procedures
-			WHERE namespace = $1
+			WHERE namespace = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 			ORDER BY name ASC
 		`
-		args = []interface{}{namespace}
+		args = []interface{}{namespace, tenantOrNil(tenantID)}
 	} else {
 		query = `
 			SELECT id, name, namespace, description, sql_query, original_code,
@@ -239,13 +240,13 @@ func (s *Storage) ListProcedures(ctx context.Context, namespace string) ([]*Proc
 				max_execution_time_seconds, require_roles, is_public, disable_execution_logs, schedule,
 				enabled, version, source, created_by, created_at, updated_at
 			FROM rpc.procedures
+			WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 			ORDER BY namespace ASC, name ASC
 		`
+		args = []interface{}{tenantOrNil(tenantID)}
 	}
-
-	tenantID := database.TenantFromContext(ctx)
 	var procedures []*Procedure
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, args...)
 		if queryErr != nil {
 			return queryErr
@@ -275,6 +276,7 @@ func (s *Storage) ListProcedures(ctx context.Context, namespace string) ([]*Proc
 
 // ListPublicProcedures lists all public and enabled procedures
 func (s *Storage) ListPublicProcedures(ctx context.Context, namespace string) ([]*ProcedureSummary, error) {
+	tenantID := database.TenantFromContext(ctx)
 	var query string
 	var args []interface{}
 
@@ -284,24 +286,23 @@ func (s *Storage) ListPublicProcedures(ctx context.Context, namespace string) ([
 				max_execution_time_seconds, require_roles, is_public, disable_execution_logs, schedule,
 				enabled, version, source, created_at, updated_at
 			FROM rpc.procedures
-			WHERE namespace = $1 AND enabled = true AND is_public = true
+			WHERE namespace = $1 AND enabled = true AND is_public = true AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 			ORDER BY name ASC
 		`
-		args = []interface{}{namespace}
+		args = []interface{}{namespace, tenantOrNil(tenantID)}
 	} else {
 		query = `
 			SELECT id, name, namespace, description, allowed_tables, allowed_schemas,
 				max_execution_time_seconds, require_roles, is_public, disable_execution_logs, schedule,
 				enabled, version, source, created_at, updated_at
 			FROM rpc.procedures
-			WHERE enabled = true AND is_public = true
+			WHERE enabled = true AND is_public = true AND (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 			ORDER BY namespace ASC, name ASC
 		`
+		args = []interface{}{tenantOrNil(tenantID)}
 	}
-
-	tenantID := database.TenantFromContext(ctx)
 	var procedures []*ProcedureSummary
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, args...)
 		if queryErr != nil {
 			return queryErr
@@ -336,12 +337,12 @@ func (s *Storage) DeleteProcedure(ctx context.Context, id string) error {
 
 // DeleteProcedureWithTenant deletes a procedure by ID with tenant context
 func (s *Storage) DeleteProcedureWithTenant(ctx context.Context, tenantID string, id string) error {
-	query := `DELETE FROM rpc.procedures WHERE id = $1`
+	query := `DELETE FROM rpc.procedures WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))`
 
 	var result pgconn.CommandTag
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		var execErr error
-		result, execErr = tx.Exec(ctx, query, id)
+		result, execErr = tx.Exec(ctx, query, id, tenantOrNil(tenantID))
 		return execErr
 	})
 	if err != nil {
@@ -364,12 +365,12 @@ func (s *Storage) DeleteProcedureByName(ctx context.Context, namespace, name str
 
 // DeleteProcedureByNameWithTenant deletes a procedure by namespace and name with tenant context
 func (s *Storage) DeleteProcedureByNameWithTenant(ctx context.Context, tenantID string, namespace, name string) error {
-	query := `DELETE FROM rpc.procedures WHERE namespace = $1 AND name = $2`
+	query := `DELETE FROM rpc.procedures WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))`
 
 	var result pgconn.CommandTag
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		var execErr error
-		result, execErr = tx.Exec(ctx, query, namespace, name)
+		result, execErr = tx.Exec(ctx, query, namespace, name, tenantOrNil(tenantID))
 		return execErr
 	})
 	if err != nil {
@@ -391,21 +392,28 @@ func (s *Storage) DeleteProcedureByNameWithTenant(ctx context.Context, tenantID 
 
 // ListNamespaces lists all unique namespaces
 func (s *Storage) ListNamespaces(ctx context.Context) ([]string, error) {
-	query := `SELECT DISTINCT namespace FROM rpc.procedures ORDER BY namespace ASC`
+	query := `SELECT DISTINCT namespace FROM rpc.procedures WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL)) ORDER BY namespace ASC`
 
-	rows, err := s.db.Pool().Query(ctx, query)
+	tenantID := database.TenantFromContext(ctx)
+	var namespaces []string
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, tenantOrNil(tenantID))
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var ns string
+			if scanErr := rows.Scan(&ns); scanErr != nil {
+				return scanErr
+			}
+			namespaces = append(namespaces, ns)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list namespaces: %w", err)
-	}
-	defer rows.Close()
-
-	var namespaces []string
-	for rows.Next() {
-		var ns string
-		if err := rows.Scan(&ns); err != nil {
-			return nil, fmt.Errorf("failed to scan namespace: %w", err)
-		}
-		namespaces = append(namespaces, ns)
 	}
 
 	return namespaces, nil
@@ -423,25 +431,31 @@ func (s *Storage) ListScheduledProcedures(ctx context.Context) ([]*Procedure, er
 		ORDER BY namespace ASC, name ASC
 	`
 
-	rows, err := s.db.Pool().Query(ctx, query)
+	tenantID := database.TenantFromContext(ctx)
+	var procedures []*Procedure
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, tenantOrNil(tenantID))
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			proc := &Procedure{}
+			if scanErr := rows.Scan(
+				&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
+				&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
+				&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
+				&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
+			); scanErr != nil {
+				return scanErr
+			}
+			procedures = append(procedures, proc)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list scheduled procedures: %w", err)
-	}
-	defer rows.Close()
-
-	var procedures []*Procedure
-	for rows.Next() {
-		proc := &Procedure{}
-		err := rows.Scan(
-			&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
-			&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
-			&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
-			&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan procedure: %w", err)
-		}
-		procedures = append(procedures, proc)
 	}
 
 	return procedures, nil
@@ -474,12 +488,16 @@ func (s *Storage) CreateExecution(ctx context.Context, exec *Execution) error {
 		exec.CreatedAt = time.Now()
 	}
 
-	_, err := s.db.Exec(ctx, query,
-		exec.ID, exec.ProcedureID, exec.ProcedureName, exec.Namespace, exec.Status,
-		exec.InputParams, exec.Result, exec.ErrorMessage, exec.RowsReturned, exec.DurationMs,
-		exec.UserID, exec.UserRole, exec.UserEmail, exec.IsAsync,
-		exec.CreatedAt, exec.StartedAt, exec.CompletedAt,
-	)
+	tenantID := database.TenantFromContext(ctx)
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query,
+			exec.ID, exec.ProcedureID, exec.ProcedureName, exec.Namespace, exec.Status,
+			exec.InputParams, exec.Result, exec.ErrorMessage, exec.RowsReturned, exec.DurationMs,
+			exec.UserID, exec.UserRole, exec.UserEmail, exec.IsAsync,
+			exec.CreatedAt, exec.StartedAt, exec.CompletedAt,
+		)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create execution: %w", err)
 	}
@@ -501,16 +519,22 @@ func (s *Storage) UpdateExecution(ctx context.Context, exec *Execution) error {
 		WHERE id = $1
 	`
 
-	result, err := s.db.Exec(ctx, query,
-		exec.ID,
-		exec.Status,
-		exec.Result,
-		exec.ErrorMessage,
-		exec.RowsReturned,
-		exec.DurationMs,
-		exec.StartedAt,
-		exec.CompletedAt,
-	)
+	tenantID := database.TenantFromContext(ctx)
+	var result pgconn.CommandTag
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query,
+			exec.ID,
+			exec.Status,
+			exec.Result,
+			exec.ErrorMessage,
+			exec.RowsReturned,
+			exec.DurationMs,
+			exec.StartedAt,
+			exec.CompletedAt,
+		)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to update execution: %w", err)
 	}
@@ -531,7 +555,13 @@ func (s *Storage) CancelExecution(ctx context.Context, id string) error {
 		WHERE id = $1 AND status IN ($3, $4)
 	`
 
-	result, err := s.db.Exec(ctx, query, id, StatusCancelled, StatusPending, StatusRunning)
+	tenantID := database.TenantFromContext(ctx)
+	var result pgconn.CommandTag
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, id, StatusCancelled, StatusPending, StatusRunning)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to cancel execution: %w", err)
 	}
@@ -554,13 +584,16 @@ func (s *Storage) GetExecution(ctx context.Context, id string) (*Execution, erro
 		WHERE id = $1
 	`
 
+	tenantID := database.TenantFromContext(ctx)
 	exec := &Execution{}
-	err := s.db.Pool().QueryRow(ctx, query, id).Scan(
-		&exec.ID, &exec.ProcedureID, &exec.ProcedureName, &exec.Namespace, &exec.Status,
-		&exec.InputParams, &exec.Result, &exec.ErrorMessage, &exec.RowsReturned, &exec.DurationMs,
-		&exec.UserID, &exec.UserRole, &exec.UserEmail, &exec.IsAsync,
-		&exec.CreatedAt, &exec.StartedAt, &exec.CompletedAt,
-	)
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id).Scan(
+			&exec.ID, &exec.ProcedureID, &exec.ProcedureName, &exec.Namespace, &exec.Status,
+			&exec.InputParams, &exec.Result, &exec.ErrorMessage, &exec.RowsReturned, &exec.DurationMs,
+			&exec.UserID, &exec.UserRole, &exec.UserEmail, &exec.IsAsync,
+			&exec.CreatedAt, &exec.StartedAt, &exec.CompletedAt,
+		)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -574,6 +607,7 @@ func (s *Storage) GetExecution(ctx context.Context, id string) (*Execution, erro
 
 // ListExecutions lists executions with optional filters
 func (s *Storage) ListExecutions(ctx context.Context, opts ListExecutionsOptions) ([]*Execution, error) {
+	tenantID := database.TenantFromContext(ctx)
 	query := `
 		SELECT id, procedure_id, procedure_name, namespace, status,
 			input_params, result, error_message, rows_returned, duration_ms,
@@ -584,6 +618,11 @@ func (s *Storage) ListExecutions(ctx context.Context, opts ListExecutionsOptions
 	`
 	args := []interface{}{}
 	argIndex := 1
+
+	// Tenant filter (first dynamic filter)
+	query += fmt.Sprintf(" AND (tenant_id = $%d OR ($%d IS NULL AND tenant_id IS NULL))", argIndex, argIndex)
+	args = append(args, tenantOrNil(tenantID))
+	argIndex++
 
 	if opts.Namespace != "" {
 		query += fmt.Sprintf(" AND namespace = $%d", argIndex)
@@ -624,28 +663,41 @@ func (s *Storage) ListExecutions(ctx context.Context, opts ListExecutionsOptions
 		args = append(args, opts.Offset)
 	}
 
-	rows, err := s.db.Pool().Query(ctx, query, args...)
+	var executions []*Execution
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, args...)
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			exec := &Execution{}
+			if scanErr := rows.Scan(
+				&exec.ID, &exec.ProcedureID, &exec.ProcedureName, &exec.Namespace, &exec.Status,
+				&exec.InputParams, &exec.Result, &exec.ErrorMessage, &exec.RowsReturned, &exec.DurationMs,
+				&exec.UserID, &exec.UserRole, &exec.UserEmail, &exec.IsAsync,
+				&exec.CreatedAt, &exec.StartedAt, &exec.CompletedAt,
+			); scanErr != nil {
+				return scanErr
+			}
+			executions = append(executions, exec)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list executions: %w", err)
-	}
-	defer rows.Close()
-
-	var executions []*Execution
-	for rows.Next() {
-		exec := &Execution{}
-		err := rows.Scan(
-			&exec.ID, &exec.ProcedureID, &exec.ProcedureName, &exec.Namespace, &exec.Status,
-			&exec.InputParams, &exec.Result, &exec.ErrorMessage, &exec.RowsReturned, &exec.DurationMs,
-			&exec.UserID, &exec.UserRole, &exec.UserEmail, &exec.IsAsync,
-			&exec.CreatedAt, &exec.StartedAt, &exec.CompletedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan execution: %w", err)
-		}
-		executions = append(executions, exec)
 	}
 
 	return executions, nil
 }
 
 // Note: Execution logs are now stored in the central logging schema (logging.entries)
+
+// tenantOrNil converts an empty tenant string to nil for UUID column compatibility
+func tenantOrNil(tenantID string) interface{} {
+	if tenantID == "" {
+		return nil
+	}
+	return tenantID
+}

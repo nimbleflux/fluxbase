@@ -2732,3 +2732,28 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE user_quotas TO service_role;
 
+--
+-- Name: tenant_service grants; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA ai TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE knowledge_bases TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE knowledge_base_permissions TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE documents TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE document_permissions TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE chunks TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entities TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE document_entities TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entity_relationships TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE providers TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE chatbots TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE chatbot_knowledge_bases TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE conversations TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE messages TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE query_audit_log TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE retrieval_log TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE table_export_sync_configs TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE user_chatbot_usage TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE user_provider_preferences TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE user_quotas TO tenant_service;
+

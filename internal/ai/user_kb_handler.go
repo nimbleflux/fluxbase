@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
@@ -65,7 +66,7 @@ func (h *UserKnowledgeBaseHandler) SetStorageService(svc *storage.Service) {
 // ListMyKnowledgeBases returns KBs accessible to current user
 // GET /api/v1/ai/knowledge-bases
 func (h *UserKnowledgeBaseHandler) ListMyKnowledgeBases(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Safely check if user_id exists in context
 	userIDRaw := c.Locals("user_id")
@@ -109,7 +110,7 @@ func (h *UserKnowledgeBaseHandler) ListMyKnowledgeBases(c fiber.Ctx) error {
 // CreateMyKnowledgeBase creates a user-owned KB
 // POST /api/v1/ai/knowledge-bases
 func (h *UserKnowledgeBaseHandler) CreateMyKnowledgeBase(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 
 	var req CreateKnowledgeBaseRequest
@@ -126,18 +127,15 @@ func (h *UserKnowledgeBaseHandler) CreateMyKnowledgeBase(c fiber.Ctx) error {
 		})
 	}
 
+	// Set owner on request so it's included in the INSERT
+	req.OwnerID = &userID
+
 	// Create KB using the shared method (handles defaults including embedding model)
 	kb, err := h.storage.CreateKnowledgeBaseFromRequest(ctx, req)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to create knowledge base",
 		})
-	}
-
-	// Set owner to current user
-	kb.OwnerID = &userID
-	if err := h.storage.UpdateKnowledgeBase(ctx, kb); err != nil {
-		log.Warn().Err(err).Msg("Failed to set KB owner")
 	}
 
 	// Grant initial permissions if specified
@@ -156,7 +154,7 @@ func (h *UserKnowledgeBaseHandler) CreateMyKnowledgeBase(c fiber.Ctx) error {
 // GetMyKnowledgeBase returns a specific KB if user has access
 // GET /api/v1/ai/knowledge-bases/:id
 func (h *UserKnowledgeBaseHandler) GetMyKnowledgeBase(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -179,7 +177,7 @@ func (h *UserKnowledgeBaseHandler) GetMyKnowledgeBase(c fiber.Ctx) error {
 // ShareKnowledgeBase grants permission to another user
 // POST /api/v1/ai/knowledge-bases/:id/share
 func (h *UserKnowledgeBaseHandler) ShareKnowledgeBase(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -213,7 +211,7 @@ func (h *UserKnowledgeBaseHandler) ShareKnowledgeBase(c fiber.Ctx) error {
 // ListPermissions lists permissions for a KB
 // GET /api/v1/ai/knowledge-bases/:id/permissions
 func (h *UserKnowledgeBaseHandler) ListPermissions(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -237,7 +235,7 @@ func (h *UserKnowledgeBaseHandler) ListPermissions(c fiber.Ctx) error {
 // RevokePermission revokes a permission
 // DELETE /api/v1/ai/knowledge-bases/:id/permissions/:user_id
 func (h *UserKnowledgeBaseHandler) RevokePermission(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 	targetUserID := c.Params("user_id")
@@ -266,7 +264,7 @@ func (h *UserKnowledgeBaseHandler) RevokePermission(c fiber.Ctx) error {
 // ListMyDocuments lists documents in a KB (requires viewer permission)
 // GET /api/v1/ai/knowledge-bases/:id/documents
 func (h *UserKnowledgeBaseHandler) ListMyDocuments(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -301,7 +299,7 @@ func (h *UserKnowledgeBaseHandler) ListMyDocuments(c fiber.Ctx) error {
 // GetMyDocument gets a specific document (requires viewer permission)
 // GET /api/v1/ai/knowledge-bases/:id/documents/:doc_id
 func (h *UserKnowledgeBaseHandler) GetMyDocument(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 	docID := c.Params("doc_id")
@@ -339,7 +337,7 @@ func (h *UserKnowledgeBaseHandler) GetMyDocument(c fiber.Ctx) error {
 // AddMyDocument adds a document to a KB (requires editor permission)
 // POST /api/v1/ai/knowledge-bases/:id/documents
 func (h *UserKnowledgeBaseHandler) AddMyDocument(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -410,7 +408,7 @@ func (h *UserKnowledgeBaseHandler) AddMyDocument(c fiber.Ctx) error {
 // UploadMyDocument uploads a file to a KB (requires editor permission)
 // POST /api/v1/ai/knowledge-bases/:id/documents/upload
 func (h *UserKnowledgeBaseHandler) UploadMyDocument(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -525,7 +523,7 @@ func (h *UserKnowledgeBaseHandler) UploadMyDocument(c fiber.Ctx) error {
 // DeleteMyDocument deletes a document from a KB (requires editor permission)
 // DELETE /api/v1/ai/knowledge-bases/:id/documents/:doc_id
 func (h *UserKnowledgeBaseHandler) DeleteMyDocument(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 	docID := c.Params("doc_id")
@@ -570,7 +568,7 @@ func (h *UserKnowledgeBaseHandler) DeleteMyDocument(c fiber.Ctx) error {
 // SearchMyKB searches a knowledge base (requires viewer permission)
 // POST /api/v1/ai/knowledge-bases/:id/search
 func (h *UserKnowledgeBaseHandler) SearchMyKB(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -641,7 +639,7 @@ func (h *UserKnowledgeBaseHandler) SearchMyKB(c fiber.Ctx) error {
 // UpdateMyDocument updates a document's metadata
 // PATCH /api/v1/ai/knowledge-bases/:id/documents/:doc_id
 func (h *UserKnowledgeBaseHandler) UpdateMyDocument(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 	docID := c.Params("doc_id")
@@ -699,7 +697,7 @@ func (h *UserKnowledgeBaseHandler) UpdateMyDocument(c fiber.Ctx) error {
 // DeleteMyDocumentsByFilter deletes documents matching a filter
 // POST /api/v1/ai/knowledge-bases/:id/documents/delete-by-filter
 func (h *UserKnowledgeBaseHandler) DeleteMyDocumentsByFilter(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -746,7 +744,7 @@ func (h *UserKnowledgeBaseHandler) DeleteMyDocumentsByFilter(c fiber.Ctx) error 
 // DebugSearchMyKB performs a debug search with detailed diagnostic information
 // POST /api/v1/ai/knowledge-bases/:id/debug-search
 func (h *UserKnowledgeBaseHandler) DebugSearchMyKB(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -816,7 +814,7 @@ func (h *UserKnowledgeBaseHandler) DebugSearchMyKB(c fiber.Ctx) error {
 // ListMyEntities lists entities in a knowledge base
 // GET /api/v1/ai/knowledge-bases/:id/entities
 func (h *UserKnowledgeBaseHandler) ListMyEntities(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -866,7 +864,7 @@ func (h *UserKnowledgeBaseHandler) ListMyEntities(c fiber.Ctx) error {
 // SearchMyEntities searches entities in a knowledge base
 // GET /api/v1/ai/knowledge-bases/:id/entities/search
 func (h *UserKnowledgeBaseHandler) SearchMyEntities(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -933,7 +931,7 @@ func (h *UserKnowledgeBaseHandler) SearchMyEntities(c fiber.Ctx) error {
 // GetMyEntityRelationships gets relationships for an entity
 // GET /api/v1/ai/knowledge-bases/:id/entities/:entity_id/relationships
 func (h *UserKnowledgeBaseHandler) GetMyEntityRelationships(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 	entityID := c.Params("entity_id")
@@ -977,7 +975,7 @@ func (h *UserKnowledgeBaseHandler) GetMyEntityRelationships(c fiber.Ctx) error {
 // GetMyKnowledgeGraph gets the full knowledge graph
 // GET /api/v1/ai/knowledge-bases/:id/graph
 func (h *UserKnowledgeBaseHandler) GetMyKnowledgeGraph(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 
@@ -1041,7 +1039,7 @@ func (h *UserKnowledgeBaseHandler) GetMyKnowledgeGraph(c fiber.Ctx) error {
 // ListMyLinkedChatbots lists chatbots linked to a knowledge base
 // GET /api/v1/ai/knowledge-bases/:id/chatbots
 func (h *UserKnowledgeBaseHandler) ListMyLinkedChatbots(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	userID := c.Locals("user_id").(string)
 	kbID := c.Params("id")
 

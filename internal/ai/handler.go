@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // VectorManagerInterface defines the interface for hot-reloading embedding service
@@ -94,7 +95,7 @@ func (h *Handler) ValidateConfig() {
 // ListChatbots returns all chatbots (admin view)
 // GET /api/v1/admin/ai/chatbots
 func (h *Handler) ListChatbots(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	chatbots, err := h.storage.ListChatbots(ctx, false)
 	if err != nil {
@@ -119,7 +120,7 @@ func (h *Handler) ListChatbots(c fiber.Ctx) error {
 // GetChatbot returns a single chatbot by ID (admin view)
 // GET /api/v1/admin/ai/chatbots/:id
 func (h *Handler) GetChatbot(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	chatbot, err := h.storage.GetChatbot(ctx, id)
@@ -178,7 +179,7 @@ func (h *Handler) SyncChatbots(c fiber.Ctx) error {
 // All chatbots are synced to the specified namespace (default: "default")
 // Any existing chatbot in that namespace not found in the filesystem will be deleted
 func (h *Handler) syncFromFilesystem(c fiber.Ctx, namespace string) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Load chatbots from filesystem
 	fsChatbots, err := h.loader.LoadAll()
@@ -329,7 +330,7 @@ func (h *Handler) syncFromPayload(c fiber.Ctx, namespace string, chatbots []stru
 	Code string `json:"code"`
 }, deleteMissing bool, dryRun bool,
 ) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Get existing chatbots in this namespace
 	dbChatbots, err := h.storage.ListChatbotsByNamespace(ctx, namespace)
@@ -507,7 +508,7 @@ type ToggleChatbotRequest struct {
 // ToggleChatbot enables or disables a chatbot
 // PUT /api/v1/admin/ai/chatbots/:id/toggle
 func (h *Handler) ToggleChatbot(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	var req ToggleChatbotRequest
@@ -548,7 +549,7 @@ func (h *Handler) ToggleChatbot(c fiber.Ctx) error {
 // DeleteChatbot deletes a chatbot
 // DELETE /api/v1/admin/ai/chatbots/:id
 func (h *Handler) DeleteChatbot(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	if err := h.storage.DeleteChatbot(ctx, id); err != nil {
@@ -584,7 +585,7 @@ type UpdateChatbotRequest struct {
 // UpdateChatbot updates a chatbot's configuration
 // PUT /api/v1/admin/ai/chatbots/:id
 func (h *Handler) UpdateChatbot(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	var req UpdateChatbotRequest
@@ -709,7 +710,7 @@ func (h *Handler) UpdateChatbot(c fiber.Ctx) error {
 // ListProviders returns all AI providers
 // GET /api/v1/admin/ai/providers
 func (h *Handler) ListProviders(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	providers, err := h.storage.ListProviders(ctx, false)
 	if err != nil {
@@ -751,7 +752,7 @@ func (h *Handler) ListProviders(c fiber.Ctx) error {
 // GetProvider returns a single provider by ID
 // GET /api/v1/admin/ai/providers/:id
 func (h *Handler) GetProvider(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	provider, err := h.storage.GetProvider(ctx, id)
@@ -813,7 +814,7 @@ func normalizeConfig(config map[string]any) map[string]string {
 // CreateProvider creates a new AI provider
 // POST /api/v1/admin/ai/providers
 func (h *Handler) CreateProvider(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	var req CreateProviderRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -882,7 +883,7 @@ func (h *Handler) CreateProvider(c fiber.Ctx) error {
 // SetDefaultProvider sets a provider as the default
 // PUT /api/v1/admin/ai/providers/:id/default
 func (h *Handler) SetDefaultProvider(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	// Prevent modifying config-based provider
@@ -915,7 +916,7 @@ func (h *Handler) SetDefaultProvider(c fiber.Ctx) error {
 // DeleteProvider deletes a provider
 // DELETE /api/v1/admin/ai/providers/:id
 func (h *Handler) DeleteProvider(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	// Prevent deleting config-based provider
@@ -948,7 +949,7 @@ func (h *Handler) DeleteProvider(c fiber.Ctx) error {
 // SetEmbeddingProvider sets a provider as the embedding provider
 // PUT /api/v1/admin/ai/providers/:id/embedding
 func (h *Handler) SetEmbeddingProvider(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	// Prevent modifying config-based provider
@@ -982,7 +983,7 @@ func (h *Handler) SetEmbeddingProvider(c fiber.Ctx) error {
 // ClearEmbeddingProvider clears the explicit embedding provider preference
 // DELETE /api/v1/admin/ai/providers/:id/embedding
 func (h *Handler) ClearEmbeddingProvider(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Clear embedding preference (revert to auto/default)
 	if err := h.storage.SetEmbeddingProviderPreference(ctx, ""); err != nil {
@@ -1015,7 +1016,7 @@ type UpdateProviderRequest struct {
 // UpdateProvider updates an AI provider
 // PUT /api/v1/admin/ai/providers/:id
 func (h *Handler) UpdateProvider(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	// Prevent modifying config-based provider
@@ -1108,7 +1109,7 @@ func (h *Handler) UpdateProvider(c fiber.Ctx) error {
 // ListPublicChatbots returns all public, enabled chatbots for users
 // GET /api/v1/ai/chatbots
 func (h *Handler) ListPublicChatbots(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	chatbots, err := h.storage.ListChatbots(ctx, true)
 	if err != nil {
@@ -1135,7 +1136,7 @@ func (h *Handler) ListPublicChatbots(c fiber.Ctx) error {
 // GetPublicChatbot returns a single public chatbot by name
 // GET /api/v1/ai/chatbots/:namespace/:name
 func (h *Handler) GetPublicChatbot(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	namespace := c.Params("namespace")
 	name := c.Params("name")
 
@@ -1174,7 +1175,7 @@ type LookupChatbotByNameResponse struct {
 // 3. If multiple matches -> try "default" namespace first
 // 4. If multiple matches and none in "default" -> return 409 Conflict with namespace list
 func (h *Handler) LookupChatbotByName(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	name := c.Params("name")
 
 	if name == "" {
@@ -1281,7 +1282,7 @@ type AIMetrics struct {
 // GetAIMetrics returns aggregated AI metrics
 // GET /api/v1/admin/ai/metrics
 func (h *Handler) GetAIMetrics(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	metrics := AIMetrics{
 		ChatbotStats:  make([]ChatbotMetric, 0),
@@ -1394,7 +1395,7 @@ type ConversationSummary struct {
 // GetConversations returns a list of AI conversations with optional filters
 // GET /api/v1/admin/ai/conversations?chatbot_id=X&user_id=Y&status=active&limit=50
 func (h *Handler) GetConversations(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Parse query parameters
 	chatbotID := c.Query("chatbot_id")
@@ -1544,7 +1545,7 @@ type MessageDetail struct {
 // GetConversationMessages returns all messages for a specific conversation
 // GET /api/v1/admin/ai/conversations/:id/messages
 func (h *Handler) GetConversationMessages(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	conversationID := c.Params("id")
 
 	query := `
@@ -1639,7 +1640,7 @@ type AuditLogEntry struct {
 // GetAuditLog returns audit log entries with optional filters
 // GET /api/v1/admin/ai/audit?chatbot_id=X&user_id=Y&success=true&limit=100
 func (h *Handler) GetAuditLog(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Parse query parameters
 	chatbotID := c.Query("chatbot_id")
@@ -1855,7 +1856,7 @@ type UpdateConversationTitleRequest struct {
 // ListUserConversations lists the authenticated user's conversations
 // GET /api/v1/ai/conversations
 func (h *Handler) ListUserConversations(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Get authenticated user ID from context
 	userID := c.Locals("user_id")
@@ -1896,6 +1897,9 @@ func (h *Handler) ListUserConversations(c fiber.Ctx) error {
 		opts.ChatbotName = &chatbot
 	}
 	if namespace := c.Query("namespace"); namespace != "" {
+		if namespace == "default" {
+			namespace = ""
+		}
 		opts.Namespace = &namespace
 	}
 
@@ -1914,7 +1918,7 @@ func (h *Handler) ListUserConversations(c fiber.Ctx) error {
 // GetUserConversation retrieves a single conversation with messages
 // GET /api/v1/ai/conversations/:id
 func (h *Handler) GetUserConversation(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	conversationID := c.Params("id")
 
 	// Get authenticated user ID from context
@@ -1952,7 +1956,7 @@ func (h *Handler) GetUserConversation(c fiber.Ctx) error {
 // DeleteUserConversation deletes a user's conversation
 // DELETE /api/v1/ai/conversations/:id
 func (h *Handler) DeleteUserConversation(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	conversationID := c.Params("id")
 
 	// Get authenticated user ID from context
@@ -1992,7 +1996,7 @@ func (h *Handler) DeleteUserConversation(c fiber.Ctx) error {
 // UpdateUserConversation updates a conversation (title only for now)
 // PATCH /api/v1/ai/conversations/:id
 func (h *Handler) UpdateUserConversation(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	conversationID := c.Params("id")
 
 	// Get authenticated user ID from context

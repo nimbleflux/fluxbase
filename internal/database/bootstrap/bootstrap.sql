@@ -55,11 +55,6 @@ CREATE SCHEMA IF NOT EXISTS realtime;
 GRANT USAGE, CREATE ON SCHEMA realtime TO CURRENT_USER;
 COMMENT ON SCHEMA realtime IS 'Realtime subscriptions and change tracking';
 
--- Migrations schema: All migration tracking
-CREATE SCHEMA IF NOT EXISTS migrations;
-GRANT USAGE, CREATE ON SCHEMA migrations TO CURRENT_USER;
-COMMENT ON SCHEMA migrations IS 'All migration tracking including system, user, and API-managed migrations';
-
 -- Jobs schema: Long-running background jobs
 CREATE SCHEMA IF NOT EXISTS jobs;
 GRANT USAGE, CREATE ON SCHEMA jobs TO CURRENT_USER;
@@ -75,11 +70,6 @@ CREATE SCHEMA IF NOT EXISTS rpc;
 GRANT USAGE, CREATE ON SCHEMA rpc TO CURRENT_USER;
 COMMENT ON SCHEMA rpc IS 'Stored procedure definitions and executions';
 
--- System schema: System-level infrastructure for scaling and distributed operations
-CREATE SCHEMA IF NOT EXISTS system;
-GRANT USAGE, CREATE ON SCHEMA system TO CURRENT_USER;
-COMMENT ON SCHEMA system IS 'System-level infrastructure for scaling and distributed operations';
-
 -- Logging schema: Centralized logging entries
 CREATE SCHEMA IF NOT EXISTS logging;
 GRANT USAGE, CREATE ON SCHEMA logging TO CURRENT_USER;
@@ -94,11 +84,6 @@ COMMENT ON SCHEMA branching IS 'Database branching for dev/test environments';
 CREATE SCHEMA IF NOT EXISTS mcp;
 GRANT USAGE, CREATE ON SCHEMA mcp TO CURRENT_USER;
 COMMENT ON SCHEMA mcp IS 'Model Context Protocol server for AI assistant integration';
-
--- API schema: API infrastructure (idempotency keys, etc.)
-CREATE SCHEMA IF NOT EXISTS api;
-GRANT USAGE, CREATE ON SCHEMA api TO CURRENT_USER;
-COMMENT ON SCHEMA api IS 'API infrastructure including idempotency keys';
 
 -- Platform schema: Multi-tenancy control plane
 CREATE SCHEMA IF NOT EXISTS platform;
@@ -194,20 +179,11 @@ GRANT USAGE ON SCHEMA rpc TO authenticated, service_role;
 -- MCP schema - all roles
 GRANT USAGE ON SCHEMA mcp TO anon, authenticated, service_role;
 
--- System schema - service role only
-GRANT USAGE ON SCHEMA system TO service_role;
-
--- API schema - service role only
-GRANT USAGE ON SCHEMA api TO service_role;
-
 -- Branching schema - service role only
 GRANT USAGE ON SCHEMA branching TO service_role;
 
 -- Logging schema - service role and {{APP_USER}} (app needs access for direct pool queries)
 GRANT USAGE ON SCHEMA logging TO service_role, {{APP_USER}};
-
--- Migrations schema - service role only (for recording schema state)
-GRANT USAGE ON SCHEMA migrations TO service_role;
 
 -- Platform schema - authenticated and service
 GRANT USAGE ON SCHEMA platform TO authenticated, service_role;
@@ -287,12 +263,6 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA rpc
 ALTER DEFAULT PRIVILEGES IN SCHEMA rpc
     GRANT ALL ON SEQUENCES TO service_role;
 
--- System schema
-ALTER DEFAULT PRIVILEGES IN SCHEMA system
-    GRANT ALL ON TABLES TO service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA system
-    GRANT ALL ON SEQUENCES TO service_role;
-
 -- MCP schema
 ALTER DEFAULT PRIVILEGES IN SCHEMA mcp
     GRANT ALL ON TABLES TO service_role;
@@ -300,12 +270,6 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA mcp
     GRANT ALL ON SEQUENCES TO service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA mcp
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated;
-
--- API schema
-ALTER DEFAULT PRIVILEGES IN SCHEMA api
-    GRANT ALL ON TABLES TO service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA api
-    GRANT ALL ON SEQUENCES TO service_role;
 
 -- Branching schema
 ALTER DEFAULT PRIVILEGES IN SCHEMA branching
@@ -373,7 +337,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- ============================================================================
 
 -- Declarative schema state tracking
-CREATE TABLE IF NOT EXISTS migrations.declarative_state (
+CREATE TABLE IF NOT EXISTS platform.declarative_state (
     id SERIAL PRIMARY KEY,
     schema_fingerprint TEXT NOT NULL,
     applied_at TIMESTAMPTZ DEFAULT NOW(),
@@ -382,20 +346,20 @@ CREATE TABLE IF NOT EXISTS migrations.declarative_state (
 );
 
 -- Bootstrap state tracking
-CREATE TABLE IF NOT EXISTS migrations.bootstrap_state (
+CREATE TABLE IF NOT EXISTS platform.bootstrap_state (
     id SERIAL PRIMARY KEY,
     bootstrapped_at TIMESTAMPTZ DEFAULT NOW(),
     version TEXT NOT NULL,
     checksum TEXT
 );
 
--- Grant permissions on migrations tables to service_role
-GRANT SELECT, INSERT, UPDATE ON TABLE migrations.declarative_state TO service_role;
-GRANT USAGE, SELECT ON SEQUENCE migrations.declarative_state_id_seq TO service_role;
-GRANT SELECT, INSERT ON TABLE migrations.bootstrap_state TO service_role;
+-- Grant permissions on platform migration tables to service_role
+GRANT SELECT, INSERT, UPDATE ON TABLE platform.declarative_state TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE platform.declarative_state_id_seq TO service_role;
+GRANT SELECT, INSERT ON TABLE platform.bootstrap_state TO service_role;
 
 -- Record bootstrap completion (idempotent)
-INSERT INTO migrations.bootstrap_state (version, checksum)
+INSERT INTO platform.bootstrap_state (version, checksum)
 VALUES ('2.0.0', '')
 ON CONFLICT DO NOTHING;
 
@@ -489,6 +453,119 @@ BEGIN
 
     IF FOUND THEN
         RAISE NOTICE 'Migrated dashboard_admin users to instance_admin';
+    END IF;
+END
+$$;
+
+-- ============================================================================
+-- MIGRATION: Move legacy system/api/migrations schema tables to platform
+-- Idempotent — safe to run multiple times, no-ops if already migrated.
+-- ============================================================================
+DO $$
+DECLARE
+    rec record;
+    v_new_name text;
+BEGIN
+    -- Map of (old_schema, old_table_name) -> new_table_name
+    -- Tables that keep the same name: rate_limits, idempotency_keys,
+    -- declarative_state, bootstrap_state
+    -- Tables that are renamed: app -> migrations, execution_logs -> migration_execution_logs,
+    -- fluxbase -> fluxbase_migrations
+
+    FOR rec IN
+        SELECT s.schema_name AS old_schema, t.table_name
+        FROM information_schema.schemata s
+        JOIN information_schema.tables t ON t.table_schema = s.schema_name
+        WHERE s.schema_name IN ('system', 'api', 'migrations')
+          AND t.table_type = 'BASE TABLE'
+    LOOP
+        -- Determine the new table name
+        CASE
+            WHEN rec.old_schema = 'migrations' AND rec.table_name = 'app' THEN
+                v_new_name := 'migrations';
+            WHEN rec.old_schema = 'migrations' AND rec.table_name = 'execution_logs' THEN
+                v_new_name := 'migration_execution_logs';
+            WHEN rec.old_schema = 'migrations' AND rec.table_name = 'fluxbase' THEN
+                v_new_name := 'fluxbase_migrations';
+            ELSE
+                v_new_name := rec.table_name;
+        END CASE;
+
+        -- Skip if target table already exists in platform schema (platform is authoritative)
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'platform' AND table_name = v_new_name) THEN
+            EXECUTE format('ALTER TABLE %I.%I SET SCHEMA platform', rec.old_schema, rec.table_name);
+            IF v_new_name != rec.table_name THEN
+                EXECUTE format('ALTER TABLE platform.%I RENAME TO %I', rec.table_name, v_new_name);
+            END IF;
+            RAISE NOTICE 'Migrated %.% to platform.%', rec.old_schema, rec.table_name, v_new_name;
+        ELSE
+            EXECUTE format('DROP TABLE %I.%I CASCADE', rec.old_schema, rec.table_name);
+            RAISE NOTICE 'Dropped duplicate %.% (platform.% already exists)', rec.old_schema, rec.table_name, v_new_name;
+        END IF;
+    END LOOP;
+
+    -- Rename constraints on migrated tables to match declarative schema expectations.
+    -- Without this, pgschema sees old constraint names (e.g., app_pkey) and tries to
+    -- drop/recreate them, which fails when other objects depend on those constraints.
+    --
+    -- Uses pg_class joins instead of ::regclass to avoid errors when tables
+    -- don't exist (e.g., on fresh tenant databases where migration is a no-op).
+
+    -- migrations.app -> platform.migrations
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE c.conname = 'app_pkey' AND n.nspname = 'platform' AND t.relname = 'migrations'
+    ) THEN
+        ALTER TABLE platform.migrations RENAME CONSTRAINT app_pkey TO migrations_pkey;
+    END IF;
+
+    -- migrations.execution_logs -> platform.migration_execution_logs
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE c.conname = 'execution_logs_pkey' AND n.nspname = 'platform' AND t.relname = 'migration_execution_logs'
+    ) THEN
+        ALTER TABLE platform.migration_execution_logs RENAME CONSTRAINT execution_logs_pkey TO migration_execution_logs_pkey;
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE c.conname = 'execution_logs_migration_id_fkey' AND n.nspname = 'platform' AND t.relname = 'migration_execution_logs'
+    ) THEN
+        ALTER TABLE platform.migration_execution_logs RENAME CONSTRAINT execution_logs_migration_id_fkey TO migration_execution_logs_migration_id_fkey;
+    END IF;
+
+    -- migrations.fluxbase -> platform.fluxbase_migrations
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE c.conname = 'fluxbase_pkey' AND n.nspname = 'platform' AND t.relname = 'fluxbase_migrations'
+    ) THEN
+        ALTER TABLE platform.fluxbase_migrations RENAME CONSTRAINT fluxbase_pkey TO fluxbase_migrations_pkey;
+    END IF;
+
+    -- Drop the now-empty old schemas
+    IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'system')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'system') THEN
+        EXECUTE 'DROP SCHEMA IF EXISTS system CASCADE';
+        RAISE NOTICE 'Dropped empty system schema';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'api')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'api') THEN
+        EXECUTE 'DROP SCHEMA IF EXISTS api CASCADE';
+        RAISE NOTICE 'Dropped empty api schema';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'migrations')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'migrations') THEN
+        EXECUTE 'DROP SCHEMA IF EXISTS migrations CASCADE';
+        RAISE NOTICE 'Dropped empty migrations schema';
     END IF;
 END
 $$;

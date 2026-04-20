@@ -1501,7 +1501,7 @@ func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageServic
 	}
 
 	// Initialize custom MCP tools and resources
-	customStorage := custom.NewStorage(s.db.Pool())
+	customStorage := custom.NewStorage(s.db)
 	// Use BaseURL for internal communication, falling back to localhost with server address
 	mcpInternalURL := s.config.BaseURL
 	if mcpInternalURL == "" {
@@ -1920,6 +1920,25 @@ func (s *Server) handleGetSchemas(c fiber.Ctx) error {
 	for _, schema := range schemas {
 		if schema != "information_schema" && schema != "pg_catalog" && schema != "pg_toast" {
 			userSchemas = append(userSchemas, schema)
+		}
+	}
+
+	// Filter schemas for tenant admins: only show schemas with tenant-visible tables
+	if userRole, ok := GetUserRole(c); ok {
+		isInstanceAdmin := userRole == "admin" || userRole == "instance_admin" || userRole == "service_role"
+		if !isInstanceAdmin {
+			tenantVisible := map[string]bool{
+				"public": true, "auth": true, "storage": true, "functions": true,
+				"jobs": true, "ai": true, "rpc": true, "mcp": true,
+				"realtime": true, "branching": true, "logging": true, "platform": true,
+			}
+			var filtered []string
+			for _, schema := range userSchemas {
+				if tenantVisible[schema] {
+					filtered = append(filtered, schema)
+				}
+			}
+			userSchemas = filtered
 		}
 	}
 

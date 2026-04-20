@@ -4,6 +4,9 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // SchemaRelationship represents a foreign key relationship for ERD visualization
@@ -67,7 +70,7 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 		})
 	}
 
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	schemasParam := c.Query("schemas", "public")
 	schemaList := strings.Split(schemasParam, ",")
 
@@ -75,6 +78,8 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 	for i, schema := range schemaList {
 		schemaList[i] = strings.TrimSpace(schema)
 	}
+
+	pool := s.schemaPool(c)
 
 	// Query all tables with their columns, primary keys, RLS status, indexes, unique constraints, and comments
 	// Excludes extension-owned tables (like PostGIS spatial_ref_sys) via pg_depend check
@@ -92,7 +97,7 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 			JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = t.table_schema
 			LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
 			WHERE t.table_schema = ANY($1)
-			AND t.table_type = 'BASE TABLE'
+			AND t.table_type IN ('BASE TABLE', 'FOREIGN TABLE')
 			AND d.objid IS NULL
 		),
 		columns_info AS (
@@ -204,7 +209,7 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 		ORDER BY ti.table_schema, ti.table_name, ci.ordinal_position
 	`
 
-	rows, err := s.db.Query(ctx, tablesQuery, schemaList)
+	rows, err := pool.Query(ctx, tablesQuery, schemaList)
 	if err != nil {
 		return SendError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -377,7 +382,7 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 		ORDER BY fk.source_schema, fk.source_table, fk.constraint_name
 	`
 
-	relRows, err := s.db.Query(ctx, relationsQuery, schemaList)
+	relRows, err := pool.Query(ctx, relationsQuery, schemaList)
 	if err != nil {
 		return SendError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -423,7 +428,7 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 // GetTableRelationships returns relationships for a specific table
 // GET /api/v1/admin/tables/:schema/:table/relationships
 func (s *Server) GetTableRelationships(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	schema := c.Params("schema")
 	table := c.Params("table")
 
@@ -437,6 +442,8 @@ func (s *Server) GetTableRelationships(c fiber.Ctx) error {
 			"error": "Database connection not initialized",
 		})
 	}
+
+	pool := s.schemaPool(c)
 
 	query := `
 		WITH outgoing AS (
@@ -487,7 +494,7 @@ func (s *Server) GetTableRelationships(c fiber.Ctx) error {
 		ORDER BY direction, constraint_name
 	`
 
-	rows, err := s.db.Query(ctx, query, schema, table)
+	rows, err := pool.Query(ctx, query, schema, table)
 	if err != nil {
 		return SendError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -531,6 +538,14 @@ func (s *Server) GetTableRelationships(c fiber.Ctx) error {
 		"outgoing": outgoing,
 		"incoming": incoming,
 	})
+}
+
+// schemaPool returns the tenant pool if available, otherwise the main pool.
+func (s *Server) schemaPool(c fiber.Ctx) *pgxpool.Pool {
+	if pool := middleware.GetTenantPool(c); pool != nil {
+		return pool
+	}
+	return s.db.Pool()
 }
 
 // fiber:context-methods migrated

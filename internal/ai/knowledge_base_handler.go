@@ -68,6 +68,9 @@ func (h *KnowledgeBaseHandler) ListKnowledgeBases(c fiber.Ctx) error {
 
 	// Parse optional namespace filter
 	namespace := c.Query("namespace", "") // Empty = all namespaces
+	if namespace == "default" {
+		namespace = ""
+	}
 
 	kbs, err := h.storage.ListKnowledgeBases(ctx, namespace, false)
 	if err != nil {

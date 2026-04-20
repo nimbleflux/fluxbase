@@ -171,7 +171,7 @@ func (m *IdempotencyMiddleware) cleanupExpiredKeys() {
 	defer cancel()
 
 	result, err := m.config.DB.Exec(ctx,
-		"DELETE FROM api.idempotency_keys WHERE expires_at < NOW()")
+		"DELETE FROM platform.idempotency_keys WHERE expires_at < NOW()")
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to cleanup expired idempotency keys")
 		return
@@ -316,7 +316,7 @@ func (m *IdempotencyMiddleware) getRecord(ctx context.Context, key string) (*Ide
 		SELECT key, method, path, user_id, request_hash, status,
 		       response_status, response_headers, response_body,
 		       created_at, completed_at, expires_at
-		FROM api.idempotency_keys
+		FROM platform.idempotency_keys
 		WHERE key = $1 AND expires_at > NOW()
 	`, key).Scan(
 		&record.Key,
@@ -349,7 +349,7 @@ func (m *IdempotencyMiddleware) getRecord(ctx context.Context, key string) (*Ide
 // createRecord creates a new idempotency record
 func (m *IdempotencyMiddleware) createRecord(ctx context.Context, key, method, path string, userID *string, requestHash string) error {
 	_, err := m.config.DB.Exec(ctx, `
-		INSERT INTO api.idempotency_keys (key, method, path, user_id, request_hash, status, expires_at)
+		INSERT INTO platform.idempotency_keys (key, method, path, user_id, request_hash, status, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW() + $7::interval)
 		ON CONFLICT (key) DO NOTHING
 	`, key, method, path, userID, requestHash, StatusProcessing, fmt.Sprintf("%d seconds", int(m.config.TTL.Seconds())))
@@ -365,7 +365,7 @@ func (m *IdempotencyMiddleware) updateRecord(ctx context.Context, key string, st
 	}
 
 	_, err = m.config.DB.Exec(ctx, `
-		UPDATE api.idempotency_keys
+		UPDATE platform.idempotency_keys
 		SET status = $2,
 		    response_status = $3,
 		    response_headers = $4,
@@ -440,7 +440,7 @@ func (m *IdempotencyMiddleware) handleExistingKey(c fiber.Ctx, record *Idempoten
 		// Previous request failed - allow retry
 		// Delete the old record and process as new
 		if _, err := m.config.DB.Exec(c.RequestCtx(),
-			"DELETE FROM api.idempotency_keys WHERE key = $1", record.Key); err != nil {
+			"DELETE FROM platform.idempotency_keys WHERE key = $1", record.Key); err != nil {
 			log.Warn().Err(err).Str("key", record.Key).Msg("Failed to delete failed idempotency record")
 		}
 		return c.Next()

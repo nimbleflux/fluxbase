@@ -460,7 +460,6 @@ jobs:
           # Grant fluxbase_app additional privileges for admin operations
           psql -h localhost -U postgres -d fluxbase_test -c "GRANT ALL ON DATABASE fluxbase_test TO fluxbase_app;"
           psql -h localhost -U postgres -d fluxbase_test -c "GRANT ALL ON SCHEMA public TO fluxbase_app;"
-          psql -h localhost -U postgres -d fluxbase_test -c "GRANT ALL ON SCHEMA migrations TO fluxbase_app;"
 
       - name: Apply declarative schema
         env:
@@ -797,7 +796,6 @@ jobs:
           psql -h localhost -U postgres -d fluxbase_test -c "GRANT anon, authenticated, service_role, tenant_service TO fluxbase_app;"
           psql -h localhost -U postgres -d fluxbase_test -c "GRANT ALL ON DATABASE fluxbase_test TO fluxbase_app;"
           psql -h localhost -U postgres -d fluxbase_test -c "GRANT ALL ON SCHEMA public TO fluxbase_app;"
-          psql -h localhost -U postgres -d fluxbase_test -c "GRANT ALL ON SCHEMA migrations TO fluxbase_app;"
 
       - name: Apply declarative schema
         env:

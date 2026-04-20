@@ -264,6 +264,141 @@ func TestTenantMiddleware_RouteGroups(t *testing.T) {
 		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantDBContext"),
 			"graphql group must have TenantDBContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
 	})
+
+	t.Run("Functions", func(t *testing.T) {
+		deps := &FunctionsDeps{
+			RequireFunctionsEnabled: tenantAwareHandler,
+			RequireAuth:             tenantAwareHandler,
+			OptionalAuth:            tenantAwareHandler,
+			RequireScope:            func(...string) fiber.Handler { return tenantAwareHandler },
+			TenantMiddleware:        tenantAwareHandler,
+			ListFunctions:           tenantAwareHandler,
+			GetFunction:             tenantAwareHandler,
+			CreateFunction:          tenantAwareHandler,
+			UpdateFunction:          tenantAwareHandler,
+			DeleteFunction:          tenantAwareHandler,
+			InvokeFunction:          tenantAwareHandler,
+			GetExecutions:           tenantAwareHandler,
+		}
+
+		group := BuildFunctionsRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"functions group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
+
+	t.Run("AI", func(t *testing.T) {
+		deps := &AIDeps{
+			RequireAIEnabled:       tenantAwareHandler,
+			OptionalAuth:           tenantAwareHandler,
+			RequireAuth:            tenantAwareHandler,
+			TenantMiddleware:       tenantAwareHandler,
+			HandleWebSocket:        tenantAwareHandler,
+			ListPublicChatbots:     tenantAwareHandler,
+			LookupChatbotByName:    tenantAwareHandler,
+			GetPublicChatbot:       tenantAwareHandler,
+			ListUserConversations:  tenantAwareHandler,
+			GetUserConversation:    tenantAwareHandler,
+			DeleteUserConversation: tenantAwareHandler,
+			UpdateUserConversation: tenantAwareHandler,
+		}
+
+		group := BuildAIRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"ai group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
+
+	t.Run("KnowledgeBase", func(t *testing.T) {
+		deps := &KnowledgeBaseDeps{
+			RequireAIEnabled: tenantAwareHandler,
+			RequireAuth:      tenantAwareHandler,
+			TenantMiddleware: tenantAwareHandler,
+			ListKBs:          tenantAwareHandler,
+			CreateKB:         tenantAwareHandler,
+			GetKB:            tenantAwareHandler,
+		}
+
+		group := BuildKnowledgeBaseRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"knowledge_base group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
+
+	t.Run("CustomMCP", func(t *testing.T) {
+		deps := &CustomMCPDeps{
+			RequireAuth:      tenantAwareHandler,
+			RequireAdmin:     tenantAwareHandler,
+			TenantMiddleware: tenantAwareHandler,
+			GetConfig:        tenantAwareHandler,
+			ListTools:        tenantAwareHandler,
+			CreateTool:       tenantAwareHandler,
+			GetTool:          tenantAwareHandler,
+			UpdateTool:       tenantAwareHandler,
+			DeleteTool:       tenantAwareHandler,
+			TestTool:         tenantAwareHandler,
+			ListResources:    tenantAwareHandler,
+			CreateResource:   tenantAwareHandler,
+			GetResource:      tenantAwareHandler,
+			UpdateResource:   tenantAwareHandler,
+			DeleteResource:   tenantAwareHandler,
+			TestResource:     tenantAwareHandler,
+		}
+
+		group := BuildCustomMCPRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"custom-mcp group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
+
+	t.Run("MCP", func(t *testing.T) {
+		deps := &MCPDeps{
+			BasePath:         "/mcp",
+			MCPAuth:          tenantAwareHandler,
+			TenantMiddleware: tenantAwareHandler,
+			HandlePost:       tenantAwareHandler,
+			HandleGet:        tenantAwareHandler,
+			HandleHealth:     tenantAwareHandler,
+		}
+
+		group := BuildMCPRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"mcp group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
+
+	t.Run("Realtime", func(t *testing.T) {
+		deps := &RealtimeDeps{
+			RequireRealtimeEnabled: tenantAwareHandler,
+			OptionalAuth:           tenantAwareHandler,
+			RequireAuth:            tenantAwareHandler,
+			RequireScope:           func(...string) fiber.Handler { return tenantAwareHandler },
+			TenantMiddleware:       tenantAwareHandler,
+			HandleWebSocket:        tenantAwareHandler,
+			HandleStats:            tenantAwareHandler,
+			HandleBroadcast:        tenantAwareHandler,
+		}
+
+		group := BuildRealtimeRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"realtime group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
+
+	t.Run("Vector", func(t *testing.T) {
+		deps := &VectorDeps{
+			RequireAuth:        tenantAwareHandler,
+			TenantMiddleware:   tenantAwareHandler,
+			HandleCapabilities: tenantAwareHandler,
+			HandleEmbed:        tenantAwareHandler,
+			HandleSearch:       tenantAwareHandler,
+		}
+
+		group := BuildVectorRoutes(deps)
+		require.NotNil(t, group)
+		assert.True(t, hasMiddlewareNamed(group.Middlewares, "TenantContext"),
+			"vector group must have TenantContext middleware, got: %v", collectMiddlewareNames(group.Middlewares))
+	})
 }
 
 // TestTenantMiddleware_NilMiddlewareNoPanic verifies that route builders handle
@@ -384,6 +519,124 @@ func TestTenantMiddleware_NilMiddlewareNoPanic(t *testing.T) {
 			HandleIntrospect: tenantAwareHandler,
 		}
 		group := BuildGraphQLRoutes(deps)
+		require.NotNil(t, group)
+		assert.Empty(t, group.Middlewares)
+	})
+
+	t.Run("Functions_nil_tenant_middleware", func(t *testing.T) {
+		deps := &FunctionsDeps{
+			RequireFunctionsEnabled: tenantAwareHandler,
+			RequireAuth:             tenantAwareHandler,
+			OptionalAuth:            tenantAwareHandler,
+			RequireScope:            func(...string) fiber.Handler { return tenantAwareHandler },
+			ListFunctions:           tenantAwareHandler,
+			GetFunction:             tenantAwareHandler,
+			CreateFunction:          tenantAwareHandler,
+			UpdateFunction:          tenantAwareHandler,
+			DeleteFunction:          tenantAwareHandler,
+			InvokeFunction:          tenantAwareHandler,
+			GetExecutions:           tenantAwareHandler,
+		}
+		group := BuildFunctionsRoutes(deps)
+		require.NotNil(t, group)
+		assert.Len(t, group.Middlewares, 1)
+		assert.Equal(t, "RequireFunctionsEnabled", group.Middlewares[0].Name)
+	})
+
+	t.Run("AI_nil_tenant_middleware", func(t *testing.T) {
+		deps := &AIDeps{
+			RequireAIEnabled:       tenantAwareHandler,
+			OptionalAuth:           tenantAwareHandler,
+			RequireAuth:            tenantAwareHandler,
+			HandleWebSocket:        tenantAwareHandler,
+			ListPublicChatbots:     tenantAwareHandler,
+			LookupChatbotByName:    tenantAwareHandler,
+			GetPublicChatbot:       tenantAwareHandler,
+			ListUserConversations:  tenantAwareHandler,
+			GetUserConversation:    tenantAwareHandler,
+			DeleteUserConversation: tenantAwareHandler,
+			UpdateUserConversation: tenantAwareHandler,
+		}
+		group := BuildAIRoutes(deps)
+		require.NotNil(t, group)
+		assert.Len(t, group.Middlewares, 1)
+		assert.Equal(t, "RequireAIEnabled", group.Middlewares[0].Name)
+	})
+
+	t.Run("KnowledgeBase_nil_tenant_middleware", func(t *testing.T) {
+		deps := &KnowledgeBaseDeps{
+			RequireAIEnabled: tenantAwareHandler,
+			RequireAuth:      tenantAwareHandler,
+			ListKBs:          tenantAwareHandler,
+			CreateKB:         tenantAwareHandler,
+			GetKB:            tenantAwareHandler,
+		}
+		group := BuildKnowledgeBaseRoutes(deps)
+		require.NotNil(t, group)
+		assert.Len(t, group.Middlewares, 1)
+		assert.Equal(t, "RequireAIEnabled", group.Middlewares[0].Name)
+	})
+
+	t.Run("CustomMCP_nil_tenant_middleware", func(t *testing.T) {
+		deps := &CustomMCPDeps{
+			RequireAuth:    tenantAwareHandler,
+			RequireAdmin:   tenantAwareHandler,
+			GetConfig:      tenantAwareHandler,
+			ListTools:      tenantAwareHandler,
+			CreateTool:     tenantAwareHandler,
+			GetTool:        tenantAwareHandler,
+			UpdateTool:     tenantAwareHandler,
+			DeleteTool:     tenantAwareHandler,
+			TestTool:       tenantAwareHandler,
+			ListResources:  tenantAwareHandler,
+			CreateResource: tenantAwareHandler,
+			GetResource:    tenantAwareHandler,
+			UpdateResource: tenantAwareHandler,
+			DeleteResource: tenantAwareHandler,
+			TestResource:   tenantAwareHandler,
+		}
+		group := BuildCustomMCPRoutes(deps)
+		require.NotNil(t, group)
+		assert.Empty(t, group.Middlewares)
+	})
+
+	t.Run("MCP_nil_tenant_middleware", func(t *testing.T) {
+		deps := &MCPDeps{
+			BasePath:     "/mcp",
+			MCPAuth:      tenantAwareHandler,
+			HandlePost:   tenantAwareHandler,
+			HandleGet:    tenantAwareHandler,
+			HandleHealth: tenantAwareHandler,
+		}
+		group := BuildMCPRoutes(deps)
+		require.NotNil(t, group)
+		assert.Empty(t, group.Middlewares)
+	})
+
+	t.Run("Realtime_nil_tenant_middleware", func(t *testing.T) {
+		deps := &RealtimeDeps{
+			RequireRealtimeEnabled: tenantAwareHandler,
+			OptionalAuth:           tenantAwareHandler,
+			RequireAuth:            tenantAwareHandler,
+			RequireScope:           func(...string) fiber.Handler { return tenantAwareHandler },
+			HandleWebSocket:        tenantAwareHandler,
+			HandleStats:            tenantAwareHandler,
+			HandleBroadcast:        tenantAwareHandler,
+		}
+		group := BuildRealtimeRoutes(deps)
+		require.NotNil(t, group)
+		assert.Len(t, group.Middlewares, 1)
+		assert.Equal(t, "RequireRealtimeEnabled", group.Middlewares[0].Name)
+	})
+
+	t.Run("Vector_nil_tenant_middleware", func(t *testing.T) {
+		deps := &VectorDeps{
+			RequireAuth:        tenantAwareHandler,
+			HandleCapabilities: tenantAwareHandler,
+			HandleEmbed:        tenantAwareHandler,
+			HandleSearch:       tenantAwareHandler,
+		}
+		group := BuildVectorRoutes(deps)
 		require.NotNil(t, group)
 		assert.Empty(t, group.Middlewares)
 	})
@@ -510,10 +763,12 @@ func minimalTenantsAdminDeps() *TenantsAdminDeps {
 	return &TenantsAdminDeps{
 		ListMyTenants:             tenantAwareHandler,
 		ListTenants:               tenantAwareHandler,
+		ListDeletedTenants:        tenantAwareHandler,
 		CreateTenant:              tenantAwareHandler,
 		GetTenant:                 tenantAwareHandler,
 		UpdateTenant:              tenantAwareHandler,
 		DeleteTenant:              tenantAwareHandler,
+		RecoverTenant:             tenantAwareHandler,
 		MigrateTenant:             tenantAwareHandler,
 		ListAdmins:                tenantAwareHandler,
 		AssignAdmin:               tenantAwareHandler,

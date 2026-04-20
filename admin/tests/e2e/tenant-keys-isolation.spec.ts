@@ -451,11 +451,14 @@ test.describe("Tenant Service Key Isolation", () => {
     const keyId = createResult.body?.id;
     expect(keyId).toBeTruthy();
 
-    // Delete as tenant admin
+    // Delete as tenant admin (with explicit tenant context)
     const deleteResult = await rawApiRequest({
       method: "DELETE",
       path: `/api/v1/admin/service-keys/${keyId}`,
-      headers: { Authorization: `Bearer ${tenantAdminToken}` },
+      headers: {
+        Authorization: `Bearer ${tenantAdminToken}`,
+        "X-FB-Tenant": tenantAdminInfo.tenantId,
+      },
     });
     expect([200, 204]).toContain(deleteResult.status);
 

@@ -115,6 +115,15 @@ func getTenantID(c fiber.Ctx) string {
 	return tenantID
 }
 
+// tenantFilterForServiceKey returns a WHERE clause fragment and args for tenant-scoped service key queries.
+// Returns ("", nil) when no tenant context is available.
+func tenantFilterForServiceKey(c fiber.Ctx, nextArgIdx int) (string, []interface{}) {
+	if tenantID := getTenantID(c); tenantID != "" {
+		return fmt.Sprintf(" AND tenant_id = $%d", nextArgIdx), []interface{}{uuid.MustParse(tenantID)}
+	}
+	return "", nil
+}
+
 // ListServiceKeys lists all service keys
 func (h *ServiceKeyHandler) ListServiceKeys(c fiber.Ctx) error {
 	pool, err := h.checkDB(c)
@@ -192,13 +201,21 @@ func (h *ServiceKeyHandler) GetServiceKey(c fiber.Ctx) error {
 	}
 
 	var key ServiceKey
-	err = pool.QueryRow(c.RequestCtx(), `
+	query := `
 		SELECT id, name, description, key_prefix, COALESCE(key_type, 'service'), scopes, allowed_namespaces, enabled,
 		       rate_limit_per_minute, rate_limit_per_hour,
 		       created_by, created_at, last_used_at, expires_at, revoked_at, deprecated_at, grace_period_ends_at, replaced_by
 		FROM auth.service_keys
 		WHERE id = $1
-	`, id).Scan(
+	`
+	args := []interface{}{id}
+
+	if tenantID := getTenantID(c); tenantID != "" {
+		query += fmt.Sprintf(" AND tenant_id = $2")
+		args = append(args, uuid.MustParse(tenantID))
+	}
+
+	err = pool.QueryRow(c.RequestCtx(), query, args...).Scan(
 		&key.ID, &key.Name, &key.Description, &key.KeyPrefix, &key.KeyType, &key.Scopes,
 		&key.AllowedNamespaces, &key.Enabled, &key.RateLimitPerMinute, &key.RateLimitPerHour,
 		&key.CreatedBy, &key.CreatedAt, &key.LastUsedAt, &key.ExpiresAt,
@@ -400,7 +417,13 @@ func (h *ServiceKeyHandler) DeleteServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	result, err := pool.Exec(c.RequestCtx(), `DELETE FROM auth.service_keys WHERE id = $1`, id)
+	delQuery := `DELETE FROM auth.service_keys WHERE id = $1`
+	delArgs := []interface{}{id}
+	if filter, filterArgs := tenantFilterForServiceKey(c, 2); filter != "" {
+		delQuery += filter
+		delArgs = append(delArgs, filterArgs...)
+	}
+	result, err := pool.Exec(c.RequestCtx(), delQuery, delArgs...)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to delete service key")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -436,7 +459,13 @@ func (h *ServiceKeyHandler) DisableServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	result, err := pool.Exec(c.RequestCtx(), `UPDATE auth.service_keys SET enabled = false WHERE id = $1`, id)
+	disQuery := `UPDATE auth.service_keys SET enabled = false WHERE id = $1`
+	disArgs := []interface{}{id}
+	if filter, filterArgs := tenantFilterForServiceKey(c, 2); filter != "" {
+		disQuery += filter
+		disArgs = append(disArgs, filterArgs...)
+	}
+	result, err := pool.Exec(c.RequestCtx(), disQuery, disArgs...)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to disable service key")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -472,7 +501,13 @@ func (h *ServiceKeyHandler) EnableServiceKey(c fiber.Ctx) error {
 		})
 	}
 
-	result, err := pool.Exec(c.RequestCtx(), `UPDATE auth.service_keys SET enabled = true WHERE id = $1`, id)
+	enQuery := `UPDATE auth.service_keys SET enabled = true WHERE id = $1`
+	enArgs := []interface{}{id}
+	if filter, filterArgs := tenantFilterForServiceKey(c, 2); filter != "" {
+		enQuery += filter
+		enArgs = append(enArgs, filterArgs...)
+	}
+	result, err := pool.Exec(c.RequestCtx(), enQuery, enArgs...)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to enable service key")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

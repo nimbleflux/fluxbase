@@ -8,9 +8,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // RealtimeAdminHandler handles realtime enablement for user tables
@@ -127,10 +129,11 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 		})
 	}
 
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
+	tenantID := middleware.GetTenantIDFromContext(c)
 
 	// Check if table exists
-	exists, err := h.tableExists(ctx, req.Schema, req.Table)
+	exists, err := h.tableExists(ctx, c, req.Schema, req.Table)
 	if err != nil {
 		log.Error().Err(err).Str("table", req.Schema+"."+req.Table).Msg("Failed to check table existence")
 		return c.Status(500).JSON(fiber.Map{
@@ -146,7 +149,7 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 	triggerName := fmt.Sprintf("%s_realtime_notify", req.Table)
 
 	// Execute all DDL in a transaction with admin role
-	err = h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 		// Start transaction
 		tx, txErr := conn.Begin(ctx)
 		if txErr != nil {
@@ -172,25 +175,25 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 
 		// 3. Create trigger
 		triggerQuery := fmt.Sprintf(`CREATE TRIGGER %s
-AFTER INSERT OR UPDATE OR DELETE ON %s.%s
-FOR EACH ROW EXECUTE FUNCTION public.notify_realtime_change()`,
+	AFTER INSERT OR UPDATE OR DELETE ON %s.%s
+	FOR EACH ROW EXECUTE FUNCTION public.notify_realtime_change()`,
 			quoteIdentifier(triggerName), quoteIdentifier(req.Schema), quoteIdentifier(req.Table))
 		log.Debug().Str("query", triggerQuery).Msg("Creating realtime trigger")
 		if _, execErr := tx.Exec(ctx, triggerQuery); execErr != nil {
 			return fmt.Errorf("failed to create trigger: %w", execErr)
 		}
 
-		// 4. Upsert into realtime.schema_registry
+		// 4. Upsert into realtime.schema_registry with explicit tenant_id
 		upsertQuery := `
-INSERT INTO realtime.schema_registry (schema_name, table_name, realtime_enabled, events, excluded_columns)
-VALUES ($1, $2, true, $3, $4)
-ON CONFLICT (schema_name, table_name) DO UPDATE
-SET realtime_enabled = true,
-    events = EXCLUDED.events,
-    excluded_columns = EXCLUDED.excluded_columns,
-    updated_at = NOW()`
+	INSERT INTO realtime.schema_registry (schema_name, table_name, realtime_enabled, events, excluded_columns, tenant_id)
+	VALUES ($1, $2, true, $3, $4, $5::uuid)
+	ON CONFLICT (schema_name, table_name) DO UPDATE
+	SET realtime_enabled = true,
+	    events = EXCLUDED.events,
+	    excluded_columns = EXCLUDED.excluded_columns,
+	    updated_at = NOW()`
 		log.Debug().Str("query", upsertQuery).Msg("Upserting schema registry")
-		if _, execErr := tx.Exec(ctx, upsertQuery, req.Schema, req.Table, req.Events, req.Exclude); execErr != nil {
+		if _, execErr := tx.Exec(ctx, upsertQuery, req.Schema, req.Table, req.Events, req.Exclude, tenantID); execErr != nil {
 			return fmt.Errorf("failed to update schema registry: %w", execErr)
 		}
 
@@ -239,10 +242,11 @@ func (h *RealtimeAdminHandler) HandleDisableRealtime(c fiber.Ctx) error {
 		})
 	}
 
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
+	tenantID := middleware.GetTenantIDFromContext(c)
 
 	// Check if table exists
-	exists, err := h.tableExists(ctx, schema, table)
+	exists, err := h.tableExists(ctx, c, schema, table)
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to check table existence")
 		return c.Status(500).JSON(fiber.Map{
@@ -258,7 +262,7 @@ func (h *RealtimeAdminHandler) HandleDisableRealtime(c fiber.Ctx) error {
 	triggerName := fmt.Sprintf("%s_realtime_notify", table)
 
 	// Execute DDL with admin role
-	err = h.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
+	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
 		tx, txErr := conn.Begin(ctx)
 		if txErr != nil {
 			return fmt.Errorf("failed to begin transaction: %w", txErr)
@@ -275,11 +279,11 @@ func (h *RealtimeAdminHandler) HandleDisableRealtime(c fiber.Ctx) error {
 
 		// 2. Update registry (set realtime_enabled = false, keep record for history)
 		updateQuery := `
-UPDATE realtime.schema_registry
-SET realtime_enabled = false, updated_at = NOW()
-WHERE schema_name = $1 AND table_name = $2`
+	UPDATE realtime.schema_registry
+	SET realtime_enabled = false, updated_at = NOW()
+	WHERE schema_name = $1 AND table_name = $2 AND tenant_id = $3::uuid`
 		log.Debug().Str("query", updateQuery).Msg("Updating schema registry")
-		if _, execErr := tx.Exec(ctx, updateQuery, schema, table); execErr != nil {
+		if _, execErr := tx.Exec(ctx, updateQuery, schema, table, tenantID); execErr != nil {
 			return fmt.Errorf("failed to update schema registry: %w", execErr)
 		}
 
@@ -309,24 +313,27 @@ func (h *RealtimeAdminHandler) HandleListRealtimeTables(c fiber.Ctx) error {
 		})
 	}
 
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Get optional filter for enabled-only
 	enabledOnly := c.Query("enabled", "true") == "true"
 
+	tenantID := middleware.GetTenantIDFromContext(c)
+
 	query := `
-SELECT id, schema_name, table_name, realtime_enabled, events,
-       COALESCE(excluded_columns, '{}') as excluded_columns,
-       created_at, updated_at
-FROM realtime.schema_registry`
+	SELECT id, schema_name, table_name, realtime_enabled, events,
+	       COALESCE(excluded_columns, '{}') as excluded_columns,
+	       created_at, updated_at
+	FROM realtime.schema_registry
+	WHERE tenant_id = $1`
 
 	if enabledOnly {
-		query += " WHERE realtime_enabled = true"
+		query += " AND realtime_enabled = true"
 	}
 
 	query += " ORDER BY schema_name, table_name"
 
-	rows, err := h.db.Pool().Query(ctx, query)
+	rows, err := h.queryPool(c).Query(ctx, query, tenantID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list realtime tables")
 		return c.Status(500).JSON(fiber.Map{
@@ -378,24 +385,25 @@ func (h *RealtimeAdminHandler) HandleGetRealtimeStatus(c fiber.Ctx) error {
 		})
 	}
 
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
+	tenantID := middleware.GetTenantIDFromContext(c)
 
 	query := `
-SELECT id, schema_name, table_name, realtime_enabled, events,
-       COALESCE(excluded_columns, '{}') as excluded_columns,
-       created_at, updated_at
-FROM realtime.schema_registry
-WHERE schema_name = $1 AND table_name = $2`
+	SELECT id, schema_name, table_name, realtime_enabled, events,
+	       COALESCE(excluded_columns, '{}') as excluded_columns,
+	       created_at, updated_at
+	FROM realtime.schema_registry
+	WHERE schema_name = $1 AND table_name = $2 AND tenant_id = $3`
 
 	var t RealtimeTableStatus
 	var createdAt, updatedAt interface{}
-	err := h.db.Pool().QueryRow(ctx, query, schema, table).Scan(
+	err := h.queryPool(c).QueryRow(ctx, query, schema, table, tenantID).Scan(
 		&t.ID, &t.Schema, &t.Table, &t.RealtimeEnabled, &t.Events, &t.ExcludedColumns, &createdAt, &updatedAt,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Table not registered - check if the table exists at all
-		exists, checkErr := h.tableExists(ctx, schema, table)
+		exists, checkErr := h.tableExists(ctx, c, schema, table)
 		if checkErr != nil {
 			return c.Status(500).JSON(fiber.Map{
 				"error": "Failed to check table existence",
@@ -489,12 +497,13 @@ func (h *RealtimeAdminHandler) HandleUpdateRealtimeConfig(c fiber.Ctx) error {
 		})
 	}
 
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
+	tenantID := middleware.GetTenantIDFromContext(c)
 
 	// Build update query dynamically
 	updates := []string{}
-	args := []interface{}{schema, table}
-	argIdx := 3
+	args := []interface{}{schema, table, tenantID}
+	argIdx := 4
 
 	if len(req.Events) > 0 {
 		updates = append(updates, fmt.Sprintf("events = $%d", argIdx))
@@ -508,13 +517,13 @@ func (h *RealtimeAdminHandler) HandleUpdateRealtimeConfig(c fiber.Ctx) error {
 	}
 
 	query := fmt.Sprintf(`
-UPDATE realtime.schema_registry
-SET %s, updated_at = NOW()
-WHERE schema_name = $1 AND table_name = $2 AND realtime_enabled = true
-RETURNING id`, strings.Join(updates, ", "))
+	UPDATE realtime.schema_registry
+	SET %s, updated_at = NOW()
+	WHERE schema_name = $1 AND table_name = $2 AND tenant_id = $3 AND realtime_enabled = true
+	RETURNING id`, strings.Join(updates, ", "))
 
 	var id int
-	err := h.db.Pool().QueryRow(ctx, query, args...).Scan(&id)
+	err := h.queryPool(c).QueryRow(ctx, query, args...).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c.Status(404).JSON(fiber.Map{
 			"error": fmt.Sprintf("Realtime not enabled on table '%s.%s'", schema, table),
@@ -535,15 +544,31 @@ RETURNING id`, strings.Join(updates, ", "))
 	})
 }
 
-// tableExists checks if a table exists in the database
-func (h *RealtimeAdminHandler) tableExists(ctx context.Context, schema, table string) (bool, error) {
+// queryPool returns the tenant pool if available, otherwise the main pool.
+func (h *RealtimeAdminHandler) queryPool(c fiber.Ctx) *pgxpool.Pool {
+	if pool := middleware.GetTenantPool(c); pool != nil {
+		return pool
+	}
+	return h.db.Pool()
+}
+
+// executeWithAdminRole executes a function with admin role, routing to the
+// tenant database when a tenant context is active.
+func (h *RealtimeAdminHandler) executeWithAdminRole(ctx context.Context, c fiber.Ctx, fn func(conn *pgx.Conn) error) error {
+	if dbName, _ := c.Locals("tenant_db_name").(string); dbName != "" {
+		return h.db.ExecuteWithAdminRoleForDB(ctx, dbName, fn)
+	}
+	return h.db.ExecuteWithAdminRole(ctx, fn)
+}
+
+// tableExists checks if a table exists in the database, using tenant pool when available.
+func (h *RealtimeAdminHandler) tableExists(ctx context.Context, c fiber.Ctx, schema, table string) (bool, error) {
 	var exists bool
-	err := h.db.Pool().QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM information_schema.tables
-			WHERE table_schema = $1 AND table_name = $2
-		)
-	`, schema, table).Scan(&exists)
+	query := `SELECT EXISTS(
+				SELECT 1 FROM information_schema.tables
+				WHERE table_schema = $1 AND table_name = $2
+			)`
+	err := h.queryPool(c).QueryRow(ctx, query, schema, table).Scan(&exists)
 	return exists, err
 }
 

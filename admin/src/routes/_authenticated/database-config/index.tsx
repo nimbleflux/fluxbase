@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Database } from 'lucide-react'
 import { monitoringApi } from '@/lib/api'
+import { requireInstanceAdmin } from '@/lib/route-guards'
 import {
   Card,
   CardContent,
@@ -186,5 +187,8 @@ const DatabaseConfigPage = () => {
 }
 
 export const Route = createFileRoute('/_authenticated/database-config/')({
+  beforeLoad: () => {
+    requireInstanceAdmin();
+  },
   component: DatabaseConfigPage,
 })

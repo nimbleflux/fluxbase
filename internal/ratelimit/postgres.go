@@ -22,7 +22,7 @@ type PostgresStore struct {
 }
 
 // NewPostgresStore creates a new PostgreSQL-backed rate limit store.
-// The store uses the system.rate_limits table which must be created via migration.
+// The store uses the platform.rate_limits table which must be created via migration.
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
 	return &PostgresStore{
 		pool: pool,
@@ -36,7 +36,7 @@ func (s *PostgresStore) Get(ctx context.Context, key string) (int64, time.Time, 
 
 	err := s.pool.QueryRow(ctx, `
 		SELECT count, expires_at
-		FROM system.rate_limits
+		FROM platform.rate_limits
 		WHERE key = $1 AND expires_at > NOW()
 	`, key).Scan(&count, &expiresAt)
 	if err != nil {
@@ -54,16 +54,16 @@ func (s *PostgresStore) Increment(ctx context.Context, key string, expiration ti
 
 	var count int64
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO system.rate_limits (key, count, expires_at)
+		INSERT INTO platform.rate_limits (key, count, expires_at)
 		VALUES ($1, 1, $2)
 		ON CONFLICT (key) DO UPDATE SET
 			count = CASE
-				WHEN system.rate_limits.expires_at <= NOW() THEN 1
-				ELSE system.rate_limits.count + 1
+				WHEN platform.rate_limits.expires_at <= NOW() THEN 1
+				ELSE platform.rate_limits.count + 1
 			END,
 			expires_at = CASE
-				WHEN system.rate_limits.expires_at <= NOW() THEN $2
-				ELSE system.rate_limits.expires_at
+				WHEN platform.rate_limits.expires_at <= NOW() THEN $2
+				ELSE platform.rate_limits.expires_at
 			END
 		RETURNING count
 	`, key, expiresAt).Scan(&count)
@@ -78,7 +78,7 @@ func (s *PostgresStore) Increment(ctx context.Context, key string, expiration ti
 // Reset resets the counter for a key.
 func (s *PostgresStore) Reset(ctx context.Context, key string) error {
 	_, err := s.pool.Exec(ctx, `
-		DELETE FROM system.rate_limits WHERE key = $1
+		DELETE FROM platform.rate_limits WHERE key = $1
 	`, key)
 	return err
 }
@@ -88,7 +88,7 @@ func (s *PostgresStore) Reset(ctx context.Context, key string) error {
 // This is primarily useful for testing.
 func (s *PostgresStore) ResetAll(ctx context.Context, pattern string) error {
 	_, err := s.pool.Exec(ctx, `
-		DELETE FROM system.rate_limits WHERE key LIKE $1
+		DELETE FROM platform.rate_limits WHERE key LIKE $1
 	`, pattern)
 	return err
 }
@@ -102,7 +102,7 @@ func (s *PostgresStore) Close() error {
 // This should be called periodically (e.g., by a background job or cron).
 func (s *PostgresStore) Cleanup(ctx context.Context) (int64, error) {
 	result, err := s.pool.Exec(ctx, `
-		DELETE FROM system.rate_limits WHERE expires_at <= NOW()
+		DELETE FROM platform.rate_limits WHERE expires_at <= NOW()
 	`)
 	if err != nil {
 		return 0, err
@@ -115,7 +115,7 @@ func (s *PostgresStore) Cleanup(ctx context.Context) (int64, error) {
 // In production, the table should be created via a migration.
 func (s *PostgresStore) EnsureTable(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS system.rate_limits (
+		CREATE TABLE IF NOT EXISTS platform.rate_limits (
 			key TEXT PRIMARY KEY,
 			count BIGINT NOT NULL DEFAULT 1,
 			expires_at TIMESTAMPTZ NOT NULL,
@@ -123,7 +123,7 @@ func (s *PostgresStore) EnsureTable(ctx context.Context) error {
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_rate_limits_expires_at
-		ON system.rate_limits (expires_at);
+		ON platform.rate_limits (expires_at);
 	`)
 	return err
 }

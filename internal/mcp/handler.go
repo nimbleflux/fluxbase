@@ -10,6 +10,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // rateLimiter tracks request counts per client key using a sliding window
@@ -167,7 +168,7 @@ func (h *Handler) HandlePost(c fiber.Ctx) error {
 		Msg("MCP: Handling POST request")
 
 	// Process the request
-	response := h.server.HandleRequest(c.RequestCtx(), c.Body(), authCtx)
+	response := h.server.HandleRequest(middleware.CtxWithTenant(c), c.Body(), authCtx)
 
 	// Check Accept header for response format
 	accept := c.Get("Accept")

@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Zap, AlertCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api'
+import { requireInstanceAdmin } from '@/lib/route-guards'
 import {
   Card,
   CardContent,
@@ -13,6 +14,9 @@ import {
 import { OverridableSwitch } from '@/components/admin/overridable-switch'
 
 export const Route = createFileRoute('/_authenticated/features/')({
+  beforeLoad: () => {
+    requireInstanceAdmin();
+  },
   component: FeaturesPage,
 })
 

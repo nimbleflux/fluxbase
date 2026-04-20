@@ -456,16 +456,19 @@ func (s *Storage) storeVersion(ctx context.Context, secretID uuid.UUID, version 
 
 // GetStats returns statistics about secrets
 func (s *Storage) GetStats(ctx context.Context) (total int, expiringSoon int, expired int, err error) {
+	tenantID := database.TenantFromContext(ctx)
+
 	query := `
 		SELECT
 			COUNT(*) as total,
 			COUNT(*) FILTER (WHERE expires_at IS NOT NULL AND expires_at > NOW() AND expires_at < NOW() + INTERVAL '7 days') as expiring_soon,
 			COUNT(*) FILTER (WHERE expires_at IS NOT NULL AND expires_at < NOW()) as expired
 		FROM functions.secrets
+		WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 	`
 
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query).Scan(&total, &expiringSoon, &expired)
+		return tx.QueryRow(ctx, query, tenantOrNil(tenantID)).Scan(&total, &expiringSoon, &expired)
 	})
 	if err != nil {
 		err = fmt.Errorf("failed to get secret stats: %w", err)

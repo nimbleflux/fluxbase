@@ -342,6 +342,108 @@ function WebhooksPage() {
                       </TableBody>
                     </Table>
                   </div>
+                ) : webhooks && webhooks.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>URL</TableHead>
+                          <TableHead>Events</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {webhooks
+                          .filter((w) => {
+                            if (!searchQuery) return true;
+                            const q = searchQuery.toLowerCase();
+                            return (
+                              w.name.toLowerCase().includes(q) ||
+                              w.url.toLowerCase().includes(q)
+                            );
+                          })
+                          .map((webhook) => (
+                            <TableRow key={webhook.id}>
+                              <TableCell>
+                                <div>
+                                  <div className="font-medium">
+                                    {webhook.name}
+                                  </div>
+                                  {webhook.description && (
+                                    <div className="text-muted-foreground text-sm">
+                                      {webhook.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="max-w-[200px] truncate">
+                                {webhook.url}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                  {webhook.events?.map((event, i) => (
+                                    <Badge key={i} variant="outline">
+                                      {event.table}:{" "}
+                                      {event.operations?.join(", ")}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    webhook.enabled ? "default" : "secondary"
+                                  }
+                                >
+                                  {webhook.enabled ? "Active" : "Disabled"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-1">
+                                  <Button variant="ghost" size="sm" asChild>
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          await webhooksApi.test(webhook.id);
+                                          toast.success(
+                                            `Test sent to ${webhook.name}`,
+                                          );
+                                        } catch {
+                                          toast.error("Test delivery failed");
+                                        }
+                                      }}
+                                    >
+                                      <Send className="h-4 w-4" />
+                                    </button>
+                                  </Button>
+                                  <Button variant="ghost" size="sm">
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          await webhooksApi.delete(webhook.id);
+                                          queryClient.invalidateQueries({
+                                            queryKey: ["webhooks"],
+                                          });
+                                          toast.success("Webhook deleted");
+                                        } catch {
+                                          toast.error(
+                                            "Failed to delete webhook",
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </button>
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Webhook className="text-muted-foreground mb-4 h-12 w-12" />

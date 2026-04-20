@@ -958,3 +958,131 @@ export async function rawListOAuthProviders(accessToken: string) {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }
+
+// ────────────────────────────────────────────────────────────────
+// Secrets Stats
+// ────────────────────────────────────────────────────────────────
+
+export async function rawGetSecretStats(
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/secrets/stats",
+    headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Webhooks
+// ────────────────────────────────────────────────────────────────
+
+export async function rawCreateWebhook(
+  options: {
+    name: string;
+    url: string;
+    events?: Array<{ table: string; operations: string[] }>;
+  },
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  const data: Record<string, unknown> = {
+    name: options.name,
+    url: options.url,
+    events: options.events || [
+      { table: "public.test_table", operations: ["INSERT"] },
+    ],
+  };
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/webhooks",
+    data,
+    headers,
+  });
+}
+
+export async function rawListWebhooks(accessToken: string, tenantId?: string) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/webhooks",
+    headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// MCP Custom Tools
+// ────────────────────────────────────────────────────────────────
+
+export async function rawCreateMCPTool(
+  options: {
+    name: string;
+    description: string;
+    enabled?: boolean;
+  },
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/mcp/tools",
+    data: options,
+    headers,
+  });
+}
+
+export async function rawListMCPTools(accessToken: string, tenantId?: string) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/mcp/tools",
+    headers,
+  });
+}
+
+export async function rawDeleteMCPTool(
+  toolId: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "DELETE",
+    path: `/api/v1/mcp/tools/${toolId}`,
+    headers,
+  });
+}

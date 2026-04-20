@@ -11,6 +11,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/logging"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/observability"
 )
 
@@ -69,8 +70,11 @@ func (h *Handler) getConfig(c fiber.Ctx) *config.RPCConfig {
 // ListProcedures returns all procedures (admin view)
 // GET /api/v1/admin/rpc/procedures
 func (h *Handler) ListProcedures(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	namespace := c.Query("namespace")
+	if namespace == "default" {
+		namespace = ""
+	}
 
 	procedures, err := h.storage.ListProcedures(ctx, namespace)
 	if err != nil {
@@ -95,7 +99,7 @@ func (h *Handler) ListProcedures(c fiber.Ctx) error {
 // GetProcedure returns a single procedure by namespace and name
 // GET /api/v1/admin/rpc/procedures/:namespace/:name
 func (h *Handler) GetProcedure(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	namespace := c.Params("namespace")
 	name := c.Params("name")
 
@@ -131,7 +135,7 @@ type UpdateProcedureRequest struct {
 // UpdateProcedure updates a procedure
 // PUT /api/v1/admin/rpc/procedures/:namespace/:name
 func (h *Handler) UpdateProcedure(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	namespace := c.Params("namespace")
 	name := c.Params("name")
 
@@ -208,7 +212,7 @@ func (h *Handler) UpdateProcedure(c fiber.Ctx) error {
 // DeleteProcedure deletes a procedure
 // DELETE /api/v1/admin/rpc/procedures/:namespace/:name
 func (h *Handler) DeleteProcedure(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	namespace := c.Params("namespace")
 	name := c.Params("name")
 
@@ -232,7 +236,7 @@ func (h *Handler) DeleteProcedure(c fiber.Ctx) error {
 // ListNamespaces returns all unique namespaces
 // GET /api/v1/admin/rpc/namespaces
 func (h *Handler) ListNamespaces(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	namespaces, err := h.storage.ListNamespaces(ctx)
 	if err != nil {
@@ -240,6 +244,18 @@ func (h *Handler) ListNamespaces(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to list namespaces",
 		})
+	}
+
+	// Ensure we always return at least "default"
+	if len(namespaces) == 0 {
+		namespaces = []string{"default"}
+	}
+
+	// Normalize empty-string namespaces to "default".
+	for i := range namespaces {
+		if namespaces[i] == "" {
+			namespaces[i] = "default"
+		}
 	}
 
 	return c.JSON(fiber.Map{
@@ -254,7 +270,7 @@ func (h *Handler) ListNamespaces(c fiber.Ctx) error {
 // SyncProcedures syncs procedures from filesystem or SDK payload
 // POST /api/v1/admin/rpc/sync
 func (h *Handler) SyncProcedures(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	var req SyncRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -502,13 +518,16 @@ func stringSlicesEqual(a, b []string) bool {
 // ListExecutions returns execution history
 // GET /api/v1/admin/rpc/executions
 func (h *Handler) ListExecutions(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	opts := ListExecutionsOptions{
 		Namespace:     c.Query("namespace"),
 		ProcedureName: c.Query("procedure"),
 		UserID:        c.Query("user_id"),
 		Limit:         100,
+	}
+	if opts.Namespace == "default" {
+		opts.Namespace = ""
 	}
 
 	if status := c.Query("status"); status != "" {
@@ -544,7 +563,7 @@ func (h *Handler) ListExecutions(c fiber.Ctx) error {
 // GetExecution returns a single execution by ID
 // GET /api/v1/admin/rpc/executions/:id
 func (h *Handler) GetExecution(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	execution, err := h.storage.GetExecution(ctx, id)
@@ -567,7 +586,7 @@ func (h *Handler) GetExecution(c fiber.Ctx) error {
 // GetExecutionLogs returns logs for an execution
 // GET /api/v1/admin/rpc/executions/:id/logs
 func (h *Handler) GetExecutionLogs(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	// Check if execution exists
@@ -611,7 +630,7 @@ func (h *Handler) GetExecutionLogs(c fiber.Ctx) error {
 // CancelExecution cancels a pending or running execution
 // POST /api/v1/admin/rpc/executions/:id/cancel
 func (h *Handler) CancelExecution(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	// Get execution to check status
@@ -658,8 +677,11 @@ func (h *Handler) CancelExecution(c fiber.Ctx) error {
 // ListPublicProcedures returns public, enabled procedures
 // GET /api/v1/rpc/procedures
 func (h *Handler) ListPublicProcedures(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	namespace := c.Query("namespace")
+	if namespace == "default" {
+		namespace = ""
+	}
 
 	procedures, err := h.storage.ListPublicProcedures(ctx, namespace)
 	if err != nil {
@@ -682,7 +704,7 @@ func (h *Handler) ListPublicProcedures(c fiber.Ctx) error {
 // Invoke invokes an RPC procedure
 // POST /api/v1/rpc/:namespace/:name
 func (h *Handler) Invoke(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	namespace := c.Params("namespace")
 	name := c.Params("name")
 
@@ -807,7 +829,7 @@ func (h *Handler) Invoke(c fiber.Ctx) error {
 // GetPublicExecution returns execution status for user's own execution
 // GET /api/v1/rpc/executions/:id
 func (h *Handler) GetPublicExecution(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	// Get user context
@@ -846,7 +868,7 @@ func (h *Handler) GetPublicExecution(c fiber.Ctx) error {
 // GetPublicExecutionLogs returns logs for user's own execution
 // GET /api/v1/rpc/executions/:id/logs
 func (h *Handler) GetPublicExecutionLogs(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
 	// Get user context

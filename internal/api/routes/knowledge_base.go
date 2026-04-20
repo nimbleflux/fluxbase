@@ -7,6 +7,7 @@ import (
 type KnowledgeBaseDeps struct {
 	RequireAIEnabled fiber.Handler
 	RequireAuth      fiber.Handler
+	TenantMiddleware fiber.Handler
 
 	ListKBs          fiber.Handler
 	CreateKB         fiber.Handler
@@ -106,12 +107,19 @@ func BuildKnowledgeBaseRoutes(deps *KnowledgeBaseDeps) *RouteGroup {
 		)
 	}
 
+	middlewares := []Middleware{
+		{Name: "RequireAIEnabled", Handler: deps.RequireAIEnabled},
+	}
+	if deps.TenantMiddleware != nil {
+		middlewares = append(middlewares, Middleware{
+			Name: "TenantContext", Handler: deps.TenantMiddleware,
+		})
+	}
+
 	return &RouteGroup{
-		Name:   "knowledge_base",
-		Routes: routes,
-		Middlewares: []Middleware{
-			{Name: "RequireAIEnabled", Handler: deps.RequireAIEnabled},
-		},
+		Name:        "knowledge_base",
+		Routes:      routes,
+		Middlewares: middlewares,
 		AuthMiddlewares: &AuthMiddlewares{
 			Required: deps.RequireAuth,
 		},

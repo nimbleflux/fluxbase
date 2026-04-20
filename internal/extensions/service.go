@@ -83,10 +83,9 @@ func (s *Service) ListExtensionsForTenant(ctx context.Context, tenantID *string,
 	}
 
 	// Query catalog metadata and enabled_extensions tracking from the main database
-	// using service_role to bypass RLS
 	var metaMap map[string]extMeta
 	var trackingMap map[string]trackInfo
-	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantIDStr(tenantID), func(tx pgx.Tx) error {
 		// Query platform.available_extensions catalog
 		metaRows, err := tx.Query(ctx, `
 			SELECT id, name, display_name, COALESCE(description, ''), category,
@@ -264,6 +263,14 @@ func mustTenantFilter(tenantID *string, idx int) string {
 	return fmt.Sprintf("tenant_id = $%d", idx)
 }
 
+// tenantIDStr dereferences a tenant ID pointer, returning "" for nil.
+func tenantIDStr(tid *string) string {
+	if tid == nil {
+		return ""
+	}
+	return *tid
+}
+
 // GetExtensionStatus returns the status of a specific extension (default tenant).
 func (s *Service) GetExtensionStatus(ctx context.Context, name string) (*ExtensionStatusResponse, error) {
 	return s.GetExtensionStatusForTenant(ctx, name, nil, nil)
@@ -274,7 +281,7 @@ func (s *Service) GetExtensionStatusForTenant(ctx context.Context, name string, 
 	filter := mustTenantFilter(tenantID, 2)
 	var isEnabled bool
 	var err error
-	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantIDStr(tenantID), func(tx pgx.Tx) error {
 		if tenantID != nil {
 			return tx.QueryRow(ctx, fmt.Sprintf(`
 				SELECT COALESCE(
@@ -335,7 +342,7 @@ func (s *Service) EnableExtensionForTenant(ctx context.Context, name string, use
 	}
 	if status.IsInstalled {
 		// Extension is already installed in PostgreSQL, but ensure it's tracked
-		err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		err = database.WrapWithTenantAwareRole(ctx, s.db, tenantIDStr(tenantID), func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, `
 				INSERT INTO platform.enabled_extensions (extension_name, tenant_id, enabled_by, is_active)
 				VALUES ($1, $2, $3, true)
@@ -408,7 +415,7 @@ func (s *Service) EnableExtensionForTenant(ctx context.Context, name string, use
 	_, version := s.checkExtensionInstalledForPool(ctx, name, nil)
 
 	// Record in enabled_extensions table
-	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantIDStr(tenantID), func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO platform.enabled_extensions (extension_name, tenant_id, enabled_by, is_active)
 			VALUES ($1, $2, $3, true)
@@ -508,7 +515,7 @@ func (s *Service) DisableExtensionForTenant(ctx context.Context, name string, us
 
 	// Update enabled_extensions table
 	filter := mustTenantFilter(tenantID, 2)
-	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantIDStr(tenantID), func(tx pgx.Tx) error {
 		if tenantID != nil {
 			_, err := tx.Exec(ctx, fmt.Sprintf(`
 				UPDATE platform.enabled_extensions

@@ -8,10 +8,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
+
+// withTenant wraps a function in a tenant-aware transaction for secrets service.
+func (s *SecretsService) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tenantID := database.TenantFromContext(ctx)
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
+}
 
 var (
 	// ErrSecretNotFound is returned when a secret setting is not found
@@ -38,11 +45,13 @@ func NewSecretsService(db *database.Connection, encryptionKey string) *SecretsSe
 func (s *SecretsService) GetUserSecret(ctx context.Context, userID uuid.UUID, key string) (string, error) {
 	var encryptedValue string
 
-	err := s.db.QueryRow(ctx, `
-		SELECT encrypted_value
-		FROM app.settings
-		WHERE key = $1 AND user_id = $2 AND is_secret = true AND encrypted_value IS NOT NULL
-	`, key, userID).Scan(&encryptedValue)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT encrypted_value
+			FROM app.settings
+			WHERE key = $1 AND user_id = $2 AND is_secret = true AND encrypted_value IS NOT NULL
+		`, key, userID).Scan(&encryptedValue)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrSecretNotFound
@@ -70,11 +79,13 @@ func (s *SecretsService) GetUserSecret(ctx context.Context, userID uuid.UUID, ke
 func (s *SecretsService) GetSystemSecret(ctx context.Context, key string) (string, error) {
 	var encryptedValue string
 
-	err := s.db.QueryRow(ctx, `
-		SELECT encrypted_value
-		FROM app.settings
-		WHERE key = $1 AND user_id IS NULL AND is_secret = true AND encrypted_value IS NOT NULL
-	`, key).Scan(&encryptedValue)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT encrypted_value
+			FROM app.settings
+			WHERE key = $1 AND user_id IS NULL AND is_secret = true AND encrypted_value IS NOT NULL
+		`, key).Scan(&encryptedValue)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrSecretNotFound
@@ -94,71 +105,85 @@ func (s *SecretsService) GetSystemSecret(ctx context.Context, key string) (strin
 // GetUserSecrets retrieves all decrypted secrets for a user.
 // This is used for injecting secrets into edge functions as environment variables.
 func (s *SecretsService) GetUserSecrets(ctx context.Context, userID uuid.UUID) (map[string]string, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT key, encrypted_value
-		FROM app.settings
-		WHERE user_id = $1 AND is_secret = true AND encrypted_value IS NOT NULL
-	`, userID)
+	secrets := make(map[string]string)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT key, encrypted_value
+			FROM app.settings
+			WHERE user_id = $1 AND is_secret = true AND encrypted_value IS NOT NULL
+		`, userID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		// Derive user-specific key once
+		derivedKey, err := crypto.DeriveUserKey(s.encryptionKey, userID)
+		if err != nil {
+			return fmt.Errorf("failed to derive user key: %w", err)
+		}
+
+		for rows.Next() {
+			var key, encryptedValue string
+			if err := rows.Scan(&key, &encryptedValue); err != nil {
+				return err
+			}
+
+			plaintext, err := crypto.Decrypt(encryptedValue, derivedKey)
+			if err != nil {
+				// Log warning but continue with other secrets
+				continue
+			}
+
+			secrets[key] = plaintext
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	// Derive user-specific key once
-	derivedKey, err := crypto.DeriveUserKey(s.encryptionKey, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive user key: %w", err)
-	}
-
-	secrets := make(map[string]string)
-	for rows.Next() {
-		var key, encryptedValue string
-		if err := rows.Scan(&key, &encryptedValue); err != nil {
-			return nil, err
-		}
-
-		plaintext, err := crypto.Decrypt(encryptedValue, derivedKey)
-		if err != nil {
-			// Log warning but continue with other secrets
-			continue
-		}
-
-		secrets[key] = plaintext
-	}
-
-	return secrets, rows.Err()
+	return secrets, nil
 }
 
 // GetSystemSecrets retrieves all decrypted system-level secrets.
 // This is used for injecting secrets into edge functions as environment variables.
 func (s *SecretsService) GetSystemSecrets(ctx context.Context) (map[string]string, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT key, encrypted_value
-		FROM app.settings
-		WHERE user_id IS NULL AND is_secret = true AND encrypted_value IS NOT NULL
-	`)
+	secrets := make(map[string]string)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT key, encrypted_value
+			FROM app.settings
+			WHERE user_id IS NULL AND is_secret = true AND encrypted_value IS NOT NULL
+		`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var key, encryptedValue string
+			if err := rows.Scan(&key, &encryptedValue); err != nil {
+				return err
+			}
+
+			plaintext, err := crypto.Decrypt(encryptedValue, s.encryptionKey)
+			if err != nil {
+				// Log warning but continue with other secrets
+				continue
+			}
+
+			secrets[key] = plaintext
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	secrets := make(map[string]string)
-	for rows.Next() {
-		var key, encryptedValue string
-		if err := rows.Scan(&key, &encryptedValue); err != nil {
-			return nil, err
-		}
-
-		plaintext, err := crypto.Decrypt(encryptedValue, s.encryptionKey)
-		if err != nil {
-			// Log warning but continue with other secrets
-			continue
-		}
-
-		secrets[key] = plaintext
-	}
-
-	return secrets, rows.Err()
+	return secrets, nil
 }
 
 // SetSystemSecret creates or updates a system-level secret setting.
@@ -171,15 +196,18 @@ func (s *SecretsService) SetSystemSecret(ctx context.Context, key, value, descri
 	}
 
 	// Upsert the secret
-	_, err = s.db.Exec(ctx, `
-		INSERT INTO app.settings (key, value, description, is_secret, encrypted_value, user_id, created_at, updated_at)
-		VALUES ($1, '{"value": "[ENCRYPTED]"}', $2, true, $3, NULL, NOW(), NOW())
-		ON CONFLICT (key, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::UUID))
-		DO UPDATE SET
-			encrypted_value = EXCLUDED.encrypted_value,
-			description = COALESCE(EXCLUDED.description, app.settings.description),
-			updated_at = NOW()
-	`, key, description, encryptedValue)
+	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO app.settings (key, value, description, is_secret, encrypted_value, user_id, created_at, updated_at)
+			VALUES ($1, '{"value": "[ENCRYPTED]"}', $2, true, $3, NULL, NOW(), NOW())
+			ON CONFLICT (key, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::UUID))
+			DO UPDATE SET
+				encrypted_value = EXCLUDED.encrypted_value,
+				description = COALESCE(EXCLUDED.description, app.settings.description),
+				updated_at = NOW()
+		`, key, description, encryptedValue)
+		return err
+	})
 
 	return err
 }
@@ -200,25 +228,33 @@ func (s *SecretsService) SetUserSecret(ctx context.Context, userID uuid.UUID, ke
 	}
 
 	// Upsert the secret
-	_, err = s.db.Exec(ctx, `
-		INSERT INTO app.settings (key, value, description, is_secret, encrypted_value, user_id, created_at, updated_at)
-		VALUES ($1, '{"value": "[ENCRYPTED]"}', $2, true, $3, $4, NOW(), NOW())
-		ON CONFLICT (key, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::UUID))
-		DO UPDATE SET
-			encrypted_value = EXCLUDED.encrypted_value,
-			description = COALESCE(EXCLUDED.description, app.settings.description),
-			updated_at = NOW()
-	`, key, description, encryptedValue, userID)
+	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO app.settings (key, value, description, is_secret, encrypted_value, user_id, created_at, updated_at)
+			VALUES ($1, '{"value": "[ENCRYPTED]"}', $2, true, $3, $4, NOW(), NOW())
+			ON CONFLICT (key, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::UUID))
+			DO UPDATE SET
+				encrypted_value = EXCLUDED.encrypted_value,
+				description = COALESCE(EXCLUDED.description, app.settings.description),
+				updated_at = NOW()
+		`, key, description, encryptedValue, userID)
+		return err
+	})
 
 	return err
 }
 
 // DeleteSystemSecret removes a system-level secret setting.
 func (s *SecretsService) DeleteSystemSecret(ctx context.Context, key string) error {
-	result, err := s.db.Exec(ctx, `
-		DELETE FROM app.settings
-		WHERE key = $1 AND user_id IS NULL AND is_secret = true
-	`, key)
+	var result pgconn.CommandTag
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		var err error
+		result, err = tx.Exec(ctx, `
+			DELETE FROM app.settings
+			WHERE key = $1 AND user_id IS NULL AND is_secret = true
+		`, key)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -232,10 +268,15 @@ func (s *SecretsService) DeleteSystemSecret(ctx context.Context, key string) err
 
 // DeleteUserSecret removes a user-specific secret setting.
 func (s *SecretsService) DeleteUserSecret(ctx context.Context, userID uuid.UUID, key string) error {
-	result, err := s.db.Exec(ctx, `
-		DELETE FROM app.settings
-		WHERE key = $1 AND user_id = $2 AND is_secret = true
-	`, key, userID)
+	var result pgconn.CommandTag
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		var err error
+		result, err = tx.Exec(ctx, `
+			DELETE FROM app.settings
+			WHERE key = $1 AND user_id = $2 AND is_secret = true
+		`, key, userID)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -257,11 +298,13 @@ func (s *SecretsService) GetUserSetting(ctx context.Context, userID uuid.UUID, k
 	var encryptedValue *string
 	var value []byte
 
-	err := s.db.QueryRow(ctx, `
-		SELECT is_secret, encrypted_value, value
-		FROM app.settings
-		WHERE key = $1 AND user_id = $2
-	`, key, userID).Scan(&isSecret, &encryptedValue, &value)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT is_secret, encrypted_value, value
+			FROM app.settings
+			WHERE key = $1 AND user_id = $2
+		`, key, userID).Scan(&isSecret, &encryptedValue, &value)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrSettingNotFound
@@ -289,11 +332,13 @@ func (s *SecretsService) GetSystemSetting(ctx context.Context, key string) (stri
 	var encryptedValue *string
 	var value []byte
 
-	err := s.db.QueryRow(ctx, `
-		SELECT is_secret, encrypted_value, value
-		FROM app.settings
-		WHERE key = $1 AND user_id IS NULL
-	`, key).Scan(&isSecret, &encryptedValue, &value)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT is_secret, encrypted_value, value
+			FROM app.settings
+			WHERE key = $1 AND user_id IS NULL
+		`, key).Scan(&isSecret, &encryptedValue, &value)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrSettingNotFound
@@ -313,85 +358,99 @@ func (s *SecretsService) GetSystemSetting(ctx context.Context, key string) (stri
 // GetAllUserSettings retrieves all settings for a user (both secrets and non-secrets).
 // Returns a map of key -> value. Secrets are decrypted.
 func (s *SecretsService) GetAllUserSettings(ctx context.Context, userID uuid.UUID) (map[string]string, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT key, is_secret, encrypted_value, value
-		FROM app.settings
-		WHERE user_id = $1
-	`, userID)
+	settings := make(map[string]string)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT key, is_secret, encrypted_value, value
+			FROM app.settings
+			WHERE user_id = $1
+		`, userID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		// Derive user-specific key once for all secrets
+		derivedKey, err := crypto.DeriveUserKey(s.encryptionKey, userID)
+		if err != nil {
+			return fmt.Errorf("failed to derive user key: %w", err)
+		}
+
+		for rows.Next() {
+			var key string
+			var isSecret bool
+			var encryptedValue *string
+			var value []byte
+
+			if err := rows.Scan(&key, &isSecret, &encryptedValue, &value); err != nil {
+				return err
+			}
+
+			if isSecret && encryptedValue != nil {
+				plaintext, err := crypto.Decrypt(*encryptedValue, derivedKey)
+				if err != nil {
+					// Skip settings that fail to decrypt
+					continue
+				}
+				settings[key] = plaintext
+			} else {
+				settings[key] = extractJSONStringValue(value)
+			}
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	// Derive user-specific key once for all secrets
-	derivedKey, err := crypto.DeriveUserKey(s.encryptionKey, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive user key: %w", err)
-	}
-
-	settings := make(map[string]string)
-	for rows.Next() {
-		var key string
-		var isSecret bool
-		var encryptedValue *string
-		var value []byte
-
-		if err := rows.Scan(&key, &isSecret, &encryptedValue, &value); err != nil {
-			return nil, err
-		}
-
-		if isSecret && encryptedValue != nil {
-			plaintext, err := crypto.Decrypt(*encryptedValue, derivedKey)
-			if err != nil {
-				// Skip settings that fail to decrypt
-				continue
-			}
-			settings[key] = plaintext
-		} else {
-			settings[key] = extractJSONStringValue(value)
-		}
-	}
-
-	return settings, rows.Err()
+	return settings, nil
 }
 
 // GetAllSystemSettings retrieves all system-level settings (both secrets and non-secrets).
 // Returns a map of key -> value. Secrets are decrypted.
 func (s *SecretsService) GetAllSystemSettings(ctx context.Context) (map[string]string, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT key, is_secret, encrypted_value, value
-		FROM app.settings
-		WHERE user_id IS NULL
-	`)
+	settings := make(map[string]string)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT key, is_secret, encrypted_value, value
+			FROM app.settings
+			WHERE user_id IS NULL
+		`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var key string
+			var isSecret bool
+			var encryptedValue *string
+			var value []byte
+
+			if err := rows.Scan(&key, &isSecret, &encryptedValue, &value); err != nil {
+				return err
+			}
+
+			if isSecret && encryptedValue != nil {
+				plaintext, err := crypto.Decrypt(*encryptedValue, s.encryptionKey)
+				if err != nil {
+					// Skip settings that fail to decrypt
+					continue
+				}
+				settings[key] = plaintext
+			} else {
+				settings[key] = extractJSONStringValue(value)
+			}
+		}
+
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	settings := make(map[string]string)
-	for rows.Next() {
-		var key string
-		var isSecret bool
-		var encryptedValue *string
-		var value []byte
-
-		if err := rows.Scan(&key, &isSecret, &encryptedValue, &value); err != nil {
-			return nil, err
-		}
-
-		if isSecret && encryptedValue != nil {
-			plaintext, err := crypto.Decrypt(*encryptedValue, s.encryptionKey)
-			if err != nil {
-				// Skip settings that fail to decrypt
-				continue
-			}
-			settings[key] = plaintext
-		} else {
-			settings[key] = extractJSONStringValue(value)
-		}
-	}
-
-	return settings, rows.Err()
+	return settings, nil
 }
 
 // GetSettingWithFallback retrieves a setting with user -> system fallback.

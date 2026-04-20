@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { HardDrive, ImageIcon, Info, Lock } from "lucide-react";
 import api, { monitoringApi } from "@/lib/api";
+import { requireInstanceAdmin } from "@/lib/route-guards";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -15,6 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/_authenticated/storage-config/")({
+  beforeLoad: () => {
+    requireInstanceAdmin();
+  },
   component: StorageConfigPage,
 });
 

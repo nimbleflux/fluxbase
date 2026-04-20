@@ -70,6 +70,8 @@ type CreateTenantRequest struct {
 	Slug     string         `json:"slug"`
 	Name     string         `json:"name"`
 	Metadata map[string]any `json:"metadata,omitempty"`
+	DBMode   string         `json:"db_mode,omitempty"` // "auto" (default) creates new DB, "existing" uses DBName
+	DBName   *string        `json:"db_name,omitempty"` // Required when DBMode is "existing"
 }
 
 type UpdateTenantRequest struct {

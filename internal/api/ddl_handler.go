@@ -950,6 +950,25 @@ func (h *DDLHandler) ListSchemas(c fiber.Ctx) error {
 		result = append(result, schemaInfo{Name: schema, Owner: "postgres"})
 	}
 
+	// Filter schemas for tenant admins: only show schemas with tenant-visible tables
+	if userRole, ok := GetUserRole(c); ok {
+		isInstanceAdmin := userRole == "admin" || userRole == "instance_admin" || userRole == "service_role"
+		if !isInstanceAdmin {
+			tenantVisible := map[string]bool{
+				"public": true, "auth": true, "storage": true, "functions": true,
+				"jobs": true, "ai": true, "rpc": true, "mcp": true,
+				"realtime": true, "branching": true, "logging": true, "platform": true,
+			}
+			var filtered []schemaInfo
+			for _, s := range result {
+				if tenantVisible[s.Name] {
+					filtered = append(filtered, s)
+				}
+			}
+			result = filtered
+		}
+	}
+
 	return c.JSON(fiber.Map{"schemas": result})
 }
 

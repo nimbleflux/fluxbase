@@ -26,6 +26,14 @@ func NewKnowledgeBaseStorage(db *database.Connection) *KnowledgeBaseStorage {
 	return &KnowledgeBaseStorage{db: db}
 }
 
+// withTenant wraps a database operation with tenant-aware role switching.
+// It extracts the tenant ID from the context and sets the appropriate
+// database role for tenant isolation via RLS.
+func (s *KnowledgeBaseStorage) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tenantID := database.TenantFromContext(ctx)
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
+}
+
 // ============================================================================
 // Knowledge Base CRUD
 // ============================================================================
@@ -38,46 +46,50 @@ func (s *KnowledgeBaseStorage) CreateKnowledgeBase(ctx context.Context, kb *Know
 	kb.CreatedAt = time.Now()
 	kb.UpdatedAt = time.Now()
 
-	query := `
-		INSERT INTO ai.knowledge_bases (
-			id, name, namespace, description,
-			embedding_model, embedding_dimensions,
-			chunk_size, chunk_overlap, chunk_strategy,
-			enabled, source, created_by, visibility, owner_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-		RETURNING created_at, updated_at
-	`
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			INSERT INTO ai.knowledge_bases (
+				id, name, namespace, description,
+				embedding_model, embedding_dimensions,
+				chunk_size, chunk_overlap, chunk_strategy,
+				enabled, source, created_by, visibility, owner_id
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			RETURNING created_at, updated_at
+		`
 
-	return s.db.QueryRow(ctx, query,
-		kb.ID, kb.Name, kb.Namespace, kb.Description,
-		kb.EmbeddingModel, kb.EmbeddingDimensions,
-		kb.ChunkSize, kb.ChunkOverlap, kb.ChunkStrategy,
-		kb.Enabled, kb.Source, kb.CreatedBy, kb.Visibility, kb.OwnerID,
-	).Scan(&kb.CreatedAt, &kb.UpdatedAt)
+		return tx.QueryRow(ctx, query,
+			kb.ID, kb.Name, kb.Namespace, kb.Description,
+			kb.EmbeddingModel, kb.EmbeddingDimensions,
+			kb.ChunkSize, kb.ChunkOverlap, kb.ChunkStrategy,
+			kb.Enabled, kb.Source, kb.CreatedBy, kb.Visibility, kb.OwnerID,
+		).Scan(&kb.CreatedAt, &kb.UpdatedAt)
+	})
 }
 
 // GetKnowledgeBase retrieves a knowledge base by ID
 func (s *KnowledgeBaseStorage) GetKnowledgeBase(ctx context.Context, id string) (*KnowledgeBase, error) {
-	query := `
-		SELECT id, name, namespace, description,
-			embedding_model, embedding_dimensions,
-			chunk_size, chunk_overlap, chunk_strategy,
-			enabled, document_count, total_chunks,
-			source, created_by, created_at, updated_at,
-			visibility, owner_id
-		FROM ai.knowledge_bases
-		WHERE id = $1
-	`
-
 	var kb KnowledgeBase
-	err := s.db.QueryRow(ctx, query, id).Scan(
-		&kb.ID, &kb.Name, &kb.Namespace, &kb.Description,
-		&kb.EmbeddingModel, &kb.EmbeddingDimensions,
-		&kb.ChunkSize, &kb.ChunkOverlap, &kb.ChunkStrategy,
-		&kb.Enabled, &kb.DocumentCount, &kb.TotalChunks,
-		&kb.Source, &kb.CreatedBy, &kb.CreatedAt, &kb.UpdatedAt,
-		&kb.Visibility, &kb.OwnerID,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT id, name, namespace, description,
+				embedding_model, embedding_dimensions,
+				chunk_size, chunk_overlap, chunk_strategy,
+				enabled, document_count, total_chunks,
+				source, created_by, created_at, updated_at,
+				visibility, owner_id
+			FROM ai.knowledge_bases
+			WHERE id = $1
+		`
+
+		return tx.QueryRow(ctx, query, id).Scan(
+			&kb.ID, &kb.Name, &kb.Namespace, &kb.Description,
+			&kb.EmbeddingModel, &kb.EmbeddingDimensions,
+			&kb.ChunkSize, &kb.ChunkOverlap, &kb.ChunkStrategy,
+			&kb.Enabled, &kb.DocumentCount, &kb.TotalChunks,
+			&kb.Source, &kb.CreatedBy, &kb.CreatedAt, &kb.UpdatedAt,
+			&kb.Visibility, &kb.OwnerID,
+		)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -89,24 +101,26 @@ func (s *KnowledgeBaseStorage) GetKnowledgeBase(ctx context.Context, id string) 
 
 // GetKnowledgeBaseByName retrieves a knowledge base by name and namespace
 func (s *KnowledgeBaseStorage) GetKnowledgeBaseByName(ctx context.Context, name, namespace string) (*KnowledgeBase, error) {
-	query := `
-		SELECT id, name, namespace, description,
-			embedding_model, embedding_dimensions,
-			chunk_size, chunk_overlap, chunk_strategy,
-			enabled, document_count, total_chunks,
-			source, created_by, created_at, updated_at, visibility
-		FROM ai.knowledge_bases
-		WHERE name = $1 AND namespace = $2
-	`
-
 	var kb KnowledgeBase
-	err := s.db.QueryRow(ctx, query, name, namespace).Scan(
-		&kb.ID, &kb.Name, &kb.Namespace, &kb.Description,
-		&kb.EmbeddingModel, &kb.EmbeddingDimensions,
-		&kb.ChunkSize, &kb.ChunkOverlap, &kb.ChunkStrategy,
-		&kb.Enabled, &kb.DocumentCount, &kb.TotalChunks,
-		&kb.Source, &kb.CreatedBy, &kb.CreatedAt, &kb.UpdatedAt, &kb.Visibility,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT id, name, namespace, description,
+				embedding_model, embedding_dimensions,
+				chunk_size, chunk_overlap, chunk_strategy,
+				enabled, document_count, total_chunks,
+				source, created_by, created_at, updated_at, visibility
+			FROM ai.knowledge_bases
+			WHERE name = $1 AND namespace = $2
+		`
+
+		return tx.QueryRow(ctx, query, name, namespace).Scan(
+			&kb.ID, &kb.Name, &kb.Namespace, &kb.Description,
+			&kb.EmbeddingModel, &kb.EmbeddingDimensions,
+			&kb.ChunkSize, &kb.ChunkOverlap, &kb.ChunkStrategy,
+			&kb.Enabled, &kb.DocumentCount, &kb.TotalChunks,
+			&kb.Source, &kb.CreatedBy, &kb.CreatedAt, &kb.UpdatedAt, &kb.Visibility,
+		)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -118,38 +132,45 @@ func (s *KnowledgeBaseStorage) GetKnowledgeBaseByName(ctx context.Context, name,
 
 // ListKnowledgeBases lists knowledge bases with optional filtering
 func (s *KnowledgeBaseStorage) ListKnowledgeBases(ctx context.Context, namespace string, enabledOnly bool) ([]KnowledgeBase, error) {
-	query := `
-		SELECT id, name, namespace, description,
-			embedding_model, embedding_dimensions,
-			chunk_size, chunk_overlap, chunk_strategy,
-			enabled, document_count, total_chunks,
-			source, created_by, created_at, updated_at
-		FROM ai.knowledge_bases
-		WHERE ($1 = '' OR namespace = $1)
-		  AND ($2 = false OR enabled = true)
-		ORDER BY namespace, name
-	`
-
-	rows, err := s.db.Query(ctx, query, namespace, enabledOnly)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list knowledge bases: %w", err)
-	}
-	defer rows.Close()
-
 	var kbs []KnowledgeBase
-	for rows.Next() {
-		var kb KnowledgeBase
-		if err := rows.Scan(
-			&kb.ID, &kb.Name, &kb.Namespace, &kb.Description,
-			&kb.EmbeddingModel, &kb.EmbeddingDimensions,
-			&kb.ChunkSize, &kb.ChunkOverlap, &kb.ChunkStrategy,
-			&kb.Enabled, &kb.DocumentCount, &kb.TotalChunks,
-			&kb.Source, &kb.CreatedBy, &kb.CreatedAt, &kb.UpdatedAt,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan knowledge base row")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT id, name, namespace, description,
+				embedding_model, embedding_dimensions,
+				chunk_size, chunk_overlap, chunk_strategy,
+				enabled, document_count, total_chunks,
+				source, created_by, created_at, updated_at
+			FROM ai.knowledge_bases
+			WHERE ($1 = '' OR namespace = $1)
+			  AND ($2 = false OR enabled = true)
+			ORDER BY namespace, name
+		`
+
+		rows, err := tx.Query(ctx, query, namespace, enabledOnly)
+		if err != nil {
+			return fmt.Errorf("failed to list knowledge bases: %w", err)
 		}
-		kbs = append(kbs, kb)
+		defer rows.Close()
+
+		for rows.Next() {
+			var kb KnowledgeBase
+			if err := rows.Scan(
+				&kb.ID, &kb.Name, &kb.Namespace, &kb.Description,
+				&kb.EmbeddingModel, &kb.EmbeddingDimensions,
+				&kb.ChunkSize, &kb.ChunkOverlap, &kb.ChunkStrategy,
+				&kb.Enabled, &kb.DocumentCount, &kb.TotalChunks,
+				&kb.Source, &kb.CreatedBy, &kb.CreatedAt, &kb.UpdatedAt,
+			); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan knowledge base row")
+				continue
+			}
+			kbs = append(kbs, kb)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return kbs, nil
@@ -157,36 +178,40 @@ func (s *KnowledgeBaseStorage) ListKnowledgeBases(ctx context.Context, namespace
 
 // UpdateKnowledgeBase updates a knowledge base
 func (s *KnowledgeBaseStorage) UpdateKnowledgeBase(ctx context.Context, kb *KnowledgeBase) error {
-	query := `
-		UPDATE ai.knowledge_bases SET
-			name = $2,
-			description = $3,
-			embedding_model = $4,
-			embedding_dimensions = $5,
-			chunk_size = $6,
-			chunk_overlap = $7,
-			chunk_strategy = $8,
-			enabled = $9,
-			visibility = $10,
-			created_by = $11,
-			owner_id = $12,
-			updated_at = NOW()
-		WHERE id = $1
-		RETURNING updated_at
-	`
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			UPDATE ai.knowledge_bases SET
+				name = $2,
+				description = $3,
+				embedding_model = $4,
+				embedding_dimensions = $5,
+				chunk_size = $6,
+				chunk_overlap = $7,
+				chunk_strategy = $8,
+				enabled = $9,
+				visibility = $10,
+				created_by = $11,
+				owner_id = $12,
+				updated_at = NOW()
+			WHERE id = $1
+			RETURNING updated_at
+		`
 
-	return s.db.QueryRow(ctx, query,
-		kb.ID, kb.Name, kb.Description,
-		kb.EmbeddingModel, kb.EmbeddingDimensions,
-		kb.ChunkSize, kb.ChunkOverlap, kb.ChunkStrategy,
-		kb.Enabled, kb.Visibility, kb.CreatedBy, kb.OwnerID,
-	).Scan(&kb.UpdatedAt)
+		return tx.QueryRow(ctx, query,
+			kb.ID, kb.Name, kb.Description,
+			kb.EmbeddingModel, kb.EmbeddingDimensions,
+			kb.ChunkSize, kb.ChunkOverlap, kb.ChunkStrategy,
+			kb.Enabled, kb.Visibility, kb.CreatedBy, kb.OwnerID,
+		).Scan(&kb.UpdatedAt)
+	})
 }
 
 // DeleteKnowledgeBase deletes a knowledge base and all its documents/chunks
 func (s *KnowledgeBaseStorage) DeleteKnowledgeBase(ctx context.Context, id string) error {
-	_, err := s.db.Exec(ctx, "DELETE FROM ai.knowledge_bases WHERE id = $1", id)
-	return err
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, "DELETE FROM ai.knowledge_bases WHERE id = $1", id)
+		return err
+	})
 }
 
 // ============================================================================
@@ -208,36 +233,40 @@ func (s *KnowledgeBaseStorage) CreateDocument(ctx context.Context, doc *Document
 		metadataJSON = doc.Metadata
 	}
 
-	query := `
-		INSERT INTO ai.documents (
-			id, knowledge_base_id, title, source_url, source_type,
-			mime_type, content, content_hash, status, metadata, tags, created_by, owner_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-		RETURNING created_at, updated_at
-	`
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			INSERT INTO ai.documents (
+				id, knowledge_base_id, title, source_url, source_type,
+				mime_type, content, content_hash, status, metadata, tags, created_by, owner_id
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			RETURNING created_at, updated_at
+		`
 
-	return s.db.QueryRow(ctx, query,
-		doc.ID, doc.KnowledgeBaseID, doc.Title, doc.SourceURL, doc.SourceType,
-		doc.MimeType, doc.Content, doc.ContentHash, doc.Status, metadataJSON, doc.Tags, doc.CreatedBy, doc.OwnerID,
-	).Scan(&doc.CreatedAt, &doc.UpdatedAt)
+		return tx.QueryRow(ctx, query,
+			doc.ID, doc.KnowledgeBaseID, doc.Title, doc.SourceURL, doc.SourceType,
+			doc.MimeType, doc.Content, doc.ContentHash, doc.Status, metadataJSON, doc.Tags, doc.CreatedBy, doc.OwnerID,
+		).Scan(&doc.CreatedAt, &doc.UpdatedAt)
+	})
 }
 
 // GetDocument retrieves a document by ID
 func (s *KnowledgeBaseStorage) GetDocument(ctx context.Context, id string) (*Document, error) {
-	query := `
-		SELECT id, knowledge_base_id, title, source_url, source_type,
-			mime_type, content, content_hash, status, error_message,
-			chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
-		FROM ai.documents
-		WHERE id = $1
-	`
-
 	var doc Document
-	err := s.db.QueryRow(ctx, query, id).Scan(
-		&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
-		&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
-		&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT id, knowledge_base_id, title, source_url, source_type,
+				mime_type, content, content_hash, status, error_message,
+				chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
+			FROM ai.documents
+			WHERE id = $1
+		`
+
+		return tx.QueryRow(ctx, query, id).Scan(
+			&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
+			&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
+			&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
+		)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -249,33 +278,40 @@ func (s *KnowledgeBaseStorage) GetDocument(ctx context.Context, id string) (*Doc
 
 // ListDocuments lists documents in a knowledge base
 func (s *KnowledgeBaseStorage) ListDocuments(ctx context.Context, knowledgeBaseID string) ([]Document, error) {
-	query := `
-		SELECT id, knowledge_base_id, title, source_url, source_type,
-			mime_type, content, content_hash, status, error_message,
-			chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
-		FROM ai.documents
-		WHERE knowledge_base_id = $1
-		ORDER BY created_at DESC
-	`
-
-	rows, err := s.db.Query(ctx, query, knowledgeBaseID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list documents: %w", err)
-	}
-	defer rows.Close()
-
 	var docs []Document
-	for rows.Next() {
-		var doc Document
-		if err := rows.Scan(
-			&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
-			&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
-			&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan document row")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT id, knowledge_base_id, title, source_url, source_type,
+				mime_type, content, content_hash, status, error_message,
+				chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
+			FROM ai.documents
+			WHERE knowledge_base_id = $1
+			ORDER BY created_at DESC
+		`
+
+		rows, err := tx.Query(ctx, query, knowledgeBaseID)
+		if err != nil {
+			return fmt.Errorf("failed to list documents: %w", err)
 		}
-		docs = append(docs, doc)
+		defer rows.Close()
+
+		for rows.Next() {
+			var doc Document
+			if err := rows.Scan(
+				&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
+				&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
+				&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
+			); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan document row")
+				continue
+			}
+			docs = append(docs, doc)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return docs, nil
@@ -283,30 +319,36 @@ func (s *KnowledgeBaseStorage) ListDocuments(ctx context.Context, knowledgeBaseI
 
 // UpdateDocumentStatus updates a document's processing status
 func (s *KnowledgeBaseStorage) UpdateDocumentStatus(ctx context.Context, id string, status DocumentStatus, errorMsg string) error {
-	query := `
-		UPDATE ai.documents SET
-			status = $2, error_message = $3, updated_at = NOW()
-		WHERE id = $1
-	`
-	_, err := s.db.Exec(ctx, query, id, status, errorMsg)
-	return err
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			UPDATE ai.documents SET
+				status = $2, error_message = $3, updated_at = NOW()
+			WHERE id = $1
+		`
+		_, err := tx.Exec(ctx, query, id, status, errorMsg)
+		return err
+	})
 }
 
 // MarkDocumentIndexed marks a document as indexed
 func (s *KnowledgeBaseStorage) MarkDocumentIndexed(ctx context.Context, id string) error {
-	query := `
-		UPDATE ai.documents SET
-			status = 'indexed', indexed_at = NOW(), updated_at = NOW()
-		WHERE id = $1
-	`
-	_, err := s.db.Exec(ctx, query, id)
-	return err
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			UPDATE ai.documents SET
+				status = 'indexed', indexed_at = NOW(), updated_at = NOW()
+			WHERE id = $1
+		`
+		_, err := tx.Exec(ctx, query, id)
+		return err
+	})
 }
 
 // DeleteDocument deletes a document and its chunks
 func (s *KnowledgeBaseStorage) DeleteDocument(ctx context.Context, id string) error {
-	_, err := s.db.Exec(ctx, "DELETE FROM ai.documents WHERE id = $1", id)
-	return err
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, "DELETE FROM ai.documents WHERE id = $1", id)
+		return err
+	})
 }
 
 // DeleteDocumentsByFilter deletes documents matching the given metadata filter
@@ -367,14 +409,22 @@ func (s *KnowledgeBaseStorage) DeleteDocumentsByFilter(
 
 	whereClause := strings.Join(whereConditions, " AND ")
 
-	query := fmt.Sprintf("DELETE FROM ai.documents WHERE %s", whereClause)
+	var rowsAffected int64
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := fmt.Sprintf("DELETE FROM ai.documents WHERE %s", whereClause)
 
-	result, err := s.db.Exec(ctx, query, args...)
+		result, err := tx.Exec(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("failed to delete documents by filter: %w", err)
+		}
+
+		rowsAffected = result.RowsAffected()
+		return nil
+	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to delete documents by filter: %w", err)
+		return 0, err
 	}
 
-	rowsAffected := result.RowsAffected()
 	return int(rowsAffected), nil
 }
 
@@ -390,24 +440,26 @@ func (s *KnowledgeBaseStorage) UpdateDocumentMetadata(ctx context.Context, id st
 		}
 	}
 
-	query := `
-		UPDATE ai.documents SET
-			title = COALESCE($2, title),
-			metadata = COALESCE($3, metadata),
-			tags = COALESCE($4, tags),
-			updated_at = NOW()
-		WHERE id = $1
-		RETURNING id, knowledge_base_id, title, source_url, source_type,
-			mime_type, content, content_hash, status, error_message,
-			chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
-	`
-
 	var doc Document
-	err := s.db.QueryRow(ctx, query, id, title, metadataJSON, tags).Scan(
-		&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
-		&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
-		&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			UPDATE ai.documents SET
+				title = COALESCE($2, title),
+				metadata = COALESCE($3, metadata),
+				tags = COALESCE($4, tags),
+				updated_at = NOW()
+			WHERE id = $1
+			RETURNING id, knowledge_base_id, title, source_url, source_type,
+				mime_type, content, content_hash, status, error_message,
+				chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
+		`
+
+		return tx.QueryRow(ctx, query, id, title, metadataJSON, tags).Scan(
+			&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
+			&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
+			&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
+		)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update document: %w", err)
 	}
@@ -417,15 +469,6 @@ func (s *KnowledgeBaseStorage) UpdateDocumentMetadata(ctx context.Context, id st
 
 // UpdateDocument updates a document entity in the database
 func (s *KnowledgeBaseStorage) UpdateDocument(ctx context.Context, doc *Document) error {
-	query := `
-		UPDATE ai.documents SET
-			title = COALESCE($2, title),
-			metadata = COALESCE($3, metadata),
-			tags = COALESCE($4, tags),
-			updated_at = NOW()
-		WHERE id = $1
-	`
-
 	var metadataJSON []byte
 	var err error
 	if doc.Metadata != nil {
@@ -435,16 +478,27 @@ func (s *KnowledgeBaseStorage) UpdateDocument(ctx context.Context, doc *Document
 		}
 	}
 
-	result, err := s.db.Exec(ctx, query, doc.ID, doc.Title, metadataJSON, doc.Tags)
-	if err != nil {
-		return fmt.Errorf("failed to update document: %w", err)
-	}
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			UPDATE ai.documents SET
+				title = COALESCE($2, title),
+				metadata = COALESCE($3, metadata),
+				tags = COALESCE($4, tags),
+				updated_at = NOW()
+			WHERE id = $1
+		`
 
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("document not found")
-	}
+		result, err := tx.Exec(ctx, query, doc.ID, doc.Title, metadataJSON, doc.Tags)
+		if err != nil {
+			return fmt.Errorf("failed to update document: %w", err)
+		}
 
-	return nil
+		if result.RowsAffected() == 0 {
+			return fmt.Errorf("document not found")
+		}
+
+		return nil
+	})
 }
 
 // FindDocumentByMetadata finds a document by knowledge base ID and metadata fields
@@ -472,21 +526,23 @@ func (s *KnowledgeBaseStorage) FindDocumentByMetadata(ctx context.Context, knowl
 	whereConditions = append(whereConditions, fmt.Sprintf("knowledge_base_id = $%d", argIndex))
 	args = append(args, knowledgeBaseID)
 
-	query := fmt.Sprintf(`
-		SELECT id, knowledge_base_id, title, source_url, source_type,
-			mime_type, content, content_hash, status, error_message,
-			chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
-		FROM ai.documents
-		WHERE %s
-		LIMIT 1
-	`, strings.Join(whereConditions, " AND "))
-
 	var doc Document
-	err := s.db.QueryRow(ctx, query, args...).Scan(
-		&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
-		&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
-		&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT id, knowledge_base_id, title, source_url, source_type,
+				mime_type, content, content_hash, status, error_message,
+				chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
+			FROM ai.documents
+			WHERE %s
+			LIMIT 1
+		`, strings.Join(whereConditions, " AND "))
+
+		return tx.QueryRow(ctx, query, args...).Scan(
+			&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
+			&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
+			&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
+		)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil // Not found
 	}
@@ -503,22 +559,24 @@ func (s *KnowledgeBaseStorage) UpdateDocumentContent(ctx context.Context, id str
 	// Calculate new content hash
 	contentHash := hashContent(content)
 
-	query := `
-		UPDATE ai.documents SET
-			content = $2,
-			content_hash = $3,
-			title = $4,
-			metadata = COALESCE($5, metadata),
-			status = 'pending',
-			updated_at = NOW()
-		WHERE id = $1
-	`
-	_, err := s.db.Exec(ctx, query, id, content, contentHash, title, metadataJSON)
-	if err != nil {
-		return fmt.Errorf("failed to update document content: %w", err)
-	}
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			UPDATE ai.documents SET
+				content = $2,
+				content_hash = $3,
+				title = $4,
+				metadata = COALESCE($5, metadata),
+				status = 'pending',
+				updated_at = NOW()
+			WHERE id = $1
+		`
+		_, err := tx.Exec(ctx, query, id, content, contentHash, title, metadataJSON)
+		if err != nil {
+			return fmt.Errorf("failed to update document content: %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // ============================================================================
@@ -566,46 +624,55 @@ func (s *KnowledgeBaseStorage) CreateChunks(ctx context.Context, chunks []Chunk)
 		)
 	}
 
-	br := s.db.Pool().SendBatch(ctx, batch)
-	defer func() { _ = br.Close() }()
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		br := tx.SendBatch(ctx, batch)
+		defer func() { _ = br.Close() }()
 
-	for range chunks {
-		if _, err := br.Exec(); err != nil {
-			return fmt.Errorf("failed to insert chunk: %w", err)
+		for range chunks {
+			if _, err := br.Exec(); err != nil {
+				return fmt.Errorf("failed to insert chunk: %w", err)
+			}
 		}
-	}
 
-	return nil
+		return nil
+	})
 }
 
 // GetChunksByDocument retrieves all chunks for a document
 func (s *KnowledgeBaseStorage) GetChunksByDocument(ctx context.Context, documentID string) ([]Chunk, error) {
-	query := `
-		SELECT id, document_id, knowledge_base_id, content,
-			chunk_index, start_offset, end_offset, token_count, metadata, created_at
-		FROM ai.chunks
-		WHERE document_id = $1
-		ORDER BY chunk_index
-	`
-
-	rows, err := s.db.Query(ctx, query, documentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get chunks: %w", err)
-	}
-	defer rows.Close()
-
 	var chunks []Chunk
-	for rows.Next() {
-		var chunk Chunk
-		if err := rows.Scan(
-			&chunk.ID, &chunk.DocumentID, &chunk.KnowledgeBaseID, &chunk.Content,
-			&chunk.ChunkIndex, &chunk.StartOffset, &chunk.EndOffset, &chunk.TokenCount,
-			&chunk.Metadata, &chunk.CreatedAt,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan chunk row")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT id, document_id, knowledge_base_id, content,
+				chunk_index, start_offset, end_offset, token_count, metadata, created_at
+			FROM ai.chunks
+			WHERE document_id = $1
+			ORDER BY chunk_index
+		`
+
+		rows, err := tx.Query(ctx, query, documentID)
+		if err != nil {
+			return fmt.Errorf("failed to get chunks: %w", err)
 		}
-		chunks = append(chunks, chunk)
+		defer rows.Close()
+
+		for rows.Next() {
+			var chunk Chunk
+			if err := rows.Scan(
+				&chunk.ID, &chunk.DocumentID, &chunk.KnowledgeBaseID, &chunk.Content,
+				&chunk.ChunkIndex, &chunk.StartOffset, &chunk.EndOffset, &chunk.TokenCount,
+				&chunk.Metadata, &chunk.CreatedAt,
+			); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan chunk row")
+				continue
+			}
+			chunks = append(chunks, chunk)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return chunks, nil
@@ -613,8 +680,10 @@ func (s *KnowledgeBaseStorage) GetChunksByDocument(ctx context.Context, document
 
 // DeleteChunksByDocument deletes all chunks for a document
 func (s *KnowledgeBaseStorage) DeleteChunksByDocument(ctx context.Context, documentID string) error {
-	_, err := s.db.Exec(ctx, "DELETE FROM ai.chunks WHERE document_id = $1", documentID)
-	return err
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, "DELETE FROM ai.chunks WHERE document_id = $1", documentID)
+		return err
+	})
 }
 
 // ============================================================================
@@ -640,71 +709,80 @@ func (s *KnowledgeBaseStorage) LinkChatbotKnowledgeBase(ctx context.Context, lin
 		link.Priority = 100
 	}
 
-	query := `
-		INSERT INTO ai.chatbot_knowledge_bases (
-			id, chatbot_id, knowledge_base_id,
-			access_level, filter_expression, context_weight, priority,
-			intent_keywords, max_chunks, similarity_threshold,
-			enabled, metadata
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		ON CONFLICT (chatbot_id, knowledge_base_id) DO UPDATE SET
-			access_level = EXCLUDED.access_level,
-			filter_expression = EXCLUDED.filter_expression,
-			context_weight = EXCLUDED.context_weight,
-			priority = EXCLUDED.priority,
-			intent_keywords = EXCLUDED.intent_keywords,
-			max_chunks = EXCLUDED.max_chunks,
-			similarity_threshold = EXCLUDED.similarity_threshold,
-			enabled = EXCLUDED.enabled,
-			metadata = EXCLUDED.metadata,
-			updated_at = NOW()
-		RETURNING created_at, updated_at
-	`
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			INSERT INTO ai.chatbot_knowledge_bases (
+				id, chatbot_id, knowledge_base_id,
+				access_level, filter_expression, context_weight, priority,
+				intent_keywords, max_chunks, similarity_threshold,
+				enabled, metadata
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			ON CONFLICT (chatbot_id, knowledge_base_id) DO UPDATE SET
+				access_level = EXCLUDED.access_level,
+				filter_expression = EXCLUDED.filter_expression,
+				context_weight = EXCLUDED.context_weight,
+				priority = EXCLUDED.priority,
+				intent_keywords = EXCLUDED.intent_keywords,
+				max_chunks = EXCLUDED.max_chunks,
+				similarity_threshold = EXCLUDED.similarity_threshold,
+				enabled = EXCLUDED.enabled,
+				metadata = EXCLUDED.metadata,
+				updated_at = NOW()
+			RETURNING created_at, updated_at
+		`
 
-	return s.db.QueryRow(ctx, query,
-		link.ID, link.ChatbotID, link.KnowledgeBaseID,
-		link.AccessLevel, link.FilterExpression, link.ContextWeight, link.Priority,
-		link.IntentKeywords, link.MaxChunks, link.SimilarityThreshold,
-		link.Enabled, link.Metadata,
-	).Scan(&link.CreatedAt, &link.UpdatedAt)
+		return tx.QueryRow(ctx, query,
+			link.ID, link.ChatbotID, link.KnowledgeBaseID,
+			link.AccessLevel, link.FilterExpression, link.ContextWeight, link.Priority,
+			link.IntentKeywords, link.MaxChunks, link.SimilarityThreshold,
+			link.Enabled, link.Metadata,
+		).Scan(&link.CreatedAt, &link.UpdatedAt)
+	})
 }
 
 // GetChatbotKnowledgeBases retrieves all knowledge base links for a chatbot
 func (s *KnowledgeBaseStorage) GetChatbotKnowledgeBases(ctx context.Context, chatbotID string) ([]ChatbotKnowledgeBase, error) {
-	query := `
-		SELECT ckb.id, ckb.chatbot_id, ckb.knowledge_base_id,
-			ckb.access_level, ckb.filter_expression, ckb.context_weight,
-			ckb.priority, ckb.intent_keywords, ckb.max_chunks,
-			ckb.similarity_threshold, ckb.enabled, ckb.metadata,
-			ckb.created_at, ckb.updated_at,
-			kb.name as knowledge_base_name
-		FROM ai.chatbot_knowledge_bases ckb
-		JOIN ai.knowledge_bases kb ON kb.id = ckb.knowledge_base_id
-		WHERE ckb.chatbot_id = $1
-		ORDER BY ckb.priority DESC
-	`
-
-	rows, err := s.db.Query(ctx, query, chatbotID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get chatbot knowledge bases: %w", err)
-	}
-	defer rows.Close()
-
 	var links []ChatbotKnowledgeBase
-	for rows.Next() {
-		var link ChatbotKnowledgeBase
-		if err := rows.Scan(
-			&link.ID, &link.ChatbotID, &link.KnowledgeBaseID,
-			&link.AccessLevel, &link.FilterExpression, &link.ContextWeight,
-			&link.Priority, &link.IntentKeywords, &link.MaxChunks,
-			&link.SimilarityThreshold, &link.Enabled, &link.Metadata,
-			&link.CreatedAt, &link.UpdatedAt,
-			&link.KnowledgeBaseName,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan chatbot knowledge base link")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT ckb.id, ckb.chatbot_id, ckb.knowledge_base_id,
+				ckb.access_level, ckb.filter_expression, ckb.context_weight,
+				ckb.priority, ckb.intent_keywords, ckb.max_chunks,
+				ckb.similarity_threshold, ckb.enabled, ckb.metadata,
+				ckb.created_at, ckb.updated_at,
+				kb.name as knowledge_base_name
+			FROM ai.chatbot_knowledge_bases ckb
+			JOIN ai.knowledge_bases kb ON kb.id = ckb.knowledge_base_id
+			WHERE ckb.chatbot_id = $1
+			ORDER BY ckb.priority DESC
+		`
+
+		rows, err := tx.Query(ctx, query, chatbotID)
+		if err != nil {
+			return fmt.Errorf("failed to get chatbot knowledge bases: %w", err)
 		}
-		links = append(links, link)
+		defer rows.Close()
+
+		for rows.Next() {
+			var link ChatbotKnowledgeBase
+			if err := rows.Scan(
+				&link.ID, &link.ChatbotID, &link.KnowledgeBaseID,
+				&link.AccessLevel, &link.FilterExpression, &link.ContextWeight,
+				&link.Priority, &link.IntentKeywords, &link.MaxChunks,
+				&link.SimilarityThreshold, &link.Enabled, &link.Metadata,
+				&link.CreatedAt, &link.UpdatedAt,
+				&link.KnowledgeBaseName,
+			); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan chatbot knowledge base link")
+				continue
+			}
+			links = append(links, link)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return links, nil
@@ -718,40 +796,47 @@ func (s *KnowledgeBaseStorage) GetChatbotKnowledgeBaseLinks(ctx context.Context,
 // GetKnowledgeBaseChatbots retrieves all chatbot links for a knowledge base (reverse lookup)
 // This is used to show which chatbots are using a specific knowledge base
 func (s *KnowledgeBaseStorage) GetKnowledgeBaseChatbots(ctx context.Context, knowledgeBaseID string) ([]ChatbotKnowledgeBase, error) {
-	query := `
-		SELECT ckb.id, ckb.chatbot_id, ckb.knowledge_base_id,
-			ckb.access_level, ckb.filter_expression, ckb.context_weight,
-			ckb.priority, ckb.intent_keywords, ckb.max_chunks,
-			ckb.similarity_threshold, ckb.enabled, ckb.metadata,
-			ckb.created_at, ckb.updated_at,
-			c.name as chatbot_name
-		FROM ai.chatbot_knowledge_bases ckb
-		JOIN ai.chatbots c ON c.id = ckb.chatbot_id
-		WHERE ckb.knowledge_base_id = $1
-		ORDER BY ckb.priority ASC
-	`
-
-	rows, err := s.db.Query(ctx, query, knowledgeBaseID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get knowledge base chatbots: %w", err)
-	}
-	defer rows.Close()
-
 	var links []ChatbotKnowledgeBase
-	for rows.Next() {
-		var link ChatbotKnowledgeBase
-		if err := rows.Scan(
-			&link.ID, &link.ChatbotID, &link.KnowledgeBaseID,
-			&link.AccessLevel, &link.FilterExpression, &link.ContextWeight,
-			&link.Priority, &link.IntentKeywords, &link.MaxChunks,
-			&link.SimilarityThreshold, &link.Enabled, &link.Metadata,
-			&link.CreatedAt, &link.UpdatedAt,
-			&link.ChatbotName,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan knowledge base chatbot link")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT ckb.id, ckb.chatbot_id, ckb.knowledge_base_id,
+				ckb.access_level, ckb.filter_expression, ckb.context_weight,
+				ckb.priority, ckb.intent_keywords, ckb.max_chunks,
+				ckb.similarity_threshold, ckb.enabled, ckb.metadata,
+				ckb.created_at, ckb.updated_at,
+				c.name as chatbot_name
+			FROM ai.chatbot_knowledge_bases ckb
+			JOIN ai.chatbots c ON c.id = ckb.chatbot_id
+			WHERE ckb.knowledge_base_id = $1
+			ORDER BY ckb.priority ASC
+		`
+
+		rows, err := tx.Query(ctx, query, knowledgeBaseID)
+		if err != nil {
+			return fmt.Errorf("failed to get knowledge base chatbots: %w", err)
 		}
-		links = append(links, link)
+		defer rows.Close()
+
+		for rows.Next() {
+			var link ChatbotKnowledgeBase
+			if err := rows.Scan(
+				&link.ID, &link.ChatbotID, &link.KnowledgeBaseID,
+				&link.AccessLevel, &link.FilterExpression, &link.ContextWeight,
+				&link.Priority, &link.IntentKeywords, &link.MaxChunks,
+				&link.SimilarityThreshold, &link.Enabled, &link.Metadata,
+				&link.CreatedAt, &link.UpdatedAt,
+				&link.ChatbotName,
+			); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan knowledge base chatbot link")
+				continue
+			}
+			links = append(links, link)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return links, nil
@@ -759,11 +844,13 @@ func (s *KnowledgeBaseStorage) GetKnowledgeBaseChatbots(ctx context.Context, kno
 
 // UnlinkChatbotKnowledgeBase removes a link between chatbot and knowledge base
 func (s *KnowledgeBaseStorage) UnlinkChatbotKnowledgeBase(ctx context.Context, chatbotID, knowledgeBaseID string) error {
-	_, err := s.db.Exec(ctx,
-		"DELETE FROM ai.chatbot_knowledge_bases WHERE chatbot_id = $1 AND knowledge_base_id = $2",
-		chatbotID, knowledgeBaseID,
-	)
-	return err
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx,
+			"DELETE FROM ai.chatbot_knowledge_bases WHERE chatbot_id = $1 AND knowledge_base_id = $2",
+			chatbotID, knowledgeBaseID,
+		)
+		return err
+	})
 }
 
 // ============================================================================
@@ -788,42 +875,49 @@ func (s *KnowledgeBaseStorage) SearchChunks(ctx context.Context, knowledgeBaseID
 		Str("embedding_preview", embeddingPreview).
 		Msg("SearchChunks starting")
 
-	query := fmt.Sprintf(`
-		SELECT
-			c.id as chunk_id,
-			c.document_id,
-			c.content,
-			1 - (c.embedding <=> '%s'::vector) as similarity,
-			c.metadata,
-			d.title as document_title
-		FROM ai.chunks c
-		JOIN ai.documents d ON d.id = c.document_id
-		WHERE c.knowledge_base_id = $1
-		  AND 1 - (c.embedding <=> '%s'::vector) >= $2
-		ORDER BY c.embedding <=> '%s'::vector
-		LIMIT $3
-	`, embeddingStr, embeddingStr, embeddingStr)
-
-	rows, err := s.db.Query(ctx, query, knowledgeBaseID, threshold, limit)
-	if err != nil {
-		log.Error().Err(err).Str("kb_id", knowledgeBaseID).Msg("SearchChunks query failed")
-		return nil, fmt.Errorf("failed to search chunks: %w", err)
-	}
-	defer rows.Close()
-
 	var results []RetrievalResult
-	for rows.Next() {
-		var r RetrievalResult
-		var docTitle *string
-		if err := rows.Scan(&r.ChunkID, &r.DocumentID, &r.Content, &r.Similarity, &r.Metadata, &docTitle); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan search result")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT
+				c.id as chunk_id,
+				c.document_id,
+				c.content,
+				1 - (c.embedding <=> '%s'::vector) as similarity,
+				c.metadata,
+				d.title as document_title
+			FROM ai.chunks c
+			JOIN ai.documents d ON d.id = c.document_id
+			WHERE c.knowledge_base_id = $1
+			  AND 1 - (c.embedding <=> '%s'::vector) >= $2
+			ORDER BY c.embedding <=> '%s'::vector
+			LIMIT $3
+		`, embeddingStr, embeddingStr, embeddingStr)
+
+		rows, err := tx.Query(ctx, query, knowledgeBaseID, threshold, limit)
+		if err != nil {
+			log.Error().Err(err).Str("kb_id", knowledgeBaseID).Msg("SearchChunks query failed")
+			return fmt.Errorf("failed to search chunks: %w", err)
 		}
-		r.KnowledgeBaseID = knowledgeBaseID
-		if docTitle != nil {
-			r.DocumentTitle = *docTitle
+		defer rows.Close()
+
+		for rows.Next() {
+			var r RetrievalResult
+			var docTitle *string
+			if err := rows.Scan(&r.ChunkID, &r.DocumentID, &r.Content, &r.Similarity, &r.Metadata, &docTitle); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan search result")
+				continue
+			}
+			r.KnowledgeBaseID = knowledgeBaseID
+			if docTitle != nil {
+				r.DocumentTitle = *docTitle
+			}
+			results = append(results, r)
 		}
-		results = append(results, r)
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Log results
@@ -902,51 +996,58 @@ func (s *KnowledgeBaseStorage) SearchChunksHybrid(ctx context.Context, knowledge
 
 // searchKeywordOnly performs full-text search only
 func (s *KnowledgeBaseStorage) searchKeywordOnly(ctx context.Context, knowledgeBaseID string, opts HybridSearchOptions) ([]RetrievalResult, error) {
-	// Prepare the search query for PostgreSQL full-text search
-	// Use plainto_tsquery for simple word matching, or websearch_to_tsquery for more advanced
-	query := `
-		SELECT
-			c.id as chunk_id,
-			c.document_id,
-			c.content,
-			ts_rank_cd(to_tsvector('simple', c.content), plainto_tsquery('simple', $2)) as similarity,
-			c.metadata,
-			d.title as document_title
-		FROM ai.chunks c
-		JOIN ai.documents d ON d.id = c.document_id
-		WHERE c.knowledge_base_id = $1
-		  AND (
-		    to_tsvector('simple', c.content) @@ plainto_tsquery('simple', $2)
-		    OR c.content ILIKE '%' || $2 || '%'
-		  )
-		ORDER BY similarity DESC
-		LIMIT $3
-	`
-
-	rows, err := s.db.Query(ctx, query, knowledgeBaseID, opts.Query, opts.Limit)
-	if err != nil {
-		log.Error().Err(err).Str("kb_id", knowledgeBaseID).Msg("Keyword search query failed")
-		return nil, fmt.Errorf("failed to search chunks: %w", err)
-	}
-	defer rows.Close()
-
 	var results []RetrievalResult
-	for rows.Next() {
-		var r RetrievalResult
-		var docTitle *string
-		if err := rows.Scan(&r.ChunkID, &r.DocumentID, &r.Content, &r.Similarity, &r.Metadata, &docTitle); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan keyword search result")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		// Prepare the search query for PostgreSQL full-text search
+		// Use plainto_tsquery for simple word matching, or websearch_to_tsquery for more advanced
+		query := `
+			SELECT
+				c.id as chunk_id,
+				c.document_id,
+				c.content,
+				ts_rank_cd(to_tsvector('simple', c.content), plainto_tsquery('simple', $2)) as similarity,
+				c.metadata,
+				d.title as document_title
+			FROM ai.chunks c
+			JOIN ai.documents d ON d.id = c.document_id
+			WHERE c.knowledge_base_id = $1
+			  AND (
+			    to_tsvector('simple', c.content) @@ plainto_tsquery('simple', $2)
+			    OR c.content ILIKE '%' || $2 || '%'
+			  )
+			ORDER BY similarity DESC
+			LIMIT $3
+		`
+
+		rows, err := tx.Query(ctx, query, knowledgeBaseID, opts.Query, opts.Limit)
+		if err != nil {
+			log.Error().Err(err).Str("kb_id", knowledgeBaseID).Msg("Keyword search query failed")
+			return fmt.Errorf("failed to search chunks: %w", err)
 		}
-		r.KnowledgeBaseID = knowledgeBaseID
-		if docTitle != nil {
-			r.DocumentTitle = *docTitle
+		defer rows.Close()
+
+		for rows.Next() {
+			var r RetrievalResult
+			var docTitle *string
+			if err := rows.Scan(&r.ChunkID, &r.DocumentID, &r.Content, &r.Similarity, &r.Metadata, &docTitle); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan keyword search result")
+				continue
+			}
+			r.KnowledgeBaseID = knowledgeBaseID
+			if docTitle != nil {
+				r.DocumentTitle = *docTitle
+			}
+			// Normalize similarity to 0-1 range (ts_rank_cd can exceed 1)
+			if r.Similarity > 1 {
+				r.Similarity = 1
+			}
+			results = append(results, r)
 		}
-		// Normalize similarity to 0-1 range (ts_rank_cd can exceed 1)
-		if r.Similarity > 1 {
-			r.Similarity = 1
-		}
-		results = append(results, r)
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	log.Debug().
@@ -995,81 +1096,88 @@ func (s *KnowledgeBaseStorage) searchHybrid(ctx context.Context, knowledgeBaseID
 		}
 	}
 
-	// Hybrid query combining vector similarity and full-text search
-	// The final score is: (semantic_weight * vector_similarity) + (keyword_weight * text_rank) + keyword_boost_if_match
-	query := fmt.Sprintf(`
-		WITH vector_search AS (
-			SELECT
-				c.id as chunk_id,
-				c.document_id,
-				c.content,
-				c.metadata,
-				1 - (c.embedding <=> '%s'::vector) as vector_similarity
-			FROM ai.chunks c
-			WHERE c.knowledge_base_id = $1
-			  AND c.embedding IS NOT NULL
-		),
-		text_search AS (
-			SELECT
-				c.id as chunk_id,
-				ts_rank_cd(to_tsvector('simple', c.content), plainto_tsquery('simple', $2)) as text_rank,
-				CASE
-					WHEN c.content ILIKE '%%' || $2 || '%%' THEN $5::float
-					ELSE 0
-				END as keyword_boost
-			FROM ai.chunks c
-			WHERE c.knowledge_base_id = $1
-		)
-		SELECT
-			v.chunk_id,
-			v.document_id,
-			v.content,
-			(($3::float * v.vector_similarity) + ($4::float * COALESCE(t.text_rank, 0)) + COALESCE(t.keyword_boost, 0)) as similarity,
-			v.metadata,
-			d.title as document_title,
-			d.tags,
-			v.vector_similarity,
-			COALESCE(t.text_rank, 0) as text_rank
-		FROM vector_search v
-		JOIN ai.documents d ON d.id = v.document_id
-		LEFT JOIN text_search t ON t.chunk_id = v.chunk_id
-		WHERE (($3::float * v.vector_similarity) + ($4::float * COALESCE(t.text_rank, 0)) + COALESCE(t.keyword_boost, 0)) >= $6
-		%s
-		ORDER BY similarity DESC
-		LIMIT $7
-	`, embeddingStr, filterConditions)
-
-	rows, err := s.db.Query(ctx, query, args...)
-	if err != nil {
-		log.Error().Err(err).Str("kb_id", knowledgeBaseID).Msg("Hybrid search query failed")
-		return nil, fmt.Errorf("failed to search chunks: %w", err)
-	}
-	defer rows.Close()
-
 	var results []RetrievalResult
-	for rows.Next() {
-		var r RetrievalResult
-		var docTitle *string
-		var tags []string
-		var vectorSim, textRank float64
-		if err := rows.Scan(&r.ChunkID, &r.DocumentID, &r.Content, &r.Similarity, &r.Metadata, &docTitle, &tags, &vectorSim, &textRank); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan hybrid search result")
-			continue
-		}
-		r.KnowledgeBaseID = knowledgeBaseID
-		if docTitle != nil {
-			r.DocumentTitle = *docTitle
-		}
-		r.Tags = tags
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		// Hybrid query combining vector similarity and full-text search
+		// The final score is: (semantic_weight * vector_similarity) + (keyword_weight * text_rank) + keyword_boost_if_match
+		query := fmt.Sprintf(`
+			WITH vector_search AS (
+				SELECT
+					c.id as chunk_id,
+					c.document_id,
+					c.content,
+					c.metadata,
+					1 - (c.embedding <=> '%s'::vector) as vector_similarity
+				FROM ai.chunks c
+				WHERE c.knowledge_base_id = $1
+				  AND c.embedding IS NOT NULL
+			),
+			text_search AS (
+				SELECT
+					c.id as chunk_id,
+					ts_rank_cd(to_tsvector('simple', c.content), plainto_tsquery('simple', $2)) as text_rank,
+					CASE
+						WHEN c.content ILIKE '%%' || $2 || '%%' THEN $5::float
+						ELSE 0
+					END as keyword_boost
+				FROM ai.chunks c
+				WHERE c.knowledge_base_id = $1
+			)
+			SELECT
+				v.chunk_id,
+				v.document_id,
+				v.content,
+				(($3::float * v.vector_similarity) + ($4::float * COALESCE(t.text_rank, 0)) + COALESCE(t.keyword_boost, 0)) as similarity,
+				v.metadata,
+				d.title as document_title,
+				d.tags,
+				v.vector_similarity,
+				COALESCE(t.text_rank, 0) as text_rank
+			FROM vector_search v
+			JOIN ai.documents d ON d.id = v.document_id
+			LEFT JOIN text_search t ON t.chunk_id = v.chunk_id
+			WHERE (($3::float * v.vector_similarity) + ($4::float * COALESCE(t.text_rank, 0)) + COALESCE(t.keyword_boost, 0)) >= $6
+			%s
+			ORDER BY similarity DESC
+			LIMIT $7
+		`, embeddingStr, filterConditions)
 
-		log.Debug().
-			Str("chunk_id", r.ChunkID).
-			Float64("vector_sim", vectorSim).
-			Float64("text_rank", textRank).
-			Float64("combined", r.Similarity).
-			Msg("Hybrid result")
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			log.Error().Err(err).Str("kb_id", knowledgeBaseID).Msg("Hybrid search query failed")
+			return fmt.Errorf("failed to search chunks: %w", err)
+		}
+		defer rows.Close()
 
-		results = append(results, r)
+		for rows.Next() {
+			var r RetrievalResult
+			var docTitle *string
+			var tags []string
+			var vectorSim, textRank float64
+			if err := rows.Scan(&r.ChunkID, &r.DocumentID, &r.Content, &r.Similarity, &r.Metadata, &docTitle, &tags, &vectorSim, &textRank); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan hybrid search result")
+				continue
+			}
+			r.KnowledgeBaseID = knowledgeBaseID
+			if docTitle != nil {
+				r.DocumentTitle = *docTitle
+			}
+			r.Tags = tags
+
+			log.Debug().
+				Str("chunk_id", r.ChunkID).
+				Float64("vector_sim", vectorSim).
+				Float64("text_rank", textRank).
+				Float64("combined", r.Similarity).
+				Msg("Hybrid result")
+
+			results = append(results, r)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	log.Debug().
@@ -1639,43 +1747,50 @@ func (s *KnowledgeBaseStorage) SearchChunksWithFilter(
 
 	whereClause := strings.Join(whereConditions, " AND ")
 
-	query := fmt.Sprintf(`
-		SELECT
-			c.id as chunk_id,
-			c.document_id,
-			c.content,
-			1 - (c.embedding <=> '%s'::vector) as similarity,
-			c.metadata,
-			d.title as document_title,
-			d.tags
-		FROM ai.chunks c
-		JOIN ai.documents d ON d.id = c.document_id
-		WHERE %s
-		ORDER BY c.embedding <=> '%s'::vector
-		LIMIT $3
-	`, embeddingStr, whereClause, embeddingStr)
-
-	rows, err := s.db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search chunks with filter: %w", err)
-	}
-	defer rows.Close()
-
 	var results []RetrievalResult
-	for rows.Next() {
-		var r RetrievalResult
-		var docTitle *string
-		var tags []string
-		if err := rows.Scan(&r.ChunkID, &r.DocumentID, &r.Content, &r.Similarity, &r.Metadata, &docTitle, &tags); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan filtered search result")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT
+				c.id as chunk_id,
+				c.document_id,
+				c.content,
+				1 - (c.embedding <=> '%s'::vector) as similarity,
+				c.metadata,
+				d.title as document_title,
+				d.tags
+			FROM ai.chunks c
+			JOIN ai.documents d ON d.id = c.document_id
+			WHERE %s
+			ORDER BY c.embedding <=> '%s'::vector
+			LIMIT $3
+		`, embeddingStr, whereClause, embeddingStr)
+
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("failed to search chunks with filter: %w", err)
 		}
-		r.KnowledgeBaseID = knowledgeBaseID
-		if docTitle != nil {
-			r.DocumentTitle = *docTitle
+		defer rows.Close()
+
+		for rows.Next() {
+			var r RetrievalResult
+			var docTitle *string
+			var tags []string
+			if err := rows.Scan(&r.ChunkID, &r.DocumentID, &r.Content, &r.Similarity, &r.Metadata, &docTitle, &tags); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan filtered search result")
+				continue
+			}
+			r.KnowledgeBaseID = knowledgeBaseID
+			if docTitle != nil {
+				r.DocumentTitle = *docTitle
+			}
+			r.Tags = tags
+			results = append(results, r)
 		}
-		r.Tags = tags
-		results = append(results, r)
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return results, nil
@@ -1828,20 +1943,22 @@ func (s *KnowledgeBaseStorage) LogRetrieval(ctx context.Context, log *RetrievalL
 	}
 	log.CreatedAt = time.Now()
 
-	query := `
-		INSERT INTO ai.retrieval_log (
-			id, chatbot_id, conversation_id, knowledge_base_id, user_id,
-			query_text, query_embedding_model, chunks_retrieved,
-			chunk_ids, similarity_scores, retrieval_duration_ms
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			INSERT INTO ai.retrieval_log (
+				id, chatbot_id, conversation_id, knowledge_base_id, user_id,
+				query_text, query_embedding_model, chunks_retrieved,
+				chunk_ids, similarity_scores, retrieval_duration_ms
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		`
 
-	_, err := s.db.Exec(ctx, query,
-		log.ID, log.ChatbotID, log.ConversationID, log.KnowledgeBaseID, log.UserID,
-		log.QueryText, log.QueryEmbeddingModel, log.ChunksRetrieved,
-		log.ChunkIDs, log.SimilarityScores, log.RetrievalDurationMs,
-	)
-	return err
+		_, err := tx.Exec(ctx, query,
+			log.ID, log.ChatbotID, log.ConversationID, log.KnowledgeBaseID, log.UserID,
+			log.QueryText, log.QueryEmbeddingModel, log.ChunksRetrieved,
+			log.ChunkIDs, log.SimilarityScores, log.RetrievalDurationMs,
+		)
+		return err
+	})
 }
 
 // formatEmbeddingLiteral formats a float32 slice as PostgreSQL vector literal
@@ -1880,33 +1997,40 @@ func sanitizeMetadataKey(key string) string {
 
 // GetPendingDocuments retrieves documents pending processing
 func (s *KnowledgeBaseStorage) GetPendingDocuments(ctx context.Context, limit int) ([]Document, error) {
-	query := `
-		SELECT id, knowledge_base_id, title, source_url, source_type,
-			mime_type, content, content_hash, status, error_message,
-			chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
-		FROM ai.documents
-		WHERE status = 'pending'
-		ORDER BY created_at
-		LIMIT $1
-	`
-
-	rows, err := s.db.Query(ctx, query, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pending documents: %w", err)
-	}
-	defer rows.Close()
-
 	var docs []Document
-	for rows.Next() {
-		var doc Document
-		if err := rows.Scan(
-			&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
-			&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
-			&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
-		); err != nil {
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT id, knowledge_base_id, title, source_url, source_type,
+				mime_type, content, content_hash, status, error_message,
+				chunks_count, metadata, tags, created_by, created_at, updated_at, indexed_at
+			FROM ai.documents
+			WHERE status = 'pending'
+			ORDER BY created_at
+			LIMIT $1
+		`
+
+		rows, err := tx.Query(ctx, query, limit)
+		if err != nil {
+			return fmt.Errorf("failed to get pending documents: %w", err)
 		}
-		docs = append(docs, doc)
+		defer rows.Close()
+
+		for rows.Next() {
+			var doc Document
+			if err := rows.Scan(
+				&doc.ID, &doc.KnowledgeBaseID, &doc.Title, &doc.SourceURL, &doc.SourceType,
+				&doc.MimeType, &doc.Content, &doc.ContentHash, &doc.Status, &doc.ErrorMessage,
+				&doc.ChunksCount, &doc.Metadata, &doc.Tags, &doc.CreatedBy, &doc.CreatedAt, &doc.UpdatedAt, &doc.IndexedAt,
+			); err != nil {
+				continue
+			}
+			docs = append(docs, doc)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return docs, nil
@@ -1919,18 +2043,22 @@ func (s *KnowledgeBaseStorage) UpdateChunkEmbedding(ctx context.Context, chunkID
 		return err
 	}
 
-	query := `UPDATE ai.chunks SET embedding = $2::vector WHERE id = $1`
-	_, err = s.db.Exec(ctx, query, chunkID, string(embeddingJSON))
-	return err
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `UPDATE ai.chunks SET embedding = $2::vector WHERE id = $1`
+		_, err := tx.Exec(ctx, query, chunkID, string(embeddingJSON))
+		return err
+	})
 }
 
 // GetChunkEmbeddingPreview returns the first N values of a chunk's embedding for debugging
 func (s *KnowledgeBaseStorage) GetChunkEmbeddingPreview(ctx context.Context, chunkID string, n int) ([]float32, error) {
-	// Get the embedding as text and parse the first N values
-	query := `SELECT left(embedding::text, 500) FROM ai.chunks WHERE id = $1`
-
 	var embeddingText *string
-	err := s.db.QueryRow(ctx, query, chunkID).Scan(&embeddingText)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		// Get the embedding as text and parse the first N values
+		query := `SELECT left(embedding::text, 500) FROM ai.chunks WHERE id = $1`
+
+		return tx.QueryRow(ctx, query, chunkID).Scan(&embeddingText)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get embedding: %w", err)
 	}
@@ -1965,21 +2093,23 @@ type ChunkEmbeddingStats struct {
 
 // GetChunkEmbeddingStats returns statistics about chunk embeddings for debugging
 func (s *KnowledgeBaseStorage) GetChunkEmbeddingStats(ctx context.Context, knowledgeBaseID string) (*ChunkEmbeddingStats, error) {
-	query := `
-		SELECT
-			COUNT(*) as total,
-			COUNT(embedding) as with_embedding,
-			COUNT(*) - COUNT(embedding) as without_embedding
-		FROM ai.chunks
-		WHERE knowledge_base_id = $1
-	`
-
 	var stats ChunkEmbeddingStats
-	err := s.db.QueryRow(ctx, query, knowledgeBaseID).Scan(
-		&stats.TotalChunks,
-		&stats.ChunksWithEmbedding,
-		&stats.ChunksWithoutEmbedding,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT
+				COUNT(*) as total,
+				COUNT(embedding) as with_embedding,
+				COUNT(*) - COUNT(embedding) as without_embedding
+			FROM ai.chunks
+			WHERE knowledge_base_id = $1
+		`
+
+		return tx.QueryRow(ctx, query, knowledgeBaseID).Scan(
+			&stats.TotalChunks,
+			&stats.ChunksWithEmbedding,
+			&stats.ChunksWithoutEmbedding,
+		)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chunk stats: %w", err)
 	}
@@ -1989,14 +2119,16 @@ func (s *KnowledgeBaseStorage) GetChunkEmbeddingStats(ctx context.Context, knowl
 
 // GetFirstChunkWithEmbedding returns the first chunk ID that has an embedding
 func (s *KnowledgeBaseStorage) GetFirstChunkWithEmbedding(ctx context.Context, knowledgeBaseID string) (string, error) {
-	query := `
-		SELECT id FROM ai.chunks
-		WHERE knowledge_base_id = $1 AND embedding IS NOT NULL
-		LIMIT 1
-	`
-
 	var chunkID string
-	err := s.db.QueryRow(ctx, query, knowledgeBaseID).Scan(&chunkID)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT id FROM ai.chunks
+			WHERE knowledge_base_id = $1 AND embedding IS NOT NULL
+			LIMIT 1
+		`
+
+		return tx.QueryRow(ctx, query, knowledgeBaseID).Scan(&chunkID)
+	})
 	if err != nil {
 		return "", fmt.Errorf("no chunks with embeddings found: %w", err)
 	}
@@ -2056,6 +2188,9 @@ func (s *KnowledgeBaseStorage) CreateKnowledgeBaseFromRequest(ctx context.Contex
 	} else {
 		kb.ChunkStrategy = defaults.ChunkStrategy
 	}
+
+	// Set owner from request if provided
+	kb.OwnerID = req.OwnerID
 
 	if err := s.CreateKnowledgeBase(ctx, kb); err != nil {
 		return nil, err
@@ -2268,48 +2403,56 @@ func (s *KnowledgeBaseStorage) SyncChatbotKnowledgeBaseLinks(ctx context.Context
 
 // ListUserKnowledgeBases returns KBs accessible to user
 func (s *KnowledgeBaseStorage) ListUserKnowledgeBases(ctx context.Context, userID string) ([]KnowledgeBaseSummary, error) {
-	query := `
-		SELECT kb.id, kb.name, kb.namespace, kb.description, kb.enabled,
-			   kb.document_count, kb.total_chunks, kb.visibility,
-			   kb.updated_at,
-			   CASE
-				   WHEN kbp.permission IS NOT NULL THEN kbp.permission
-				   WHEN kb.visibility = 'public' THEN 'viewer'
-				   ELSE NULL
-			   END as user_permission
-		FROM ai.knowledge_bases kb
-		LEFT JOIN ai.knowledge_base_permissions kbp
-			   ON kbp.knowledge_base_id = kb.id AND kbp.user_id = $1
-		WHERE kb.enabled = true
-		  AND (kbp.user_id = $1 OR kb.visibility = 'public')
-		ORDER BY kb.name
-	`
-
-	rows, err := s.db.Query(ctx, query, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list user knowledge bases: %w", err)
-	}
-	defer rows.Close()
-
 	var kbs []KnowledgeBaseSummary
-	for rows.Next() {
-		var kb KnowledgeBase
-		var userPermission string
-		if err := rows.Scan(
-			&kb.ID, &kb.Name, &kb.Namespace, &kb.Description,
-			&kb.Enabled, &kb.DocumentCount, &kb.TotalChunks,
-			&kb.UpdatedAt,
-			&userPermission,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan knowledge base row")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT kb.id, kb.name, kb.namespace, kb.description, kb.enabled,
+				   kb.document_count, kb.total_chunks, kb.visibility,
+				   kb.updated_at,
+				   CASE
+					   WHEN kb.owner_id = $1 THEN 'owner'
+					   WHEN kbp.permission IS NOT NULL THEN kbp.permission
+					   WHEN kb.visibility = 'public' THEN 'viewer'
+					   ELSE NULL
+				   END as user_permission
+			FROM ai.knowledge_bases kb
+			LEFT JOIN ai.knowledge_base_permissions kbp
+				   ON kbp.knowledge_base_id = kb.id AND kbp.user_id = $1
+			WHERE kb.enabled = true
+			  AND (kb.owner_id = $1 OR kbp.user_id = $1 OR kb.visibility = 'public')
+			ORDER BY kb.name
+		`
+
+		rows, err := tx.Query(ctx, query, userID)
+		if err != nil {
+			return fmt.Errorf("failed to list user knowledge bases: %w", err)
 		}
-		summary := kb.ToSummary()
-		summary.UserPermission = userPermission
-		if kb.Visibility != "" {
-			summary.Visibility = string(kb.Visibility)
+		defer rows.Close()
+
+		for rows.Next() {
+			var kb KnowledgeBase
+			var userPermission string
+			if err := rows.Scan(
+				&kb.ID, &kb.Name, &kb.Namespace, &kb.Description,
+				&kb.Enabled, &kb.DocumentCount, &kb.TotalChunks, &kb.Visibility,
+				&kb.UpdatedAt,
+				&userPermission,
+			); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan knowledge base row")
+				continue
+			}
+			summary := kb.ToSummary()
+			summary.UserPermission = userPermission
+			if kb.Visibility != "" {
+				summary.Visibility = string(kb.Visibility)
+			}
+			kbs = append(kbs, summary)
 		}
-		kbs = append(kbs, summary)
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return kbs, nil
@@ -2318,17 +2461,19 @@ func (s *KnowledgeBaseStorage) ListUserKnowledgeBases(ctx context.Context, userI
 // CanUserAccessKB checks if user has access
 func (s *KnowledgeBaseStorage) CanUserAccessKB(ctx context.Context, kbID, userID string) bool {
 	var hasAccess bool
-	query := `
-		SELECT EXISTS (
-			SELECT 1 FROM ai.knowledge_bases kb
-			LEFT JOIN ai.knowledge_base_permissions kbp
-				   ON kbp.knowledge_base_id = kb.id AND kbp.user_id = $2
-			WHERE kb.id = $1
-			  AND kb.enabled = true
-			  AND (kbp.user_id = $2 OR kb.visibility = 'public')
-		)
-	`
-	err := s.db.QueryRow(ctx, query, kbID, userID).Scan(&hasAccess)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT EXISTS (
+				SELECT 1 FROM ai.knowledge_bases kb
+				LEFT JOIN ai.knowledge_base_permissions kbp
+					   ON kbp.knowledge_base_id = kb.id AND kbp.user_id = $2
+				WHERE kb.id = $1
+				  AND kb.enabled = true
+				  AND (kbp.user_id = $2 OR kb.visibility = 'public')
+			)
+		`
+		return tx.QueryRow(ctx, query, kbID, userID).Scan(&hasAccess)
+	})
 	return err == nil && hasAccess
 }
 
@@ -2355,19 +2500,21 @@ func (s *KnowledgeBaseStorage) CheckKBPermission(ctx context.Context, kbID, user
 		return false, nil
 	}
 
-	query := `
-		SELECT EXISTS (
-			SELECT 1 FROM ai.knowledge_bases kb
-			LEFT JOIN ai.knowledge_base_permissions kbp
-				ON kbp.knowledge_base_id = kb.id AND kbp.user_id = $2
-			WHERE kb.id = $1
-			  AND kb.enabled = true
-			  AND (kb.owner_id = $2 OR ` + permissionCheck + `)
-		)
-	`
-
 	var hasPermission bool
-	err := s.db.QueryRow(ctx, query, kbID, userID).Scan(&hasPermission)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT EXISTS (
+				SELECT 1 FROM ai.knowledge_bases kb
+				LEFT JOIN ai.knowledge_base_permissions kbp
+					ON kbp.knowledge_base_id = kb.id AND kbp.user_id = $2
+				WHERE kb.id = $1
+				  AND kb.enabled = true
+				  AND (kb.owner_id = $2 OR ` + permissionCheck + `)
+			)
+		`
+
+		return tx.QueryRow(ctx, query, kbID, userID).Scan(&hasPermission)
+	})
 	if err != nil {
 		return false, fmt.Errorf("failed to check KB permission: %w", err)
 	}
@@ -2378,22 +2525,24 @@ func (s *KnowledgeBaseStorage) CheckKBPermission(ctx context.Context, kbID, user
 // Returns the permission level or empty string if no access.
 // For public KBs, returns 'viewer' if no explicit permission exists.
 func (s *KnowledgeBaseStorage) GetUserKBPermission(ctx context.Context, kbID, userID string) (string, error) {
-	query := `
-		SELECT
-			CASE
-				WHEN kb.owner_id = $2 THEN 'owner'
-				WHEN kbp.permission IS NOT NULL THEN kbp.permission
-				WHEN kb.visibility = 'public' THEN 'viewer'
-				ELSE ''
-			END as permission
-		FROM ai.knowledge_bases kb
-		LEFT JOIN ai.knowledge_base_permissions kbp
-			ON kbp.knowledge_base_id = kb.id AND kbp.user_id = $2
-		WHERE kb.id = $1 AND kb.enabled = true
-	`
-
 	var permission string
-	err := s.db.QueryRow(ctx, query, kbID, userID).Scan(&permission)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT
+				CASE
+					WHEN kb.owner_id = $2 THEN 'owner'
+					WHEN kbp.permission IS NOT NULL THEN kbp.permission
+					WHEN kb.visibility = 'public' THEN 'viewer'
+					ELSE ''
+				END as permission
+			FROM ai.knowledge_bases kb
+			LEFT JOIN ai.knowledge_base_permissions kbp
+				ON kbp.knowledge_base_id = kb.id AND kbp.user_id = $2
+			WHERE kb.id = $1 AND kb.enabled = true
+		`
+
+		return tx.QueryRow(ctx, query, kbID, userID).Scan(&permission)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
@@ -2405,19 +2554,21 @@ func (s *KnowledgeBaseStorage) GetUserKBPermission(ctx context.Context, kbID, us
 
 // GrantKBPermission grants permission to user
 func (s *KnowledgeBaseStorage) GrantKBPermission(ctx context.Context, kbID, userID, permission string, grantedBy *string) (*KBPermissionGrant, error) {
-	// Upsert permission
-	query := `
-		INSERT INTO ai.knowledge_base_permissions (knowledge_base_id, user_id, permission, granted_by)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (knowledge_base_id, user_id)
-		DO UPDATE SET permission = $3, granted_by = $4, granted_at = NOW()
-		RETURNING id, knowledge_base_id, user_id, permission, granted_by, granted_at
-	`
-
 	var grant KBPermissionGrant
-	err := s.db.QueryRow(ctx, query, kbID, userID, permission, grantedBy).Scan(
-		&grant.ID, &grant.KnowledgeBaseID, &grant.UserID, &grant.Permission, &grant.GrantedBy, &grant.GrantedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		// Upsert permission
+		query := `
+			INSERT INTO ai.knowledge_base_permissions (knowledge_base_id, user_id, permission, granted_by)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (knowledge_base_id, user_id)
+			DO UPDATE SET permission = $3, granted_by = $4, granted_at = NOW()
+			RETURNING id, knowledge_base_id, user_id, permission, granted_by, granted_at
+		`
+
+		return tx.QueryRow(ctx, query, kbID, userID, permission, grantedBy).Scan(
+			&grant.ID, &grant.KnowledgeBaseID, &grant.UserID, &grant.Permission, &grant.GrantedBy, &grant.GrantedAt,
+		)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to grant permission: %w", err)
 	}
@@ -2427,29 +2578,36 @@ func (s *KnowledgeBaseStorage) GrantKBPermission(ctx context.Context, kbID, user
 
 // ListKBPermissions lists all permissions for a KB
 func (s *KnowledgeBaseStorage) ListKBPermissions(ctx context.Context, kbID string) ([]KBPermissionGrant, error) {
-	query := `
-		SELECT id, knowledge_base_id, user_id, permission, granted_by, granted_at
-		FROM ai.knowledge_base_permissions
-		WHERE knowledge_base_id = $1
-		ORDER BY granted_at DESC
-	`
-
-	rows, err := s.db.Query(ctx, query, kbID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list permissions: %w", err)
-	}
-	defer rows.Close()
-
 	var grants []KBPermissionGrant
-	for rows.Next() {
-		var grant KBPermissionGrant
-		if err := rows.Scan(
-			&grant.ID, &grant.KnowledgeBaseID, &grant.UserID, &grant.Permission, &grant.GrantedBy, &grant.GrantedAt,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan permission row")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT id, knowledge_base_id, user_id, permission, granted_by, granted_at
+			FROM ai.knowledge_base_permissions
+			WHERE knowledge_base_id = $1
+			ORDER BY granted_at DESC
+		`
+
+		rows, err := tx.Query(ctx, query, kbID)
+		if err != nil {
+			return fmt.Errorf("failed to list permissions: %w", err)
 		}
-		grants = append(grants, grant)
+		defer rows.Close()
+
+		for rows.Next() {
+			var grant KBPermissionGrant
+			if err := rows.Scan(
+				&grant.ID, &grant.KnowledgeBaseID, &grant.UserID, &grant.Permission, &grant.GrantedBy, &grant.GrantedAt,
+			); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan permission row")
+				continue
+			}
+			grants = append(grants, grant)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return grants, nil
@@ -2457,12 +2615,14 @@ func (s *KnowledgeBaseStorage) ListKBPermissions(ctx context.Context, kbID strin
 
 // RevokeKBPermission revokes permission from user
 func (s *KnowledgeBaseStorage) RevokeKBPermission(ctx context.Context, kbID, userID string) error {
-	query := `DELETE FROM ai.knowledge_base_permissions WHERE knowledge_base_id = $1 AND user_id = $2`
-	_, err := s.db.Exec(ctx, query, kbID, userID)
-	if err != nil {
-		return fmt.Errorf("failed to revoke permission: %w", err)
-	}
-	return nil
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `DELETE FROM ai.knowledge_base_permissions WHERE knowledge_base_id = $1 AND user_id = $2`
+		_, err := tx.Exec(ctx, query, kbID, userID)
+		if err != nil {
+			return fmt.Errorf("failed to revoke permission: %w", err)
+		}
+		return nil
+	})
 }
 
 // ============================================================================
@@ -2471,36 +2631,38 @@ func (s *KnowledgeBaseStorage) RevokeKBPermission(ctx context.Context, kbID, use
 
 // GrantDocumentPermission grants permission on a document to a user
 func (s *KnowledgeBaseStorage) GrantDocumentPermission(ctx context.Context, documentID, userID, permission, grantedBy string) (*DocumentPermissionGrant, error) {
-	// First check if the requester owns the document
-	var ownerID string
-	checkQuery := `SELECT owner_id FROM ai.documents WHERE id = $1`
-	err := s.db.QueryRow(ctx, checkQuery, documentID).Scan(&ownerID)
-	if err != nil {
-		return nil, fmt.Errorf("document not found: %w", err)
-	}
-
-	// Verify ownership (service role and dashboard admins bypass this check in the handler)
-	if ownerID != grantedBy {
-		// Check if grantedBy is dashboard admin or service role
-		// This is a simple check - in production you'd want proper auth context
-		return nil, fmt.Errorf("only document owner can grant permissions")
-	}
-
-	// Upsert permission
-	query := `
-		INSERT INTO ai.document_permissions (document_id, user_id, permission, granted_by)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (document_id, user_id)
-		DO UPDATE SET permission = $3, granted_by = $4, granted_at = NOW()
-		RETURNING id, document_id, user_id, permission, granted_by, granted_at
-	`
-
 	var grant DocumentPermissionGrant
-	err = s.db.QueryRow(ctx, query, documentID, userID, permission, grantedBy).Scan(
-		&grant.ID, &grant.DocumentID, &grant.UserID, &grant.Permission, &grant.GrantedBy, &grant.GrantedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		// First check if the requester owns the document
+		var ownerID string
+		checkQuery := `SELECT owner_id FROM ai.documents WHERE id = $1`
+		err := tx.QueryRow(ctx, checkQuery, documentID).Scan(&ownerID)
+		if err != nil {
+			return fmt.Errorf("document not found: %w", err)
+		}
+
+		// Verify ownership (service role and dashboard admins bypass this check in the handler)
+		if ownerID != grantedBy {
+			// Check if grantedBy is dashboard admin or service role
+			// This is a simple check - in production you'd want proper auth context
+			return fmt.Errorf("only document owner can grant permissions")
+		}
+
+		// Upsert permission
+		query := `
+			INSERT INTO ai.document_permissions (document_id, user_id, permission, granted_by)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (document_id, user_id)
+			DO UPDATE SET permission = $3, granted_by = $4, granted_at = NOW()
+			RETURNING id, document_id, user_id, permission, granted_by, granted_at
+		`
+
+		return tx.QueryRow(ctx, query, documentID, userID, permission, grantedBy).Scan(
+			&grant.ID, &grant.DocumentID, &grant.UserID, &grant.Permission, &grant.GrantedBy, &grant.GrantedAt,
+		)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to grant document permission: %w", err)
+		return nil, err
 	}
 
 	return &grant, nil
@@ -2508,29 +2670,36 @@ func (s *KnowledgeBaseStorage) GrantDocumentPermission(ctx context.Context, docu
 
 // ListDocumentPermissions lists all permissions for a document
 func (s *KnowledgeBaseStorage) ListDocumentPermissions(ctx context.Context, documentID string) ([]DocumentPermissionGrant, error) {
-	query := `
-		SELECT id, document_id, user_id, permission, granted_by, granted_at
-		FROM ai.document_permissions
-		WHERE document_id = $1
-		ORDER BY granted_at DESC
-	`
-
-	rows, err := s.db.Query(ctx, query, documentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list document permissions: %w", err)
-	}
-	defer rows.Close()
-
 	var grants []DocumentPermissionGrant
-	for rows.Next() {
-		var grant DocumentPermissionGrant
-		if err := rows.Scan(
-			&grant.ID, &grant.DocumentID, &grant.UserID, &grant.Permission, &grant.GrantedBy, &grant.GrantedAt,
-		); err != nil {
-			log.Warn().Err(err).Msg("Failed to scan document permission row")
-			continue
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT id, document_id, user_id, permission, granted_by, granted_at
+			FROM ai.document_permissions
+			WHERE document_id = $1
+			ORDER BY granted_at DESC
+		`
+
+		rows, err := tx.Query(ctx, query, documentID)
+		if err != nil {
+			return fmt.Errorf("failed to list document permissions: %w", err)
 		}
-		grants = append(grants, grant)
+		defer rows.Close()
+
+		for rows.Next() {
+			var grant DocumentPermissionGrant
+			if err := rows.Scan(
+				&grant.ID, &grant.DocumentID, &grant.UserID, &grant.Permission, &grant.GrantedBy, &grant.GrantedAt,
+			); err != nil {
+				log.Warn().Err(err).Msg("Failed to scan document permission row")
+				continue
+			}
+			grants = append(grants, grant)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return grants, nil
@@ -2538,70 +2707,77 @@ func (s *KnowledgeBaseStorage) ListDocumentPermissions(ctx context.Context, docu
 
 // RevokeDocumentPermission revokes permission from a user on a document
 func (s *KnowledgeBaseStorage) RevokeDocumentPermission(ctx context.Context, documentID, userID string) error {
-	query := `DELETE FROM ai.document_permissions WHERE document_id = $1 AND user_id = $2`
-	_, err := s.db.Exec(ctx, query, documentID, userID)
-	if err != nil {
-		return fmt.Errorf("failed to revoke document permission: %w", err)
-	}
-	return nil
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `DELETE FROM ai.document_permissions WHERE document_id = $1 AND user_id = $2`
+		_, err := tx.Exec(ctx, query, documentID, userID)
+		if err != nil {
+			return fmt.Errorf("failed to revoke document permission: %w", err)
+		}
+		return nil
+	})
 }
 
 // CanUserAccessDocument checks if a user can access a document
 func (s *KnowledgeBaseStorage) CanUserAccessDocument(ctx context.Context, documentID, userID string) (bool, error) {
-	// Check if user owns the document
-	var ownerID *string
-	checkQuery := `SELECT owner_id FROM ai.documents WHERE id = $1`
-	err := s.db.QueryRow(ctx, checkQuery, documentID).Scan(&ownerID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
+	var hasAccess bool
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		// Check if user owns the document
+		var ownerID *string
+		checkQuery := `SELECT owner_id FROM ai.documents WHERE id = $1`
+		err := tx.QueryRow(ctx, checkQuery, documentID).Scan(&ownerID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil // hasAccess stays false
+			}
+			return fmt.Errorf("failed to check document ownership: %w", err)
 		}
-		return false, fmt.Errorf("failed to check document ownership: %w", err)
-	}
 
-	// User owns the document
-	if ownerID != nil && *ownerID == userID {
-		return true, nil
-	}
+		// User owns the document
+		if ownerID != nil && *ownerID == userID {
+			hasAccess = true
+			return nil
+		}
 
-	// Check if user has been granted permission
-	var hasPermission bool
-	permQuery := `
-		SELECT EXISTS(
-			SELECT 1 FROM ai.document_permissions
-			WHERE document_id = $1 AND user_id = $2
-		)
-	`
-	err = s.db.QueryRow(ctx, permQuery, documentID, userID).Scan(&hasPermission)
+		// Check if user has been granted permission
+		permQuery := `
+			SELECT EXISTS(
+				SELECT 1 FROM ai.document_permissions
+				WHERE document_id = $1 AND user_id = $2
+			)
+		`
+		return tx.QueryRow(ctx, permQuery, documentID, userID).Scan(&hasAccess)
+	})
 	if err != nil {
-		return false, fmt.Errorf("failed to check document permission: %w", err)
+		return false, err
 	}
 
-	return hasPermission, nil
+	return hasAccess, nil
 }
 
 // GetUserQuota retrieves quota information for a user
 func (s *KnowledgeBaseStorage) GetUserQuota(ctx context.Context, userID string) (*UserQuota, error) {
-	query := `
-		SELECT user_id, max_documents, max_chunks, max_storage_bytes,
-		       used_documents, used_chunks, used_storage_bytes,
-		       created_at, updated_at
-		FROM ai.user_quotas
-		WHERE user_id = $1
-	`
-
 	var quota UserQuota
-	err := s.db.QueryRow(ctx, query, userID).Scan(
-		&quota.UserID,
-		&quota.MaxDocuments,
-		&quota.MaxChunks,
-		&quota.MaxStorageBytes,
-		&quota.UsedDocuments,
-		&quota.UsedChunks,
-		&quota.UsedStorageBytes,
-		&quota.CreatedAt,
-		&quota.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			SELECT user_id, max_documents, max_chunks, max_storage_bytes,
+			       used_documents, used_chunks, used_storage_bytes,
+			       created_at, updated_at
+			FROM ai.user_quotas
+			WHERE user_id = $1
+		`
+
+		return tx.QueryRow(ctx, query, userID).Scan(
+			&quota.UserID,
+			&quota.MaxDocuments,
+			&quota.MaxChunks,
+			&quota.MaxStorageBytes,
+			&quota.UsedDocuments,
+			&quota.UsedChunks,
+			&quota.UsedStorageBytes,
+			&quota.CreatedAt,
+			&quota.UpdatedAt,
+		)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -2611,45 +2787,49 @@ func (s *KnowledgeBaseStorage) GetUserQuota(ctx context.Context, userID string) 
 
 // SetUserQuota creates or updates quota for a user
 func (s *KnowledgeBaseStorage) SetUserQuota(ctx context.Context, quota *UserQuota) error {
-	query := `
-		INSERT INTO ai.user_quotas (user_id, max_documents, max_chunks, max_storage_bytes)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (user_id) DO UPDATE
-		SET max_documents = COALESCE(EXCLUDED.max_documents, ai.user_quotas.max_documents),
-		    max_chunks = COALESCE(EXCLUDED.max_chunks, ai.user_quotas.max_chunks),
-		    max_storage_bytes = COALESCE(EXCLUDED.max_storage_bytes, ai.user_quotas.max_storage_bytes),
-		    updated_at = NOW()
-	`
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			INSERT INTO ai.user_quotas (user_id, max_documents, max_chunks, max_storage_bytes)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (user_id) DO UPDATE
+			SET max_documents = COALESCE(EXCLUDED.max_documents, ai.user_quotas.max_documents),
+			    max_chunks = COALESCE(EXCLUDED.max_chunks, ai.user_quotas.max_chunks),
+			    max_storage_bytes = COALESCE(EXCLUDED.max_storage_bytes, ai.user_quotas.max_storage_bytes),
+			    updated_at = NOW()
+		`
 
-	_, err := s.db.Exec(ctx, query,
-		quota.UserID,
-		quota.MaxDocuments,
-		quota.MaxChunks,
-		quota.MaxStorageBytes,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to set user quota: %w", err)
-	}
+		_, err := tx.Exec(ctx, query,
+			quota.UserID,
+			quota.MaxDocuments,
+			quota.MaxChunks,
+			quota.MaxStorageBytes,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to set user quota: %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // UpdateUserQuotaUsage updates quota usage counters for a user
 func (s *KnowledgeBaseStorage) UpdateUserQuotaUsage(ctx context.Context, userID string, docsDelta int, chunksDelta int, storageDelta int64) error {
-	query := `
-		INSERT INTO ai.user_quotas (user_id, used_documents, used_chunks, used_storage_bytes)
-		VALUES ($1, GREATEST(0, $2), GREATEST(0, $3), GREATEST(0, $4))
-		ON CONFLICT (user_id) DO UPDATE
-		SET used_documents = GREATEST(0, ai.user_quotas.used_documents + $2),
-		    used_chunks = GREATEST(0, ai.user_quotas.used_chunks + $3),
-		    used_storage_bytes = GREATEST(0, ai.user_quotas.used_storage_bytes + $4),
-		    updated_at = NOW()
-	`
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `
+			INSERT INTO ai.user_quotas (user_id, used_documents, used_chunks, used_storage_bytes)
+			VALUES ($1, GREATEST(0, $2), GREATEST(0, $3), GREATEST(0, $4))
+			ON CONFLICT (user_id) DO UPDATE
+			SET used_documents = GREATEST(0, ai.user_quotas.used_documents + $2),
+			    used_chunks = GREATEST(0, ai.user_quotas.used_chunks + $3),
+			    used_storage_bytes = GREATEST(0, ai.user_quotas.used_storage_bytes + $4),
+			    updated_at = NOW()
+		`
 
-	_, err := s.db.Exec(ctx, query, userID, docsDelta, chunksDelta, storageDelta)
-	if err != nil {
-		return fmt.Errorf("failed to update quota usage: %w", err)
-	}
+		_, err := tx.Exec(ctx, query, userID, docsDelta, chunksDelta, storageDelta)
+		if err != nil {
+			return fmt.Errorf("failed to update quota usage: %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }

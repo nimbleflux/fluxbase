@@ -99,6 +99,11 @@ func NewTableExportSyncService(
 	}
 }
 
+func (s *TableExportSyncService) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tenantID := database.TenantFromContext(ctx)
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
+}
+
 // CreateSyncConfig creates a new sync configuration
 func (s *TableExportSyncService) CreateSyncConfig(ctx context.Context, config *CreateTableExportSyncConfig) (*TableExportSyncConfig, error) {
 	// Set defaults
@@ -127,12 +132,14 @@ func (s *TableExportSyncService) CreateSyncConfig(ctx context.Context, config *C
 		columns = config.Columns
 	}
 
-	err := s.db.QueryRow(ctx, query,
-		id, config.KnowledgeBaseID, config.SchemaName, config.TableName, columns,
-		config.SyncMode, config.SyncOnInsert, config.SyncOnUpdate, config.SyncOnDelete,
-		config.DebounceSeconds, config.IncludeForeignKeys, config.IncludeIndexes,
-		now, now,
-	).Scan(&now, &now)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			id, config.KnowledgeBaseID, config.SchemaName, config.TableName, columns,
+			config.SyncMode, config.SyncOnInsert, config.SyncOnUpdate, config.SyncOnDelete,
+			config.DebounceSeconds, config.IncludeForeignKeys, config.IncludeIndexes,
+			now, now,
+		).Scan(&now, &now)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sync config: %w", err)
 	}
@@ -182,13 +189,15 @@ func (s *TableExportSyncService) GetSyncConfig(ctx context.Context, id string) (
 	var lastSyncAt *time.Time
 	var lastSyncStatus, lastSyncError *string
 
-	err := s.db.QueryRow(ctx, query, id).Scan(
-		&config.ID, &config.KnowledgeBaseID, &config.SchemaName, &config.TableName, &columns,
-		&config.SyncMode, &config.SyncOnInsert, &config.SyncOnUpdate, &config.SyncOnDelete,
-		&config.DebounceSeconds, &config.IncludeForeignKeys, &config.IncludeIndexes,
-		&lastSyncAt, &lastSyncStatus, &lastSyncError,
-		&config.CreatedAt, &config.UpdatedAt,
-	)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id).Scan(
+			&config.ID, &config.KnowledgeBaseID, &config.SchemaName, &config.TableName, &columns,
+			&config.SyncMode, &config.SyncOnInsert, &config.SyncOnUpdate, &config.SyncOnDelete,
+			&config.DebounceSeconds, &config.IncludeForeignKeys, &config.IncludeIndexes,
+			&lastSyncAt, &lastSyncStatus, &lastSyncError,
+			&config.CreatedAt, &config.UpdatedAt,
+		)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("sync config not found")
 	}
@@ -223,42 +232,50 @@ func (s *TableExportSyncService) GetSyncConfigsByKnowledgeBase(ctx context.Conte
 		ORDER BY created_at DESC
 	`
 
-	rows, err := s.db.Query(ctx, query, knowledgeBaseID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list sync configs: %w", err)
-	}
-	defer rows.Close()
-
 	var configs []TableExportSyncConfig
-	for rows.Next() {
-		config := TableExportSyncConfig{}
-		var columns []byte
-		var lastSyncAt *time.Time
-		var lastSyncStatus, lastSyncError *string
 
-		err := rows.Scan(
-			&config.ID, &config.KnowledgeBaseID, &config.SchemaName, &config.TableName, &columns,
-			&config.SyncMode, &config.SyncOnInsert, &config.SyncOnUpdate, &config.SyncOnDelete,
-			&config.DebounceSeconds, &config.IncludeForeignKeys, &config.IncludeIndexes,
-			&lastSyncAt, &lastSyncStatus, &lastSyncError,
-			&config.CreatedAt, &config.UpdatedAt,
-		)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, knowledgeBaseID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan sync config: %w", err)
+			return fmt.Errorf("failed to list sync configs: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			config := TableExportSyncConfig{}
+			var columns []byte
+			var lastSyncAt *time.Time
+			var lastSyncStatus, lastSyncError *string
+
+			err := rows.Scan(
+				&config.ID, &config.KnowledgeBaseID, &config.SchemaName, &config.TableName, &columns,
+				&config.SyncMode, &config.SyncOnInsert, &config.SyncOnUpdate, &config.SyncOnDelete,
+				&config.DebounceSeconds, &config.IncludeForeignKeys, &config.IncludeIndexes,
+				&lastSyncAt, &lastSyncStatus, &lastSyncError,
+				&config.CreatedAt, &config.UpdatedAt,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to scan sync config: %w", err)
+			}
+
+			if columns != nil {
+				config.Columns = parsePostgresArray(string(columns))
+			}
+			config.LastSyncAt = lastSyncAt
+			if lastSyncStatus != nil {
+				config.LastSyncStatus = *lastSyncStatus
+			}
+			if lastSyncError != nil {
+				config.LastSyncError = *lastSyncError
+			}
+
+			configs = append(configs, config)
 		}
 
-		if columns != nil {
-			config.Columns = parsePostgresArray(string(columns))
-		}
-		config.LastSyncAt = lastSyncAt
-		if lastSyncStatus != nil {
-			config.LastSyncStatus = *lastSyncStatus
-		}
-		if lastSyncError != nil {
-			config.LastSyncError = *lastSyncError
-		}
-
-		configs = append(configs, config)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return configs, nil
@@ -316,7 +333,9 @@ func (s *TableExportSyncService) UpdateSyncConfig(ctx context.Context, id string
 
 	query += " WHERE id = $1 RETURNING id"
 
-	err := s.db.QueryRow(ctx, query, args...).Scan(&id)
+	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, args...).Scan(&id)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update sync config: %w", err)
 	}
@@ -326,12 +345,14 @@ func (s *TableExportSyncService) UpdateSyncConfig(ctx context.Context, id string
 
 // DeleteSyncConfig deletes a sync configuration
 func (s *TableExportSyncService) DeleteSyncConfig(ctx context.Context, id string) error {
-	query := `DELETE FROM ai.table_export_sync_configs WHERE id = $1`
-	_, err := s.db.Exec(ctx, query, id)
-	if err != nil {
-		return fmt.Errorf("failed to delete sync config: %w", err)
-	}
-	return nil
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		query := `DELETE FROM ai.table_export_sync_configs WHERE id = $1`
+		_, err := tx.Exec(ctx, query, id)
+		if err != nil {
+			return fmt.Errorf("failed to delete sync config: %w", err)
+		}
+		return nil
+	})
 }
 
 // TriggerSync manually triggers a sync for a config
@@ -376,8 +397,10 @@ func (s *TableExportSyncService) updateSyncStatus(ctx context.Context, id string
 			updated_at = NOW()
 		WHERE id = $1
 	`
-	_, err := s.db.Exec(ctx, query, id, string(status), errMsg)
-	return err
+	return s.withTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, id, string(status), errMsg)
+		return err
+	})
 }
 
 // parsePostgresArray parses a PostgreSQL array string into a Go slice

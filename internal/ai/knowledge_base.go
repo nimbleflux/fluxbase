@@ -301,6 +301,8 @@ type CreateKnowledgeBaseRequest struct {
 	ChunkStrategy       string        `json:"chunk_strategy,omitempty"`
 	// InitialPermissions grants permissions to users upon creation
 	InitialPermissions []KBInitialPermission `json:"initial_permissions,omitempty"`
+	// OwnerID is set internally by the handler, not exposed in the API
+	OwnerID *string `json:"-"`
 }
 
 // KBInitialPermission represents a permission to grant upon KB creation

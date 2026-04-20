@@ -56,6 +56,10 @@ type CreateTenantRequest struct {
 	Name     string                 `json:"name" validate:"required,min=1,max=255"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 
+	// Database selection
+	DBMode string  `json:"db_mode,omitempty"` // "auto" (default) or "existing"
+	DBName *string `json:"db_name,omitempty"` // Required when db_mode is "existing"
+
 	// Key generation
 	AutoGenerateKeys bool `json:"auto_generate_keys"` // default: true
 
@@ -210,6 +214,8 @@ func (h *TenantHandler) CreateTenant(c fiber.Ctx) error {
 		Slug:     req.Slug,
 		Name:     req.Name,
 		Metadata: metadata,
+		DBMode:   req.DBMode,
+		DBName:   req.DBName,
 	})
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrMaxTenantsReached) {
@@ -306,6 +312,7 @@ func (h *TenantHandler) UpdateTenant(c fiber.Ctx) error {
 func (h *TenantHandler) DeleteTenant(c fiber.Ctx) error {
 	ctx := c.Context()
 	tenantID := c.Params("id")
+	hard := c.Query("hard") == "true"
 
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
@@ -320,14 +327,55 @@ func (h *TenantHandler) DeleteTenant(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Cannot delete the default tenant")
 	}
 
-	if err := h.Manager.DeleteTenantDatabase(ctx, tenantID); err != nil {
-		log.Error().Err(err).Msg("Failed to delete tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete tenant")
+	if hard {
+		if err := h.Manager.HardDeleteTenantDatabase(ctx, tenantID); err != nil {
+			log.Error().Err(err).Msg("Failed to hard delete tenant")
+			return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete tenant")
+		}
+		log.Info().Str("tenant_id", tenantID).Msg("Tenant hard-deleted")
+	} else {
+		if err := h.Manager.DeleteTenantDatabase(ctx, tenantID); err != nil {
+			log.Error().Err(err).Msg("Failed to soft delete tenant")
+			return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete tenant")
+		}
+		log.Info().Str("tenant_id", tenantID).Msg("Tenant soft-deleted")
 	}
 
-	log.Info().Str("tenant_id", tenantID).Msg("Tenant deleted")
-
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (h *TenantHandler) RecoverTenant(c fiber.Ctx) error {
+	ctx := c.Context()
+	tenantID := c.Params("id")
+
+	if err := h.Manager.RecoverTenantDatabase(ctx, tenantID); err != nil {
+		if errors.Is(err, tenantdb.ErrTenantNotDeleted) {
+			return fiber.NewError(fiber.StatusBadRequest, "Tenant is not in a deleted state")
+		}
+		log.Error().Err(err).Msg("Failed to recover tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to recover tenant")
+	}
+
+	log.Info().Str("tenant_id", tenantID).Msg("Tenant recovered")
+
+	return c.JSON(fiber.Map{"status": "recovered"})
+}
+
+func (h *TenantHandler) ListDeletedTenants(c fiber.Ctx) error {
+	ctx := c.Context()
+
+	tenants, err := h.Manager.ListDeletedTenants(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to list deleted tenants")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to list deleted tenants")
+	}
+
+	result := make([]TenantResponse, len(tenants))
+	for i, t := range tenants {
+		result[i] = tenantToResponse(&t)
+	}
+
+	return c.JSON(result)
 }
 
 func (h *TenantHandler) MigrateTenant(c fiber.Ctx) error {
@@ -970,4 +1018,29 @@ func (h *TenantHandler) DeleteStoredSchema(c fiber.Ctx) error {
 	log.Info().Str("tenant_id", tenantID).Str("tenant_slug", t.Slug).Msg("Tenant stored schema deleted")
 
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// RepairTenant re-runs schema application and FDW setup for an existing tenant.
+func (h *TenantHandler) RepairTenant(c fiber.Ctx) error {
+	tenantID := c.Params("id")
+	if tenantID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "Tenant ID is required")
+	}
+
+	t, err := h.Storage.GetTenant(c.Context(), tenantID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+	}
+
+	if t.UsesMainDatabase() {
+		return fiber.NewError(fiber.StatusBadRequest, "Cannot repair default tenant (uses main database)")
+	}
+
+	if err := h.Manager.RepairTenant(c.Context(), t); err != nil {
+		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to repair tenant")
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to repair tenant: %s", err.Error()))
+	}
+
+	log.Info().Str("tenant_id", tenantID).Msg("Tenant repaired successfully")
+	return c.JSON(fiber.Map{"message": "Tenant repaired successfully"})
 }

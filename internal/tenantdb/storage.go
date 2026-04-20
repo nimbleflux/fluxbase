@@ -16,6 +16,7 @@ var (
 	ErrTenantNotFound      = errors.New("tenant not found")
 	ErrTenantAlreadyExists = errors.New("tenant already exists")
 	ErrNoDefaultTenant     = errors.New("no default tenant found")
+	ErrTenantNotDeleted    = errors.New("tenant is not in a deleted state")
 )
 
 // DB abstracts database operations for testability.
@@ -350,6 +351,78 @@ func (s *Storage) HardDeleteTenant(ctx context.Context, id string) error {
 	return nil
 }
 
+func (s *Storage) RecoverTenant(ctx context.Context, id string) error {
+	query := `
+		UPDATE platform.tenants
+		SET deleted_at = NULL, status = 'active', updated_at = NOW()
+		WHERE id = $1::uuid AND deleted_at IS NOT NULL
+	`
+
+	result, err := s.db.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to recover tenant: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrTenantNotDeleted
+	}
+
+	return nil
+}
+
+func (s *Storage) GetDeletedTenants(ctx context.Context) ([]Tenant, error) {
+	query := `
+		SELECT id, slug, name, db_name, is_default, status, metadata, created_at, updated_at, deleted_at
+		FROM platform.tenants
+		WHERE deleted_at IS NOT NULL
+		ORDER BY deleted_at DESC
+	`
+
+	rows, err := s.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deleted tenants: %w", err)
+	}
+	defer rows.Close()
+
+	var tenants []Tenant
+	for rows.Next() {
+		var tenant Tenant
+		var dbName *string
+		var metadataBytes []byte
+
+		err := rows.Scan(
+			&tenant.ID,
+			&tenant.Slug,
+			&tenant.Name,
+			&dbName,
+			&tenant.IsDefault,
+			&tenant.Status,
+			&metadataBytes,
+			&tenant.CreatedAt,
+			&tenant.UpdatedAt,
+			&tenant.DeletedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan tenant: %w", err)
+		}
+
+		tenant.DBName = dbName
+		if metadataBytes != nil {
+			if err := json.Unmarshal(metadataBytes, &tenant.Metadata); err != nil {
+				tenant.Metadata = make(map[string]any)
+			}
+		}
+
+		tenants = append(tenants, tenant)
+	}
+
+	if tenants == nil {
+		tenants = []Tenant{}
+	}
+
+	return tenants, nil
+}
+
 func (s *Storage) AssignUserToTenant(ctx context.Context, userID, tenantID string) error {
 	query := `
 		INSERT INTO platform.tenant_admin_assignments (tenant_id, user_id)
@@ -619,7 +692,7 @@ func (s *Storage) CleanupTenantData(ctx context.Context, tenantID string) error 
 
 	// Phase 9: Migrations.
 	tables9 := []string{
-		"migrations.migrations",
+		"platform.migrations",
 	}
 	for _, table := range tables9 {
 		_, err := s.db.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1::uuid", table), tenantID)

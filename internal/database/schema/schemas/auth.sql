@@ -1875,7 +1875,6 @@ CREATE TABLE IF NOT EXISTS webhooks (
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now(),
     CONSTRAINT webhooks_pkey PRIMARY KEY (id),
-    CONSTRAINT webhooks_created_by_fkey FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
     CONSTRAINT webhooks_scope_check CHECK (scope IN ('user'::text, 'global'::text))
 );
 
@@ -2789,7 +2788,7 @@ CREATE POLICY auth_users_insert ON users FOR INSERT TO PUBLIC WITH CHECK ((CURRE
 -- Name: auth_users_select; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_users_select ON users FOR SELECT TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id));
+CREATE POLICY auth_users_select ON users FOR SELECT TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (current_setting('request.jwt.claims', true) <> '' AND id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id));
 
 --
 -- Name: auth_users_select_own; Type: POLICY; Schema: -; Owner: -
@@ -2801,7 +2800,7 @@ CREATE POLICY auth_users_select_own ON users FOR SELECT TO authenticated USING (
 -- Name: auth_users_update; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_users_update ON users FOR UPDATE TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id)) WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id));
+CREATE POLICY auth_users_update ON users FOR UPDATE TO PUBLIC USING ((CURRENT_USER = 'service_role'::name) OR (current_setting('request.jwt.claims', true) <> '' AND id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id)) WITH CHECK ((CURRENT_USER = 'service_role'::name) OR (current_setting('request.jwt.claims', true) <> '' AND id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))::uuid) OR has_tenant_access(tenant_id));
 
 --
 -- Name: auth_users_update_own; Type: POLICY; Schema: -; Owner: -
@@ -4315,4 +4314,40 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE webhooks TO service_role;
+
+--
+-- Name: auth; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA auth TO tenant_service;
+
+--
+-- Name: webhooks; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.webhooks TO tenant_service;
+
+--
+-- Name: webhook_deliveries; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.webhook_deliveries TO tenant_service;
+
+--
+-- Name: webhook_events; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.webhook_events TO tenant_service;
+
+--
+-- Name: increment_webhook_table_count(text, text); Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT EXECUTE ON FUNCTION auth.increment_webhook_table_count(text, text) TO tenant_service;
+
+--
+-- Name: decrement_webhook_table_count(text, text); Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT EXECUTE ON FUNCTION auth.decrement_webhook_table_count(text, text) TO tenant_service;
 

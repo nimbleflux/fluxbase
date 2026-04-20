@@ -1,12 +1,16 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // validPolicyNameRegex ensures policy names are safe PostgreSQL identifiers
@@ -60,10 +64,19 @@ type CreatePolicyRequest struct {
 	WithCheck  string   `json:"with_check"`
 }
 
+// policyPool returns the tenant pool if available, otherwise the main pool.
+func (s *Server) policyPool(c fiber.Ctx) *pgxpool.Pool {
+	if pool := middleware.GetTenantPool(c); pool != nil {
+		return pool
+	}
+	return s.db.Pool()
+}
+
 // ListPolicies returns all RLS policies
 // GET /api/v1/admin/policies
 func (s *Server) ListPolicies(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := context.Background()
+	pool := s.policyPool(c)
 	schema := c.Query("schema", "")
 
 	query := `
@@ -87,7 +100,7 @@ func (s *Server) ListPolicies(c fiber.Ctx) error {
 	}
 	query += " ORDER BY schemaname, tablename, policyname"
 
-	rows, err := s.db.Query(ctx, query, args...)
+	rows, err := pool.Query(ctx, query, args...)
 	if err != nil {
 		return SendError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -114,7 +127,8 @@ func (s *Server) ListPolicies(c fiber.Ctx) error {
 // GetTablesWithRLS returns all tables with their RLS status and policies
 // GET /api/v1/admin/tables/rls
 func (s *Server) GetTablesWithRLS(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := context.Background()
+	pool := s.policyPool(c)
 	schema := c.Query("schema", "public")
 
 	// Get tables with RLS status (excluding extension-owned tables like spatial_ref_sys)
@@ -128,13 +142,13 @@ func (s *Server) GetTablesWithRLS(c fiber.Ctx) error {
 		JOIN pg_namespace n ON n.oid = c.relnamespace
 		LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
 		WHERE n.nspname = $1
-		AND c.relkind = 'r'
+		AND c.relkind IN ('r', 'f')
 		AND c.relname NOT LIKE 'pg_%'
 		AND d.objid IS NULL
 		ORDER BY c.relname
 	`
 
-	tablesRows, err := s.db.Query(ctx, tablesQuery, schema)
+	tablesRows, err := pool.Query(ctx, tablesQuery, schema)
 	if err != nil {
 		return SendError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -166,7 +180,7 @@ func (s *Server) GetTablesWithRLS(c fiber.Ctx) error {
 		ORDER BY tablename, policyname
 	`
 
-	policyRows, err := s.db.Query(ctx, policiesQuery, schema)
+	policyRows, err := pool.Query(ctx, policiesQuery, schema)
 	if err != nil {
 		return SendError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -220,7 +234,8 @@ func (s *Server) GetTablesWithRLS(c fiber.Ctx) error {
 // GetTableRLSStatus returns RLS status and policies for a specific table
 // GET /api/v1/admin/tables/:schema/:table/rls
 func (s *Server) GetTableRLSStatus(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := context.Background()
+	pool := s.policyPool(c)
 	schema := c.Params("schema")
 	table := c.Params("table")
 
@@ -229,7 +244,7 @@ func (s *Server) GetTableRLSStatus(c fiber.Ctx) error {
 	status.Schema = schema
 	status.Table = table
 
-	err := s.db.QueryRow(ctx, `
+	err := pool.QueryRow(ctx, `
 		SELECT relrowsecurity, relforcerowsecurity
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -240,7 +255,7 @@ func (s *Server) GetTableRLSStatus(c fiber.Ctx) error {
 	}
 
 	// Get policies
-	rows, err := s.db.Query(ctx, `
+	rows, err := pool.Query(ctx, `
 		SELECT policyname, permissive, roles, cmd, qual, with_check
 		FROM pg_policies
 		WHERE schemaname = $1 AND tablename = $2
@@ -272,7 +287,8 @@ func (s *Server) GetTableRLSStatus(c fiber.Ctx) error {
 // ToggleTableRLS enables or disables RLS on a table
 // POST /api/v1/admin/tables/:schema/:table/rls/toggle
 func (s *Server) ToggleTableRLS(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := context.Background()
+	pool := s.policyPool(c)
 	schema := c.Params("schema")
 	table := c.Params("table")
 
@@ -285,7 +301,7 @@ func (s *Server) ToggleTableRLS(c fiber.Ctx) error {
 
 	// Validate table exists
 	var exists bool
-	err := s.db.QueryRow(ctx, `
+	err := pool.QueryRow(ctx, `
 		SELECT EXISTS(
 			SELECT 1 FROM pg_class c
 			JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -309,7 +325,7 @@ func (s *Server) ToggleTableRLS(c fiber.Ctx) error {
 		action,
 	)
 
-	_, err = s.db.Exec(ctx, sql)
+	_, err = pool.Exec(ctx, sql)
 	if err != nil {
 		return SendError(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -323,7 +339,8 @@ func (s *Server) ToggleTableRLS(c fiber.Ctx) error {
 // CreatePolicy creates a new RLS policy
 // POST /api/v1/admin/policies
 func (s *Server) CreatePolicy(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := context.Background()
+	pool := s.policyPool(c)
 
 	var req CreatePolicyRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -377,7 +394,7 @@ func (s *Server) CreatePolicy(c fiber.Ctx) error {
 		sql += fmt.Sprintf(" WITH CHECK (%s)", req.WithCheck)
 	}
 
-	_, err := s.db.Exec(ctx, sql)
+	_, err := pool.Exec(ctx, sql)
 	if err != nil {
 		return SendError(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -391,7 +408,8 @@ func (s *Server) CreatePolicy(c fiber.Ctx) error {
 // DeletePolicy drops an RLS policy
 // DELETE /api/v1/admin/policies/:schema/:table/:policy
 func (s *Server) DeletePolicy(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := context.Background()
+	pool := s.policyPool(c)
 	schema := c.Params("schema")
 	table := c.Params("table")
 	policy := c.Params("policy")
@@ -403,7 +421,7 @@ func (s *Server) DeletePolicy(c fiber.Ctx) error {
 		quoteIdentifier(table),
 	)
 
-	_, err := s.db.Exec(ctx, sql)
+	_, err := pool.Exec(ctx, sql)
 	if err != nil {
 		return SendError(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -423,7 +441,8 @@ type UpdatePolicyRequest struct {
 // Note: PostgreSQL's ALTER POLICY can only change roles, USING, and WITH CHECK.
 // It cannot change the policy name, command type, or permissive/restrictive mode.
 func (s *Server) UpdatePolicy(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := context.Background()
+	pool := s.policyPool(c)
 	schema := c.Params("schema")
 	table := c.Params("table")
 	policyName := c.Params("policy")
@@ -468,7 +487,7 @@ func (s *Server) UpdatePolicy(c fiber.Ctx) error {
 		sql += fmt.Sprintf(" WITH CHECK (%s)", *req.WithCheck)
 	}
 
-	_, err := s.db.Exec(ctx, sql)
+	_, err := pool.Exec(ctx, sql)
 	if err != nil {
 		return SendError(c, fiber.StatusBadRequest, err.Error())
 	}
@@ -483,17 +502,18 @@ func (s *Server) UpdatePolicy(c fiber.Ctx) error {
 // GetSecurityWarnings scans for security issues
 // GET /api/v1/admin/security/warnings
 func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := context.Background()
+	pool := s.policyPool(c)
 	warnings := []SecurityWarning{}
 
 	// Check 1: Tables in public schema without RLS (excluding extension-owned tables)
-	rows1, err := s.db.Query(ctx, `
+	rows1, err := pool.Query(ctx, `
 		SELECT c.relname
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
 		LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
 		WHERE n.nspname = 'public'
-		AND c.relkind = 'r'
+		AND c.relkind IN ('r', 'f')
 		AND NOT c.relrowsecurity
 		AND c.relname NOT LIKE 'pg_%'
 		AND c.relname NOT LIKE '_pg_%'
@@ -520,13 +540,13 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 	}
 
 	// Check 2: RLS enabled but no policies (excluding extension-owned tables)
-	rows2, err := s.db.Query(ctx, `
+	rows2, err := pool.Query(ctx, `
 		SELECT n.nspname, c.relname
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
 		LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
 		WHERE c.relrowsecurity = true
-		AND c.relkind = 'r'
+		AND c.relkind IN ('r', 'f')
 		AND NOT EXISTS (
 			SELECT 1 FROM pg_policies p
 			WHERE p.schemaname = n.nspname AND p.tablename = c.relname
@@ -556,7 +576,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 	// Check 3: Overly permissive policies (USING true for non-SELECT)
 	// Excludes service_role which intentionally bypasses RLS for system operations
 	// Excludes tenant_service which is an internal role for tenant-scoped operations
-	rows3, err := s.db.Query(ctx, `
+	rows3, err := pool.Query(ctx, `
 		SELECT schemaname, tablename, policyname, cmd
 		FROM pg_policies
 		WHERE qual = 'true'
@@ -584,7 +604,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 	}
 
 	// Check 4: Anon role has write access
-	rows4, err := s.db.Query(ctx, `
+	rows4, err := pool.Query(ctx, `
 		SELECT schemaname, tablename, policyname, cmd
 		FROM pg_policies
 		WHERE 'anon' = ANY(roles)
@@ -613,7 +633,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 	// Check 5: Missing WITH CHECK on INSERT/UPDATE policies
 	// Excludes service_role which intentionally has full access without restrictions
 	// Excludes Fluxbase-managed schemas where service-level policies don't need WITH CHECK
-	rows5, err := s.db.Query(ctx, `
+	rows5, err := pool.Query(ctx, `
 		SELECT schemaname, tablename, policyname, cmd
 		FROM pg_policies
 		WHERE cmd IN ('INSERT', 'UPDATE', 'ALL')
@@ -643,7 +663,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 	}
 
 	// Check 6: Tables with sensitive columns but no RLS (excluding extension-owned tables)
-	rows6, err := s.db.Query(ctx, `
+	rows6, err := pool.Query(ctx, `
 		SELECT DISTINCT t.table_schema, t.table_name, c.column_name
 		FROM information_schema.columns c
 		JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name
@@ -651,7 +671,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 		JOIN pg_namespace pn ON pn.oid = pc.relnamespace AND pn.nspname = t.table_schema
 		LEFT JOIN pg_depend pd ON pd.objid = pc.oid AND pd.deptype = 'e'
 		WHERE t.table_schema = 'public'
-		AND t.table_type = 'BASE TABLE'
+		AND t.table_type IN ('BASE TABLE', 'FOREIGN TABLE')
 		AND NOT pc.relrowsecurity
 		AND c.column_name ~* '(password|secret|token|api_key|apikey|private_key|credit_card|ssn|social_security)'
 		AND pd.objid IS NULL
@@ -678,7 +698,7 @@ func (s *Server) GetSecurityWarnings(c fiber.Ctx) error {
 
 	// Check 7: Policies that grant access to PUBLIC role
 	// Excludes Fluxbase-managed schemas where PUBLIC access is intentional for internal operations
-	rows7, err := s.db.Query(ctx, `
+	rows7, err := pool.Query(ctx, `
 		SELECT schemaname, tablename, policyname, cmd
 		FROM pg_policies
 		WHERE 'public' = ANY(roles)

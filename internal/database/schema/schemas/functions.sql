@@ -1009,3 +1009,57 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE shared_modules TO service_role;
 
+--
+-- Name: functions; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA functions TO tenant_service;
+
+--
+-- Name: edge_functions; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE functions.edge_functions TO tenant_service;
+
+--
+-- Name: edge_executions; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE functions.edge_executions TO tenant_service;
+
+--
+-- Name: edge_files; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE functions.edge_files TO tenant_service;
+
+--
+-- Name: edge_triggers; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE functions.edge_triggers TO tenant_service;
+
+--
+-- Name: secrets; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE functions.secrets TO tenant_service;
+
+--
+-- Name: secret_versions; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE functions.secret_versions TO tenant_service;
+
+--
+-- Name: shared_modules; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE functions.shared_modules TO tenant_service;
+
+--
+-- Name: function_dependencies; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE functions.function_dependencies TO tenant_service;
+

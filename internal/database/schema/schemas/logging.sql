@@ -835,6 +835,54 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE entries_system TO {{APP_USER}};
 GRANT DELETE, INSERT, SELECT, TRUNCATE, UPDATE ON TABLE entries TO service_role;
 GRANT DELETE, INSERT, SELECT, TRUNCATE, UPDATE ON TABLE entries TO {{APP_USER}};
 
+--
+-- Name: logging; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT USAGE ON SCHEMA logging TO tenant_service;
+
+--
+-- Name: entries; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE logging.entries TO tenant_service;
+
+--
+-- Name: entries_ai; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE logging.entries_ai TO tenant_service;
+
+--
+-- Name: entries_custom; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE logging.entries_custom TO tenant_service;
+
+--
+-- Name: entries_execution; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE logging.entries_execution TO tenant_service;
+
+--
+-- Name: entries_http; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE logging.entries_http TO tenant_service;
+
+--
+-- Name: entries_security; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE logging.entries_security TO tenant_service;
+
+--
+-- Name: entries_system; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE logging.entries_system TO tenant_service;
+
 -- ============================================================================
 -- ATTACH PARTITIONS
 -- The child tables are created as regular tables and then attached as partitions

@@ -318,7 +318,7 @@ func (s *DeclarativeService) GetTenantSchemaStatus(ctx context.Context, tenant *
 	var appliedAt time.Time
 	err = pool.QueryRow(ctx, `
 		SELECT schema_fingerprint, applied_at
-		FROM migrations.tenant_declarative_state
+		FROM platform.tenant_declarative_state
 		WHERE tenant_id = $1
 		ORDER BY applied_at DESC
 		LIMIT 1
@@ -365,8 +365,7 @@ func (s *DeclarativeService) recordApply(ctx context.Context, tenant *Tenant, fi
 
 	// Ensure state table exists
 	if _, err := pool.Exec(ctx, `
-		CREATE SCHEMA IF NOT EXISTS migrations;
-		CREATE TABLE IF NOT EXISTS migrations.tenant_declarative_state (
+		CREATE TABLE IF NOT EXISTS platform.tenant_declarative_state (
 			id SERIAL PRIMARY KEY,
 			tenant_id uuid NOT NULL,
 			schema_fingerprint TEXT NOT NULL,
@@ -378,7 +377,7 @@ func (s *DeclarativeService) recordApply(ctx context.Context, tenant *Tenant, fi
 	}
 
 	_, err = pool.Exec(ctx, `
-		INSERT INTO migrations.tenant_declarative_state (tenant_id, schema_fingerprint, applied_by)
+		INSERT INTO platform.tenant_declarative_state (tenant_id, schema_fingerprint, applied_by)
 		VALUES ($1, $2, 'fluxbase')
 	`, tenant.ID, fingerprint)
 

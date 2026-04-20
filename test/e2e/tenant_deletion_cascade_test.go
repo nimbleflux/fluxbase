@@ -58,7 +58,7 @@ func TestTenantDeletion_CascadeCleanup(t *testing.T) {
 	assert.Equal(t, int64(1), rowsBefore[0]["cnt"].(int64), "job function should exist before deletion")
 
 	// Delete the tenant via API
-	delResp := tc.NewRequest("DELETE", "/api/v1/admin/tenants/"+tenantID).
+	delResp := tc.NewRequest("DELETE", "/api/v1/admin/tenants/"+tenantID+"?hard=true").
 		WithAuth(token).
 		Send()
 	require.True(t, delResp.Status() < 300,
