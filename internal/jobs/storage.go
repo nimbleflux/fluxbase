@@ -834,7 +834,7 @@ func (s *Storage) ListJobs(ctx context.Context, filters *JobFilters) ([]*Job, er
 	}
 
 	var jobs []*Job
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return err
@@ -1005,7 +1005,7 @@ func (s *Storage) ListJobsAdmin(ctx context.Context, filters *JobFilters) ([]*Jo
 	var jobs []*Job
 
 	// Use service role with tenant context (admin endpoint)
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return err
