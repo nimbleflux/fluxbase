@@ -149,10 +149,16 @@ test.describe("Tenant Resource Isolation", () => {
 
     // List jobs in both tenants — just verify the endpoint works
     const jobsA = await rawListJobs(adminToken, defaultTenantId);
-    expect(jobsA.status).toBeLessThan(300);
+    expect(
+      jobsA.status,
+      `Jobs A list failed: ${JSON.stringify(jobsA.body)}`,
+    ).toBeLessThan(300);
 
     const jobsB = await rawListJobs(adminToken, thirdTenantId);
-    expect(jobsB.status).toBeLessThan(300);
+    expect(
+      jobsB.status,
+      `Jobs B list failed: ${JSON.stringify(jobsB.body)}`,
+    ).toBeLessThan(300);
   });
 
   // ────────────────────────────────────────────────────────────────
