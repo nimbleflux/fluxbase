@@ -305,75 +305,10 @@ func (s *DashboardAuthService) Login(ctx context.Context, email, password string
 		IsInstanceAdmin: userRole == "instance_admin",
 	}
 
-	// Fetch user's tenant membership to get tenant_id and tenant_role
-	// Use default tenant for backward compatibility
-	var defaultTenantID *string
-	var tenantRole string
-
-	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		// First try to get the default tenant
-		var tenantID string
-		err := tx.QueryRow(ctx, `
-			SELECT t.id::text
-			FROM platform.tenants t
-			WHERE t.is_default = true AND t.deleted_at IS NULL
-			LIMIT 1
-		`).Scan(&tenantID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				// No default tenant, try first tenant user is assigned to
-				return tx.QueryRow(ctx, `
-					SELECT taa.tenant_id::text
-					FROM platform.tenant_admin_assignments taa
-					INNER JOIN platform.tenants t ON t.id = taa.tenant_id
-					WHERE taa.user_id = $1 AND t.deleted_at IS NULL
-					ORDER BY t.is_default DESC, t.created_at ASC
-					LIMIT 1
-				`, user.ID).Scan(&tenantID)
-			}
-			return err
-		}
-		defaultTenantID = &tenantID
-
-		// Check if user is assigned to this tenant
-		var isAssigned bool
-		err = tx.QueryRow(ctx, `
-			SELECT EXISTS(
-				SELECT 1 FROM platform.tenant_admin_assignments
-				WHERE tenant_id = $1 AND user_id = $2
-			)
-		`, tenantID, user.ID).Scan(&isAssigned)
-		if err != nil {
-			return err
-		}
-
-		if isAssigned {
-			tenantRole = "tenant_admin"
-		} else {
-			// User is not assigned to default tenant, try any tenant they're assigned to
-			err = tx.QueryRow(ctx, `
-				SELECT taa.tenant_id::text
-				FROM platform.tenant_admin_assignments taa
-				INNER JOIN platform.tenants t ON t.id = taa.tenant_id
-				WHERE taa.user_id = $1 AND t.deleted_at IS NULL
-				ORDER BY t.is_default DESC, t.created_at ASC
-				LIMIT 1
-			`, user.ID).Scan(&tenantID)
-			if err == nil {
-				defaultTenantID = &tenantID
-				tenantRole = "tenant_admin"
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		log.Debug().Err(err).Str("user_id", user.ID.String()).Msg("Failed to get tenant membership, using default")
-		// Continue without tenant context - will fall back to default tenant in RLS
-	}
-
-	if defaultTenantID != nil {
-		tenantOpts.TenantID = defaultTenantID
-		tenantOpts.TenantRole = tenantRole
+	membership := s.resolveTenantMembership(ctx, user.ID)
+	if membership.tenantID != nil {
+		tenantOpts.TenantID = membership.tenantID
+		tenantOpts.TenantRole = membership.tenantRole
 	}
 
 	// Generate JWT token pair with tenant context (access + refresh)
@@ -795,6 +730,76 @@ func generateBackupCode() (string, error) {
 	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(bytes), nil
 }
 
+type tenantMembership struct {
+	tenantID   *string
+	tenantRole string
+}
+
+func (s *DashboardAuthService) resolveTenantMembership(ctx context.Context, userID uuid.UUID) tenantMembership {
+	var membership tenantMembership
+	var tenantID string
+	var tenantRole string
+
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, `
+			SELECT t.id::text
+			FROM platform.tenants t
+			WHERE t.is_default = true AND t.deleted_at IS NULL
+			LIMIT 1
+		`).Scan(&tenantID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return tx.QueryRow(ctx, `
+					SELECT taa.tenant_id::text
+					FROM platform.tenant_admin_assignments taa
+					INNER JOIN platform.tenants t ON t.id = taa.tenant_id
+					WHERE taa.user_id = $1 AND t.deleted_at IS NULL
+					ORDER BY t.is_default DESC, t.created_at ASC
+					LIMIT 1
+				`, userID).Scan(&tenantID)
+			}
+			return err
+		}
+
+		var isAssigned bool
+		err = tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM platform.tenant_admin_assignments
+				WHERE tenant_id = $1 AND user_id = $2
+			)
+		`, tenantID, userID).Scan(&isAssigned)
+		if err != nil {
+			return err
+		}
+
+		if isAssigned {
+			tenantRole = "tenant_admin"
+		} else {
+			err = tx.QueryRow(ctx, `
+				SELECT taa.tenant_id::text
+				FROM platform.tenant_admin_assignments taa
+				INNER JOIN platform.tenants t ON t.id = taa.tenant_id
+				WHERE taa.user_id = $1 AND t.deleted_at IS NULL
+				ORDER BY t.is_default DESC, t.created_at ASC
+				LIMIT 1
+			`, userID).Scan(&tenantID)
+			if err == nil {
+				tenantRole = "tenant_admin"
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		log.Debug().Err(err).Str("user_id", userID.String()).Msg("Failed to get tenant membership, using default")
+	}
+
+	if tenantID != "" {
+		membership.tenantID = &tenantID
+		membership.tenantRole = tenantRole
+	}
+	return membership
+}
+
 // SSOIdentity represents a linked SSO identity for a dashboard user
 type SSOIdentity struct {
 	ID             uuid.UUID `json:"id"`
@@ -1158,8 +1163,19 @@ func (s *DashboardAuthService) LoginViaSSO(ctx context.Context, user *DashboardU
 		userRole = "dashboard_user"
 	}
 
-	// Generate JWT token pair
-	accessToken, refreshToken, sessionID, err := s.jwtManager.GenerateTokenPair(user.ID.String(), user.Email, userRole, userMetadata, nil)
+	// Determine tenant context for JWT claims
+	tenantOpts := TenantTokenOptions{
+		IsInstanceAdmin: userRole == "instance_admin",
+	}
+
+	membership := s.resolveTenantMembership(ctx, user.ID)
+	if membership.tenantID != nil {
+		tenantOpts.TenantID = membership.tenantID
+		tenantOpts.TenantRole = membership.tenantRole
+	}
+
+	// Generate JWT token pair with tenant context
+	accessToken, refreshToken, sessionID, err := s.jwtManager.GenerateTokenPairWithTenant(user.ID.String(), user.Email, userRole, userMetadata, nil, tenantOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate tokens: %w", err)
 	}

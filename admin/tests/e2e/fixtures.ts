@@ -1,5 +1,10 @@
 /* eslint-disable react-hooks/rules-of-hooks, no-empty-pattern */
-import { test as base, expect, type Page } from "@playwright/test";
+import {
+  test as base,
+  expect,
+  type Page,
+  type Browser,
+} from "@playwright/test";
 import { rawLogin, listTenants } from "./helpers/api";
 import { getUserByEmail } from "./helpers/db";
 import {
@@ -79,19 +84,17 @@ async function browserLogin(
 
   // Select the default tenant so tenant-scoped pages work.
   // Only instance admins see the tenant selector — tenant admins don't.
-  // Wait briefly for the UI to render, then attempt tenant selection.
-  await page.waitForTimeout(500);
   try {
     const tenantCombo = page.getByRole("combobox", { name: /select tenant/i });
-    if (await tenantCombo.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    if (await tenantCombo.isVisible({ timeout: 500 }).catch(() => false)) {
       const comboText = await tenantCombo.innerText().catch(() => "");
       if (comboText.includes("Select tenant")) {
         await tenantCombo.click();
         const listbox = page.getByRole("listbox");
-        await expect(listbox).toBeVisible({ timeout: 3_000 });
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
         const firstOption = page.getByRole("option").first();
         await firstOption.click();
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(200);
       }
     }
   } catch {
@@ -140,10 +143,19 @@ async function _setupImpersonation(
 }
 
 export const test = base.extend<Fixtures>({
-  adminPage: async ({ page }, use) => {
-    await browserLogin(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-    await use(page);
-  },
+  // Worker-scoped: logs in once per worker, reused across all tests in that worker.
+  // With workers:2, at most 2 concurrent browser logins happen (one per worker),
+  // eliminating the race condition where two first-tests log in simultaneously.
+  adminPage: [
+    async ({ browser }, use) => {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await browserLogin(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+      await use(page);
+      await context.close();
+    },
+    { scope: "worker" },
+  ],
 
   adminToken: async ({}, use) => {
     const token = await getAdminToken();
@@ -152,12 +164,20 @@ export const test = base.extend<Fixtures>({
 
   /**
    * Provides a tenant admin page (logged in as tenant admin).
-   * Requires global setup to have created the second tenant + tenant admin user.
+   * Worker-scoped to avoid repeated browser logins that cause race conditions
+   * under parallel execution. Requires global setup to have created the
+   * second tenant + tenant admin user.
    */
-  tenantAdminPage: async ({ page }, use) => {
-    await browserLogin(page, TENANT_ADMIN_EMAIL, TENANT_ADMIN_PASSWORD);
-    await use(page);
-  },
+  tenantAdminPage: [
+    async ({ browser }, use) => {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await browserLogin(page, TENANT_ADMIN_EMAIL, TENANT_ADMIN_PASSWORD);
+      await use(page);
+      await context.close();
+    },
+    { scope: "worker" },
+  ],
 
   tenantAdminToken: async ({ tenantAdminPage }, use) => {
     const token = await tenantAdminPage.evaluate(() =>

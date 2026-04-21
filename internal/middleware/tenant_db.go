@@ -125,8 +125,9 @@ func resolveTenantID(c fiber.Ctx, userID string, isInstanceAdmin bool, claims *a
 			if _, err := storage.GetTenant(c.Context(), headerTenant); err == nil {
 				return headerTenant, "header"
 			}
+			log.Debug().Str("tenant", headerTenant).Msg("resolveTenantID: X-FB-Tenant header value does not match any known tenant")
 		}
-		return headerTenant, "header"
+		return "", ""
 	}
 
 	if claims != nil && claims.TenantID != nil && *claims.TenantID != "" {

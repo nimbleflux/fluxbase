@@ -181,8 +181,10 @@ func (s *Server) buildDashboardAuthRouteDeps() *routes.DashboardAuthDeps {
 
 func (s *Server) buildOpenAPIRouteDeps() *routes.OpenAPIDeps {
 	return &routes.OpenAPIDeps{
-		OptionalAuth:   middleware.OptionalAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
-		GetOpenAPISpec: NewOpenAPIHandler(s.db).GetOpenAPISpec,
+		OptionalAuth:    middleware.OptionalAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
+		TenantContext:   s.Middleware.Tenant,
+		TenantDBContext: s.Middleware.TenantDB,
+		GetOpenAPISpec:  NewOpenAPIHandler(s.db).GetOpenAPISpec,
 	}
 }
 
@@ -427,6 +429,7 @@ func (s *Server) buildSyncRouteDeps() *routes.SyncDeps {
 	deps := &routes.SyncDeps{
 		RequireSyncAuth: UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db.Pool()),
 		RequireRole:     RequireRole("admin", "instance_admin", "service_role"),
+		TenantContext:   s.Middleware.Tenant,
 	}
 
 	// Functions sync
@@ -561,6 +564,7 @@ func (s *Server) buildMigrationsRouteDeps() *routes.MigrationsDeps {
 			s.sharedMiddlewareStorage,
 			tenantPoolProvider,
 		),
+		TenantContext:     s.Middleware.Tenant,
 		RequireRole:       RequireRole,
 		CreateMigration:   s.Schema.Migrations.CreateMigration,
 		ListMigrations:    s.Schema.Migrations.ListMigrations,

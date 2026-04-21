@@ -148,7 +148,7 @@ CREATE INDEX IF NOT EXISTS idx_instance_settings_tenant_id ON instance_settings 
 -- Name: instance_settings; Type: RLS; Schema: -; Owner: -
 --
 
-ALTER TABLE instance_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE instance_settings FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: instance_settings_delete; Type: POLICY; Schema: -; Owner: -

@@ -16,18 +16,33 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
+type TenantDatabaseInfo struct {
+	DBName    string
+	Slug      string
+	IsDefault bool
+}
+
+type TenantResolver interface {
+	GetTenantDatabase(ctx context.Context, tenantID uuid.UUID) (*TenantDatabaseInfo, error)
+}
+
+type FDWRepairer interface {
+	RepairFDWForBranch(ctx context.Context, branchDBURL string, tenantID uuid.UUID) error
+}
+
 // Manager handles database operations for branches
 type Manager struct {
-	storage    *Storage
-	config     config.BranchingConfig
-	adminPool  *pgxpool.Pool // Connection pool with CREATE DATABASE privileges
-	mainDBName string        // Name of the main database
-	mainDBURL  string        // Connection URL for the main database
+	storage        *Storage
+	config         config.BranchingConfig
+	adminPool      *pgxpool.Pool // Connection pool with CREATE DATABASE privileges
+	mainDBName     string        // Name of the main database
+	mainDBURL      string        // Connection URL for the main database
+	tenantResolver TenantResolver
+	fdwRepairer    FDWRepairer
 }
 
 // NewManager creates a new branch manager
 func NewManager(storage *Storage, cfg config.BranchingConfig, mainPool *pgxpool.Pool, mainDBURL string) (*Manager, error) {
-	// Parse the main database URL to get the database name
 	parsedURL, err := url.Parse(mainDBURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse main database URL: %w", err)
@@ -38,19 +53,15 @@ func NewManager(storage *Storage, cfg config.BranchingConfig, mainPool *pgxpool.
 		mainDBName = "fluxbase"
 	}
 
-	// Use main database credentials to connect to 'postgres' database for admin operations
-	// This requires the database user to have CREATE DATABASE privilege
 	adminParsed := *parsedURL
 	adminParsed.Path = "/postgres"
 	adminURL := adminParsed.String()
 
-	// Create admin connection pool
 	adminConfig, err := pgxpool.ParseConfig(adminURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse admin database URL: %w", err)
 	}
 
-	// Admin pool should have minimal connections since it's only for CREATE/DROP
 	adminConfig.MaxConns = 2
 	adminConfig.MinConns = 0
 
@@ -66,6 +77,14 @@ func NewManager(storage *Storage, cfg config.BranchingConfig, mainPool *pgxpool.
 		mainDBName: mainDBName,
 		mainDBURL:  mainDBURL,
 	}, nil
+}
+
+func (m *Manager) SetTenantResolver(resolver TenantResolver) {
+	m.tenantResolver = resolver
+}
+
+func (m *Manager) SetFDWRepairer(repairer FDWRepairer) {
+	m.fdwRepairer = repairer
 }
 
 // CreateBranch creates a new database branch
@@ -456,7 +475,6 @@ func (m *Manager) getTenantSlug(ctx context.Context, tenantID uuid.UUID) (string
 
 // createDatabase creates a new database for a branch
 func (m *Manager) createDatabase(ctx context.Context, branch *Branch, parentBranchID *uuid.UUID) error {
-	// Sanitize database name for SQL
 	dbName := sanitizeIdentifier(branch.DatabaseName)
 
 	switch branch.DataCloneMode {
@@ -467,7 +485,6 @@ func (m *Manager) createDatabase(ctx context.Context, branch *Branch, parentBran
 	case DataCloneModeSeedData:
 		return m.createDatabaseSeedData(ctx, branch, parentBranchID)
 	default:
-		// Create empty database
 		query := fmt.Sprintf("CREATE DATABASE %s", dbName)
 		_, err := m.adminPool.Exec(ctx, query)
 		if err != nil {
@@ -477,52 +494,64 @@ func (m *Manager) createDatabase(ctx context.Context, branch *Branch, parentBran
 	}
 }
 
+// resolveTemplateDatabase determines the correct database to use as a TEMPLATE
+// for cloning. For tenant branches with a separate database, this returns the
+// tenant's database name. Otherwise, it returns the parent branch's database.
+func (m *Manager) resolveTemplateDatabase(ctx context.Context, branch *Branch, parentBranchID *uuid.UUID) (string, error) {
+	// If the branch belongs to a tenant and we have a tenant resolver, check
+	// if the tenant has a separate database to clone from.
+	if branch.TenantID != nil && m.tenantResolver != nil {
+		tenantInfo, err := m.tenantResolver.GetTenantDatabase(ctx, *branch.TenantID)
+		if err != nil {
+			log.Warn().Err(err).Str("tenant_id", branch.TenantID.String()).
+				Msg("Failed to resolve tenant database, falling back to parent branch")
+		} else if tenantInfo != nil && !tenantInfo.IsDefault && tenantInfo.DBName != "" {
+			log.Info().
+				Str("tenant_db", tenantInfo.DBName).
+				Str("branch", branch.Slug).
+				Msg("Cloning branch from tenant's separate database")
+			return tenantInfo.DBName, nil
+		}
+	}
+
+	// Fall back to parent branch's database (original behavior)
+	if parentBranchID == nil {
+		return m.mainDBName, nil
+	}
+	parent, err := m.storage.GetBranch(ctx, *parentBranchID, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get parent branch: %w", err)
+	}
+	return parent.DatabaseName, nil
+}
+
 // createDatabaseSchemaOnly creates a database with schema only (no data)
 func (m *Manager) createDatabaseSchemaOnly(ctx context.Context, branch *Branch, parentBranchID *uuid.UUID) error {
 	dbName := sanitizeIdentifier(branch.DatabaseName)
 
-	// Create the database first
-	createQuery := fmt.Sprintf("CREATE DATABASE %s", dbName)
-	_, err := m.adminPool.Exec(ctx, createQuery)
+	templateDB, err := m.resolveTemplateDatabase(ctx, branch, parentBranchID)
 	if err != nil {
-		return fmt.Errorf("failed to create database: %w", err)
+		return err
 	}
 
-	// If no parent, we're done
-	if parentBranchID == nil {
+	createFromTemplate := fmt.Sprintf("CREATE DATABASE %s TEMPLATE %s",
+		dbName, sanitizeIdentifier(templateDB))
+
+	_, err = m.adminPool.Exec(ctx, createFromTemplate)
+	if err != nil {
+		log.Warn().Err(err).Str("template", templateDB).
+			Msg("Failed to create from template, creating empty database")
+		createQuery := fmt.Sprintf("CREATE DATABASE %s", dbName)
+		_, err = m.adminPool.Exec(ctx, createQuery)
+		if err != nil {
+			return fmt.Errorf("failed to create database: %w", err)
+		}
 		return nil
 	}
 
-	// Get parent branch
-	parent, err := m.storage.GetBranch(ctx, *parentBranchID, nil)
-	if err != nil {
-		return fmt.Errorf("failed to get parent branch: %w", err)
-	}
-
-	// Use pg_dump with schema-only flag to copy schema
-	// This requires pg_dump/pg_restore to be available in the environment
-	// For now, we'll use CREATE DATABASE ... TEMPLATE approach if parent is main
-	if parent.Type == BranchTypeMain {
-		// Drop the empty database we just created
-		dropQuery := fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName)
-		_, _ = m.adminPool.Exec(ctx, dropQuery)
-
-		// Create from template (schema only via empty template with schema)
-		// Note: TEMPLATE copies everything, so for schema-only we need pg_dump approach
-		// For simplicity, let's just create from template for now
-		createFromTemplate := fmt.Sprintf("CREATE DATABASE %s TEMPLATE %s",
-			dbName, sanitizeIdentifier(parent.DatabaseName))
-
-		_, err = m.adminPool.Exec(ctx, createFromTemplate)
-		if err != nil {
-			// If template approach fails (e.g., active connections), try empty db
-			log.Warn().Err(err).Msg("Failed to create from template, creating empty database")
-			createQuery := fmt.Sprintf("CREATE DATABASE %s", dbName)
-			_, err = m.adminPool.Exec(ctx, createQuery)
-			if err != nil {
-				return fmt.Errorf("failed to create database: %w", err)
-			}
-		}
+	if err := m.repairFDW(ctx, branch); err != nil {
+		log.Warn().Err(err).Str("branch", branch.Slug).
+			Msg("Failed to repair FDW after cloning, branch may have stale FDW mappings")
 	}
 
 	return nil
@@ -532,34 +561,25 @@ func (m *Manager) createDatabaseSchemaOnly(ctx context.Context, branch *Branch, 
 func (m *Manager) createDatabaseFullClone(ctx context.Context, branch *Branch, parentBranchID *uuid.UUID) error {
 	dbName := sanitizeIdentifier(branch.DatabaseName)
 
-	// If no parent, just create empty database
-	if parentBranchID == nil {
-		createQuery := fmt.Sprintf("CREATE DATABASE %s", dbName)
-		_, err := m.adminPool.Exec(ctx, createQuery)
-		if err != nil {
-			return fmt.Errorf("failed to create database: %w", err)
-		}
-		return nil
-	}
-
-	// Get parent branch
-	parent, err := m.storage.GetBranch(ctx, *parentBranchID, nil)
+	templateDB, err := m.resolveTemplateDatabase(ctx, branch, parentBranchID)
 	if err != nil {
-		return fmt.Errorf("failed to get parent branch: %w", err)
+		return err
 	}
 
-	// Use CREATE DATABASE ... TEMPLATE for full clone
-	// Note: This requires no active connections to the template database
 	createFromTemplate := fmt.Sprintf("CREATE DATABASE %s TEMPLATE %s",
-		dbName, sanitizeIdentifier(parent.DatabaseName))
+		dbName, sanitizeIdentifier(templateDB))
 
 	_, err = m.adminPool.Exec(ctx, createFromTemplate)
 	if err != nil {
-		// Check if it's because of active connections
 		if strings.Contains(err.Error(), "being accessed by other users") {
 			return fmt.Errorf("cannot clone database: parent database has active connections. Try schema_only mode instead: %w", err)
 		}
 		return fmt.Errorf("failed to create database from template: %w", err)
+	}
+
+	if err := m.repairFDW(ctx, branch); err != nil {
+		log.Warn().Err(err).Str("branch", branch.Slug).
+			Msg("Failed to repair FDW after cloning, branch may have stale FDW mappings")
 	}
 
 	return nil
@@ -660,6 +680,24 @@ func (m *Manager) getBranchConnectionPool(ctx context.Context, branch *Branch) (
 	}
 
 	return pool, nil
+}
+
+// repairFDW repairs the Foreign Data Wrapper configuration in a branch database
+// after cloning from a tenant database. When a tenant database with FDW is cloned
+// via TEMPLATE, the foreign table definitions and server are copied but user
+// mappings may be stale. This method recreates the FDW user mapping if an
+// FDWRepairer is available and the branch belongs to a tenant.
+func (m *Manager) repairFDW(ctx context.Context, branch *Branch) error {
+	if branch.TenantID == nil || m.fdwRepairer == nil {
+		return nil
+	}
+
+	connURL, err := m.GetBranchConnectionURL(branch)
+	if err != nil {
+		return fmt.Errorf("failed to get branch connection URL for FDW repair: %w", err)
+	}
+
+	return m.fdwRepairer.RepairFDWForBranch(ctx, connURL, *branch.TenantID)
 }
 
 // dropDatabase drops a database

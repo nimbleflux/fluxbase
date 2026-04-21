@@ -619,8 +619,8 @@ func TestMapKeyTypetoRole(t *testing.T) {
 		{"global_service constant", keys.KeyTypeGlobalService, "service_role"},
 		{"publishable constant", keys.KeyTypePublishable, "authenticated"},
 		{"legacy service type", "service", "service_role"},
-		{"unknown type defaults to service_role", "unknown", "service_role"},
-		{"empty type defaults to service_role", "", "service_role"},
+		{"unknown type defaults to anon", "unknown", "anon"},
+		{"empty type defaults to anon", "", "anon"},
 	}
 
 	for _, tt := range tests {

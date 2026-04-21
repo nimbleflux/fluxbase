@@ -4,6 +4,7 @@ import "github.com/gofiber/fiber/v3"
 
 type MigrationsDeps struct {
 	SecurityMiddleware fiber.Handler
+	TenantContext      fiber.Handler
 	RequireRole        func(...string) fiber.Handler
 	CreateMigration    fiber.Handler
 	ListMigrations     fiber.Handler
@@ -35,6 +36,9 @@ func BuildMigrationsRoutes(deps *MigrationsDeps) *RouteGroup {
 			{Method: "POST", Path: "/apply-pending", Handler: deps.ApplyPending, Summary: "Apply pending migrations", Auth: AuthServiceKey, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 			{Method: "POST", Path: "/sync", Handler: deps.SyncMigrations, Summary: "Sync migrations", Auth: AuthServiceKey, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
 			{Method: "GET", Path: "/:name/executions", Handler: deps.GetExecutions, Summary: "Get execution history", Auth: AuthServiceKey, Roles: []string{"admin", "instance_admin", "tenant_admin"}},
+		},
+		Middlewares: []Middleware{
+			{Name: "TenantContext", Handler: deps.TenantContext},
 		},
 		AuthMiddlewares: &AuthMiddlewares{
 			ServiceKey: deps.SecurityMiddleware,

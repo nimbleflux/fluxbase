@@ -13,6 +13,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
@@ -732,6 +733,49 @@ func (m *Manager) UpgradeAllTenantsFDW(ctx context.Context) {
 			log.Error().Err(err).Str("tenant", tenants[i].Slug).Msg("Failed to upgrade tenant with FDW")
 		}
 	}
+}
+
+// RepairFDWForBranch repairs FDW configuration in a branch database that was
+// cloned from a tenant database. After cloning via TEMPLATE, the branch database
+// inherits foreign table definitions but the user mapping may reference stale
+// credentials. This method recreates the user mapping with the tenant's FDW role.
+func (m *Manager) RepairFDWForBranch(ctx context.Context, branchDBURL string, tenantID uuid.UUID) error {
+	if m.fdwConfig == nil {
+		log.Debug().Msg("FDW not configured, skipping FDW repair for branch")
+		return nil
+	}
+
+	tenantPool, err := m.router.GetPool(tenantID.String())
+	if err != nil {
+		return fmt.Errorf("failed to get tenant pool for FDW role lookup: %w", err)
+	}
+
+	fdwRole, err := GetFDWRoleForTenant(ctx, tenantPool, tenantID.String())
+	if err != nil {
+		return fmt.Errorf("failed to get FDW role for tenant: %w", err)
+	}
+
+	branchPool, err := pgxpool.New(ctx, branchDBURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to branch database: %w", err)
+	}
+	defer branchPool.Close()
+
+	appUser := extractDBUser(branchDBURL)
+	if appUser == "" {
+		appUser = "fluxbase"
+	}
+
+	if err := CreateFDWUserMapping(ctx, branchPool, appUser, fdwRole); err != nil {
+		return fmt.Errorf("failed to create FDW user mapping in branch: %w", err)
+	}
+
+	log.Info().
+		Str("tenant_id", tenantID.String()).
+		Str("fdw_role", fdwRole.RoleName).
+		Msg("Repaired FDW user mapping in branch database")
+
+	return nil
 }
 
 // replaceDBName constructs a database URL for a specific database name

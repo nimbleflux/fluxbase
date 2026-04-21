@@ -121,12 +121,14 @@ test/e2e/                # End-to-end tests
 
 **Database Branching:**
 
-- `internal/branching/manager.go` - CREATE/DROP DATABASE operations
-- `internal/branching/storage.go` - Branch metadata CRUD
+- `internal/branching/manager.go` - Branch lifecycle, tenant-aware clone source resolution, FDW repair
+- `internal/branching/storage.go` - Branch metadata CRUD (tenant-scoped via RLS)
 - `internal/branching/router.go` - Connection pool per branch
+- `internal/branching/types.go` - `TenantResolver`, `FDWRepairer` interfaces, tenant-aware DB name generation
 - `internal/api/branch_handler.go` - REST API for branch management
 - `internal/api/github_webhook_handler.go` - GitHub PR automation
 - `internal/middleware/branch.go` - Branch context extraction
+- `internal/tenantdb/fdw.go` - `GetFDWRoleForTenant`, `RepairFDWForBranch` for branch FDW repair
 - `cli/cmd/branch.go` - CLI commands
 
 **GraphQL:**
@@ -182,6 +184,66 @@ test/e2e/                # End-to-end tests
 - `internal/middleware/migrations_security.go` - Migrations API auth, IP allowlist, rate limiting
 - `internal/database/connection.go` - Filesystem migration runner (`runUserMigrations`)
 - `cli/cmd/migrations.go` - CLI commands (`fluxbase migrations sync/list/create/apply/rollback`)
+
+## Branching + Multi-Tenancy Interaction
+
+### Pool Priority Chain
+
+When a request carries both `X-FB-Tenant` and `X-Fluxbase-Branch` headers, the pool selection follows this priority:
+
+```
+1. Branch pool (branch-specific database)
+2. Tenant pool (tenant's separate database via FDW)
+3. Main pool (shared application database)
+```
+
+Implemented in `internal/middleware/tenant_db.go:GetPoolForSchema()`.
+
+### Branch Clone Source
+
+When creating a branch for a tenant that has a separate database (`DBName` is set), the branch is cloned from the **tenant's database** (not the main database). For the default tenant (no separate DB), branches clone from the main database as before.
+
+Key interfaces:
+- `branching.TenantResolver` — resolves tenant database info for branch cloning
+- `branching.FDWRepairer` — repairs FDW mappings after cloning a tenant database
+
+The clone flow:
+1. `Manager.resolveTemplateDatabase()` checks if the tenant has a separate DB via `TenantResolver`
+2. If yes, uses `CREATE DATABASE ... TEMPLATE <tenant_db>` instead of the main DB
+3. After cloning, `repairFDW()` recreates the FDW user mapping in the branch DB using the tenant's FDW role credentials
+
+### FDW + Branching
+
+Tenant databases use `postgres_fdw` to access shared schemas (auth, storage, branching, etc.) from the main database. When a tenant database is cloned for a branch:
+- Foreign table definitions are copied but user mappings may be stale
+- `tenantdb.Manager.RepairFDWForBranch()` recreates the user mapping with the tenant's FDW role
+- The branch's FDW connection correctly enforces RLS with the tenant's `app.current_tenant_id`
+
+FDW schemas imported into tenant databases: `platform`, `auth`, `storage`, `jobs`, `functions`, `realtime`, `ai`, `rpc`, `branching`, `logging`, `mcp`
+
+### Default Tenant
+
+- Slug is hardcoded as `"default"`, identified by `is_default = true` in `platform.tenants`
+- `FLUXBASE_TENANTS_DEFAULT_NAME` configures the display name only (not the slug)
+- Uses the main database pool (no separate database, no FDW setup needed)
+- `UsesMainDatabase()` returns true when `DBName` is nil or empty
+
+### Route Registry Tenant Coverage
+
+Most route groups include `TenantMiddleware` for tenant context. Groups without it are intentionally tenant-agnostic:
+- `health` — system-level health checks
+- `dashboard-auth` — pre-authentication endpoints
+- `github-webhook` — uses repository-to-tenant mapping (no user auth)
+- `internal-ai` — server-internal only (`RequireInternal`)
+- `invitations` — token-based, pre-tenant-context
+- `settings` (base) — global app settings via RLS
+
+### Key Branching + Tenancy Files
+
+- `internal/branching/manager.go` - Branch lifecycle, tenant-aware clone source resolution
+- `internal/tenantdb/fdw.go` - FDW setup/repair, `GetFDWRoleForTenant`, `RepairFDWForBranch`
+- `internal/api/server.go` - Wires `TenantResolver` and `FDWRepairer` to branch manager
+- `internal/middleware/tenant_db.go` - Pool priority (branch > tenant > main)
 
 ## Common Commands
 
@@ -301,12 +363,15 @@ mcp:
 branching:
   enabled: true
   max_branches_per_user: 5
+  max_branches_per_tenant: 20
   max_total_branches: 50
   default_data_clone_mode: schema_only
   auto_delete_after: 24h
   database_prefix: branch_
   admin_database_url: "postgresql://..."
 ```
+
+When multi-tenancy is enabled, branches for tenants with separate databases clone from the tenant's database (not the main DB). The FDW user mapping is automatically repaired after cloning.
 
 **Logging Backend Configuration:**
 

@@ -5,8 +5,10 @@ import (
 )
 
 type OpenAPIDeps struct {
-	OptionalAuth   fiber.Handler
-	GetOpenAPISpec fiber.Handler
+	OptionalAuth    fiber.Handler
+	TenantContext   fiber.Handler
+	TenantDBContext fiber.Handler
+	GetOpenAPISpec  fiber.Handler
 }
 
 func BuildOpenAPIRoutes(deps *OpenAPIDeps) *RouteGroup {
@@ -20,6 +22,10 @@ func BuildOpenAPIRoutes(deps *OpenAPIDeps) *RouteGroup {
 				Summary: "OpenAPI specification (full spec for admins, minimal for others)",
 				Auth:    AuthOptional,
 			},
+		},
+		Middlewares: []Middleware{
+			{Name: "TenantContext", Handler: deps.TenantContext},
+			{Name: "TenantDBContext", Handler: deps.TenantDBContext},
 		},
 		AuthMiddlewares: &AuthMiddlewares{
 			Optional: deps.OptionalAuth,

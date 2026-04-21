@@ -1134,7 +1134,8 @@ func mapKeyTypetoRole(keyType string) string {
 	case keys.KeyTypePublishable:
 		return "authenticated"
 	default:
-		return "service_role"
+		log.Warn().Str("key_type", keyType).Msg("mapKeyTypetoRole: unrecognized key type, defaulting to anon")
+		return "anon"
 	}
 }
 

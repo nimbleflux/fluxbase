@@ -170,6 +170,50 @@ func DropFDWRole(ctx context.Context, adminPool *pgxpool.Pool, tenantID string) 
 	}
 }
 
+// GetFDWRoleForTenant retrieves the FDW role credentials for a tenant by reading
+// the user mapping from the tenant database. The role name is deterministic based
+// on the tenant ID, and the password is extracted from the existing user mapping.
+func GetFDWRoleForTenant(ctx context.Context, tenantPool *pgxpool.Pool, tenantID string) (FDWRoleCredentials, error) {
+	suffix := tenantID
+	if len(suffix) > 8 {
+		suffix = suffix[:8]
+	}
+	roleName := fmt.Sprintf("fdw_tenant_%s", suffix)
+
+	var umOptions string
+	err := tenantPool.QueryRow(ctx, `
+		SELECT umoptions::text FROM pg_user_mapping
+		WHERE umserver = (SELECT oid FROM pg_foreign_server WHERE srvname = $1)
+		LIMIT 1
+	`, fdwServerName).Scan(&umOptions)
+	if err != nil {
+		return FDWRoleCredentials{}, fmt.Errorf("failed to read FDW user mapping: %w", err)
+	}
+
+	password := extractOptionValue(umOptions, "password")
+	if password == "" {
+		return FDWRoleCredentials{}, fmt.Errorf("FDW user mapping has no password for tenant %s", tenantID)
+	}
+
+	return FDWRoleCredentials{
+		RoleName: roleName,
+		Password: password,
+	}, nil
+}
+
+// extractOptionValue extracts a value from pg_user_mapping options string format.
+// The umoptions column returns strings like {"user=fdw_tenant_xxx","password=yyy"}
+func extractOptionValue(options, key string) string {
+	prefix := key + "="
+	for _, part := range strings.Split(strings.Trim(options, "{}"), ",") {
+		part = strings.Trim(part, "\"")
+		if strings.HasPrefix(part, prefix) {
+			return strings.TrimPrefix(part, prefix)
+		}
+	}
+	return ""
+}
+
 // SetupFDW configures postgres_fdw in a tenant database so it can access
 // tables from the main database. It creates a foreign server, user mapping
 // (using the per-tenant FDW role for RLS), and imports foreign tables from
