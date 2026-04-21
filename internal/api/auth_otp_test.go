@@ -48,10 +48,7 @@ func setupAuthTestServer(t *testing.T) (*fiber.App, *auth.Service, *database.Con
 		dbPassword = "fluxbase_app_password"
 	}
 
-	dbDatabase := os.Getenv("FLUXBASE_DATABASE_DATABASE")
-	if dbDatabase == "" {
-		dbDatabase = "fluxbase_test"
-	}
+	dbDatabase := "fluxbase_test"
 
 	// Create database configuration for testing
 	dbConfig := config.DatabaseConfig{

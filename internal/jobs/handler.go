@@ -928,6 +928,11 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 
 	ctx := middleware.CtxWithTenant(c)
 
+	// syncCtx uses service_role (no tenant) so find-existing/update/delete
+	// operations can find and modify records created before multi-tenancy
+	// that have NULL tenant_id. Creates still use ctx for correct tenant_id.
+	syncCtx := database.ContextWithTenant(ctx, "")
+
 	// Get user ID from context (if authenticated)
 	var createdBy *uuid.UUID
 	if userID := c.Locals("user_id"); userID != nil {
@@ -981,7 +986,7 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 	}
 
 	// Get all existing job functions in this namespace
-	existingFunctions, err := h.storage.ListJobFunctions(ctx, namespace)
+	existingFunctions, err := h.storage.ListJobFunctions(syncCtx, namespace)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to list existing job functions in namespace",
@@ -1154,7 +1159,7 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 				updatedFn.RequireRoles = spec.RequireRoles
 			}
 
-			if err := h.storage.UpdateJobFunction(ctx, updatedFn); err != nil {
+			if err := h.storage.UpdateJobFunction(syncCtx, updatedFn); err != nil {
 				errorList = append(errorList, fiber.Map{
 					"job":    spec.Name,
 					"error":  err.Error(),
@@ -1190,7 +1195,7 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 				Source:                 "api",
 			}
 
-			if err := h.storage.CreateJobFunction(ctx, fn); err != nil {
+			if err := h.storage.CreateJobFunction(syncCtx, fn); err != nil {
 				errorList = append(errorList, fiber.Map{
 					"job":    spec.Name,
 					"error":  err.Error(),
@@ -1205,7 +1210,7 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 	// Delete removed job functions (after successful creates/updates for safety)
 	if req.Options.DeleteMissing {
 		for _, name := range toDelete {
-			if err := h.storage.DeleteJobFunction(ctx, namespace, name); err != nil {
+			if err := h.storage.DeleteJobFunction(syncCtx, namespace, name); err != nil {
 				errorList = append(errorList, fiber.Map{
 					"job":    name,
 					"error":  err.Error(),

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Zap, Activity, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -64,6 +65,7 @@ function FunctionsPage() {
 
 function EdgeFunctionsTab() {
   const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
+  const queryClient = useQueryClient();
 
   // Tab state
   const [activeTab, setActiveTab] = useState<"executions" | "functions">(
@@ -71,8 +73,6 @@ function EdgeFunctionsTab() {
   );
 
   // Existing state
-  const [edgeFunctions, setEdgeFunctions] = useState<EdgeFunction[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isInvokeDialogOpen, setIsInvokeDialogOpen] = useState(false);
@@ -106,6 +106,19 @@ function EdgeFunctionsTab() {
   const [fetchingFunction, setFetchingFunction] = useState(false);
   const [namespaces, setNamespaces] = useState<string[]>(["default"]);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
+
+  // Functions list via TanStack Query
+  const {
+    data: edgeFunctions = [],
+    isLoading: loading,
+    refetch: refetchFunctions,
+  } = useQuery({
+    queryKey: ["edge-functions", selectedNamespace, currentTenantId],
+    queryFn: async () => {
+      const data = await functionsApi.list(selectedNamespace);
+      return data || [];
+    },
+  });
 
   // Execution detail dialog state
   const [showExecutionDetailDialog, setShowExecutionDetailDialog] =
@@ -177,34 +190,11 @@ function EdgeFunctionsTab() {
     setReloading(true);
     try {
       await reloadFunctionsFromDisk(true);
-      await fetchEdgeFunctions(false); // Refresh the list without reloading again
+      await refetchFunctions();
     } finally {
       setReloading(false);
     }
   };
-
-  const fetchEdgeFunctions = useCallback(
-    async (shouldReload = true, namespace?: string) => {
-      setLoading(true);
-      try {
-        // First, reload functions from disk (only on initial load or manual refresh)
-        if (shouldReload) {
-          await reloadFunctionsFromDisk();
-        }
-
-        const ns = namespace ?? selectedNamespace;
-        const data = await functionsApi.list(ns);
-        setEdgeFunctions(data || []);
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error("Error fetching edge functions:", error);
-        toast.error("Failed to fetch edge functions");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [selectedNamespace],
-  );
 
   // Fetch all executions for the executions tab
   const fetchAllExecutions = useCallback(async () => {
@@ -336,10 +326,6 @@ function EdgeFunctionsTab() {
     fetchNamespaces();
   }, [currentTenantId]); // Re-fetch when tenant changes
 
-  useEffect(() => {
-    fetchEdgeFunctions();
-  }, [fetchEdgeFunctions, selectedNamespace, currentTenantId]);
-
   // Fetch executions when tab changes or any fetch-related state changes
   useEffect(() => {
     if (activeTab === "executions") {
@@ -378,7 +364,7 @@ function EdgeFunctionsTab() {
       toast.success("Edge function created successfully");
       setIsCreateDialogOpen(false);
       resetForm();
-      fetchEdgeFunctions(false); // Don't reload from disk after creating
+      queryClient.invalidateQueries({ queryKey: ["edge-functions"] });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Error creating edge function:", error);
@@ -402,7 +388,7 @@ function EdgeFunctionsTab() {
       });
       toast.success("Edge function updated successfully");
       setIsEditDialogOpen(false);
-      fetchEdgeFunctions(false); // Don't reload from disk after updating
+      queryClient.invalidateQueries({ queryKey: ["edge-functions"] });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Error updating edge function:", error);
@@ -414,7 +400,7 @@ function EdgeFunctionsTab() {
     try {
       await functionsApi.delete(name);
       toast.success("Edge function deleted successfully");
-      fetchEdgeFunctions(false); // Don't reload from disk after deleting
+      queryClient.invalidateQueries({ queryKey: ["edge-functions"] });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Error deleting edge function:", error);
@@ -440,7 +426,7 @@ function EdgeFunctionsTab() {
         enabled: newEnabledState,
       });
       toast.success(`Function ${newEnabledState ? "enabled" : "disabled"}`);
-      fetchEdgeFunctions(false); // Don't reload from disk after toggling
+      queryClient.invalidateQueries({ queryKey: ["edge-functions"] });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Error toggling function:", error);
@@ -620,7 +606,7 @@ function EdgeFunctionsTab() {
             reloading={reloading}
             onNamespaceChange={setSelectedNamespace}
             onReload={handleReloadClick}
-            onRefresh={() => fetchEdgeFunctions(false)}
+            onRefresh={() => refetchFunctions()}
             onCreateFunction={() => setIsCreateDialogOpen(true)}
             onEditFunction={openEditDialog}
             onInvokeFunction={openInvokeDialog}

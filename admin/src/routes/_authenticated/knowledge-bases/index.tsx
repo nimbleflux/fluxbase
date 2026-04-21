@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { BookOpen, Plus, RefreshCw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -40,10 +41,7 @@ export const Route = createFileRoute("/_authenticated/knowledge-bases/")({
 function KnowledgeBasesPage() {
   const navigate = useNavigate();
   const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
-  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseSummary[]>(
-    [],
-  );
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [featureDisabled, setFeatureDisabled] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -64,28 +62,101 @@ function KnowledgeBasesPage() {
     initial_permissions: [],
   });
 
-  const fetchKnowledgeBases = useCallback(async () => {
-    setLoading(true);
-    setFeatureDisabled(false);
-    try {
-      const data = await knowledgeBasesApi.list();
-      setKnowledgeBases(data || []);
-    } catch (error) {
-      const axiosError = error as {
-        response?: { status?: number; data?: FeatureDisabledError };
-      };
-      if (
-        axiosError.response?.status === 503 &&
-        axiosError.response?.data?.code === "FEATURE_DISABLED"
-      ) {
-        setFeatureDisabled(true);
-      } else {
-        toast.error("Failed to fetch knowledge bases");
+  // Fetch knowledge bases
+  const { data: knowledgeBases = [], isLoading } = useQuery<
+    KnowledgeBaseSummary[]
+  >({
+    queryKey: ["knowledge-bases", currentTenantId],
+    queryFn: async () => {
+      setFeatureDisabled(false);
+      try {
+        const data = await knowledgeBasesApi.list();
+        return data || [];
+      } catch (error) {
+        const axiosError = error as {
+          response?: { status?: number; data?: FeatureDisabledError };
+        };
+        if (
+          axiosError.response?.status === 503 &&
+          axiosError.response?.data?.code === "FEATURE_DISABLED"
+        ) {
+          setFeatureDisabled(true);
+          return [];
+        }
+        throw error;
       }
-    } finally {
-      setLoading(false);
+    },
+  });
+
+  // Create knowledge base mutation
+  const createMutation = useMutation({
+    mutationFn: async (req: CreateKnowledgeBaseRequest) => {
+      await userKnowledgeBasesApi.create(req);
+    },
+    onSuccess: () => {
+      toast.success("Knowledge base created");
+      setCreateDialogOpen(false);
+      setNewKB({
+        name: "",
+        description: "",
+        visibility: "private",
+        embedding_model: "",
+        chunk_size: 512,
+        chunk_overlap: 50,
+        chunk_strategy: "recursive",
+        initial_permissions: [],
+      });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+    },
+    onError: (error) => {
+      const message =
+        (error as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || "Failed to create knowledge base";
+      toast.error(message);
+    },
+  });
+
+  // Delete knowledge base mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await knowledgeBasesApi.delete(id);
+    },
+    onSuccess: () => {
+      toast.success("Knowledge base deleted");
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+    },
+    onError: () => {
+      toast.error("Failed to delete knowledge base");
+    },
+    onSettled: () => {
+      setDeleteConfirm(null);
+    },
+  });
+
+  // Toggle enabled mutation
+  const toggleMutation = useMutation({
+    mutationFn: async (kb: KnowledgeBaseSummary) => {
+      await knowledgeBasesApi.update(kb.id, { enabled: !kb.enabled });
+      return !kb.enabled;
+    },
+    onSuccess: (newEnabledState) => {
+      toast.success(
+        `Knowledge base ${newEnabledState ? "disabled" : "enabled"}`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+    },
+    onError: () => {
+      toast.error("Failed to update knowledge base");
+    },
+  });
+
+  const handleCreate = () => {
+    if (!newKB.name.trim()) {
+      toast.error("Name is required");
+      return;
     }
-  }, []);
+    createMutation.mutate(newKB);
+  };
 
   const fetchUsers = useCallback(async () => {
     if (usersLoadedRef.current) return;
@@ -113,60 +184,6 @@ function KnowledgeBasesPage() {
     }
   }, []);
 
-  const handleCreate = async () => {
-    if (!newKB.name.trim()) {
-      toast.error("Name is required");
-      return;
-    }
-    try {
-      await userKnowledgeBasesApi.create(newKB);
-      toast.success("Knowledge base created");
-      setCreateDialogOpen(false);
-      setNewKB({
-        name: "",
-        description: "",
-        visibility: "private",
-        embedding_model: "",
-        chunk_size: 512,
-        chunk_overlap: 50,
-        chunk_strategy: "recursive",
-        initial_permissions: [],
-      });
-      await fetchKnowledgeBases();
-    } catch (error) {
-      const message =
-        (error as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error || "Failed to create knowledge base";
-      toast.error(message);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await knowledgeBasesApi.delete(id);
-      toast.success("Knowledge base deleted");
-      await fetchKnowledgeBases();
-    } catch {
-      toast.error("Failed to delete knowledge base");
-    } finally {
-      setDeleteConfirm(null);
-    }
-  };
-
-  const toggleEnabled = async (kb: KnowledgeBaseSummary) => {
-    try {
-      await knowledgeBasesApi.update(kb.id, { enabled: !kb.enabled });
-      toast.success(`Knowledge base ${kb.enabled ? "disabled" : "enabled"}`);
-      await fetchKnowledgeBases();
-    } catch {
-      toast.error("Failed to update knowledge base");
-    }
-  };
-
-  useEffect(() => {
-    fetchKnowledgeBases();
-  }, [fetchKnowledgeBases, currentTenantId]);
-
   useEffect(() => {
     if (createDialogOpen) {
       fetchUsers();
@@ -174,7 +191,7 @@ function KnowledgeBasesPage() {
     }
   }, [createDialogOpen, fetchUsers, fetchProviders]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex h-96 items-center justify-center">
         <RefreshCw className="text-muted-foreground h-8 w-8 animate-spin" />
@@ -229,7 +246,11 @@ function KnowledgeBasesPage() {
             </div>
             <div className="flex items-center gap-2">
               <Button
-                onClick={() => fetchKnowledgeBases()}
+                onClick={() =>
+                  queryClient.invalidateQueries({
+                    queryKey: ["knowledge-bases"],
+                  })
+                }
                 variant="outline"
                 size="sm"
               >
@@ -287,7 +308,7 @@ function KnowledgeBasesPage() {
                   <KnowledgeBaseCard
                     key={kb.id}
                     kb={kb}
-                    onToggleEnabled={toggleEnabled}
+                    onToggleEnabled={(kb) => toggleMutation.mutate(kb)}
                     onDelete={(id) => setDeleteConfirm(id)}
                     onNavigate={(path) => navigate({ to: path })}
                   />
@@ -312,7 +333,9 @@ function KnowledgeBasesPage() {
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
-                  onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
+                  onClick={() =>
+                    deleteConfirm && deleteMutation.mutate(deleteConfirm)
+                  }
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
                   Delete

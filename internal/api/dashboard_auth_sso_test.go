@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package api
 
 import (
@@ -46,10 +49,7 @@ func setupDashboardAuthTestServer(t *testing.T) (*fiber.App, *DashboardAuthHandl
 		dbPassword = "fluxbase_app_password"
 	}
 
-	dbDatabase := os.Getenv("FLUXBASE_DATABASE_DATABASE")
-	if dbDatabase == "" {
-		dbDatabase = "fluxbase_test"
-	}
+	dbDatabase := "fluxbase_test"
 
 	dbConfig := config.DatabaseConfig{
 		Host:            dbHost,

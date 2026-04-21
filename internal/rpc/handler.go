@@ -272,6 +272,11 @@ func (h *Handler) ListNamespaces(c fiber.Ctx) error {
 func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 
+	// syncCtx uses service_role (no tenant) so find-existing/update/delete
+	// operations can find and modify records created before multi-tenancy
+	// that have NULL tenant_id. Creates still use ctx for correct tenant_id.
+	syncCtx := database.ContextWithTenant(ctx, "")
+
 	var req SyncRequest
 	if err := c.Bind().Body(&req); err != nil {
 		// Body is optional, continue with defaults
@@ -335,8 +340,8 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 		result.Message = "Synced from SDK payload"
 	}
 
-	// Get existing procedures in namespace
-	existing, err := h.storage.ListProcedures(ctx, namespace)
+	// Get existing procedures in namespace (syncCtx to find NULL-tenant records)
+	existing, err := h.storage.ListProcedures(syncCtx, namespace)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list existing procedures")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -379,7 +384,7 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 		if !exists {
 			// Create new procedure
 			if !req.Options.DryRun {
-				if err := h.storage.CreateProcedure(ctx, proc); err != nil {
+				if err := h.storage.CreateProcedure(syncCtx, proc); err != nil {
 					result.Errors = append(result.Errors, SyncError{
 						Procedure: spec.Name,
 						Error:     err.Error(),
@@ -401,7 +406,7 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 			if h.needsUpdate(existingProc, proc) {
 				proc.ID = existingProc.ID
 				if !req.Options.DryRun {
-					if err := h.storage.UpdateProcedure(ctx, proc); err != nil {
+					if err := h.storage.UpdateProcedure(syncCtx, proc); err != nil {
 						result.Errors = append(result.Errors, SyncError{
 							Procedure: spec.Name,
 							Error:     err.Error(),
@@ -434,7 +439,7 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 					if h.scheduler != nil {
 						h.scheduler.UnscheduleProcedure(proc.Namespace, name)
 					}
-					if err := h.storage.DeleteProcedure(ctx, proc.ID); err != nil {
+					if err := h.storage.DeleteProcedure(syncCtx, proc.ID); err != nil {
 						result.Errors = append(result.Errors, SyncError{
 							Procedure: name,
 							Error:     err.Error(),
