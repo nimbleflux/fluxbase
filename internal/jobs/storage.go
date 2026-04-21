@@ -95,6 +95,7 @@ func (s *Storage) UpdateJobFunctionForSync(ctx context.Context, tenantID string,
 			max_retries = $10, progress_timeout_seconds = $11, allow_net = $12, allow_env = $13,
 			allow_read = $14, allow_write = $15, require_roles = $16, disable_execution_logs = $17, version = version + 1
 		WHERE id = $18
+		RETURNING version, updated_at
 	`
 
 	return database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
