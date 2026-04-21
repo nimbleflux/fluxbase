@@ -310,6 +310,7 @@ export function AIProvidersTab() {
       />
 
       <EditProviderDialog
+        key={editingProvider?.id ?? "none"}
         open={!!editingProvider}
         onOpenChange={(open) => {
           if (!open) setEditingProvider(null);

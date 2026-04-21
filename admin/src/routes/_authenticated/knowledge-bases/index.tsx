@@ -43,6 +43,7 @@ function KnowledgeBasesPage() {
   const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
   const queryClient = useQueryClient();
   const [featureDisabled, setFeatureDisabled] = useState(false);
+  const featureDisabledRef = useRef(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [users, setUsers] = useState<EnrichedUser[]>([]);
@@ -63,15 +64,21 @@ function KnowledgeBasesPage() {
   });
 
   // Fetch knowledge bases
+  type KBQueryResult = {
+    bases: KnowledgeBaseSummary[];
+    disabled: boolean;
+  };
+
   const { data: knowledgeBases = [], isLoading } = useQuery<
+    KBQueryResult,
+    Error,
     KnowledgeBaseSummary[]
   >({
     queryKey: ["knowledge-bases", currentTenantId],
     queryFn: async () => {
-      setFeatureDisabled(false);
       try {
         const data = await knowledgeBasesApi.list();
-        return data || [];
+        return { bases: data || [], disabled: false };
       } catch (error) {
         const axiosError = error as {
           response?: { status?: number; data?: FeatureDisabledError };
@@ -80,11 +87,17 @@ function KnowledgeBasesPage() {
           axiosError.response?.status === 503 &&
           axiosError.response?.data?.code === "FEATURE_DISABLED"
         ) {
-          setFeatureDisabled(true);
-          return [];
+          return { bases: [] as KnowledgeBaseSummary[], disabled: true };
         }
         throw error;
       }
+    },
+    select: (result) => {
+      if (featureDisabledRef.current !== result.disabled) {
+        featureDisabledRef.current = result.disabled;
+        setFeatureDisabled(result.disabled);
+      }
+      return result.bases;
     },
   });
 

@@ -1,10 +1,5 @@
 /* eslint-disable react-hooks/rules-of-hooks, no-empty-pattern */
-import {
-  test as base,
-  expect,
-  type Page,
-  type Browser,
-} from "@playwright/test";
+import { test as base, expect, type Page } from "@playwright/test";
 import { rawLogin, listTenants } from "./helpers/api";
 import { getUserByEmail } from "./helpers/db";
 import {

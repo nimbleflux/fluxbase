@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useFluxbaseClient } from "@nimbleflux/fluxbase-sdk-react";
 import { toast } from "sonner";
@@ -29,21 +29,15 @@ export function EditProviderDialog({
   const client = useFluxbaseClient();
   const queryClient = useQueryClient();
 
-  const [displayName, setDisplayName] = useState("");
+  const [displayName, setDisplayName] = useState(
+    () => provider?.display_name || "",
+  );
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("");
-  const [embeddingModel, setEmbeddingModel] = useState("");
-  const [enabled, setEnabled] = useState(true);
-
-  useEffect(() => {
-    if (provider) {
-      setDisplayName(provider.display_name || "");
-      setApiKey("");
-      setModel(provider.config?.model || "");
-      setEmbeddingModel(provider.embedding_model || "");
-      setEnabled(provider.enabled);
-    }
-  }, [provider]);
+  const [model, setModel] = useState(() => provider?.config?.model || "");
+  const [embeddingModel, setEmbeddingModel] = useState(
+    () => provider?.embedding_model || "",
+  );
+  const [enabled, setEnabled] = useState(() => provider?.enabled ?? true);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
