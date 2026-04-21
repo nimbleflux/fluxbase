@@ -827,6 +827,14 @@ func backfillTenantIDToDefault(pool *pgxpool.Pool) error {
 	//   - platform.enabled_extensions (NULL = instance-level extensions)
 	//   - auth.service_keys (NULL = global_service keys)
 	//   - auth.saml_providers (NULL = shared SAML providers, like OAuth)
+	tenantIDDedupTables := map[string]string{
+		"mcp.custom_tools":         "name, namespace",
+		"mcp.custom_resources":     "uri, namespace",
+		"branching.branches":       "name",
+		"branching.github_config":  "repository",
+		"platform.oauth_providers": "provider_name",
+	}
+
 	tables := []string{
 		"auth.users",
 		"auth.client_keys",
@@ -890,6 +898,18 @@ func backfillTenantIDToDefault(pool *pgxpool.Pool) error {
 
 	var totalBackfilled int
 	for _, table := range tables {
+		if dedupCols, needsDedup := tenantIDDedupTables[table]; needsDedup {
+			dedupQuery := fmt.Sprintf(
+				"DELETE FROM %s WHERE id IN (SELECT id FROM (SELECT id, row_number() OVER (PARTITION BY %s ORDER BY created_at DESC) AS rn FROM %s WHERE tenant_id IS NULL) sub WHERE rn > 1)",
+				table, dedupCols, table,
+			)
+			if dedupResult, err := pool.Exec(ctx, dedupQuery); err != nil {
+				log.Warn().Err(err).Str("table", table).Msg("Failed to dedup NULL-tenant rows before backfill")
+			} else if n := dedupResult.RowsAffected(); n > 0 {
+				log.Info().Str("table", table).Int64("duplicates_removed", n).Msg("Removed duplicate NULL-tenant rows before backfill")
+			}
+		}
+
 		result, err := pool.Exec(ctx,
 			fmt.Sprintf("UPDATE %s SET tenant_id = $1::uuid WHERE tenant_id IS NULL", table),
 			defaultTenantID,

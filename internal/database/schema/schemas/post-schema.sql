@@ -494,13 +494,41 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- ============================================================================
--- LOGGING PARTITION ATTACHMENT
+-- LOGGING TRIGGER + PARTITION ATTACHMENT
 -- logging.entries is PARTITION BY LIST (category). The child tables are created
 -- in logging.sql but ATTACH PARTITION must run via this file because pgschema's
 -- plan path skips DO $$ blocks. The trigger on the parent (logging_entries_set_tenant_id)
 -- auto-propagates to partitions on attach, so we drop any pre-existing trigger on
 -- each child table before attaching to avoid "trigger already exists" errors.
+--
+-- The trigger itself is also defined here (not in logging.sql) because pgschema
+-- detects the auto-propagated triggers on partition children and tries to DROP them,
+-- which PostgreSQL forbids (inherited triggers cannot be dropped from partitions).
 -- ============================================================================
+
+DO $$
+BEGIN
+    EXECUTE 'ALTER TABLE logging.entries ENABLE ROW LEVEL SECURITY';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'logging.entries ENABLE RLS: %', SQLERRM;
+END $$;
+
+DO $$
+BEGIN
+    EXECUTE 'ALTER TABLE logging.entries FORCE ROW LEVEL SECURITY';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'logging.entries FORCE RLS: %', SQLERRM;
+END $$;
+
+DO $$
+BEGIN
+    EXECUTE 'CREATE OR REPLACE TRIGGER logging_entries_set_tenant_id
+        BEFORE INSERT ON logging.entries
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context()';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'logging_entries_set_tenant_id trigger: %', SQLERRM;
+END $$;
 
 DO $$
 BEGIN

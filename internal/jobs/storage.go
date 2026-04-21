@@ -87,6 +87,26 @@ func (s *Storage) UpdateJobFunctionWithTenant(ctx context.Context, tenantID stri
 	})
 }
 
+func (s *Storage) UpdateJobFunctionForSync(ctx context.Context, tenantID string, fn *JobFunction) error {
+	query := `
+		UPDATE jobs.functions SET
+			description = $1, code = $2, original_code = $3, is_bundled = $4, bundle_error = $5,
+			enabled = $6, schedule = $7, timeout_seconds = $8, memory_limit_mb = $9,
+			max_retries = $10, progress_timeout_seconds = $11, allow_net = $12, allow_env = $13,
+			allow_read = $14, allow_write = $15, require_roles = $16, disable_execution_logs = $17, version = version + 1
+		WHERE id = $18
+	`
+
+	return database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			fn.Description, fn.Code, fn.OriginalCode, fn.IsBundled, fn.BundleError,
+			fn.Enabled, fn.Schedule, fn.TimeoutSeconds, fn.MemoryLimitMB,
+			fn.MaxRetries, fn.ProgressTimeoutSeconds, fn.AllowNet, fn.AllowEnv,
+			fn.AllowRead, fn.AllowWrite, fn.RequireRoles, fn.DisableExecutionLogs, fn.ID,
+		).Scan(&fn.Version, &fn.UpdatedAt)
+	})
+}
+
 // UpsertJobFunction creates or updates a job function atomically
 func (s *Storage) UpsertJobFunction(ctx context.Context, fn *JobFunction) error {
 	tenantID := database.TenantFromContext(ctx)
@@ -281,6 +301,50 @@ func (s *Storage) ListJobFunctions(ctx context.Context, namespace string) ([]*Jo
 	return functions, nil
 }
 
+// ListJobFunctionsForSync lists job functions matching the given tenant OR with NULL tenant_id.
+// Used by sync flows to find existing functions regardless of backfill state.
+func (s *Storage) ListJobFunctionsForSync(ctx context.Context, namespace string, tenantID string) ([]*JobFunctionSummary, error) {
+	query := `
+		SELECT id, name, namespace, description, is_bundled, bundle_error,
+			enabled, schedule, timeout_seconds, memory_limit_mb, max_retries,
+			progress_timeout_seconds, allow_net, allow_env, allow_read, allow_write, require_roles, disable_execution_logs,
+			version, created_by, source, created_at, updated_at
+		FROM jobs.functions
+		WHERE namespace = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+		ORDER BY name
+	`
+
+	var functions []*JobFunctionSummary
+	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, namespace, tenantOrNil(tenantID))
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var fn JobFunctionSummary
+			if err := rows.Scan(
+				&fn.ID, &fn.Name, &fn.Namespace, &fn.Description,
+				&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
+				&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
+				&fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.RequireRoles, &fn.DisableExecutionLogs,
+				&fn.Version, &fn.CreatedBy, &fn.Source, &fn.CreatedAt, &fn.UpdatedAt,
+			); err != nil {
+				return err
+			}
+			functions = append(functions, &fn)
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return functions, nil
+}
+
 // ListAllJobFunctions lists all job functions across all namespaces (admin use)
 func (s *Storage) ListAllJobFunctions(ctx context.Context) ([]*JobFunctionSummary, error) {
 	query := `
@@ -334,6 +398,26 @@ func (s *Storage) DeleteJobFunction(ctx context.Context, namespace, name string)
 // DeleteJobFunctionWithTenant deletes a job function with tenant context
 func (s *Storage) DeleteJobFunctionWithTenant(ctx context.Context, tenantID string, namespace, name string) error {
 	query := `DELETE FROM jobs.functions WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))`
+
+	var result pgconn.CommandTag
+	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, namespace, name, tenantOrNil(tenantID))
+		return execErr
+	})
+	if err != nil {
+		return err
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("job function not found: %s/%s", namespace, name)
+	}
+
+	return nil
+}
+
+func (s *Storage) DeleteJobFunctionForSync(ctx context.Context, tenantID string, namespace, name string) error {
+	query := `DELETE FROM jobs.functions WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR tenant_id IS NULL)`
 
 	var result pgconn.CommandTag
 	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {

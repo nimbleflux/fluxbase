@@ -918,14 +918,9 @@ CREATE POLICY logging_entries_tenant ON entries TO PUBLIC
     USING (auth.has_tenant_access(tenant_id))
     WITH CHECK (auth.has_tenant_access(tenant_id));
 
---
--- Name: logging_entries_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
---
-
-CREATE OR REPLACE TRIGGER logging_entries_set_tenant_id
-    BEFORE INSERT ON entries
-    FOR EACH ROW
-    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+-- logging_entries_set_tenant_id trigger is defined in post-schema.sql (as a DO $$ block)
+-- because pgschema tries to DROP the auto-propagated triggers on partition children,
+-- which PostgreSQL forbids. Moving it here skips pgschema's plan/apply entirely.
 
 --
 -- Name: entries_ai; Type: RLS; Schema: -; Owner: -

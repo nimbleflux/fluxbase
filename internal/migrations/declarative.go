@@ -673,6 +673,16 @@ func (s *DeclarativeService) applyPlanDirectly(ctx context.Context, schema strin
 			}
 		}
 
+		// Skip DROP TRIGGER on partition tables (inherited from parent, cannot be dropped independently)
+		// Also skip on partitioned parent tables (triggers managed outside pgschema, e.g. in post-schema.sql)
+		if strings.HasPrefix(sqlUpper, "DROP TRIGGER") {
+			trigTable := extractDropTriggerTableName(change.SQL)
+			if partitions[trigTable] || partitionedTables[trigTable] {
+				log.Debug().Str("schema", schema).Str("table", trigTable).Msg("Skipping DROP TRIGGER on partition/partitioned table (managed outside schema SQL)")
+				continue
+			}
+		}
+
 		// Substitute {{APP_USER}} placeholder with the runtime user
 		sql := bootstrap.SubstituteAppUser(change.SQL, s.appUser)
 
@@ -1037,6 +1047,27 @@ func extractTriggerTableName(sql string) string {
 		return ""
 	}
 	rest := strings.TrimSpace(sql[onIdx+len(" ON "):])
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return ""
+	}
+	name := fields[0]
+	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		name = name[idx+1:]
+	}
+	return strings.Trim(name, `"`)
+}
+
+// extractDropTriggerTableName extracts the table name from a DROP TRIGGER statement.
+// Format: "DROP TRIGGER [IF EXISTS] name ON [schema.]table"
+func extractDropTriggerTableName(sql string) string {
+	upper := strings.ToUpper(sql)
+	onIdx := strings.Index(upper, " ON ")
+	if onIdx < 0 {
+		return ""
+	}
+	rest := strings.TrimSpace(sql[onIdx+len(" ON "):])
+	rest = strings.TrimRight(rest, ";")
 	fields := strings.Fields(rest)
 	if len(fields) == 0 {
 		return ""
