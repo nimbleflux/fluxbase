@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Plus,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { mcpToolsApi, type MCPTool } from "@/lib/api";
+import { useTenantStore } from "@/stores/tenant-store";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,8 +79,8 @@ function MCPToolsPage() {
 
 // Tools Tab Component
 function ToolsTab() {
-  const [tools, setTools] = useState<MCPTool[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -86,27 +88,20 @@ function ToolsTab() {
   const [selectedTool, setSelectedTool] = useState<MCPTool | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const fetchTools = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await mcpToolsApi.list();
-      setTools(data);
-    } catch {
-      toast.error("Failed to load MCP tools");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTools();
-  }, [fetchTools]);
+  const {
+    data: tools = [],
+    isLoading: loading,
+    refetch: fetchTools,
+  } = useQuery({
+    queryKey: ["mcp-tools", currentTenantId],
+    queryFn: () => mcpToolsApi.list(),
+  });
 
   const handleDelete = async (id: string) => {
     try {
       await mcpToolsApi.delete(id);
       toast.success("Tool deleted");
-      fetchTools();
+      queryClient.invalidateQueries({ queryKey: ["mcp-tools"] });
     } catch {
       toast.error("Failed to delete tool");
     }
@@ -117,7 +112,7 @@ function ToolsTab() {
     try {
       await mcpToolsApi.update(tool.id, { enabled: !tool.enabled });
       toast.success(tool.enabled ? "Tool disabled" : "Tool enabled");
-      fetchTools();
+      queryClient.invalidateQueries({ queryKey: ["mcp-tools"] });
     } catch {
       toast.error("Failed to update tool");
     }
@@ -144,7 +139,7 @@ function ToolsTab() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchTools}>
+          <Button variant="outline" size="sm" onClick={() => fetchTools()}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
@@ -278,7 +273,7 @@ function ToolsTab() {
         onSave={async (data) => {
           await mcpToolsApi.create(data);
           toast.success("Tool created");
-          fetchTools();
+          queryClient.invalidateQueries({ queryKey: ["mcp-tools"] });
           setIsCreateDialogOpen(false);
         }}
       />
@@ -292,7 +287,7 @@ function ToolsTab() {
           onSave={async (data) => {
             await mcpToolsApi.update(selectedTool.id, data);
             toast.success("Tool updated");
-            fetchTools();
+            queryClient.invalidateQueries({ queryKey: ["mcp-tools"] });
             setIsEditDialogOpen(false);
           }}
         />

@@ -50,6 +50,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTenantStore } from "@/stores/tenant-store";
 
 const webhooksSearchSchema = z.object({
   tab: z.string().optional().catch("webhooks"),
@@ -68,6 +69,7 @@ function WebhooksPage() {
   const search = route.useSearch();
   const navigate = route.useNavigate();
   const queryClient = useQueryClient();
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedWebhook] = useState<WebhookType | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -90,13 +92,13 @@ function WebhooksPage() {
 
   // Fetch webhooks
   const { data: webhooks, isLoading } = useQuery<WebhookType[]>({
-    queryKey: ["webhooks"],
+    queryKey: ["webhooks", currentTenantId],
     queryFn: webhooksApi.list,
   });
 
   // Fetch deliveries for selected webhook
   const { data: deliveries } = useQuery<WebhookDelivery[]>({
-    queryKey: ["webhook-deliveries", selectedWebhook?.id, selectedWebhook],
+    queryKey: ["webhook-deliveries", selectedWebhook?.id, selectedWebhook, currentTenantId],
     queryFn: async () => {
       if (!selectedWebhook) return [];
       return webhooksApi.getDeliveries(selectedWebhook.id, 50);

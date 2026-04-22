@@ -340,6 +340,7 @@ function EdgeFunctionsTab() {
     statusFilter,
     executionsPage,
     executionsPageSize,
+    currentTenantId,
   ]);
 
   // Debounced search - resets page to 0 and fetches
