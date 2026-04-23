@@ -11,11 +11,9 @@ func TestBuildEnvForFunction(t *testing.T) {
 	// Set up test environment variables
 	testVars := map[string]string{
 		// Should be included
-		"FLUXBASE_BASE_URL":         "http://localhost:8080",
-		"FLUXBASE_SERVICE_ROLE_KEY": "test-service-key",
-		"FLUXBASE_ANON_KEY":         "test-anon-key",
-		"FLUXBASE_DEBUG":            "true",
-		// Should be blocked
+		"FLUXBASE_BASE_URL": "http://localhost:8080",
+		"FLUXBASE_DEBUG":    "true",
+		// Should be blocked (secrets)
 		"FLUXBASE_AUTH_JWT_SECRET":         "super-secret",
 		"FLUXBASE_DATABASE_PASSWORD":       "db-password",
 		"FLUXBASE_STORAGE_S3_SECRET_KEY":   "s3-secret",
@@ -23,6 +21,8 @@ func TestBuildEnvForFunction(t *testing.T) {
 		"FLUXBASE_SECURITY_SETUP_TOKEN":    "setup-token",
 		"FLUXBASE_DATABASE_ADMIN_PASSWORD": "admin-password",
 		"FLUXBASE_STORAGE_S3_ACCESS_KEY":   "s3-access-key",
+		"FLUXBASE_SERVICE_ROLE_KEY":        "test-service-key",
+		"FLUXBASE_ANON_KEY":                "test-anon-key",
 	}
 
 	// Set environment variables
@@ -50,8 +50,6 @@ func TestBuildEnvForFunction(t *testing.T) {
 	// Test that allowed variables are included
 	allowedVars := []string{
 		"FLUXBASE_BASE_URL",
-		"FLUXBASE_SERVICE_ROLE_KEY",
-		"FLUXBASE_ANON_KEY",
 		"FLUXBASE_DEBUG",
 	}
 
@@ -72,6 +70,8 @@ func TestBuildEnvForFunction(t *testing.T) {
 		"FLUXBASE_SECURITY_SETUP_TOKEN",
 		"FLUXBASE_DATABASE_ADMIN_PASSWORD",
 		"FLUXBASE_STORAGE_S3_ACCESS_KEY",
+		"FLUXBASE_SERVICE_ROLE_KEY",
+		"FLUXBASE_ANON_KEY",
 	}
 
 	for _, key := range blockedVarsToCheck {

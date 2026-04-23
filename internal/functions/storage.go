@@ -11,6 +11,20 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
+var allowedFunctionColumns = map[string]bool{
+	"name": true, "namespace": true, "description": true, "code": true,
+	"original_code": true, "is_bundled": true, "bundle_error": true,
+	"enabled": true, "timeout_seconds": true, "memory_limit_mb": true,
+	"allow_net": true, "allow_env": true, "allow_read": true,
+	"allow_write": true, "allow_unauthenticated": true, "is_public": true,
+	"cron_schedule": true, "version": true, "created_by": true,
+	"source": true, "needs_rebundle": true, "cors_origins": true,
+	"cors_methods": true, "cors_headers": true, "cors_credentials": true,
+	"cors_max_age": true, "disable_execution_logs": true,
+	"rate_limit_per_minute": true, "rate_limit_per_hour": true,
+	"rate_limit_per_day": true,
+}
+
 // EdgeFunction represents a stored edge function
 type EdgeFunction struct {
 	ID                   uuid.UUID `json:"id"`
@@ -558,6 +572,9 @@ func (s *Storage) UpdateFunctionByNamespace(ctx context.Context, name string, na
 	argCount := 1
 
 	for key, value := range updates {
+		if !allowedFunctionColumns[key] {
+			continue
+		}
 		if argCount > 1 {
 			query += ", "
 		}
@@ -612,6 +629,9 @@ func (s *Storage) UpdateFunctionForSync(ctx context.Context, name string, tenant
 	argCount := 1
 
 	for key, value := range updates {
+		if !allowedFunctionColumns[key] {
+			continue
+		}
 		if argCount > 1 {
 			query += ", "
 		}
@@ -644,6 +664,9 @@ func (s *Storage) UpdateFunctionByNamespaceForSync(ctx context.Context, name str
 	argCount := 1
 
 	for key, value := range updates {
+		if !allowedFunctionColumns[key] {
+			continue
+		}
 		if argCount > 1 {
 			query += ", "
 		}

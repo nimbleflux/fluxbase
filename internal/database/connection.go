@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -39,6 +40,7 @@ func quoteIdentifier(identifier string) string {
 // Connection represents a database connection pool
 type Connection struct {
 	pool      *pgxpool.Pool
+	poolMu    sync.RWMutex
 	config    *config.DatabaseConfig
 	inspector *SchemaInspector
 	metrics   *observability.Metrics
@@ -218,12 +220,17 @@ func NewConnectionWithPool(pool *pgxpool.Pool) *Connection {
 
 // Close closes the database connection pool
 func (c *Connection) Close() {
-	c.pool.Close()
+	c.poolMu.RLock()
+	p := c.pool
+	c.poolMu.RUnlock()
+	p.Close()
 	log.Info().Msg("Database connection closed")
 }
 
 // Pool returns the underlying connection pool
 func (c *Connection) Pool() *pgxpool.Pool {
+	c.poolMu.RLock()
+	defer c.poolMu.RUnlock()
 	return c.pool
 }
 
@@ -231,8 +238,9 @@ func (c *Connection) Pool() *pgxpool.Pool {
 // This is safer than Reset() as it ensures a completely fresh pool state.
 // Use this after schema changes (migrations) to avoid prepared statement cache issues.
 func (c *Connection) RecreatePool() error {
-	// Close the old pool
-	c.pool.Close()
+	c.poolMu.RLock()
+	oldPool := c.pool
+	c.poolMu.RUnlock()
 
 	// Create a new pool with the same configuration
 	poolConfig, err := pgxpool.ParseConfig(c.config.RuntimeConnectionString())
@@ -301,7 +309,15 @@ func (c *Connection) RecreatePool() error {
 		return fmt.Errorf("unable to ping database: %w", err)
 	}
 
+	c.poolMu.Lock()
 	c.pool = pool
+	c.poolMu.Unlock()
+
+	// Close old pool outside the lock
+	if oldPool != nil {
+		oldPool.Close()
+	}
+
 	log.Info().Msg("Connection pool recreated successfully")
 	return nil
 }
@@ -890,7 +906,7 @@ func WrapWithTenantAwareRole(ctx context.Context, conn *Connection, tenantID str
 // ExecuteWithAdminRole executes a database operation using admin credentials
 // Used for migrations that require DDL privileges (CREATE TABLE, ALTER, etc.)
 // Creates a temporary admin connection that is closed after execution
-func (c *Connection) ExecuteWithAdminRole(ctx context.Context, fn func(conn *pgx.Conn) error) error {
+func (c *Connection) ExecuteWithAdminRole(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	// Get admin connection string
 	adminConnStr := c.config.AdminConnectionString()
 
@@ -933,8 +949,8 @@ func (c *Connection) ExecuteWithAdminRole(ctx context.Context, fn func(conn *pgx
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Execute the wrapped function with the connection
-	if err := fn(adminConn); err != nil {
+	// Execute the wrapped function with the transaction
+	if err := fn(tx); err != nil {
 		return err
 	}
 
@@ -950,7 +966,7 @@ func (c *Connection) ExecuteWithAdminRole(ctx context.Context, fn func(conn *pgx
 // ExecuteWithAdminRoleForDB executes a function with admin privileges against
 // a specific database (for tenant DDL operations). It replaces the database name
 // in the admin connection string with the provided dbName.
-func (c *Connection) ExecuteWithAdminRoleForDB(ctx context.Context, dbName string, fn func(conn *pgx.Conn) error) error {
+func (c *Connection) ExecuteWithAdminRoleForDB(ctx context.Context, dbName string, fn func(tx pgx.Tx) error) error {
 	adminConnStr := c.config.AdminConnectionString()
 
 	adminUser := c.config.AdminUser
@@ -984,7 +1000,7 @@ func (c *Connection) ExecuteWithAdminRoleForDB(ctx context.Context, dbName strin
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := fn(adminConn); err != nil {
+	if err := fn(tx); err != nil {
 		return err
 	}
 

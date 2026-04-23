@@ -1,7 +1,5 @@
-// Authentication utilities for admin UI
+import { useAuthStore } from "@/stores/auth-store";
 
-const ACCESS_TOKEN_KEY = "fluxbase_admin_access_token";
-const REFRESH_TOKEN_KEY = "fluxbase_admin_refresh_token";
 const USER_KEY = "fluxbase_admin_user";
 
 export interface AdminUser {
@@ -14,7 +12,6 @@ export interface AdminUser {
   updated_at: string;
 }
 
-// DashboardUser type (from dashboard authentication)
 export interface DashboardUser {
   id: string;
   email: string;
@@ -36,26 +33,20 @@ export interface TokenPair {
   expires_in: number;
 }
 
-// Get access token from localStorage
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
-  // Check both new key and legacy key for backwards compatibility
-  return (
-    localStorage.getItem(ACCESS_TOKEN_KEY) ||
-    localStorage.getItem("access_token")
-  );
+  const token = useAuthStore.getState().auth.accessToken;
+  return token || null;
 }
 
-// Get refresh token from localStorage
 export function getRefreshToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
+  const token = useAuthStore.getState().auth.refreshToken;
+  return token || null;
 }
 
-// Get stored user from localStorage (can be either AdminUser or DashboardUser)
 export function getStoredUser(): AdminUser | DashboardUser | null {
   if (typeof window === "undefined") return null;
-  // Check both new key and legacy key for backwards compatibility
   const userJson =
     localStorage.getItem(USER_KEY) || localStorage.getItem("user");
   if (!userJson) return null;
@@ -66,32 +57,34 @@ export function getStoredUser(): AdminUser | DashboardUser | null {
   }
 }
 
-// Store tokens and user in localStorage
 export function setTokens(tokens: TokenPair, user: AdminUser): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-  localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+  const store = useAuthStore.getState();
+  store.auth.setTokens(tokens.access_token, tokens.refresh_token);
+  store.auth.setUser({
+    accountNo: user.id,
+    email: user.email,
+    role: [user.role],
+    exp: Date.now() + tokens.expires_in * 1000,
+  });
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
-// Clear all auth data from localStorage
 export function clearTokens(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  useAuthStore.getState().auth.reset();
   localStorage.removeItem(USER_KEY);
-  // Also clear legacy keys
+  localStorage.removeItem("user");
+  localStorage.removeItem("fluxbase_admin_access_token");
+  localStorage.removeItem("fluxbase_admin_refresh_token");
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
-  localStorage.removeItem("user");
 }
 
-// Check if user is authenticated (has valid token)
 export function isAuthenticated(): boolean {
   return !!getAccessToken();
 }
 
-// Logout helper - clears tokens and redirects to login
 export function logout(): void {
   clearTokens();
   window.location.href = "/admin/login";

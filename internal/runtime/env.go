@@ -15,7 +15,9 @@ var blockedVars = map[string]bool{
 	"FLUXBASE_STORAGE_S3_ACCESS_KEY":   true,
 	"FLUXBASE_EMAIL_SMTP_PASSWORD":     true,
 	"FLUXBASE_SECURITY_SETUP_TOKEN":    true,
-	"FLUXBASE_ENCRYPTION_KEY":          true, // Used for encrypting secrets at rest
+	"FLUXBASE_ENCRYPTION_KEY":          true,
+	"FLUXBASE_SERVICE_ROLE_KEY":        true,
+	"FLUXBASE_ANON_KEY":                true,
 }
 
 // buildEnv creates the environment variable list for execution

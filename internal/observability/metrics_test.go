@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,8 +52,18 @@ func TestNormalizePath(t *testing.T) {
 		assert.Equal(t, "/api/v1/users", result)
 	})
 
-	t.Run("returns long_path for paths over 50 chars", func(t *testing.T) {
-		longPath := "/api/v1/very/long/path/that/exceeds/fifty/characters/limit/here"
+	t.Run("replaces UUIDs with :id", func(t *testing.T) {
+		result := normalizePath("/api/v1/users/550e8400-e29b-41d4-a716-446655440000")
+		assert.Equal(t, "/api/v1/users/:id", result)
+	})
+
+	t.Run("replaces numeric IDs with :id", func(t *testing.T) {
+		result := normalizePath("/api/v1/tables/users/records/12345")
+		assert.Equal(t, "/api/v1/tables/users/records/:id", result)
+	})
+
+	t.Run("returns long_path for paths over 200 chars", func(t *testing.T) {
+		longPath := "/api/v1/" + strings.Repeat("a", 200)
 		result := normalizePath(longPath)
 		assert.Equal(t, "long_path", result)
 	})
@@ -373,8 +384,8 @@ func TestNormalizePath_EdgeCases(t *testing.T) {
 		path     string
 		expected string
 	}{
-		{"exactly 50 chars", "/api/v1/tables/users/records/000000000000000000000", "/api/v1/tables/users/records/000000000000000000000"},
-		{"51 chars", "/api/v1/tables/users/records/0000000000000000000000", "long_path"},
+		{"numeric ID normalized", "/api/v1/tables/users/records/000000000000000000000", "/api/v1/tables/users/records/:id"},
+		{"long numeric ID normalized", "/api/v1/tables/users/records/0000000000000000000000", "/api/v1/tables/users/records/:id"},
 		{"special characters", "/api/v1/users?filter=name%3Djohn", "/api/v1/users?filter=name%3Djohn"},
 		{"unicode path", "/api/v1/用户/数据", "/api/v1/用户/数据"},
 	}

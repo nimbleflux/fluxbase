@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 )
 
 type TenantExecutor struct {
+	mu       sync.Mutex
 	storage  *Storage
 	db       *database.Connection
 	tenantDB *pgxpool.Pool
@@ -27,6 +29,9 @@ func NewTenantExecutor(db *database.Connection, tenantDB *pgxpool.Pool) *TenantE
 }
 
 func (e *TenantExecutor) ApplyMigration(ctx context.Context, namespace, name, tenantID string, executedBy *uuid.UUID) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	migration, err := e.storage.GetMigration(ctx, namespace, name)
 	if err != nil {
 		return fmt.Errorf("failed to get migration: %w", err)
@@ -109,6 +114,9 @@ func (e *TenantExecutor) ApplyMigration(ctx context.Context, namespace, name, te
 }
 
 func (e *TenantExecutor) RollbackMigration(ctx context.Context, namespace, name, tenantID string, executedBy *uuid.UUID) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	migration, err := e.storage.GetMigration(ctx, namespace, name)
 	if err != nil {
 		return fmt.Errorf("failed to get migration: %w", err)

@@ -48,11 +48,8 @@ export function useAuth() {
 
       const { access_token, refresh_token, expires_in, user } = response;
 
-      // Store tokens
-      auth.setAccessToken(access_token);
-      localStorage.setItem("refresh_token", refresh_token);
+      auth.setTokens(access_token, refresh_token);
 
-      // Store user in Zustand with actual role from server
       auth.setUser({
         accountNo: user.id,
         email: user.email,
@@ -60,7 +57,6 @@ export function useAuth() {
         exp: Date.now() + expires_in * 1000,
       });
 
-      // Sync SDK token with new admin token
       syncAuthToken();
 
       // Invalidate and refetch user query to get full user data with role
@@ -96,11 +92,8 @@ export function useAuth() {
         return;
       }
 
-      // Store tokens
-      auth.setAccessToken(session.access_token);
-      localStorage.setItem("refresh_token", session.refresh_token);
+      auth.setTokens(session.access_token, session.refresh_token);
 
-      // Store user in Zustand
       auth.setUser({
         accountNo: user.id,
         email: user.email,
@@ -124,25 +117,15 @@ export function useAuth() {
       await client.auth.signOut();
     },
     onSuccess: () => {
-      // Clear tokens and user data
       auth.reset();
-      localStorage.removeItem("refresh_token");
-
-      // Clear all queries
       queryClient.clear();
-
-      // Redirect to login
       navigate({ to: "/login", replace: true });
-
       toast.success("Signed out successfully");
     },
     onError: (error: Error) => {
-      // Even if signout fails on server, clear local data
       auth.reset();
-      localStorage.removeItem("refresh_token");
       queryClient.clear();
       navigate({ to: "/login", replace: true });
-
       toast.error(error.message || "Failed to sign out");
     },
   });

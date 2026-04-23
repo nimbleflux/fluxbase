@@ -148,7 +148,7 @@ func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 		})
 	}
 
-	inviteLink := fmt.Sprintf("%s/invite/%s", h.baseURL, invitation.Token)
+	inviteLink := fmt.Sprintf("%s/invite/%s", h.baseURL, invitation.PlaintextToken)
 
 	emailSent := false
 	emailStatus := ""
@@ -167,7 +167,7 @@ func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 	}
 
 	return c.Status(http.StatusCreated).JSON(CreateInvitationResponse{
-		Invitation:  invitation,
+		Invitation:  invitation.InvitationToken,
 		InviteLink:  inviteLink,
 		EmailSent:   emailSent,
 		EmailStatus: emailStatus,
@@ -192,8 +192,6 @@ func (h *InvitationHandler) ValidateInvitation(c fiber.Ctx) error {
 			Error: invitationErrorDetails(err),
 		})
 	}
-
-	invitation.Token = ""
 
 	return c.JSON(ValidateInvitationResponse{
 		Valid:      true,
@@ -290,10 +288,6 @@ func (h *InvitationHandler) ListInvitations(c fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to list invitations",
 		})
-	}
-
-	for i := range invitations {
-		invitations[i].Token = ""
 	}
 
 	return c.JSON(fiber.Map{

@@ -1,11 +1,5 @@
 import axios, { type AxiosError, type AxiosInstance } from "axios";
-import {
-  getAccessToken,
-  getRefreshToken,
-  setTokens,
-  clearTokens,
-  type AdminUser,
-} from "../auth";
+import { useAuthStore } from "@/stores/auth-store";
 import { useTenantStore } from "@/stores/tenant-store";
 import { useBranchStore } from "@/stores/branch-store";
 
@@ -65,7 +59,7 @@ const isNotLoggedInResponse = (data: unknown): boolean => {
 api.interceptors.request.use(
   (config) => {
     if (!config.headers.Authorization) {
-      const accessToken = getAccessToken();
+      const { accessToken } = useAuthStore.getState().auth;
       if (accessToken) {
         config.headers.Authorization = `Bearer ${accessToken}`;
       }
@@ -97,7 +91,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     if (isNotLoggedInResponse(response.data)) {
-      const refreshToken = getRefreshToken();
+      const { refreshToken } = useAuthStore.getState().auth;
       if (refreshToken) {
         return axios
           .post(`${API_BASE_URL}/api/v1/admin/refresh`, {
@@ -110,22 +104,28 @@ api.interceptors.response.use(
               user,
               expires_in,
             } = refreshResponse.data;
-            setTokens(
-              { access_token, refresh_token: newRefreshToken, expires_in },
-              user as AdminUser,
-            );
+            const store = useAuthStore.getState().auth;
+            store.setTokens(access_token, newRefreshToken);
+            if (user) {
+              store.setUser({
+                accountNo: user.id,
+                email: user.email,
+                role: [user.role || "tenant_admin"],
+                exp: Date.now() + expires_in * 1000,
+              });
+            }
             if (response.config.headers) {
               response.config.headers.Authorization = `Bearer ${access_token}`;
             }
             return api(response.config);
           })
           .catch(() => {
-            clearTokens();
+            useAuthStore.getState().auth.reset();
             window.location.href = "/admin/login";
             return new Promise(() => {});
           });
       }
-      clearTokens();
+      useAuthStore.getState().auth.reset();
       window.location.href = "/admin/login";
       return new Promise(() => {});
     }
@@ -162,9 +162,9 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = getRefreshToken();
+      const refreshToken = useAuthStore.getState().auth.refreshToken;
       if (!refreshToken) {
-        clearTokens();
+        useAuthStore.getState().auth.reset();
         window.location.href = "/admin/login";
         return new Promise(() => {});
       }
@@ -180,10 +180,16 @@ api.interceptors.response.use(
           user,
           expires_in,
         } = response.data;
-        setTokens(
-          { access_token, refresh_token: newRefreshToken, expires_in },
-          user as AdminUser,
-        );
+        const store = useAuthStore.getState().auth;
+        store.setTokens(access_token, newRefreshToken);
+        if (user) {
+          store.setUser({
+            accountNo: user.id,
+            email: user.email,
+            role: [user.role || "tenant_admin"],
+            exp: Date.now() + expires_in * 1000,
+          });
+        }
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${access_token}`;
         }
@@ -193,7 +199,7 @@ api.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError as Error, null);
         isRefreshing = false;
-        clearTokens();
+        useAuthStore.getState().auth.reset();
         window.location.href = "/admin/login";
         return new Promise(() => {});
       }
@@ -205,7 +211,7 @@ api.interceptors.response.use(
       !originalRequest._retry
     ) {
       originalRequest._retry = true;
-      const refreshToken = getRefreshToken();
+      const refreshToken = useAuthStore.getState().auth.refreshToken;
       if (refreshToken) {
         try {
           const response = await axios.post(
@@ -218,21 +224,27 @@ api.interceptors.response.use(
             user,
             expires_in,
           } = response.data;
-          setTokens(
-            { access_token, refresh_token: newRefreshToken, expires_in },
-            user as AdminUser,
-          );
+          const store = useAuthStore.getState().auth;
+          store.setTokens(access_token, newRefreshToken);
+          if (user) {
+            store.setUser({
+              accountNo: user.id,
+              email: user.email,
+              role: [user.role || "tenant_admin"],
+              exp: Date.now() + expires_in * 1000,
+            });
+          }
           if (originalRequest.headers) {
             originalRequest.headers.Authorization = `Bearer ${access_token}`;
           }
           return api(originalRequest);
         } catch {
-          clearTokens();
+          useAuthStore.getState().auth.reset();
           window.location.href = "/admin/login";
           return new Promise(() => {});
         }
       }
-      clearTokens();
+      useAuthStore.getState().auth.reset();
       window.location.href = "/admin/login";
       return new Promise(() => {});
     }
@@ -242,6 +254,6 @@ api.interceptors.response.use(
 );
 
 export const getDashboardAuthHeaders = (): Record<string, string> => {
-  const token = getAccessToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const { accessToken } = useAuthStore.getState().auth;
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 };

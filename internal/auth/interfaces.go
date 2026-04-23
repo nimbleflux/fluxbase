@@ -175,8 +175,8 @@ type PasswordResetRepositoryInterface interface {
 
 // OTPRepositoryInterface defines OTP (one-time password) operations.
 type OTPRepositoryInterface interface {
-	// Create generates a new OTP for email or phone
-	Create(ctx context.Context, email, phone *string, otpType, purpose string, expiryDuration time.Duration) (*OTPCode, error)
+	// Create generates a new OTP for email or phone, returning the code with plaintext for sending
+	Create(ctx context.Context, email, phone *string, otpType, purpose string, expiryDuration time.Duration) (*OTPCodeWithPlaintext, error)
 
 	// GetByCode retrieves an OTP by its code and contact info
 	GetByCode(ctx context.Context, email, phone *string, code string) (*OTPCode, error)

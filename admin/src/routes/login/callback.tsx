@@ -3,7 +3,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth-store";
 import type { DashboardUser } from "@/lib/auth";
-import { setAuthToken } from "@/lib/fluxbase-client";
 import { decodeJWT } from "@/lib/jwt";
 
 export const Route = createFileRoute("/login/callback")({
@@ -49,24 +48,17 @@ function SSOCallbackPage() {
       }
 
       try {
-        // Store access token in Zustand auth store (also sets cookie and syncs SDK)
-        auth.setAccessToken(access_token);
+        auth.setTokens(access_token, refresh_token);
 
-        // Store tokens in localStorage (for route guards and persistence)
-        localStorage.setItem("fluxbase_admin_access_token", access_token);
-        localStorage.setItem("fluxbase_admin_refresh_token", refresh_token);
-
-        // Decode JWT to extract user information
         const tokenPayload = decodeJWT(access_token);
 
-        // Construct user object for localStorage (matching DashboardUser type)
         const user: DashboardUser = {
           id: tokenPayload.user_id,
           email: tokenPayload.email,
-          email_verified: true, // OAuth users are always email verified
+          email_verified: true,
           full_name: tokenPayload.user_metadata?.name || null,
           avatar_url: tokenPayload.user_metadata?.avatar || null,
-          totp_enabled: false, // OAuth users don't have TOTP
+          totp_enabled: false,
           is_active: true,
           is_locked: false,
           last_login_at: new Date().toISOString(),
@@ -77,8 +69,6 @@ function SSOCallbackPage() {
           role: tokenPayload.role,
         };
 
-        // Store user in Zustand auth store so useAuth().user is available
-        // immediately (the /dashboard/auth/me endpoint only allows instance_admin)
         auth.setUser({
           accountNo: tokenPayload.user_id,
           email: tokenPayload.email,
@@ -88,11 +78,7 @@ function SSOCallbackPage() {
             : Date.now() + 24 * 60 * 60 * 1000,
         });
 
-        // Store user object in localStorage
         localStorage.setItem("fluxbase_admin_user", JSON.stringify(user));
-
-        // Also set token in Fluxbase SDK
-        setAuthToken(access_token);
 
         toast.success("Welcome!", {
           description: "You have successfully logged in via SSO.",

@@ -134,13 +134,15 @@ func (v *Validator) CheckSchemaIntegrity(ctx context.Context) ([]string, error) 
 	rows, err := v.pool.Query(ctx, `
 		SELECT tc.table_schema, tc.table_name, tc.constraint_name
 		FROM information_schema.table_constraints tc
+		JOIN pg_constraint pc ON pc.contype = 'f'
+		JOIN pg_namespace n ON pc.connamespace = n.oid
+		JOIN pg_class c ON pc.conrelid = c.oid
 		WHERE tc.constraint_type = 'FOREIGN KEY'
 		AND tc.table_schema NOT IN ('information_schema', 'pg_catalog')
-		AND NOT EXISTS (
-			SELECT 1 FROM pg_constraint pc
-			WHERE pc.contype = 'f'
-			AND pc.convalidated = true
-		)
+		AND n.nspname = tc.table_schema
+		AND c.relname = tc.table_name
+		AND pc.conname = tc.constraint_name
+		AND pc.convalidated = false
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check foreign keys: %w", err)

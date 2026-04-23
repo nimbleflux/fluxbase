@@ -877,6 +877,7 @@ CREATE TABLE IF NOT EXISTS invitation_tokens (
     id uuid DEFAULT gen_random_uuid(),
     email text NOT NULL,
     token text NOT NULL,
+    token_hash text,
     role text DEFAULT 'dashboard_user' NOT NULL,
     tenant_id uuid,
     invited_by uuid,
@@ -913,6 +914,12 @@ CREATE INDEX IF NOT EXISTS idx_dashboard_invitation_tokens_expires_at ON invitat
 --
 
 CREATE INDEX IF NOT EXISTS idx_dashboard_invitation_tokens_token ON invitation_tokens (token);
+
+--
+-- Name: idx_dashboard_invitation_tokens_token_hash; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_dashboard_invitation_tokens_token_hash ON invitation_tokens (token_hash) WHERE token_hash IS NOT NULL;
 
 --
 -- Name: idx_dashboard_invitation_tokens_tenant_id; Type: INDEX; Schema: -; Owner: -

@@ -685,7 +685,7 @@ func (h *TenantHandler) assignOrInviteAdmin(
 		if baseURL == "" {
 			baseURL = "http://localhost:8080"
 		}
-		inviteLink := fmt.Sprintf("%s/admin/accept-invitation?token=%s&tenant=%s", baseURL, invitation.Token, tenantID)
+		inviteLink := fmt.Sprintf("%s/admin/accept-invitation?token=%s&tenant=%s", baseURL, invitation.PlaintextToken, tenantID)
 
 		// Include keys in email if requested
 		var keyInfo string

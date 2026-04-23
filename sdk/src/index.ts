@@ -415,6 +415,7 @@ export type {
 
   // OAuth Provider Configuration types
   OAuthProvider,
+  OAuthProviderInfo,
   CreateOAuthProviderRequest,
   CreateOAuthProviderResponse,
   UpdateOAuthProviderRequest,

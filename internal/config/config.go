@@ -294,6 +294,9 @@ type SAMLProviderConfig struct {
 	// SP signing keys for SLO (Single Logout) - PEM-encoded
 	SPCertificate string `mapstructure:"sp_certificate"` // PEM-encoded X.509 certificate for signing
 	SPPrivateKey  string `mapstructure:"sp_private_key"` // PEM-encoded private key for signing
+
+	// Logout signature verification
+	RequireLogoutSignature *bool `mapstructure:"require_logout_signature"` // Require signed SAML logout messages (default: true)
 }
 
 // OAuthProviderConfig represents a unified OAuth/OIDC provider configuration

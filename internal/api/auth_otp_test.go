@@ -179,7 +179,7 @@ func TestOTPFlow(t *testing.T) {
 		// Verify OTP
 		verifyReq := map[string]interface{}{
 			"email": testEmail,
-			"token": otpCode.Code,
+			"token": otpCode.PlaintextCode,
 			"type":  "email",
 		}
 		body, _ := json.Marshal(verifyReq)

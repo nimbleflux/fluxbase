@@ -3,6 +3,7 @@ import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
 import { setAuthToken as setFluxbaseAuthToken } from '@/lib/fluxbase-client'
 
 const AUTH_COOKIE_NAME = 'fluxbase_admin_token'
+const REFRESH_COOKIE_NAME = 'fluxbase_admin_refresh_token'
 
 interface AuthUser {
   accountNo: string
@@ -16,7 +17,9 @@ interface AuthState {
     user: AuthUser | null
     setUser: (user: AuthUser | null) => void
     accessToken: string
+    refreshToken: string
     setAccessToken: (accessToken: string) => void
+    setTokens: (accessToken: string, refreshToken: string) => void
     resetAccessToken: () => void
     reset: () => void
   }
@@ -25,8 +28,11 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()((set) => {
   const cookieState = getCookie(AUTH_COOKIE_NAME)
   const initToken = cookieState ? JSON.parse(cookieState) : ''
+  const refreshCookieState = getCookie(REFRESH_COOKIE_NAME)
+  const initRefreshToken = refreshCookieState
+    ? JSON.parse(refreshCookieState)
+    : ''
 
-  // Initialize Fluxbase client with the stored token
   if (initToken) {
     setFluxbaseAuthToken(initToken)
   }
@@ -37,25 +43,42 @@ export const useAuthStore = create<AuthState>()((set) => {
       setUser: (user) =>
         set((state) => ({ ...state, auth: { ...state.auth, user } })),
       accessToken: initToken,
+      refreshToken: initRefreshToken,
       setAccessToken: (accessToken) =>
         set((state) => {
           setCookie(AUTH_COOKIE_NAME, JSON.stringify(accessToken))
-          setFluxbaseAuthToken(accessToken) // Sync with Fluxbase client
+          setFluxbaseAuthToken(accessToken)
           return { ...state, auth: { ...state.auth, accessToken } }
+        }),
+      setTokens: (accessToken, refreshToken) =>
+        set((state) => {
+          setCookie(AUTH_COOKIE_NAME, JSON.stringify(accessToken))
+          setCookie(REFRESH_COOKIE_NAME, JSON.stringify(refreshToken))
+          setFluxbaseAuthToken(accessToken)
+          return {
+            ...state,
+            auth: { ...state.auth, accessToken, refreshToken },
+          }
         }),
       resetAccessToken: () =>
         set((state) => {
           removeCookie(AUTH_COOKIE_NAME)
-          setFluxbaseAuthToken(null) // Clear Fluxbase client token
+          setFluxbaseAuthToken(null)
           return { ...state, auth: { ...state.auth, accessToken: '' } }
         }),
       reset: () =>
         set((state) => {
           removeCookie(AUTH_COOKIE_NAME)
-          setFluxbaseAuthToken(null) // Clear Fluxbase client token
+          removeCookie(REFRESH_COOKIE_NAME)
+          setFluxbaseAuthToken(null)
           return {
             ...state,
-            auth: { ...state.auth, user: null, accessToken: '' },
+            auth: {
+              ...state.auth,
+              user: null,
+              accessToken: '',
+              refreshToken: '',
+            },
           }
         }),
     },

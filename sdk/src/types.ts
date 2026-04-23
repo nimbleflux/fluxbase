@@ -821,7 +821,7 @@ export interface AnonymousSignInResponse extends AuthResponse {
 }
 
 // OAuth Types
-export interface OAuthProvider {
+export interface OAuthProviderInfo {
   id: string;
   name: string;
   enabled: boolean;
@@ -829,7 +829,7 @@ export interface OAuthProvider {
 }
 
 export interface OAuthProvidersResponse {
-  providers: OAuthProvider[];
+  providers: OAuthProviderInfo[];
 }
 
 export interface OAuthOptions {

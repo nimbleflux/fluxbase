@@ -127,8 +127,8 @@ func (h *DDLHandler) CreateSchema(c fiber.Ctx) error {
 	queryMetadata := logutil.ExtractDDLMetadata(query)
 	log.Info().Str("schema", req.Name).Str("operation", queryMetadata).Msg("Creating schema")
 
-	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err = h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -236,8 +236,8 @@ func (h *DDLHandler) CreateTable(c fiber.Ctx) error {
 		Msg("Creating table")
 
 	// Execute CREATE TABLE with admin role for full DDL access (superuser privileges)
-	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err = h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -310,8 +310,8 @@ func (h *DDLHandler) DeleteTable(c fiber.Ctx) error {
 	log.Info().Str("table", schema+"."+table).Str("operation", logutil.ExtractDDLMetadata(query)).Msg("Dropping table")
 
 	// Execute DROP TABLE with admin role for full DDL access (superuser privileges)
-	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err = h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -409,8 +409,8 @@ func (h *DDLHandler) AddColumn(c fiber.Ctx) error {
 
 	log.Info().Str("table", schema+"."+table).Str("column", req.Name).Str("operation", logutil.ExtractDDLMetadata(query)).Msg("Adding column")
 
-	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err = h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -479,8 +479,8 @@ func (h *DDLHandler) DropColumn(c fiber.Ctx) error {
 
 	log.Info().Str("table", schema+"."+table).Str("column", column).Str("operation", logutil.ExtractDDLMetadata(query)).Msg("Dropping column")
 
-	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err = h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -558,8 +558,8 @@ func (h *DDLHandler) RenameTable(c fiber.Ctx) error {
 
 	log.Info().Str("table", schema+"."+table).Str("newName", req.NewName).Str("operation", logutil.ExtractDDLMetadata(query)).Msg("Renaming table")
 
-	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err = h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -635,7 +635,7 @@ func (h *DDLHandler) queryPool(c fiber.Ctx) *pgxpool.Pool {
 
 // executeWithAdminRole executes a function with admin role, routing to the
 // tenant database when a tenant context is active.
-func (h *DDLHandler) executeWithAdminRole(ctx context.Context, c fiber.Ctx, fn func(conn *pgx.Conn) error) error {
+func (h *DDLHandler) executeWithAdminRole(ctx context.Context, c fiber.Ctx, fn func(tx pgx.Tx) error) error {
 	if dbName, _ := c.Locals("tenant_db_name").(string); dbName != "" {
 		return h.db.ExecuteWithAdminRoleForDB(ctx, dbName, fn)
 	}
@@ -815,8 +815,8 @@ func (h *DDLHandler) grantTablePermissions(ctx context.Context, c fiber.Ctx, sch
 		quoteIdentifier(table),
 	)
 
-	err := h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, grantTableQuery)
+	err := h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, grantTableQuery)
 		return err
 	})
 	if err != nil {
@@ -856,8 +856,8 @@ func (h *DDLHandler) grantTablePermissions(ctx context.Context, c fiber.Ctx, sch
 			quoteIdentifier(schema),
 			quoteIdentifier(seqName),
 		)
-		err := h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-			_, err := conn.Exec(ctx, grantSeqQuery)
+		err := h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, grantSeqQuery)
 			return err
 		})
 		if err != nil {
@@ -888,8 +888,8 @@ func (h *DDLHandler) setupSchemaDefaultPrivileges(ctx context.Context, c fiber.C
 	}
 
 	for _, query := range queries {
-		err := h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-			_, err := conn.Exec(ctx, query)
+		err := h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, query)
 			return err
 		})
 		if err != nil {
@@ -899,8 +899,8 @@ func (h *DDLHandler) setupSchemaDefaultPrivileges(ctx context.Context, c fiber.C
 
 	// Also grant USAGE on the schema itself to service_role, anon, and authenticated
 	grantSchemaQuery := fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO service_role, anon, authenticated", quoteIdentifier(schema))
-	err := h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, grantSchemaQuery)
+	err := h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, grantSchemaQuery)
 		return err
 	})
 	if err != nil {

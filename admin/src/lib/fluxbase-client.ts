@@ -1,8 +1,5 @@
-/**
- * Fluxbase SDK client configuration for Admin UI
- */
 import { createClient } from "@nimbleflux/fluxbase-sdk";
-import { getAccessToken } from "./auth";
+import { useAuthStore } from "@/stores/auth-store";
 import { useTenantStore } from "@/stores/tenant-store";
 
 // Declare the runtime config type injected by the server
@@ -24,34 +21,24 @@ const API_BASE_URL =
   window.location.origin;
 const API_KEY = import.meta.env.VITE_API_KEY || "anonymous";
 
-// Helper to get impersonation token if active
 const getImpersonationToken = (): string | null => {
   return localStorage.getItem("fluxbase_impersonation_token");
 };
 
-// Helper to get active token (impersonation takes precedence over admin token)
 const getActiveToken = (): string | null => {
-  return getImpersonationToken() || getAccessToken();
+  const accessToken = useAuthStore.getState().auth.accessToken;
+  return getImpersonationToken() || accessToken || null;
 };
 
 // Create the Fluxbase client
 export const fluxbaseClient = createClient(API_BASE_URL, API_KEY, {
   auth: {
-    autoRefresh: false, // Disable auto-refresh since we manage tokens ourselves
-    persist: false, // We manage persistence ourselves via localStorage
+    autoRefresh: false,
+    persist: false,
   },
-  timeout: 30000, // 30 seconds
+  timeout: 30000,
 });
 
-// Initialize SDK with existing tokens on load (checks for impersonation token first)
-const existingToken = getActiveToken();
-if (existingToken) {
-  fluxbaseClient.setAuthToken(existingToken);
-}
-
-// Register before-request interceptor to dynamically inject tenant header.
-// This reads from the Zustand store at REQUEST TIME, avoiding race conditions
-// with useEffect-based header updates.
 fluxbaseClient.setBeforeRequestCallback((headers) => {
   const currentTenant = useTenantStore.getState().currentTenant;
   if (currentTenant?.id) {

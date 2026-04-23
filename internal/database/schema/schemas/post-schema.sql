@@ -1019,3 +1019,35 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'NULL tenant_id migration skipped: %', SQLERRM;
 END $$;
+
+-- ============================================================================
+-- DATA MIGRATION: Hash existing plaintext OTP codes
+-- Idempotent — WHERE code_hash IS NULL makes this a no-op after first run.
+-- OTP codes are short-lived (10-15 min), so clearing unhashed codes on upgrade
+-- is acceptable. Users can simply request a new code.
+-- ============================================================================
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='auth' AND table_name='otp_codes' AND column_name='code_hash') THEN
+        DELETE FROM auth.otp_codes WHERE code_hash IS NULL AND code IS NOT NULL;
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'OTP code hash migration skipped: %', SQLERRM;
+END $$;
+
+-- ============================================================================
+-- DATA MIGRATION: Hash existing plaintext invitation tokens
+-- Idempotent — WHERE token_hash IS NULL makes this a no-op after first run.
+-- Invitation tokens are long-lived (7 days), so we keep both columns during
+-- transition. The Go code uses dual-read: hash lookup first, plaintext fallback.
+-- ============================================================================
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema='platform' AND table_name='invitation_tokens' AND column_name='token_hash') THEN
+        UPDATE platform.invitation_tokens
+        SET token_hash = encode(digest(token, 'sha256'), 'hex')
+        WHERE token_hash IS NULL AND token IS NOT NULL;
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Invitation token hash migration skipped: %', SQLERRM;
+END $$;

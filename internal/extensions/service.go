@@ -390,14 +390,14 @@ func (s *Service) EnableExtensionForTenant(ctx context.Context, name string, use
 	// Execute on the appropriate database
 	if tenantDBName != "" {
 		// Separate-DB tenant: run on tenant database
-		err = s.db.ExecuteWithAdminRoleForDB(ctx, tenantDBName, func(conn *pgx.Conn) error {
-			_, err := conn.Exec(ctx, sql)
+		err = s.db.ExecuteWithAdminRoleForDB(ctx, tenantDBName, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, sql)
 			return err
 		})
 	} else {
 		// Default tenant: run on main database
-		err = s.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
-			_, err := conn.Exec(ctx, sql)
+		err = s.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, sql)
 			return err
 		})
 	}
@@ -494,13 +494,13 @@ func (s *Service) DisableExtensionForTenant(ctx context.Context, name string, us
 
 	// Execute on the appropriate database
 	if tenantDBName != "" {
-		err = s.db.ExecuteWithAdminRoleForDB(ctx, tenantDBName, func(conn *pgx.Conn) error {
-			_, err := conn.Exec(ctx, sql)
+		err = s.db.ExecuteWithAdminRoleForDB(ctx, tenantDBName, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, sql)
 			return err
 		})
 	} else {
-		err = s.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
-			_, err := conn.Exec(ctx, sql)
+		err = s.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, sql)
 			return err
 		})
 	}

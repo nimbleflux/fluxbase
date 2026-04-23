@@ -3,7 +3,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth-store";
 import { dashboardAuthAPI } from "@/lib/api";
-import { setAuthToken } from "@/lib/fluxbase-client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -69,14 +68,10 @@ function OtpPage() {
         code: code,
       });
 
-      // Clear the stored user_id
       sessionStorage.removeItem("2fa_user_id");
 
-      // Store access token in Zustand auth store
-      auth.setAccessToken(response.access_token);
+      auth.setTokens(response.access_token, response.refresh_token);
 
-      // Store user in Zustand auth store so useAuth().user is available
-      // immediately (the /dashboard/auth/me endpoint only allows instance_admin)
       auth.setUser({
         accountNo: response.user.id,
         email: response.user.email,
@@ -84,22 +79,10 @@ function OtpPage() {
         exp: Date.now() + response.expires_in * 1000,
       });
 
-      // Store tokens and user in localStorage
-      localStorage.setItem(
-        "fluxbase_admin_access_token",
-        response.access_token,
-      );
-      localStorage.setItem(
-        "fluxbase_admin_refresh_token",
-        response.refresh_token,
-      );
       localStorage.setItem(
         "fluxbase_admin_user",
         JSON.stringify(response.user),
       );
-
-      // Also set token in Fluxbase SDK
-      setAuthToken(response.access_token);
 
       toast.success("Welcome back!", {
         description: "You have successfully logged in.",

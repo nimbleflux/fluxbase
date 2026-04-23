@@ -391,6 +391,7 @@ CREATE TABLE IF NOT EXISTS otp_codes (
     email text,
     phone text,
     code varchar(10) NOT NULL,
+    code_hash text,
     type text NOT NULL,
     purpose text NOT NULL,
     expires_at timestamptz NOT NULL,
@@ -423,7 +424,7 @@ COMMENT ON COLUMN auth.otp_codes.attempts IS 'Number of failed verification atte
 -- Name: idx_auth_otp_codes_code; Type: INDEX; Schema: -; Owner: -
 --
 
-CREATE INDEX IF NOT EXISTS idx_auth_otp_codes_code ON otp_codes (code);
+CREATE INDEX IF NOT EXISTS idx_auth_otp_codes_code_hash ON otp_codes (code_hash) WHERE code_hash IS NOT NULL;
 
 --
 -- Name: idx_auth_otp_codes_email; Type: INDEX; Schema: -; Owner: -

@@ -149,14 +149,7 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 	triggerName := fmt.Sprintf("%s_realtime_notify", req.Table)
 
 	// Execute all DDL in a transaction with admin role
-	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-		// Start transaction
-		tx, txErr := conn.Begin(ctx)
-		if txErr != nil {
-			return fmt.Errorf("failed to begin transaction: %w", txErr)
-		}
-		defer tx.Rollback(ctx) //nolint:errcheck
-
+	err = h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
 		// 1. Set REPLICA IDENTITY FULL (required for UPDATE/DELETE to include old values)
 		replicaQuery := fmt.Sprintf("ALTER TABLE %s.%s REPLICA IDENTITY FULL",
 			quoteIdentifier(req.Schema), quoteIdentifier(req.Table))
@@ -197,7 +190,7 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 			return fmt.Errorf("failed to update schema registry: %w", execErr)
 		}
 
-		return tx.Commit(ctx)
+		return nil
 	})
 	if err != nil {
 		log.Error().Err(err).Str("table", req.Schema+"."+req.Table).Msg("Failed to enable realtime")
@@ -262,13 +255,7 @@ func (h *RealtimeAdminHandler) HandleDisableRealtime(c fiber.Ctx) error {
 	triggerName := fmt.Sprintf("%s_realtime_notify", table)
 
 	// Execute DDL with admin role
-	err = h.executeWithAdminRole(ctx, c, func(conn *pgx.Conn) error {
-		tx, txErr := conn.Begin(ctx)
-		if txErr != nil {
-			return fmt.Errorf("failed to begin transaction: %w", txErr)
-		}
-		defer tx.Rollback(ctx) //nolint:errcheck
-
+	err = h.executeWithAdminRole(ctx, c, func(tx pgx.Tx) error {
 		// 1. Drop the trigger
 		dropQuery := fmt.Sprintf("DROP TRIGGER IF EXISTS %s ON %s.%s",
 			quoteIdentifier(triggerName), quoteIdentifier(schema), quoteIdentifier(table))
@@ -287,7 +274,7 @@ func (h *RealtimeAdminHandler) HandleDisableRealtime(c fiber.Ctx) error {
 			return fmt.Errorf("failed to update schema registry: %w", execErr)
 		}
 
-		return tx.Commit(ctx)
+		return nil
 	})
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to disable realtime")
@@ -554,7 +541,7 @@ func (h *RealtimeAdminHandler) queryPool(c fiber.Ctx) *pgxpool.Pool {
 
 // executeWithAdminRole executes a function with admin role, routing to the
 // tenant database when a tenant context is active.
-func (h *RealtimeAdminHandler) executeWithAdminRole(ctx context.Context, c fiber.Ctx, fn func(conn *pgx.Conn) error) error {
+func (h *RealtimeAdminHandler) executeWithAdminRole(ctx context.Context, c fiber.Ctx, fn func(tx pgx.Tx) error) error {
 	if dbName, _ := c.Locals("tenant_db_name").(string); dbName != "" {
 		return h.db.ExecuteWithAdminRoleForDB(ctx, dbName, fn)
 	}
