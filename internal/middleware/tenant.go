@@ -38,8 +38,10 @@ func TenantMiddleware(cfg TenantConfig) fiber.Handler {
 
 		// Get claims if available
 		var claims *auth.TokenClaims
-		if c, ok := c.Locals("claims").(*auth.TokenClaims); ok {
-			claims = c
+		if cl, ok := c.Locals("claims").(*auth.TokenClaims); ok {
+			claims = cl
+		} else if cl, ok := c.Locals("jwt_claims").(*auth.TokenClaims); ok {
+			claims = cl
 		}
 
 		var tenantID string

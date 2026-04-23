@@ -174,6 +174,7 @@ func migrationsValidateAuthAndScope(c fiber.Ctx, db *pgxpool.Pool, authService *
 			c.Locals("user_role", claims.Role)
 			c.Locals("user_id", claims.UserID)
 			c.Locals("claims", claims)
+			c.Locals("jwt_claims", claims)
 
 			if claims.Role == "service_role" {
 				tenantID := migrationsGetTenantIDFromHeader(c)

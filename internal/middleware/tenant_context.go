@@ -17,7 +17,13 @@ func CtxWithTenant(c fiber.Ctx) context.Context {
 	tenantSource := GetTenantSourceFromContext(c)
 
 	if tenantSource == "default" || tenantID == "" {
-		if claims, ok := c.Locals("claims").(*auth.TokenClaims); ok && claims != nil && claims.TenantID != nil {
+		var claims *auth.TokenClaims
+		if cl, ok := c.Locals("claims").(*auth.TokenClaims); ok && cl != nil {
+			claims = cl
+		} else if cl, ok := c.Locals("jwt_claims").(*auth.TokenClaims); ok && cl != nil {
+			claims = cl
+		}
+		if claims != nil && claims.TenantID != nil {
 			tenantID = *claims.TenantID
 		}
 	}

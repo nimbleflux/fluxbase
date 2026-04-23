@@ -50,8 +50,10 @@ func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
 		tenantRole, _ := c.Locals("tenant_role").(string)
 
 		var claims *auth.TokenClaims
-		if c, ok := c.Locals("claims").(*auth.TokenClaims); ok {
-			claims = c
+		if cl, ok := c.Locals("claims").(*auth.TokenClaims); ok {
+			claims = cl
+		} else if cl, ok := c.Locals("jwt_claims").(*auth.TokenClaims); ok {
+			claims = cl
 		}
 
 		// Respect prior explicit resolution from TenantMiddleware.
