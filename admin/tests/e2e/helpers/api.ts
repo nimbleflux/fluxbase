@@ -1086,3 +1086,88 @@ export async function rawDeleteMCPTool(
     headers,
   });
 }
+
+// ────────────────────────────────────────────────────────────────
+// Webhook Deliveries
+// ────────────────────────────────────────────────────────────────
+
+export async function rawListWebhookDeliveries(
+  webhookId: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: `/api/v1/webhooks/${webhookId}/deliveries`,
+    headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Settings (Custom)
+// ────────────────────────────────────────────────────────────────
+
+export async function rawCreateCustomSetting(
+  options: {
+    key: string;
+    value: string;
+    category?: string;
+    description?: string;
+  },
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/settings/custom",
+    data: options,
+    headers,
+  });
+}
+
+export async function rawListCustomSettings(
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/settings/custom",
+    headers,
+  });
+}
+
+export async function rawDeleteCustomSetting(
+  key: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "DELETE",
+    path: `/api/v1/settings/custom/${key}`,
+    headers,
+  });
+}

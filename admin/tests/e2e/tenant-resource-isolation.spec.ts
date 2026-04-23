@@ -10,6 +10,9 @@ import {
   rawCreateMCPTool,
   rawListMCPTools,
   rawDeleteMCPTool,
+  rawCreateCustomSetting,
+  rawListCustomSettings,
+  rawDeleteCustomSetting,
   rawApiRequest,
 } from "./helpers/api";
 
@@ -48,6 +51,9 @@ test.describe("Tenant Resource Isolation", () => {
           break;
         case "mcp_tool":
           path = `/api/v1/mcp/tools/${id}`;
+          break;
+        case "setting":
+          path = `/api/v1/settings/custom/${id}`;
           break;
         default:
           continue;
@@ -279,6 +285,122 @@ test.describe("Tenant Resource Isolation", () => {
       await rawDeleteMCPTool(tool.body.id, adminToken, defaultTenantId).catch(
         () => {},
       );
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────
+  // Group 6: Settings Isolation
+  // ────────────────────────────────────────────────────────────────
+
+  test("settings created in tenant A are not visible in tenant B", async ({
+    adminToken,
+    defaultTenantId,
+    thirdTenantId,
+  }) => {
+    const suffix = Date.now();
+    const key = `iso-setting-${suffix}`;
+
+    const setting = await rawCreateCustomSetting(
+      { key, value: "tenant-a-value", category: "custom" },
+      adminToken,
+      defaultTenantId,
+    );
+    expect(setting.status).toBeLessThan(300);
+    createdResources.push({
+      type: "setting",
+      id: key,
+      token: adminToken,
+      tenantId: defaultTenantId,
+    });
+
+    const listA = await rawListCustomSettings(adminToken, defaultTenantId);
+    expect(listA.status).toBeLessThan(300);
+    const settingsA = Array.isArray(listA.body) ? listA.body : listA.body?.settings || [];
+    const foundInA = settingsA.some((s: { key: string }) => s.key === key);
+    expect(foundInA).toBe(true);
+
+    const listB = await rawListCustomSettings(adminToken, thirdTenantId);
+    expect(listB.status).toBeLessThan(300);
+    const settingsB = Array.isArray(listB.body) ? listB.body : listB.body?.settings || [];
+    const foundInB = settingsB.some((s: { key: string }) => s.key === key);
+    expect(foundInB).toBe(false);
+  });
+
+  test("settings created in tenant B are not visible in tenant A", async ({
+    adminToken,
+    defaultTenantId,
+    thirdTenantId,
+  }) => {
+    const suffix = Date.now();
+    const key = `iso-setting-b-${suffix}`;
+
+    const setting = await rawCreateCustomSetting(
+      { key, value: "tenant-b-value", category: "custom" },
+      adminToken,
+      thirdTenantId,
+    );
+    expect(setting.status).toBeLessThan(300);
+    createdResources.push({
+      type: "setting",
+      id: key,
+      token: adminToken,
+      tenantId: thirdTenantId,
+    });
+
+    const listA = await rawListCustomSettings(adminToken, defaultTenantId);
+    expect(listA.status).toBeLessThan(300);
+    const settingsA = Array.isArray(listA.body) ? listA.body : listA.body?.settings || [];
+    const foundInA = settingsA.some((s: { key: string }) => s.key === key);
+    expect(foundInA).toBe(false);
+
+    const listB = await rawListCustomSettings(adminToken, thirdTenantId);
+    expect(listB.status).toBeLessThan(300);
+    const settingsB = Array.isArray(listB.body) ? listB.body : listB.body?.settings || [];
+    const foundInB = settingsB.some((s: { key: string }) => s.key === key);
+    expect(foundInB).toBe(true);
+  });
+
+  // ────────────────────────────────────────────────────────────────
+  // Group 7: Bidirectional Webhook Isolation
+  // ────────────────────────────────────────────────────────────────
+
+  test("webhooks created in tenant B are not visible in tenant A", async ({
+    adminToken,
+    defaultTenantId,
+    thirdTenantId,
+  }) => {
+    const webhook = await rawCreateWebhook(
+      {
+        name: `iso-wh-b-${Date.now()}`,
+        url: "https://example.com/webhook-b",
+      },
+      adminToken,
+      thirdTenantId,
+    );
+
+    if (webhook.status < 300 && webhook.body?.id) {
+      createdResources.push({
+        type: "webhook",
+        id: webhook.body.id,
+        token: adminToken,
+        tenantId: thirdTenantId,
+      });
+
+      const listA = await rawListWebhooks(adminToken, defaultTenantId);
+      expect(listA.status).toBeLessThan(300);
+      const webhooksA = Array.isArray(listA.body) ? listA.body : [];
+      const foundInA = webhooksA.some(
+        (w: { id: string }) => w.id === webhook.body.id,
+      );
+      expect(foundInA).toBe(false);
+
+      const listB = await rawListWebhooks(adminToken, thirdTenantId);
+      expect(listB.status).toBeLessThan(300);
+      const webhooksB = Array.isArray(listB.body) ? listB.body : [];
+      const foundInB = webhooksB.some(
+        (w: { id: string }) => w.id === webhook.body.id,
+      );
+      expect(foundInB).toBe(true);
     }
   });
 });
