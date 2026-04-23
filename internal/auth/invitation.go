@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
@@ -144,6 +145,16 @@ func (s *InvitationService) CreateInvitationWithTenant(ctx context.Context, emai
 	return &InvitationTokenWithPlaintext{InvitationToken: invitation, PlaintextToken: token}, nil
 }
 
+func validateInvitation(invitation *InvitationToken) error {
+	if invitation.Accepted {
+		return ErrInvitationAlreadyAccepted
+	}
+	if time.Now().After(invitation.ExpiresAt) {
+		return ErrInvitationExpired
+	}
+	return nil
+}
+
 // ValidateToken validates an invitation token and returns the invitation
 func (s *InvitationService) ValidateToken(ctx context.Context, token string) (*InvitationToken, error) {
 	tokenHash := hashInvitationToken(token)
@@ -170,7 +181,7 @@ func (s *InvitationService) ValidateToken(ctx context.Context, token string) (*I
 		)
 	})
 	if err == nil {
-		goto validated
+		return invitation, validateInvitation(invitation)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
@@ -205,23 +216,16 @@ func (s *InvitationService) ValidateToken(ctx context.Context, token string) (*I
 
 	// Lazy migration: backfill hash for this legacy token
 	if invitation.TokenHash == "" {
-		_ = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-			_, _ = tx.Exec(ctx, `UPDATE platform.invitation_tokens SET token_hash = $1 WHERE id = $2`, tokenHash, invitation.ID)
-			invitation.TokenHash = tokenHash
-			return nil
-		})
+		if migrateErr := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+			_, execErr := tx.Exec(ctx, `UPDATE platform.invitation_tokens SET token_hash = $1 WHERE id = $2`, tokenHash, invitation.ID)
+			return execErr
+		}); migrateErr != nil {
+			log.Debug().Err(migrateErr).Str("invitation_id", invitation.ID.String()).Msg("Failed to lazy-migrate invitation token hash")
+		}
+		invitation.TokenHash = tokenHash
 	}
 
-validated:
-	if invitation.Accepted {
-		return nil, ErrInvitationAlreadyAccepted
-	}
-
-	if time.Now().After(invitation.ExpiresAt) {
-		return nil, ErrInvitationExpired
-	}
-
-	return invitation, nil
+	return invitation, validateInvitation(invitation)
 }
 
 // AcceptInvitation marks an invitation as accepted

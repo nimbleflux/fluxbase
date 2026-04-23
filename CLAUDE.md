@@ -465,6 +465,40 @@ Git pre-commit hooks automatically run:
 - PostgreSQL Row Level Security (RLS) for authorization
 - PostgREST-compatible REST API conventions
 
+## Security Hardening
+
+### Sensitive Value Handling
+
+- **OTP codes** are stored as SHA-256 hashes (`auth.otp_codes.code_hash`). The `PlaintextCode` field uses `json:"-"` to prevent API leakage
+- **Invitation tokens** are stored as SHA-256 hashes (`platform.invitation_tokens.token_hash`). Dual-read with lazy migration supports existing plaintext tokens during upgrade
+- **Edge function env vars**: `internal/runtime/env.go` blocks sensitive vars (`FLUXBASE_DATABASE_URL`, `FLUXBASE_AUTH_JWT_SECRET`, email API keys, etc.) from being passed to Deno functions
+- **Function update columns**: `internal/functions/storage.go` uses a whitelist (`allowedFunctionColumns`) to prevent overwriting protected columns (`id`, `tenant_id`, `created_at`, `updated_at`)
+
+### Database Connection Safety
+
+- **Pool mutex**: `internal/database/connection.go` uses `sync.RWMutex` on all pool access (`BeginTx`, `Query`, `Exec`, `Stats`, `Pool`). `Close()` acquires write lock, nils pool, then closes outside lock
+- **Advisory locks**: Migrations use `pg_try_advisory_xact_lock` (transaction-scoped) to prevent concurrent migration execution. Lock auto-releases on commit/rollback
+
+### Admin UI Auth
+
+- **Single source of truth**: Zustand store (`admin/src/stores/auth-store.ts`) manages tokens. Axios interceptor reads/writes via Zustand
+- **Retry guard**: Both success and error interceptors use `_retry` flag to prevent infinite refresh loops
+
+### Path Safety
+
+- **Log file paths**: `internal/storage/log_local.go` validates components via `validatePathComponent` (rejects `..`, `/`, null bytes, absolute paths)
+- **SQL substitution**: `internal/database/bootstrap/substitute.go` validates `APP_USER` identifier with `^[a-zA-Z_][a-zA-Z0-9_]*$` before SQL substitution
+- **Prometheus metrics**: `normalizePath` replaces UUIDs (case-insensitive) and numeric IDs with `:id` to prevent cardinality explosion
+
+### SAML
+
+- **Logout signature verification**: Enabled by default. `RequireLogoutSignature` config can disable for development
+- **Nil-safe parsing**: `ParseLogoutRequest`/`ParseLogoutResponse` guard against nil `NameID`, `Issuer`, `Status` fields
+
+### Email
+
+- **HTML escaping**: All dynamic values in email templates pass through `html.EscapeString` to prevent injection
+
 ## Migrations
 
 Fluxbase uses a **hybrid migration system** with three subsystems:

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -94,7 +93,7 @@ type AcceptInvitationResponse struct {
 }
 
 func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 
 	inviterID, ok := c.Locals("user_id").(string)
 	if !ok {
@@ -175,7 +174,7 @@ func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 }
 
 func (h *InvitationHandler) ValidateInvitation(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 
 	token := c.Params("token")
 	if token == "" {
@@ -200,7 +199,7 @@ func (h *InvitationHandler) ValidateInvitation(c fiber.Ctx) error {
 }
 
 func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 
 	token := c.Params("token")
 	if token == "" {
@@ -257,7 +256,7 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 	if err := h.invitationService.AcceptInvitation(ctx, token); err != nil {
 		log.Warn().
 			Err(err).
-			Str("token", token).
+			Str("invitation_id", invitation.ID.String()).
 			Str("email", invitation.Email).
 			Msg("Failed to mark invitation as accepted")
 	}
@@ -278,7 +277,7 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 }
 
 func (h *InvitationHandler) ListInvitations(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 
 	includeAccepted := c.Query("include_accepted", "false") == "true"
 	includeExpired := c.Query("include_expired", "false") == "true"
@@ -296,7 +295,7 @@ func (h *InvitationHandler) ListInvitations(c fiber.Ctx) error {
 }
 
 func (h *InvitationHandler) RevokeInvitation(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 
 	token := c.Params("token")
 	if token == "" {

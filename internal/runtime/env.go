@@ -8,16 +8,21 @@ import (
 
 // blockedVars are environment variables that should never be exposed to user code
 var blockedVars = map[string]bool{
-	"FLUXBASE_AUTH_JWT_SECRET":         true,
-	"FLUXBASE_DATABASE_PASSWORD":       true,
-	"FLUXBASE_DATABASE_ADMIN_PASSWORD": true,
-	"FLUXBASE_STORAGE_S3_SECRET_KEY":   true,
-	"FLUXBASE_STORAGE_S3_ACCESS_KEY":   true,
-	"FLUXBASE_EMAIL_SMTP_PASSWORD":     true,
-	"FLUXBASE_SECURITY_SETUP_TOKEN":    true,
-	"FLUXBASE_ENCRYPTION_KEY":          true,
-	"FLUXBASE_SERVICE_ROLE_KEY":        true,
-	"FLUXBASE_ANON_KEY":                true,
+	"FLUXBASE_AUTH_JWT_SECRET":             true,
+	"FLUXBASE_DATABASE_PASSWORD":           true,
+	"FLUXBASE_DATABASE_ADMIN_PASSWORD":     true,
+	"FLUXBASE_DATABASE_URL":                true,
+	"FLUXBASE_DATABASE_ADMIN_URL":          true,
+	"FLUXBASE_STORAGE_S3_SECRET_KEY":       true,
+	"FLUXBASE_STORAGE_S3_ACCESS_KEY":       true,
+	"FLUXBASE_EMAIL_SMTP_PASSWORD":         true,
+	"FLUXBASE_EMAIL_SENDGRID_API_KEY":      true,
+	"FLUXBASE_EMAIL_MAILGUN_API_KEY":       true,
+	"FLUXBASE_EMAIL_SES_SECRET_ACCESS_KEY": true,
+	"FLUXBASE_SECURITY_SETUP_TOKEN":        true,
+	"FLUXBASE_ENCRYPTION_KEY":              true,
+	"FLUXBASE_SERVICE_ROLE_KEY":            true,
+	"FLUXBASE_ANON_KEY":                    true,
 }
 
 // buildEnv creates the environment variable list for execution

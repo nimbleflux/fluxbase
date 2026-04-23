@@ -31,6 +31,11 @@ type (
 	TxConnection = pgx.Tx
 )
 
+// errRow implements pgx.Row to return an error when the pool is closed.
+type errRow struct{ err error }
+
+func (r errRow) Scan(dest ...interface{}) error { return r.err }
+
 // quoteIdentifier safely quotes a PostgreSQL identifier to prevent SQL injection.
 // It wraps the identifier in double quotes and escapes any embedded double quotes.
 func quoteIdentifier(identifier string) string {
@@ -220,10 +225,13 @@ func NewConnectionWithPool(pool *pgxpool.Pool) *Connection {
 
 // Close closes the database connection pool
 func (c *Connection) Close() {
-	c.poolMu.RLock()
+	c.poolMu.Lock()
 	p := c.pool
-	c.poolMu.RUnlock()
-	p.Close()
+	c.pool = nil
+	c.poolMu.Unlock()
+	if p != nil {
+		p.Close()
+	}
 	log.Info().Msg("Database connection closed")
 }
 
@@ -639,13 +647,24 @@ func (c *Connection) grantRolesToRuntimeUser() error {
 
 // BeginTx starts a new transaction
 func (c *Connection) BeginTx(ctx context.Context) (pgx.Tx, error) {
+	c.poolMu.RLock()
+	defer c.poolMu.RUnlock()
+	if c.pool == nil {
+		return nil, fmt.Errorf("database connection closed")
+	}
 	return c.pool.Begin(ctx)
 }
 
 // Query executes a query that returns rows
 func (c *Connection) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	c.poolMu.RLock()
+	if c.pool == nil {
+		c.poolMu.RUnlock()
+		return nil, fmt.Errorf("database connection closed")
+	}
 	start := time.Now()
 	rows, err := c.pool.Query(ctx, sql, args...)
+	c.poolMu.RUnlock()
 	duration := time.Since(start)
 
 	// Record metrics
@@ -671,6 +690,11 @@ func (c *Connection) Query(ctx context.Context, sql string, args ...interface{})
 
 // QueryRow executes a query that returns a single row
 func (c *Connection) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	c.poolMu.RLock()
+	defer c.poolMu.RUnlock()
+	if c.pool == nil {
+		return errRow{fmt.Errorf("database connection closed")}
+	}
 	start := time.Now()
 	row := c.pool.QueryRow(ctx, sql, args...)
 	duration := time.Since(start)
@@ -698,8 +722,14 @@ func (c *Connection) QueryRow(ctx context.Context, sql string, args ...interface
 
 // Exec executes a query that doesn't return rows
 func (c *Connection) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	c.poolMu.RLock()
+	if c.pool == nil {
+		c.poolMu.RUnlock()
+		return pgconn.CommandTag{}, fmt.Errorf("database connection closed")
+	}
 	start := time.Now()
 	tag, err := c.pool.Exec(ctx, sql, args...)
+	c.poolMu.RUnlock()
 	duration := time.Since(start)
 
 	// Record metrics
@@ -748,6 +778,11 @@ func (c *Connection) Health(ctx context.Context) error {
 
 // Stats returns database connection pool statistics
 func (c *Connection) Stats() *pgxpool.Stat {
+	c.poolMu.RLock()
+	defer c.poolMu.RUnlock()
+	if c.pool == nil {
+		return nil
+	}
 	return c.pool.Stat()
 }
 

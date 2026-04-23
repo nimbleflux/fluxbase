@@ -91,8 +91,19 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     if (isNotLoggedInResponse(response.data)) {
+      const config = response.config as typeof response.config & {
+        _retry?: boolean;
+      };
+
+      if (config._retry) {
+        useAuthStore.getState().auth.reset();
+        window.location.href = "/admin/login";
+        return new Promise(() => {});
+      }
+
       const { refreshToken } = useAuthStore.getState().auth;
       if (refreshToken) {
+        config._retry = true;
         return axios
           .post(`${API_BASE_URL}/api/v1/admin/refresh`, {
             refresh_token: refreshToken,
@@ -114,10 +125,10 @@ api.interceptors.response.use(
                 exp: Date.now() + expires_in * 1000,
               });
             }
-            if (response.config.headers) {
-              response.config.headers.Authorization = `Bearer ${access_token}`;
+            if (config.headers) {
+              config.headers.Authorization = `Bearer ${access_token}`;
             }
-            return api(response.config);
+            return api(config);
           })
           .catch(() => {
             useAuthStore.getState().auth.reset();

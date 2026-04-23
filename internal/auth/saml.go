@@ -1002,12 +1002,23 @@ func (s *SAMLService) ParseLogoutRequest(samlRequest, relayState string, isDefla
 		return nil, "", fmt.Errorf("%w: XML parse failed: %w", ErrSAMLInvalidLogoutRequest, err)
 	}
 
+	var nameID string
+	var nameIDFormat string
+	if logoutRequest.NameID != nil {
+		nameID = logoutRequest.NameID.Value
+		nameIDFormat = string(logoutRequest.NameID.Format)
+	}
+	var issuer string
+	if logoutRequest.Issuer != nil {
+		issuer = logoutRequest.Issuer.Value
+	}
+
 	// Find matching provider by issuer
 	providerName := ""
 	var provider *SAMLProvider
 	s.mu.RLock()
 	for name, p := range s.providers {
-		if p.metadata != nil && p.metadata.EntityID == logoutRequest.Issuer.Value {
+		if p.metadata != nil && p.metadata.EntityID == issuer {
 			providerName = name
 			provider = p
 			break
@@ -1016,7 +1027,7 @@ func (s *SAMLService) ParseLogoutRequest(samlRequest, relayState string, isDefla
 	s.mu.RUnlock()
 
 	if providerName == "" {
-		return nil, "", fmt.Errorf("%w: unknown issuer %s", ErrSAMLInvalidLogoutRequest, logoutRequest.Issuer.Value)
+		return nil, "", fmt.Errorf("%w: unknown issuer %s", ErrSAMLInvalidLogoutRequest, issuer)
 	}
 
 	if provider.RequireLogoutSignature {
@@ -1037,10 +1048,10 @@ func (s *SAMLService) ParseLogoutRequest(samlRequest, relayState string, isDefla
 
 	parsed := &ParsedLogoutRequest{
 		ID:           logoutRequest.ID,
-		NameID:       logoutRequest.NameID.Value,
-		NameIDFormat: string(logoutRequest.NameID.Format),
+		NameID:       nameID,
+		NameIDFormat: nameIDFormat,
 		SessionIndex: sessionIndex,
-		Issuer:       logoutRequest.Issuer.Value,
+		Issuer:       issuer,
 		Destination:  logoutRequest.Destination,
 		RelayState:   relayState,
 	}
@@ -1070,12 +1081,17 @@ func (s *SAMLService) ParseLogoutResponse(samlResponse string, isDeflated bool) 
 		return nil, "", fmt.Errorf("%w: XML parse failed: %w", ErrSAMLInvalidLogoutResponse, err)
 	}
 
+	var issuer string
+	if logoutResponse.Issuer != nil {
+		issuer = logoutResponse.Issuer.Value
+	}
+
 	// Find matching provider by issuer
 	providerName := ""
 	var provider *SAMLProvider
 	s.mu.RLock()
 	for name, p := range s.providers {
-		if p.metadata != nil && p.metadata.EntityID == logoutResponse.Issuer.Value {
+		if p.metadata != nil && p.metadata.EntityID == issuer {
 			providerName = name
 			provider = p
 			break
@@ -1084,7 +1100,7 @@ func (s *SAMLService) ParseLogoutResponse(samlResponse string, isDeflated bool) 
 	s.mu.RUnlock()
 
 	if providerName == "" {
-		return nil, "", fmt.Errorf("%w: unknown issuer %s", ErrSAMLInvalidLogoutResponse, logoutResponse.Issuer.Value)
+		return nil, "", fmt.Errorf("%w: unknown issuer %s", ErrSAMLInvalidLogoutResponse, issuer)
 	}
 
 	if provider.RequireLogoutSignature {
@@ -1099,12 +1115,16 @@ func (s *SAMLService) ParseLogoutResponse(samlResponse string, isDeflated bool) 
 
 	// Extract status
 	status := logoutResponse.Status.StatusCode.Value
+	var statusMessage string
+	if logoutResponse.Status.StatusMessage != nil {
+		statusMessage = logoutResponse.Status.StatusMessage.Value
+	}
 
 	parsed := &ParsedLogoutResponse{
 		InResponseTo:  logoutResponse.InResponseTo,
 		Status:        status,
-		StatusMessage: logoutResponse.Status.StatusMessage.Value,
-		Issuer:        logoutResponse.Issuer.Value,
+		StatusMessage: statusMessage,
+		Issuer:        issuer,
 	}
 
 	return parsed, providerName, nil

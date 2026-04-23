@@ -612,6 +612,41 @@ func TestEdgeFunction_Timestamps(t *testing.T) {
 // EdgeFunctionExecution Duration Tests
 // =============================================================================
 
+func TestAllowedFunctionColumns(t *testing.T) {
+	t.Run("essential columns are whitelisted", func(t *testing.T) {
+		essential := []string{
+			"name", "namespace", "description", "code",
+			"original_code", "enabled", "cron_schedule", "version",
+			"timeout_seconds", "memory_limit_mb",
+			"allow_net", "allow_env", "allow_read", "allow_write",
+			"allow_unauthenticated", "is_public",
+			"is_bundled", "bundle_error", "source",
+			"cors_origins", "cors_methods", "cors_headers",
+			"cors_credentials", "cors_max_age",
+			"rate_limit_per_minute", "rate_limit_per_hour", "rate_limit_per_day",
+			"disable_execution_logs", "needs_rebundle",
+			"created_by",
+		}
+		for _, col := range essential {
+			assert.True(t, allowedFunctionColumns[col], "column %q should be in whitelist", col)
+		}
+	})
+
+	t.Run("protected columns are NOT whitelisted", func(t *testing.T) {
+		protected := []string{"id", "created_at", "updated_at", "tenant_id"}
+		for _, col := range protected {
+			assert.False(t, allowedFunctionColumns[col], "protected column %q must NOT be in whitelist", col)
+		}
+	})
+
+	t.Run("nonsense columns are NOT whitelisted", func(t *testing.T) {
+		nonsense := []string{"admin_override", "password", "secret"}
+		for _, col := range nonsense {
+			assert.False(t, allowedFunctionColumns[col], "nonsense column %q must NOT be in whitelist", col)
+		}
+	})
+}
+
 func TestEdgeFunctionExecution_Duration(t *testing.T) {
 	t.Run("fast execution", func(t *testing.T) {
 		duration := 50 // 50ms

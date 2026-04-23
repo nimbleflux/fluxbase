@@ -566,3 +566,31 @@ func TestMockOTPSender_SMSError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Len(t, sender.SentSMS, 0)
 }
+
+// =============================================================================
+// hashOTPCode Tests
+// =============================================================================
+
+func TestHashOTPCode(t *testing.T) {
+	t.Run("deterministic", func(t *testing.T) {
+		h1 := hashOTPCode("123456")
+		h2 := hashOTPCode("123456")
+		assert.Equal(t, h1, h2)
+	})
+
+	t.Run("different inputs produce different outputs", func(t *testing.T) {
+		h1 := hashOTPCode("123456")
+		h2 := hashOTPCode("654321")
+		assert.NotEqual(t, h1, h2)
+	})
+
+	t.Run("empty string produces valid non-empty hash", func(t *testing.T) {
+		h := hashOTPCode("")
+		assert.NotEmpty(t, h)
+	})
+
+	t.Run("output length is 44 chars", func(t *testing.T) {
+		h := hashOTPCode("test")
+		assert.Len(t, h, 44)
+	})
+}

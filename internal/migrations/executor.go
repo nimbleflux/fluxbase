@@ -67,17 +67,13 @@ func (e *Executor) ApplyMigration(ctx context.Context, namespace, name string, e
 	// Migrations require DDL privileges (CREATE TABLE, ALTER, etc.)
 	err = e.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
 		var acquired bool
-		if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", migrationLockID).Scan(&acquired); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", migrationLockID).Scan(&acquired); err != nil {
 			return fmt.Errorf("failed to acquire advisory lock: %w", err)
 		}
 		if !acquired {
 			return fmt.Errorf("another migration is already in progress")
 		}
-		defer func() {
-			_, _ = tx.Exec(ctx, "SELECT pg_advisory_unlock($1)", migrationLockID)
-		}()
 
-		// Execute the up SQL
 		_, err := tx.Exec(ctx, migration.UpSQL)
 		return err
 	})
@@ -173,17 +169,13 @@ func (e *Executor) RollbackMigration(ctx context.Context, namespace, name string
 	// Rollbacks may require DDL privileges (DROP TABLE, ALTER, etc.)
 	err = e.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
 		var acquired bool
-		if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", migrationLockID).Scan(&acquired); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", migrationLockID).Scan(&acquired); err != nil {
 			return fmt.Errorf("failed to acquire advisory lock: %w", err)
 		}
 		if !acquired {
 			return fmt.Errorf("another migration is already in progress")
 		}
-		defer func() {
-			_, _ = tx.Exec(ctx, "SELECT pg_advisory_unlock($1)", migrationLockID)
-		}()
 
-		// Execute the down SQL
 		_, err := tx.Exec(ctx, *migration.DownSQL)
 		return err
 	})

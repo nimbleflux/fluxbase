@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"testing"
 	"time"
 
@@ -584,4 +586,38 @@ func TestInvitationService_ConcurrentTokenGeneration(t *testing.T) {
 	}
 
 	assert.Len(t, seen, 100)
+}
+
+// =============================================================================
+// hashInvitationToken Tests
+// =============================================================================
+
+func TestHashInvitationToken(t *testing.T) {
+	t.Run("deterministic", func(t *testing.T) {
+		h1 := hashInvitationToken("some-token")
+		h2 := hashInvitationToken("some-token")
+		assert.Equal(t, h1, h2)
+	})
+
+	t.Run("different inputs produce different outputs", func(t *testing.T) {
+		h1 := hashInvitationToken("token-a")
+		h2 := hashInvitationToken("token-b")
+		assert.NotEqual(t, h1, h2)
+	})
+
+	t.Run("output is 64 chars", func(t *testing.T) {
+		h := hashInvitationToken("test")
+		assert.Len(t, h, 64)
+	})
+
+	t.Run("high entropy token differs from short string", func(t *testing.T) {
+		b := make([]byte, 32)
+		_, err := rand.Read(b)
+		require.NoError(t, err)
+		highEntropy := base64.StdEncoding.EncodeToString(b)
+
+		h1 := hashInvitationToken(highEntropy)
+		h2 := hashInvitationToken("short")
+		assert.NotEqual(t, h1, h2)
+	})
 }

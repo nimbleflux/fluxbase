@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
@@ -57,7 +58,7 @@ type OTPCode struct {
 // (e.g., sending via email/SMS). The plaintext code is never persisted.
 type OTPCodeWithPlaintext struct {
 	*OTPCode
-	PlaintextCode string
+	PlaintextCode string `json:"-"`
 }
 
 // OTPRepository handles database operations for OTP codes
@@ -239,11 +240,13 @@ func (r *OTPRepository) GetByCode(ctx context.Context, email *string, phone *str
 
 	// Lazy migration: backfill hash for this legacy code
 	if otpCode.CodeHash == "" {
-		_ = database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
-			_, _ = tx.Exec(ctx, `UPDATE auth.otp_codes SET code_hash = $1 WHERE id = $2`, codeHash, otpCode.ID)
-			otpCode.CodeHash = codeHash
-			return nil
-		})
+		if migrateErr := database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
+			_, execErr := tx.Exec(ctx, `UPDATE auth.otp_codes SET code_hash = $1 WHERE id = $2`, codeHash, otpCode.ID)
+			return execErr
+		}); migrateErr != nil {
+			log.Debug().Err(migrateErr).Str("otp_id", otpCode.ID).Msg("Failed to lazy-migrate OTP code hash")
+		}
+		otpCode.CodeHash = codeHash
 	}
 
 	return otpCode, nil

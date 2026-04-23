@@ -77,6 +77,26 @@ func TestNormalizePath(t *testing.T) {
 		result := normalizePath("/")
 		assert.Equal(t, "/", result)
 	})
+
+	t.Run("replaces uppercase UUIDs with :id", func(t *testing.T) {
+		result := normalizePath("/api/v1/users/550E8400-E29B-41D4-A716-446655440000")
+		assert.Equal(t, "/api/v1/users/:id", result)
+	})
+
+	t.Run("replaces mixed case UUIDs with :id", func(t *testing.T) {
+		result := normalizePath("/api/v1/users/550e8400-E29B-41d4-A716-446655440000")
+		assert.Equal(t, "/api/v1/users/:id", result)
+	})
+
+	t.Run("replaces multiple IDs in one path", func(t *testing.T) {
+		result := normalizePath("/api/v1/users/550e8400-e29b-41d4-a716-446655440000/posts/123")
+		assert.Equal(t, "/api/v1/users/:id/posts/:id", result)
+	})
+
+	t.Run("preserves non-ID path segments", func(t *testing.T) {
+		result := normalizePath("/api/v1/users/settings")
+		assert.Equal(t, "/api/v1/users/settings", result)
+	})
 }
 
 func TestMetrics_Struct(t *testing.T) {
@@ -388,6 +408,7 @@ func TestNormalizePath_EdgeCases(t *testing.T) {
 		{"long numeric ID normalized", "/api/v1/tables/users/records/0000000000000000000000", "/api/v1/tables/users/records/:id"},
 		{"special characters", "/api/v1/users?filter=name%3Djohn", "/api/v1/users?filter=name%3Djohn"},
 		{"unicode path", "/api/v1/用户/数据", "/api/v1/用户/数据"},
+		{"uppercase UUID", "/api/v1/users/550E8400-E29B-41D4-A716-446655440000", "/api/v1/users/:id"},
 	}
 
 	for _, tt := range tests {
