@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at timestamptz DEFAULT now() NOT NULL,
     encrypted_value text,
     user_id uuid,
+    tenant_id uuid,
     CONSTRAINT settings_pkey PRIMARY KEY (id),
     CONSTRAINT settings_category_check CHECK (category IN ('auth'::text, 'system'::text, 'storage'::text, 'functions'::text, 'realtime'::text, 'custom'::text)),
     CONSTRAINT settings_value_type_check CHECK (value_type IN ('string'::text, 'number'::text, 'boolean'::text, 'json'::text, 'array'::text))
@@ -116,6 +117,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_app_settings_system_key ON settings (key) 
 CREATE INDEX IF NOT EXISTS idx_app_settings_user_id ON settings (user_id) WHERE (user_id IS NOT NULL);
 
 --
+-- Name: idx_app_settings_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_app_settings_tenant_id ON settings (tenant_id);
+
+--
 -- Name: settings; Type: RLS; Schema: -; Owner: -
 --
 
@@ -180,6 +187,12 @@ CREATE POLICY "Users can read their own secret settings" ON settings FOR SELECT 
 --
 
 CREATE POLICY "Users can update their own settings" ON settings FOR UPDATE TO authenticated USING (user_id = auth.current_user_id()) WITH CHECK (user_id = auth.current_user_id());
+
+--
+-- Name: settings_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY settings_tenant ON settings TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
 
 --
 -- Cross-schema FKs moved to post-schema-fks.sql

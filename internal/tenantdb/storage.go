@@ -665,7 +665,8 @@ func (s *Storage) CleanupTenantData(ctx context.Context, tenantID string) error 
 
 	// Phase 7: Secrets, keys, and settings.
 	tables7 := []string{
-		"auth.secrets",
+		"functions.secrets",
+		"functions.secret_versions",
 		"auth.service_keys",
 		"app.settings",
 	}

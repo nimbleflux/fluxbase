@@ -688,6 +688,50 @@ EXCEPTION WHEN OTHERS THEN
 END $$;
 
 -- ============================================================================
+-- AUTH SCHEMA TRIGGERS (auto-populate tenant_id for webhook tables)
+-- ============================================================================
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_webhook_deliveries_set_tenant_id
+        BEFORE INSERT ON auth.webhook_deliveries
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'auth.webhook_deliveries set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_webhook_events_set_tenant_id
+        BEFORE INSERT ON auth.webhook_events
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'auth.webhook_events set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_saml_providers_set_tenant_id
+        BEFORE INSERT ON auth.saml_providers
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'auth.saml_providers set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+-- ============================================================================
+-- APP SCHEMA TRIGGERS (auto-populate tenant_id)
+-- ============================================================================
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER app_settings_set_tenant_id
+        BEFORE INSERT ON app.settings
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'app.settings set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+-- ============================================================================
 -- DATA MIGRATION: assign existing NULL tenant_id rows to the default tenant
 -- These UPDATEs are idempotent (WHERE tenant_id IS NULL) and become no-ops
 -- after the first successful run.
@@ -708,6 +752,9 @@ BEGIN
 
     -- Auth tables with tenant RLS
     UPDATE auth.webhooks SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.webhook_deliveries SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.webhook_events SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.saml_providers SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
     UPDATE auth.client_keys SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
     UPDATE auth.impersonation_sessions SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
 
@@ -719,6 +766,9 @@ BEGIN
     UPDATE platform.tenant_memberships SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
     UPDATE platform.enabled_extensions SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
     UPDATE platform.invitation_tokens SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+
+    -- App tables with tenant RLS
+    UPDATE app.settings SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
 
     RAISE NOTICE 'Migrated NULL tenant_id rows to default tenant %', default_tenant_uuid;
 EXCEPTION WHEN OTHERS THEN

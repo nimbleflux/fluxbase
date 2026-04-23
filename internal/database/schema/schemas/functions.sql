@@ -467,7 +467,7 @@ ALTER TABLE secrets FORCE ROW LEVEL SECURITY;
 -- Name: secrets_tenant; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY secrets_tenant ON secrets TO PUBLIC USING (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'instance_admin') WITH CHECK (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'instance_admin');
+CREATE POLICY secrets_tenant ON secrets TO PUBLIC USING (auth.has_tenant_access(tenant_id)) WITH CHECK (auth.has_tenant_access(tenant_id));
 
 --
 -- Name: secret_versions; Type: TABLE; Schema: -; Owner: -
@@ -517,7 +517,7 @@ ALTER TABLE secret_versions FORCE ROW LEVEL SECURITY;
 -- Name: secret_versions_tenant; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY secret_versions_tenant ON secret_versions TO PUBLIC USING (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'instance_admin') WITH CHECK (auth.has_tenant_access(tenant_id) AND auth.current_user_role() = 'instance_admin');
+CREATE POLICY secret_versions_tenant ON secret_versions TO PUBLIC USING (auth.has_tenant_access(tenant_id)) WITH CHECK (auth.has_tenant_access(tenant_id));
 
 --
 -- Name: shared_modules; Type: TABLE; Schema: -; Owner: -

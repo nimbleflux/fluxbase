@@ -451,7 +451,7 @@ func (h *MonitoringHandler) GetLogs(c fiber.Ctx) error {
 	opts.Offset = fiber.Query[int](c, "offset", 0)
 
 	// Query logs from storage
-	result, err := h.loggingService.Storage().Query(c.RequestCtx(), opts)
+	result, err := h.loggingService.Storage().Query(middleware.CtxWithTenant(c), opts)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to query logs: " + err.Error(),

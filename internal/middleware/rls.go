@@ -222,7 +222,7 @@ func SetRLSContext(ctx context.Context, tx pgx.Tx, userID string, role string, c
 		Msg("Set request.jwt.claims using parameterized query")
 
 	// Set tenant context for multi-tenancy (app.current_tenant_id)
-	// This is used by RLS policies that check auth.has_tenant_access() and storage.has_tenant_access()
+	// Priority: claims.TenantID > Go context tenant_id (from TenantMiddleware)
 	if claims != nil && claims.TenantID != nil {
 		tenantIDStr := *claims.TenantID
 		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantIDStr)
@@ -230,7 +230,14 @@ func SetRLSContext(ctx context.Context, tx pgx.Tx, userID string, role string, c
 			log.Error().Err(err).Str("tenant_id", tenantIDStr).Msg("Failed to set app.current_tenant_id")
 			return fmt.Errorf("failed to set app.current_tenant_id: %w", err)
 		}
-		log.Debug().Str("tenant_id", tenantIDStr).Msg("Set app.current_tenant_id for tenant isolation")
+		log.Debug().Str("tenant_id", tenantIDStr).Msg("Set app.current_tenant_id from claims")
+	} else if tenantID := database.TenantFromContext(ctx); tenantID != "" {
+		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
+		if err != nil {
+			log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to set app.current_tenant_id")
+			return fmt.Errorf("failed to set app.current_tenant_id: %w", err)
+		}
+		log.Debug().Str("tenant_id", tenantID).Msg("Set app.current_tenant_id from context")
 	}
 
 	log.Debug().

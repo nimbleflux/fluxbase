@@ -133,7 +133,14 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 	// all RLS policies are bypassed regardless of FORCE ROW LEVEL SECURITY.
 	// Exception: instance_admin and service_role keep BYPASSRLS for full admin access.
 	if roleStr == "instance_admin" || roleStr == "service_role" {
-		log.Debug().Str("user_id", userIDStr).Str("role", roleStr).Msg("Keeping BYPASSRLS for admin role")
+		if tid, ok := tenantID.(string); ok && tid != "" {
+			if _, err := tx.Exec(ctx, "SET LOCAL ROLE tenant_service"); err != nil {
+				return fmt.Errorf("failed to SET LOCAL ROLE tenant_service: %w", err)
+			}
+			log.Debug().Str("user_id", userIDStr).Str("tenant_id", tid).Msg("Switched instance_admin to tenant_service for tenant context")
+		} else {
+			log.Debug().Str("user_id", userIDStr).Str("role", roleStr).Msg("Keeping BYPASSRLS for admin role (no tenant)")
+		}
 		return nil
 	}
 

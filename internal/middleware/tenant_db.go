@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/tenantdb"
 )
 
@@ -79,6 +80,7 @@ func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
 
 		c.Locals("tenant_id", tenantID)
 		c.Locals("tenant_source", tenantSource)
+		c.SetContext(database.ContextWithTenant(c.RequestCtx(), tenantID))
 
 		// Fetch tenant record and set DB context only for tenants with separate databases.
 		// For default tenants (UsesMainDatabase), tenant_db stays nil so handlers fall back

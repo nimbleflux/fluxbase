@@ -470,7 +470,7 @@ func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 	}
 
 	// Execute vector search with RLS context
-	data, distances, err := h.executeVectorSearch(c.RequestCtx(), vectorSearchParams{
+	data, distances, err := h.executeVectorSearch(middleware.CtxWithTenant(c), vectorSearchParams{
 		table:          req.Table,
 		column:         req.Column,
 		selectCols:     selectCols,

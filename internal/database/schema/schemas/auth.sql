@@ -555,6 +555,12 @@ CREATE INDEX IF NOT EXISTS idx_saml_providers_tenant_id ON saml_providers (tenan
 ALTER TABLE saml_providers ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: saml_providers; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE saml_providers FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: users; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1914,6 +1920,7 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     attempt integer DEFAULT 1,
     delivered_at timestamptz,
     created_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT webhook_deliveries_pkey PRIMARY KEY (id),
     CONSTRAINT webhook_deliveries_webhook_id_fkey FOREIGN KEY (webhook_id) REFERENCES webhooks (id) ON DELETE CASCADE
 );
@@ -1941,6 +1948,12 @@ CREATE INDEX IF NOT EXISTS idx_auth_webhook_deliveries_webhook_id ON webhook_del
 --
 
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook_id ON webhook_deliveries (webhook_id);
+
+--
+-- Name: idx_webhook_deliveries_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_tenant_id ON webhook_deliveries (tenant_id);
 
 --
 -- Name: webhook_deliveries; Type: RLS; Schema: -; Owner: -
@@ -1973,6 +1986,7 @@ CREATE TABLE IF NOT EXISTS webhook_events (
     next_retry_at timestamptz,
     error_message text,
     created_at timestamptz DEFAULT CURRENT_TIMESTAMP,
+    tenant_id uuid,
     CONSTRAINT webhook_events_pkey PRIMARY KEY (id),
     CONSTRAINT fk_webhook_event_webhook FOREIGN KEY (webhook_id) REFERENCES webhooks (id) ON DELETE CASCADE,
     CONSTRAINT webhook_events_webhook_id_fkey FOREIGN KEY (webhook_id) REFERENCES webhooks (id) ON DELETE CASCADE
@@ -1998,6 +2012,12 @@ CREATE INDEX IF NOT EXISTS idx_webhook_events_unprocessed ON webhook_events (pro
 --
 
 CREATE INDEX IF NOT EXISTS idx_webhook_events_webhook ON webhook_events (webhook_id);
+
+--
+-- Name: idx_webhook_events_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_webhook_events_tenant_id ON webhook_events (tenant_id);
 
 --
 -- Name: webhook_events; Type: RLS; Schema: -; Owner: -
@@ -2319,7 +2339,7 @@ BEGIN
 
     -- Find matching webhooks WITH SCOPING
     FOR webhook_record IN
-        SELECT id, events, created_by, scope
+        SELECT id, events, created_by, scope, tenant_id
         FROM auth.webhooks
         WHERE enabled = TRUE
           AND (
@@ -2356,7 +2376,8 @@ BEGIN
                 record_id,
                 old_data,
                 new_data,
-                next_retry_at
+                next_retry_at,
+                tenant_id
             ) VALUES (
                 webhook_record.id,
                 event_type,
@@ -2365,7 +2386,8 @@ BEGIN
                 record_id_value,
                 old_data,
                 new_data,
-                CURRENT_TIMESTAMP
+                CURRENT_TIMESTAMP,
+                webhook_record.tenant_id
             );
 
             -- Send notification to application via pg_notify
@@ -2719,6 +2741,12 @@ COMMENT ON FUNCTION validate_app_metadata_update() IS 'Validates that only admin
 CREATE POLICY "Dashboard admin can manage saml_providers" ON saml_providers TO authenticated USING (current_user_role() = 'instance_admin') WITH CHECK (current_user_role() = 'instance_admin');
 
 --
+-- Name: saml_providers_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY saml_providers_tenant ON saml_providers TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+
+--
 -- Name: auth_client_keys_policy; Type: POLICY; Schema: -; Owner: -
 --
 
@@ -3003,6 +3031,12 @@ CREATE POLICY webhook_deliveries_service_update ON webhook_deliveries FOR UPDATE
 CREATE POLICY webhook_deliveries_service_write ON webhook_deliveries FOR INSERT TO PUBLIC WITH CHECK (current_user_role() = 'service_role');
 
 --
+-- Name: webhook_deliveries_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY webhook_deliveries_tenant ON webhook_deliveries TO PUBLIC USING (has_tenant_access(tenant_id));
+
+--
 -- Name: webhook_events_admin_select; Type: POLICY; Schema: -; Owner: -
 --
 
@@ -3013,6 +3047,12 @@ CREATE POLICY webhook_events_admin_select ON webhook_events FOR SELECT TO PUBLIC
 --
 
 CREATE POLICY webhook_events_service ON webhook_events TO PUBLIC USING (current_user_role() = 'service_role');
+
+--
+-- Name: webhook_events_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY webhook_events_tenant ON webhook_events TO PUBLIC USING (has_tenant_access(tenant_id));
 
 --
 -- Name: webhook_monitored_tables_service_only; Type: POLICY; Schema: -; Owner: -
@@ -4036,6 +4076,12 @@ GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE saml_providers TO service_role;
+
+--
+-- Name: saml_providers; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.saml_providers TO tenant_service;
 
 --
 -- Name: saml_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -

@@ -37,6 +37,7 @@ type Worker struct {
 	jobLogCounters         sync.Map // jobID -> *int (line counter)
 	jobStartTimes          sync.Map // jobID -> time.Time (for ETA calculation)
 	jobLogsDisabled        sync.Map // jobID -> bool (whether execution logs are disabled)
+	jobTenants             sync.Map // jobID -> string (tenant_id for tenant-scoped storage access)
 	currentJobCount        int
 	currentJobCountMutex   sync.RWMutex
 	shutdownChan           chan struct{}
@@ -246,8 +247,11 @@ func (w *Worker) pollLoop(ctx context.Context) {
 									Str("job_id", j.ID.String()).
 									Str("job_name", j.JobName).
 									Msg("Panic in job execution - recovered, marking job as failed")
-								// Mark job as failed (defers in executeJob will have already cleaned up job count)
-								_ = w.Storage.FailJob(context.Background(), j.ID, fmt.Sprintf("Internal error: job execution panic: %v", rec))
+								panicCtx := context.Background()
+								if j.TenantID != "" {
+									panicCtx = database.ContextWithTenant(panicCtx, j.TenantID)
+								}
+								_ = w.Storage.FailJob(panicCtx, j.ID, fmt.Sprintf("Internal error: job execution panic: %v", rec))
 							}
 						}()
 						w.executeJob(ctx, j)
@@ -410,7 +414,15 @@ func (w *Worker) executeJob(ctx context.Context, job *Job) {
 		Str("job_id", job.ID.String()).
 		Str("job_name", job.JobName).
 		Int("retry_count", job.RetryCount).
+		Str("tenant_id", job.TenantID).
 		Msg("Executing job")
+
+	// Derive tenant-scoped context from the claimed job.
+	// Workers claim from the global queue (service_role) but execute within
+	// the job's tenant context (tenant_service + RLS enforced).
+	if job.TenantID != "" {
+		ctx = database.ContextWithTenant(ctx, job.TenantID)
+	}
 
 	// Increment job count
 	w.incrementJobCount()
@@ -429,6 +441,10 @@ func (w *Worker) executeJob(ctx context.Context, job *Job) {
 	// Store job start time for ETA calculation
 	w.jobStartTimes.Store(job.ID, time.Now())
 	defer w.jobStartTimes.Delete(job.ID)
+
+	// Store tenant ID for async operations (progress updates)
+	w.jobTenants.Store(job.ID, job.TenantID)
+	defer w.jobTenants.Delete(job.ID)
 
 	// Get job function
 	var jobFunction *JobFunction
@@ -615,6 +631,14 @@ func (w *Worker) handleProgressUpdate(jobID uuid.UUID, progress *runtime.Progres
 	// are async and should complete even if job is finishing
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	// Look up tenant ID from the running job for tenant-scoped storage access
+	if tenantVal, ok := w.jobTenants.Load(jobID); ok {
+		if tenantID, ok := tenantVal.(string); ok && tenantID != "" {
+			ctx = database.ContextWithTenant(ctx, tenantID)
+		}
+	}
+
 	if err := w.Storage.UpdateJobProgress(ctx, jobID, string(progressJSON)); err != nil {
 		log.Error().Err(err).Str("job_id", jobID.String()).Msg("Failed to update job progress")
 	}
@@ -673,13 +697,18 @@ func (w *Worker) interruptAllJobs() {
 			return true
 		}
 
-		// Cancel the job execution
 		if cancelSignal, ok := value.(*runtime.CancelSignal); ok {
 			cancelSignal.Cancel()
 		}
 
-		// Mark the job as interrupted in the database
-		if err := w.Storage.InterruptJob(ctx, jobID, reason); err != nil {
+		jobCtx := ctx
+		if tenantVal, ok := w.jobTenants.Load(jobID); ok {
+			if tenantID, ok := tenantVal.(string); ok && tenantID != "" {
+				jobCtx = database.ContextWithTenant(ctx, tenantID)
+			}
+		}
+
+		if err := w.Storage.InterruptJob(jobCtx, jobID, reason); err != nil {
 			log.Warn().
 				Err(err).
 				Str("job_id", jobID.String()).
@@ -773,6 +802,7 @@ func jobToExecutionRequest(job *Job, publicURL string) runtime.ExecutionRequest 
 		Namespace:  job.Namespace,
 		RetryCount: job.RetryCount,
 		BaseURL:    publicURL,
+		TenantID:   job.TenantID,
 	}
 
 	// Parse payload if present
