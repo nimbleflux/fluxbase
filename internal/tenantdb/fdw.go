@@ -48,13 +48,8 @@ var fdwExcludeTables = map[string][]string{
 	"auth": {
 		"captcha_challenges", "captcha_trust_tokens", "user_trust_signals",
 		"emergency_revocation", "rls_audit_log", "token_blacklist",
-		"service_key_revocations", "webhook_monitored_tables",
-		"magic_links", "otp_codes", "oauth_states",
-		"email_verification_tokens", "password_reset_tokens",
-		"two_factor_setups", "two_factor_recovery_attempts", "nonces",
-		"saml_assertion_ids", "oauth_logout_states",
-		"mcp_oauth_clients", "mcp_oauth_codes", "mcp_oauth_tokens",
-		"client_key_usage",
+		"webhook_monitored_tables", "saml_assertion_ids",
+		"nonces", "oauth_states",
 	},
 }
 

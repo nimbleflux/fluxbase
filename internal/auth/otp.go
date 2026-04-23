@@ -77,8 +77,9 @@ func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string
 	}
 
 	query := `
-		INSERT INTO auth.otp_codes (id, email, phone, code, type, purpose, expires_at, used, attempts, max_attempts, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO auth.otp_codes (id, email, phone, code, type, purpose, expires_at, used, attempts, max_attempts, created_at, user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+			COALESCE((SELECT id FROM auth.users WHERE email = $2 LIMIT 1), (SELECT id FROM auth.users WHERE phone = $3 LIMIT 1)))
 		RETURNING id, email, phone, code, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
 	`
 

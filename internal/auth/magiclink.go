@@ -81,8 +81,8 @@ func (r *MagicLinkRepository) Create(ctx context.Context, email string, expiryDu
 	}
 
 	query := `
-		INSERT INTO auth.magic_links (id, email, token_hash, expires_at, created_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO auth.magic_links (id, email, token_hash, expires_at, created_at, user_id)
+		VALUES ($1, $2, $3, $4, $5, (SELECT id FROM auth.users WHERE email = $2 LIMIT 1))
 		RETURNING id, email, token_hash, expires_at, used_at, created_at
 	`
 

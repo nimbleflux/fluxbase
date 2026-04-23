@@ -183,8 +183,11 @@ CREATE TABLE IF NOT EXISTS magic_links (
     ip_address text,
     user_agent text,
     created_at timestamptz DEFAULT now(),
+    user_id uuid,
+    tenant_id uuid,
     CONSTRAINT magic_links_pkey PRIMARY KEY (id),
-    CONSTRAINT magic_links_token_key UNIQUE (token_hash)
+    CONSTRAINT magic_links_token_key UNIQUE (token_hash),
+    CONSTRAINT magic_links_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
 
@@ -201,6 +204,18 @@ CREATE INDEX IF NOT EXISTS idx_auth_magic_links_email ON magic_links (email);
 --
 
 CREATE INDEX IF NOT EXISTS idx_auth_magic_links_token_hash ON magic_links (token_hash);
+
+--
+-- Name: idx_magic_links_user_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_magic_links_user_id ON magic_links (user_id) WHERE (user_id IS NOT NULL);
+
+--
+-- Name: idx_magic_links_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_magic_links_tenant_id ON magic_links (tenant_id);
 
 --
 -- Name: magic_links; Type: RLS; Schema: -; Owner: -
@@ -287,7 +302,10 @@ CREATE TABLE IF NOT EXISTS otp_codes (
     ip_address text,
     user_agent text,
     created_at timestamptz DEFAULT now(),
-    CONSTRAINT otp_codes_pkey PRIMARY KEY (id)
+    user_id uuid,
+    tenant_id uuid,
+    CONSTRAINT otp_codes_pkey PRIMARY KEY (id),
+    CONSTRAINT otp_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
 
@@ -331,6 +349,18 @@ CREATE INDEX IF NOT EXISTS idx_auth_otp_codes_phone ON otp_codes (phone) WHERE (
 --
 
 CREATE INDEX IF NOT EXISTS idx_auth_otp_codes_type ON otp_codes (type);
+
+--
+-- Name: idx_otp_codes_user_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_otp_codes_user_id ON otp_codes (user_id) WHERE (user_id IS NOT NULL);
+
+--
+-- Name: idx_otp_codes_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_otp_codes_tenant_id ON otp_codes (tenant_id);
 
 --
 -- Name: otp_codes; Type: RLS; Schema: -; Owner: -
@@ -755,6 +785,7 @@ CREATE TABLE IF NOT EXISTS client_key_usage (
     status_code integer,
     response_time_ms integer,
     created_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT api_key_usage_pkey PRIMARY KEY (id),
     CONSTRAINT api_key_usage_api_key_id_fkey FOREIGN KEY (client_key_id) REFERENCES client_keys (id) ON DELETE CASCADE
 );
@@ -790,6 +821,12 @@ CREATE INDEX IF NOT EXISTS idx_auth_client_key_usage_client_key_id ON client_key
 CREATE INDEX IF NOT EXISTS idx_auth_client_key_usage_created_at ON client_key_usage (created_at DESC);
 
 --
+-- Name: idx_client_key_usage_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_client_key_usage_tenant_id ON client_key_usage (tenant_id);
+
+--
 -- Name: client_key_usage; Type: RLS; Schema: -; Owner: -
 --
 
@@ -813,6 +850,7 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
     used boolean DEFAULT false,
     used_at timestamptz,
     created_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT email_verification_tokens_pkey PRIMARY KEY (id),
     CONSTRAINT email_verification_tokens_token_hash_key UNIQUE (token_hash),
     CONSTRAINT email_verification_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -829,6 +867,12 @@ CREATE INDEX IF NOT EXISTS idx_auth_email_verification_tokens_hash ON email_veri
 --
 
 CREATE INDEX IF NOT EXISTS idx_auth_email_verification_tokens_user_id ON email_verification_tokens (user_id);
+
+--
+-- Name: idx_email_verification_tokens_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_tenant_id ON email_verification_tokens (tenant_id);
 
 --
 -- Name: email_verification_tokens; Type: RLS; Schema: -; Owner: -
@@ -919,6 +963,7 @@ CREATE TABLE IF NOT EXISTS mcp_oauth_clients (
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT mcp_oauth_clients_pkey PRIMARY KEY (client_id),
     CONSTRAINT mcp_oauth_clients_registered_by_fkey FOREIGN KEY (registered_by) REFERENCES users (id) ON DELETE SET NULL,
     CONSTRAINT mcp_oauth_clients_client_type_check CHECK (client_type IN ('public'::text, 'confidential'::text))
@@ -932,6 +977,12 @@ COMMENT ON TABLE mcp_oauth_clients IS 'OAuth 2.1 clients for MCP authentication 
 --
 
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_clients_registered_by ON mcp_oauth_clients (registered_by) WHERE (registered_by IS NOT NULL);
+
+--
+-- Name: idx_mcp_oauth_clients_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_mcp_oauth_clients_tenant_id ON mcp_oauth_clients (tenant_id);
 
 --
 -- Name: mcp_oauth_clients; Type: RLS; Schema: -; Owner: -
@@ -960,6 +1011,7 @@ CREATE TABLE IF NOT EXISTS mcp_oauth_codes (
     state text,
     expires_at timestamptz DEFAULT (now() + '00:10:00'::interval) NOT NULL,
     created_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT mcp_oauth_codes_pkey PRIMARY KEY (code),
     CONSTRAINT mcp_oauth_codes_client_id_fkey FOREIGN KEY (client_id) REFERENCES mcp_oauth_clients (client_id) ON DELETE CASCADE
 );
@@ -981,6 +1033,12 @@ CREATE INDEX IF NOT EXISTS idx_mcp_oauth_codes_client_id ON mcp_oauth_codes (cli
 --
 
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_codes_expires_at ON mcp_oauth_codes (expires_at);
+
+--
+-- Name: idx_mcp_oauth_codes_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_mcp_oauth_codes_tenant_id ON mcp_oauth_codes (tenant_id);
 
 --
 -- Name: mcp_oauth_codes; Type: RLS; Schema: -; Owner: -
@@ -1011,6 +1069,7 @@ CREATE TABLE IF NOT EXISTS mcp_oauth_tokens (
     revoked_reason text,
     created_at timestamptz DEFAULT now() NOT NULL,
     revoked_at timestamptz,
+    tenant_id uuid,
     CONSTRAINT mcp_oauth_tokens_pkey PRIMARY KEY (id),
     CONSTRAINT mcp_oauth_tokens_token_hash_key UNIQUE (token_hash),
     CONSTRAINT mcp_oauth_tokens_client_id_fkey FOREIGN KEY (client_id) REFERENCES mcp_oauth_clients (client_id) ON DELETE CASCADE,
@@ -1049,6 +1108,12 @@ CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_token_hash ON mcp_oauth_tokens (
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_user_id ON mcp_oauth_tokens (user_id) WHERE (user_id IS NOT NULL);
 
 --
+-- Name: idx_mcp_oauth_tokens_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_tenant_id ON mcp_oauth_tokens (tenant_id);
+
+--
 -- Name: mcp_oauth_tokens; Type: RLS; Schema: -; Owner: -
 --
 
@@ -1074,6 +1139,7 @@ CREATE TABLE IF NOT EXISTS mfa_factors (
     phone text,
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT mfa_factors_pkey PRIMARY KEY (id),
     CONSTRAINT mfa_factors_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT mfa_factors_factor_type_check CHECK (factor_type IN ('totp'::text, 'phone'::text)),
@@ -1112,6 +1178,12 @@ CREATE INDEX IF NOT EXISTS idx_auth_mfa_factors_user_id ON mfa_factors (user_id)
 --
 
 CREATE INDEX IF NOT EXISTS idx_auth_mfa_factors_user_id_status ON mfa_factors (user_id, status) WHERE (status = 'verified'::text);
+
+--
+-- Name: idx_mfa_factors_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_mfa_factors_tenant_id ON mfa_factors (tenant_id);
 
 --
 -- Name: mfa_factors; Type: RLS; Schema: -; Owner: -
@@ -1178,6 +1250,7 @@ CREATE TABLE IF NOT EXISTS oauth_links (
     metadata jsonb,
     created_at timestamptz DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz DEFAULT CURRENT_TIMESTAMP,
+    tenant_id uuid,
     CONSTRAINT oauth_links_pkey PRIMARY KEY (id),
     CONSTRAINT oauth_links_provider_provider_user_id_key UNIQUE (provider, provider_user_id),
     CONSTRAINT fk_oauth_links_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
@@ -1195,6 +1268,12 @@ CREATE INDEX IF NOT EXISTS idx_oauth_links_provider ON oauth_links (provider, pr
 --
 
 CREATE INDEX IF NOT EXISTS idx_oauth_links_user ON oauth_links (user_id);
+
+--
+-- Name: idx_oauth_links_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_oauth_links_tenant_id ON oauth_links (tenant_id);
 
 --
 -- Name: oauth_links; Type: RLS; Schema: -; Owner: -
@@ -1220,6 +1299,7 @@ CREATE TABLE IF NOT EXISTS oauth_logout_states (
     post_logout_redirect_uri text,
     created_at timestamptz DEFAULT CURRENT_TIMESTAMP,
     expires_at timestamptz DEFAULT (CURRENT_TIMESTAMP + '00:10:00'::interval) NOT NULL,
+    tenant_id uuid,
     CONSTRAINT oauth_logout_states_pkey PRIMARY KEY (id),
     CONSTRAINT oauth_logout_states_state_key UNIQUE (state),
     CONSTRAINT oauth_logout_states_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -1239,6 +1319,12 @@ CREATE INDEX IF NOT EXISTS idx_oauth_logout_states_expires_at ON oauth_logout_st
 --
 
 CREATE INDEX IF NOT EXISTS idx_oauth_logout_states_state ON oauth_logout_states (state);
+
+--
+-- Name: idx_oauth_logout_states_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_oauth_logout_states_tenant_id ON oauth_logout_states (tenant_id);
 
 --
 -- Name: oauth_logout_states; Type: RLS; Schema: -; Owner: -
@@ -1266,6 +1352,7 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
     created_at timestamptz DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz DEFAULT CURRENT_TIMESTAMP,
     id_token text,
+    tenant_id uuid,
     CONSTRAINT oauth_tokens_pkey PRIMARY KEY (id),
     CONSTRAINT oauth_tokens_user_id_provider_key UNIQUE (user_id, provider),
     CONSTRAINT fk_oauth_tokens_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
@@ -1286,6 +1373,12 @@ CREATE INDEX IF NOT EXISTS idx_oauth_tokens_provider ON oauth_tokens (user_id, p
 --
 
 CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user ON oauth_tokens (user_id);
+
+--
+-- Name: idx_oauth_tokens_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_tenant_id ON oauth_tokens (tenant_id);
 
 --
 -- Name: oauth_tokens; Type: RLS; Schema: -; Owner: -
@@ -1311,6 +1404,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     used boolean DEFAULT false,
     used_at timestamptz,
     created_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT password_reset_tokens_pkey PRIMARY KEY (id),
     CONSTRAINT password_reset_tokens_token_key UNIQUE (token_hash),
     CONSTRAINT password_reset_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -1330,6 +1424,12 @@ CREATE INDEX IF NOT EXISTS idx_auth_password_reset_tokens_token_hash ON password
 --
 
 CREATE INDEX IF NOT EXISTS idx_auth_password_reset_tokens_user_id ON password_reset_tokens (user_id);
+
+--
+-- Name: idx_password_reset_tokens_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_tenant_id ON password_reset_tokens (tenant_id);
 
 --
 -- Name: password_reset_tokens; Type: RLS; Schema: -; Owner: -
@@ -1358,6 +1458,7 @@ CREATE TABLE IF NOT EXISTS saml_sessions (
     attributes jsonb,
     expires_at timestamptz,
     created_at timestamptz DEFAULT now(),
+    tenant_id uuid,
     CONSTRAINT saml_sessions_pkey PRIMARY KEY (id),
     CONSTRAINT saml_sessions_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES saml_providers (id) ON DELETE SET NULL,
     CONSTRAINT saml_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -1383,6 +1484,12 @@ CREATE INDEX IF NOT EXISTS idx_saml_sessions_provider_name ON saml_sessions (pro
 --
 
 CREATE INDEX IF NOT EXISTS idx_saml_sessions_user_id ON saml_sessions (user_id);
+
+--
+-- Name: idx_saml_sessions_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_saml_sessions_tenant_id ON saml_sessions (tenant_id);
 
 --
 -- Name: saml_sessions; Type: RLS; Schema: -; Owner: -
@@ -1549,6 +1656,7 @@ CREATE TABLE IF NOT EXISTS service_key_revocations (
     reason text NOT NULL,
     revocation_type text NOT NULL,
     created_at timestamptz DEFAULT now() NOT NULL,
+    tenant_id uuid,
     CONSTRAINT service_key_revocations_pkey PRIMARY KEY (id),
     CONSTRAINT service_key_revocations_key_id_fkey FOREIGN KEY (key_id) REFERENCES service_keys (id) ON DELETE CASCADE,
     CONSTRAINT service_key_revocations_revocation_type_check CHECK (revocation_type IN ('emergency'::text, 'rotation'::text, 'expiration'::text))
@@ -1570,6 +1678,12 @@ CREATE INDEX IF NOT EXISTS idx_service_key_revocations_created_at ON service_key
 CREATE INDEX IF NOT EXISTS idx_service_key_revocations_key_id ON service_key_revocations (key_id);
 
 --
+-- Name: idx_service_key_revocations_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_service_key_revocations_tenant_id ON service_key_revocations (tenant_id);
+
+--
 -- Name: sessions; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -1581,6 +1695,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     updated_at timestamptz DEFAULT now(),
     access_token_hash text NOT NULL,
     refresh_token_hash text,
+    tenant_id uuid,
     CONSTRAINT sessions_pkey PRIMARY KEY (id),
     CONSTRAINT auth_sessions_access_token_hash_unique UNIQUE (access_token_hash),
     CONSTRAINT sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -1615,6 +1730,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_sessions_refresh_token_hash_unique ON
 --
 
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON sessions (user_id);
+
+--
+-- Name: idx_sessions_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_sessions_tenant_id ON sessions (tenant_id);
 
 --
 -- Name: sessions; Type: RLS; Schema: -; Owner: -
@@ -1681,6 +1802,7 @@ CREATE TABLE IF NOT EXISTS two_factor_recovery_attempts (
     ip_address inet,
     user_agent text,
     attempted_at timestamptz DEFAULT CURRENT_TIMESTAMP,
+    tenant_id uuid,
     CONSTRAINT two_factor_recovery_attempts_pkey PRIMARY KEY (id),
     CONSTRAINT fk_2fa_recovery_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
     CONSTRAINT two_factor_recovery_attempts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -1700,6 +1822,12 @@ CREATE INDEX IF NOT EXISTS idx_2fa_recovery_time ON two_factor_recovery_attempts
 --
 
 CREATE INDEX IF NOT EXISTS idx_2fa_recovery_user ON two_factor_recovery_attempts (user_id);
+
+--
+-- Name: idx_two_factor_recovery_attempts_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_two_factor_recovery_attempts_tenant_id ON two_factor_recovery_attempts (tenant_id);
 
 --
 -- Name: two_factor_recovery_attempts; Type: RLS; Schema: -; Owner: -
@@ -1728,6 +1856,7 @@ CREATE TABLE IF NOT EXISTS two_factor_setups (
     verified boolean DEFAULT false,
     expires_at timestamptz DEFAULT (CURRENT_TIMESTAMP + '00:10:00'::interval) NOT NULL,
     created_at timestamptz DEFAULT CURRENT_TIMESTAMP,
+    tenant_id uuid,
     CONSTRAINT two_factor_setups_pkey PRIMARY KEY (id),
     CONSTRAINT two_factor_setups_user_id_key UNIQUE (user_id),
     CONSTRAINT fk_2fa_setup_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
@@ -1757,6 +1886,12 @@ CREATE INDEX IF NOT EXISTS idx_2fa_setup_expires ON two_factor_setups (expires_a
 --
 
 CREATE INDEX IF NOT EXISTS idx_2fa_setup_user ON two_factor_setups (user_id);
+
+--
+-- Name: idx_two_factor_setups_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_two_factor_setups_tenant_id ON two_factor_setups (tenant_id);
 
 --
 -- Name: two_factor_setups; Type: RLS; Schema: -; Owner: -
@@ -4441,4 +4576,138 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.client_keys TO tenant_service
 --
 
 GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.impersonation_sessions TO tenant_service;
+
+-- ============================================================================
+-- TRIGGER FUNCTIONS: tenant_id auto-population with user_id fallback
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION set_tenant_id_from_user_or_context()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    ctx_tenant TEXT;
+BEGIN
+    BEGIN
+        ctx_tenant := current_setting('app.current_tenant_id', true);
+        IF ctx_tenant IS NOT NULL AND ctx_tenant <> '' THEN
+            NEW.tenant_id := ctx_tenant::UUID;
+            RETURN NEW;
+        END IF;
+    EXCEPTION WHEN others THEN NULL;
+    END;
+
+    IF NEW.tenant_id IS NULL AND NEW.user_id IS NOT NULL THEN
+        SELECT tenant_id INTO NEW.tenant_id FROM auth.users WHERE id = NEW.user_id;
+    END IF;
+
+    IF NEW.tenant_id IS NULL THEN
+        BEGIN
+            IF NEW.registered_by IS NOT NULL THEN
+                SELECT tenant_id INTO NEW.tenant_id FROM auth.users WHERE id = NEW.registered_by;
+            END IF;
+        EXCEPTION WHEN undefined_column THEN NULL;
+        END;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION set_tenant_id_from_client_key_or_context()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    ctx_tenant TEXT;
+BEGIN
+    BEGIN
+        ctx_tenant := current_setting('app.current_tenant_id', true);
+        IF ctx_tenant IS NOT NULL AND ctx_tenant <> '' THEN
+            NEW.tenant_id := ctx_tenant::UUID;
+            RETURN NEW;
+        END IF;
+    EXCEPTION WHEN others THEN NULL;
+    END;
+
+    IF NEW.tenant_id IS NULL AND NEW.client_key_id IS NOT NULL THEN
+        SELECT tenant_id INTO NEW.tenant_id FROM auth.client_keys WHERE id = NEW.client_key_id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION set_tenant_id_from_service_key_or_context()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    ctx_tenant TEXT;
+BEGIN
+    BEGIN
+        ctx_tenant := current_setting('app.current_tenant_id', true);
+        IF ctx_tenant IS NOT NULL AND ctx_tenant <> '' THEN
+            NEW.tenant_id := ctx_tenant::UUID;
+            RETURN NEW;
+        END IF;
+    EXCEPTION WHEN others THEN NULL;
+    END;
+
+    IF NEW.tenant_id IS NULL AND NEW.key_id IS NOT NULL THEN
+        SELECT tenant_id INTO NEW.tenant_id FROM auth.service_keys WHERE id = NEW.key_id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+-- ============================================================================
+-- TENANT RLS POLICIES + GRANTS for tables with new tenant_id
+-- ============================================================================
+
+CREATE POLICY sessions_tenant ON sessions TO PUBLIC USING (has_tenant_access(tenant_id));
+CREATE POLICY oauth_links_tenant ON oauth_links TO PUBLIC USING (has_tenant_access(tenant_id));
+CREATE POLICY oauth_tokens_tenant ON oauth_tokens TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+CREATE POLICY mfa_factors_tenant ON mfa_factors TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+CREATE POLICY saml_sessions_tenant ON saml_sessions TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+CREATE POLICY magic_links_tenant ON magic_links TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+CREATE POLICY otp_codes_tenant ON otp_codes TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+CREATE POLICY email_verification_tokens_tenant ON email_verification_tokens TO PUBLIC USING (has_tenant_access(tenant_id));
+CREATE POLICY password_reset_tokens_tenant ON password_reset_tokens TO PUBLIC USING (has_tenant_access(tenant_id));
+CREATE POLICY two_factor_setups_tenant ON two_factor_setups TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+CREATE POLICY two_factor_recovery_attempts_tenant ON two_factor_recovery_attempts TO PUBLIC USING (has_tenant_access(tenant_id));
+CREATE POLICY oauth_logout_states_tenant ON oauth_logout_states TO PUBLIC USING (has_tenant_access(tenant_id));
+CREATE POLICY mcp_oauth_clients_tenant ON mcp_oauth_clients TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+CREATE POLICY mcp_oauth_codes_tenant ON mcp_oauth_codes TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+CREATE POLICY mcp_oauth_tokens_tenant ON mcp_oauth_tokens TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+CREATE POLICY client_key_usage_tenant ON client_key_usage TO PUBLIC USING (has_tenant_access(tenant_id));
+CREATE POLICY service_key_revocations_tenant ON service_key_revocations TO PUBLIC USING (has_tenant_access(tenant_id));
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.sessions TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.oauth_links TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.oauth_tokens TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.mfa_factors TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.saml_sessions TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.magic_links TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.otp_codes TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.email_verification_tokens TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.password_reset_tokens TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.two_factor_setups TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.two_factor_recovery_attempts TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.oauth_logout_states TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.mcp_oauth_clients TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.mcp_oauth_codes TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.mcp_oauth_tokens TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.client_key_usage TO tenant_service;
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.service_key_revocations TO tenant_service;
 

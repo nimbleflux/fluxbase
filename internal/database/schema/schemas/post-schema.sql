@@ -732,6 +732,129 @@ EXCEPTION WHEN OTHERS THEN
 END $$;
 
 -- ============================================================================
+-- AUTH SCHEMA TRIGGERS — user-derived tenant_id (set_tenant_id_from_user_or_context)
+-- ============================================================================
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_sessions_set_tenant_id
+        BEFORE INSERT ON auth.sessions FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.sessions set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_oauth_links_set_tenant_id
+        BEFORE INSERT ON auth.oauth_links FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.oauth_links set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_oauth_tokens_set_tenant_id
+        BEFORE INSERT ON auth.oauth_tokens FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.oauth_tokens set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_mfa_factors_set_tenant_id
+        BEFORE INSERT ON auth.mfa_factors FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.mfa_factors set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_saml_sessions_set_tenant_id
+        BEFORE INSERT ON auth.saml_sessions FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.saml_sessions set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_magic_links_set_tenant_id
+        BEFORE INSERT ON auth.magic_links FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.magic_links set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_otp_codes_set_tenant_id
+        BEFORE INSERT ON auth.otp_codes FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.otp_codes set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_email_verification_tokens_set_tenant_id
+        BEFORE INSERT ON auth.email_verification_tokens FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.email_verification_tokens set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_password_reset_tokens_set_tenant_id
+        BEFORE INSERT ON auth.password_reset_tokens FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.password_reset_tokens set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_two_factor_setups_set_tenant_id
+        BEFORE INSERT ON auth.two_factor_setups FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.two_factor_setups set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_two_factor_recovery_set_tenant_id
+        BEFORE INSERT ON auth.two_factor_recovery_attempts FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.two_factor_recovery_attempts set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_oauth_logout_states_set_tenant_id
+        BEFORE INSERT ON auth.oauth_logout_states FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.oauth_logout_states set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_mcp_oauth_clients_set_tenant_id
+        BEFORE INSERT ON auth.mcp_oauth_clients FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.mcp_oauth_clients set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_mcp_oauth_codes_set_tenant_id
+        BEFORE INSERT ON auth.mcp_oauth_codes FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.mcp_oauth_codes set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_mcp_oauth_tokens_set_tenant_id
+        BEFORE INSERT ON auth.mcp_oauth_tokens FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_user_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.mcp_oauth_tokens set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_client_key_usage_set_tenant_id
+        BEFORE INSERT ON auth.client_key_usage FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_client_key_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.client_key_usage set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER auth_service_key_revocations_set_tenant_id
+        BEFORE INSERT ON auth.service_key_revocations FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_service_key_or_context();
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'auth.service_key_revocations set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+-- ============================================================================
 -- DATA MIGRATION: assign existing NULL tenant_id rows to the default tenant
 -- These UPDATEs are idempotent (WHERE tenant_id IS NULL) and become no-ops
 -- after the first successful run.
@@ -757,6 +880,48 @@ BEGIN
     UPDATE auth.saml_providers SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
     UPDATE auth.client_keys SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
     UPDATE auth.impersonation_sessions SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+
+    -- Auth tables — derive tenant_id from user_id first, fallback to default
+    UPDATE auth.sessions SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.sessions.user_id) WHERE tenant_id IS NULL;
+    UPDATE auth.oauth_links SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.oauth_links.user_id) WHERE tenant_id IS NULL;
+    UPDATE auth.oauth_tokens SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.oauth_tokens.user_id) WHERE tenant_id IS NULL;
+    UPDATE auth.mfa_factors SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.mfa_factors.user_id) WHERE tenant_id IS NULL;
+    UPDATE auth.saml_sessions SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.saml_sessions.user_id) WHERE tenant_id IS NULL;
+    UPDATE auth.email_verification_tokens SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.email_verification_tokens.user_id) WHERE tenant_id IS NULL;
+    UPDATE auth.password_reset_tokens SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.password_reset_tokens.user_id) WHERE tenant_id IS NULL;
+    UPDATE auth.two_factor_setups SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.two_factor_setups.user_id) WHERE tenant_id IS NULL;
+    UPDATE auth.two_factor_recovery_attempts SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.two_factor_recovery_attempts.user_id) WHERE tenant_id IS NULL;
+    UPDATE auth.oauth_logout_states SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.oauth_logout_states.user_id) WHERE tenant_id IS NULL;
+
+    -- Auth tables — derive from email/registered_by/key FK
+    UPDATE auth.magic_links SET user_id = (SELECT id FROM auth.users WHERE email = auth.magic_links.email LIMIT 1) WHERE user_id IS NULL;
+    UPDATE auth.magic_links SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.magic_links.user_id) WHERE tenant_id IS NULL AND user_id IS NOT NULL;
+    UPDATE auth.otp_codes SET user_id = (SELECT id FROM auth.users WHERE email = auth.otp_codes.email LIMIT 1) WHERE user_id IS NULL AND email IS NOT NULL;
+    UPDATE auth.otp_codes SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.otp_codes.user_id) WHERE tenant_id IS NULL AND user_id IS NOT NULL;
+    UPDATE auth.mcp_oauth_clients SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.mcp_oauth_clients.registered_by) WHERE tenant_id IS NULL AND registered_by IS NOT NULL;
+    UPDATE auth.mcp_oauth_codes SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.mcp_oauth_codes.user_id) WHERE tenant_id IS NULL AND user_id IS NOT NULL;
+    UPDATE auth.mcp_oauth_tokens SET tenant_id = (SELECT tenant_id FROM auth.users WHERE id = auth.mcp_oauth_tokens.user_id) WHERE tenant_id IS NULL AND user_id IS NOT NULL;
+    UPDATE auth.client_key_usage SET tenant_id = (SELECT tenant_id FROM auth.client_keys WHERE id = auth.client_key_usage.client_key_id) WHERE tenant_id IS NULL;
+    UPDATE auth.service_key_revocations SET tenant_id = (SELECT tenant_id FROM auth.service_keys WHERE id = auth.service_key_revocations.key_id) WHERE tenant_id IS NULL;
+
+    -- Fallback: any remaining NULL tenant_id → default tenant
+    UPDATE auth.sessions SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.oauth_links SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.oauth_tokens SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.mfa_factors SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.saml_sessions SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.magic_links SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.otp_codes SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.email_verification_tokens SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.password_reset_tokens SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.two_factor_setups SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.two_factor_recovery_attempts SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.oauth_logout_states SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.mcp_oauth_clients SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.mcp_oauth_codes SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.mcp_oauth_tokens SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.client_key_usage SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.service_key_revocations SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
 
     -- Platform tables with tenant RLS
     UPDATE platform.oauth_providers SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
