@@ -54,17 +54,17 @@ func (s *PostgresLogStorage) Write(ctx context.Context, entries []*LogEntry) err
 		INSERT INTO logging.entries (
 			id, timestamp, category, level, message, custom_category,
 			request_id, trace_id, component, user_id, ip_address,
-			fields, execution_id, line_number
+			fields, execution_id, line_number, tenant_id
 		) VALUES `
 
 	values := make([]string, 0, len(entries))
-	args := make([]any, 0, len(entries)*14)
+	args := make([]any, 0, len(entries)*15)
 
 	for i, entry := range entries {
-		base := i * 14
+		base := i * 15
 		values = append(values, fmt.Sprintf(
-			"($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
-			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10, base+11, base+12, base+13, base+14,
+			"($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10, base+11, base+12, base+13, base+14, base+15,
 		))
 
 		// Ensure ID is set
@@ -99,6 +99,13 @@ func (s *PostgresLogStorage) Write(ctx context.Context, entries []*LogEntry) err
 			lineNumber = &entry.LineNumber
 		}
 
+		var tenantID *uuid.UUID
+		if entry.TenantID != "" {
+			if parsed, err := uuid.Parse(entry.TenantID); err == nil {
+				tenantID = &parsed
+			}
+		}
+
 		args = append(args,
 			entry.ID,
 			entry.Timestamp,
@@ -114,12 +121,16 @@ func (s *PostgresLogStorage) Write(ctx context.Context, entries []*LogEntry) err
 			entry.Fields,
 			executionID,
 			lineNumber,
+			tenantID,
 		)
 	}
 
 	query += strings.Join(values, ", ")
 
-	_, err := s.db.Pool().Exec(ctx, query, args...)
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, args...)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to insert log entries: %w", err)
 	}
@@ -129,55 +140,60 @@ func (s *PostgresLogStorage) Write(ctx context.Context, entries []*LogEntry) err
 
 // Query retrieves logs matching the given options.
 func (s *PostgresLogStorage) Query(ctx context.Context, opts LogQueryOptions) (*LogQueryResult, error) {
-	// Build WHERE clauses
-	where, args := s.buildWhereClause(opts)
+	tenantID := database.TenantFromContext(ctx)
 
-	// Count total matching entries
-	countQuery := "SELECT COUNT(*) FROM logging.entries" + where
-	var totalCount int64
-	if err := s.db.Pool().QueryRow(ctx, countQuery, args...).Scan(&totalCount); err != nil {
-		return nil, fmt.Errorf("failed to count log entries: %w", err)
-	}
+	var result *LogQueryResult
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		where, args := s.buildWhereClause(opts)
 
-	// Build ORDER BY
-	orderBy := " ORDER BY timestamp DESC"
-	if opts.SortAsc {
-		orderBy = " ORDER BY timestamp ASC"
-	}
+		countQuery := "SELECT COUNT(*) FROM logging.entries" + where
+		var totalCount int64
+		if err := tx.QueryRow(ctx, countQuery, args...).Scan(&totalCount); err != nil {
+			return fmt.Errorf("failed to count log entries: %w", err)
+		}
 
-	// Build LIMIT/OFFSET
-	limit := opts.Limit
-	if limit <= 0 {
-		limit = 100 // Default limit
-	}
-	offset := opts.Offset
-	if offset < 0 {
-		offset = 0
-	}
+		orderBy := " ORDER BY timestamp DESC"
+		if opts.SortAsc {
+			orderBy = " ORDER BY timestamp ASC"
+		}
 
-	// Fetch entries
-	selectQuery := `
-		SELECT id, timestamp, category, level, message, custom_category,
-		       request_id, trace_id, component, user_id, ip_address::text,
-		       fields, execution_id, line_number
-		FROM logging.entries` + where + orderBy + fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
+		limit := opts.Limit
+		if limit <= 0 {
+			limit = 100
+		}
+		offset := opts.Offset
+		if offset < 0 {
+			offset = 0
+		}
 
-	rows, err := s.db.Pool().Query(ctx, selectQuery, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query log entries: %w", err)
-	}
-	defer rows.Close()
+		selectQuery := `
+			SELECT id, timestamp, category, level, message, custom_category,
+			       request_id, trace_id, component, user_id, ip_address::text,
+			       fields, execution_id, line_number
+			FROM logging.entries` + where + orderBy + fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
 
-	entries, err := s.scanEntries(rows)
+		rows, err := tx.Query(ctx, selectQuery, args...)
+		if err != nil {
+			return fmt.Errorf("failed to query log entries: %w", err)
+		}
+		defer rows.Close()
+
+		entries, err := s.scanEntries(rows)
+		if err != nil {
+			return err
+		}
+
+		result = &LogQueryResult{
+			Entries:    entries,
+			TotalCount: totalCount,
+			HasMore:    int64(offset+len(entries)) < totalCount,
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	return &LogQueryResult{
-		Entries:    entries,
-		TotalCount: totalCount,
-		HasMore:    int64(offset+len(entries)) < totalCount,
-	}, nil
+	return result, nil
 }
 
 // GetExecutionLogs retrieves logs for a specific execution.
@@ -187,21 +203,31 @@ func (s *PostgresLogStorage) GetExecutionLogs(ctx context.Context, executionID s
 		return nil, fmt.Errorf("invalid execution ID: %w", err)
 	}
 
-	query := `
-		SELECT id, timestamp, category, level, message, custom_category,
-		       request_id, trace_id, component, user_id, ip_address::text,
-		       fields, execution_id, line_number
-		FROM logging.entries
-		WHERE execution_id = $1 AND line_number > $2
-		ORDER BY line_number ASC`
+	tenantID := database.TenantFromContext(ctx)
 
-	rows, err := s.db.Pool().Query(ctx, query, execUUID, afterLine)
+	var entries []*LogEntry
+	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		query := `
+			SELECT id, timestamp, category, level, message, custom_category,
+			       request_id, trace_id, component, user_id, ip_address::text,
+			       fields, execution_id, line_number
+			FROM logging.entries
+			WHERE execution_id = $1 AND line_number > $2
+			ORDER BY line_number ASC`
+
+		rows, err := tx.Query(ctx, query, execUUID, afterLine)
+		if err != nil {
+			return fmt.Errorf("failed to query execution logs: %w", err)
+		}
+		defer rows.Close()
+
+		entries, err = s.scanEntries(rows)
+		return err
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to query execution logs: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-
-	return s.scanEntries(rows)
+	return entries, nil
 }
 
 // Delete removes logs matching the given options.
@@ -211,68 +237,81 @@ func (s *PostgresLogStorage) Delete(ctx context.Context, opts LogQueryOptions) (
 		return 0, fmt.Errorf("delete requires at least one filter condition")
 	}
 
+	tenantID := database.TenantFromContext(ctx)
 	query := "DELETE FROM logging.entries" + where
 
-	result, err := s.db.Pool().Exec(ctx, query, args...)
+	var rowsAffected int64
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("failed to delete log entries: %w", err)
+		}
+		rowsAffected = result.RowsAffected()
+		return nil
+	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to delete log entries: %w", err)
+		return 0, err
 	}
-
-	return result.RowsAffected(), nil
+	return rowsAffected, nil
 }
 
 // Stats returns statistics about stored logs.
 func (s *PostgresLogStorage) Stats(ctx context.Context) (*LogStats, error) {
+	tenantID := database.TenantFromContext(ctx)
+
 	stats := &LogStats{
 		EntriesByCategory: make(map[LogCategory]int64),
 		EntriesByLevel:    make(map[LogLevel]int64),
 	}
 
-	// Get total count and time range
-	err := s.db.Pool().QueryRow(ctx, `
-		SELECT COUNT(*), MIN(timestamp), MAX(timestamp)
-		FROM logging.entries
-	`).Scan(&stats.TotalEntries, &stats.OldestEntry, &stats.NewestEntry)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get log stats: %w", err)
-	}
-
-	// Get counts by category
-	rows, err := s.db.Pool().Query(ctx, `
-		SELECT category, COUNT(*) FROM logging.entries GROUP BY category
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get category counts: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var category string
-		var count int64
-		if err := rows.Scan(&category, &count); err != nil {
-			return nil, fmt.Errorf("failed to scan category count: %w", err)
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, `
+			SELECT COUNT(*), MIN(timestamp), MAX(timestamp)
+			FROM logging.entries
+		`).Scan(&stats.TotalEntries, &stats.OldestEntry, &stats.NewestEntry)
+		if err != nil {
+			return fmt.Errorf("failed to get log stats: %w", err)
 		}
-		stats.EntriesByCategory[LogCategory(category)] = count
-	}
 
-	// Get counts by level
-	rows, err = s.db.Pool().Query(ctx, `
-		SELECT level, COUNT(*) FROM logging.entries GROUP BY level
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get level counts: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var level string
-		var count int64
-		if err := rows.Scan(&level, &count); err != nil {
-			return nil, fmt.Errorf("failed to scan level count: %w", err)
+		rows, err := tx.Query(ctx, `
+			SELECT category, COUNT(*) FROM logging.entries GROUP BY category
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to get category counts: %w", err)
 		}
-		stats.EntriesByLevel[LogLevel(level)] = count
-	}
+		defer rows.Close()
 
+		for rows.Next() {
+			var category string
+			var count int64
+			if err := rows.Scan(&category, &count); err != nil {
+				return fmt.Errorf("failed to scan category count: %w", err)
+			}
+			stats.EntriesByCategory[LogCategory(category)] = count
+		}
+
+		rows, err = tx.Query(ctx, `
+			SELECT level, COUNT(*) FROM logging.entries GROUP BY level
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to get level counts: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var level string
+			var count int64
+			if err := rows.Scan(&level, &count); err != nil {
+				return fmt.Errorf("failed to scan level count: %w", err)
+			}
+			stats.EntriesByLevel[LogLevel(level)] = count
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return stats, nil
 }
 

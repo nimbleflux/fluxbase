@@ -61,12 +61,13 @@ const (
 
 // LogEntry represents a unified log entry across all categories.
 type LogEntry struct {
-	// Core fields (all categories)
 	ID        uuid.UUID   `json:"id"`
 	Timestamp time.Time   `json:"timestamp"`
 	Category  LogCategory `json:"category"`
 	Level     LogLevel    `json:"level"`
 	Message   string      `json:"message"`
+
+	TenantID string `json:"tenant_id,omitempty"`
 
 	// Custom category name (only used when Category is LogCategoryCustom)
 	CustomCategory string `json:"custom_category,omitempty"`
@@ -208,6 +209,7 @@ type LogStreamEvent struct {
 	Category       LogCategory    `json:"category"`
 	Level          LogLevel       `json:"level"`
 	Message        string         `json:"message"`
+	TenantID       string         `json:"tenant_id,omitempty"`
 	CustomCategory string         `json:"custom_category,omitempty"`
 	RequestID      string         `json:"request_id,omitempty"`
 	TraceID        string         `json:"trace_id,omitempty"`

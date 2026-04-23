@@ -2722,7 +2722,7 @@ CREATE POLICY "Dashboard admin can manage saml_providers" ON saml_providers TO a
 -- Name: auth_client_keys_policy; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY auth_client_keys_policy ON client_keys TO PUBLIC USING (is_admin() OR (current_user_role() = 'instance_admin') OR (current_user_id()::text = (user_id)::text));
+CREATE POLICY auth_client_keys_policy ON client_keys TO PUBLIC USING (is_admin() OR (current_user_role() = 'instance_admin') OR (current_user_id()::text = (user_id)::text) OR has_tenant_access(tenant_id)) WITH CHECK (is_admin() OR (current_user_role() = 'instance_admin') OR (current_user_id()::text = (user_id)::text) OR has_tenant_access(tenant_id));
 
 --
 -- Name: auth_service_keys_delete; Type: POLICY; Schema: -; Owner: -
@@ -2833,11 +2833,11 @@ CREATE POLICY email_verification_tokens_service_only ON email_verification_token
 CREATE POLICY impersonation_sessions_instance_admin_only ON impersonation_sessions TO PUBLIC USING (
     (current_user_role() = 'service_role')
     OR (current_user_role() = 'instance_admin')
-    OR (
-        current_user_role() = 'authenticated'
-        AND tenant_id IS NOT NULL
-        AND has_tenant_access(tenant_id)
-    )
+    OR has_tenant_access(tenant_id)
+) WITH CHECK (
+    (current_user_role() = 'service_role')
+    OR (current_user_role() = 'instance_admin')
+    OR has_tenant_access(tenant_id)
 );
 
 --
@@ -3024,7 +3024,13 @@ CREATE POLICY webhook_monitored_tables_service_only ON webhook_monitored_tables 
 -- Name: webhooks_admin_only; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY webhooks_admin_only ON webhooks TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'instance_admin') OR is_admin());
+CREATE POLICY webhooks_admin_only ON webhooks TO PUBLIC USING ((current_user_role() = 'service_role') OR (current_user_role() = 'instance_admin') OR is_admin()) WITH CHECK ((current_user_role() = 'service_role') OR (current_user_role() = 'instance_admin') OR is_admin());
+
+--
+-- Name: auth_webhooks_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY auth_webhooks_tenant ON webhooks TO PUBLIC USING (auth.has_tenant_access(tenant_id)) WITH CHECK (auth.has_tenant_access(tenant_id));
 
 --
 -- Name: saml_assertion_ids_service; Type: POLICY; Schema: -; Owner: -
@@ -3122,6 +3128,33 @@ CREATE POLICY mcp_oauth_tokens_service ON mcp_oauth_tokens TO PUBLIC USING (curr
 
 CREATE OR REPLACE TRIGGER auth_service_keys_set_tenant_id
     BEFORE INSERT ON service_keys
+    FOR EACH ROW
+    EXECUTE FUNCTION set_tenant_id_from_context();
+
+--
+-- Name: auth_webhooks_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER auth_webhooks_set_tenant_id
+    BEFORE INSERT ON webhooks
+    FOR EACH ROW
+    EXECUTE FUNCTION set_tenant_id_from_context();
+
+--
+-- Name: auth_client_keys_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER auth_client_keys_set_tenant_id
+    BEFORE INSERT ON client_keys
+    FOR EACH ROW
+    EXECUTE FUNCTION set_tenant_id_from_context();
+
+--
+-- Name: auth_impersonation_sessions_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
+--
+
+CREATE OR REPLACE TRIGGER auth_impersonation_sessions_set_tenant_id
+    BEFORE INSERT ON impersonation_sessions
     FOR EACH ROW
     EXECUTE FUNCTION set_tenant_id_from_context();
 
@@ -4350,4 +4383,16 @@ GRANT EXECUTE ON FUNCTION auth.increment_webhook_table_count(text, text) TO tena
 --
 
 GRANT EXECUTE ON FUNCTION auth.decrement_webhook_table_count(text, text) TO tenant_service;
+
+--
+-- Name: client_keys; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.client_keys TO tenant_service;
+
+--
+-- Name: impersonation_sessions; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE auth.impersonation_sessions TO tenant_service;
 

@@ -387,6 +387,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 					c.Locals("user_role", claims.Role)
 					c.Locals("auth_type", "jwt")
 					c.Locals("is_anonymous", false)
+					c.Locals("is_instance_admin", true)
 
 					// Set RLS context for platform admin
 					c.Locals("rls_user_id", claims.Subject)

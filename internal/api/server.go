@@ -345,6 +345,12 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			} else {
 				tenantManager.SetFDWConfig(fdwCfg)
 				log.Info().Msg("FDW enabled for tenant databases")
+
+				go func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+					defer cancel()
+					tenantManager.UpgradeAllTenantsFDW(ctx)
+				}()
 			}
 		}
 

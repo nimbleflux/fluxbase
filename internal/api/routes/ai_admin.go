@@ -35,6 +35,7 @@ type AIAdminDeps struct {
 	LinkKnowledgeBase          fiber.Handler
 	UpdateChatbotKnowledgeBase fiber.Handler
 	UnlinkKnowledgeBase        fiber.Handler
+	DeleteKnowledgeBase        fiber.Handler
 }
 
 // BuildAIAdminRoutes creates the AI admin route group.
@@ -83,6 +84,9 @@ func BuildAIAdminRoutes(deps *AIAdminDeps) *RouteGroup {
 			{Method: "POST", Path: "/ai/chatbots/:id/knowledge-bases", Handler: deps.LinkKnowledgeBase, Summary: "Link knowledge base to chatbot"},
 			{Method: "PUT", Path: "/ai/chatbots/:id/knowledge-bases/:kb_id", Handler: deps.UpdateChatbotKnowledgeBase, Summary: "Update chatbot knowledge base link"},
 			{Method: "DELETE", Path: "/ai/chatbots/:id/knowledge-bases/:kb_id", Handler: deps.UnlinkKnowledgeBase, Summary: "Unlink knowledge base from chatbot"},
+
+			// Knowledge Base management (uses default roles)
+			{Method: "DELETE", Path: "/ai/knowledge-bases/:id", Handler: deps.DeleteKnowledgeBase, Summary: "Delete knowledge base"},
 		},
 	}
 }

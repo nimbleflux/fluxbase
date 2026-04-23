@@ -20,6 +20,16 @@ func isAdminUser(c fiber.Ctx) bool {
 	return ok && (role == "admin" || role == "instance_admin")
 }
 
+// isTenantWriteBlocked returns true when tenant context is active but the table
+// has no tenant_id column. This prevents writing non-isolated data in multi-tenant mode.
+func isTenantWriteBlocked(c fiber.Ctx, table database.TableInfo) bool {
+	tenantID, _ := c.Locals("tenant_id").(string)
+	if tenantID == "" {
+		return false
+	}
+	return table.GetColumn("tenant_id") == nil
+}
+
 // makeGetHandler creates a GET handler for listing records
 func (h *RESTHandler) makeGetHandler(table database.TableInfo) fiber.Handler {
 	return func(c fiber.Ctx) error {
@@ -143,6 +153,12 @@ func (h *RESTHandler) makeGetByIdHandler(table database.TableInfo) fiber.Handler
 func (h *RESTHandler) makePostHandler(table database.TableInfo) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		ctx := c.RequestCtx()
+
+		if isTenantWriteBlocked(c, table) {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "Cannot write to tables without tenant_id column when tenant context is active",
+			})
+		}
 
 		// Check for upsert preferences
 		preferHeader := c.Get("Prefer", "")
@@ -318,6 +334,12 @@ func (h *RESTHandler) makePutHandler(table database.TableInfo) fiber.Handler {
 		ctx := c.RequestCtx()
 		id := c.Params("id")
 
+		if isTenantWriteBlocked(c, table) {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "Cannot write to tables without tenant_id column when tenant context is active",
+			})
+		}
+
 		// Parse request body
 		var data map[string]interface{}
 		if err := c.Bind().Body(&data); err != nil {
@@ -420,6 +442,12 @@ func (h *RESTHandler) makeDeleteHandler(table database.TableInfo) fiber.Handler 
 	return func(c fiber.Ctx) error {
 		ctx := c.RequestCtx()
 		id := c.Params("id")
+
+		if isTenantWriteBlocked(c, table) {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "Cannot write to tables without tenant_id column when tenant context is active",
+			})
+		}
 
 		// Determine primary key column
 		pkColumn := "id"

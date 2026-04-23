@@ -47,9 +47,16 @@ CREATE TABLE IF NOT EXISTS edge_functions (
     rate_limit_per_hour integer,
     rate_limit_per_day integer,
     tenant_id uuid,
-    CONSTRAINT edge_functions_pkey PRIMARY KEY (id),
-    CONSTRAINT unique_function_name_namespace UNIQUE (name, namespace)
+    CONSTRAINT edge_functions_pkey PRIMARY KEY (id)
 );
+
+ALTER TABLE edge_functions DROP CONSTRAINT IF EXISTS unique_function_name_namespace;
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_function_name_namespace_tenant
+    ON edge_functions (tenant_id, name, namespace) WHERE tenant_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_function_name_namespace_default
+    ON edge_functions (name, namespace) WHERE tenant_id IS NULL;
 
 
 COMMENT ON COLUMN functions.edge_functions.namespace IS 'Namespace for isolating functions across different apps/deployments. Functions with same name can exist in different namespaces.';

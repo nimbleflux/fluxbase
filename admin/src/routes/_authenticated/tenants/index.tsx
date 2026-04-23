@@ -12,6 +12,7 @@ import {
   Pencil,
   Copy,
   Download,
+  Wrench,
   Mail,
   Key,
   Database,
@@ -130,12 +131,25 @@ function TenantsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => tenantsApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tenants"] });
+    onSuccess: (_, id) => {
+      queryClient.setQueryData<Tenant[]>(
+        ["tenants"],
+        (old) => old?.filter((t) => t.id !== id) || [],
+      );
       toast.success("Tenant deleted successfully");
     },
     onError: (error: Error) => {
       toast.error(`Failed to delete tenant: ${error.message}`);
+    },
+  });
+
+  const repairMutation = useMutation({
+    mutationFn: (id: string) => tenantsApi.repair(id),
+    onSuccess: () => {
+      toast.success("Tenant database repaired successfully");
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to repair tenant: ${error.message}`);
     },
   });
 
@@ -393,6 +407,44 @@ function TenantsPage() {
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
+                            {!tenant.is_default && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={repairMutation.isPending}
+                                  >
+                                    <Wrench className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>
+                                      Repair Tenant Database
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will re-bootstrap, re-apply internal
+                                      schemas, and re-setup FDW on "
+                                      {tenant.name}"'s database. Existing data is
+                                      preserved.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>
+                                      Cancel
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() =>
+                                        repairMutation.mutate(tenant.id)
+                                      }
+                                    >
+                                      Repair
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
                             {!tenant.is_default && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>

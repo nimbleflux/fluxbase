@@ -1804,6 +1804,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE oauth_providers TO authenticated;
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_providers TO service_role;
 
 --
+-- Name: oauth_providers; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE oauth_providers TO tenant_service;
+
+--
 -- Name: password_reset_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
@@ -1880,6 +1886,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE tenant_admin_assignments TO authen
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE tenant_admin_assignments TO service_role;
+
+--
+-- Name: tenant_admin_assignments; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE tenant_admin_assignments TO tenant_service;
 
 --
 -- Name: tenant_memberships; Type: PRIVILEGE; Schema: privileges; Owner: -

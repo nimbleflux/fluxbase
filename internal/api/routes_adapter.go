@@ -727,6 +727,7 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			DeleteTenant:              s.Tenancy.Tenant.DeleteTenant,
 			RecoverTenant:             s.Tenancy.Tenant.RecoverTenant,
 			MigrateTenant:             s.Tenancy.Tenant.MigrateTenant,
+			RepairTenant:              s.Tenancy.Tenant.RepairTenant,
 			ListAdmins:                s.Tenancy.Tenant.ListAdmins,
 			AssignAdmin:               s.Tenancy.Tenant.AssignAdmin,
 			RemoveAdmin:               s.Tenancy.Tenant.RemoveAdmin,
@@ -801,6 +802,7 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			LinkKnowledgeBase:          s.AI.KnowledgeBase.LinkKnowledgeBase,
 			UpdateChatbotKnowledgeBase: s.AI.KnowledgeBase.UpdateChatbotKnowledgeBase,
 			UnlinkKnowledgeBase:        s.AI.KnowledgeBase.UnlinkKnowledgeBase,
+			DeleteKnowledgeBase:        s.AI.KnowledgeBase.DeleteKnowledgeBase,
 		},
 		RPC: &routes.RPCAdminDeps{
 			ListRPCNamespaces:   s.RPC.Handler.ListNamespaces,

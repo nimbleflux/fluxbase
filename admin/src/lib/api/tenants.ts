@@ -98,6 +98,10 @@ export const tenantsApi = {
     await api.delete(`/api/v1/admin/tenants/${id}`);
   },
 
+  repair: async (id: string): Promise<void> => {
+    await api.post(`/api/v1/admin/tenants/${id}/repair`);
+  },
+
   listMembers: async (tenantId: string): Promise<TenantMembership[]> => {
     const response = await api.get<TenantMembership[]>(
       `/api/v1/admin/tenants/${tenantId}/members`,

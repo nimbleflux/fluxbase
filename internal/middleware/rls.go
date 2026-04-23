@@ -323,14 +323,26 @@ func WrapWithRLS(ctx context.Context, conn *database.Connection, c fiber.Ctx, fn
 		userIDStr = fmt.Sprintf("%v", userID)
 	}
 
+	// When a tenant context is active, override instance_admin/service_role to tenant_service.
+	// This ensures FDW queries work (no user mapping for service_role on tenant DBs)
+	// and RLS enforces tenant isolation for the selected tenant.
+	roleStr := role.(string)
+	tenantID, hasTenant := c.Locals("tenant_id").(string)
+	if hasTenant && tenantID != "" {
+		if roleStr == "instance_admin" || roleStr == "service_role" {
+			roleStr = "tenant_service"
+		}
+	}
+
 	log.Debug().
 		Str("user_id", userIDStr).
-		Str("role", role.(string)).
+		Str("role", roleStr).
 		Bool("has_jwt_claims", claims != nil).
+		Bool("tenant_context", hasTenant && tenantID != "").
 		Str("path", c.Path()).
 		Msg("WrapWithRLS: Retrieved RLS context from Fiber locals")
 
-	if err := SetRLSContext(ctx, tx, userIDStr, role.(string), claims); err != nil {
+	if err := SetRLSContext(ctx, tx, userIDStr, roleStr, claims); err != nil {
 		return err
 	}
 

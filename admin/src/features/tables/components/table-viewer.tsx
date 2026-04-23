@@ -35,6 +35,7 @@ import {
   type TableDensity,
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
 import {
   DataTablePagination,
   DataTableColumnHeader,
@@ -68,6 +69,7 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
   const { data: tableInfo } = useQuery<{
     schema: string;
     name: string;
+    type?: string;
     rest_path?: string;
     columns: Array<{
       name: string;
@@ -90,6 +92,8 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
     },
     staleTime: 60000, // Cache for 1 minute
   });
+
+  const isView = tableInfo?.type === "view";
   // Use schema/table format for REST API path to match backend expectations
   const tableApiPath =
     tableInfo?.rest_path ||
@@ -286,30 +290,32 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
       return [];
     }
 
-    // Add selection column at the beginning
-    const allColumns: ColumnDef<Record<string, unknown>>[] = [
-      {
-        id: "select",
-        header: ({ table }) => (
-          <Checkbox
-            checked={table.getIsAllPageRowsSelected()}
-            onCheckedChange={(value) =>
-              table.toggleAllPageRowsSelected(!!value)
-            }
-            aria-label="Select all"
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label="Select row"
-          />
-        ),
-        enableSorting: false,
-        enableHiding: false,
-      },
-    ];
+    // Add selection column at the beginning (hidden for views — read-only)
+    const allColumns: ColumnDef<Record<string, unknown>>[] = isView
+      ? []
+      : [
+          {
+            id: "select",
+            header: ({ table }) => (
+              <Checkbox
+                checked={table.getIsAllPageRowsSelected()}
+                onCheckedChange={(value) =>
+                  table.toggleAllPageRowsSelected(!!value)
+                }
+                aria-label="Select all"
+              />
+            ),
+            cell: ({ row }) => (
+              <Checkbox
+                checked={row.getIsSelected()}
+                onCheckedChange={(value) => row.toggleSelected(!!value)}
+                aria-label="Select row"
+              />
+            ),
+            enableSorting: false,
+            enableHiding: false,
+          },
+        ];
 
     const dataColumns: ColumnDef<Record<string, unknown>>[] = columnKeys.map(
       (key) => ({
@@ -332,7 +338,7 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
           return (
             <EditableCell
               value={value}
-              isReadOnly={isIdColumn}
+              isReadOnly={isIdColumn || isView}
               onSave={async (newValue) => {
                 await updateMutateAsync({
                   id: recordId as string | number,
@@ -349,20 +355,22 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
     // Add data columns
     allColumns.push(...dataColumns);
 
-    // Add actions column
-    allColumns.push({
-      id: "actions",
-      cell: ({ row }) => (
-        <TableRowActions
-          row={row}
-          onEdit={(record) => setEditingRecord(record)}
-          onDelete={(record) => deleteMutate(record)}
-        />
-      ),
-    });
+    // Add actions column (hidden for views — they are read-only)
+    if (!isView) {
+      allColumns.push({
+        id: "actions",
+        cell: ({ row }) => (
+          <TableRowActions
+            row={row}
+            onEdit={(record) => setEditingRecord(record)}
+            onDelete={(record) => deleteMutate(record)}
+          />
+        ),
+      });
+    }
 
     return allColumns;
-  }, [data, deleteMutate, updateMutateAsync, tableColumns]);
+  }, [data, deleteMutate, updateMutateAsync, tableColumns, isView]);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table returns non-memoizable functions by design
   const table = useReactTable<Record<string, unknown>>({
@@ -374,7 +382,7 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
       globalFilter,
       rowSelection,
     },
-    enableRowSelection: true,
+    enableRowSelection: !isView,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
@@ -425,7 +433,10 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
       <div className="flex h-full flex-col gap-4 p-6">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 flex-shrink-0">
-            <h2 className="text-2xl font-bold">{tableName}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-bold">{tableName}</h2>
+              {isView && <Badge variant="secondary">View</Badge>}
+            </div>
             <p className="text-muted-foreground text-sm">
               {hasData
                 ? `${data.length} record${data.length !== 1 ? "s" : ""}`
@@ -435,7 +446,7 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
           </div>
 
           <div className="flex shrink-0 gap-2">
-            {selectedCount > 0 && (
+            {!isView && selectedCount > 0 && (
               <Button
                 variant="destructive"
                 onClick={handleBulkDelete}
@@ -464,10 +475,12 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
                 <Rows3 className="size-4" />
               )}
             </Button>
-            <Button onClick={() => setIsCreating(true)}>
-              <Plus className="mr-2 size-4" />
-              Add Record
-            </Button>
+            {!isView && (
+              <Button onClick={() => setIsCreating(true)}>
+                <Plus className="mr-2 size-4" />
+                Add Record
+              </Button>
+            )}
           </div>
         </div>
 
@@ -535,10 +548,12 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
             <div className="sticky left-0 flex min-h-48 w-full items-center justify-center">
               <div className="flex flex-col items-center justify-center gap-2">
                 <p className="text-muted-foreground">
-                  No records in this table
+                  {isView ? "No rows in this view" : "No records in this table"}
                 </p>
                 <p className="text-muted-foreground text-xs">
-                  Click "Add Record" to create the first entry
+                  {isView
+                    ? "Views are read-only and display data from underlying tables"
+                    : 'Click "Add Record" to create the first entry'}
                 </p>
               </div>
             </div>

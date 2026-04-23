@@ -279,6 +279,7 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 				c.Locals("user_id", claims.Subject)
 				c.Locals("user_email", claims.Email)
 				c.Locals("user_role", claims.Role)
+				c.Locals("is_instance_admin", true)
 				c.Locals("jwt_claims", claims)
 
 				log.Debug().

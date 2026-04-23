@@ -118,11 +118,29 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 --
+-- Name: platform_tenant_admin_assignments_tenant; Type: POLICY; Schema: platform; Owner: -
+--
+
+DO $$ BEGIN
+    CREATE POLICY platform_tenant_admin_assignments_tenant ON platform.tenant_admin_assignments TO PUBLIC USING (auth.has_tenant_access(tenant_id)) WITH CHECK (auth.has_tenant_access(tenant_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+--
 -- Name: platform_tenants_assigned; Type: POLICY; Schema: platform; Owner: -
 --
 
 DO $$ BEGIN
     CREATE POLICY platform_tenants_assigned ON platform.tenants FOR SELECT TO authenticated USING (platform.is_instance_admin(auth.uid()) OR (EXISTS ( SELECT 1 FROM platform.tenant_admin_assignments taa WHERE ((taa.tenant_id = tenants.id) AND (taa.user_id = auth.uid())))));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+--
+-- Name: platform_oauth_providers_tenant; Type: POLICY; Schema: platform; Owner: -
+--
+
+DO $$ BEGIN
+    CREATE POLICY platform_oauth_providers_tenant ON platform.oauth_providers TO PUBLIC USING (auth.has_tenant_access(tenant_id)) WITH CHECK (auth.has_tenant_access(tenant_id));
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -600,4 +618,109 @@ BEGIN
         EXECUTE 'DROP TRIGGER IF EXISTS logging_entries_set_tenant_id ON logging.entries_system';
         EXECUTE 'ALTER TABLE logging.entries ATTACH PARTITION logging.entries_system FOR VALUES IN (''system'')';
     END IF;
+END $$;
+
+-- ============================================================================
+-- PLATFORM SCHEMA TRIGGERS (auto-populate tenant_id)
+-- ============================================================================
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER platform_instance_settings_set_tenant_id
+        BEFORE INSERT ON platform.instance_settings
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'platform.instance_settings set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER platform_service_keys_set_tenant_id
+        BEFORE INSERT ON platform.service_keys
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'platform.service_keys set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER platform_tenant_memberships_set_tenant_id
+        BEFORE INSERT ON platform.tenant_memberships
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'platform.tenant_memberships set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER platform_enabled_extensions_set_tenant_id
+        BEFORE INSERT ON platform.enabled_extensions
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'platform.enabled_extensions set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER platform_invitation_tokens_set_tenant_id
+        BEFORE INSERT ON platform.invitation_tokens
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'platform.invitation_tokens set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER platform_oauth_providers_set_tenant_id
+        BEFORE INSERT ON platform.oauth_providers
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'platform.oauth_providers set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+DO $$ BEGIN
+    CREATE OR REPLACE TRIGGER platform_tenant_admin_assignments_set_tenant_id
+        BEFORE INSERT ON platform.tenant_admin_assignments
+        FOR EACH ROW
+        EXECUTE FUNCTION auth.set_tenant_id_from_context();
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'platform.tenant_admin_assignments set_tenant_id trigger: %', SQLERRM;
+END $$;
+
+-- ============================================================================
+-- DATA MIGRATION: assign existing NULL tenant_id rows to the default tenant
+-- These UPDATEs are idempotent (WHERE tenant_id IS NULL) and become no-ops
+-- after the first successful run.
+-- ============================================================================
+
+DO $$
+DECLARE
+    default_tenant_uuid UUID;
+BEGIN
+    SELECT id INTO default_tenant_uuid FROM platform.tenants WHERE is_default = true LIMIT 1;
+    IF default_tenant_uuid IS NULL THEN
+        RAISE NOTICE 'No default tenant found, skipping NULL tenant_id migration';
+        RETURN;
+    END IF;
+
+    -- Logging entries (parent + all partitions)
+    UPDATE logging.entries SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+
+    -- Auth tables with tenant RLS
+    UPDATE auth.webhooks SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.client_keys SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE auth.impersonation_sessions SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+
+    -- Platform tables with tenant RLS
+    UPDATE platform.oauth_providers SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE platform.tenant_admin_assignments SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE platform.instance_settings SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE platform.service_keys SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE platform.tenant_memberships SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE platform.enabled_extensions SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+    UPDATE platform.invitation_tokens SET tenant_id = default_tenant_uuid WHERE tenant_id IS NULL;
+
+    RAISE NOTICE 'Migrated NULL tenant_id rows to default tenant %', default_tenant_uuid;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'NULL tenant_id migration skipped: %', SQLERRM;
 END $$;
