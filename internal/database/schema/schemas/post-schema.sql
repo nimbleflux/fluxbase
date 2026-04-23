@@ -6,6 +6,86 @@
 --
 
 -- ============================================================================
+-- AUTH SCHEMA MIGRATIONS — add missing columns for tenant isolation
+-- These are idempotent ALTER TABLE statements for databases where the tables
+-- already exist (CREATE TABLE IF NOT EXISTS won't add new columns).
+-- ============================================================================
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='users' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.users ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='magic_links' AND column_name='user_id') THEN
+        ALTER TABLE auth.magic_links ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='magic_links' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.magic_links ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='otp_codes' AND column_name='user_id') THEN
+        ALTER TABLE auth.otp_codes ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='otp_codes' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.otp_codes ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='sessions' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.sessions ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='oauth_links' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.oauth_links ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='oauth_tokens' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.oauth_tokens ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='mfa_factors' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.mfa_factors ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='saml_sessions' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.saml_sessions ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='email_verification_tokens' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.email_verification_tokens ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='password_reset_tokens' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.password_reset_tokens ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='two_factor_setups' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.two_factor_setups ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='two_factor_recovery_attempts' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.two_factor_recovery_attempts ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='oauth_logout_states' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.oauth_logout_states ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='mcp_oauth_clients' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.mcp_oauth_clients ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='mcp_oauth_codes' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.mcp_oauth_codes ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='mcp_oauth_tokens' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.mcp_oauth_tokens ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='client_key_usage' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.client_key_usage ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='auth' AND table_name='service_key_revocations' AND column_name='tenant_id') THEN
+        ALTER TABLE auth.service_key_revocations ADD COLUMN tenant_id uuid;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='app' AND table_name='settings' AND column_name='tenant_id') THEN
+        ALTER TABLE app.settings ADD COLUMN tenant_id uuid;
+    END IF;
+
+    CREATE INDEX IF NOT EXISTS idx_auth_users_tenant_id ON auth.users (tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_magic_links_tenant_id ON auth.magic_links (tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_otp_codes_tenant_id ON auth.otp_codes (tenant_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS auth_users_email_tenant_null_unique ON auth.users (email) WHERE (tenant_id IS NULL);
+    CREATE UNIQUE INDEX IF NOT EXISTS auth_users_email_tenant_unique ON auth.users (tenant_id, email) WHERE (tenant_id IS NOT NULL);
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Auth schema migration: %', SQLERRM;
+END $$;
+
+-- ============================================================================
 -- PLATFORM SCHEMA POLICIES (reference auth.users and auth.uid())
 -- ============================================================================
 

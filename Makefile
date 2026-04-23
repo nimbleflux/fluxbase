@@ -279,10 +279,11 @@ test-setup-db: ## Apply bootstrap + declarative schemas to match CI pipeline set
 	@# Substitute {{APP_USER}} with $(DATABASE_USER) (Go runtime does this via SubstituteAppUser)
 	@sed "s/{{APP_USER}}/$(DATABASE_USER)/g" internal/database/bootstrap/bootstrap.sql | PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1
 	@# 2. Apply each declarative schema in dependency order (all use CREATE IF NOT EXISTS = idempotent)
-	@# Note: Some schemas use CREATE POLICY without IF NOT EXISTS, so we don't use ON_ERROR_STOP for re-runs
+	@# Note: We do NOT use ON_ERROR_STOP because tables may reference FKs not yet created;
+	@# cross-schema FKs are added later by post-schema-fks.sql. Errors are tolerated via || true.
 	@for schema in platform auth storage jobs functions realtime ai rpc app branching logging mcp; do \
 		echo "Applying schema: $$schema"; \
-		sed "s/{{APP_USER}}/$(DATABASE_USER)/g" internal/database/schema/schemas/$$schema.sql | PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 || true; \
+		sed "s/{{APP_USER}}/$(DATABASE_USER)/g" internal/database/schema/schemas/$$schema.sql | PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) || true; \
 	done
 	@# 3. Apply cross-schema foreign keys (idempotent DO blocks)
 	@echo "Applying cross-schema foreign keys..."
@@ -297,13 +298,16 @@ test-setup-db: ## Apply bootstrap + declarative schemas to match CI pipeline set
 	@PGPASSWORD=$(DATABASE_ADMIN_PASSWORD) psql -h $(DATABASE_HOST) -U $(DATABASE_ADMIN_USER) -d $(DATABASE_NAME) -c "GRANT ALL ON SCHEMA public TO fluxbase_app;" || true
 	@echo "${GREEN}Database schema applied successfully!${NC}"
 
-test-full: test-setup-db ## Run ALL tests including e2e with race detector (may take 5-10 minutes)
+test-full: ## Run ALL tests including e2e with race detector (may take 5-10 minutes)
+	$(MAKE) test-setup-db DATABASE_NAME=fluxbase_test
 	@./scripts/test-runner.sh go test -timeout 15m -v -race -cover -tags=integration ./...
 
-test-e2e: test-setup-db ## Run e2e tests only (requires postgres, mailhog, minio services). Use RUN= to filter tests.
+test-e2e: ## Run e2e tests only (requires postgres, mailhog, minio services). Use RUN= to filter tests.
+	$(MAKE) test-setup-db DATABASE_NAME=fluxbase_test
 	@./scripts/test-runner.sh go test -v -race -parallel=1 -timeout=5m -tags=integration ./test/e2e/... $(if $(RUN),-run $(RUN),)
 
-test-e2e-fast: test-setup-db ## Run e2e tests without race detector (faster for dev iteration). Use RUN= to filter tests.
+test-e2e-fast: ## Run e2e tests without race detector (faster for dev iteration). Use RUN= to filter tests.
+	$(MAKE) test-setup-db DATABASE_NAME=fluxbase_test
 	@./scripts/test-runner.sh go test -v -parallel=1 -timeout=3m -tags=integration ./test/e2e/... $(if $(RUN),-run $(RUN),)
 
 test-auth: ## Run authentication tests only

@@ -62,7 +62,10 @@ func setupStorageTestServer(t *testing.T) (*fiber.App, string, *database.Connect
 		dbPassword = "fluxbase_app_password"
 	}
 
-	dbDatabase := "fluxbase_test"
+	dbDatabase := os.Getenv("FLUXBASE_TEST_DATABASE")
+	if dbDatabase == "" {
+		dbDatabase = "fluxbase_test"
+	}
 
 	// Create minimal database configuration for testing
 	dbConfig := config.DatabaseConfig{

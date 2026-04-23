@@ -170,6 +170,105 @@ ALTER TABLE emergency_revocation ENABLE ROW LEVEL SECURITY;
 ALTER TABLE emergency_revocation FORCE ROW LEVEL SECURITY;
 
 --
+-- Name: users; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS users (
+    id uuid DEFAULT gen_random_uuid(),
+    email text NOT NULL,
+    password_hash text,
+    email_verified boolean DEFAULT false,
+    role text DEFAULT 'authenticated',
+    user_metadata jsonb DEFAULT '{}',
+    app_metadata jsonb DEFAULT '{}',
+    totp_secret varchar(255),
+    totp_enabled boolean DEFAULT false,
+    backup_codes text[],
+    failed_login_attempts integer DEFAULT 0,
+    is_locked boolean DEFAULT false,
+    locked_until timestamptz,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    tenant_id uuid,
+    CONSTRAINT users_pkey PRIMARY KEY (id)
+);
+
+
+COMMENT ON COLUMN auth.users.user_metadata IS 'User-editable metadata. Users can update this field themselves. Included in JWT claims.';
+
+
+COMMENT ON COLUMN auth.users.app_metadata IS 'Application/admin-only metadata. Can only be updated by admins or service role. Included in JWT claims.';
+
+
+COMMENT ON COLUMN auth.users.failed_login_attempts IS 'Number of consecutive failed login attempts';
+
+
+COMMENT ON COLUMN auth.users.is_locked IS 'Whether the account is locked due to too many failed attempts';
+
+
+COMMENT ON COLUMN auth.users.locked_until IS 'When the account lock expires (null = permanent until admin unlocks)';
+
+--
+-- Name: auth_users_email_tenant_null_unique; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE UNIQUE INDEX IF NOT EXISTS auth_users_email_tenant_null_unique ON users (email) WHERE (tenant_id IS NULL);
+
+--
+-- Name: auth_users_email_tenant_unique; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE UNIQUE INDEX IF NOT EXISTS auth_users_email_tenant_unique ON users (tenant_id, email) WHERE (tenant_id IS NOT NULL);
+
+--
+-- Name: idx_auth_users_app_metadata; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_auth_users_app_metadata ON users USING gin (app_metadata);
+
+--
+-- Name: idx_auth_users_email; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_auth_users_email ON users (email);
+
+--
+-- Name: idx_auth_users_is_locked; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_auth_users_is_locked ON users (is_locked) WHERE (is_locked = true);
+
+--
+-- Name: idx_auth_users_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_auth_users_tenant_id ON users (tenant_id);
+
+--
+-- Name: idx_auth_users_totp_enabled; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_auth_users_totp_enabled ON users (totp_enabled) WHERE (totp_enabled = true);
+
+--
+-- Name: idx_auth_users_user_metadata; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_auth_users_user_metadata ON users USING gin (user_metadata);
+
+--
+-- Name: users; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: users; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE users FORCE ROW LEVEL SECURITY;
+
+--
 -- Name: magic_links; Type: TABLE; Schema: -; Owner: -
 --
 
@@ -589,105 +688,6 @@ ALTER TABLE saml_providers ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE saml_providers FORCE ROW LEVEL SECURITY;
-
---
--- Name: users; Type: TABLE; Schema: -; Owner: -
---
-
-CREATE TABLE IF NOT EXISTS users (
-    id uuid DEFAULT gen_random_uuid(),
-    email text NOT NULL,
-    password_hash text,
-    email_verified boolean DEFAULT false,
-    role text DEFAULT 'authenticated',
-    user_metadata jsonb DEFAULT '{}',
-    app_metadata jsonb DEFAULT '{}',
-    totp_secret varchar(255),
-    totp_enabled boolean DEFAULT false,
-    backup_codes text[],
-    failed_login_attempts integer DEFAULT 0,
-    is_locked boolean DEFAULT false,
-    locked_until timestamptz,
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now(),
-    tenant_id uuid,
-    CONSTRAINT users_pkey PRIMARY KEY (id)
-);
-
-
-COMMENT ON COLUMN auth.users.user_metadata IS 'User-editable metadata. Users can update this field themselves. Included in JWT claims.';
-
-
-COMMENT ON COLUMN auth.users.app_metadata IS 'Application/admin-only metadata. Can only be updated by admins or service role. Included in JWT claims.';
-
-
-COMMENT ON COLUMN auth.users.failed_login_attempts IS 'Number of consecutive failed login attempts';
-
-
-COMMENT ON COLUMN auth.users.is_locked IS 'Whether the account is locked due to too many failed attempts';
-
-
-COMMENT ON COLUMN auth.users.locked_until IS 'When the account lock expires (null = permanent until admin unlocks)';
-
---
--- Name: auth_users_email_tenant_null_unique; Type: INDEX; Schema: -; Owner: -
---
-
-CREATE UNIQUE INDEX IF NOT EXISTS auth_users_email_tenant_null_unique ON users (email) WHERE (tenant_id IS NULL);
-
---
--- Name: auth_users_email_tenant_unique; Type: INDEX; Schema: -; Owner: -
---
-
-CREATE UNIQUE INDEX IF NOT EXISTS auth_users_email_tenant_unique ON users (tenant_id, email) WHERE (tenant_id IS NOT NULL);
-
---
--- Name: idx_auth_users_app_metadata; Type: INDEX; Schema: -; Owner: -
---
-
-CREATE INDEX IF NOT EXISTS idx_auth_users_app_metadata ON users USING gin (app_metadata);
-
---
--- Name: idx_auth_users_email; Type: INDEX; Schema: -; Owner: -
---
-
-CREATE INDEX IF NOT EXISTS idx_auth_users_email ON users (email);
-
---
--- Name: idx_auth_users_is_locked; Type: INDEX; Schema: -; Owner: -
---
-
-CREATE INDEX IF NOT EXISTS idx_auth_users_is_locked ON users (is_locked) WHERE (is_locked = true);
-
---
--- Name: idx_auth_users_tenant_id; Type: INDEX; Schema: -; Owner: -
---
-
-CREATE INDEX IF NOT EXISTS idx_auth_users_tenant_id ON users (tenant_id);
-
---
--- Name: idx_auth_users_totp_enabled; Type: INDEX; Schema: -; Owner: -
---
-
-CREATE INDEX IF NOT EXISTS idx_auth_users_totp_enabled ON users (totp_enabled) WHERE (totp_enabled = true);
-
---
--- Name: idx_auth_users_user_metadata; Type: INDEX; Schema: -; Owner: -
---
-
-CREATE INDEX IF NOT EXISTS idx_auth_users_user_metadata ON users USING gin (user_metadata);
-
---
--- Name: users; Type: RLS; Schema: -; Owner: -
---
-
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-
---
--- Name: users; Type: RLS; Schema: -; Owner: -
---
-
-ALTER TABLE users FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: client_keys; Type: TABLE; Schema: -; Owner: -

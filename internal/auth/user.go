@@ -40,14 +40,15 @@ func quoteTableName(schema, table string) string {
 type User struct {
 	ID                  string     `json:"id" db:"id"`
 	Email               string     `json:"email" db:"email"`
-	PasswordHash        string     `json:"-" db:"password_hash"` // Never expose in JSON
+	PasswordHash        string     `json:"-" db:"password_hash"`
 	EmailVerified       bool       `json:"email_verified" db:"email_verified"`
 	Role                string     `json:"role,omitempty" db:"role"`
-	UserMetadata        any        `json:"user_metadata,omitempty" db:"user_metadata"` // User-editable metadata
-	AppMetadata         any        `json:"app_metadata,omitempty" db:"app_metadata"`   // Application/admin-only metadata
-	FailedLoginAttempts int        `json:"-" db:"failed_login_attempts"`               // Track failed logins for lockout
-	IsLocked            bool       `json:"-" db:"is_locked"`                           // Account locked status
-	LockedUntil         *time.Time `json:"-" db:"locked_until"`                        // Lock expiry time
+	TenantID            string     `json:"tenant_id,omitempty" db:"tenant_id"`
+	UserMetadata        any        `json:"user_metadata,omitempty" db:"user_metadata"`
+	AppMetadata         any        `json:"app_metadata,omitempty" db:"app_metadata"`
+	FailedLoginAttempts int        `json:"-" db:"failed_login_attempts"`
+	IsLocked            bool       `json:"-" db:"is_locked"`
+	LockedUntil         *time.Time `json:"-" db:"locked_until"`
 	CreatedAt           time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at" db:"updated_at"`
 }
@@ -105,7 +106,8 @@ func (r *UserRepository) Create(ctx context.Context, req CreateUserRequest, pass
 		RETURNING id, email, email_verified, role, user_metadata, app_metadata, created_at, updated_at
 	`
 
-	err := database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
+	tenantID := database.TenantFromContext(ctx)
+	err := database.WrapWithServiceRoleAndTenant(ctx, r.db, tenantID, func(tx pgx.Tx) error {
 		row := tx.QueryRow(ctx, query,
 			user.ID,
 			user.Email,
@@ -143,7 +145,8 @@ func (r *UserRepository) Create(ctx context.Context, req CreateUserRequest, pass
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*User, error) {
 	query := `
-		SELECT id, email, COALESCE(password_hash, ''), email_verified, role, user_metadata, app_metadata,
+		SELECT id, email, COALESCE(password_hash, ''), email_verified, role, COALESCE(tenant_id::text, ''),
+		       user_metadata, app_metadata,
 		       COALESCE(failed_login_attempts, 0), COALESCE(is_locked, false), locked_until,
 		       created_at, updated_at
 		FROM auth.users
@@ -158,6 +161,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*User, error) 
 			&user.PasswordHash,
 			&user.EmailVerified,
 			&user.Role,
+			&user.TenantID,
 			&user.UserMetadata,
 			&user.AppMetadata,
 			&user.FailedLoginAttempts,
@@ -180,7 +184,8 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*User, error) 
 // GetByEmail retrieves a user by email
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
-		SELECT id, email, COALESCE(password_hash, ''), email_verified, role, user_metadata, app_metadata,
+		SELECT id, email, COALESCE(password_hash, ''), email_verified, role, COALESCE(tenant_id::text, ''),
+		       user_metadata, app_metadata,
 		       COALESCE(failed_login_attempts, 0), COALESCE(is_locked, false), locked_until,
 		       created_at, updated_at
 		FROM auth.users
@@ -195,6 +200,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*User, e
 			&user.PasswordHash,
 			&user.EmailVerified,
 			&user.Role,
+			&user.TenantID,
 			&user.UserMetadata,
 			&user.AppMetadata,
 			&user.FailedLoginAttempts,

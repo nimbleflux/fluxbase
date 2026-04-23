@@ -192,7 +192,7 @@ CREATE POLICY "Users can update their own settings" ON settings FOR UPDATE TO au
 -- Name: settings_tenant; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY settings_tenant ON settings TO PUBLIC USING (has_tenant_access(tenant_id)) WITH CHECK (has_tenant_access(tenant_id));
+CREATE POLICY settings_tenant ON settings TO PUBLIC USING (auth.has_tenant_access(tenant_id)) WITH CHECK (auth.has_tenant_access(tenant_id));
 
 --
 -- Cross-schema FKs moved to post-schema-fks.sql

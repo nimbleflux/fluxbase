@@ -99,7 +99,8 @@ func (r *EmailVerificationRepository) Create(ctx context.Context, userID string,
 		RETURNING id, user_id, token_hash, expires_at, used, used_at, created_at
 	`
 
-	err = database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
+	tenantID := database.TenantFromContext(ctx)
+	err = database.WrapWithServiceRoleAndTenant(ctx, r.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			token.ID,
 			token.UserID,

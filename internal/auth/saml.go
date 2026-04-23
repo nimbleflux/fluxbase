@@ -758,7 +758,8 @@ func (s *SAMLService) CheckAssertionReplay(ctx context.Context, assertionID stri
 
 // CreateSAMLSession creates a new SAML session for tracking
 func (s *SAMLService) CreateSAMLSession(ctx context.Context, session *SAMLSession) error {
-	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	tenantID := database.TenantFromContext(ctx)
+	return database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO auth.saml_sessions (id, user_id, provider_id, provider_name, name_id, name_id_format, session_index, attributes, expires_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
