@@ -1055,6 +1055,9 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Int("max_complexity", cfg.GraphQL.MaxComplexity).
 			Bool("introspection", cfg.GraphQL.Introspection).
 			Msg("GraphQL API enabled")
+		if cfg.GraphQL.Introspection {
+			log.Warn().Msg("GraphQL introspection is enabled — consider setting graphql.introspection to false in production")
+		}
 	}
 
 	// Start realtime listener (unless disabled or in worker-only mode)

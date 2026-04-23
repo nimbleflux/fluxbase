@@ -369,8 +369,6 @@ type CaptchaConfig struct {
 	// Cap provider settings (self-hosted proof-of-work CAPTCHA)
 	CapServerURL string `mapstructure:"cap_server_url"` // URL of Cap server (e.g., http://localhost:3000)
 	CapAPIKey    string `mapstructure:"cap_api_key"`    // API key for Cap server authentication
-	// Test mode settings (for development/testing only - DO NOT use in production)
-	TestBypassToken string `mapstructure:"test_bypass_token"` // Token that bypasses verification (leave empty in production)
 	// Adaptive trust settings for intelligent CAPTCHA decisions
 	AdaptiveTrust AdaptiveTrustConfig `mapstructure:"adaptive_trust"`
 }
@@ -1389,6 +1387,9 @@ func (dc *DatabaseConfig) Validate() error {
 	}
 	if !sslModeValid {
 		return fmt.Errorf("invalid ssl_mode: %s (must be one of: %v)", dc.SSLMode, validSSLModes)
+	}
+	if dc.SSLMode == "disable" {
+		log.Warn().Msg("database.ssl_mode is 'disable' — database connections are unencrypted. Set ssl_mode to 'require' or higher in production.")
 	}
 
 	// Validate connection pool settings

@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -492,7 +491,11 @@ func (m *Manager) applyInternalSchemas(ctx context.Context, dbName string, fdwEn
 
 		sql := string(data)
 		if appUser != "" {
-			sql = strings.ReplaceAll(sql, "{{APP_USER}}", appUser)
+			var subErr error
+			sql, subErr = bootstrap.SubstituteAppUser(sql, appUser)
+			if subErr != nil {
+				return fmt.Errorf("invalid app user for schema %s: %w", schemaName, subErr)
+			}
 		}
 
 		if _, err := pool.Exec(ctx, sql); err != nil {
@@ -515,7 +518,11 @@ func (m *Manager) applyInternalSchemas(ctx context.Context, dbName string, fdwEn
 		}
 		sql := string(data)
 		if appUser != "" {
-			sql = strings.ReplaceAll(sql, "{{APP_USER}}", appUser)
+			var subErr error
+			sql, subErr = bootstrap.SubstituteAppUser(sql, appUser)
+			if subErr != nil {
+				return fmt.Errorf("invalid app user for %s: %w", extraFile, subErr)
+			}
 		}
 		if _, err := pool.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("failed to apply %s to tenant database %s: %w", extraFile, dbName, err)
