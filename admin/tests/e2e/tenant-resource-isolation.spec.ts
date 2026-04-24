@@ -12,7 +12,6 @@ import {
   rawDeleteMCPTool,
   rawCreateCustomSetting,
   rawListCustomSettings,
-  rawDeleteCustomSetting,
   rawApiRequest,
 } from "./helpers/api";
 
@@ -315,13 +314,17 @@ test.describe("Tenant Resource Isolation", () => {
 
     const listA = await rawListCustomSettings(adminToken, defaultTenantId);
     expect(listA.status).toBeLessThan(300);
-    const settingsA = Array.isArray(listA.body) ? listA.body : listA.body?.settings || [];
+    const settingsA = Array.isArray(listA.body)
+      ? listA.body
+      : listA.body?.settings || [];
     const foundInA = settingsA.some((s: { key: string }) => s.key === key);
     expect(foundInA).toBe(true);
 
     const listB = await rawListCustomSettings(adminToken, thirdTenantId);
     expect(listB.status).toBeLessThan(300);
-    const settingsB = Array.isArray(listB.body) ? listB.body : listB.body?.settings || [];
+    const settingsB = Array.isArray(listB.body)
+      ? listB.body
+      : listB.body?.settings || [];
     const foundInB = settingsB.some((s: { key: string }) => s.key === key);
     expect(foundInB).toBe(false);
   });
@@ -349,13 +352,17 @@ test.describe("Tenant Resource Isolation", () => {
 
     const listA = await rawListCustomSettings(adminToken, defaultTenantId);
     expect(listA.status).toBeLessThan(300);
-    const settingsA = Array.isArray(listA.body) ? listA.body : listA.body?.settings || [];
+    const settingsA = Array.isArray(listA.body)
+      ? listA.body
+      : listA.body?.settings || [];
     const foundInA = settingsA.some((s: { key: string }) => s.key === key);
     expect(foundInA).toBe(false);
 
     const listB = await rawListCustomSettings(adminToken, thirdTenantId);
     expect(listB.status).toBeLessThan(300);
-    const settingsB = Array.isArray(listB.body) ? listB.body : listB.body?.settings || [];
+    const settingsB = Array.isArray(listB.body)
+      ? listB.body
+      : listB.body?.settings || [];
     const foundInB = settingsB.some((s: { key: string }) => s.key === key);
     expect(foundInB).toBe(true);
   });

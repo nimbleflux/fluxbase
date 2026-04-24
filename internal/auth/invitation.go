@@ -37,7 +37,7 @@ type InvitationToken struct {
 	ID         uuid.UUID  `json:"id"`
 	Email      string     `json:"email"`
 	Token      string     `json:"-" db:"token"`
-	TokenHash  string     `json:"-" db:"token_hash"`
+	TokenHash  *string    `json:"-" db:"token_hash"`
 	Role       string     `json:"role"`
 	TenantID   *uuid.UUID `json:"tenant_id,omitempty"`
 	InvitedBy  *uuid.UUID `json:"invited_by,omitempty"`
@@ -100,7 +100,7 @@ func (s *InvitationService) CreateInvitationWithTenant(ctx context.Context, emai
 		ID:        uuid.New(),
 		Email:     email,
 		Token:     token,
-		TokenHash: tokenHash,
+		TokenHash: &tokenHash,
 		Role:      role,
 		TenantID:  tenantID,
 		InvitedBy: invitedBy,
@@ -215,14 +215,14 @@ func (s *InvitationService) ValidateToken(ctx context.Context, token string) (*I
 	}
 
 	// Lazy migration: backfill hash for this legacy token
-	if invitation.TokenHash == "" {
+	if invitation.TokenHash == nil || *invitation.TokenHash == "" {
 		if migrateErr := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 			_, execErr := tx.Exec(ctx, `UPDATE platform.invitation_tokens SET token_hash = $1 WHERE id = $2`, tokenHash, invitation.ID)
 			return execErr
 		}); migrateErr != nil {
 			log.Debug().Err(migrateErr).Str("invitation_id", invitation.ID.String()).Msg("Failed to lazy-migrate invitation token hash")
 		}
-		invitation.TokenHash = tokenHash
+		invitation.TokenHash = &tokenHash
 	}
 
 	return invitation, validateInvitation(invitation)

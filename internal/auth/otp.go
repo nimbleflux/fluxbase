@@ -41,7 +41,7 @@ type OTPCode struct {
 	ID          string     `json:"id" db:"id"`
 	Email       *string    `json:"email,omitempty" db:"email"`
 	Phone       *string    `json:"phone,omitempty" db:"phone"`
-	CodeHash    string     `json:"-" db:"code_hash"`
+	CodeHash    *string    `json:"-" db:"code_hash"`
 	Type        string     `json:"type" db:"type"`
 	Purpose     string     `json:"purpose" db:"purpose"`
 	ExpiresAt   time.Time  `json:"expires_at" db:"expires_at"`
@@ -84,7 +84,7 @@ func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string
 		ID:          uuid.New().String(),
 		Email:       email,
 		Phone:       phone,
-		CodeHash:    codeHash,
+		CodeHash:    &codeHash,
 		Type:        otpType,
 		Purpose:     purpose,
 		ExpiresAt:   time.Now().Add(expiryDuration),
@@ -239,14 +239,14 @@ func (r *OTPRepository) GetByCode(ctx context.Context, email *string, phone *str
 	}
 
 	// Lazy migration: backfill hash for this legacy code
-	if otpCode.CodeHash == "" {
+	if otpCode.CodeHash == nil || *otpCode.CodeHash == "" {
 		if migrateErr := database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
 			_, execErr := tx.Exec(ctx, `UPDATE auth.otp_codes SET code_hash = $1 WHERE id = $2`, codeHash, otpCode.ID)
 			return execErr
 		}); migrateErr != nil {
 			log.Debug().Err(migrateErr).Str("otp_id", otpCode.ID).Msg("Failed to lazy-migrate OTP code hash")
 		}
-		otpCode.CodeHash = codeHash
+		otpCode.CodeHash = &codeHash
 	}
 
 	return otpCode, nil

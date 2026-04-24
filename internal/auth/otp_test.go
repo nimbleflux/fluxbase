@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func ptrStr(s string) *string { return &s }
+
 // =============================================================================
 // GenerateOTPCode Tests
 // =============================================================================
@@ -171,7 +173,7 @@ func TestOTPCode_FieldsExist(t *testing.T) {
 		ID:          "otp-123",
 		Email:       &email,
 		Phone:       &phone,
-		CodeHash:    hashOTPCode("123456"),
+		CodeHash:    ptrStr(hashOTPCode("123456")),
 		Type:        "email",
 		Purpose:     "signin",
 		ExpiresAt:   now.Add(10 * time.Minute),
@@ -205,7 +207,7 @@ func TestOTPCode_NullableFields(t *testing.T) {
 		ID:          "otp-456",
 		Email:       nil,
 		Phone:       nil,
-		CodeHash:    hashOTPCode("654321"),
+		CodeHash:    ptrStr(hashOTPCode("654321")),
 		Type:        "sms",
 		Purpose:     "recovery",
 		ExpiresAt:   time.Now().Add(5 * time.Minute),
@@ -342,7 +344,7 @@ func TestOTPCode_ValidationLogic(t *testing.T) {
 		{
 			name: "valid code",
 			otp: OTPCode{
-				CodeHash:    hashOTPCode("123456"),
+				CodeHash:    ptrStr(hashOTPCode("123456")),
 				Used:        false,
 				ExpiresAt:   now.Add(5 * time.Minute),
 				Attempts:    0,
@@ -354,7 +356,7 @@ func TestOTPCode_ValidationLogic(t *testing.T) {
 		{
 			name: "code already used",
 			otp: OTPCode{
-				CodeHash:    hashOTPCode("123456"),
+				CodeHash:    ptrStr(hashOTPCode("123456")),
 				Used:        true,
 				UsedAt:      &now,
 				ExpiresAt:   now.Add(5 * time.Minute),
@@ -367,7 +369,7 @@ func TestOTPCode_ValidationLogic(t *testing.T) {
 		{
 			name: "code expired",
 			otp: OTPCode{
-				CodeHash:    hashOTPCode("123456"),
+				CodeHash:    ptrStr(hashOTPCode("123456")),
 				Used:        false,
 				ExpiresAt:   now.Add(-1 * time.Hour),
 				Attempts:    0,
@@ -379,7 +381,7 @@ func TestOTPCode_ValidationLogic(t *testing.T) {
 		{
 			name: "max attempts exceeded",
 			otp: OTPCode{
-				CodeHash:    hashOTPCode("123456"),
+				CodeHash:    ptrStr(hashOTPCode("123456")),
 				Used:        false,
 				ExpiresAt:   now.Add(5 * time.Minute),
 				Attempts:    3,
