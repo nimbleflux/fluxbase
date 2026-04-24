@@ -1132,7 +1132,7 @@ export async function rawCreateCustomSetting(
   return rawApiRequest({
     method: "POST",
     path: "/api/v1/admin/settings/custom",
-    data: options,
+    data: { ...options, value: { value: options.value } },
     headers,
   });
 }

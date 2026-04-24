@@ -153,8 +153,8 @@ test.describe("Tenant CRUD", () => {
 
     // Find the delete button for this tenant's row
     const row = adminPage.getByRole("row").filter({ hasText: tenantName });
-    const deleteButtons = row.getByRole("button");
-    const deleteBtn = deleteButtons.nth(1); // Second button is delete (first is edit)
+    const buttons = row.getByRole("button");
+    const deleteBtn = buttons.nth(2); // Third button: Edit (0), Repair (1), Delete (2)
     await deleteBtn.click();
 
     // Confirm deletion in dialog
