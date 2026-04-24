@@ -226,6 +226,7 @@ type DatabaseConfig struct {
 	MaxConnIdleTime    time.Duration `mapstructure:"max_conn_idle_time"`
 	HealthCheck        time.Duration `mapstructure:"health_check_period"`
 	UserMigrationsPath string        `mapstructure:"user_migrations_path"` // Path to user-provided migration files
+	SlowQueryThreshold time.Duration `mapstructure:"slow_query_threshold"` // Log queries slower than this (default: 1s)
 }
 
 // AuthConfig contains authentication settings
@@ -816,6 +817,7 @@ func setDefaults() {
 	viper.SetDefault("database.max_conn_idle_time", "30m")
 	viper.SetDefault("database.health_check_period", "1m")
 	viper.SetDefault("database.user_migrations_path", "/migrations/user")
+	viper.SetDefault("database.slow_query_threshold", "1s")
 
 	// Auth defaults
 	viper.SetDefault("auth.jwt_secret", "your-secret-key-change-in-production")

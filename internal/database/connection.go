@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -24,7 +25,85 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/observability"
 )
 
-// Type aliases for backward compatibility with refactored code
+type callerKey struct{}
+
+func WithCaller(ctx context.Context, caller string) context.Context {
+	return context.WithValue(ctx, callerKey{}, caller)
+}
+
+func getCallerFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v, ok := ctx.Value(callerKey{}).(string); ok && v != "" {
+		return v
+	}
+	return ""
+}
+
+func getCallerFromRuntime() string {
+	for skip := 3; skip <= 8; skip++ {
+		if _, file, _, ok := runtime.Caller(skip); ok {
+			idx := strings.LastIndex(file, "/internal/")
+			if idx >= 0 {
+				return file[idx+1:]
+			}
+		}
+	}
+	return ""
+}
+
+type slowQueryEntry struct {
+	count     int
+	firstSeen time.Time
+}
+
+type slowQueryTracker struct {
+	mu      sync.Mutex
+	entries map[string]*slowQueryEntry
+	maxAge  time.Duration
+}
+
+func newSlowQueryTracker() *slowQueryTracker {
+	t := &slowQueryTracker{
+		entries: make(map[string]*slowQueryEntry),
+		maxAge:  1 * time.Hour,
+	}
+	go t.cleanupLoop()
+	return t
+}
+
+func (t *slowQueryTracker) record(queryKey string) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	now := time.Now()
+	e, ok := t.entries[queryKey]
+	if !ok {
+		t.entries[queryKey] = &slowQueryEntry{count: 1, firstSeen: now}
+		return 1
+	}
+	e.count++
+	return e.count
+}
+
+func (t *slowQueryTracker) cleanupLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		t.mu.Lock()
+		now := time.Now()
+		for k, e := range t.entries {
+			if now.Sub(e.firstSeen) > t.maxAge {
+				delete(t.entries, k)
+			}
+		}
+		t.mu.Unlock()
+	}
+}
+
+const slowQueryTruncationLimit = 500
+
 // These aliases allow the middleware and handlers to use simpler type names
 type (
 	Querier      interface{}
@@ -44,11 +123,13 @@ func quoteIdentifier(identifier string) string {
 
 // Connection represents a database connection pool
 type Connection struct {
-	pool      *pgxpool.Pool
-	poolMu    sync.RWMutex
-	config    *config.DatabaseConfig
-	inspector *SchemaInspector
-	metrics   *observability.Metrics
+	pool               *pgxpool.Pool
+	poolMu             sync.RWMutex
+	config             *config.DatabaseConfig
+	inspector          *SchemaInspector
+	metrics            *observability.Metrics
+	slowQueryTracker   *slowQueryTracker
+	slowQueryThreshold time.Duration
 }
 
 // SetMetrics sets the metrics instance for recording database metrics
@@ -56,9 +137,9 @@ func (c *Connection) SetMetrics(m *observability.Metrics) {
 	c.metrics = m
 }
 
-// extractTableName attempts to extract the table name from a SQL query
+// ExtractTableName attempts to extract the table name from a SQL query
 // Returns "unknown" if the table cannot be determined
-func extractTableName(sql string) string {
+func ExtractTableName(sql string) string {
 	sql = strings.ToUpper(strings.TrimSpace(sql))
 
 	// Match common SQL patterns
@@ -83,8 +164,8 @@ func extractTableName(sql string) string {
 	return "unknown"
 }
 
-// extractOperation extracts the SQL operation type from a query
-func extractOperation(sql string) string {
+// ExtractOperation extracts the SQL operation type from a query
+func ExtractOperation(sql string) string {
 	sql = strings.ToUpper(strings.TrimSpace(sql))
 	switch {
 	case strings.HasPrefix(sql, "SELECT"):
@@ -109,10 +190,10 @@ func ExtractDDLMetadata(sql string) string {
 	}
 
 	// Extract operation
-	operation := extractOperation(sql)
+	operation := ExtractOperation(sql)
 
 	// Try to extract table name for better logging
-	tableName := extractTableName(sql)
+	tableName := ExtractTableName(sql)
 
 	if tableName != "unknown" && tableName != "" {
 		return fmt.Sprintf("%s (table: %s)", operation, tableName)
@@ -201,9 +282,16 @@ func NewConnection(cfg config.DatabaseConfig) (*Connection, error) {
 		return nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
+	slowQueryThreshold := cfg.SlowQueryThreshold
+	if slowQueryThreshold <= 0 {
+		slowQueryThreshold = 1 * time.Second
+	}
+
 	conn := &Connection{
-		pool:   pool,
-		config: &cfg,
+		pool:               pool,
+		config:             &cfg,
+		slowQueryTracker:   newSlowQueryTracker(),
+		slowQueryThreshold: slowQueryThreshold,
 	}
 
 	// Initialize schema inspector
@@ -669,21 +757,13 @@ func (c *Connection) Query(ctx context.Context, sql string, args ...interface{})
 
 	// Record metrics
 	if c.metrics != nil {
-		operation := extractOperation(sql)
-		table := extractTableName(sql)
+		operation := ExtractOperation(sql)
+		table := ExtractTableName(sql)
 		c.metrics.RecordDBQuery(operation, table, duration, err)
 	}
 
-	// Log slow queries (> 1 second)
-	if duration > 1*time.Second {
-		sanitizedQuery := truncateQuery(logutil.SanitizeSQL(sql), 200)
-		log.Warn().
-			Dur("duration", duration).
-			Int64("duration_ms", duration.Milliseconds()).
-			Str("query", sanitizedQuery).
-			Bool("slow_query", true).
-			Msg("Slow query detected")
-	}
+	// Log slow queries
+	c.logSlowQuery(ctx, sql, duration, "query")
 
 	return rows, err
 }
@@ -701,21 +781,13 @@ func (c *Connection) QueryRow(ctx context.Context, sql string, args ...interface
 
 	// Record metrics
 	if c.metrics != nil {
-		operation := extractOperation(sql)
-		table := extractTableName(sql)
+		operation := ExtractOperation(sql)
+		table := ExtractTableName(sql)
 		c.metrics.RecordDBQuery(operation, table, duration, nil)
 	}
 
-	// Log slow queries (> 1 second)
-	if duration > 1*time.Second {
-		sanitizedQuery := truncateQuery(logutil.SanitizeSQL(sql), 200)
-		log.Warn().
-			Dur("duration", duration).
-			Int64("duration_ms", duration.Milliseconds()).
-			Str("query", sanitizedQuery).
-			Bool("slow_query", true).
-			Msg("Slow query detected")
-	}
+	// Log slow queries
+	c.logSlowQuery(ctx, sql, duration, "query_row")
 
 	return row
 }
@@ -734,21 +806,13 @@ func (c *Connection) Exec(ctx context.Context, sql string, args ...interface{}) 
 
 	// Record metrics
 	if c.metrics != nil {
-		operation := extractOperation(sql)
-		table := extractTableName(sql)
+		operation := ExtractOperation(sql)
+		table := ExtractTableName(sql)
 		c.metrics.RecordDBQuery(operation, table, duration, err)
 	}
 
-	// Log slow queries (> 1 second)
-	if duration > 1*time.Second {
-		sanitizedQuery := truncateQuery(logutil.SanitizeSQL(sql), 200)
-		log.Warn().
-			Dur("duration", duration).
-			Int64("duration_ms", duration.Milliseconds()).
-			Str("query", sanitizedQuery).
-			Bool("slow_query", true).
-			Msg("Slow query detected")
-	}
+	// Log slow queries
+	c.logSlowQuery(ctx, sql, duration, "exec")
 
 	return tag, err
 }
@@ -784,6 +848,42 @@ func (c *Connection) Stats() *pgxpool.Stat {
 		return nil
 	}
 	return c.pool.Stat()
+}
+
+func (c *Connection) logSlowQuery(ctx context.Context, sql string, duration time.Duration, opType string) {
+	if duration <= c.slowQueryThreshold {
+		return
+	}
+
+	operation := ExtractOperation(sql)
+	table := ExtractTableName(sql)
+	sanitizedQuery := truncateQuery(logutil.SanitizeSQL(sql), slowQueryTruncationLimit)
+
+	queryKey := operation + ":" + table
+	occurrences := 1
+	if c.slowQueryTracker != nil {
+		occurrences = c.slowQueryTracker.record(queryKey)
+	}
+
+	caller := getCallerFromContext(ctx)
+	if caller == "" {
+		caller = getCallerFromRuntime()
+	}
+
+	evt := log.Warn().
+		Dur("duration", duration).
+		Int64("duration_ms", duration.Milliseconds()).
+		Str("operation", operation).
+		Str("table", table).
+		Str("query", sanitizedQuery).
+		Int("occurrences", occurrences).
+		Bool("slow_query", true)
+
+	if caller != "" {
+		evt = evt.Str("caller", caller)
+	}
+
+	evt.Msg("Slow query detected")
 }
 
 // truncateQuery truncates a SQL query to a maximum length for logging
