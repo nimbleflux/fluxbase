@@ -768,7 +768,9 @@ func TestLokiLogStorage_Stats_TimeRange(t *testing.T) {
 		stats, err := storage.Stats(ctx)
 
 		assert.NoError(t, err)
+		assert.NotNil(t, stats.OldestEntry)
 		assert.False(t, stats.OldestEntry.IsZero())
+		assert.NotNil(t, stats.NewestEntry)
 		assert.False(t, stats.NewestEntry.IsZero())
 	})
 }

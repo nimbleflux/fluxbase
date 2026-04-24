@@ -188,8 +188,8 @@ type LogStats struct {
 	TotalEntries      int64                 `json:"total_entries"`
 	EntriesByCategory map[LogCategory]int64 `json:"entries_by_category"`
 	EntriesByLevel    map[LogLevel]int64    `json:"entries_by_level"`
-	OldestEntry       time.Time             `json:"oldest_entry,omitempty"`
-	NewestEntry       time.Time             `json:"newest_entry,omitempty"`
+	OldestEntry       *time.Time            `json:"oldest_entry,omitempty"`
+	NewestEntry       *time.Time            `json:"newest_entry,omitempty"`
 }
 
 // ExecutionLogEvent is the event sent via PubSub for real-time log streaming.

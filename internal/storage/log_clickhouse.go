@@ -412,12 +412,8 @@ func (s *ClickHouseLogStorage) Stats(ctx context.Context) (*LogStats, error) {
 	}
 
 	stats.TotalEntries = totalCount
-	if oldestEntry != nil {
-		stats.OldestEntry = *oldestEntry
-	}
-	if newestEntry != nil {
-		stats.NewestEntry = *newestEntry
-	}
+	stats.OldestEntry = oldestEntry
+	stats.NewestEntry = newestEntry
 
 	// Get counts by category
 	rows, err := s.conn.Query(ctx, fmt.Sprintf(`

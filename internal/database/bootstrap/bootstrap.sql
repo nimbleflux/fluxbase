@@ -276,6 +276,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE {{APP_USER}} IN SCHEMA logging
     GRANT ALL ON TABLES TO service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE {{APP_USER}} IN SCHEMA logging
     GRANT ALL ON SEQUENCES TO service_role;
+-- tenant_service needs access for the logs dashboard (subject to RLS).
+ALTER DEFAULT PRIVILEGES IN SCHEMA logging
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tenant_service;
+ALTER DEFAULT PRIVILEGES FOR ROLE {{APP_USER}} IN SCHEMA logging
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tenant_service;
 
 -- MCP schema
 ALTER DEFAULT PRIVILEGES IN SCHEMA mcp
@@ -338,23 +343,43 @@ BEGIN
 END
 $$;
 
--- Grant permissions on all existing logging tables to service_role.
+-- Grant permissions on all existing logging tables to service_role and tenant_service.
 -- pgschema skips PRIVILEGE entries during plan/apply, so the per-table
--- GRANTs in logging.sql may never be applied. This DO block ensures
--- service_role can always query logging.entries (used by the admin stats API).
+-- GRANTs in logging.sql may never be applied. This DO block ensures both
+-- service_role and tenant_service can query logging.entries (used by the admin
+-- stats API and the logs dashboard). tenant_service is subject to RLS policies
+-- (auth.has_tenant_access) so tenants only see their own logs.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'logging') THEN
         BEGIN
             EXECUTE 'GRANT ALL ON ALL TABLES IN SCHEMA logging TO service_role';
         EXCEPTION WHEN others THEN
-            RAISE NOTICE 'Could not grant on logging tables: %', SQLERRM;
+            RAISE NOTICE 'Could not grant on logging tables to service_role: %', SQLERRM;
         END;
 
         BEGIN
             EXECUTE 'GRANT ALL ON ALL SEQUENCES IN SCHEMA logging TO service_role';
         EXCEPTION WHEN others THEN
-            RAISE NOTICE 'Could not grant on logging sequences: %', SQLERRM;
+            RAISE NOTICE 'Could not grant on logging sequences to service_role: %', SQLERRM;
+        END;
+
+        BEGIN
+            EXECUTE 'GRANT USAGE ON SCHEMA logging TO tenant_service';
+        EXCEPTION WHEN others THEN
+            RAISE NOTICE 'Could not grant usage on logging schema to tenant_service: %', SQLERRM;
+        END;
+
+        BEGIN
+            EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA logging TO tenant_service';
+        EXCEPTION WHEN others THEN
+            RAISE NOTICE 'Could not grant on logging tables to tenant_service: %', SQLERRM;
+        END;
+
+        BEGIN
+            EXECUTE 'GRANT ALL ON ALL SEQUENCES IN SCHEMA logging TO tenant_service';
+        EXCEPTION WHEN others THEN
+            RAISE NOTICE 'Could not grant on logging sequences to tenant_service: %', SQLERRM;
         END;
     END IF;
 END
