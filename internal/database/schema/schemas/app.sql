@@ -195,6 +195,12 @@ CREATE POLICY "Users can update their own settings" ON settings FOR UPDATE TO au
 CREATE POLICY settings_tenant ON settings FOR SELECT TO PUBLIC USING (auth.has_tenant_access(tenant_id) AND (NOT is_secret OR user_id = auth.current_user_id()));
 
 --
+-- Name: settings_tenant_service; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY settings_tenant_service ON settings TO tenant_service USING (true) WITH CHECK (true);
+
+--
 -- Cross-schema FKs moved to post-schema-fks.sql
 -- settings_user_id_fkey
 --
