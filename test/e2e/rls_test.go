@@ -625,6 +625,9 @@ func TestRLSTokenTablesServiceRoleOnly(t *testing.T) {
 	// Create a user directly in database as superuser
 	userID := "55555555-5555-5555-5555-555555555555"
 	tc.ExecuteSQLAsSuperuser(`
+		DELETE FROM auth.password_reset_tokens WHERE user_id = $1;
+		DELETE FROM auth.magic_links WHERE email = 'user@example.com';
+		DELETE FROM auth.users WHERE id = $1;
 		INSERT INTO auth.users (id, email, password_hash, email_verified, created_at)
 		VALUES ($1, 'user@example.com', 'hash1', true, NOW())
 	`, userID)

@@ -27,6 +27,9 @@ func isTenantWriteBlocked(c fiber.Ctx, table database.TableInfo) bool {
 	if tenantID == "" {
 		return false
 	}
+	if isDefault, _ := c.Locals("is_default_tenant").(bool); isDefault {
+		return false
+	}
 	return table.GetColumn("tenant_id") == nil
 }
 

@@ -335,7 +335,8 @@ func WrapWithRLS(ctx context.Context, conn *database.Connection, c fiber.Ctx, fn
 	// and RLS enforces tenant isolation for the selected tenant.
 	roleStr := role.(string)
 	tenantID, hasTenant := c.Locals("tenant_id").(string)
-	if hasTenant && tenantID != "" {
+	isDefaultTenant, _ := c.Locals("is_default_tenant").(bool)
+	if hasTenant && tenantID != "" && !isDefaultTenant {
 		if roleStr == "instance_admin" || roleStr == "service_role" {
 			roleStr = "tenant_service"
 		}
