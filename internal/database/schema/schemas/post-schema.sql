@@ -220,8 +220,8 @@ END $$;
 --
 
 DO $$ BEGIN
-    CREATE POLICY platform_oauth_providers_tenant ON platform.oauth_providers TO PUBLIC USING (auth.has_tenant_access(tenant_id)) WITH CHECK (auth.has_tenant_access(tenant_id));
-EXCEPTION WHEN duplicate_object THEN NULL;
+    CREATE POLICY platform_oauth_providers_tenant ON platform.oauth_providers TO PUBLIC USING (auth.is_admin() AND auth.has_tenant_access(tenant_id)) WITH CHECK (auth.is_admin() AND auth.has_tenant_access(tenant_id));
+    EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- ============================================================================
