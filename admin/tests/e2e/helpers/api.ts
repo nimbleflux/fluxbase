@@ -1131,7 +1131,7 @@ export async function rawCreateCustomSetting(
   }
   return rawApiRequest({
     method: "POST",
-    path: "/api/v1/settings/custom",
+    path: "/api/v1/admin/settings/custom",
     data: options,
     headers,
   });
@@ -1149,7 +1149,7 @@ export async function rawListCustomSettings(
   }
   return rawApiRequest({
     method: "GET",
-    path: "/api/v1/settings/custom",
+    path: "/api/v1/admin/settings/custom",
     headers,
   });
 }
@@ -1167,7 +1167,7 @@ export async function rawDeleteCustomSetting(
   }
   return rawApiRequest({
     method: "DELETE",
-    path: `/api/v1/settings/custom/${key}`,
+    path: `/api/v1/admin/settings/custom/${key}`,
     headers,
   });
 }

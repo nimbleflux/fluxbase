@@ -113,14 +113,16 @@ func TestTenantIsolation_AuthServiceKeys(t *testing.T) {
 	`, tenantTestID2)
 
 	// Verify as tenant1: should only see tenant1's key
-	tenant1Keys := tc.QuerySQLAsTenant(tenantTestID1,
+	// Uses tenant_service role since auth.service_keys RLS requires
+	// current_user_role() IN ('instance_admin', 'tenant_service')
+	tenant1Keys := tc.QuerySQLAsTenantService(tenantTestID1,
 		`SELECT name FROM auth.service_keys WHERE name LIKE 'tenant-test-%'`)
 
 	require.Len(t, tenant1Keys, 1, "Tenant1 should only see their own service keys")
 	require.Equal(t, "tenant-test-key1", tenant1Keys[0]["name"])
 
 	// Verify as tenant2: should only see tenant2's key
-	tenant2Keys := tc.QuerySQLAsTenant(tenantTestID2,
+	tenant2Keys := tc.QuerySQLAsTenantService(tenantTestID2,
 		`SELECT name FROM auth.service_keys WHERE name LIKE 'tenant-test-%'`)
 
 	require.Len(t, tenant2Keys, 1, "Tenant2 should only see their own service keys")

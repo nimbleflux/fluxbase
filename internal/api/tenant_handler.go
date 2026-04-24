@@ -516,7 +516,7 @@ func (h *TenantHandler) AssignAdmin(c fiber.Ctx) error {
 func (h *TenantHandler) RemoveAdmin(c fiber.Ctx) error {
 	ctx := c.Context()
 	tenantID := c.Params("id")
-	userID := c.Params("userId")
+	userID := c.Params("user_id")
 
 	result, err := h.DB.Pool().Exec(ctx, `
 		DELETE FROM platform.tenant_admin_assignments

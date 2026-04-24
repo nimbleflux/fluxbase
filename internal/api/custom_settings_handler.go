@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
@@ -26,7 +25,7 @@ func NewCustomSettingsHandler(settingsService *settings.CustomSettingsService) *
 // CreateSetting creates a new custom setting
 // POST /api/v1/admin/settings/custom
 func (h *CustomSettingsHandler) CreateSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 
 	// Get user ID and role from context (set by auth middleware)
 	userIDStr := c.Locals("user_id")
@@ -146,7 +145,7 @@ func (h *CustomSettingsHandler) CreateSetting(c fiber.Ctx) error {
 // ListSettings returns all custom settings
 // GET /api/v1/admin/settings/custom
 func (h *CustomSettingsHandler) ListSettings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 
 	// Get user role from context
 	userRole := c.Locals("user_role")
@@ -170,7 +169,7 @@ func (h *CustomSettingsHandler) ListSettings(c fiber.Ctx) error {
 // GetSetting returns a specific custom setting by key
 // GET /api/v1/admin/settings/custom/*
 func (h *CustomSettingsHandler) GetSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 	key := c.Params("*")
 
 	if key == "" {
@@ -198,7 +197,7 @@ func (h *CustomSettingsHandler) GetSetting(c fiber.Ctx) error {
 // UpdateSetting updates an existing custom setting
 // PUT /api/v1/admin/settings/custom/*
 func (h *CustomSettingsHandler) UpdateSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 	key := c.Params("*")
 
 	if key == "" {
@@ -271,7 +270,7 @@ func (h *CustomSettingsHandler) UpdateSetting(c fiber.Ctx) error {
 // DeleteSetting deletes a custom setting
 // DELETE /api/v1/admin/settings/custom/*
 func (h *CustomSettingsHandler) DeleteSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 	key := c.Params("*")
 
 	if key == "" {
@@ -318,7 +317,7 @@ func (h *CustomSettingsHandler) DeleteSetting(c fiber.Ctx) error {
 // CreateSecretSetting creates a new encrypted system-level secret setting
 // POST /api/v1/admin/settings/custom/secret
 func (h *CustomSettingsHandler) CreateSecretSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
@@ -389,7 +388,7 @@ func (h *CustomSettingsHandler) CreateSecretSetting(c fiber.Ctx) error {
 // GetSecretSetting returns metadata for a system-level secret setting (never returns the value)
 // GET /api/v1/admin/settings/custom/secret/*
 func (h *CustomSettingsHandler) GetSecretSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 	key := c.Params("*")
 
 	if key == "" {
@@ -418,7 +417,7 @@ func (h *CustomSettingsHandler) GetSecretSetting(c fiber.Ctx) error {
 // UpdateSecretSetting updates a system-level secret setting
 // PUT /api/v1/admin/settings/custom/secret/*
 func (h *CustomSettingsHandler) UpdateSecretSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 	key := c.Params("*")
 
 	if key == "" {
@@ -476,7 +475,7 @@ func (h *CustomSettingsHandler) UpdateSecretSetting(c fiber.Ctx) error {
 // DeleteSecretSetting deletes a system-level secret setting
 // DELETE /api/v1/admin/settings/custom/secret/*
 func (h *CustomSettingsHandler) DeleteSecretSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 	key := c.Params("*")
 
 	if key == "" {
@@ -509,7 +508,7 @@ func (h *CustomSettingsHandler) DeleteSecretSetting(c fiber.Ctx) error {
 // ListSecretSettings returns metadata for all system-level secret settings
 // GET /api/v1/admin/settings/custom/secrets
 func (h *CustomSettingsHandler) ListSecretSettings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 
 	// List system secrets (userID = nil)
 	secrets, err := h.settingsService.ListSecretSettings(ctx, nil)

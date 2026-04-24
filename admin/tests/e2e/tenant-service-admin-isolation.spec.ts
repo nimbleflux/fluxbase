@@ -528,7 +528,10 @@ test.describe("Tenant Admin Service Isolation", () => {
           await rawApiRequest({
             method: "DELETE",
             path: `/api/v1/webhooks/${defaultResult.body.id}`,
-            headers: { Authorization: `Bearer ${adminToken}`, "X-FB-Tenant": defaultTenantId },
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              "X-FB-Tenant": defaultTenantId,
+            },
           });
         },
       });
@@ -547,7 +550,10 @@ test.describe("Tenant Admin Service Isolation", () => {
           await rawApiRequest({
             method: "DELETE",
             path: `/api/v1/webhooks/${thirdResult.body.id}`,
-            headers: { Authorization: `Bearer ${adminToken}`, "X-FB-Tenant": thirdTenantId },
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              "X-FB-Tenant": thirdTenantId,
+            },
           });
         },
       });
@@ -557,7 +563,9 @@ test.describe("Tenant Admin Service Isolation", () => {
     expect([200, 401, 403]).toContain(listResult.status);
 
     if (listResult.status === 200) {
-      const webhooks = (Array.isArray(listResult.body) ? listResult.body : []) as Array<{
+      const webhooks = (
+        Array.isArray(listResult.body) ? listResult.body : []
+      ) as Array<{
         name: string;
       }>;
       const whNames = webhooks.map((w: { name: string }) => w.name);
@@ -590,8 +598,11 @@ test.describe("Tenant Admin Service Isolation", () => {
       cleanup: async () => {
         await rawApiRequest({
           method: "DELETE",
-          path: `/api/v1/settings/custom/${defaultKey}`,
-          headers: { Authorization: `Bearer ${adminToken}`, "X-FB-Tenant": defaultTenantId },
+          path: `/api/v1/admin/settings/custom/${defaultKey}`,
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            "X-FB-Tenant": defaultTenantId,
+          },
         });
       },
     });
@@ -607,8 +618,11 @@ test.describe("Tenant Admin Service Isolation", () => {
       cleanup: async () => {
         await rawApiRequest({
           method: "DELETE",
-          path: `/api/v1/settings/custom/${thirdKey}`,
-          headers: { Authorization: `Bearer ${adminToken}`, "X-FB-Tenant": thirdTenantId },
+          path: `/api/v1/admin/settings/custom/${thirdKey}`,
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            "X-FB-Tenant": thirdTenantId,
+          },
         });
       },
     });
@@ -617,7 +631,11 @@ test.describe("Tenant Admin Service Isolation", () => {
     expect([200, 401, 403]).toContain(listResult.status);
 
     if (listResult.status === 200) {
-      const settings = (Array.isArray(listResult.body) ? listResult.body : listResult.body?.settings || []) as Array<{
+      const settings = (
+        Array.isArray(listResult.body)
+          ? listResult.body
+          : listResult.body?.settings || []
+      ) as Array<{
         key: string;
       }>;
       const keys = settings.map((s: { key: string }) => s.key);

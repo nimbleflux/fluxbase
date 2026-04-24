@@ -52,7 +52,7 @@ test.describe("Tenant Resource Isolation", () => {
           path = `/api/v1/mcp/tools/${id}`;
           break;
         case "setting":
-          path = `/api/v1/settings/custom/${id}`;
+          path = `/api/v1/admin/settings/custom/${id}`;
           break;
         default:
           continue;
