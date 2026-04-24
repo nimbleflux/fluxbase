@@ -9,6 +9,8 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // sensitiveQueryParams are query parameters that should be redacted from logs
@@ -209,20 +211,23 @@ func toString(v interface{}) string {
 func SlowQueryLogger(threshold time.Duration) func(query string, duration time.Duration, err error) {
 	return func(query string, duration time.Duration, err error) {
 		if duration > threshold {
+			operation := database.ExtractOperation(query)
+			table := database.ExtractTableName(query)
+			sanitized := query
+			if len(sanitized) > 500 {
+				sanitized = sanitized[:500] + "... (truncated)"
+			}
+
 			logEvent := log.Warn().
 				Dur("duration", duration).
 				Int64("duration_ms", duration.Milliseconds()).
+				Str("operation", operation).
+				Str("table", table).
+				Str("query", sanitized).
 				Bool("slow_query", true)
 
 			if err != nil {
 				logEvent = logEvent.Err(err)
-			}
-
-			// Truncate long queries
-			if len(query) > 500 {
-				logEvent = logEvent.Str("query", query[:500]+"... (truncated)")
-			} else {
-				logEvent = logEvent.Str("query", query)
 			}
 
 			logEvent.Msg("Slow database query detected")
