@@ -73,7 +73,18 @@ async function browserLogin(
   await expect(page).toHaveURL(/\/admin\/?$/, { timeout: 60_000 });
 
   const token = await page.evaluate(() => {
-    return localStorage.getItem("fluxbase_admin_access_token");
+    const prefix = "fluxbase_admin_token=";
+    const parts = document.cookie.split("; ");
+    for (const part of parts) {
+      if (part.startsWith(prefix)) {
+        try {
+          return JSON.parse(part.substring(prefix.length));
+        } catch {
+          return part.substring(prefix.length);
+        }
+      }
+    }
+    return null;
   });
   expect(token).toBeTruthy();
 
@@ -175,9 +186,20 @@ export const test = base.extend<Fixtures>({
   ],
 
   tenantAdminToken: async ({ tenantAdminPage }, use) => {
-    const token = await tenantAdminPage.evaluate(() =>
-      localStorage.getItem("fluxbase_admin_access_token"),
-    );
+    const token = await tenantAdminPage.evaluate(() => {
+      const prefix = "fluxbase_admin_token=";
+      const parts = document.cookie.split("; ");
+      for (const part of parts) {
+        if (part.startsWith(prefix)) {
+          try {
+            return JSON.parse(part.substring(prefix.length));
+          } catch {
+            return part.substring(prefix.length);
+          }
+        }
+      }
+      return null;
+    });
     expect(token).toBeTruthy();
     await use(token || "");
   },

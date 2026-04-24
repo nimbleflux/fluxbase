@@ -1609,8 +1609,62 @@ func (tc *TestContext) ExecuteSQLAsSuperuser(sql string, args ...interface{}) {
 	pool, err := tc.getSuperuserPool(ctx)
 	require.NoError(tc.T, err, "Failed to get superuser pool")
 
-	_, err = pool.Exec(ctx, sql, args...)
-	require.NoError(tc.T, err, "Failed to execute SQL as superuser")
+	statements := splitSQLStatements(sql)
+	for _, stmt := range statements {
+		_, err = pool.Exec(ctx, stmt, args...)
+		require.NoError(tc.T, err, "Failed to execute SQL as superuser")
+	}
+}
+
+// splitSQLStatements splits a multi-statement SQL string into individual statements.
+// It handles semicolons inside dollar-quoted strings and strips whitespace.
+func splitSQLStatements(sql string) []string {
+	var statements []string
+	var current strings.Builder
+	inDollarQuote := false
+	dollarTag := ""
+
+	for i := 0; i < len(sql); i++ {
+		if !inDollarQuote && i+1 < len(sql) && sql[i] == '$' {
+			tagStart := i
+			j := i + 1
+			for j < len(sql) && (sql[j] == '_' || (sql[j] >= 'a' && sql[j] <= 'z') || (sql[j] >= 'A' && sql[j] <= 'Z') || (sql[j] >= '0' && sql[j] <= '9')) {
+				j++
+			}
+			if j > i+1 && j < len(sql) && sql[j] == '$' {
+				dollarTag = sql[tagStart : j+1]
+				inDollarQuote = true
+				current.WriteString(sql[tagStart : j+1])
+				i = j
+				continue
+			}
+		} else if inDollarQuote && len(dollarTag) > 0 {
+			if i+len(dollarTag) <= len(sql) && sql[i:i+len(dollarTag)] == dollarTag {
+				current.WriteString(dollarTag)
+				i += len(dollarTag) - 1
+				inDollarQuote = false
+				dollarTag = ""
+				continue
+			}
+		}
+
+		if sql[i] == ';' && !inDollarQuote {
+			stmt := strings.TrimSpace(current.String())
+			if stmt != "" {
+				statements = append(statements, stmt)
+			}
+			current.Reset()
+		} else {
+			current.WriteByte(sql[i])
+		}
+	}
+
+	stmt := strings.TrimSpace(current.String())
+	if stmt != "" {
+		statements = append(statements, stmt)
+	}
+
+	return statements
 }
 
 // ExecuteSQLWithRLSContext executes SQL with RLS context set up (role and JWT claims).
@@ -2794,6 +2848,20 @@ func (tc *TestContext) CreateServiceKey(name string) string {
 		string(keyHash),
 		keyPrefix,
 	).Scan(&keyID)
+	if err != nil {
+		// Fallback: use superuser pool to bypass RLS when tc.DB is an
+		// RLS-enforced connection (e.g. fluxbase_rls_test user).
+		pool, poolErr := tc.getSuperuserPool(ctx)
+		if poolErr != nil {
+			require.NoError(tc.T, err, "Failed to insert service key (superuser fallback also failed: %v)", poolErr)
+		}
+		err = pool.QueryRow(ctx, query,
+			name,
+			"Test service key for "+name,
+			string(keyHash),
+			keyPrefix,
+		).Scan(&keyID)
+	}
 	require.NoError(tc.T, err, "Failed to insert service key")
 	require.NotEmpty(tc.T, keyID, "Service key ID is empty")
 
