@@ -198,7 +198,7 @@ CREATE POLICY settings_tenant ON settings FOR SELECT TO PUBLIC USING (auth.has_t
 -- Name: settings_tenant_service; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY settings_tenant_service ON settings TO tenant_service USING (true) WITH CHECK (true);
+CREATE POLICY settings_tenant_service ON settings TO tenant_service USING (auth.has_tenant_access(tenant_id)) WITH CHECK (auth.has_tenant_access(tenant_id));
 
 --
 -- Cross-schema FKs moved to post-schema-fks.sql
