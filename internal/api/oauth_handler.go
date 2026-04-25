@@ -106,6 +106,27 @@ func NewOAuthHandler(db *pgxpool.Pool, authSvc *auth.Service, jwtManager *auth.J
 	}
 }
 
+func (h *OAuthHandler) requireDB(c fiber.Ctx) error {
+	if h.db == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
+func (h *OAuthHandler) requireAuthService(c fiber.Ctx) error {
+	if h.authSvc == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
+func (h *OAuthHandler) requireLogoutService(c fiber.Ctx) error {
+	if h.logoutService == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // Stop stops the cleanup goroutines
 func (h *OAuthHandler) Stop() {
 	// Check if already stopped (prevent double-close)
@@ -129,7 +150,10 @@ func (h *OAuthHandler) Authorize(c fiber.Ctx) error {
 	// Get tenant context for tenant-specific provider lookup
 	tenantID := middleware.GetTenantIDFromContext(c)
 
-	// Get OAuth provider configuration from database
+	if err := h.requireDB(c); err != nil {
+		return err
+	}
+
 	oauthConfig, err := h.getProviderConfig(ctx, providerName, tenantID)
 	if err != nil {
 		log.Error().Err(err).Str("provider", providerName).Str("tenant_id", tenantID).Msg("Failed to get OAuth provider config")
@@ -222,14 +246,10 @@ func (h *OAuthHandler) Callback(c fiber.Ctx) error {
 		})
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// Get tenant context for fiber context
 	tenantID := middleware.GetTenantIDFromContext(c)
 
 	// Get OAuth provider configuration
@@ -361,8 +381,6 @@ func (h *OAuthHandler) Callback(c fiber.Ctx) error {
 		})
 	}
 
-	// Generate JWT tokens and create session in database
-	// This is required for token refresh to work - the refresh endpoint looks up sessions by refresh token
 	tokenResp, err := h.authSvc.GenerateTokensForUser(ctx, user.ID)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", user.ID).Msg("Failed to generate tokens and create session")
@@ -392,14 +410,10 @@ func (h *OAuthHandler) Callback(c fiber.Ctx) error {
 func (h *OAuthHandler) ListEnabledProviders(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// SECURITY: Only list providers that allow app login
 	tenantID := middleware.GetTenantIDFromContext(c)
 	query := `
 		SELECT provider_name, display_name, redirect_url
@@ -752,14 +766,18 @@ func (h *OAuthHandler) Logout(c fiber.Ctx) error {
 	}
 	_ = c.Bind().Body(&reqBody)
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// Get provider configuration to check for SLO endpoints
+	if err := h.requireLogoutService(c); err != nil {
+		return err
+	}
+
+	if err := h.requireAuthService(c); err != nil {
+		return err
+	}
+
 	var revocationEndpoint, endSessionEndpoint, clientID, clientSecret *string
 	var isEncrypted bool
 	err := h.db.QueryRow(ctx, `
@@ -917,7 +935,10 @@ func (h *OAuthHandler) LogoutCallback(c fiber.Ctx) error {
 		})
 	}
 
-	// Validate and consume the state
+	if err := h.requireLogoutService(c); err != nil {
+		return err
+	}
+
 	logoutState, err := h.logoutService.ValidateLogoutState(ctx, state)
 	if err != nil {
 		log.Warn().Err(err).Str("provider", providerName).Str("state", state).Msg("Invalid or expired logout state")
@@ -977,10 +998,12 @@ func (h *OAuthHandler) GetProviderToken(c fiber.Ctx) error {
 	}
 	userIDStr := userID.(string)
 
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
+	}
+
+	if err := h.requireLogoutService(c); err != nil {
+		return err
 	}
 
 	oauthConfig, err := h.getProviderConfigForToken(ctx, providerName)

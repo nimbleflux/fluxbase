@@ -9,102 +9,68 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// CreateBucket handles bucket creation
-// POST /api/v1/storage/buckets/:bucket
 func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
 	bucket := c.Params("bucket")
 
 	if bucket == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket name is required",
-		})
+		return SendMissingField(c, "bucket name")
 	}
 
-	// Get tenant-specific storage service
 	svc, err := h.getService(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get storage service",
-		})
+		return SendInternalError(c, "Failed to get storage service")
 	}
 
-	// Parse request body for bucket configuration
 	var req struct {
 		Public           bool     `json:"public"`
 		AllowedMimeTypes []string `json:"allowed_mime_types"`
 		MaxFileSize      *int64   `json:"max_file_size"`
 	}
-	// Try to parse body, but allow empty body (use defaults)
 	_ = c.Bind().Body(&req)
 
-	// Check if database connection is available
 	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "database connection not initialized",
-		})
+		return SendInternalError(c, "Database connection not initialized")
 	}
 
-	// Start database transaction
 	ctx := c.RequestCtx()
 	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for bucket creation")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to create bucket",
-		})
+		return SendInternalError(c, "Failed to create bucket")
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Set RLS context
 	if err := h.setRLSContext(ctx, tx, c); err != nil {
 		log.Error().Err(err).Msg("Failed to set RLS context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to create bucket",
-		})
+		return SendInternalError(c, "Failed to create bucket")
 	}
 
-	// Insert bucket into database (RLS will check permissions)
 	_, err = tx.Exec(ctx, `
 		INSERT INTO storage.buckets (id, name, public, allowed_mime_types, max_file_size)
 		VALUES ($1, $2, $3, $4, $5)
 	`, bucket, bucket, req.Public, req.AllowedMimeTypes, req.MaxFileSize)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "already exists") {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "bucket already exists",
-			})
+			return SendConflict(c, "bucket already exists", ErrCodeConflict)
 		}
 		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "policy") {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "insufficient permissions to create bucket",
-			})
+			return SendForbidden(c, "insufficient permissions to create bucket", ErrCodeAccessDenied)
 		}
 		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to insert bucket into database")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to create bucket",
-		})
+		return SendInternalError(c, "Failed to create bucket")
 	}
 
-	// Create the bucket in storage provider
 	if err := svc.Provider.CreateBucket(ctx, bucket); err != nil {
-		// Rollback will happen via defer
 		if strings.Contains(err.Error(), "already exists") {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "bucket already exists in storage",
-			})
+			return SendConflict(c, "bucket already exists in storage", ErrCodeConflict)
 		}
 		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to create bucket in provider")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to create bucket in storage provider",
-		})
+		return SendInternalError(c, "Failed to create bucket in storage provider")
 	}
 
-	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
 		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to commit bucket creation")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to create bucket",
-		})
+		return SendInternalError(c, "Failed to create bucket")
 	}
 
 	log.Info().
@@ -124,57 +90,40 @@ func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
 	})
 }
 
-// UpdateBucketSettings handles updating bucket settings
-// PUT /api/v1/storage/buckets/:bucket
 func (h *StorageHandler) UpdateBucketSettings(c fiber.Ctx) error {
 	bucket := c.Params("bucket")
 
 	if bucket == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket name is required",
-		})
+		return SendMissingField(c, "bucket name")
 	}
 
-	// Parse request body
 	var req struct {
 		Public           *bool    `json:"public"`
 		AllowedMimeTypes []string `json:"allowed_mime_types"`
 		MaxFileSize      *int64   `json:"max_file_size"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Check if database connection is available
 	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "database connection not initialized",
-		})
+		return SendInternalError(c, "Database connection not initialized")
 	}
 
 	ctx := c.RequestCtx()
 
-	// Start database transaction
 	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for bucket update")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to update bucket",
-		})
+		return SendInternalError(c, "Failed to update bucket")
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Set RLS context
 	if err := h.setRLSContext(ctx, tx, c); err != nil {
 		log.Error().Err(err).Msg("Failed to set RLS context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to update bucket",
-		})
+		return SendInternalError(c, "Failed to update bucket")
 	}
 
-	// Build dynamic UPDATE query based on provided fields
 	updates := []string{}
 	args := []interface{}{bucket}
 	argCount := 1
@@ -198,9 +147,7 @@ func (h *StorageHandler) UpdateBucketSettings(c fiber.Ctx) error {
 	}
 
 	if len(updates) == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "no fields to update",
-		})
+		return SendBadRequest(c, "no fields to update", ErrCodeInvalidInput)
 	}
 
 	updates = append(updates, "updated_at = NOW()")
@@ -210,33 +157,22 @@ func (h *StorageHandler) UpdateBucketSettings(c fiber.Ctx) error {
 		WHERE id = $1
 	`, strings.Join(updates, ", "))
 
-	// Execute update (RLS will check permissions - only admins can update buckets)
 	result, err := tx.Exec(ctx, query, args...)
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "policy") {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "insufficient permissions to update bucket",
-			})
+			return SendForbidden(c, "insufficient permissions to update bucket", ErrCodeAccessDenied)
 		}
 		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to update bucket in database")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to update bucket",
-		})
+		return SendInternalError(c, "Failed to update bucket")
 	}
 
-	// Check if any rows were affected
 	if result.RowsAffected() == 0 {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "bucket not found or insufficient permissions",
-		})
+		return SendNotFound(c, "bucket not found or insufficient permissions")
 	}
 
-	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
 		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to commit bucket update")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to update bucket",
-		})
+		return SendInternalError(c, "Failed to update bucket")
 	}
 
 	log.Info().
@@ -250,41 +186,27 @@ func (h *StorageHandler) UpdateBucketSettings(c fiber.Ctx) error {
 	})
 }
 
-// DeleteBucket handles bucket deletion
-// DELETE /api/v1/storage/buckets/:bucket
 func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
 	bucket := c.Params("bucket")
 
 	if bucket == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket name is required",
-		})
+		return SendMissingField(c, "bucket name")
 	}
 
-	// Get tenant-specific storage service
 	svc, err := h.getService(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get storage service",
-		})
+		return SendInternalError(c, "Failed to get storage service")
 	}
 
-	// Delete the bucket
 	if err := svc.Provider.DeleteBucket(c.RequestCtx(), bucket); err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "bucket not found",
-			})
+			return SendNotFound(c, "bucket not found")
 		}
 		if strings.Contains(err.Error(), "not empty") {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "bucket is not empty",
-			})
+			return SendConflict(c, "bucket is not empty", ErrCodeConflict)
 		}
 		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to delete bucket")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to delete bucket",
-		})
+		return SendInternalError(c, "Failed to delete bucket")
 	}
 
 	log.Info().
@@ -295,50 +217,34 @@ func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
 	return c.Status(fiber.StatusNoContent).Send(nil)
 }
 
-// ListBuckets handles listing all buckets
-// GET /api/v1/storage/buckets
-// Admin-only endpoint - non-admin users receive 403 Forbidden
 func (h *StorageHandler) ListBuckets(c fiber.Ctx) error {
-	// Check if user has admin role (including tenant admins)
 	role, _ := c.Locals("user_role").(string)
 	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
 	tenantRole, _ := c.Locals("tenant_role").(string)
 	isAuthorized := role == "admin" || role == "instance_admin" || role == "service_role" || role == "tenant_service" ||
 		isInstanceAdmin || tenantRole == "tenant_admin" || tenantRole == "tenant_service"
 	if !isAuthorized {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Admin access required to list buckets",
-		})
+		return SendForbidden(c, "Admin access required to list buckets", ErrCodeAccessDenied)
 	}
 
-	// Check if database connection is available
 	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "database connection not initialized",
-		})
+		return SendInternalError(c, "Database connection not initialized")
 	}
 
 	ctx := c.RequestCtx()
 
-	// Start database transaction
 	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for listing buckets")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list buckets",
-		})
+		return SendInternalError(c, "Failed to list buckets")
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Set RLS context
 	if err := h.setRLSContext(ctx, tx, c); err != nil {
 		log.Error().Err(err).Msg("Failed to set RLS context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list buckets",
-		})
+		return SendInternalError(c, "Failed to list buckets")
 	}
 
-	// Query buckets from database (RLS will filter based on permissions)
 	rows, err := tx.Query(ctx, `
 		SELECT id, name, public, allowed_mime_types, max_file_size, created_at, updated_at
 		FROM storage.buckets
@@ -346,13 +252,10 @@ func (h *StorageHandler) ListBuckets(c fiber.Ctx) error {
 	`)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to query buckets from database")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list buckets",
-		})
+		return SendInternalError(c, "Failed to list buckets")
 	}
 	defer rows.Close()
 
-	// Parse results
 	type Bucket struct {
 		ID               string    `json:"id"`
 		Name             string    `json:"name"`
@@ -375,17 +278,12 @@ func (h *StorageHandler) ListBuckets(c fiber.Ctx) error {
 
 	if err := rows.Err(); err != nil {
 		log.Error().Err(err).Msg("Error iterating bucket rows")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list buckets",
-		})
+		return SendInternalError(c, "Failed to list buckets")
 	}
 
-	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
 		log.Error().Err(err).Msg("Failed to commit bucket list transaction")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list buckets",
-		})
+		return SendInternalError(c, "Failed to list buckets")
 	}
 
 	return c.JSON(fiber.Map{

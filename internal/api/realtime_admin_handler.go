@@ -25,6 +25,13 @@ func NewRealtimeAdminHandler(db *database.Connection) *RealtimeAdminHandler {
 	return &RealtimeAdminHandler{db: db}
 }
 
+func (h *RealtimeAdminHandler) requireService(c fiber.Ctx) error {
+	if h.db == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // EnableRealtimeRequest represents a request to enable realtime on a table
 type EnableRealtimeRequest struct {
 	Schema  string   `json:"schema"`
@@ -57,10 +64,8 @@ type RealtimeTableStatus struct {
 // HandleEnableRealtime enables realtime on a table
 func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 	var req EnableRealtimeRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Default schema to public
@@ -70,21 +75,15 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 
 	// Validate schema name
 	if err := validateIdentifier(req.Schema, "schema"); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
 	// Validate table name
 	if req.Table == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Table name is required",
-		})
+		return SendBadRequest(c, "Table name is required", ErrCodeMissingField)
 	}
 	if err := validateIdentifier(req.Table, "table"); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
 	// Validate and set default events
@@ -93,9 +92,7 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 	} else {
 		for _, event := range req.Events {
 			if event != "INSERT" && event != "UPDATE" && event != "DELETE" {
-				return c.Status(400).JSON(fiber.Map{
-					"error": fmt.Sprintf("Invalid event type: %s. Must be INSERT, UPDATE, or DELETE", event),
-				})
+				return SendBadRequest(c, fmt.Sprintf("Invalid event type: %s. Must be INSERT, UPDATE, or DELETE", event), ErrCodeInvalidInput)
 			}
 		}
 	}
@@ -103,9 +100,7 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 	// Validate excluded columns
 	for _, col := range req.Exclude {
 		if err := validateIdentifier(col, "column"); err != nil {
-			return c.Status(400).JSON(fiber.Map{
-				"error": fmt.Sprintf("Invalid excluded column: %s", err.Error()),
-			})
+			return SendBadRequest(c, fmt.Sprintf("Invalid excluded column: %s", err.Error()), ErrCodeValidationFailed)
 		}
 	}
 
@@ -117,16 +112,11 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 		"realtime":           true,
 	}
 	if systemSchemas[req.Schema] {
-		return c.Status(400).JSON(fiber.Map{
-			"error": fmt.Sprintf("Cannot enable realtime on system schema '%s'", req.Schema),
-		})
+		return SendBadRequest(c, fmt.Sprintf("Cannot enable realtime on system schema '%s'", req.Schema), ErrCodeInvalidInput)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	ctx := middleware.CtxWithTenant(c)
@@ -136,14 +126,10 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 	exists, err := h.tableExists(ctx, c, req.Schema, req.Table)
 	if err != nil {
 		log.Error().Err(err).Str("table", req.Schema+"."+req.Table).Msg("Failed to check table existence")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to check table existence",
-		})
+		return SendInternalError(c, "Failed to check table existence")
 	}
 	if !exists {
-		return c.Status(404).JSON(fiber.Map{
-			"error": fmt.Sprintf("Table '%s.%s' does not exist", req.Schema, req.Table),
-		})
+		return SendNotFound(c, fmt.Sprintf("Table '%s.%s' does not exist", req.Schema, req.Table))
 	}
 
 	triggerName := fmt.Sprintf("%s_realtime_notify", req.Table)
@@ -194,9 +180,7 @@ func (h *RealtimeAdminHandler) HandleEnableRealtime(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Error().Err(err).Str("table", req.Schema+"."+req.Table).Msg("Failed to enable realtime")
-		return c.Status(500).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to enable realtime: %v", err),
-		})
+		return SendInternalError(c, "Failed to enable realtime")
 	}
 
 	log.Info().
@@ -228,11 +212,8 @@ func (h *RealtimeAdminHandler) HandleDisableRealtime(c fiber.Ctx) error {
 		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	ctx := middleware.CtxWithTenant(c)
@@ -242,14 +223,10 @@ func (h *RealtimeAdminHandler) HandleDisableRealtime(c fiber.Ctx) error {
 	exists, err := h.tableExists(ctx, c, schema, table)
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to check table existence")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to check table existence",
-		})
+		return SendInternalError(c, "Failed to check table existence")
 	}
 	if !exists {
-		return c.Status(404).JSON(fiber.Map{
-			"error": fmt.Sprintf("Table '%s.%s' does not exist", schema, table),
-		})
+		return SendNotFound(c, fmt.Sprintf("Table '%s.%s' does not exist", schema, table))
 	}
 
 	triggerName := fmt.Sprintf("%s_realtime_notify", table)
@@ -278,9 +255,7 @@ func (h *RealtimeAdminHandler) HandleDisableRealtime(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to disable realtime")
-		return c.Status(500).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to disable realtime: %v", err),
-		})
+		return SendInternalError(c, "Failed to disable realtime")
 	}
 
 	log.Info().Str("schema", schema).Str("table", table).Msg("Realtime disabled on table")
@@ -293,11 +268,8 @@ func (h *RealtimeAdminHandler) HandleDisableRealtime(c fiber.Ctx) error {
 
 // HandleListRealtimeTables lists all realtime-enabled tables
 func (h *RealtimeAdminHandler) HandleListRealtimeTables(c fiber.Ctx) error {
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	ctx := middleware.CtxWithTenant(c)
@@ -323,9 +295,7 @@ func (h *RealtimeAdminHandler) HandleListRealtimeTables(c fiber.Ctx) error {
 	rows, err := h.queryPool(c).Query(ctx, query, tenantID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list realtime tables")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to list realtime tables",
-		})
+		return SendInternalError(c, "Failed to list realtime tables")
 	}
 	defer rows.Close()
 
@@ -365,11 +335,8 @@ func (h *RealtimeAdminHandler) HandleGetRealtimeStatus(c fiber.Ctx) error {
 		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	ctx := middleware.CtxWithTenant(c)
@@ -392,14 +359,10 @@ func (h *RealtimeAdminHandler) HandleGetRealtimeStatus(c fiber.Ctx) error {
 		// Table not registered - check if the table exists at all
 		exists, checkErr := h.tableExists(ctx, c, schema, table)
 		if checkErr != nil {
-			return c.Status(500).JSON(fiber.Map{
-				"error": "Failed to check table existence",
-			})
+			return SendInternalError(c, "Failed to check table existence")
 		}
 		if !exists {
-			return c.Status(404).JSON(fiber.Map{
-				"error": fmt.Sprintf("Table '%s.%s' does not exist", schema, table),
-			})
+			return SendNotFound(c, fmt.Sprintf("Table '%s.%s' does not exist", schema, table))
 		}
 		// Table exists but not registered for realtime
 		return c.JSON(RealtimeTableStatus{
@@ -412,9 +375,7 @@ func (h *RealtimeAdminHandler) HandleGetRealtimeStatus(c fiber.Ctx) error {
 	}
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to get realtime status")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to get realtime status",
-		})
+		return SendInternalError(c, "Failed to get realtime status")
 	}
 
 	if createdAt != nil {
@@ -444,24 +405,20 @@ func (h *RealtimeAdminHandler) HandleUpdateRealtimeConfig(c fiber.Ctx) error {
 		Events  []string `json:"events,omitempty"`
 		Exclude []string `json:"exclude,omitempty"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return SendInvalidBody(c)
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate that at least one update is provided
 	if len(req.Events) == 0 && req.Exclude == nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "No updates provided",
-		})
+		return SendBadRequest(c, "No updates provided", ErrCodeInvalidInput)
 	}
 
 	// Validate event types
 	if len(req.Events) > 0 {
 		for _, event := range req.Events {
 			if event != "INSERT" && event != "UPDATE" && event != "DELETE" {
-				return c.Status(400).JSON(fiber.Map{
-					"error": fmt.Sprintf("Invalid event type: %s", event),
-				})
+				return SendBadRequest(c, fmt.Sprintf("Invalid event type: %s", event), ErrCodeInvalidInput)
 			}
 		}
 	}
@@ -470,18 +427,13 @@ func (h *RealtimeAdminHandler) HandleUpdateRealtimeConfig(c fiber.Ctx) error {
 	if req.Exclude != nil {
 		for _, col := range req.Exclude {
 			if err := validateIdentifier(col, "column"); err != nil {
-				return c.Status(400).JSON(fiber.Map{
-					"error": fmt.Sprintf("Invalid excluded column: %s", err.Error()),
-				})
+				return SendBadRequest(c, fmt.Sprintf("Invalid excluded column: %s", err.Error()), ErrCodeValidationFailed)
 			}
 		}
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	ctx := middleware.CtxWithTenant(c)
@@ -512,15 +464,11 @@ func (h *RealtimeAdminHandler) HandleUpdateRealtimeConfig(c fiber.Ctx) error {
 	var id int
 	err := h.queryPool(c).QueryRow(ctx, query, args...).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return c.Status(404).JSON(fiber.Map{
-			"error": fmt.Sprintf("Realtime not enabled on table '%s.%s'", schema, table),
-		})
+		return SendNotFound(c, fmt.Sprintf("Realtime not enabled on table '%s.%s'", schema, table))
 	}
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to update realtime config")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to update realtime configuration",
-		})
+		return SendInternalError(c, "Failed to update realtime configuration")
 	}
 
 	log.Info().Str("schema", schema).Str("table", table).Msg("Realtime config updated")

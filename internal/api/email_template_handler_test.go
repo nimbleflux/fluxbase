@@ -262,7 +262,7 @@ func TestDefaultTemplates(t *testing.T) {
 
 func TestGetTemplate_Validation(t *testing.T) {
 	t.Run("invalid template type", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Get("/templates/:type", handler.GetTemplate)
@@ -286,7 +286,7 @@ func TestGetTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("valid template type - magic_link", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Get("/templates/:type", handler.GetTemplate)
@@ -302,7 +302,7 @@ func TestGetTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("valid template type - email_verification", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Get("/templates/:type", handler.GetTemplate)
@@ -317,7 +317,7 @@ func TestGetTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("valid template type - password_reset", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Get("/templates/:type", handler.GetTemplate)
@@ -338,7 +338,7 @@ func TestGetTemplate_Validation(t *testing.T) {
 
 func TestUpdateTemplate_Validation(t *testing.T) {
 	t.Run("invalid template type", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Put("/templates/:type", handler.UpdateTemplate)
@@ -364,7 +364,7 @@ func TestUpdateTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Put("/templates/:type", handler.UpdateTemplate)
@@ -389,7 +389,7 @@ func TestUpdateTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("missing subject", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Put("/templates/:type", handler.UpdateTemplate)
@@ -415,7 +415,7 @@ func TestUpdateTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("missing html_body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Put("/templates/:type", handler.UpdateTemplate)
@@ -432,7 +432,7 @@ func TestUpdateTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("empty subject", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Put("/templates/:type", handler.UpdateTemplate)
@@ -449,7 +449,7 @@ func TestUpdateTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("valid request", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Put("/templates/:type", handler.UpdateTemplate)
@@ -473,7 +473,7 @@ func TestUpdateTemplate_Validation(t *testing.T) {
 
 func TestResetTemplate_Validation(t *testing.T) {
 	t.Run("invalid template type", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Post("/templates/:type/reset", handler.ResetTemplate)
@@ -497,7 +497,7 @@ func TestResetTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("valid template type", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Post("/templates/:type/reset", handler.ResetTemplate)
@@ -519,7 +519,7 @@ func TestResetTemplate_Validation(t *testing.T) {
 
 func TestTestTemplate_Validation(t *testing.T) {
 	t.Run("invalid template type", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Post("/templates/:type/test", handler.TestTemplate)
@@ -545,7 +545,7 @@ func TestTestTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Post("/templates/:type/test", handler.TestTemplate)
@@ -570,7 +570,7 @@ func TestTestTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("missing recipient email", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Post("/templates/:type/test", handler.TestTemplate)
@@ -596,7 +596,7 @@ func TestTestTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("empty recipient email", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil)
 
 		app.Post("/templates/:type/test", handler.TestTemplate)
@@ -613,7 +613,7 @@ func TestTestTemplate_Validation(t *testing.T) {
 	})
 
 	t.Run("email service not configured", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewEmailTemplateHandler(nil, nil) // nil email service
 
 		app.Post("/templates/:type/test", handler.TestTemplate)

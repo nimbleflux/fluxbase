@@ -14,7 +14,7 @@ func TestNewAuditLogger(t *testing.T) {
 	t.Run("creates audit logger with nil db", func(t *testing.T) {
 		logger := NewAuditLogger(nil)
 		assert.NotNil(t, logger)
-		assert.Nil(t, logger.db)
+		assert.Nil(t, logger.DB)
 	})
 }
 

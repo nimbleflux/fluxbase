@@ -46,31 +46,31 @@ func (h *TenantSettingsHandler) GetTenantSettings(c fiber.Ctx) error {
 	tenantID := c.Params("id")
 
 	if tenantID == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Tenant ID is required")
+		return SendMissingField(c, "tenant_id")
 	}
 
 	// Verify tenant exists
 	tenant, err := h.tenantDB.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendResourceNotFound(c, "Tenant")
 		}
 		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	// Get tenant settings
 	tenantSettings, err := h.settingsSvc.GetTenantSettings(ctx, tenantID)
 	if err != nil {
 		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant settings")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant settings")
+		return SendInternalError(c, "Failed to get tenant settings")
 	}
 
 	// Get instance settings for overridable list
 	instanceSettings, err := h.settingsSvc.GetInstanceSettings(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get instance settings")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get settings")
+		return SendInternalError(c, "Failed to get settings")
 	}
 
 	// Build response with resolved settings
@@ -103,36 +103,36 @@ func (h *TenantSettingsHandler) UpdateTenantSettings(c fiber.Ctx) error {
 	tenantID := c.Params("id")
 
 	if tenantID == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Tenant ID is required")
+		return SendMissingField(c, "tenant_id")
 	}
 
 	// Verify tenant exists
 	_, err := h.tenantDB.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendResourceNotFound(c, "Tenant")
 		}
 		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	var req UpdateTenantSettingsRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Settings == nil && req.Secrets == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Settings or secrets are required")
+		return SendBadRequest(c, "Settings or secrets are required", ErrCodeMissingField)
 	}
 
 	// Update regular settings
 	for path, value := range req.Settings {
 		if err := h.settingsSvc.SetTenantSetting(ctx, tenantID, path, value, false); err != nil {
 			if errors.Is(err, settings.ErrNotOverridable) {
-				return fiber.NewError(fiber.StatusBadRequest, "Setting '"+path+"' is not overridable at tenant level")
+				return SendBadRequest(c, "Setting '"+path+"' is not overridable at tenant level", ErrCodeInvalidInput)
 			}
 			log.Error().Err(err).Str("tenant_id", tenantID).Str("path", path).Msg("Failed to set tenant setting")
-			return fiber.NewError(fiber.StatusInternalServerError, "Failed to update tenant settings")
+			return SendInternalError(c, "Failed to update tenant settings")
 		}
 	}
 
@@ -140,10 +140,10 @@ func (h *TenantSettingsHandler) UpdateTenantSettings(c fiber.Ctx) error {
 	for path, value := range req.Secrets {
 		if err := h.settingsSvc.SetTenantSetting(ctx, tenantID, path, value, true); err != nil {
 			if errors.Is(err, settings.ErrNotOverridable) {
-				return fiber.NewError(fiber.StatusBadRequest, "Secret '"+path+"' is not overridable at tenant level")
+				return SendBadRequest(c, "Secret '"+path+"' is not overridable at tenant level", ErrCodeInvalidInput)
 			}
 			log.Error().Err(err).Str("tenant_id", tenantID).Str("path", path).Msg("Failed to set tenant secret")
-			return fiber.NewError(fiber.StatusInternalServerError, "Failed to update tenant secrets")
+			return SendInternalError(c, "Failed to update tenant secrets")
 		}
 	}
 
@@ -161,30 +161,30 @@ func (h *TenantSettingsHandler) DeleteTenantSetting(c fiber.Ctx) error {
 	settingPath := c.Params("*")
 
 	if tenantID == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Tenant ID is required")
+		return SendMissingField(c, "tenant_id")
 	}
 
 	if settingPath == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Setting path is required")
+		return SendMissingField(c, "path")
 	}
 
 	// Verify tenant exists
 	_, err := h.tenantDB.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendResourceNotFound(c, "Tenant")
 		}
 		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	// Delete the setting
 	if err := h.settingsSvc.DeleteTenantSetting(ctx, tenantID, settingPath); err != nil {
 		if errors.Is(err, settings.ErrSettingNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Setting not found")
+			return SendNotFound(c, "Setting not found")
 		}
 		log.Error().Err(err).Str("tenant_id", tenantID).Str("path", settingPath).Msg("Failed to delete tenant setting")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete tenant setting")
+		return SendInternalError(c, "Failed to delete tenant setting")
 	}
 
 	log.Info().Str("tenant_id", tenantID).Str("path", settingPath).Msg("Deleted tenant setting")
@@ -200,31 +200,31 @@ func (h *TenantSettingsHandler) GetTenantSetting(c fiber.Ctx) error {
 	settingPath := c.Params("*")
 
 	if tenantID == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Tenant ID is required")
+		return SendMissingField(c, "tenant_id")
 	}
 
 	if settingPath == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Setting path is required")
+		return SendMissingField(c, "path")
 	}
 
 	// Verify tenant exists
 	tenant, err := h.tenantDB.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendResourceNotFound(c, "Tenant")
 		}
 		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	// Resolve the setting
 	resolved, err := h.settingsSvc.ResolveSetting(ctx, tenantID, settingPath, tenant.IsDefault, tenant.Slug)
 	if err != nil {
 		if errors.Is(err, settings.ErrSettingNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Setting not found")
+			return SendNotFound(c, "Setting not found")
 		}
 		log.Error().Err(err).Str("tenant_id", tenantID).Str("path", settingPath).Msg("Failed to resolve setting")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get setting")
+		return SendInternalError(c, "Failed to get setting")
 	}
 
 	return c.JSON(fiber.Map{

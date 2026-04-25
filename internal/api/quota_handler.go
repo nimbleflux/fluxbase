@@ -1,8 +1,6 @@
 package api
 
 import (
-	"fmt"
-
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/nimbleflux/fluxbase/internal/ai"
@@ -27,17 +25,13 @@ func NewQuotaHandler(quotaService *ai.QuotaService, userMgmtService *auth.UserMa
 // GET /api/v1/admin/users
 func (h *QuotaHandler) ListUsersWithQuotas(c fiber.Ctx) error {
 	if h.userMgmtService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User management service not initialized",
-		})
+		return SendInternalError(c, "User management service not initialized")
 	}
 
 	// Get all users (no tenant filtering for quota listing)
 	users, err := h.userMgmtService.ListEnrichedUsers(c.RequestCtx(), "app", "")
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch users",
-		})
+		return SendInternalError(c, "Failed to fetch users")
 	}
 
 	if users == nil {
@@ -80,16 +74,12 @@ func (h *QuotaHandler) ListUsersWithQuotas(c fiber.Ctx) error {
 func (h *QuotaHandler) GetUserQuota(c fiber.Ctx) error {
 	userID := c.Params("id")
 	if userID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "User ID is required",
-		})
+		return SendMissingField(c, "id")
 	}
 
 	quota, err := h.quotaService.GetUserQuotaUsage(c.RequestCtx(), userID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "User not found or quota not set",
-		})
+		return SendNotFound(c, "User not found or quota not set")
 	}
 
 	return c.JSON(quota)
@@ -100,9 +90,7 @@ func (h *QuotaHandler) GetUserQuota(c fiber.Ctx) error {
 func (h *QuotaHandler) SetUserQuota(c fiber.Ctx) error {
 	userID := c.Params("id")
 	if userID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "User ID is required",
-		})
+		return SendMissingField(c, "id")
 	}
 
 	var req struct {
@@ -111,29 +99,21 @@ func (h *QuotaHandler) SetUserQuota(c fiber.Ctx) error {
 		MaxStorageBytes int64 `json:"max_storage_bytes"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate limits
 	if req.MaxDocuments <= 0 || req.MaxDocuments > 1000000 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "max_documents must be between 1 and 1000000",
-		})
+		return SendBadRequest(c, "max_documents must be between 1 and 1000000", ErrCodeInvalidInput)
 	}
 
 	if req.MaxChunks <= 0 || req.MaxChunks > 10000000 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "max_chunks must be between 1 and 10000000",
-		})
+		return SendBadRequest(c, "max_chunks must be between 1 and 10000000", ErrCodeInvalidInput)
 	}
 
 	if req.MaxStorageBytes <= 0 || req.MaxStorageBytes > 1024*1024*1024*1024 { // 1TB max
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "max_storage_bytes must be between 1 and 1TB",
-		})
+		return SendBadRequest(c, "max_storage_bytes must be between 1 and 1TB", ErrCodeInvalidInput)
 	}
 
 	setReq := ai.SetUserQuotaRequest{
@@ -143,17 +123,13 @@ func (h *QuotaHandler) SetUserQuota(c fiber.Ctx) error {
 	}
 
 	if err := h.quotaService.SetUserQuota(c.RequestCtx(), userID, setReq); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to set quota: %v", err),
-		})
+		return SendInternalError(c, "Failed to set quota")
 	}
 
 	// Return the updated quota
 	quota, err := h.quotaService.GetUserQuotaUsage(c.RequestCtx(), userID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve updated quota",
-		})
+		return SendInternalError(c, "Failed to retrieve updated quota")
 	}
 
 	return c.JSON(quota)

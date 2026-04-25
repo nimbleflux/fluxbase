@@ -61,36 +61,26 @@ func (h *StorageHandler) InitChunkedUpload(c fiber.Ctx) error {
 	// Get tenant-specific storage service
 	svc, err := h.getService(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get storage service",
-		})
+		return SendInternalError(c, "Failed to get storage service")
 	}
 
 	bucket := c.Params("bucket")
 	if bucket == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket is required",
-		})
+		return SendMissingField(c, "bucket")
 	}
 
 	// Parse request body
 	var req InitChunkedUploadRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid request body: " + err.Error(),
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Path == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "path is required",
-		})
+		return SendMissingField(c, "path")
 	}
 
 	if req.TotalSize <= 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "total_size must be greater than 0",
-		})
+		return SendBadRequest(c, "total_size must be greater than 0", ErrCodeInvalidInput)
 	}
 
 	// Default chunk size to 5MB if not specified
@@ -106,9 +96,7 @@ func (h *StorageHandler) InitChunkedUpload(c fiber.Ctx) error {
 
 	// Validate total size
 	if err := svc.ValidateUploadSize(req.TotalSize); err != nil {
-		return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendErrorWithCode(c, fiber.StatusRequestEntityTooLarge, "File size exceeds upload limit", ErrCodeInvalidInput)
 	}
 
 	// Get owner ID from authenticated user
@@ -134,16 +122,12 @@ func (h *StorageHandler) InitChunkedUpload(c fiber.Ctx) error {
 	case *storage.S3Storage:
 		session, err = provider.InitChunkedUpload(ctx, bucket, req.Path, req.TotalSize, chunkSize, opts)
 	default:
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "storage provider does not support chunked uploads",
-		})
+		return SendInternalError(c, "Storage provider does not support chunked uploads")
 	}
 
 	if err != nil {
 		log.Error().Err(err).Str("bucket", bucket).Str("path", req.Path).Msg("Failed to initialize chunked upload")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to initialize chunked upload: " + err.Error(),
-		})
+		return SendInternalError(c, "Failed to initialize chunked upload")
 	}
 
 	session.OwnerID = ownerID
@@ -181,9 +165,7 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 	// Get tenant-specific storage service
 	svc, err := h.getService(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get storage service",
-		})
+		return SendInternalError(c, "Failed to get storage service")
 	}
 
 	bucket := c.Params("bucket")
@@ -191,24 +173,18 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 	chunkIndexStr := c.Params("chunkIndex")
 
 	if bucket == "" || uploadID == "" || chunkIndexStr == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket, uploadId, and chunkIndex are required",
-		})
+		return SendBadRequest(c, "Bucket, uploadId, and chunkIndex are required", ErrCodeMissingField)
 	}
 
 	chunkIndex, err := strconv.Atoi(chunkIndexStr)
 	if err != nil || chunkIndex < 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid chunkIndex: must be a non-negative integer",
-		})
+		return SendBadRequest(c, "Invalid chunkIndex: must be a non-negative integer", ErrCodeInvalidInput)
 	}
 
 	// Get chunk size from Content-Length header
 	size := int64(c.Request().Header.ContentLength())
 	if size <= 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Content-Length header is required",
-		})
+		return SendBadRequest(c, "Content-Length header is required", ErrCodeMissingField)
 	}
 
 	ctx := c.RequestCtx()
@@ -216,30 +192,22 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 	// Retrieve session
 	session, err := h.getChunkedUploadSessionFromProvider(svc.Provider, uploadID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "upload session not found: " + err.Error(),
-		})
+		return SendNotFound(c, "Upload session not found")
 	}
 
 	// Verify bucket matches
 	if session.Bucket != bucket {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket mismatch",
-		})
+		return SendBadRequest(c, "Bucket mismatch", ErrCodeInvalidInput)
 	}
 
 	// Check if session is still active
 	if session.Status != "active" {
-		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-			"error": fmt.Sprintf("upload session is not active (status: %s)", session.Status),
-		})
+		return SendConflict(c, fmt.Sprintf("Upload session is not active (status: %s)", session.Status), ErrCodeConflict)
 	}
 
 	// Check expiration
 	if time.Now().After(session.ExpiresAt) {
-		return c.Status(fiber.StatusGone).JSON(fiber.Map{
-			"error": "upload session has expired",
-		})
+		return SendErrorWithCode(c, fiber.StatusGone, "Upload session has expired", "SESSION_EXPIRED")
 	}
 
 	// Get the request body as a stream reader
@@ -251,9 +219,7 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 		// Fall back to reading the buffered body
 		bodyBytes := c.Body()
 		if len(bodyBytes) == 0 {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "request body is required",
-			})
+			return SendBadRequest(c, "Request body is required", ErrCodeMissingField)
 		}
 		body = bytes.NewReader(bodyBytes)
 	}
@@ -267,16 +233,12 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 	case *storage.S3Storage:
 		result, err = provider.UploadChunk(ctx, session, chunkIndex, body, size)
 	default:
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "storage provider does not support chunked uploads",
-		})
+		return SendInternalError(c, "Storage provider does not support chunked uploads")
 	}
 
 	if err != nil {
 		log.Error().Err(err).Str("uploadID", uploadID).Int("chunkIndex", chunkIndex).Msg("Failed to upload chunk")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to upload chunk: " + err.Error(),
-		})
+		return SendInternalError(c, "Failed to upload chunk")
 	}
 
 	// Update session with the completed chunk
@@ -322,18 +284,14 @@ func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
 	// Get tenant-specific storage service
 	svc, err := h.getService(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get storage service",
-		})
+		return SendInternalError(c, "Failed to get storage service")
 	}
 
 	bucket := c.Params("bucket")
 	uploadID := c.Params("uploadId")
 
 	if bucket == "" || uploadID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket and uploadId are required",
-		})
+		return SendBadRequest(c, "Bucket and uploadId are required", ErrCodeMissingField)
 	}
 
 	ctx := c.RequestCtx()
@@ -341,16 +299,12 @@ func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
 	// Retrieve session
 	session, err := h.getChunkedUploadSessionFromProvider(svc.Provider, uploadID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "upload session not found: " + err.Error(),
-		})
+		return SendNotFound(c, "Upload session not found")
 	}
 
 	// Verify bucket matches
 	if session.Bucket != bucket {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket mismatch",
-		})
+		return SendBadRequest(c, "Bucket mismatch", ErrCodeInvalidInput)
 	}
 
 	// Check if all chunks are uploaded
@@ -365,12 +319,13 @@ func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
 				missingChunks = append(missingChunks, i)
 			}
 		}
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":          "not all chunks have been uploaded",
-			"missing_chunks": missingChunks,
-			"uploaded":       len(session.CompletedChunks),
-			"total":          session.TotalChunks,
-		})
+		return SendErrorWithDetails(c, fiber.StatusBadRequest,
+			"Not all chunks have been uploaded", ErrCodeValidationFailed, "", "",
+			fiber.Map{
+				"missing_chunks": missingChunks,
+				"uploaded":       len(session.CompletedChunks),
+				"total":          session.TotalChunks,
+			})
 	}
 
 	// Mark session as completing
@@ -386,18 +341,14 @@ func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
 	case *storage.S3Storage:
 		object, err = provider.CompleteChunkedUpload(ctx, session)
 	default:
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "storage provider does not support chunked uploads",
-		})
+		return SendInternalError(c, "Storage provider does not support chunked uploads")
 	}
 
 	if err != nil {
 		session.Status = "active" // Revert status on failure
 		_ = h.updateChunkedUploadSessionInProvider(svc.Provider, session)
 		log.Error().Err(err).Str("uploadID", uploadID).Msg("Failed to complete chunked upload")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to complete chunked upload: " + err.Error(),
-		})
+		return SendInternalError(c, "Failed to complete chunked upload")
 	}
 
 	// Store object record in database
@@ -431,33 +382,25 @@ func (h *StorageHandler) GetChunkedUploadStatus(c fiber.Ctx) error {
 	// Get tenant-specific storage service
 	svc, err := h.getService(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get storage service",
-		})
+		return SendInternalError(c, "Failed to get storage service")
 	}
 
 	bucket := c.Params("bucket")
 	uploadID := c.Params("uploadId")
 
 	if bucket == "" || uploadID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket and uploadId are required",
-		})
+		return SendBadRequest(c, "Bucket and uploadId are required", ErrCodeMissingField)
 	}
 
 	// Retrieve session
 	session, err := h.getChunkedUploadSessionFromProvider(svc.Provider, uploadID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "upload session not found: " + err.Error(),
-		})
+		return SendNotFound(c, "Upload session not found")
 	}
 
 	// Verify bucket matches
 	if session.Bucket != bucket {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket mismatch",
-		})
+		return SendBadRequest(c, "Bucket mismatch", ErrCodeInvalidInput)
 	}
 
 	// Calculate missing chunks
@@ -495,18 +438,14 @@ func (h *StorageHandler) AbortChunkedUpload(c fiber.Ctx) error {
 	// Get tenant-specific storage service
 	svc, err := h.getService(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get storage service",
-		})
+		return SendInternalError(c, "Failed to get storage service")
 	}
 
 	bucket := c.Params("bucket")
 	uploadID := c.Params("uploadId")
 
 	if bucket == "" || uploadID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket and uploadId are required",
-		})
+		return SendBadRequest(c, "Bucket and uploadId are required", ErrCodeMissingField)
 	}
 
 	ctx := c.RequestCtx()
@@ -514,16 +453,12 @@ func (h *StorageHandler) AbortChunkedUpload(c fiber.Ctx) error {
 	// Retrieve session
 	session, err := h.getChunkedUploadSessionFromProvider(svc.Provider, uploadID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "upload session not found: " + err.Error(),
-		})
+		return SendNotFound(c, "Upload session not found")
 	}
 
 	// Verify bucket matches
 	if session.Bucket != bucket {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket mismatch",
-		})
+		return SendBadRequest(c, "Bucket mismatch", ErrCodeInvalidInput)
 	}
 
 	// Abort the upload
@@ -533,16 +468,12 @@ func (h *StorageHandler) AbortChunkedUpload(c fiber.Ctx) error {
 	case *storage.S3Storage:
 		err = provider.AbortChunkedUpload(ctx, session)
 	default:
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "storage provider does not support chunked uploads",
-		})
+		return SendInternalError(c, "Storage provider does not support chunked uploads")
 	}
 
 	if err != nil {
 		log.Error().Err(err).Str("uploadID", uploadID).Msg("Failed to abort chunked upload")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to abort chunked upload: " + err.Error(),
-		})
+		return SendInternalError(c, "Failed to abort chunked upload")
 	}
 
 	// Delete session from database

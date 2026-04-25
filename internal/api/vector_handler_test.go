@@ -428,7 +428,7 @@ func TestVectorCapabilities_Struct(t *testing.T) {
 
 func TestHandleEmbed_Validation(t *testing.T) {
 	t.Run("no text provided", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 
 		// We can't easily test the full handler without mocking VectorManager
 		// but we can test the request validation behavior
@@ -598,7 +598,7 @@ func TestDistanceMetrics(t *testing.T) {
 
 func TestHandleGetCapabilities_RoleBasedResponse(t *testing.T) {
 	t.Run("admin user gets full details", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 
 		// Middleware to set admin role
 		app.Use(func(c fiber.Ctx) error {
@@ -648,7 +648,7 @@ func TestHandleGetCapabilities_RoleBasedResponse(t *testing.T) {
 	})
 
 	t.Run("non-admin user gets minimal info", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 
 		// Middleware to set regular user role
 		app.Use(func(c fiber.Ctx) error {

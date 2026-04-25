@@ -14,19 +14,14 @@ import (
 
 // AuditLogger logs AI query execution for compliance and debugging
 type AuditLogger struct {
-	db *database.Connection
+	database.TenantAware
 }
 
 // NewAuditLogger creates a new audit logger
 func NewAuditLogger(db *database.Connection) *AuditLogger {
 	return &AuditLogger{
-		db: db,
+		TenantAware: database.TenantAware{DB: db},
 	}
-}
-
-func (l *AuditLogger) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	tenantID := database.TenantFromContext(ctx)
-	return database.WrapWithTenantAwareRole(ctx, l.db, tenantID, fn)
 }
 
 // AuditEntry represents a query audit log entry
@@ -68,7 +63,7 @@ func (l *AuditLogger) LogQuery(ctx context.Context, entry *AuditEntry) error {
 	validUserID := entry.UserID
 	if validUserID != nil && *validUserID != "" {
 		var exists bool
-		err := l.withTenant(ctx, func(tx pgx.Tx) error {
+		err := l.WithTenant(ctx, func(tx pgx.Tx) error {
 			return tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)", *validUserID).Scan(&exists)
 		})
 		if err != nil {
@@ -102,7 +97,7 @@ func (l *AuditLogger) LogQuery(ctx context.Context, entry *AuditEntry) error {
 		)
 	`
 
-	err := l.withTenant(ctx, func(tx pgx.Tx) error {
+	err := l.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, execErr := tx.Exec(ctx, query,
 			entry.ID, entry.ChatbotID, entry.ConversationID, entry.MessageID, validUserID,
 			entry.GeneratedSQL, entry.SanitizedSQL, entry.Executed,
@@ -215,7 +210,7 @@ func (l *AuditLogger) GetRecentQueries(ctx context.Context, limit int) ([]*Audit
 	`
 
 	var entries []*AuditEntry
-	err := l.withTenant(ctx, func(tx pgx.Tx) error {
+	err := l.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, limit)
 		if queryErr != nil {
 			return queryErr
@@ -268,7 +263,7 @@ func (l *AuditLogger) GetQueriesByChatbot(ctx context.Context, chatbotID string,
 	`
 
 	var entries []*AuditEntry
-	err := l.withTenant(ctx, func(tx pgx.Tx) error {
+	err := l.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, chatbotID, limit)
 		if queryErr != nil {
 			return queryErr
@@ -322,7 +317,7 @@ func (l *AuditLogger) GetFailedQueries(ctx context.Context, since time.Time, lim
 	`
 
 	var entries []*AuditEntry
-	err := l.withTenant(ctx, func(tx pgx.Tx) error {
+	err := l.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, since, limit)
 		if queryErr != nil {
 			return queryErr
@@ -379,7 +374,7 @@ func (l *AuditLogger) GetStats(ctx context.Context, since time.Time) (*AuditStat
 	`
 
 	stats := &AuditStats{}
-	err := l.withTenant(ctx, func(tx pgx.Tx) error {
+	err := l.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, since).Scan(
 			&stats.TotalQueries,
 			&stats.ExecutedQueries,

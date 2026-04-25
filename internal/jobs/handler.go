@@ -328,7 +328,7 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 		// Verify user exists in auth.users
 		var exists bool
 		checkQuery := "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)"
-		if err := h.storage.conn.Pool().QueryRow(middleware.CtxWithTenant(c), checkQuery, parsed).Scan(&exists); err != nil || !exists {
+		if err := h.storage.DB.Pool().QueryRow(middleware.CtxWithTenant(c), checkQuery, parsed).Scan(&exists); err != nil || !exists {
 			return c.Status(400).JSON(fiber.Map{
 				"error": "User not found in on_behalf_of.user_id",
 			})
@@ -383,7 +383,7 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 					// Dashboard admins are in platform.users, not auth.users
 					var exists bool
 					checkQuery := "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)"
-					if err := h.storage.conn.Pool().QueryRow(middleware.CtxWithTenant(c), checkQuery, parsed).Scan(&exists); err == nil && exists {
+					if err := h.storage.DB.Pool().QueryRow(middleware.CtxWithTenant(c), checkQuery, parsed).Scan(&exists); err == nil && exists {
 						userID = &parsed
 					}
 					// If user doesn't exist in auth.users, leave userID as nil

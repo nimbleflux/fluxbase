@@ -18,7 +18,7 @@ import (
 // Uses a hybrid approach: in-memory cache for active conversations,
 // database persistence for long-term storage
 type ConversationManager struct {
-	db          *database.Connection
+	database.TenantAware
 	cache       map[string]*ConversationState
 	cacheMu     sync.RWMutex
 	cacheTTL    time.Duration
@@ -81,15 +81,10 @@ type ConversationMessage struct {
 	SequenceNumber   int                      `json:"sequence_number"`
 }
 
-func (cm *ConversationManager) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	tenantID := database.TenantFromContext(ctx)
-	return database.WrapWithTenantAwareRole(ctx, cm.db, tenantID, fn)
-}
-
 // NewConversationManager creates a new conversation manager
 func NewConversationManager(db *database.Connection, cacheTTL time.Duration, maxTurns int) *ConversationManager {
 	cm := &ConversationManager{
-		db:          db,
+		TenantAware: database.TenantAware{DB: db},
 		cache:       make(map[string]*ConversationState),
 		cacheTTL:    cacheTTL,
 		maxTurns:    maxTurns,
@@ -316,7 +311,7 @@ func (cm *ConversationManager) CloseConversation(ctx context.Context, conversati
 
 	// Update database status if persisted
 	if state.PersistToDatabase {
-		err := cm.withTenant(ctx, func(tx pgx.Tx) error {
+		err := cm.WithTenant(ctx, func(tx pgx.Tx) error {
 			query := `UPDATE ai.conversations SET status = 'archived', updated_at = NOW() WHERE id = $1`
 			_, execErr := tx.Exec(ctx, query, conversationID)
 			return execErr
@@ -338,7 +333,7 @@ func (cm *ConversationManager) saveConversation(ctx context.Context, conv *Conve
 	validUserID := conv.UserID
 	if validUserID != nil {
 		var exists bool
-		err := cm.withTenant(ctx, func(tx pgx.Tx) error {
+		err := cm.WithTenant(ctx, func(tx pgx.Tx) error {
 			return tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)", *validUserID).Scan(&exists)
 		})
 		if err != nil {
@@ -360,7 +355,7 @@ func (cm *ConversationManager) saveConversation(ctx context.Context, conv *Conve
 		)
 	`
 
-	return cm.withTenant(ctx, func(tx pgx.Tx) error {
+	return cm.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query,
 			conv.ID, conv.ChatbotID, validUserID, conv.SessionID, conv.Title, conv.Status,
 			conv.TurnCount, conv.TotalPromptTokens, conv.TotalCompletionTokens,
@@ -380,7 +375,7 @@ func (cm *ConversationManager) loadConversation(ctx context.Context, id string) 
 	`
 
 	var conv Conversation
-	err := cm.withTenant(ctx, func(tx pgx.Tx) error {
+	err := cm.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id).Scan(
 			&conv.ID, &conv.ChatbotID, &conv.UserID, &conv.SessionID, &conv.Title, &conv.Status,
 			&conv.TurnCount, &conv.TotalPromptTokens, &conv.TotalCompletionTokens,
@@ -407,7 +402,7 @@ func (cm *ConversationManager) loadMessages(ctx context.Context, conversationID 
 	`
 
 	var messages []Message
-	err := cm.withTenant(ctx, func(tx pgx.Tx) error {
+	err := cm.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, conversationID)
 		if queryErr != nil {
 			return queryErr
@@ -453,7 +448,7 @@ func (cm *ConversationManager) saveMessage(ctx context.Context, msg *Conversatio
 		)
 	`
 
-	return cm.withTenant(ctx, func(tx pgx.Tx) error {
+	return cm.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query,
 			msg.ID, msg.ConversationID, msg.Role, msg.Content, msg.ToolCallID, msg.ToolName,
 			msg.ExecutedSQL, msg.SQLResultSummary, msg.SQLRowCount, msg.SQLError, msg.SQLDurationMs,
@@ -474,7 +469,7 @@ func (cm *ConversationManager) updateConversationStats(ctx context.Context, conv
 		WHERE id = $1
 	`
 
-	return cm.withTenant(ctx, func(tx pgx.Tx) error {
+	return cm.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query,
 			conversationID,
 			state.TurnCount,
@@ -556,7 +551,7 @@ func (cm *ConversationManager) autoGenerateTitleIfNeeded(conversationID, content
 
 	// Check if title is already set
 	var existingTitle *string
-	err := cm.withTenant(ctx, func(tx pgx.Tx) error {
+	err := cm.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT title FROM ai.conversations WHERE id = $1`, conversationID).Scan(&existingTitle)
 	})
 	if err != nil {
@@ -570,7 +565,7 @@ func (cm *ConversationManager) autoGenerateTitleIfNeeded(conversationID, content
 
 	// Generate and set title
 	title := generateTitle(content)
-	err = cm.withTenant(ctx, func(tx pgx.Tx) error {
+	err = cm.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, execErr := tx.Exec(ctx, `UPDATE ai.conversations SET title = $2, updated_at = NOW() WHERE id = $1`, conversationID, title)
 		return execErr
 	})

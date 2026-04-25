@@ -18,7 +18,7 @@ func TestNewStorage(t *testing.T) {
 	t.Run("creates storage with nil database", func(t *testing.T) {
 		storage := NewStorage(nil)
 		assert.NotNil(t, storage)
-		assert.Nil(t, storage.db)
+		assert.Nil(t, storage.DB)
 	})
 }
 

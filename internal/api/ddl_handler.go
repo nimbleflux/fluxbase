@@ -30,6 +30,13 @@ func NewDDLHandler(db *database.Connection, schemaCache *database.SchemaCache) *
 	return &DDLHandler{db: db, schemaCache: schemaCache}
 }
 
+func (h *DDLHandler) requireDB(c fiber.Ctx) error {
+	if h.db == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // SetSchemaCache sets the schema cache for invalidation after DDL operations
 func (h *DDLHandler) SetSchemaCache(cache *database.SchemaCache) {
 	h.schemaCache = cache
@@ -85,24 +92,17 @@ type CreateColumnRequest struct {
 // CreateSchema creates a new database schema
 func (h *DDLHandler) CreateSchema(c fiber.Ctx) error {
 	var req CreateSchemaRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate schema name
 	if err := validateIdentifier(req.Name, "schema"); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	ctx := c.RequestCtx()
@@ -111,14 +111,10 @@ func (h *DDLHandler) CreateSchema(c fiber.Ctx) error {
 	exists, err := h.schemaExists(ctx, c, req.Name)
 	if err != nil {
 		log.Error().Err(err).Str("schema", req.Name).Msg("Failed to check schema existence")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to check schema existence",
-		})
+		return SendInternalError(c, "Failed to check schema existence")
 	}
 	if exists {
-		return c.Status(409).JSON(fiber.Map{
-			"error": fmt.Sprintf("Schema '%s' already exists", req.Name),
-		})
+		return SendConflict(c, fmt.Sprintf("Schema '%s' already exists", req.Name), ErrCodeAlreadyExists)
 	}
 
 	// Create schema (using quoted identifier for safety)
@@ -133,9 +129,7 @@ func (h *DDLHandler) CreateSchema(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Error().Err(err).Str("schema", req.Name).Msg("Failed to create schema")
-		return c.Status(500).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to create schema: %v", err),
-		})
+		return SendInternalError(c, "Failed to create schema")
 	}
 
 	// Set up default privileges for tables created in this schema by the admin user
@@ -157,38 +151,24 @@ func (h *DDLHandler) CreateSchema(c fiber.Ctx) error {
 // CreateTable creates a new table with specified columns
 func (h *DDLHandler) CreateTable(c fiber.Ctx) error {
 	var req CreateTableRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Validate schema name
 	if err := validateIdentifier(req.Schema, "schema"); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
-	// Validate table name
 	if err := validateIdentifier(req.Name, "table"); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
-	// Validate columns
 	if len(req.Columns) == 0 {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "At least one column is required",
-		})
+		return SendBadRequest(c, "At least one column is required", ErrCodeValidationFailed)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	ctx := c.RequestCtx()
@@ -197,36 +177,26 @@ func (h *DDLHandler) CreateTable(c fiber.Ctx) error {
 	exists, err := h.schemaExists(ctx, c, req.Schema)
 	if err != nil {
 		log.Error().Err(err).Str("schema", req.Schema).Msg("Failed to check schema existence")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to check schema existence",
-		})
+		return SendInternalError(c, "Failed to check schema existence")
 	}
 	if !exists {
-		return c.Status(404).JSON(fiber.Map{
-			"error": fmt.Sprintf("Schema '%s' does not exist", req.Schema),
-		})
+		return SendNotFound(c, fmt.Sprintf("Schema '%s' does not exist", req.Schema))
 	}
 
 	// Check if table already exists
 	tableExists, err := h.tableExists(ctx, c, req.Schema, req.Name)
 	if err != nil {
 		log.Error().Err(err).Str("table", req.Schema+"."+req.Name).Msg("Failed to check table existence")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to check table existence",
-		})
+		return SendInternalError(c, "Failed to check table existence")
 	}
 	if tableExists {
-		return c.Status(409).JSON(fiber.Map{
-			"error": fmt.Sprintf("Table '%s.%s' already exists", req.Schema, req.Name),
-		})
+		return SendConflict(c, fmt.Sprintf("Table '%s.%s' already exists", req.Schema, req.Name), ErrCodeAlreadyExists)
 	}
 
 	// Build CREATE TABLE statement
 	query, err := h.buildCreateTableQuery(req)
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
 	log.Info().
@@ -242,9 +212,7 @@ func (h *DDLHandler) CreateTable(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Error().Err(err).Str("table", req.Schema+"."+req.Name).Msg("Failed to create table")
-		return c.Status(500).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to create table: %v", err),
-		})
+		return SendInternalError(c, "Failed to create table")
 	}
 
 	// Grant permissions to service_role for instance_admin access
@@ -272,21 +240,14 @@ func (h *DDLHandler) DeleteTable(c fiber.Ctx) error {
 
 	// Validate identifiers
 	if err := validateIdentifier(schema, "schema"); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 	if err := validateIdentifier(table, "table"); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	ctx := c.RequestCtx()
@@ -295,14 +256,10 @@ func (h *DDLHandler) DeleteTable(c fiber.Ctx) error {
 	exists, err := h.tableExists(ctx, c, schema, table)
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to check table existence")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to check table existence",
-		})
+		return SendInternalError(c, "Failed to check table existence")
 	}
 	if !exists {
-		return c.Status(404).JSON(fiber.Map{
-			"error": fmt.Sprintf("Table '%s.%s' does not exist", schema, table),
-		})
+		return SendNotFound(c, fmt.Sprintf("Table '%s.%s' does not exist", schema, table))
 	}
 
 	// Build DROP TABLE statement
@@ -316,9 +273,7 @@ func (h *DDLHandler) DeleteTable(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Msg("Failed to drop table")
-		return c.Status(500).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to drop table: %v", err),
-		})
+		return SendInternalError(c, "Failed to drop table")
 	}
 
 	h.invalidateCache(ctx)
@@ -351,8 +306,8 @@ func (h *DDLHandler) AddColumn(c fiber.Ctx) error {
 	}
 
 	var req AddColumnRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return SendInvalidBody(c)
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate column name
@@ -360,11 +315,8 @@ func (h *DDLHandler) AddColumn(c fiber.Ctx) error {
 		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	// Validate data type
@@ -415,9 +367,7 @@ func (h *DDLHandler) AddColumn(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Str("column", req.Name).Msg("Failed to add column")
-		return c.Status(500).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to add column: %v", err),
-		})
+		return SendInternalError(c, "Failed to add column")
 	}
 
 	h.invalidateCache(ctx)
@@ -445,11 +395,8 @@ func (h *DDLHandler) DropColumn(c fiber.Ctx) error {
 		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	ctx := c.RequestCtx()
@@ -515,15 +462,12 @@ func (h *DDLHandler) RenameTable(c fiber.Ctx) error {
 	}
 
 	var req RenameTableRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return SendInvalidBody(c)
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	// Validate new table name
@@ -564,9 +508,7 @@ func (h *DDLHandler) RenameTable(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Error().Err(err).Str("table", schema+"."+table).Str("newName", req.NewName).Msg("Failed to rename table")
-		return c.Status(500).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to rename table: %v", err),
-		})
+		return SendInternalError(c, "Failed to rename table")
 	}
 
 	h.invalidateCache(ctx)
@@ -914,11 +856,8 @@ func (h *DDLHandler) setupSchemaDefaultPrivileges(ctx context.Context, c fiber.C
 
 // ListSchemas returns all user schemas (excluding system schemas)
 func (h *DDLHandler) ListSchemas(c fiber.Ctx) error {
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	ctx := c.RequestCtx()
@@ -974,11 +913,8 @@ func (h *DDLHandler) ListSchemas(c fiber.Ctx) error {
 
 // ListTables returns all tables, optionally filtered by schema
 func (h *DDLHandler) ListTables(c fiber.Ctx) error {
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	ctx := c.RequestCtx()

@@ -59,23 +59,17 @@ func parseTableIdentifier(tableIdentifier string) (string, string, error) {
 // HandleBulkAction processes a bulk action request
 func (h *BulkOperationsHandler) HandleBulkAction(c fiber.Ctx) error {
 	var req BulkActionRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate request
 	if req.Action == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Action is required",
-		})
+		return SendMissingField(c, "action")
 	}
 
 	if len(req.Targets) == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "At least one target ID is required",
-		})
+		return SendBadRequest(c, "At least one target ID is required", ErrCodeMissingField)
 	}
 
 	// Get table name from request or context
@@ -84,31 +78,23 @@ func (h *BulkOperationsHandler) HandleBulkAction(c fiber.Ctx) error {
 		// Try to get from query parameter
 		tableName = c.Query("table", "")
 		if tableName == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Table name is required",
-			})
+			return SendMissingField(c, "table")
 		}
 	}
 
 	// Parse schema and table name
 	schema, table, err := parseTableIdentifier(tableName)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": fmt.Sprintf("Invalid table name: %v", err),
-		})
+		return SendBadRequest(c, fmt.Sprintf("Invalid table name: %v", err), ErrCodeInvalidInput)
 	}
 
 	// Get table metadata to verify it exists and get primary key
 	tableInfo, exists, err := h.schemaCache.GetTable(c.RequestCtx(), schema, table)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to lookup table: %v", err),
-		})
+		return SendInternalError(c, "Failed to lookup table")
 	}
 	if !exists {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": fmt.Sprintf("Table not found: %s", tableName),
-		})
+		return SendNotFound(c, fmt.Sprintf("Table not found: %s", tableName))
 	}
 
 	// Get primary key column
@@ -127,9 +113,7 @@ func (h *BulkOperationsHandler) HandleBulkAction(c fiber.Ctx) error {
 		return h.handleBulkExport(c, ctx, schema, table, pkColumn, req.Targets)
 
 	default:
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": fmt.Sprintf("Unknown action: %s. Supported actions: delete, export", req.Action),
-		})
+		return SendBadRequest(c, fmt.Sprintf("Unknown action: %s. Supported actions: delete, export", req.Action), ErrCodeInvalidInput)
 	}
 }
 
@@ -154,9 +138,7 @@ func (h *BulkOperationsHandler) handleBulkDelete(c fiber.Ctx, ctx context.Contex
 		return nil
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to delete records: %v", err),
-		})
+		return SendInternalError(c, "Failed to delete records")
 	}
 
 	return c.JSON(fiber.Map{
@@ -189,9 +171,7 @@ func (h *BulkOperationsHandler) handleBulkExport(c fiber.Ctx, ctx context.Contex
 		return err
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to export records: %v", err),
-		})
+		return SendInternalError(c, "Failed to export records")
 	}
 
 	return c.JSON(fiber.Map{

@@ -1815,7 +1815,7 @@ func (h *KnowledgeBaseHandler) GetKnowledgeGraph(c fiber.Ctx) error {
 			WHERE entity_id = ANY($1)
 			GROUP BY entity_id
 		`
-		rows, err := h.storage.db.Query(ctx, query, entityIDs)
+		rows, err := h.storage.DB.Query(ctx, query, entityIDs)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {

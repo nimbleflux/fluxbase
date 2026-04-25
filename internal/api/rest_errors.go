@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/middleware"
+
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 )
 
 // Standard error codes for consistent API error responses.
@@ -84,6 +87,18 @@ type ErrorResponse struct {
 	Hint      string      `json:"hint,omitempty"`
 	Details   interface{} `json:"details,omitempty"`
 	RequestID string      `json:"request_id,omitempty"`
+}
+
+// SendAppError sends a standardized error response from an AppError.
+// If the error is not an AppError, it returns a generic 500 response.
+// This is the bridge between domain errors (internal/errors) and HTTP responses.
+func SendAppError(c fiber.Ctx, err error) error {
+	var appErr *apperrors.AppError
+	if errors.As(err, &appErr) {
+		return SendErrorWithCode(c, appErr.HTTPStatus(), appErr.Message(), appErr.Code())
+	}
+	log.Error().Err(err).Str("path", c.Path()).Msg("Unhandled error")
+	return SendErrorWithCode(c, 500, "Internal Server Error", ErrCodeInternalError)
 }
 
 // SendError sends a standardized error response with request ID

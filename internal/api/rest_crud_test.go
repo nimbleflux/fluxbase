@@ -68,7 +68,7 @@ func TestIsAdminUser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 
 			var result bool
 			app.Get("/test", func(c fiber.Ctx) error {
@@ -732,7 +732,7 @@ func TestRESTHandler_isInConflictTarget(t *testing.T) {
 // =============================================================================
 
 func TestMakePostHandler_ValidationErrors(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := &RESTHandler{}
 
 	table := database.TableInfo{
@@ -787,7 +787,7 @@ func TestMakePostHandler_ValidationErrors(t *testing.T) {
 			},
 		}
 
-		app2 := fiber.New()
+		app2 := newTestApp(t)
 		app2.Post("/places", handler.makePostHandler(tableWithGeom))
 
 		// Send partial GeoJSON (missing coordinates)
@@ -806,7 +806,7 @@ func TestMakePostHandler_ValidationErrors(t *testing.T) {
 }
 
 func TestMakePutHandler_ValidationErrors(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := &RESTHandler{}
 
 	table := database.TableInfo{
@@ -852,7 +852,7 @@ func TestMakePutHandler_ValidationErrors(t *testing.T) {
 
 // TestMakeGetHandler_InvalidQuery tests that makeGetHandler is called and validates query strings
 func TestMakeGetHandler_InvalidQuery(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := &RESTHandler{}
 
 	table := database.TableInfo{

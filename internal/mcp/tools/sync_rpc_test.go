@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/nimbleflux/fluxbase/internal/loader"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
@@ -233,32 +234,32 @@ SELECT * FROM data;`
 
 func TestParseCommaSeparatedList(t *testing.T) {
 	t.Run("empty string", func(t *testing.T) {
-		result := parseCommaSeparatedList("")
+		result := loader.ParseCommaList("")
 		assert.Nil(t, result)
 	})
 
 	t.Run("single item", func(t *testing.T) {
-		result := parseCommaSeparatedList("users")
+		result := loader.ParseCommaList("users")
 		assert.Equal(t, []string{"users"}, result)
 	})
 
 	t.Run("multiple items", func(t *testing.T) {
-		result := parseCommaSeparatedList("users, orders, products")
+		result := loader.ParseCommaList("users, orders, products")
 		assert.Equal(t, []string{"users", "orders", "products"}, result)
 	})
 
 	t.Run("trims whitespace", func(t *testing.T) {
-		result := parseCommaSeparatedList("  users  ,  orders  ,  products  ")
+		result := loader.ParseCommaList("  users  ,  orders  ,  products  ")
 		assert.Equal(t, []string{"users", "orders", "products"}, result)
 	})
 
 	t.Run("filters empty items", func(t *testing.T) {
-		result := parseCommaSeparatedList("users,,orders,  ,products")
+		result := loader.ParseCommaList("users,,orders,  ,products")
 		assert.Equal(t, []string{"users", "orders", "products"}, result)
 	})
 
 	t.Run("no commas", func(t *testing.T) {
-		result := parseCommaSeparatedList("singlevalue")
+		result := loader.ParseCommaList("singlevalue")
 		assert.Equal(t, []string{"singlevalue"}, result)
 	})
 }

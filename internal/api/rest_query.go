@@ -57,11 +57,8 @@ func (h *RESTHandler) makePostQueryHandler(table database.TableInfo) fiber.Handl
 
 		// Parse request body
 		var req PostQueryRequest
-		if err := c.Bind().Body(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":   "Invalid request body",
-				"details": err.Error(),
-			})
+		if err := ParseBody(c, &req); err != nil {
+			return err
 		}
 
 		// Convert POST request to QueryParams

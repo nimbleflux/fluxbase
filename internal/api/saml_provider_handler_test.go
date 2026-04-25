@@ -498,7 +498,7 @@ func TestSAMLProviderNamePattern(t *testing.T) {
 
 func TestCreateSAMLProvider_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Post("/saml/providers", handler.CreateSAMLProvider)
@@ -519,7 +519,7 @@ func TestCreateSAMLProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid provider name format", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Post("/saml/providers", handler.CreateSAMLProvider)
@@ -541,7 +541,7 @@ func TestCreateSAMLProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("name starts with uppercase", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Post("/saml/providers", handler.CreateSAMLProvider)
@@ -558,7 +558,7 @@ func TestCreateSAMLProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("missing metadata URL and XML", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Post("/saml/providers", handler.CreateSAMLProvider)
@@ -580,7 +580,7 @@ func TestCreateSAMLProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("empty metadata URL and XML", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Post("/saml/providers", handler.CreateSAMLProvider)
@@ -603,7 +603,7 @@ func TestCreateSAMLProvider_Validation(t *testing.T) {
 
 func TestGetSAMLProvider_Validation(t *testing.T) {
 	t.Run("invalid provider ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Get("/saml/providers/:id", handler.GetSAMLProvider)
@@ -623,7 +623,7 @@ func TestGetSAMLProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("valid UUID format is accepted", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Get("/saml/providers/:id", handler.GetSAMLProvider)
@@ -646,7 +646,7 @@ func TestGetSAMLProvider_Validation(t *testing.T) {
 
 func TestUpdateSAMLProvider_Validation(t *testing.T) {
 	t.Run("invalid provider ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Put("/saml/providers/:id", handler.UpdateSAMLProvider)
@@ -674,7 +674,7 @@ func TestUpdateSAMLProvider_Validation(t *testing.T) {
 
 func TestDeleteSAMLProvider_Validation(t *testing.T) {
 	t.Run("invalid provider ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Delete("/saml/providers/:id", handler.DeleteSAMLProvider)
@@ -700,7 +700,7 @@ func TestDeleteSAMLProvider_Validation(t *testing.T) {
 
 func TestValidateMetadata_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Post("/saml/validate-metadata", handler.ValidateMetadata)
@@ -721,7 +721,7 @@ func TestValidateMetadata_Validation(t *testing.T) {
 	})
 
 	t.Run("missing both URL and XML", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Post("/saml/validate-metadata", handler.ValidateMetadata)
@@ -743,7 +743,7 @@ func TestValidateMetadata_Validation(t *testing.T) {
 	})
 
 	t.Run("empty URL and XML", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Post("/saml/validate-metadata", handler.ValidateMetadata)
@@ -766,7 +766,7 @@ func TestValidateMetadata_Validation(t *testing.T) {
 
 func TestGetSPMetadata_Validation(t *testing.T) {
 	t.Run("no SAML service returns 503", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSAMLProviderHandler(nil, nil)
 
 		app.Get("/saml/metadata/:provider", handler.GetSPMetadata)
@@ -777,12 +777,10 @@ func TestGetSPMetadata_Validation(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
-		assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
+		assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
 
 		body, _ := io.ReadAll(resp.Body)
-		var result map[string]interface{}
-		_ = json.Unmarshal(body, &result)
-		assert.Equal(t, "SAML service not available", result["error"])
+		assert.Contains(t, string(body), "not_initialized")
 	})
 }
 

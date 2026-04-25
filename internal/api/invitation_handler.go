@@ -35,6 +35,20 @@ func NewInvitationHandler(
 	}
 }
 
+func (h *InvitationHandler) requireInvitationService(c fiber.Ctx) error {
+	if h.invitationService == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
+func (h *InvitationHandler) requireDashboardAuth(c fiber.Ctx) error {
+	if h.dashboardAuth == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 func invitationErrorDetails(err error) string {
 	switch {
 	case errors.Is(err, auth.ErrInvitationExpired):
@@ -62,8 +76,8 @@ func invitationErrorStatus(err error) int {
 }
 
 type CreateInvitationRequest struct {
-	Email          string `json:"email" validate:"required,email"`
-	Role           string `json:"role" validate:"required,oneof=instance_admin tenant_admin"`
+	Email          string `json:"email"`
+	Role           string `json:"role"`
 	ExpiryDuration int64  `json:"expiry_duration,omitempty"`
 }
 
@@ -81,8 +95,8 @@ type ValidateInvitationResponse struct {
 }
 
 type AcceptInvitationRequest struct {
-	Password string `json:"password" validate:"required,min=12"`
-	Name     string `json:"name" validate:"required,min=2"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
 }
 
 type AcceptInvitationResponse struct {
@@ -97,42 +111,34 @@ func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 
 	inviterID, ok := c.Locals("user_id").(string)
 	if !ok {
-		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{
-			"error": "User not authenticated",
-		})
+		return SendUnauthorized(c, "User not authenticated", ErrCodeAuthRequired)
 	}
 
 	inviterUUID, err := uuid.Parse(inviterID)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	var req CreateInvitationRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if err := auth.ValidateDashboardRole(req.Role); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, err.Error(), ErrCodeInvalidRole)
 	}
 
 	inviterRole, ok := c.Locals("user_role").(string)
 	if !ok {
-		return c.Status(http.StatusUnauthorized).JSON(fiber.Map{
-			"error": "User role not found",
-		})
+		return SendUnauthorized(c, "User role not found", ErrCodeAuthRequired)
 	}
 
 	if req.Role == "tenant_admin" && inviterRole != "instance_admin" {
-		return c.Status(http.StatusForbidden).JSON(fiber.Map{
-			"error": "Only instance_admin can invite tenant_admin users",
-		})
+		return SendForbidden(c, "Only instance_admin can invite tenant_admin users", ErrCodeInsufficientPermissions)
+	}
+
+	if err := h.requireInvitationService(c); err != nil {
+		return err
 	}
 
 	expiryDuration := 7 * 24 * time.Hour
@@ -142,9 +148,7 @@ func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 
 	invitation, err := h.invitationService.CreateInvitation(ctx, req.Email, req.Role, &inviterUUID, expiryDuration)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to create invitation: %v", err),
-		})
+		return SendInternalError(c, "Failed to create invitation")
 	}
 
 	inviteLink := fmt.Sprintf("%s/invite/%s", h.baseURL, invitation.PlaintextToken)
@@ -184,6 +188,10 @@ func (h *InvitationHandler) ValidateInvitation(c fiber.Ctx) error {
 		})
 	}
 
+	if err := h.requireInvitationService(c); err != nil {
+		return err
+	}
+
 	invitation, err := h.invitationService.ValidateToken(ctx, token)
 	if err != nil {
 		return c.JSON(ValidateInvitationResponse{
@@ -203,43 +211,39 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 
 	token := c.Params("token")
 	if token == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Token is required",
-		})
+		return SendMissingField(c, "Token")
 	}
 
 	var req AcceptInvitationRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if err := auth.ValidateDashboardPassword(req.Password); err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
+	}
+
+	if err := h.requireInvitationService(c); err != nil {
+		return err
+	}
+
+	if err := h.requireDashboardAuth(c); err != nil {
+		return err
 	}
 
 	invitation, err := h.invitationService.ValidateToken(ctx, token)
 	if err != nil {
-		return c.Status(invitationErrorStatus(err)).JSON(fiber.Map{
-			"error": invitationErrorDetails(err),
-		})
+		return SendError(c, invitationErrorStatus(err), invitationErrorDetails(err))
 	}
 
 	_, err = h.dashboardAuth.GetDB().Exec(ctx, "SET LOCAL app.invitation_token = $1", token)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to set session context",
-		})
+		return SendInternalError(c, "Failed to set session context")
 	}
 
 	user, err := h.dashboardAuth.CreateUser(ctx, invitation.Email, req.Password, req.Name)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to create user: %v", err),
-		})
+		return SendInternalError(c, "Failed to create user")
 	}
 
 	_, err = h.dashboardAuth.GetDB().Exec(ctx, `
@@ -248,9 +252,7 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 		WHERE id = $2
 	`, invitation.Role, user.ID)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to set user role and verify email",
-		})
+		return SendInternalError(c, "Failed to set user role and verify email")
 	}
 
 	if err := h.invitationService.AcceptInvitation(ctx, token); err != nil {
@@ -263,9 +265,7 @@ func (h *InvitationHandler) AcceptInvitation(c fiber.Ctx) error {
 
 	loggedInUser, loginResp, err := h.dashboardAuth.Login(ctx, invitation.Email, req.Password, nil, c.Get("User-Agent"))
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User created but failed to generate access token",
-		})
+		return SendInternalError(c, "User created but failed to generate access token")
 	}
 
 	return c.Status(http.StatusCreated).JSON(AcceptInvitationResponse{
@@ -282,11 +282,13 @@ func (h *InvitationHandler) ListInvitations(c fiber.Ctx) error {
 	includeAccepted := c.Query("include_accepted", "false") == "true"
 	includeExpired := c.Query("include_expired", "false") == "true"
 
+	if err := h.requireInvitationService(c); err != nil {
+		return err
+	}
+
 	invitations, err := h.invitationService.ListInvitations(ctx, includeAccepted, includeExpired)
 	if err != nil {
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to list invitations",
-		})
+		return SendInternalError(c, "Failed to list invitations")
 	}
 
 	return c.JSON(fiber.Map{
@@ -299,20 +301,18 @@ func (h *InvitationHandler) RevokeInvitation(c fiber.Ctx) error {
 
 	token := c.Params("token")
 	if token == "" {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Token is required",
-		})
+		return SendMissingField(c, "Token")
+	}
+
+	if err := h.requireInvitationService(c); err != nil {
+		return err
 	}
 
 	if err := h.invitationService.RevokeInvitation(ctx, token); err != nil {
 		if errors.Is(err, auth.ErrInvitationNotFound) {
-			return c.Status(http.StatusNotFound).JSON(fiber.Map{
-				"error": "Invitation not found",
-			})
+			return SendNotFound(c, "Invitation not found")
 		}
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to revoke invitation",
-		})
+		return SendInternalError(c, "Failed to revoke invitation")
 	}
 
 	return c.JSON(fiber.Map{

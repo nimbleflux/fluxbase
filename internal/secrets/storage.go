@@ -67,14 +67,6 @@ func NewStorage(db *database.Connection, encryptionKey string) *Storage {
 	}
 }
 
-// tenantOrNil converts an empty tenant ID string to nil for UUID column compatibility.
-func tenantOrNil(tenantID string) interface{} {
-	if tenantID == "" {
-		return nil
-	}
-	return tenantID
-}
-
 // CreateSecret creates a new secret with encrypted value
 func (s *Storage) CreateSecret(ctx context.Context, secret *Secret, plainValue string, userID *uuid.UUID) error {
 	tenantID := database.TenantFromContext(ctx)
@@ -129,7 +121,7 @@ func (s *Storage) GetSecret(ctx context.Context, id uuid.UUID) (*Secret, error) 
 
 	secret := &Secret{}
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, id, tenantOrNil(tenantID)).Scan(
+		return tx.QueryRow(ctx, query, id, database.TenantOrNil(tenantID)).Scan(
 			&secret.ID, &secret.Name, &secret.Scope, &secret.Namespace,
 			&secret.Description, &secret.Version, &secret.ExpiresAt,
 			&secret.CreatedAt, &secret.UpdatedAt, &secret.CreatedBy, &secret.UpdatedBy,
@@ -157,7 +149,7 @@ func (s *Storage) GetSecretByName(ctx context.Context, name string, namespace *s
 			WHERE name = $1 AND scope = 'global' AND namespace IS NULL
 			  AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 		`
-		args = []interface{}{name, tenantOrNil(tenantID)}
+		args = []interface{}{name, database.TenantOrNil(tenantID)}
 	} else {
 		query = `
 			SELECT id, name, scope, namespace, description, version, expires_at,
@@ -166,7 +158,7 @@ func (s *Storage) GetSecretByName(ctx context.Context, name string, namespace *s
 			WHERE name = $1 AND namespace = $2
 			  AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))
 		`
-		args = []interface{}{name, *namespace, tenantOrNil(tenantID)}
+		args = []interface{}{name, *namespace, database.TenantOrNil(tenantID)}
 	}
 
 	secret := &Secret{}
@@ -195,7 +187,7 @@ func (s *Storage) ListSecrets(ctx context.Context, scope *string, namespace *str
 		FROM functions.secrets
 		WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 	`
-	args := []interface{}{tenantOrNil(tenantID)}
+	args := []interface{}{database.TenantOrNil(tenantID)}
 	argIdx := 2
 
 	if scope != nil {
@@ -468,7 +460,7 @@ func (s *Storage) GetStats(ctx context.Context) (total int, expiringSoon int, ex
 	`
 
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, tenantOrNil(tenantID)).Scan(&total, &expiringSoon, &expired)
+		return tx.QueryRow(ctx, query, database.TenantOrNil(tenantID)).Scan(&total, &expiringSoon, &expired)
 	})
 	if err != nil {
 		err = fmt.Errorf("failed to get secret stats: %w", err)

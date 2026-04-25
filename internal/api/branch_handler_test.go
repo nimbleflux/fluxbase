@@ -250,7 +250,8 @@ func TestCreateBranch_Validation(t *testing.T) {
 		err = json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Equal(t, "branching_disabled", result["error"])
+		assert.Contains(t, result["error"], "not enabled")
+		assert.Equal(t, "SERVICE_UNAVAILABLE", result["code"])
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
@@ -277,7 +278,7 @@ func TestCreateBranch_Validation(t *testing.T) {
 		err = json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Equal(t, "invalid_request", result["error"])
+		assert.Contains(t, result["error"], "Invalid request body")
 	})
 
 	t.Run("empty branch name", func(t *testing.T) {
@@ -305,8 +306,7 @@ func TestCreateBranch_Validation(t *testing.T) {
 		err = json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Equal(t, "validation_error", result["error"])
-		assert.Contains(t, result["message"], "Branch name is required")
+		assert.Equal(t, "Branch name is required", result["error"])
 	})
 
 	t.Run("invalid expires_in duration", func(t *testing.T) {
@@ -334,8 +334,7 @@ func TestCreateBranch_Validation(t *testing.T) {
 		err = json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Equal(t, "validation_error", result["error"])
-		assert.Contains(t, result["message"], "Invalid expires_in duration")
+		assert.Contains(t, result["error"], "Invalid expires_in duration")
 	})
 }
 
@@ -656,7 +655,8 @@ func TestSetActiveBranch_Validation(t *testing.T) {
 		err = json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Equal(t, "branching_disabled", result["error"])
+		assert.Contains(t, result["error"], "not enabled")
+		assert.Equal(t, "SERVICE_UNAVAILABLE", result["code"])
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
@@ -702,8 +702,7 @@ func TestSetActiveBranch_Validation(t *testing.T) {
 		err = json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Equal(t, "validation_error", result["error"])
-		assert.Contains(t, result["message"], "Branch slug is required")
+		assert.Equal(t, "Branch slug is required", result["error"])
 	})
 }
 
@@ -774,7 +773,7 @@ func TestUpsertGitHubConfig_Validation(t *testing.T) {
 		err = json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Equal(t, "invalid_request", result["error"])
+		assert.Contains(t, result["error"], "Invalid request body")
 	})
 
 	t.Run("empty repository", func(t *testing.T) {
@@ -800,8 +799,7 @@ func TestUpsertGitHubConfig_Validation(t *testing.T) {
 		err = json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Equal(t, "validation_error", result["error"])
-		assert.Contains(t, result["message"], "Repository is required")
+		assert.Equal(t, "Repository is required", result["error"])
 	})
 }
 

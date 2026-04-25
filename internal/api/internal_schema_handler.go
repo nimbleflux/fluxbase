@@ -76,7 +76,7 @@ func (h *InternalSchemaHandler) Initialize(cfg *config.Config, db *database.Conn
 // DumpSchema handles POST /api/v1/admin/internal-schema/dump
 func (h *InternalSchemaHandler) DumpSchema(c fiber.Ctx) error {
 	if h.declarative == nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Handler not initialized"})
+		return SendInternalError(c, "Handler not initialized")
 	}
 
 	ctx := c.Context()
@@ -86,7 +86,7 @@ func (h *InternalSchemaHandler) DumpSchema(c fiber.Ctx) error {
 		Schema string `json:"schema"` // Optional: dump a specific schema
 	}
 	if err := c.Bind().Body(&req); err != nil && err != fiber.ErrUnprocessableEntity {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+		return SendBadRequest(c, "Invalid request body", ErrCodeInvalidBody)
 	}
 
 	schemaDir := h.config.SchemaDir
@@ -98,12 +98,12 @@ func (h *InternalSchemaHandler) DumpSchema(c fiber.Ctx) error {
 	if req.Schema != "" {
 		outputPath := filepath.Join(schemaDir, req.Schema+".sql")
 		if err := h.declarative.DumpForSchema(ctx, req.Schema, outputPath); err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+			return SendInternalError(c, "Failed to dump schema")
 		}
 
 		content, err := os.ReadFile(outputPath)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to read dumped schema"})
+			return SendInternalError(c, "Failed to read dumped schema")
 		}
 
 		return c.JSON(fiber.Map{
@@ -117,7 +117,7 @@ func (h *InternalSchemaHandler) DumpSchema(c fiber.Ctx) error {
 
 	// Dump all schemas
 	if err := h.declarative.Dump(ctx, schemaDir); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		return SendInternalError(c, "Failed to dump schemas")
 	}
 
 	return c.JSON(fiber.Map{
@@ -129,7 +129,7 @@ func (h *InternalSchemaHandler) DumpSchema(c fiber.Ctx) error {
 // PlanSchema handles POST /api/v1/admin/internal-schema/plan
 func (h *InternalSchemaHandler) PlanSchema(c fiber.Ctx) error {
 	if h.declarative == nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Handler not initialized"})
+		return SendInternalError(c, "Handler not initialized")
 	}
 
 	ctx := c.Context()
@@ -138,7 +138,7 @@ func (h *InternalSchemaHandler) PlanSchema(c fiber.Ctx) error {
 		Schema string `json:"schema"` // Optional: plan a specific schema
 	}
 	if err := c.Bind().Body(&req); err != nil && err != fiber.ErrUnprocessableEntity {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+		return SendBadRequest(c, "Invalid request body", ErrCodeInvalidBody)
 	}
 
 	var plan *migrations.Plan
@@ -151,7 +151,7 @@ func (h *InternalSchemaHandler) PlanSchema(c fiber.Ctx) error {
 	}
 
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		return SendInternalError(c, "Failed to generate schema plan")
 	}
 
 	return c.JSON(fiber.Map{
@@ -174,7 +174,7 @@ func (h *InternalSchemaHandler) PlanSchema(c fiber.Ctx) error {
 // ApplySchema handles POST /api/v1/admin/internal-schema/apply
 func (h *InternalSchemaHandler) ApplySchema(c fiber.Ctx) error {
 	if h.declarative == nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Handler not initialized"})
+		return SendInternalError(c, "Handler not initialized")
 	}
 
 	ctx := c.Context()
@@ -185,7 +185,7 @@ func (h *InternalSchemaHandler) ApplySchema(c fiber.Ctx) error {
 		AllowDestructive bool   `json:"allow_destructive"`
 	}
 	if err := c.Bind().Body(&req); err != nil && err != fiber.ErrUnprocessableEntity {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+		return SendBadRequest(c, "Invalid request body", ErrCodeInvalidBody)
 	}
 
 	// Update allow destructive setting temporarily
@@ -203,7 +203,7 @@ func (h *InternalSchemaHandler) ApplySchema(c fiber.Ctx) error {
 	}
 
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		return SendInternalError(c, "Failed to apply schema")
 	}
 
 	return c.JSON(fiber.Map{
@@ -216,14 +216,14 @@ func (h *InternalSchemaHandler) ApplySchema(c fiber.Ctx) error {
 // ValidateSchema handles GET /api/v1/admin/internal-schema/validate
 func (h *InternalSchemaHandler) ValidateSchema(c fiber.Ctx) error {
 	if h.declarative == nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Handler not initialized"})
+		return SendInternalError(c, "Handler not initialized")
 	}
 
 	ctx := c.Context()
 
 	result, err := h.declarative.Validate(ctx)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		return SendInternalError(c, "Failed to validate schema")
 	}
 
 	return c.JSON(fiber.Map{
@@ -236,7 +236,7 @@ func (h *InternalSchemaHandler) ValidateSchema(c fiber.Ctx) error {
 // GetSchemaStatus handles GET /api/v1/admin/internal-schema/status
 func (h *InternalSchemaHandler) GetSchemaStatus(c fiber.Ctx) error {
 	if h.bootstrap == nil || h.validator == nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Handler not initialized"})
+		return SendInternalError(c, "Handler not initialized")
 	}
 
 	ctx := c.Context()
@@ -277,7 +277,7 @@ func (h *InternalSchemaHandler) GetSchemaStatus(c fiber.Ctx) error {
 // MigrateSchema handles POST /api/v1/admin/internal-schema/migrate
 func (h *InternalSchemaHandler) MigrateSchema(c fiber.Ctx) error {
 	if h.transition == nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Handler not initialized"})
+		return SendInternalError(c, "Handler not initialized")
 	}
 
 	ctx := c.Context()
@@ -287,7 +287,7 @@ func (h *InternalSchemaHandler) MigrateSchema(c fiber.Ctx) error {
 		KeepOldMigrations bool   `json:"keep_old_migrations"`
 	}
 	if err := c.Bind().Body(&req); err != nil && err != fiber.ErrUnprocessableEntity {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+		return SendBadRequest(c, "Invalid request body", ErrCodeInvalidBody)
 	}
 
 	schemaDir := h.config.SchemaDir
@@ -303,7 +303,7 @@ func (h *InternalSchemaHandler) MigrateSchema(c fiber.Ctx) error {
 
 	result, err := h.transition.Transition(ctx, opts)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		return SendInternalError(c, "Failed to migrate schema")
 	}
 
 	return c.JSON(fiber.Map{

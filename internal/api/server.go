@@ -129,15 +129,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	}
 
 	// Initialize OpenTelemetry tracer
-	tracerCfg := observability.TracerConfig{
-		Enabled:     cfg.Tracing.Enabled,
-		Endpoint:    cfg.Tracing.Endpoint,
-		ServiceName: cfg.Tracing.ServiceName,
-		Environment: cfg.Tracing.Environment,
-		SampleRate:  cfg.Tracing.SampleRate,
-		Insecure:    cfg.Tracing.Insecure,
-	}
-	tracer, err := observability.NewTracer(context.Background(), tracerCfg)
+	tracer, err := observability.NewTracer(context.Background(), cfg.Tracing)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to initialize OpenTelemetry tracer, tracing will be disabled")
 	}
@@ -562,173 +554,6 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	// Create schema export handler for TypeScript type generation
 	schemaExportHandler := NewSchemaExportHandler(schemaCache, db.Inspector())
 
-	// Create AI storage first (needed for provider lookup)
-	aiStorage := ai.NewStorage(db)
-	aiStorage.SetConfig(&cfg.AI)
-
-	// Create vector manager with hot-reload capability
-	vectorManager := NewVectorManager(&cfg.AI, aiStorage, db.Inspector(), db)
-
-	// Create vector search handler (for pgvector support) - create early for embedding service sharing
-	// Embedding can be enabled explicitly (EmbeddingEnabled=true) or via fallback from AI provider
-	var vectorHandler *VectorHandler
-	vectorHandler, err = NewVectorHandler(vectorManager, db.Inspector(), db, cfg)
-	//nolint:gocritic // Initialization state checks, not switch-compatible
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to initialize vector handler")
-	} else if vectorHandler.IsEmbeddingConfigured() {
-		// Embedding is available (either explicitly configured or via AI provider fallback)
-		provider := cfg.AI.EmbeddingProvider
-		if provider == "" {
-			provider = cfg.AI.ProviderType
-		}
-		model := ""
-		if vectorHandler.GetEmbeddingService() != nil {
-			model = vectorHandler.GetEmbeddingService().DefaultModel()
-		}
-		log.Info().
-			Str("provider", provider).
-			Str("model", model).
-			Bool("explicit_config", cfg.AI.EmbeddingEnabled).
-			Msg("Vector handler initialized with embedding support")
-	} else {
-		log.Info().Msg("Vector handler initialized (embedding not available)")
-	}
-
-	// Create AI components (only if AI is enabled)
-	var aiHandler *ai.Handler
-	var aiChatHandler *ai.ChatHandler
-	var aiConversations *ai.ConversationManager
-	var aiMetrics *observability.Metrics
-	if cfg.AI.Enabled {
-		// Create AI metrics
-		aiMetrics = observability.NewMetrics()
-
-		// AI storage already created above for vectorManager
-		// Create AI loader
-		aiLoader := ai.NewLoader(cfg.AI.ChatbotsDir)
-
-		// Create conversation manager
-		aiConversations = ai.NewConversationManager(db, cfg.AI.ConversationCacheTTL, cfg.AI.MaxConversationTurns)
-
-		// Create AI handler for admin endpoints (pass vectorManager for hot-reload)
-		aiHandler = ai.NewHandler(aiStorage, aiLoader, &cfg.AI, vectorManager)
-
-		// Get embedding service from vector handler (if available) for RAG support
-		var embeddingService *ai.EmbeddingService
-		if vectorHandler != nil {
-			embeddingService = vectorHandler.GetEmbeddingService()
-		}
-
-		// Create AI chat handler for WebSocket with RAG support
-		aiChatHandler = ai.NewChatHandler(db, aiStorage, aiConversations, aiMetrics, &cfg.AI, embeddingService, loggingService)
-
-		// Create settings resolver for chatbot template variable resolution
-		settingsResolver := ai.NewSettingsResolver(secretsService, 5*time.Minute)
-		aiChatHandler.SetSettingsResolver(settingsResolver)
-
-		log.Info().
-			Str("chatbots_dir", cfg.AI.ChatbotsDir).
-			Bool("auto_load", cfg.AI.AutoLoadOnBoot).
-			Str("provider_type", cfg.AI.ProviderType).
-			Str("provider_name", cfg.AI.ProviderName).
-			Str("provider_model", cfg.AI.ProviderModel).
-			Bool("rag_enabled", embeddingService != nil).
-			Msg("AI components initialized")
-	}
-
-	// Create knowledge base handler for RAG management
-	var knowledgeBaseHandler *ai.KnowledgeBaseHandler
-	var kbStorage *ai.KnowledgeBaseStorage
-	var docProcessor *ai.DocumentProcessor
-	var tableExportSyncService *ai.TableExportSyncService
-	var ocrService *ai.OCRService
-	var quotaHandler *QuotaHandler
-	if cfg.AI.Enabled {
-		// Initialize OCR service for image-based PDF extraction
-		if cfg.AI.OCREnabled {
-			var err error
-			ocrService, err = ai.NewOCRService(ai.OCRServiceConfig{
-				Enabled:          cfg.AI.OCREnabled,
-				ProviderType:     ai.OCRProviderType(cfg.AI.OCRProvider),
-				DefaultLanguages: cfg.AI.OCRLanguages,
-			})
-			if err != nil {
-				log.Warn().Err(err).Msg("Failed to initialize OCR service, OCR will be disabled")
-			} else if ocrService.IsEnabled() {
-				log.Info().
-					Str("provider", cfg.AI.OCRProvider).
-					Strs("languages", cfg.AI.OCRLanguages).
-					Msg("OCR service initialized")
-			}
-		}
-
-		kbStorage = ai.NewKnowledgeBaseStorage(db)
-
-		// Initialize knowledge graph for entity and relationship storage
-		knowledgeGraph := ai.NewKnowledgeGraph(kbStorage)
-		log.Info().Msg("Knowledge graph initialized")
-
-		// Initialize entity extractor for extracting entities from documents
-		entityExtractor := ai.NewRuleBasedExtractor()
-		log.Info().Msg("Entity extractor initialized")
-
-		if vectorHandler != nil && vectorHandler.GetEmbeddingService() != nil {
-			docProcessor = ai.NewDocumentProcessor(kbStorage, vectorHandler.GetEmbeddingService(), entityExtractor, knowledgeGraph)
-		}
-
-		// Use OCR-enabled handler if OCR service is available
-		if ocrService != nil && ocrService.IsEnabled() {
-			knowledgeBaseHandler = ai.NewKnowledgeBaseHandlerWithOCR(kbStorage, docProcessor, ocrService)
-		} else {
-			knowledgeBaseHandler = ai.NewKnowledgeBaseHandler(kbStorage, docProcessor)
-		}
-		knowledgeBaseHandler.SetStorageService(storageService)
-
-		// Initialize table exporter for database schema export
-		tableExporter := ai.NewTableExporter(db, docProcessor, knowledgeGraph, kbStorage)
-		knowledgeBaseHandler.SetTableExporter(tableExporter)
-		knowledgeBaseHandler.SetKnowledgeGraph(knowledgeGraph)
-		log.Info().Msg("Table exporter initialized")
-
-		// Initialize table export sync service
-		tableExportSyncService = ai.NewTableExportSyncService(db, tableExporter, kbStorage)
-		knowledgeBaseHandler.SetSyncService(tableExportSyncService)
-		log.Info().Msg("Table export sync service initialized")
-
-		// Set knowledge base storage on AI handler for syncing KB links during chatbot sync
-		aiHandler.SetKnowledgeBaseStorage(kbStorage)
-		log.Info().Msg("AI handler configured with knowledge base storage")
-
-		log.Info().
-			Bool("processing_enabled", docProcessor != nil).
-			Bool("ocr_enabled", ocrService != nil && ocrService.IsEnabled()).
-			Bool("entity_extraction_enabled", true).
-			Bool("table_export_enabled", true).
-			Bool("sync_enabled", true).
-			Msg("Knowledge base handler initialized")
-
-		// Initialize quota service and handler
-		quotaService := ai.NewQuotaService(kbStorage)
-		quotaHandler = NewQuotaHandler(quotaService, userMgmtService)
-		log.Info().Msg("Quota service and handler initialized")
-	}
-
-	// Create internal AI handler for custom MCP tools, edge functions, and jobs
-	// This allows runtime code to access AI capabilities via utils.ai.chat() and utils.ai.embed()
-	var internalAIHandler *InternalAIHandler
-	if cfg.AI.Enabled {
-		var embeddingSvc *ai.EmbeddingService
-		if vectorHandler != nil {
-			embeddingSvc = vectorHandler.GetEmbeddingService()
-		}
-		internalAIHandler = NewInternalAIHandler(aiStorage, embeddingSvc, cfg.AI.ProviderName)
-		log.Info().
-			Str("default_provider", cfg.AI.ProviderName).
-			Bool("embedding_enabled", embeddingSvc != nil).
-			Msg("Internal AI handler initialized for MCP tools/functions/jobs")
-	}
-
 	// Create internal schema handler for declarative schema management
 	internalSchemaHandler := NewInternalSchemaHandler()
 	internalSchemaHandler.Initialize(cfg, db)
@@ -751,49 +576,6 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Str("procedures_dir", cfg.RPC.ProceduresDir).
 			Bool("auto_load", cfg.RPC.AutoLoadOnBoot).
 			Msg("RPC components initialized")
-	}
-
-	// Create realtime components with connection limits from config
-	realtimeManager := realtime.NewManagerWithConfig(context.Background(), realtime.ManagerConfig{
-		MaxConnections:         cfg.Realtime.MaxConnections,
-		MaxConnectionsPerUser:  cfg.Realtime.MaxConnectionsPerUser,
-		MaxConnectionsPerIP:    cfg.Realtime.MaxConnectionsPerIP,
-		ClientMessageQueueSize: cfg.Realtime.ClientMessageQueueSize,
-	})
-	realtimeManager.SetBaseConfig(cfg)
-
-	// Set up cross-instance broadcasting via pub/sub (if configured)
-	if ps != nil {
-		realtimeManager.SetPubSub(ps)
-	}
-
-	realtimeAuthAdapter := realtime.NewAuthServiceAdapter(authService)
-	realtimeSubManager := realtime.NewSubscriptionManagerWithConfig(
-		realtime.NewPgxSubscriptionDB(db.Pool()),
-		realtime.RLSCacheConfig{
-			MaxSize: cfg.Realtime.RLSCacheSize,
-			TTL:     cfg.Realtime.RLSCacheTTL,
-		},
-	)
-	realtimeHandler := realtime.NewRealtimeHandler(realtimeManager, realtimeAuthAdapter, realtimeSubManager)
-	realtimeListener := realtime.NewListenerPool(
-		db.Pool(),
-		realtimeHandler,
-		realtimeSubManager,
-		ps,
-		realtime.ListenerPoolConfig{
-			PoolSize:    cfg.Realtime.ListenerPoolSize,
-			WorkerCount: cfg.Realtime.NotificationWorkers,
-			QueueSize:   cfg.Realtime.NotificationQueueSize,
-		},
-	)
-
-	// Create monitoring handler
-	monitoringHandler := NewMonitoringHandler(db.Pool(), realtimeHandler, storageService.Provider)
-
-	// Set logging service if available for log queries
-	if loggingService != nil {
-		monitoringHandler.SetLoggingService(loggingService)
 	}
 
 	// Create server instance with handler groups
@@ -827,20 +609,8 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Handler: storageHandler,
 		},
 
-		// AI handlers group
-		AI: &AIHandlers{
-			Handler:         aiHandler,
-			Chat:            aiChatHandler,
-			Conversations:   aiConversations,
-			Metrics:         aiMetrics,
-			KnowledgeBase:   knowledgeBaseHandler,
-			KBStorage:       kbStorage,
-			DocProcessor:    docProcessor,
-			TableExportSync: tableExportSyncService,
-			VectorManager:   vectorManager,
-			VectorHandler:   vectorHandler,
-			Internal:        internalAIHandler,
-		},
+		// AI handlers group (populated by initAI)
+		AI: &AIHandlers{},
 
 		// Functions handlers group
 		Functions: &FunctionsHandlers{
@@ -855,12 +625,9 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Scheduler: jobsScheduler,
 		},
 
-		// Realtime handlers group
+		// Realtime handlers group (populated by initRealtime, Admin set here)
 		Realtime: &RealtimeHandlers{
-			Manager:  realtimeManager,
-			Handler:  realtimeHandler,
-			Listener: realtimeListener,
-			Admin:    realtimeAdminHandler,
+			Admin: realtimeAdminHandler,
 		},
 
 		// MCP handlers group
@@ -958,15 +725,11 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Settings: captchaSettingsHandler,
 		},
 
-		// Monitoring handlers group
-		Monitoring: &MonitoringHandlers{
-			Handler: monitoringHandler,
-		},
+		// Monitoring handlers group (populated by initRealtime)
+		Monitoring: &MonitoringHandlers{},
 
-		// Quota handlers group
-		Quota: &QuotaHandlers{
-			Handler: quotaHandler,
-		},
+		// Quota handlers group (Handler populated by initAI)
+		Quota: &QuotaHandlers{},
 
 		// Middleware components
 		Middleware: &MiddlewareComponents{
@@ -993,9 +756,15 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		tenantConfigLoader: nil, // Initialized later after migrations
 	}
 
+	// Initialize AI components (populates server.AI and server.Quota.Handler)
+	server.initAI(storageService, loggingService, secretsService, userMgmtService)
+
+	// Initialize realtime components and monitoring handler (populates server.Realtime and server.Monitoring)
+	server.initRealtime(ps, authService, storageService, loggingService)
+
 	// Initialize MCP Server if enabled
 	if cfg.MCP.Enabled {
-		server.setupMCPServer(schemaCache, storageService, functionsHandler, rpcHandler, vectorHandler)
+		server.setupMCPServer(schemaCache, storageService, functionsHandler, rpcHandler, server.AI.VectorHandler)
 		log.Info().
 			Str("base_path", cfg.MCP.BasePath).
 			Dur("session_timeout", cfg.MCP.SessionTimeout).
@@ -1004,7 +773,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 
 	// Initialize Database Branching if enabled
 	if cfg.Branching.Enabled {
-		branchStorage := branching.NewStorage(db.Pool(), cfg.EncryptionKey)
+		branchStorage := branching.NewStorage(db, cfg.EncryptionKey)
 		dbURL := cfg.Database.RuntimeConnectionString()
 		branchManager, err := branching.NewManager(branchStorage, cfg.Branching, db.Pool(), dbURL)
 		if err != nil {
@@ -1060,162 +829,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		}
 	}
 
-	// Start realtime listener (unless disabled or in worker-only mode)
-	if !cfg.Scaling.DisableRealtime && !cfg.Scaling.WorkerOnly {
-		if err := realtimeListener.Start(); err != nil {
-			log.Error().Err(err).Msg("Failed to start realtime listener")
-		}
-	} else {
-		log.Info().
-			Bool("disable_realtime", cfg.Scaling.DisableRealtime).
-			Bool("worker_only", cfg.Scaling.WorkerOnly).
-			Msg("Realtime listener disabled by scaling configuration")
-	}
-
-	// Start edge functions scheduler (respects scaling configuration)
-	if !cfg.Scaling.DisableScheduler && !cfg.Scaling.WorkerOnly {
-		if cfg.Scaling.EnableSchedulerLeaderElection {
-			// Use leader election - only the leader will run the scheduler
-			server.Scaling.FunctionsLeader = scaling.NewLeaderElector(
-				db.Pool(),
-				scaling.FunctionsSchedulerLockID,
-				"functions-scheduler",
-			)
-			server.Scaling.FunctionsLeader.Start(
-				func() {
-					// Became leader - start the scheduler
-					log.Info().Msg("This instance is now the functions scheduler leader")
-					if err := functionsScheduler.Start(); err != nil {
-						log.Error().Err(err).Msg("Failed to start edge functions scheduler")
-					}
-				},
-				func() {
-					// Lost leadership - stop the scheduler
-					log.Warn().Msg("Lost functions scheduler leadership - stopping scheduler")
-					functionsScheduler.Stop()
-				},
-			)
-		} else {
-			// No leader election - start scheduler directly
-			if err := functionsScheduler.Start(); err != nil {
-				log.Error().Err(err).Msg("Failed to start edge functions scheduler")
-			}
-		}
-	} else {
-		log.Info().
-			Bool("disable_scheduler", cfg.Scaling.DisableScheduler).
-			Bool("worker_only", cfg.Scaling.WorkerOnly).
-			Msg("Edge functions scheduler disabled by scaling configuration")
-	}
-
-	// Start jobs manager and scheduler
-	if cfg.Jobs.Enabled && jobsManager != nil {
-		// Job workers can run on any instance (including worker-only mode)
-		// The scheduler should respect the scaling configuration
-		workerCount := cfg.Jobs.EmbeddedWorkerCount
-		if workerCount <= 0 {
-			workerCount = 4 // Default to 4 workers if not configured
-		}
-		if err := jobsManager.Start(context.Background(), workerCount); err != nil {
-			log.Error().Err(err).Msg("Failed to start jobs manager")
-		} else {
-			log.Info().Int("workers", workerCount).Msg("Jobs manager started successfully")
-		}
-
-		// Start jobs scheduler for cron-based execution (respects scaling configuration)
-		if jobsScheduler != nil {
-			if !cfg.Scaling.DisableScheduler && !cfg.Scaling.WorkerOnly {
-				if cfg.Scaling.EnableSchedulerLeaderElection {
-					// Use leader election - only the leader will run the scheduler
-					server.Scaling.JobsLeader = scaling.NewLeaderElector(
-						db.Pool(),
-						scaling.JobsSchedulerLockID,
-						"jobs-scheduler",
-					)
-					server.Scaling.JobsLeader.Start(
-						func() {
-							// Became leader - start the scheduler
-							log.Info().Msg("This instance is now the jobs scheduler leader")
-							if err := jobsScheduler.Start(); err != nil {
-								log.Error().Err(err).Msg("Failed to start jobs scheduler")
-							}
-						},
-						func() {
-							// Lost leadership - stop the scheduler
-							log.Warn().Msg("Lost jobs scheduler leadership - stopping scheduler")
-							jobsScheduler.Stop()
-						},
-					)
-				} else {
-					// No leader election - start scheduler directly
-					if err := jobsScheduler.Start(); err != nil {
-						log.Error().Err(err).Msg("Failed to start jobs scheduler")
-					}
-				}
-			} else {
-				log.Info().
-					Bool("disable_scheduler", cfg.Scaling.DisableScheduler).
-					Bool("worker_only", cfg.Scaling.WorkerOnly).
-					Msg("Jobs scheduler disabled by scaling configuration (workers still active)")
-			}
-		}
-	}
-
-	// Start RPC scheduler for cron-based procedure execution (respects scaling configuration)
-	if cfg.RPC.Enabled && rpcScheduler != nil {
-		if !cfg.Scaling.DisableScheduler && !cfg.Scaling.WorkerOnly {
-			if cfg.Scaling.EnableSchedulerLeaderElection {
-				// Use leader election - only the leader will run the scheduler
-				server.Scaling.RPCLeader = scaling.NewLeaderElector(
-					db.Pool(),
-					scaling.RPCSchedulerLockID,
-					"rpc-scheduler",
-				)
-				server.Scaling.RPCLeader.Start(
-					func() {
-						// Became leader - start the scheduler
-						log.Info().Msg("This instance is now the RPC scheduler leader")
-						if err := rpcScheduler.Start(); err != nil {
-							log.Error().Err(err).Msg("Failed to start RPC scheduler")
-						}
-					},
-					func() {
-						// Lost leadership - stop the scheduler
-						log.Warn().Msg("Lost RPC scheduler leadership - stopping scheduler")
-						rpcScheduler.Stop()
-					},
-				)
-			} else {
-				// No leader election - start scheduler directly
-				if err := rpcScheduler.Start(); err != nil {
-					log.Error().Err(err).Msg("Failed to start RPC scheduler")
-				}
-			}
-		} else {
-			log.Info().
-				Bool("disable_scheduler", cfg.Scaling.DisableScheduler).
-				Bool("worker_only", cfg.Scaling.WorkerOnly).
-				Msg("RPC scheduler disabled by scaling configuration")
-		}
-	}
-
-	// Start webhook trigger service
-	if err := webhookTriggerService.Start(context.Background()); err != nil {
-		log.Error().Err(err).Msg("Failed to start webhook trigger service")
-	}
-
-	// Start retention cleanup service (for central logging)
-	if retentionService != nil {
-		retentionService.Start()
-		log.Info().
-			Dur("interval", cfg.Logging.RetentionCheckInterval).
-			Msg("Log retention cleanup service started")
-	}
-
-	// Start branch cleanup scheduler
-	if server.Branching.Scheduler != nil {
-		server.Branching.Scheduler.Start()
-	}
+	server.initBackgroundServices()
 
 	// Start Prometheus metrics server if enabled
 	if cfg.Metrics.Enabled {
@@ -1236,8 +850,8 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		authService.SetMetrics(server.Metrics.Metrics)
 
 		// Wire up realtime metrics
-		if realtimeManager != nil {
-			realtimeManager.SetMetrics(server.Metrics.Metrics)
+		if server.Realtime.Manager != nil {
+			server.Realtime.Manager.SetMetrics(server.Metrics.Metrics)
 		}
 
 		// Wire up rate limiter metrics
@@ -1260,8 +874,8 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	}
 
 	// Auto-load AI chatbots if enabled
-	if cfg.AI.Enabled && cfg.AI.AutoLoadOnBoot && aiHandler != nil {
-		if err := aiHandler.AutoLoadChatbots(context.Background()); err != nil {
+	if cfg.AI.Enabled && cfg.AI.AutoLoadOnBoot && server.AI.Handler != nil {
+		if err := server.AI.Handler.AutoLoadChatbots(context.Background()); err != nil {
 			log.Error().Err(err).Msg("Failed to auto-load AI chatbots")
 		} else {
 			log.Info().Msg("AI chatbots auto-loaded successfully")
@@ -1477,7 +1091,7 @@ func (s *Server) setupMCPServer(schemaCache *database.SchemaCache, storageServic
 
 	// Database branching tools
 	if s.Branching.Manager != nil && s.config.Branching.Enabled {
-		branchStorage := branching.NewStorage(s.db.Pool(), s.config.EncryptionKey)
+		branchStorage := branching.NewStorage(s.db, s.config.EncryptionKey)
 		toolRegistry.Register(mcptools.NewListBranchesTool(branchStorage))
 		toolRegistry.Register(mcptools.NewGetBranchTool(branchStorage))
 		toolRegistry.Register(mcptools.NewCreateBranchTool(s.Branching.Manager))
@@ -2244,28 +1858,40 @@ func (s *Server) LoadAIChatbotsFromFilesystem(ctx context.Context) error {
 	return s.AI.Handler.AutoLoadChatbots(ctx)
 }
 
-// customErrorHandler handles errors globally
+// customErrorHandler handles errors globally with a consistent response shape
 func customErrorHandler(c fiber.Ctx, err error) error {
-	// Default to 500 status code
 	code := fiber.StatusInternalServerError
 	message := "Internal Server Error"
+	errCode := ErrCodeInternalError
 
-	// Check if it's a Fiber error
 	var e *fiber.Error
 	if errors.As(err, &e) {
 		code = e.Code
 		message = e.Message
+		switch {
+		case code == fiber.StatusBadRequest:
+			errCode = ErrCodeInvalidBody
+		case code == fiber.StatusUnauthorized:
+			errCode = ErrCodeAuthRequired
+		case code == fiber.StatusForbidden:
+			errCode = ErrCodeAccessDenied
+		case code == fiber.StatusNotFound:
+			errCode = ErrCodeNotFound
+		case code == fiber.StatusConflict:
+			errCode = ErrCodeConflict
+		case code < 500:
+			errCode = ErrCodeInvalidInput
+		}
 	}
 
-	// Log error
 	if code >= 500 {
 		log.Error().Err(err).Str("path", c.Path()).Msg("Server error")
 	}
 
-	// Return JSON error response
-	return c.Status(code).JSON(fiber.Map{
-		"error": message,
-		"code":  code,
+	return c.Status(code).JSON(ErrorResponse{
+		Error:     message,
+		Code:      errCode,
+		RequestID: getRequestID(c),
 	})
 }
 
@@ -2384,10 +2010,8 @@ type BroadcastRequest struct {
 // handleRealtimeBroadcast broadcasts a message to a channel
 func (s *Server) handleRealtimeBroadcast(c fiber.Ctx) error {
 	var req BroadcastRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Channel == "" {
@@ -2449,4 +2073,319 @@ type branchFDWRepairer struct {
 
 func (r *branchFDWRepairer) RepairFDWForBranch(ctx context.Context, branchDBURL string, tenantID uuid.UUID) error {
 	return r.manager.RepairFDWForBranch(ctx, branchDBURL, tenantID)
+}
+
+func (s *Server) startSchedulerWithLeaderElection(name string, lockID int64, startFn, stopFn func()) *scaling.LeaderElector {
+	if s.config.Scaling.DisableScheduler || s.config.Scaling.WorkerOnly {
+		log.Info().
+			Bool("disable_scheduler", s.config.Scaling.DisableScheduler).
+			Bool("worker_only", s.config.Scaling.WorkerOnly).
+			Msgf("%s disabled by scaling configuration", name)
+		return nil
+	}
+	if s.config.Scaling.EnableSchedulerLeaderElection {
+		elector := scaling.NewLeaderElector(s.db.Pool(), lockID, name)
+		elector.Start(startFn, stopFn)
+		return elector
+	}
+	startFn()
+	return nil
+}
+
+func (s *Server) initBackgroundServices() {
+	cfg := s.config
+
+	if !cfg.Scaling.DisableRealtime && !cfg.Scaling.WorkerOnly {
+		if err := s.Realtime.Listener.Start(); err != nil {
+			log.Error().Err(err).Msg("Failed to start realtime listener")
+		}
+	} else {
+		log.Info().
+			Bool("disable_realtime", cfg.Scaling.DisableRealtime).
+			Bool("worker_only", cfg.Scaling.WorkerOnly).
+			Msg("Realtime listener disabled by scaling configuration")
+	}
+
+	s.Scaling.FunctionsLeader = s.startSchedulerWithLeaderElection(
+		"functions-scheduler", scaling.FunctionsSchedulerLockID,
+		func() {
+			log.Info().Msg("This instance is now the functions scheduler leader")
+			if err := s.Functions.Scheduler.Start(); err != nil {
+				log.Error().Err(err).Msg("Failed to start edge functions scheduler")
+			}
+		},
+		func() {
+			log.Warn().Msg("Lost functions scheduler leadership - stopping scheduler")
+			s.Functions.Scheduler.Stop()
+		},
+	)
+
+	if cfg.Jobs.Enabled && s.Jobs.Manager != nil {
+		workerCount := cfg.Jobs.EmbeddedWorkerCount
+		if workerCount <= 0 {
+			workerCount = 4
+		}
+		if err := s.Jobs.Manager.Start(context.Background(), workerCount); err != nil {
+			log.Error().Err(err).Msg("Failed to start jobs manager")
+		} else {
+			log.Info().Int("workers", workerCount).Msg("Jobs manager started successfully")
+		}
+
+		if s.Jobs.Scheduler != nil {
+			s.Scaling.JobsLeader = s.startSchedulerWithLeaderElection(
+				"jobs-scheduler", scaling.JobsSchedulerLockID,
+				func() {
+					log.Info().Msg("This instance is now the jobs scheduler leader")
+					if err := s.Jobs.Scheduler.Start(); err != nil {
+						log.Error().Err(err).Msg("Failed to start jobs scheduler")
+					}
+				},
+				func() {
+					log.Warn().Msg("Lost jobs scheduler leadership - stopping scheduler")
+					s.Jobs.Scheduler.Stop()
+				},
+			)
+		}
+	}
+
+	if cfg.RPC.Enabled && s.RPC.Scheduler != nil {
+		s.Scaling.RPCLeader = s.startSchedulerWithLeaderElection(
+			"rpc-scheduler", scaling.RPCSchedulerLockID,
+			func() {
+				log.Info().Msg("This instance is now the RPC scheduler leader")
+				if err := s.RPC.Scheduler.Start(); err != nil {
+					log.Error().Err(err).Msg("Failed to start RPC scheduler")
+				}
+			},
+			func() {
+				log.Warn().Msg("Lost RPC scheduler leadership - stopping scheduler")
+				s.RPC.Scheduler.Stop()
+			},
+		)
+	}
+
+	if err := s.Webhook.Trigger.Start(context.Background()); err != nil {
+		log.Error().Err(err).Msg("Failed to start webhook trigger service")
+	}
+
+	if s.Logging.Retention != nil {
+		s.Logging.Retention.Start()
+		log.Info().
+			Dur("interval", cfg.Logging.RetentionCheckInterval).
+			Msg("Log retention cleanup service started")
+	}
+
+	if s.Branching.Scheduler != nil {
+		s.Branching.Scheduler.Start()
+	}
+}
+
+func (s *Server) initAI(storageService *storage.Service, loggingService *logging.Service, secretsService *settings.SecretsService, userMgmtService *auth.UserManagementService) {
+	cfg := s.config
+	db := s.db
+
+	aiStorage := ai.NewStorage(db)
+	aiStorage.SetConfig(&cfg.AI)
+
+	vectorManager := NewVectorManager(&cfg.AI, aiStorage, db.Inspector(), db)
+
+	var vectorHandler *VectorHandler
+	vectorHandler, err := NewVectorHandler(vectorManager, db.Inspector(), db, cfg)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to initialize vector handler")
+	} else if vectorHandler.IsEmbeddingConfigured() {
+		provider := cfg.AI.EmbeddingProvider
+		if provider == "" {
+			provider = cfg.AI.ProviderType
+		}
+		model := ""
+		if vectorHandler.GetEmbeddingService() != nil {
+			model = vectorHandler.GetEmbeddingService().DefaultModel()
+		}
+		log.Info().
+			Str("provider", provider).
+			Str("model", model).
+			Bool("explicit_config", cfg.AI.EmbeddingEnabled).
+			Msg("Vector handler initialized with embedding support")
+	} else {
+		log.Info().Msg("Vector handler initialized (embedding not available)")
+	}
+
+	var aiHandler *ai.Handler
+	var aiChatHandler *ai.ChatHandler
+	var aiConversations *ai.ConversationManager
+	var aiMetrics *observability.Metrics
+	if cfg.AI.Enabled {
+		aiMetrics = observability.NewMetrics()
+
+		aiLoader := ai.NewLoader(cfg.AI.ChatbotsDir)
+
+		aiConversations = ai.NewConversationManager(db, cfg.AI.ConversationCacheTTL, cfg.AI.MaxConversationTurns)
+
+		aiHandler = ai.NewHandler(aiStorage, aiLoader, &cfg.AI, vectorManager)
+
+		var embeddingService *ai.EmbeddingService
+		if vectorHandler != nil {
+			embeddingService = vectorHandler.GetEmbeddingService()
+		}
+
+		aiChatHandler = ai.NewChatHandler(db, aiStorage, aiConversations, aiMetrics, &cfg.AI, embeddingService, loggingService)
+
+		settingsResolver := ai.NewSettingsResolver(secretsService, 5*time.Minute)
+		aiChatHandler.SetSettingsResolver(settingsResolver)
+
+		log.Info().
+			Str("chatbots_dir", cfg.AI.ChatbotsDir).
+			Bool("auto_load", cfg.AI.AutoLoadOnBoot).
+			Str("provider_type", cfg.AI.ProviderType).
+			Str("provider_name", cfg.AI.ProviderName).
+			Str("provider_model", cfg.AI.ProviderModel).
+			Bool("rag_enabled", embeddingService != nil).
+			Msg("AI components initialized")
+	}
+
+	var knowledgeBaseHandler *ai.KnowledgeBaseHandler
+	var kbStorage *ai.KnowledgeBaseStorage
+	var docProcessor *ai.DocumentProcessor
+	var tableExportSyncService *ai.TableExportSyncService
+	var ocrService *ai.OCRService
+	var quotaHandler *QuotaHandler
+	if cfg.AI.Enabled {
+		if cfg.AI.OCREnabled {
+			var ocrErr error
+			ocrService, ocrErr = ai.NewOCRService(ai.OCRServiceConfig{
+				Enabled:          cfg.AI.OCREnabled,
+				ProviderType:     ai.OCRProviderType(cfg.AI.OCRProvider),
+				DefaultLanguages: cfg.AI.OCRLanguages,
+			})
+			if ocrErr != nil {
+				log.Warn().Err(ocrErr).Msg("Failed to initialize OCR service, OCR will be disabled")
+			} else if ocrService.IsEnabled() {
+				log.Info().
+					Str("provider", cfg.AI.OCRProvider).
+					Strs("languages", cfg.AI.OCRLanguages).
+					Msg("OCR service initialized")
+			}
+		}
+
+		kbStorage = ai.NewKnowledgeBaseStorage(db)
+
+		knowledgeGraph := ai.NewKnowledgeGraph(kbStorage)
+		log.Info().Msg("Knowledge graph initialized")
+
+		entityExtractor := ai.NewRuleBasedExtractor()
+		log.Info().Msg("Entity extractor initialized")
+
+		if vectorHandler != nil && vectorHandler.GetEmbeddingService() != nil {
+			docProcessor = ai.NewDocumentProcessor(kbStorage, vectorHandler.GetEmbeddingService(), entityExtractor, knowledgeGraph)
+		}
+
+		if ocrService != nil && ocrService.IsEnabled() {
+			knowledgeBaseHandler = ai.NewKnowledgeBaseHandlerWithOCR(kbStorage, docProcessor, ocrService)
+		} else {
+			knowledgeBaseHandler = ai.NewKnowledgeBaseHandler(kbStorage, docProcessor)
+		}
+		knowledgeBaseHandler.SetStorageService(storageService)
+
+		tableExporter := ai.NewTableExporter(db, docProcessor, knowledgeGraph, kbStorage)
+		knowledgeBaseHandler.SetTableExporter(tableExporter)
+		knowledgeBaseHandler.SetKnowledgeGraph(knowledgeGraph)
+		log.Info().Msg("Table exporter initialized")
+
+		tableExportSyncService = ai.NewTableExportSyncService(db, tableExporter, kbStorage)
+		knowledgeBaseHandler.SetSyncService(tableExportSyncService)
+		log.Info().Msg("Table export sync service initialized")
+
+		aiHandler.SetKnowledgeBaseStorage(kbStorage)
+		log.Info().Msg("AI handler configured with knowledge base storage")
+
+		log.Info().
+			Bool("processing_enabled", docProcessor != nil).
+			Bool("ocr_enabled", ocrService != nil && ocrService.IsEnabled()).
+			Bool("entity_extraction_enabled", true).
+			Bool("table_export_enabled", true).
+			Bool("sync_enabled", true).
+			Msg("Knowledge base handler initialized")
+
+		quotaService := ai.NewQuotaService(kbStorage)
+		quotaHandler = NewQuotaHandler(quotaService, userMgmtService)
+		log.Info().Msg("Quota service and handler initialized")
+	}
+
+	var internalAIHandler *InternalAIHandler
+	if cfg.AI.Enabled {
+		var embeddingSvc *ai.EmbeddingService
+		if vectorHandler != nil {
+			embeddingSvc = vectorHandler.GetEmbeddingService()
+		}
+		internalAIHandler = NewInternalAIHandler(aiStorage, embeddingSvc, cfg.AI.ProviderName)
+		log.Info().
+			Str("default_provider", cfg.AI.ProviderName).
+			Bool("embedding_enabled", embeddingSvc != nil).
+			Msg("Internal AI handler initialized for MCP tools/functions/jobs")
+	}
+
+	s.AI = &AIHandlers{
+		Handler:         aiHandler,
+		Chat:            aiChatHandler,
+		Conversations:   aiConversations,
+		Metrics:         aiMetrics,
+		KnowledgeBase:   knowledgeBaseHandler,
+		KBStorage:       kbStorage,
+		DocProcessor:    docProcessor,
+		TableExportSync: tableExportSyncService,
+		VectorManager:   vectorManager,
+		VectorHandler:   vectorHandler,
+		Internal:        internalAIHandler,
+	}
+
+	s.Quota.Handler = quotaHandler
+}
+
+func (s *Server) initRealtime(ps pubsub.PubSub, authService *auth.Service, storageService *storage.Service, loggingService *logging.Service) {
+	cfg := s.config
+	db := s.db
+
+	realtimeManager := realtime.NewManagerWithConfig(context.Background(), realtime.ManagerConfig{
+		MaxConnections:         cfg.Realtime.MaxConnections,
+		MaxConnectionsPerUser:  cfg.Realtime.MaxConnectionsPerUser,
+		MaxConnectionsPerIP:    cfg.Realtime.MaxConnectionsPerIP,
+		ClientMessageQueueSize: cfg.Realtime.ClientMessageQueueSize,
+	})
+	realtimeManager.SetBaseConfig(cfg)
+
+	if ps != nil {
+		realtimeManager.SetPubSub(ps)
+	}
+
+	realtimeAuthAdapter := realtime.NewAuthServiceAdapter(authService)
+	realtimeSubManager := realtime.NewSubscriptionManagerWithConfig(
+		realtime.NewPgxSubscriptionDB(db.Pool()),
+		realtime.RLSCacheConfig{
+			MaxSize: cfg.Realtime.RLSCacheSize,
+			TTL:     cfg.Realtime.RLSCacheTTL,
+		},
+	)
+	realtimeHandler := realtime.NewRealtimeHandler(realtimeManager, realtimeAuthAdapter, realtimeSubManager)
+	realtimeListener := realtime.NewListenerPool(
+		db.Pool(),
+		realtimeHandler,
+		realtimeSubManager,
+		ps,
+		realtime.ListenerPoolConfig{
+			PoolSize:    cfg.Realtime.ListenerPoolSize,
+			WorkerCount: cfg.Realtime.NotificationWorkers,
+			QueueSize:   cfg.Realtime.NotificationQueueSize,
+		},
+	)
+
+	s.Realtime.Manager = realtimeManager
+	s.Realtime.Handler = realtimeHandler
+	s.Realtime.Listener = realtimeListener
+
+	monitoringHandler := NewMonitoringHandler(db.Pool(), realtimeHandler, storageService.Provider)
+	if loggingService != nil {
+		monitoringHandler.SetLoggingService(loggingService)
+	}
+	s.Monitoring.Handler = monitoringHandler
 }

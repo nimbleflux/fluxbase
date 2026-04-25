@@ -130,7 +130,7 @@ func TestCreateSecret_Validation(t *testing.T) {
 		respBody, _ := io.ReadAll(resp.Body)
 		var result map[string]interface{}
 		_ = json.Unmarshal(respBody, &result)
-		assert.Equal(t, "Setting key is required", result["error"])
+		assert.Equal(t, "key is required", result["error"])
 	})
 
 	t.Run("missing value returns error", func(t *testing.T) {
@@ -155,7 +155,7 @@ func TestCreateSecret_Validation(t *testing.T) {
 		respBody, _ := io.ReadAll(resp.Body)
 		var result map[string]interface{}
 		_ = json.Unmarshal(respBody, &result)
-		assert.Equal(t, "Setting value is required", result["error"])
+		assert.Equal(t, "value is required", result["error"])
 	})
 }
 
@@ -181,7 +181,7 @@ func TestGetSecret_Validation(t *testing.T) {
 		respBody, _ := io.ReadAll(resp.Body)
 		var result map[string]interface{}
 		_ = json.Unmarshal(respBody, &result)
-		assert.Equal(t, "Setting key is required", result["error"])
+		assert.Equal(t, "key is required", result["error"])
 	})
 
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
@@ -242,7 +242,7 @@ func TestUpdateSecret_Validation(t *testing.T) {
 		respBody, _ := io.ReadAll(resp.Body)
 		var result map[string]interface{}
 		_ = json.Unmarshal(respBody, &result)
-		assert.Equal(t, "Setting key is required", result["error"])
+		assert.Equal(t, "key is required", result["error"])
 	})
 
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
@@ -304,7 +304,7 @@ func TestDeleteSecret_Validation(t *testing.T) {
 		respBody, _ := io.ReadAll(resp.Body)
 		var result map[string]interface{}
 		_ = json.Unmarshal(respBody, &result)
-		assert.Equal(t, "Setting key is required", result["error"])
+		assert.Equal(t, "key is required", result["error"])
 	})
 
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
@@ -619,7 +619,7 @@ func TestSetSetting_Validation(t *testing.T) {
 		respBody, _ := io.ReadAll(resp.Body)
 		var result map[string]interface{}
 		_ = json.Unmarshal(respBody, &result)
-		assert.Equal(t, "Setting value is required", result["error"])
+		assert.Equal(t, "value is required", result["error"])
 	})
 }
 

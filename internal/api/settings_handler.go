@@ -13,62 +13,54 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
-// SettingsHandler handles public settings operations with RLS support
 type SettingsHandler struct {
 	db *database.Connection
 }
 
-// NewSettingsHandler creates a new settings handler
 func NewSettingsHandler(db *database.Connection) *SettingsHandler {
 	return &SettingsHandler{
 		db: db,
 	}
 }
 
-// SettingResponse represents a setting value response
+func (h *SettingsHandler) requireService(c fiber.Ctx) error {
+	if h.db == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 type SettingResponse struct {
 	Value interface{} `json:"value"`
 }
 
-// BatchSettingsRequest represents a batch settings request
 type BatchSettingsRequest struct {
 	Keys []string `json:"keys"`
 }
 
-// BatchSettingsResponse represents a batch settings response
 type BatchSettingsResponse struct {
 	Key   string      `json:"key"`
 	Value interface{} `json:"value"`
 }
 
-// GetSetting retrieves a single setting with RLS enforcement
-// GET /api/v1/settings/:key
 func (h *SettingsHandler) GetSetting(c fiber.Ctx) error {
 	ctx := context.Background()
 	key := c.Params("key")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "Setting key")
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	var value interface{}
 	var queryErr error
 
-	// Set target schema to ensure main pool (app schema is not tenant-routable)
 	middleware.SetTargetSchema(c, "app")
 
-	// Use WrapWithRLS to properly set database role + JWT claims
 	err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
-		// Query the setting (RLS policies will be applied)
 		var valueJSON []byte
 		queryErr = tx.QueryRow(ctx, `
 			SELECT value
@@ -80,13 +72,11 @@ func (h *SettingsHandler) GetSetting(c fiber.Ctx) error {
 			return queryErr
 		}
 
-		// Unmarshal the JSON value
 		var valueMap map[string]interface{}
 		if err := json.Unmarshal(valueJSON, &valueMap); err != nil {
 			return err
 		}
 
-		// Extract the actual value from the value map
 		if val, ok := valueMap["value"]; ok {
 			value = val
 		} else {
@@ -97,60 +87,40 @@ func (h *SettingsHandler) GetSetting(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Setting not found or access denied",
-			})
+			return SendNotFound(c, "Setting not found or access denied")
 		}
 		log.Error().Err(err).Str("key", key).Msg("Failed to get setting")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve setting",
-		})
+		return SendInternalError(c, "Failed to retrieve setting")
 	}
 
 	return c.JSON(SettingResponse{Value: value})
 }
 
-// GetSettings retrieves multiple settings with RLS enforcement
-// POST /api/v1/settings/batch
 func (h *SettingsHandler) GetSettings(c fiber.Ctx) error {
 	ctx := context.Background()
 
 	var req BatchSettingsRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse batch settings request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if len(req.Keys) == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "At least one key is required",
-		})
+		return SendMissingField(c, "keys")
 	}
 
-	// Limit the number of keys to prevent abuse
 	if len(req.Keys) > 100 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Maximum 100 keys allowed per request",
-		})
+		return SendBadRequest(c, "Maximum 100 keys allowed per request", ErrCodeInvalidInput)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	results := make(map[string]interface{})
 
-	// Set target schema to ensure main pool (app schema is not tenant-routable)
 	middleware.SetTargetSchema(c, "app")
 
-	// Use WrapWithRLS to properly set database role + JWT claims
 	err := middleware.WrapWithRLS(ctx, h.db, c, func(tx pgx.Tx) error {
-		// Query the settings (RLS policies will be applied)
 		rows, err := tx.Query(ctx, `
 			SELECT key, value
 			FROM app.settings
@@ -161,7 +131,6 @@ func (h *SettingsHandler) GetSettings(c fiber.Ctx) error {
 		}
 		defer rows.Close()
 
-		// Build results map
 		for rows.Next() {
 			var key string
 			var valueJSON []byte
@@ -170,13 +139,11 @@ func (h *SettingsHandler) GetSettings(c fiber.Ctx) error {
 				return err
 			}
 
-			// Unmarshal the JSON value
 			var valueMap map[string]interface{}
 			if err := json.Unmarshal(valueJSON, &valueMap); err != nil {
 				return err
 			}
 
-			// Extract the actual value from the value map
 			if val, ok := valueMap["value"]; ok {
 				results[key] = val
 			} else {
@@ -188,12 +155,9 @@ func (h *SettingsHandler) GetSettings(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get settings")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve settings",
-		})
+		return SendInternalError(c, "Failed to retrieve settings")
 	}
 
-	// Convert map to array for response
 	response := make([]BatchSettingsResponse, 0, len(results))
 	for key, value := range results {
 		response = append(response, BatchSettingsResponse{

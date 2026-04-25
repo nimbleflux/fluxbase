@@ -9,13 +9,11 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 
-// UserManagementHandler handles admin user management operations
 type UserManagementHandler struct {
 	userMgmtService *auth.UserManagementService
 	authService     *auth.Service
 }
 
-// NewUserManagementHandler creates a new user management handler
 func NewUserManagementHandler(userMgmtService *auth.UserManagementService, authService *auth.Service) *UserManagementHandler {
 	return &UserManagementHandler{
 		userMgmtService: userMgmtService,
@@ -23,15 +21,14 @@ func NewUserManagementHandler(userMgmtService *auth.UserManagementService, authS
 	}
 }
 
-// ListUsers lists all users with enriched metadata
-func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
-	// Nil check for service (can happen in tests)
+func (h *UserManagementHandler) requireService(c fiber.Ctx) error {
 	if h.userMgmtService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User management service not initialized",
-		})
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
 	}
+	return nil
+}
 
+func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
 	const defaultLimit = 100
 	const maxLimit = 1000
 
@@ -39,38 +36,33 @@ func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
 	search := c.Query("search", "")
 	limit := fiber.Query[int](c, "limit", defaultLimit)
 	offset := fiber.Query[int](c, "offset", 0)
-	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
+	userType := c.Query("type", "app")
 
-	// Get tenant ID from context (set by TenantMiddleware when X-FB-Tenant header is present)
 	tenantID, _ := c.Locals("tenant_id").(string)
 	tenantSource, _ := c.Locals("tenant_source").(string)
 	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
 
-	// Instance admins without explicit tenant context see all users across tenants.
-	// When a tenant IS selected via the selector, tenantSource is "header" and filtering applies normally.
 	if isInstanceAdmin && tenantSource == "default" {
 		tenantID = ""
 	}
 
-	// Normalize pagination parameters
 	limit, offset = NormalizePaginationParams(limit, offset, defaultLimit, maxLimit)
+
+	if err := h.requireService(c); err != nil {
+		return err
+	}
 
 	users, err := h.userMgmtService.ListEnrichedUsers(c.RequestCtx(), userType, tenantID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to list users")
 	}
 
-	// Ensure we never return null (nil slice serializes to null in JSON)
 	if users == nil {
 		users = []*auth.EnrichedUser{}
 	}
 
-	// Filter users based on query parameters
 	filteredUsers := users
 
-	// Exclude admins if requested
 	if excludeAdmins {
 		nonAdminUsers := make([]*auth.EnrichedUser, 0)
 		for _, user := range filteredUsers {
@@ -81,7 +73,6 @@ func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
 		filteredUsers = nonAdminUsers
 	}
 
-	// Search by email if provided (case-insensitive)
 	if search != "" {
 		searchLower := strings.ToLower(search)
 		searchResults := make([]*auth.EnrichedUser, 0)
@@ -94,17 +85,14 @@ func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
 		filteredUsers = searchResults
 	}
 
-	// Calculate total before pagination
 	total := len(filteredUsers)
 
-	// Apply offset
 	if offset >= len(filteredUsers) {
 		filteredUsers = []*auth.EnrichedUser{}
 	} else {
 		filteredUsers = filteredUsers[offset:]
 	}
 
-	// Apply limit
 	if len(filteredUsers) > limit {
 		filteredUsers = filteredUsers[:limit]
 	}
@@ -117,50 +105,37 @@ func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
 	})
 }
 
-// GetUserByID gets a single user by ID with enriched metadata
 func (h *UserManagementHandler) GetUserByID(c fiber.Ctx) error {
-	if h.userMgmtService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User management service not initialized",
-		})
-	}
-
 	userID := c.Params("id")
-	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
+	userType := c.Query("type", "app")
+
+	if err := h.requireService(c); err != nil {
+		return err
+	}
 
 	user, err := h.userMgmtService.GetEnrichedUserByID(c.RequestCtx(), userID, userType)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
-			})
+			return SendNotFound(c, "User not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to get user")
 	}
 
 	return c.JSON(user)
 }
 
-// InviteUser invites a new user
 func (h *UserManagementHandler) InviteUser(c fiber.Ctx) error {
 	var req auth.InviteUserRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	if h.userMgmtService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User management service not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
-	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
+	userType := c.Query("type", "app")
 
-	// Get tenant ID from context if not provided in request (set by TenantMiddleware)
 	if req.TenantID == "" {
 		tenantID, _ := c.Locals("tenant_id").(string)
 		req.TenantID = tenantID
@@ -168,35 +143,26 @@ func (h *UserManagementHandler) InviteUser(c fiber.Ctx) error {
 
 	resp, err := h.userMgmtService.InviteUser(c.RequestCtx(), req, userType)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to invite user")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(resp)
 }
 
-// DeleteUser deletes a user
 func (h *UserManagementHandler) DeleteUser(c fiber.Ctx) error {
-	if h.userMgmtService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User management service not initialized",
-		})
-	}
-
 	userID := c.Params("id")
-	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
+	userType := c.Query("type", "app")
+
+	if err := h.requireService(c); err != nil {
+		return err
+	}
 
 	err := h.userMgmtService.DeleteUser(c.RequestCtx(), userID, userType)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
-			})
+			return SendNotFound(c, "User not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to delete user")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -204,95 +170,70 @@ func (h *UserManagementHandler) DeleteUser(c fiber.Ctx) error {
 	})
 }
 
-// UpdateUserRole updates a user's role
 func (h *UserManagementHandler) UpdateUserRole(c fiber.Ctx) error {
 	userID := c.Params("id")
-	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
+	userType := c.Query("type", "app")
 
 	var req struct {
 		Role string `json:"role"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	if h.userMgmtService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User management service not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	user, err := h.userMgmtService.UpdateUserRole(c.RequestCtx(), userID, req.Role, userType)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
-			})
+			return SendNotFound(c, "User not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to update user role")
 	}
 
 	return c.JSON(user)
 }
 
-// UpdateUser updates a user's information (email, role, password, user_metadata)
 func (h *UserManagementHandler) UpdateUser(c fiber.Ctx) error {
 	userID := c.Params("id")
-	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
+	userType := c.Query("type", "app")
 
 	var req auth.UpdateAdminUserRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	if h.userMgmtService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User management service not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	user, err := h.userMgmtService.UpdateUser(c.RequestCtx(), userID, req, userType)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
-			})
+			return SendNotFound(c, "User not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to update user")
 	}
 
 	return c.JSON(user)
 }
 
-// ResetUserPassword resets a user's password
 func (h *UserManagementHandler) ResetUserPassword(c fiber.Ctx) error {
-	if h.userMgmtService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User management service not initialized",
-		})
-	}
-
 	userID := c.Params("id")
-	userType := c.Query("type", "app") // "app" for auth.users, "platform" for platform.users
+	userType := c.Query("type", "app")
+
+	if err := h.requireService(c); err != nil {
+		return err
+	}
 
 	result, err := h.userMgmtService.ResetUserPassword(c.RequestCtx(), userID, userType)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
-			})
+			return SendNotFound(c, "User not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to reset user password")
 	}
 
 	return c.JSON(fiber.Map{
@@ -300,27 +241,20 @@ func (h *UserManagementHandler) ResetUserPassword(c fiber.Ctx) error {
 	})
 }
 
-// LockUser locks a user account
 func (h *UserManagementHandler) LockUser(c fiber.Ctx) error {
-	if h.userMgmtService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User management service not initialized",
-		})
-	}
-
 	userID := c.Params("id")
 	userType := c.Query("type", "app")
+
+	if err := h.requireService(c); err != nil {
+		return err
+	}
 
 	err := h.userMgmtService.LockUser(c.RequestCtx(), userID, userType)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
-			})
+			return SendNotFound(c, "User not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to lock user")
 	}
 
 	return c.JSON(fiber.Map{
@@ -328,27 +262,20 @@ func (h *UserManagementHandler) LockUser(c fiber.Ctx) error {
 	})
 }
 
-// UnlockUser unlocks a user account
 func (h *UserManagementHandler) UnlockUser(c fiber.Ctx) error {
-	if h.userMgmtService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "User management service not initialized",
-		})
-	}
-
 	userID := c.Params("id")
 	userType := c.Query("type", "app")
+
+	if err := h.requireService(c); err != nil {
+		return err
+	}
 
 	err := h.userMgmtService.UnlockUser(c.RequestCtx(), userID, userType)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "User not found",
-			})
+			return SendNotFound(c, "User not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to unlock user")
 	}
 
 	return c.JSON(fiber.Map{

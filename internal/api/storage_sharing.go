@@ -17,31 +17,23 @@ func (h *StorageHandler) ShareObject(c fiber.Ctx) error {
 	key := c.Params("*")
 
 	if bucket == "" || key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket and key are required",
-		})
+		return SendBadRequest(c, "Bucket and key are required", ErrCodeMissingField)
 	}
 
 	var req struct {
 		UserID     string `json:"user_id"`
 		Permission string `json:"permission"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Permission != "read" && req.Permission != "write" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "permission must be 'read' or 'write'",
-		})
+		return SendBadRequest(c, "Permission must be 'read' or 'write'", ErrCodeInvalidInput)
 	}
 
 	if req.UserID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "user_id is required",
-		})
+		return SendMissingField(c, "user_id")
 	}
 
 	ctx := c.RequestCtx()
@@ -49,17 +41,13 @@ func (h *StorageHandler) ShareObject(c fiber.Ctx) error {
 	tx, err := h.db.Pool().Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for sharing file")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to share file",
-		})
+		return SendInternalError(c, "Failed to share file")
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if err := h.setRLSContext(ctx, tx, c); err != nil {
 		log.Error().Err(err).Msg("Failed to set RLS context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to share file",
-		})
+		return SendInternalError(c, "Failed to share file")
 	}
 
 	var objectID string
@@ -69,14 +57,10 @@ func (h *StorageHandler) ShareObject(c fiber.Ctx) error {
 	`, bucket, key).Scan(&objectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "file not found or insufficient permissions",
-			})
+			return SendNotFound(c, "File not found or insufficient permissions")
 		}
 		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to find file")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to share file",
-		})
+		return SendInternalError(c, "Failed to share file")
 	}
 
 	_, err = tx.Exec(ctx, `
@@ -87,21 +71,15 @@ func (h *StorageHandler) ShareObject(c fiber.Ctx) error {
 	`, objectID, req.UserID, req.Permission)
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "policy") {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "only file owners can share files",
-			})
+			return SendForbidden(c, "Only file owners can share files", ErrCodeAccessDenied)
 		}
 		log.Error().Err(err).Str("object_id", objectID).Msg("Failed to create file permission")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to share file",
-		})
+		return SendInternalError(c, "Failed to share file")
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		log.Error().Err(err).Msg("Failed to commit share transaction")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to share file",
-		})
+		return SendInternalError(c, "Failed to share file")
 	}
 
 	log.Info().
@@ -127,9 +105,7 @@ func (h *StorageHandler) RevokeShare(c fiber.Ctx) error {
 	sharedUserID := c.Params("user_id")
 
 	if bucket == "" || key == "" || sharedUserID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket, key, and user_id are required",
-		})
+		return SendBadRequest(c, "Bucket, key, and user_id are required", ErrCodeMissingField)
 	}
 
 	ctx := c.RequestCtx()
@@ -137,17 +113,13 @@ func (h *StorageHandler) RevokeShare(c fiber.Ctx) error {
 	tx, err := h.db.Pool().Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for revoking share")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to revoke share",
-		})
+		return SendInternalError(c, "Failed to revoke share")
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if err := h.setRLSContext(ctx, tx, c); err != nil {
 		log.Error().Err(err).Msg("Failed to set RLS context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to revoke share",
-		})
+		return SendInternalError(c, "Failed to revoke share")
 	}
 
 	var objectID string
@@ -157,14 +129,10 @@ func (h *StorageHandler) RevokeShare(c fiber.Ctx) error {
 	`, bucket, key).Scan(&objectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "file not found or insufficient permissions",
-			})
+			return SendNotFound(c, "File not found or insufficient permissions")
 		}
 		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to find file")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to revoke share",
-		})
+		return SendInternalError(c, "Failed to revoke share")
 	}
 
 	result, err := tx.Exec(ctx, `
@@ -173,27 +141,19 @@ func (h *StorageHandler) RevokeShare(c fiber.Ctx) error {
 	`, objectID, sharedUserID)
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "policy") {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "only file owners can revoke shares",
-			})
+			return SendForbidden(c, "Only file owners can revoke shares", ErrCodeAccessDenied)
 		}
 		log.Error().Err(err).Str("object_id", objectID).Msg("Failed to delete file permission")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to revoke share",
-		})
+		return SendInternalError(c, "Failed to revoke share")
 	}
 
 	if result.RowsAffected() == 0 {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "share not found or insufficient permissions",
-		})
+		return SendNotFound(c, "Share not found or insufficient permissions")
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		log.Error().Err(err).Msg("Failed to commit revoke share transaction")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to revoke share",
-		})
+		return SendInternalError(c, "Failed to revoke share")
 	}
 
 	log.Info().
@@ -213,9 +173,7 @@ func (h *StorageHandler) ListShares(c fiber.Ctx) error {
 	key := c.Params("*")
 
 	if bucket == "" || key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket and key are required",
-		})
+		return SendBadRequest(c, "Bucket and key are required", ErrCodeMissingField)
 	}
 
 	ctx := c.RequestCtx()
@@ -223,17 +181,13 @@ func (h *StorageHandler) ListShares(c fiber.Ctx) error {
 	tx, err := h.db.Pool().Begin(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start transaction for listing shares")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list shares",
-		})
+		return SendInternalError(c, "Failed to list shares")
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if err := h.setRLSContext(ctx, tx, c); err != nil {
 		log.Error().Err(err).Msg("Failed to set RLS context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list shares",
-		})
+		return SendInternalError(c, "Failed to list shares")
 	}
 
 	var objectID string
@@ -243,14 +197,10 @@ func (h *StorageHandler) ListShares(c fiber.Ctx) error {
 	`, bucket, key).Scan(&objectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "file not found or insufficient permissions",
-			})
+			return SendNotFound(c, "File not found or insufficient permissions")
 		}
 		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to find file")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list shares",
-		})
+		return SendInternalError(c, "Failed to list shares")
 	}
 
 	rows, err := tx.Query(ctx, `
@@ -261,9 +211,7 @@ func (h *StorageHandler) ListShares(c fiber.Ctx) error {
 	`, objectID)
 	if err != nil {
 		log.Error().Err(err).Str("object_id", objectID).Msg("Failed to query shares")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list shares",
-		})
+		return SendInternalError(c, "Failed to list shares")
 	}
 	defer rows.Close()
 
@@ -285,16 +233,12 @@ func (h *StorageHandler) ListShares(c fiber.Ctx) error {
 
 	if err := rows.Err(); err != nil {
 		log.Error().Err(err).Msg("Error iterating share rows")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list shares",
-		})
+		return SendInternalError(c, "Failed to list shares")
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		log.Error().Err(err).Msg("Failed to commit list shares transaction")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to list shares",
-		})
+		return SendInternalError(c, "Failed to list shares")
 	}
 
 	return c.JSON(fiber.Map{

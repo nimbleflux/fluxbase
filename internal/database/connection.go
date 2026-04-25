@@ -1147,6 +1147,30 @@ func (c *Connection) ExecuteWithAdminRoleForDB(ctx context.Context, dbName strin
 	return nil
 }
 
+// TenantOrNil converts an empty tenant string to nil for UUID column compatibility.
+// PostgreSQL UUID columns accept NULL but reject empty strings, so this helper
+// is used when passing tenant IDs as query parameters.
+func TenantOrNil(tenantID string) interface{} {
+	if tenantID == "" {
+		return nil
+	}
+	return tenantID
+}
+
+// TenantAware provides a reusable embedded struct for tenant-scoped database operations.
+// Storage types embed this to get the WithTenant helper method.
+type TenantAware struct {
+	DB *Connection
+}
+
+// WithTenant wraps a database operation with tenant-aware role selection.
+// When a tenant context is active, uses tenant_service (respects RLS).
+// When no tenant context, uses service_role (bypasses RLS).
+func (t *TenantAware) WithTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	tenantID := TenantFromContext(ctx)
+	return WrapWithTenantAwareRole(ctx, t.DB, tenantID, fn)
+}
+
 // validateMigrationSQL validates SQL syntax for user-provided migration files
 // This validates that the SQL is valid PostgreSQL syntax without executing it
 func (c *Connection) validateMigrationSQL(sql, migrationName string) error {

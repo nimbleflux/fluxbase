@@ -22,6 +22,13 @@ func NewAdminSessionHandler(sessionRepo *auth.SessionRepository) *AdminSessionHa
 	}
 }
 
+func (h *AdminSessionHandler) requireService(c fiber.Ctx) error {
+	if h.sessionRepo == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // ListSessions lists all active sessions with pagination
 func (h *AdminSessionHandler) ListSessions(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
@@ -44,6 +51,10 @@ func (h *AdminSessionHandler) ListSessions(c fiber.Ctx) error {
 		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
 			offset = parsed
 		}
+	}
+
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	sessions, total, err := h.sessionRepo.ListAllPaginated(ctx, includeExpired, limit, offset)
@@ -74,6 +85,10 @@ func (h *AdminSessionHandler) RevokeSession(c fiber.Ctx) error {
 		})
 	}
 
+	if err := h.requireService(c); err != nil {
+		return err
+	}
+
 	err := h.sessionRepo.Delete(ctx, sessionID)
 	if err != nil {
 		if errors.Is(err, auth.ErrSessionNotFound) {
@@ -101,6 +116,10 @@ func (h *AdminSessionHandler) RevokeUserSessions(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "User ID is required",
 		})
+	}
+
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	err := h.sessionRepo.DeleteByUserID(ctx, userID)

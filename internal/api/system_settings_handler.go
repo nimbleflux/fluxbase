@@ -12,13 +12,11 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 
-// SystemSettingsHandler handles system settings operations
 type SystemSettingsHandler struct {
 	settingsService *auth.SystemSettingsService
 	settingsCache   *auth.SettingsCache
 }
 
-// NewSystemSettingsHandler creates a new system settings handler
 func NewSystemSettingsHandler(settingsService *auth.SystemSettingsService, settingsCache *auth.SettingsCache) *SystemSettingsHandler {
 	return &SystemSettingsHandler{
 		settingsService: settingsService,
@@ -26,27 +24,26 @@ func NewSystemSettingsHandler(settingsService *auth.SystemSettingsService, setti
 	}
 }
 
-// ListSettings returns all system settings
-// GET /api/v1/admin/system/settings
+func (h *SystemSettingsHandler) requireService(c fiber.Ctx) error {
+	if h.settingsService == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 func (h *SystemSettingsHandler) ListSettings(c fiber.Ctx) error {
 	ctx := context.Background()
 
-	// Check if settings service is available
-	if h.settingsService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Settings service not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	settings, err := h.settingsService.ListSettings(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get system settings")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve system settings",
-		})
+		return SendInternalError(c, "Failed to retrieve system settings")
 	}
 
-	// Populate override information for each setting
 	if h.settingsCache != nil {
 		for i := range settings {
 			settings[i].IsOverridden = h.settingsCache.IsOverriddenByEnv(settings[i].Key)
@@ -59,31 +56,22 @@ func (h *SystemSettingsHandler) ListSettings(c fiber.Ctx) error {
 	return c.JSON(settings)
 }
 
-// GetSetting returns a specific setting by key
-// GET /api/v1/admin/system/settings/*
 func (h *SystemSettingsHandler) GetSetting(c fiber.Ctx) error {
 	ctx := context.Background()
 	key := c.Params("*")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "Setting key")
 	}
 
-	// Check if settings service is available
-	if h.settingsService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Settings service not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	setting, err := h.settingsService.GetSetting(ctx, key)
 	if err != nil {
 		if errors.Is(err, auth.ErrSettingNotFound) {
-			// Return default value for known settings instead of 404
 			if defaultSetting := h.getDefaultSetting(key); defaultSetting != nil {
-				// Populate override information for defaults too
 				if h.settingsCache != nil {
 					defaultSetting.IsOverridden = h.settingsCache.IsOverriddenByEnv(key)
 					if defaultSetting.IsOverridden {
@@ -92,17 +80,12 @@ func (h *SystemSettingsHandler) GetSetting(c fiber.Ctx) error {
 				}
 				return c.JSON(defaultSetting)
 			}
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Setting not found",
-			})
+			return SendNotFound(c, "Setting not found")
 		}
 		log.Error().Err(err).Str("key", key).Msg("Failed to get setting")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve setting",
-		})
+		return SendInternalError(c, "Failed to retrieve setting")
 	}
 
-	// Populate override information
 	if h.settingsCache != nil {
 		setting.IsOverridden = h.settingsCache.IsOverriddenByEnv(key)
 		if setting.IsOverridden {
@@ -113,16 +96,12 @@ func (h *SystemSettingsHandler) GetSetting(c fiber.Ctx) error {
 	return c.JSON(setting)
 }
 
-// UpdateSetting updates a specific setting
-// PUT /api/v1/admin/system/settings/*
 func (h *SystemSettingsHandler) UpdateSetting(c fiber.Ctx) error {
 	ctx := context.Background()
 	key := c.Params("*")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "Setting key")
 	}
 
 	var req struct {
@@ -130,50 +109,31 @@ func (h *SystemSettingsHandler) UpdateSetting(c fiber.Ctx) error {
 		Description string                 `json:"description"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse request body")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Validate setting key is in allowlist
 	if !h.isValidSettingKey(key) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid setting key",
-			"code":  "INVALID_SETTING_KEY",
-		})
+		return SendBadRequest(c, "Invalid setting key", ErrCodeInvalidInput)
 	}
 
-	// Check if setting is overridden by environment variable
 	if h.settingsCache != nil && h.settingsCache.IsOverriddenByEnv(key) {
-		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-			"error": "This setting cannot be updated because it is overridden by an environment variable",
-			"code":  "ENV_OVERRIDE",
-			"key":   key,
-		})
+		return SendConflict(c, "This setting cannot be updated because it is overridden by an environment variable", ErrCodeConflict)
 	}
 
-	// Check if settings service is available
-	if h.settingsService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Settings service not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	if err := h.settingsService.SetSetting(ctx, key, req.Value, req.Description); err != nil {
 		log.Error().Err(err).Str("key", key).Msg("Failed to update setting")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to update setting",
-		})
+		return SendInternalError(c, "Failed to update setting")
 	}
 
 	log.Info().Str("key", key).Interface("value", req.Value).Msg("System setting updated")
 
-	// Return the updated setting
 	setting, err := h.settingsService.GetSetting(ctx, key)
 	if err != nil {
-		// Setting was created but we can't retrieve it - return success anyway
 		return c.JSON(fiber.Map{
 			"key":         key,
 			"value":       req.Value,
@@ -184,35 +144,24 @@ func (h *SystemSettingsHandler) UpdateSetting(c fiber.Ctx) error {
 	return c.JSON(setting)
 }
 
-// DeleteSetting deletes a specific setting
-// DELETE /api/v1/admin/system/settings/*
 func (h *SystemSettingsHandler) DeleteSetting(c fiber.Ctx) error {
 	ctx := context.Background()
 	key := c.Params("*")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "Setting key")
 	}
 
-	// Check if settings service is available
-	if h.settingsService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Settings service not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
 	if err := h.settingsService.DeleteSetting(ctx, key); err != nil {
 		if errors.Is(err, auth.ErrSettingNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Setting not found",
-			})
+			return SendNotFound(c, "Setting not found")
 		}
 		log.Error().Err(err).Str("key", key).Msg("Failed to delete setting")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to delete setting",
-		})
+		return SendInternalError(c, "Failed to delete setting")
 	}
 
 	log.Info().Str("key", key).Msg("System setting deleted")
@@ -220,7 +169,6 @@ func (h *SystemSettingsHandler) DeleteSetting(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// settingDefaults defines default values for known settings
 var settingDefaults = map[string]map[string]interface{}{
 	"app.auth.signup_enabled":               {"value": true},
 	"app.auth.magic_link_enabled":           {"value": false},
@@ -235,52 +183,43 @@ var settingDefaults = map[string]map[string]interface{}{
 	"app.email.enabled":                     {"value": true},
 	"app.email.provider":                    {"value": ""},
 	"app.security.enable_global_rate_limit": {"value": true},
-	// Email provider settings (for UI configuration)
-	"app.email.from_address":     {"value": ""},
-	"app.email.from_name":        {"value": ""},
-	"app.email.smtp_host":        {"value": ""},
-	"app.email.smtp_port":        {"value": 587},
-	"app.email.smtp_username":    {"value": ""},
-	"app.email.smtp_password":    {"value": ""}, // Encrypted in database
-	"app.email.smtp_tls":         {"value": true},
-	"app.email.sendgrid_api_key": {"value": ""}, // Encrypted in database
-	"app.email.mailgun_api_key":  {"value": ""}, // Encrypted in database
-	"app.email.mailgun_domain":   {"value": ""},
-	"app.email.ses_access_key":   {"value": ""}, // Encrypted in database
-	"app.email.ses_secret_key":   {"value": ""}, // Encrypted in database
-	"app.email.ses_region":       {"value": "us-east-1"},
-	// Captcha provider settings (for UI configuration)
-	"app.security.captcha.enabled":         {"value": false},
-	"app.security.captcha.provider":        {"value": "hcaptcha"},
-	"app.security.captcha.site_key":        {"value": ""},
-	"app.security.captcha.secret_key":      {"value": ""}, // Encrypted in database
-	"app.security.captcha.score_threshold": {"value": 0.5},
-	"app.security.captcha.endpoints":       {"value": []string{"signup", "login", "password_reset", "magic_link"}},
-	"app.security.captcha.cap_server_url":  {"value": ""},
-	"app.security.captcha.cap_api_key":     {"value": ""}, // Encrypted in database
+	"app.email.from_address":                {"value": ""},
+	"app.email.from_name":                   {"value": ""},
+	"app.email.smtp_host":                   {"value": ""},
+	"app.email.smtp_port":                   {"value": 587},
+	"app.email.smtp_username":               {"value": ""},
+	"app.email.smtp_password":               {"value": ""},
+	"app.email.smtp_tls":                    {"value": true},
+	"app.email.sendgrid_api_key":            {"value": ""},
+	"app.email.mailgun_api_key":             {"value": ""},
+	"app.email.mailgun_domain":              {"value": ""},
+	"app.email.ses_access_key":              {"value": ""},
+	"app.email.ses_secret_key":              {"value": ""},
+	"app.email.ses_region":                  {"value": "us-east-1"},
+	"app.security.captcha.enabled":          {"value": false},
+	"app.security.captcha.provider":         {"value": "hcaptcha"},
+	"app.security.captcha.site_key":         {"value": ""},
+	"app.security.captcha.secret_key":       {"value": ""},
+	"app.security.captcha.score_threshold":  {"value": 0.5},
+	"app.security.captcha.endpoints":        {"value": []string{"signup", "login", "password_reset", "magic_link"}},
+	"app.security.captcha.cap_server_url":   {"value": ""},
+	"app.security.captcha.cap_api_key":      {"value": ""},
 }
 
-// isValidSettingKey checks if a setting key is in the allowlist
 func (h *SystemSettingsHandler) isValidSettingKey(key string) bool {
 	_, exists := settingDefaults[key]
 	return exists
 }
 
-// getDefaultSetting returns a default setting for a known key
-// It reads the actual current value from the config system (including environment variables)
 func (h *SystemSettingsHandler) getDefaultSetting(key string) *auth.SystemSetting {
 	defaultValue, exists := settingDefaults[key]
 	if !exists {
 		return nil
 	}
 
-	// Try to read the actual current value from settings cache (includes env vars)
-	// This ensures we return the real configured value, not just a hardcoded default
 	if h.settingsCache != nil {
 		ctx := context.Background()
 
-		// Determine the type and read the actual value
-		// Most settings are booleans, check for that first
 		if val, ok := defaultValue["value"].(bool); ok {
 			actualValue := h.settingsCache.GetBool(ctx, key, val)
 			return &auth.SystemSetting{
@@ -289,7 +228,6 @@ func (h *SystemSettingsHandler) getDefaultSetting(key string) *auth.SystemSettin
 			}
 		}
 
-		// Handle string values
 		if val, ok := defaultValue["value"].(string); ok {
 			actualValue := h.settingsCache.GetString(ctx, key, val)
 			return &auth.SystemSetting{
@@ -298,7 +236,6 @@ func (h *SystemSettingsHandler) getDefaultSetting(key string) *auth.SystemSettin
 			}
 		}
 
-		// Handle int values
 		if val, ok := defaultValue["value"].(int); ok {
 			actualValue := h.settingsCache.GetInt(ctx, key, val)
 			return &auth.SystemSetting{
@@ -307,12 +244,10 @@ func (h *SystemSettingsHandler) getDefaultSetting(key string) *auth.SystemSettin
 			}
 		}
 
-		// Handle float values - convert to string, get as string, parse back
 		if val, ok := defaultValue["value"].(float64); ok {
 			strVal := fmt.Sprintf("%v", val)
 			actualStrValue := h.settingsCache.GetString(ctx, key, strVal)
 			if actualStrValue != "" {
-				// Try to parse the actual value
 				if actualVal, err := strconv.ParseFloat(actualStrValue, 64); err == nil {
 					return &auth.SystemSetting{
 						Key:   key,
@@ -320,7 +255,6 @@ func (h *SystemSettingsHandler) getDefaultSetting(key string) *auth.SystemSettin
 					}
 				}
 			}
-			// If parsing fails or env var not set, use default
 			return &auth.SystemSetting{
 				Key:   key,
 				Value: defaultValue,
@@ -328,7 +262,6 @@ func (h *SystemSettingsHandler) getDefaultSetting(key string) *auth.SystemSettin
 		}
 	}
 
-	// Fallback to hardcoded default if settings cache is not available
 	return &auth.SystemSetting{
 		Key:   key,
 		Value: defaultValue,

@@ -16,13 +16,11 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/email"
 )
 
-// EmailTemplateHandler handles email template management
 type EmailTemplateHandler struct {
 	db           *database.Connection
 	emailService email.Service
 }
 
-// NewEmailTemplateHandler creates a new email template handler
 func NewEmailTemplateHandler(db *database.Connection, emailService email.Service) *EmailTemplateHandler {
 	return &EmailTemplateHandler{
 		db:           db,
@@ -30,7 +28,13 @@ func NewEmailTemplateHandler(db *database.Connection, emailService email.Service
 	}
 }
 
-// EmailTemplate represents an email template
+func (h *EmailTemplateHandler) requireDB(c fiber.Ctx) error {
+	if h.db == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 type EmailTemplate struct {
 	ID           uuid.UUID `json:"id"`
 	TemplateType string    `json:"template_type"`
@@ -42,19 +46,16 @@ type EmailTemplate struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// UpdateTemplateRequest represents the request to update a template
 type UpdateTemplateRequest struct {
 	Subject  string  `json:"subject"`
 	HTMLBody string  `json:"html_body"`
 	TextBody *string `json:"text_body,omitempty"`
 }
 
-// TestEmailRequest represents a request to send a test email
 type TestEmailRequest struct {
 	RecipientEmail string `json:"recipient_email"`
 }
 
-// Default email templates
 var defaultTemplates = map[string]EmailTemplate{
 	"magic_link": {
 		TemplateType: "magic_link",
@@ -157,16 +158,11 @@ If you didn't request a password reset, you can safely ignore this email. Your p
 	},
 }
 
-// ListTemplates returns all email templates
-// GET /api/v1/admin/email/templates
 func (h *EmailTemplateHandler) ListTemplates(c fiber.Ctx) error {
 	ctx := context.Background()
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	rows, err := h.db.Query(ctx, `
@@ -176,9 +172,7 @@ func (h *EmailTemplateHandler) ListTemplates(c fiber.Ctx) error {
 	`)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list email templates")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve email templates",
-		})
+		return SendInternalError(c, "Failed to retrieve email templates")
 	}
 	defer rows.Close()
 
@@ -205,7 +199,6 @@ func (h *EmailTemplateHandler) ListTemplates(c fiber.Ctx) error {
 		existingTypes[template.TemplateType] = true
 	}
 
-	// Add default templates for types that don't exist in the database
 	for templateType, defaultTemplate := range defaultTemplates {
 		if !existingTypes[templateType] {
 			templates = append(templates, defaultTemplate)
@@ -215,24 +208,16 @@ func (h *EmailTemplateHandler) ListTemplates(c fiber.Ctx) error {
 	return c.JSON(templates)
 }
 
-// GetTemplate returns a specific email template by type
-// GET /api/v1/admin/email/templates/:type
 func (h *EmailTemplateHandler) GetTemplate(c fiber.Ctx) error {
 	ctx := context.Background()
 	templateType := c.Params("type")
 
-	// Validate template type
 	if _, exists := defaultTemplates[templateType]; !exists {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid template type",
-		})
+		return SendBadRequest(c, "Invalid template type", ErrCodeInvalidInput)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	var template EmailTemplate
@@ -252,60 +237,40 @@ func (h *EmailTemplateHandler) GetTemplate(c fiber.Ctx) error {
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// Return default template
 			defaultTemplate, exists := defaultTemplates[templateType]
 			if !exists {
-				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error": "Template not found",
-				})
+				return SendNotFound(c, "Template not found")
 			}
 			return c.JSON(defaultTemplate)
 		}
 		log.Error().Err(err).Str("type", templateType).Msg("Failed to get email template")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve email template",
-		})
+		return SendInternalError(c, "Failed to retrieve email template")
 	}
 
 	return c.JSON(template)
 }
 
-// UpdateTemplate updates or creates an email template
-// PUT /api/v1/admin/email/templates/:type
 func (h *EmailTemplateHandler) UpdateTemplate(c fiber.Ctx) error {
 	ctx := context.Background()
 	templateType := c.Params("type")
 
-	// Validate template type
 	if _, exists := defaultTemplates[templateType]; !exists {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid template type",
-		})
+		return SendBadRequest(c, "Invalid template type", ErrCodeInvalidInput)
 	}
 
 	var req UpdateTemplateRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse update template request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Validate required fields
 	if req.Subject == "" || req.HTMLBody == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Subject and HTML body are required",
-		})
+		return SendBadRequest(c, "Subject and HTML body are required", ErrCodeMissingField)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// Insert or update template
 	var templateID uuid.UUID
 	err := h.db.QueryRow(ctx, `
 		INSERT INTO platform.email_templates (template_type, subject, html_body, text_body, is_custom)
@@ -320,48 +285,34 @@ func (h *EmailTemplateHandler) UpdateTemplate(c fiber.Ctx) error {
 	`, templateType, req.Subject, req.HTMLBody, req.TextBody).Scan(&templateID)
 	if err != nil {
 		log.Error().Err(err).Str("type", templateType).Msg("Failed to update email template")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to update email template",
-		})
+		return SendInternalError(c, "Failed to update email template")
 	}
 
 	log.Info().Str("type", templateType).Str("id", templateID.String()).Msg("Email template updated")
 
-	// Fetch and return the updated template
 	return h.GetTemplate(c)
 }
 
-// ResetTemplate resets an email template to its default
-// POST /api/v1/admin/email/templates/:type/reset
 func (h *EmailTemplateHandler) ResetTemplate(c fiber.Ctx) error {
 	ctx := context.Background()
 	templateType := c.Params("type")
 
-	// Validate template type
 	defaultTemplate, exists := defaultTemplates[templateType]
 	if !exists {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid template type",
-		})
+		return SendBadRequest(c, "Invalid template type", ErrCodeInvalidInput)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// Delete custom template to fall back to default
 	_, err := h.db.Exec(ctx, `
 		DELETE FROM platform.email_templates
 		WHERE template_type = $1
 	`, templateType)
 	if err != nil {
 		log.Error().Err(err).Str("type", templateType).Msg("Failed to reset email template")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to reset email template",
-		})
+		return SendInternalError(c, "Failed to reset email template")
 	}
 
 	log.Info().Str("type", templateType).Msg("Email template reset to default")
@@ -369,49 +320,34 @@ func (h *EmailTemplateHandler) ResetTemplate(c fiber.Ctx) error {
 	return c.JSON(defaultTemplate)
 }
 
-// TestTemplate sends a test email using the specified template
-// POST /api/v1/admin/email/templates/:type/test
 func (h *EmailTemplateHandler) TestTemplate(c fiber.Ctx) error {
 	templateType := c.Params("type")
 
-	// Validate template type
 	if _, exists := defaultTemplates[templateType]; !exists {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid template type",
-		})
+		return SendBadRequest(c, "Invalid template type", ErrCodeInvalidInput)
 	}
 
 	var req TestEmailRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse test email request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.RecipientEmail == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Recipient email is required",
-		})
+		return SendMissingField(c, "Recipient email")
 	}
 
-	// Check if email service is available first (more specific error for this endpoint)
 	if h.emailService == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"error": "Email service not configured",
 		})
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	ctx := context.Background()
 
-	// Get template (custom or default)
 	var emailTemplate EmailTemplate
 	err := h.db.QueryRow(ctx, `
 		SELECT id, template_type, subject, html_body, text_body, is_custom, created_at, updated_at
@@ -429,17 +365,13 @@ func (h *EmailTemplateHandler) TestTemplate(c fiber.Ctx) error {
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// Use default template
 			emailTemplate = defaultTemplates[templateType]
 		} else {
 			log.Error().Err(err).Str("type", templateType).Msg("Failed to get email template")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to get email template",
-			})
+			return SendInternalError(c, "Failed to get email template")
 		}
 	}
 
-	// Create test data for rendering
 	testData := map[string]string{
 		"AppName":     "Test Application",
 		"Link":        "https://example.com/test-link",
@@ -452,19 +384,15 @@ func (h *EmailTemplateHandler) TestTemplate(c fiber.Ctx) error {
 		"Expiry":      "15 minutes",
 	}
 
-	// Render template with test data
 	renderedSubject := renderTemplateString(emailTemplate.Subject, testData)
 	renderedBody := renderTemplateString(emailTemplate.HTMLBody, testData)
 
-	// Send test email
 	if err := h.emailService.Send(ctx, req.RecipientEmail, renderedSubject, renderedBody); err != nil {
 		log.Error().Err(err).
 			Str("type", templateType).
 			Str("recipient", req.RecipientEmail).
 			Msg("Failed to send test email")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to send test email: " + err.Error(),
-		})
+		return SendInternalError(c, "Failed to send test email")
 	}
 
 	log.Info().
@@ -478,22 +406,20 @@ func (h *EmailTemplateHandler) TestTemplate(c fiber.Ctx) error {
 	})
 }
 
-// renderTemplateString renders a template string with the given data
 func renderTemplateString(templateStr string, data map[string]string) string {
 	tmpl, err := template.New("email").Parse(templateStr)
 	if err != nil {
-		return templateStr // Return original if parsing fails
+		return templateStr
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return templateStr // Return original if execution fails
+		return templateStr
 	}
 
 	return buf.String()
 }
 
-// Helper function to create string pointers
 func stringPtr(s string) *string {
 	return &s
 }

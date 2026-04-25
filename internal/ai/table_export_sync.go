@@ -81,7 +81,7 @@ type UpdateTableExportSyncConfig struct {
 
 // TableExportSyncService manages sync configurations and manual triggers for exported tables
 type TableExportSyncService struct {
-	db       *database.Connection
+	database.TenantAware
 	exporter *TableExporter
 	storage  *KnowledgeBaseStorage
 }
@@ -93,15 +93,10 @@ func NewTableExportSyncService(
 	storage *KnowledgeBaseStorage,
 ) *TableExportSyncService {
 	return &TableExportSyncService{
-		db:       db,
-		exporter: exporter,
-		storage:  storage,
+		TenantAware: database.TenantAware{DB: db},
+		exporter:    exporter,
+		storage:     storage,
 	}
-}
-
-func (s *TableExportSyncService) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	tenantID := database.TenantFromContext(ctx)
-	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
 }
 
 // CreateSyncConfig creates a new sync configuration
@@ -132,7 +127,7 @@ func (s *TableExportSyncService) CreateSyncConfig(ctx context.Context, config *C
 		columns = config.Columns
 	}
 
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			id, config.KnowledgeBaseID, config.SchemaName, config.TableName, columns,
 			config.SyncMode, config.SyncOnInsert, config.SyncOnUpdate, config.SyncOnDelete,
@@ -189,7 +184,7 @@ func (s *TableExportSyncService) GetSyncConfig(ctx context.Context, id string) (
 	var lastSyncAt *time.Time
 	var lastSyncStatus, lastSyncError *string
 
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, id).Scan(
 			&config.ID, &config.KnowledgeBaseID, &config.SchemaName, &config.TableName, &columns,
 			&config.SyncMode, &config.SyncOnInsert, &config.SyncOnUpdate, &config.SyncOnDelete,
@@ -234,7 +229,7 @@ func (s *TableExportSyncService) GetSyncConfigsByKnowledgeBase(ctx context.Conte
 
 	var configs []TableExportSyncConfig
 
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, knowledgeBaseID)
 		if err != nil {
 			return fmt.Errorf("failed to list sync configs: %w", err)
@@ -333,7 +328,7 @@ func (s *TableExportSyncService) UpdateSyncConfig(ctx context.Context, id string
 
 	query += " WHERE id = $1 RETURNING id"
 
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, args...).Scan(&id)
 	})
 	if err != nil {
@@ -345,7 +340,7 @@ func (s *TableExportSyncService) UpdateSyncConfig(ctx context.Context, id string
 
 // DeleteSyncConfig deletes a sync configuration
 func (s *TableExportSyncService) DeleteSyncConfig(ctx context.Context, id string) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `DELETE FROM ai.table_export_sync_configs WHERE id = $1`
 		_, err := tx.Exec(ctx, query, id)
 		if err != nil {
@@ -397,7 +392,7 @@ func (s *TableExportSyncService) updateSyncStatus(ctx context.Context, id string
 			updated_at = NOW()
 		WHERE id = $1
 	`
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, id, string(status), errMsg)
 		return err
 	})

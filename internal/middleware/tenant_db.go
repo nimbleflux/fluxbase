@@ -189,42 +189,6 @@ func GetTargetSchema(c fiber.Ctx) string {
 	return ""
 }
 
-func SetTenantDBSessionContext(ctx context.Context, tx pgxpool.Tx, tenantID string) error {
-	if tenantID == "" {
-		return nil
-	}
-	_, err := tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
-	if err != nil {
-		return fmt.Errorf("failed to set tenant session context: %w", err)
-	}
-	return nil
-}
-
-func RequireTenantAdmin() fiber.Handler {
-	return func(c fiber.Ctx) error {
-		isInstanceAdminVal, _ := c.Locals("is_instance_admin").(bool)
-		tenantSource, _ := c.Locals("tenant_source").(string)
-		tenantID, _ := c.Locals("tenant_id").(string)
-
-		actingAsTenantAdmin := tenantID != "" && (tenantSource == "header" || tenantSource == "jwt")
-
-		if isInstanceAdminVal && !actingAsTenantAdmin {
-			return c.Next()
-		}
-
-		tenantRole, _ := c.Locals("tenant_role").(string)
-		if tenantRole == "" {
-			return fiber.NewError(fiber.StatusForbidden, "tenant membership required")
-		}
-
-		if tenantRole != "tenant_admin" {
-			return fiber.NewError(fiber.StatusForbidden, "tenant admin role required")
-		}
-
-		return c.Next()
-	}
-}
-
 func GetUserManagedTenantIDs(ctx context.Context, storage UserTenantLister, userID string) ([]string, error) {
 	if storage == nil {
 		return nil, errors.New("storage not initialized")

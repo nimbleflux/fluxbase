@@ -14,16 +14,15 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/runtime"
 )
 
-// Storage provides database operations for jobs
 type Storage struct {
-	conn *database.Connection
+	database.TenantAware
 }
 
-// NewStorage creates a new Storage instance
 func NewStorage(conn *database.Connection) *Storage {
-	return &Storage{conn: conn}
+	return &Storage{TenantAware: database.TenantAware{DB: conn}}
 }
 
 // ========== Job Functions ==========
@@ -48,7 +47,7 @@ func (s *Storage) CreateJobFunctionWithTenant(ctx context.Context, tenantID stri
 		RETURNING created_at, updated_at
 	`
 
-	return database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	return database.WrapWithTenantAwareRole(ctx, s.DB, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			fn.ID, fn.Name, fn.Namespace, fn.Description, fn.Code, fn.OriginalCode,
 			fn.IsBundled, fn.BundleError, fn.Enabled, fn.Schedule, fn.TimeoutSeconds,
@@ -77,7 +76,7 @@ func (s *Storage) UpdateJobFunctionWithTenant(ctx context.Context, tenantID stri
 		RETURNING version, updated_at
 	`
 
-	return database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	return database.WrapWithTenantAwareRole(ctx, s.DB, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			fn.Description, fn.Code, fn.OriginalCode, fn.IsBundled, fn.BundleError,
 			fn.Enabled, fn.Schedule, fn.TimeoutSeconds, fn.MemoryLimitMB,
@@ -98,7 +97,7 @@ func (s *Storage) UpdateJobFunctionForSync(ctx context.Context, tenantID string,
 		RETURNING version, updated_at
 	`
 
-	return database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	return database.WrapWithTenantAwareRole(ctx, s.DB, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			fn.Description, fn.Code, fn.OriginalCode, fn.IsBundled, fn.BundleError,
 			fn.Enabled, fn.Schedule, fn.TimeoutSeconds, fn.MemoryLimitMB,
@@ -148,7 +147,7 @@ func (s *Storage) UpsertJobFunctionWithTenant(ctx context.Context, tenantID stri
 		RETURNING id, version, created_at, updated_at
 	`
 
-	return database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	return database.WrapWithTenantAwareRole(ctx, s.DB, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			fn.ID, fn.Name, fn.Namespace, fn.Description, fn.Code, fn.OriginalCode,
 			fn.IsBundled, fn.BundleError, fn.Enabled, fn.Schedule, fn.TimeoutSeconds,
@@ -170,10 +169,9 @@ func (s *Storage) GetJobFunction(ctx context.Context, namespace, name string) (*
 		WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))
 	`
 
-	tenantID := database.TenantFromContext(ctx)
 	var fn JobFunction
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, namespace, name, tenantOrNil(tenantID)).Scan(
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, namespace, name, database.TenantOrNil(database.TenantFromContext(ctx))).Scan(
 			&fn.ID, &fn.Name, &fn.Namespace, &fn.Description, &fn.Code, &fn.OriginalCode,
 			&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
 			&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
@@ -205,10 +203,9 @@ func (s *Storage) GetJobFunctionByName(ctx context.Context, name string) (*JobFu
 		LIMIT 1
 	`
 
-	tenantID := database.TenantFromContext(ctx)
 	var fn JobFunction
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, name, tenantOrNil(tenantID)).Scan(
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, name, database.TenantOrNil(database.TenantFromContext(ctx))).Scan(
 			&fn.ID, &fn.Name, &fn.Namespace, &fn.Description, &fn.Code, &fn.OriginalCode,
 			&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
 			&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
@@ -237,10 +234,9 @@ func (s *Storage) GetJobFunctionByID(ctx context.Context, id uuid.UUID) (*JobFun
 		WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 	`
 
-	tenantID := database.TenantFromContext(ctx)
 	var fn JobFunction
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, id, tenantOrNil(tenantID)).Scan(
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, id, database.TenantOrNil(database.TenantFromContext(ctx))).Scan(
 			&fn.ID, &fn.Name, &fn.Namespace, &fn.Description, &fn.Code, &fn.OriginalCode,
 			&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
 			&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
@@ -270,10 +266,9 @@ func (s *Storage) ListJobFunctions(ctx context.Context, namespace string) ([]*Jo
 		ORDER BY name
 	`
 
-	tenantID := database.TenantFromContext(ctx)
 	var functions []*JobFunctionSummary
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, namespace, tenantOrNil(tenantID))
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, namespace, database.TenantOrNil(database.TenantFromContext(ctx)))
 		if err != nil {
 			return err
 		}
@@ -316,8 +311,8 @@ func (s *Storage) ListJobFunctionsForSync(ctx context.Context, namespace string,
 	`
 
 	var functions []*JobFunctionSummary
-	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, namespace, tenantOrNil(tenantID))
+	err := database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, namespace, database.TenantOrNil(tenantID))
 		if err != nil {
 			return err
 		}
@@ -358,10 +353,9 @@ func (s *Storage) ListAllJobFunctions(ctx context.Context) ([]*JobFunctionSummar
 			ORDER BY namespace, name
 	`
 
-	tenantID := database.TenantFromContext(ctx)
 	var functions []*JobFunctionSummary
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, tenantOrNil(tenantID))
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, database.TenantOrNil(database.TenantFromContext(ctx)))
 		if err != nil {
 			return err
 		}
@@ -401,9 +395,9 @@ func (s *Storage) DeleteJobFunctionWithTenant(ctx context.Context, tenantID stri
 	query := `DELETE FROM jobs.functions WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))`
 
 	var result pgconn.CommandTag
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.DB, tenantID, func(tx pgx.Tx) error {
 		var execErr error
-		result, execErr = tx.Exec(ctx, query, namespace, name, tenantOrNil(tenantID))
+		result, execErr = tx.Exec(ctx, query, namespace, name, database.TenantOrNil(tenantID))
 		return execErr
 	})
 	if err != nil {
@@ -421,9 +415,9 @@ func (s *Storage) DeleteJobFunctionForSync(ctx context.Context, tenantID string,
 	query := `DELETE FROM jobs.functions WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR tenant_id IS NULL)`
 
 	var result pgconn.CommandTag
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.DB, tenantID, func(tx pgx.Tx) error {
 		var execErr error
-		result, execErr = tx.Exec(ctx, query, namespace, name, tenantOrNil(tenantID))
+		result, execErr = tx.Exec(ctx, query, namespace, name, database.TenantOrNil(tenantID))
 		return execErr
 	})
 	if err != nil {
@@ -448,7 +442,7 @@ func (s *Storage) CreateJobFunctionFile(ctx context.Context, file *JobFunctionFi
 		RETURNING created_at
 	`
 
-	return s.conn.Pool().QueryRow(ctx, query,
+	return s.DB.Pool().QueryRow(ctx, query,
 		file.ID, file.JobFunctionID, file.FilePath, file.Content,
 	).Scan(&file.CreatedAt)
 }
@@ -462,7 +456,7 @@ func (s *Storage) ListJobFunctionFiles(ctx context.Context, jobFunctionID uuid.U
 		ORDER BY file_path
 	`
 
-	rows, err := s.conn.Pool().Query(ctx, query, jobFunctionID)
+	rows, err := s.DB.Pool().Query(ctx, query, jobFunctionID)
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +477,7 @@ func (s *Storage) ListJobFunctionFiles(ctx context.Context, jobFunctionID uuid.U
 // DeleteJobFunctionFiles deletes all files for a job function
 func (s *Storage) DeleteJobFunctionFiles(ctx context.Context, jobFunctionID uuid.UUID) error {
 	query := `DELETE FROM jobs.function_files WHERE function_id = $1`
-	_, err := s.conn.Pool().Exec(ctx, query, jobFunctionID)
+	_, err := s.DB.Pool().Exec(ctx, query, jobFunctionID)
 	return err
 }
 
@@ -505,7 +499,7 @@ func (s *Storage) EnqueueJobWithTenant(ctx context.Context, tenantID string, job
 		RETURNING created_at
 	`
 
-	return database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	return database.WrapWithTenantAwareRole(ctx, s.DB, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			job.ID, job.Namespace, job.JobFunctionID, job.JobName, job.Status, job.Payload,
 			job.Priority, job.MaxDurationSeconds, job.ProgressTimeoutSeconds,
@@ -540,10 +534,9 @@ func (s *Storage) IsDuplicateJob(ctx context.Context, namespace, jobName string,
 		LIMIT 1
 	`
 
-	tenantID := database.TenantFromContext(ctx)
 	var existingID uuid.UUID
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, namespace, jobName, JobStatusPending, JobStatusRunning, payload, tenantOrNil(tenantID)).Scan(&existingID)
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, namespace, jobName, JobStatusPending, JobStatusRunning, payload, database.TenantOrNil(database.TenantFromContext(ctx))).Scan(&existingID)
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -600,7 +593,7 @@ func (s *Storage) ClaimNextJob(ctx context.Context, workerID uuid.UUID) (*Job, e
 
 	var job Job
 	var tenantID string
-	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, JobStatusRunning, workerID, JobStatusPending).Scan(
 			&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
 			&job.Payload, &job.Result, &job.Progress, &job.Priority,
@@ -629,8 +622,12 @@ func (s *Storage) UpdateJobProgress(ctx context.Context, jobID uuid.UUID, progre
 		WHERE id = $2 AND status = $3
 	`
 
-	tenantID := database.TenantFromContext(ctx)
-	result, err := s.updateWithTenantRole(ctx, tenantID, query, progress, jobID, JobStatusRunning)
+	var result pgconn.CommandTag
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, progress, jobID, JobStatusRunning)
+		return execErr
+	})
 	if err != nil {
 		return err
 	}
@@ -652,8 +649,12 @@ func (s *Storage) CompleteJob(ctx context.Context, jobID uuid.UUID, result strin
 		WHERE id = $3 AND status = $4
 	`
 
-	tenantID := database.TenantFromContext(ctx)
-	cmdTag, err := s.updateWithTenantRole(ctx, tenantID, query, JobStatusCompleted, result, jobID, JobStatusRunning)
+	var cmdTag pgconn.CommandTag
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		var execErr error
+		cmdTag, execErr = tx.Exec(ctx, query, JobStatusCompleted, result, jobID, JobStatusRunning)
+		return execErr
+	})
 	if err != nil {
 		return err
 	}
@@ -673,8 +674,12 @@ func (s *Storage) FailJob(ctx context.Context, jobID uuid.UUID, errorMessage str
 		WHERE id = $3 AND status = $4
 	`
 
-	tenantID := database.TenantFromContext(ctx)
-	cmdTag, err := s.updateWithTenantRole(ctx, tenantID, query, JobStatusFailed, errorMessage, jobID, JobStatusRunning)
+	var cmdTag pgconn.CommandTag
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		var execErr error
+		cmdTag, execErr = tx.Exec(ctx, query, JobStatusFailed, errorMessage, jobID, JobStatusRunning)
+		return execErr
+	})
 	if err != nil {
 		return err
 	}
@@ -694,11 +699,10 @@ func (s *Storage) CancelJob(ctx context.Context, jobID uuid.UUID) error {
 		WHERE id = $2 AND status IN ($3, $4) AND (tenant_id = $5 OR ($5 IS NULL AND tenant_id IS NULL))
 	`
 
-	tenantID := database.TenantFromContext(ctx)
 	var result pgconn.CommandTag
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		var execErr error
-		result, execErr = tx.Exec(ctx, query, JobStatusCancelled, jobID, JobStatusPending, JobStatusRunning, tenantOrNil(tenantID))
+		result, execErr = tx.Exec(ctx, query, JobStatusCancelled, jobID, JobStatusPending, JobStatusRunning, database.TenantOrNil(database.TenantFromContext(ctx)))
 		return execErr
 	})
 	if err != nil {
@@ -720,8 +724,12 @@ func (s *Storage) InterruptJob(ctx context.Context, jobID uuid.UUID, reason stri
 		WHERE id = $3 AND status = $4
 	`
 
-	tenantID := database.TenantFromContext(ctx)
-	result, err := s.updateWithTenantRole(ctx, tenantID, query, JobStatusInterrupted, reason, jobID, JobStatusRunning)
+	var result pgconn.CommandTag
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, JobStatusInterrupted, reason, jobID, JobStatusRunning)
+		return execErr
+	})
 	if err != nil {
 		return err
 	}
@@ -743,11 +751,10 @@ func (s *Storage) RequeueJob(ctx context.Context, jobID uuid.UUID) error {
 		WHERE id = $2 AND status = $3 AND retry_count < max_retries AND (tenant_id = $4 OR ($4 IS NULL AND tenant_id IS NULL))
 	`
 
-	tenantID := database.TenantFromContext(ctx)
 	var result pgconn.CommandTag
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		var execErr error
-		result, execErr = tx.Exec(ctx, query, JobStatusPending, jobID, JobStatusFailed, tenantOrNil(tenantID))
+		result, execErr = tx.Exec(ctx, query, JobStatusPending, jobID, JobStatusFailed, database.TenantOrNil(database.TenantFromContext(ctx)))
 		return execErr
 	})
 	if err != nil {
@@ -796,8 +803,7 @@ func (s *Storage) ResubmitJob(ctx context.Context, originalJobID uuid.UUID) (*Jo
 		RETURNING created_at
 	`
 
-	tenantID := database.TenantFromContext(ctx)
-	err = database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			newJob.ID, newJob.Namespace, newJob.JobFunctionID, newJob.JobName, newJob.Status,
 			newJob.Payload, newJob.Priority, newJob.MaxDurationSeconds, newJob.ProgressTimeoutSeconds,
@@ -824,10 +830,9 @@ func (s *Storage) GetJob(ctx context.Context, jobID uuid.UUID) (*Job, error) {
 		WHERE q.id = $1 AND (q.tenant_id = $2 OR ($2 IS NULL AND q.tenant_id IS NULL))
 	`
 
-	tenantID := database.TenantFromContext(ctx)
 	var job Job
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, jobID, tenantOrNil(tenantID)).Scan(
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, jobID, database.TenantOrNil(database.TenantFromContext(ctx))).Scan(
 			&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
 			&job.Payload, &job.Result, &job.Progress, &job.Priority,
 			&job.MaxDurationSeconds, &job.ProgressTimeoutSeconds, &job.MaxRetries,
@@ -884,7 +889,7 @@ func (s *Storage) ListJobs(ctx context.Context, filters *JobFilters) ([]*Job, er
 
 	// Tenant filter (first dynamic filter)
 	query += fmt.Sprintf(" AND (q.tenant_id = $%d OR ($%d IS NULL AND q.tenant_id IS NULL))", argCount, argCount)
-	args = append(args, tenantOrNil(tenantID))
+	args = append(args, database.TenantOrNil(tenantID))
 	argCount++
 
 	if filters != nil {
@@ -929,7 +934,7 @@ func (s *Storage) ListJobs(ctx context.Context, filters *JobFilters) ([]*Job, er
 	}
 
 	var jobs []*Job
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.DB, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return err
@@ -991,12 +996,10 @@ func (s *Storage) GetJobByIDAdmin(ctx context.Context, jobID uuid.UUID) (*Job, e
 		WHERE q.id = $1 AND (q.tenant_id = $2 OR ($2 IS NULL AND q.tenant_id IS NULL))
 	`
 
-	tenantID := database.TenantFromContext(ctx)
 	var job Job
 
-	// Use service role with tenant context (admin endpoint)
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, jobID, tenantOrNil(tenantID)).Scan(
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, jobID, database.TenantOrNil(database.TenantFromContext(ctx))).Scan(
 			&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
 			&job.Payload, &job.Result, &job.Progress, &job.Priority,
 			&job.MaxDurationSeconds, &job.ProgressTimeoutSeconds, &job.MaxRetries,
@@ -1053,7 +1056,7 @@ func (s *Storage) ListJobsAdmin(ctx context.Context, filters *JobFilters) ([]*Jo
 
 	// Tenant filter (first dynamic filter)
 	query += fmt.Sprintf(" AND (q.tenant_id = $%d OR ($%d IS NULL AND q.tenant_id IS NULL))", argCount, argCount)
-	args = append(args, tenantOrNil(tenantID))
+	args = append(args, database.TenantOrNil(tenantID))
 	argCount++
 
 	if filters != nil {
@@ -1100,7 +1103,7 @@ func (s *Storage) ListJobsAdmin(ctx context.Context, filters *JobFilters) ([]*Jo
 	var jobs []*Job
 
 	// Use service role with tenant context (admin endpoint)
-	err := database.WrapWithServiceRoleAndTenant(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRoleAndTenant(ctx, s.DB, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return err
@@ -1150,15 +1153,13 @@ func (s *Storage) GetJobStats(ctx context.Context, namespace *string) (*JobStats
 
 	tenantID := database.TenantFromContext(ctx)
 
-	// Build args for tenant + namespace filters
 	var args []interface{}
-	args = append(args, tenantOrNil(tenantID))
+	args = append(args, database.TenantOrNil(tenantID))
 	if namespace != nil {
 		args = append(args, *namespace)
 	}
 
-	// Use service role with tenant context (admin endpoint)
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		// Basic counts query
 		countQuery := `
 			SELECT
@@ -1288,7 +1289,7 @@ func (s *Storage) RegisterWorker(ctx context.Context, worker *WorkerRecord) erro
 		RETURNING started_at, last_heartbeat_at
 	`
 
-	return database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+	return database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			worker.ID, worker.Name, worker.Hostname, worker.Status,
 			worker.MaxConcurrentJobs, worker.Metadata,
@@ -1304,7 +1305,7 @@ func (s *Storage) UpdateWorkerHeartbeat(ctx context.Context, workerID uuid.UUID,
 		WHERE id = $2
 	`
 
-	return database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+	return database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, currentJobCount, workerID)
 		return err
 	})
@@ -1312,7 +1313,7 @@ func (s *Storage) UpdateWorkerHeartbeat(ctx context.Context, workerID uuid.UUID,
 
 func (s *Storage) UpdateWorkerStatus(ctx context.Context, workerID uuid.UUID, status WorkerStatus) error {
 	query := `UPDATE jobs.workers SET status = $1 WHERE id = $2`
-	return database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+	return database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, status, workerID)
 		return err
 	})
@@ -1320,7 +1321,7 @@ func (s *Storage) UpdateWorkerStatus(ctx context.Context, workerID uuid.UUID, st
 
 func (s *Storage) DeregisterWorker(ctx context.Context, workerID uuid.UUID) error {
 	query := `DELETE FROM jobs.workers WHERE id = $1`
-	return database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+	return database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, workerID)
 		return err
 	})
@@ -1336,7 +1337,7 @@ func (s *Storage) GetWorker(ctx context.Context, workerID uuid.UUID) (*WorkerRec
 	`
 
 	var worker WorkerRecord
-	err := s.conn.Pool().QueryRow(ctx, query, workerID).Scan(
+	err := s.DB.Pool().QueryRow(ctx, query, workerID).Scan(
 		&worker.ID, &worker.Name, &worker.Hostname, &worker.Status,
 		&worker.MaxConcurrentJobs, &worker.CurrentJobCount,
 		&worker.LastHeartbeatAt, &worker.StartedAt, &worker.Metadata,
@@ -1363,10 +1364,8 @@ func (s *Storage) ListWorkers(ctx context.Context) ([]*WorkerRecord, error) {
 
 	var workers []*WorkerRecord
 
-	// Use service role with tenant context (admin endpoint)
-	tenantID := database.TenantFromContext(ctx)
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, tenantOrNil(tenantID))
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, database.TenantOrNil(database.TenantFromContext(ctx)))
 		if err != nil {
 			return err
 		}
@@ -1402,7 +1401,7 @@ func (s *Storage) CleanupStaleWorkers(ctx context.Context, timeout time.Duration
 	`
 
 	var result pgconn.CommandTag
-	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		var execErr error
 		result, execErr = tx.Exec(ctx, query, timeout.String())
 		return execErr
@@ -1426,7 +1425,7 @@ func (s *Storage) ResetOrphanedJobs(ctx context.Context) (int64, error) {
 	`
 
 	var result pgconn.CommandTag
-	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		var execErr error
 		result, execErr = tx.Exec(ctx, query, JobStatusPending, JobStatusRunning)
 		return execErr
@@ -1446,10 +1445,8 @@ func (s *Storage) ListJobNamespaces(ctx context.Context) ([]string, error) {
 
 	var namespaces []string
 
-	// Use service role with tenant context (admin endpoint)
-	tenantID := database.TenantFromContext(ctx)
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, query, tenantOrNil(tenantID))
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, database.TenantOrNil(database.TenantFromContext(ctx)))
 		if err != nil {
 			return err
 		}
@@ -1474,7 +1471,7 @@ func (s *Storage) ListJobNamespaces(ctx context.Context) ([]string, error) {
 // ========== Helper Functions ==========
 
 // ProgressToJSON converts a Progress struct to JSON string
-func ProgressToJSON(p *Progress) (*string, error) {
+func ProgressToJSON(p *runtime.Progress) (*string, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -1489,37 +1486,17 @@ func ProgressToJSON(p *Progress) (*string, error) {
 }
 
 // JSONToProgress converts a JSON string to Progress struct
-func JSONToProgress(s *string) (*Progress, error) {
+func JSONToProgress(s *string) (*runtime.Progress, error) {
 	if s == nil || *s == "" {
 		return nil, nil
 	}
 
-	var p Progress
+	var p runtime.Progress
 	if err := json.Unmarshal([]byte(*s), &p); err != nil {
 		return nil, err
 	}
 
 	return &p, nil
-}
-
-// tenantOrNil converts an empty tenant string to nil for UUID column compatibility
-func tenantOrNil(tenantID string) interface{} {
-	if tenantID == "" {
-		return nil
-	}
-	return tenantID
-}
-
-// updateWithTenantRole executes an UPDATE query with tenant-aware role wrapping.
-// Workers use this after claiming a job to operate within the job's tenant context.
-func (s *Storage) updateWithTenantRole(ctx context.Context, tenantID string, query string, args ...interface{}) (pgconn.CommandTag, error) {
-	var result pgconn.CommandTag
-	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
-		var execErr error
-		result, execErr = tx.Exec(ctx, query, args...)
-		return execErr
-	})
-	return result, err
 }
 
 // ListAllScheduledJobFunctions lists all enabled scheduled job functions across all tenants.
@@ -1536,7 +1513,7 @@ func (s *Storage) ListAllScheduledJobFunctions(ctx context.Context) ([]*JobFunct
 	`
 
 	var functions []*JobFunctionSummary
-	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query)
 		if err != nil {
 			return err

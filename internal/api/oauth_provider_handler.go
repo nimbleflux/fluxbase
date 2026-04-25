@@ -40,6 +40,13 @@ func NewOAuthProviderHandler(db *pgxpool.Pool, settingsCache *auth.SettingsCache
 	}
 }
 
+func (h *OAuthProviderHandler) requireDB(c fiber.Ctx) error {
+	if h.db == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // EncryptExistingSecrets encrypts any plaintext client secrets in the database.
 // This should be called on startup to migrate existing secrets to encrypted format.
 func (h *OAuthProviderHandler) EncryptExistingSecrets(ctx context.Context) error {
@@ -203,11 +210,8 @@ var providerNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{1,49}$`)
 func (h *OAuthProviderHandler) ListOAuthProviders(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	query := `
@@ -225,9 +229,7 @@ func (h *OAuthProviderHandler) ListOAuthProviders(c fiber.Ctx) error {
 	rows, err := h.db.Query(ctx, query)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list OAuth providers")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to retrieve OAuth providers",
-		})
+		return SendInternalError(c, "Failed to retrieve OAuth providers")
 	}
 	defer rows.Close()
 
@@ -318,16 +320,11 @@ func (h *OAuthProviderHandler) GetOAuthProvider(c fiber.Ctx) error {
 
 	providerID, err := uuid.Parse(id)
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid provider ID",
-		})
+		return SendBadRequest(c, "Invalid provider ID", ErrCodeInvalidID)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	query := `
@@ -354,15 +351,11 @@ func (h *OAuthProviderHandler) GetOAuthProvider(c fiber.Ctx) error {
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "OAuth provider not found",
-		})
+		return SendNotFound(c, "OAuth provider not found")
 	}
 	if err != nil {
 		log.Error().Err(err).Str("id", id).Msg("Failed to get OAuth provider")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to retrieve OAuth provider",
-		})
+		return SendInternalError(c, "Failed to retrieve OAuth provider")
 	}
 
 	// Unmarshal RBAC fields
@@ -383,43 +376,31 @@ func (h *OAuthProviderHandler) CreateOAuthProvider(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 	var req CreateOAuthProviderRequest
 
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate provider name
 	if !providerNamePattern.MatchString(req.ProviderName) {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Provider name must start with a letter and contain only lowercase letters, numbers, and underscores (2-50 chars)",
-		})
+		return SendBadRequest(c, "Provider name must start with a letter and contain only lowercase letters, numbers, and underscores (2-50 chars)", ErrCodeInvalidInput)
 	}
 
 	// Validate required fields
 	if req.DisplayName == "" || req.ClientID == "" || req.ClientSecret == "" || req.RedirectURL == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Missing required fields: display_name, client_id, client_secret, redirect_url",
-		})
+		return SendBadRequest(c, "Missing required fields: display_name, client_id, client_secret, redirect_url", ErrCodeMissingField)
 	}
 
 	// For custom providers, require custom URLs
 	if req.IsCustom {
 		if req.AuthorizationURL == nil || req.TokenURL == nil || req.UserInfoURL == nil {
-			return c.Status(400).JSON(fiber.Map{
-				"error": "Custom providers require authorization_url, token_url, and user_info_url",
-			})
+			return SendBadRequest(c, "Custom providers require authorization_url, token_url, and user_info_url", ErrCodeMissingField)
 		}
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// Get user ID from context (set by auth middleware)
 	userID := getUserIDFromContext(c)
 
 	// Set defaults for new fields
@@ -445,9 +426,7 @@ func (h *OAuthProviderHandler) CreateOAuthProvider(c fiber.Ctx) error {
 	encryptedSecret, err := crypto.Encrypt(req.ClientSecret, h.encryptionKey)
 	if err != nil {
 		log.Error().Err(err).Str("provider", req.ProviderName).Msg("Failed to encrypt client secret")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to encrypt client secret",
-		})
+		return SendInternalError(c, "Failed to encrypt client secret")
 	}
 
 	query := `
@@ -472,14 +451,10 @@ func (h *OAuthProviderHandler) CreateOAuthProvider(c fiber.Ctx) error {
 	).Scan(&id, &createdAt, &updatedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
-			return c.Status(409).JSON(fiber.Map{
-				"error": fmt.Sprintf("OAuth provider '%s' already exists", req.ProviderName),
-			})
+			return SendConflict(c, fmt.Sprintf("OAuth provider '%s' already exists", req.ProviderName), ErrCodeDuplicateKey)
 		}
 		log.Error().Err(err).Str("provider", req.ProviderName).Msg("Failed to create OAuth provider")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to create OAuth provider",
-		})
+		return SendInternalError(c, "Failed to create OAuth provider")
 	}
 
 	log.Info().Str("id", id.String()).Str("provider", req.ProviderName).Msg("OAuth provider created")
@@ -501,16 +476,12 @@ func (h *OAuthProviderHandler) UpdateOAuthProvider(c fiber.Ctx) error {
 
 	providerID, err := uuid.Parse(id)
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid provider ID",
-		})
+		return SendBadRequest(c, "Invalid provider ID", ErrCodeInvalidID)
 	}
 
 	var req UpdateOAuthProviderRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate that at least one field is provided
@@ -520,16 +491,11 @@ func (h *OAuthProviderHandler) UpdateOAuthProvider(c fiber.Ctx) error {
 		req.RevocationEndpoint == nil && req.EndSessionEndpoint == nil &&
 		req.AllowDashboardLogin == nil && req.AllowAppLogin == nil &&
 		req.RequiredClaims == nil && req.DeniedClaims == nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "No fields to update",
-		})
+		return SendBadRequest(c, "No fields to update", ErrCodeInvalidInput)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	// Build dynamic update query
@@ -557,9 +523,7 @@ func (h *OAuthProviderHandler) UpdateOAuthProvider(c fiber.Ctx) error {
 		encryptedSecret, encErr := crypto.Encrypt(*req.ClientSecret, h.encryptionKey)
 		if encErr != nil {
 			log.Error().Err(encErr).Msg("Failed to encrypt client secret")
-			return c.Status(500).JSON(fiber.Map{
-				"error": "Failed to encrypt client secret",
-			})
+			return SendInternalError(c, "Failed to encrypt client secret")
 		}
 		updates = append(updates, fmt.Sprintf("client_secret = $%d", argPos))
 		args = append(args, encryptedSecret)
@@ -640,15 +604,11 @@ func (h *OAuthProviderHandler) UpdateOAuthProvider(c fiber.Ctx) error {
 	err = h.db.QueryRow(ctx, query, args...).Scan(&displayName)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "OAuth provider not found",
-		})
+		return SendNotFound(c, "OAuth provider not found")
 	}
 	if err != nil {
 		log.Error().Err(err).Str("id", id).Msg("Failed to update OAuth provider")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to update OAuth provider",
-		})
+		return SendInternalError(c, "Failed to update OAuth provider")
 	}
 
 	log.Info().Str("id", id).Msg("OAuth provider updated")
@@ -666,16 +626,11 @@ func (h *OAuthProviderHandler) DeleteOAuthProvider(c fiber.Ctx) error {
 
 	providerID, err := uuid.Parse(id)
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid provider ID",
-		})
+		return SendBadRequest(c, "Invalid provider ID", ErrCodeInvalidID)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	query := "	DELETE FROM platform.oauth_providers WHERE id = $1 RETURNING display_name"
@@ -684,15 +639,11 @@ func (h *OAuthProviderHandler) DeleteOAuthProvider(c fiber.Ctx) error {
 	err = h.db.QueryRow(ctx, query, providerID).Scan(&displayName)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "OAuth provider not found",
-		})
+		return SendNotFound(c, "OAuth provider not found")
 	}
 	if err != nil {
 		log.Error().Err(err).Str("id", id).Msg("Failed to delete OAuth provider")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to delete OAuth provider",
-		})
+		return SendInternalError(c, "Failed to delete OAuth provider")
 	}
 
 	log.Info().Str("id", id).Str("provider", displayName).Msg("OAuth provider deleted")
@@ -707,20 +658,15 @@ func (h *OAuthProviderHandler) DeleteOAuthProvider(c fiber.Ctx) error {
 func (h *OAuthProviderHandler) GetAuthSettings(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	query := "SELECT key, value FROM app.settings WHERE category = 'auth'"
 	rows, err := h.db.Query(ctx, query)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get auth settings")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to retrieve auth settings",
-		})
+		return SendInternalError(c, "Failed to retrieve auth settings")
 	}
 	defer rows.Close()
 
@@ -818,20 +764,14 @@ func (h *OAuthProviderHandler) UpdateAuthSettings(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 	var req AuthSettings
 
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// Check for environment variable overrides before updating
 	if h.settingsCache != nil {
 		settingsKeyMap := map[string]string{
 			"enable_signup":              "app.auth.signup_enabled",
@@ -842,11 +782,7 @@ func (h *OAuthProviderHandler) UpdateAuthSettings(c fiber.Ctx) error {
 
 		for fieldName, settingKey := range settingsKeyMap {
 			if h.settingsCache.IsOverriddenByEnv(settingKey) {
-				return c.Status(409).JSON(fiber.Map{
-					"error": fmt.Sprintf("Setting '%s' cannot be updated because it is overridden by an environment variable", fieldName),
-					"code":  "ENV_OVERRIDE",
-					"field": fieldName,
-				})
+				return SendConflict(c, fmt.Sprintf("Setting '%s' cannot be updated because it is overridden by an environment variable", fieldName), "ENV_OVERRIDE")
 			}
 		}
 	}
@@ -864,15 +800,10 @@ func (h *OAuthProviderHandler) UpdateAuthSettings(c fiber.Ctx) error {
 		hasSSO, err := h.hasDashboardSSOProviders(ctx)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to check dashboard SSO providers")
-			return c.Status(500).JSON(fiber.Map{
-				"error": "Failed to verify SSO providers",
-			})
+			return SendInternalError(c, "Failed to verify SSO providers")
 		}
 		if !hasSSO {
-			return c.Status(400).JSON(fiber.Map{
-				"error": "Cannot disable password login: No SSO providers are configured for dashboard login. Configure at least one OAuth or SAML provider with 'Allow dashboard login' enabled first.",
-				"code":  "NO_SSO_PROVIDERS",
-			})
+			return SendBadRequest(c, "Cannot disable password login: No SSO providers are configured for dashboard login. Configure at least one OAuth or SAML provider with 'Allow dashboard login' enabled first.", "NO_SSO_PROVIDERS")
 		}
 	}
 
@@ -881,15 +812,10 @@ func (h *OAuthProviderHandler) UpdateAuthSettings(c fiber.Ctx) error {
 		hasSSO, err := h.hasAppSSOProviders(ctx)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to check app SSO providers")
-			return c.Status(500).JSON(fiber.Map{
-				"error": "Failed to verify SSO providers",
-			})
+			return SendInternalError(c, "Failed to verify SSO providers")
 		}
 		if !hasSSO {
-			return c.Status(400).JSON(fiber.Map{
-				"error": "Cannot disable password login: No OAuth or SAML providers are configured for app login. Configure at least one OAuth or SAML provider with 'Allow app login' enabled first.",
-				"code":  "NO_APP_SSO_PROVIDERS",
-			})
+			return SendBadRequest(c, "Cannot disable password login: No OAuth or SAML providers are configured for app login. Configure at least one OAuth or SAML provider with 'Allow app login' enabled first.", "NO_APP_SSO_PROVIDERS")
 		}
 	}
 
@@ -912,9 +838,7 @@ func (h *OAuthProviderHandler) UpdateAuthSettings(c fiber.Ctx) error {
 		_, err := h.db.Exec(ctx, upsertQuery, key, value)
 		if err != nil {
 			log.Error().Err(err).Str("setting", key).Msg("Failed to upsert auth setting")
-			return c.Status(500).JSON(fiber.Map{
-				"error": fmt.Sprintf("Failed to update setting: %s", key),
-			})
+			return SendInternalError(c, fmt.Sprintf("Failed to update setting: %s", key))
 		}
 	}
 

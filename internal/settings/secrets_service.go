@@ -14,12 +14,6 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
-// withTenant wraps a function in a tenant-aware transaction for secrets service.
-func (s *SecretsService) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	tenantID := database.TenantFromContext(ctx)
-	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
-}
-
 var (
 	// ErrSecretNotFound is returned when a secret setting is not found
 	ErrSecretNotFound = errors.New("secret setting not found")
@@ -31,13 +25,13 @@ var (
 // This service should ONLY be used internally by edge functions, background jobs,
 // and custom handlers. It should NEVER be exposed via API endpoints.
 type SecretsService struct {
-	db            *database.Connection
+	database.TenantAware
 	encryptionKey string
 }
 
 // NewSecretsService creates a new secrets service for server-side decryption
 func NewSecretsService(db *database.Connection, encryptionKey string) *SecretsService {
-	return &SecretsService{db: db, encryptionKey: encryptionKey}
+	return &SecretsService{TenantAware: database.TenantAware{DB: db}, encryptionKey: encryptionKey}
 }
 
 // GetUserSecret retrieves and decrypts a user's secret setting.
@@ -45,7 +39,7 @@ func NewSecretsService(db *database.Connection, encryptionKey string) *SecretsSe
 func (s *SecretsService) GetUserSecret(ctx context.Context, userID uuid.UUID, key string) (string, error) {
 	var encryptedValue string
 
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT encrypted_value
 			FROM app.settings
@@ -79,7 +73,7 @@ func (s *SecretsService) GetUserSecret(ctx context.Context, userID uuid.UUID, ke
 func (s *SecretsService) GetSystemSecret(ctx context.Context, key string) (string, error) {
 	var encryptedValue string
 
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT encrypted_value
 			FROM app.settings
@@ -106,7 +100,7 @@ func (s *SecretsService) GetSystemSecret(ctx context.Context, key string) (strin
 // This is used for injecting secrets into edge functions as environment variables.
 func (s *SecretsService) GetUserSecrets(ctx context.Context, userID uuid.UUID) (map[string]string, error) {
 	secrets := make(map[string]string)
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
 			SELECT key, encrypted_value
 			FROM app.settings
@@ -151,7 +145,7 @@ func (s *SecretsService) GetUserSecrets(ctx context.Context, userID uuid.UUID) (
 // This is used for injecting secrets into edge functions as environment variables.
 func (s *SecretsService) GetSystemSecrets(ctx context.Context) (map[string]string, error) {
 	secrets := make(map[string]string)
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
 			SELECT key, encrypted_value
 			FROM app.settings
@@ -196,7 +190,7 @@ func (s *SecretsService) SetSystemSecret(ctx context.Context, key, value, descri
 	}
 
 	// Upsert the secret
-	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO app.settings (key, value, description, is_secret, encrypted_value, user_id, created_at, updated_at)
 			VALUES ($1, '{"value": "[ENCRYPTED]"}', $2, true, $3, NULL, NOW(), NOW())
@@ -228,7 +222,7 @@ func (s *SecretsService) SetUserSecret(ctx context.Context, userID uuid.UUID, ke
 	}
 
 	// Upsert the secret
-	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO app.settings (key, value, description, is_secret, encrypted_value, user_id, created_at, updated_at)
 			VALUES ($1, '{"value": "[ENCRYPTED]"}', $2, true, $3, $4, NOW(), NOW())
@@ -247,7 +241,7 @@ func (s *SecretsService) SetUserSecret(ctx context.Context, userID uuid.UUID, ke
 // DeleteSystemSecret removes a system-level secret setting.
 func (s *SecretsService) DeleteSystemSecret(ctx context.Context, key string) error {
 	var result pgconn.CommandTag
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		var err error
 		result, err = tx.Exec(ctx, `
 			DELETE FROM app.settings
@@ -269,7 +263,7 @@ func (s *SecretsService) DeleteSystemSecret(ctx context.Context, key string) err
 // DeleteUserSecret removes a user-specific secret setting.
 func (s *SecretsService) DeleteUserSecret(ctx context.Context, userID uuid.UUID, key string) error {
 	var result pgconn.CommandTag
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		var err error
 		result, err = tx.Exec(ctx, `
 			DELETE FROM app.settings
@@ -298,7 +292,7 @@ func (s *SecretsService) GetUserSetting(ctx context.Context, userID uuid.UUID, k
 	var encryptedValue *string
 	var value []byte
 
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT is_secret, encrypted_value, value
 			FROM app.settings
@@ -332,7 +326,7 @@ func (s *SecretsService) GetSystemSetting(ctx context.Context, key string) (stri
 	var encryptedValue *string
 	var value []byte
 
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT is_secret, encrypted_value, value
 			FROM app.settings
@@ -359,7 +353,7 @@ func (s *SecretsService) GetSystemSetting(ctx context.Context, key string) (stri
 // Returns a map of key -> value. Secrets are decrypted.
 func (s *SecretsService) GetAllUserSettings(ctx context.Context, userID uuid.UUID) (map[string]string, error) {
 	settings := make(map[string]string)
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
 			SELECT key, is_secret, encrypted_value, value
 			FROM app.settings
@@ -411,7 +405,7 @@ func (s *SecretsService) GetAllUserSettings(ctx context.Context, userID uuid.UUI
 // Returns a map of key -> value. Secrets are decrypted.
 func (s *SecretsService) GetAllSystemSettings(ctx context.Context) (map[string]string, error) {
 	settings := make(map[string]string)
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
 			SELECT key, is_secret, encrypted_value, value
 			FROM app.settings

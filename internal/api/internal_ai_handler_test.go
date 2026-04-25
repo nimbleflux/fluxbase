@@ -8,13 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInternalAIHandler_HandleChat_NoAIService(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewInternalAIHandler(nil, nil, "")
 
 	app.Post("/api/v1/internal/ai/chat", handler.HandleChat)
@@ -31,17 +30,16 @@ func TestInternalAIHandler_HandleChat_NoAIService(t *testing.T) {
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
 	respBody, _ := io.ReadAll(resp.Body)
 	var result map[string]any
 	_ = json.Unmarshal(respBody, &result)
-	assert.Contains(t, result["error"], "AI service not configured")
+	assert.Contains(t, result["error"], "not_initialized")
 }
 
 func TestInternalAIHandler_HandleChat_EmptyMessages(t *testing.T) {
-	app := fiber.New()
-	// We still need nil for aiStorage to test validation before provider lookup
+	app := newTestApp(t)
 	handler := NewInternalAIHandler(nil, nil, "test-provider")
 
 	app.Post("/api/v1/internal/ai/chat", handler.HandleChat)
@@ -57,12 +55,11 @@ func TestInternalAIHandler_HandleChat_EmptyMessages(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	// Should fail because aiStorage is nil
-	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
 func TestInternalAIHandler_HandleEmbed_NoService(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewInternalAIHandler(nil, nil, "")
 
 	app.Post("/api/v1/internal/ai/embed", handler.HandleEmbed)
@@ -77,17 +74,16 @@ func TestInternalAIHandler_HandleEmbed_NoService(t *testing.T) {
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
 	respBody, _ := io.ReadAll(resp.Body)
 	var result map[string]any
 	_ = json.Unmarshal(respBody, &result)
-	assert.Contains(t, result["error"], "Embedding service not configured")
+	assert.Contains(t, result["error"], "not_initialized")
 }
 
 func TestInternalAIHandler_HandleEmbed_EmptyText(t *testing.T) {
-	app := fiber.New()
-	// Handler with nil embedding service
+	app := newTestApp(t)
 	handler := NewInternalAIHandler(nil, nil, "")
 
 	app.Post("/api/v1/internal/ai/embed", handler.HandleEmbed)
@@ -103,12 +99,11 @@ func TestInternalAIHandler_HandleEmbed_EmptyText(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 
-	// Should fail because embedding service is nil, not due to empty text validation
-	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
 
 func TestInternalAIHandler_HandleListProviders_NoService(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewInternalAIHandler(nil, nil, "")
 
 	app.Get("/api/v1/internal/ai/providers", handler.HandleListProviders)
@@ -117,12 +112,12 @@ func TestInternalAIHandler_HandleListProviders_NoService(t *testing.T) {
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
 	respBody, _ := io.ReadAll(resp.Body)
 	var result map[string]any
 	_ = json.Unmarshal(respBody, &result)
-	assert.Contains(t, result["error"], "AI service not configured")
+	assert.Contains(t, result["error"], "not_initialized")
 }
 
 func TestInternalChatRequest_Parsing(t *testing.T) {

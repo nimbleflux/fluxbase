@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/runtime"
 )
 
 func TestJobStatus_Constants(t *testing.T) {
@@ -262,7 +264,7 @@ func TestProgress_Struct(t *testing.T) {
 	t.Run("creates progress with all fields", func(t *testing.T) {
 		estimatedLeft := 30
 
-		p := Progress{
+		p := runtime.Progress{
 			Percent:              75,
 			Message:              "Processing items...",
 			EstimatedSecondsLeft: &estimatedLeft,
@@ -279,7 +281,7 @@ func TestProgress_Struct(t *testing.T) {
 	})
 
 	t.Run("marshals to JSON", func(t *testing.T) {
-		p := Progress{
+		p := runtime.Progress{
 			Percent: 50,
 			Message: "Halfway",
 		}

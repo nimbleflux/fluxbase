@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/loader"
 )
 
 // LoadFunctionCode loads function code from the filesystem
@@ -467,27 +469,20 @@ type FunctionConfig struct {
 //   - // @fluxbase:cors-max-age <seconds> - Max age for preflight cache in seconds
 //   - // @fluxbase:rate-limit <N>/<unit> - Rate limit per user/IP (e.g., 100/min, 1000/hour, 10000/day)
 func ParseFunctionConfig(code string) FunctionConfig {
+	annotations := loader.ParseAnnotations(code, []string{"//", "/*"})
 	config := FunctionConfig{
-		AllowUnauthenticated: false, // Secure by default
-		IsPublic:             true,  // Public by default
-		DisableExecutionLogs: false, // Logging enabled by default
+		AllowUnauthenticated: false,
+		IsPublic:             true,
+		DisableExecutionLogs: false,
 	}
 
-	// Regex to match @fluxbase directives in comments
-	// Matches: // @fluxbase:allow-unauthenticated or /* @fluxbase:allow-unauthenticated */ or * @fluxbase:allow-unauthenticated (inside multi-line comments)
-	allowUnauthPattern := regexp.MustCompile(`(?m)^\s*(?://|/\*|\*)\s*@fluxbase:allow-unauthenticated`)
-
-	if allowUnauthPattern.MatchString(code) {
+	if _, ok := annotations["allow-unauthenticated"]; ok {
 		config.AllowUnauthenticated = true
 		log.Debug().Msg("Found @fluxbase:allow-unauthenticated directive in function code")
 	}
 
-	// Match @fluxbase:public with optional true/false value
-	// Matches: // @fluxbase:public false or // @fluxbase:public true or just // @fluxbase:public
-	publicPattern := regexp.MustCompile(`(?m)^\s*(?://|/\*|\*)\s*@fluxbase:public(?:\s+(true|false))?`)
-
-	if matches := publicPattern.FindStringSubmatch(code); matches != nil {
-		if len(matches) > 1 && matches[1] == "false" {
+	if v, ok := annotations["public"]; ok {
+		if v == "false" {
 			config.IsPublic = false
 			log.Debug().Msg("Found @fluxbase:public false directive in function code")
 		} else {
@@ -496,74 +491,52 @@ func ParseFunctionConfig(code string) FunctionConfig {
 		}
 	}
 
-	// Match @fluxbase:disable-execution-logs with boolean value
-	disableLogsPattern := regexp.MustCompile(`(?m)^\s*(?://|/\*|\*)\s*@fluxbase:disable-execution-logs(?:\s+(true|false))?`)
-	if matches := disableLogsPattern.FindStringSubmatch(code); matches != nil {
-		// If no value specified or value is "true", disable logs
-		if len(matches) <= 1 || matches[1] == "" || matches[1] == "true" {
+	if v, ok := annotations["disable-execution-logs"]; ok {
+		if v == "" || v == "true" {
 			config.DisableExecutionLogs = true
 			log.Debug().Msg("Found @fluxbase:disable-execution-logs directive in function code")
 		}
 	}
 
-	// Parse CORS annotations
-	// Match @fluxbase:cors-origins with value
-	corsOriginsPattern := regexp.MustCompile(`(?m)^\s*(?://|/\*|\*)\s*@fluxbase:cors-origins\s+(.+?)\s*$`)
-	if matches := corsOriginsPattern.FindStringSubmatch(code); len(matches) > 1 {
-		value := strings.TrimSpace(matches[1])
-		config.CorsOrigins = &value
-		log.Debug().Str("origins", value).Msg("Found @fluxbase:cors-origins directive")
+	if v, ok := annotations["cors-origins"]; ok {
+		config.CorsOrigins = &v
+		log.Debug().Str("origins", v).Msg("Found @fluxbase:cors-origins directive")
 	}
-
-	// Match @fluxbase:cors-methods with value
-	corsMethodsPattern := regexp.MustCompile(`(?m)^\s*(?://|/\*|\*)\s*@fluxbase:cors-methods\s+(.+?)\s*$`)
-	if matches := corsMethodsPattern.FindStringSubmatch(code); len(matches) > 1 {
-		value := strings.TrimSpace(matches[1])
-		config.CorsMethods = &value
-		log.Debug().Str("methods", value).Msg("Found @fluxbase:cors-methods directive")
+	if v, ok := annotations["cors-methods"]; ok {
+		config.CorsMethods = &v
+		log.Debug().Str("methods", v).Msg("Found @fluxbase:cors-methods directive")
 	}
-
-	// Match @fluxbase:cors-headers with value
-	corsHeadersPattern := regexp.MustCompile(`(?m)^\s*(?://|/\*|\*)\s*@fluxbase:cors-headers\s+(.+?)\s*$`)
-	if matches := corsHeadersPattern.FindStringSubmatch(code); len(matches) > 1 {
-		value := strings.TrimSpace(matches[1])
-		config.CorsHeaders = &value
-		log.Debug().Str("headers", value).Msg("Found @fluxbase:cors-headers directive")
+	if v, ok := annotations["cors-headers"]; ok {
+		config.CorsHeaders = &v
+		log.Debug().Str("headers", v).Msg("Found @fluxbase:cors-headers directive")
 	}
-
-	// Match @fluxbase:cors-credentials with boolean value
-	corsCredentialsPattern := regexp.MustCompile(`(?m)^\s*(?://|/\*|\*)\s*@fluxbase:cors-credentials\s+(true|false)\s*$`)
-	if matches := corsCredentialsPattern.FindStringSubmatch(code); len(matches) > 1 {
-		value := matches[1] == "true"
-		config.CorsCredentials = &value
-		log.Debug().Bool("credentials", value).Msg("Found @fluxbase:cors-credentials directive")
+	if v, ok := annotations["cors-credentials"]; ok {
+		b := v == "true"
+		config.CorsCredentials = &b
+		log.Debug().Bool("credentials", b).Msg("Found @fluxbase:cors-credentials directive")
 	}
-
-	// Match @fluxbase:cors-max-age with integer value
-	corsMaxAgePattern := regexp.MustCompile(`(?m)^\s*(?://|/\*|\*)\s*@fluxbase:cors-max-age\s+(\d+)\s*$`)
-	if matches := corsMaxAgePattern.FindStringSubmatch(code); len(matches) > 1 {
-		if value, err := strconv.Atoi(matches[1]); err == nil {
-			config.CorsMaxAge = &value
-			log.Debug().Int("max_age", value).Msg("Found @fluxbase:cors-max-age directive")
+	if v, ok := annotations["cors-max-age"]; ok {
+		if val, err := strconv.Atoi(v); err == nil {
+			config.CorsMaxAge = &val
+			log.Debug().Int("max_age", val).Msg("Found @fluxbase:cors-max-age directive")
 		}
 	}
 
-	// Match @fluxbase:rate-limit with value and unit (e.g., 100/min, 1000/hour, 10000/day)
 	rateLimitPattern := regexp.MustCompile(`(?m)^\s*(?://|/\*|\*)\s*@fluxbase:rate-limit\s+(\d+)/(min|hour|day)\s*$`)
 	for _, matches := range rateLimitPattern.FindAllStringSubmatch(code, -1) {
 		if len(matches) > 2 {
-			if value, err := strconv.Atoi(matches[1]); err == nil {
+			if count, err := strconv.Atoi(matches[1]); err == nil && count > 0 {
 				unit := matches[2]
 				switch unit {
 				case "min":
-					config.RateLimitPerMinute = &value
-					log.Debug().Int("rate_limit", value).Str("unit", unit).Msg("Found @fluxbase:rate-limit directive")
+					config.RateLimitPerMinute = &count
+					log.Debug().Int("rate_limit", count).Str("unit", unit).Msg("Found @fluxbase:rate-limit directive")
 				case "hour":
-					config.RateLimitPerHour = &value
-					log.Debug().Int("rate_limit", value).Str("unit", unit).Msg("Found @fluxbase:rate-limit directive")
+					config.RateLimitPerHour = &count
+					log.Debug().Int("rate_limit", count).Str("unit", unit).Msg("Found @fluxbase:rate-limit directive")
 				case "day":
-					config.RateLimitPerDay = &value
-					log.Debug().Int("rate_limit", value).Str("unit", unit).Msg("Found @fluxbase:rate-limit directive")
+					config.RateLimitPerDay = &count
+					log.Debug().Int("rate_limit", count).Str("unit", unit).Msg("Found @fluxbase:rate-limit directive")
 				}
 			}
 		}

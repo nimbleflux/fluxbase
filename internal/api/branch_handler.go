@@ -28,6 +28,20 @@ func NewBranchHandler(manager *branching.Manager, router *branching.Router, cfg 
 	}
 }
 
+func (h *BranchHandler) requireManager(c fiber.Ctx) error {
+	if h.manager == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
+func (h *BranchHandler) requireRouter(c fiber.Ctx) error {
+	if h.router == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // getTenantFilter returns a tenant ID filter for the current request.
 // Returns nil for instance admins (no filter) or when no tenant context is available.
 func getTenantFilter(c fiber.Ctx) *uuid.UUID {
@@ -49,7 +63,7 @@ func getTenantFilter(c fiber.Ctx) *uuid.UUID {
 
 // CreateBranchRequest represents the request body for creating a branch
 type CreateBranchRequest struct {
-	Name           string                  `json:"name" validate:"required,min=1,max=100"`
+	Name           string                  `json:"name"`
 	TenantID       *uuid.UUID              `json:"tenant_id,omitempty"`
 	ParentBranchID *uuid.UUID              `json:"parent_branch_id,omitempty"`
 	DataCloneMode  branching.DataCloneMode `json:"data_clone_mode,omitempty"`
@@ -63,25 +77,16 @@ type CreateBranchRequest struct {
 // CreateBranch handles POST /admin/branches
 func (h *BranchHandler) CreateBranch(c fiber.Ctx) error {
 	if !h.config.Enabled {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error":   "branching_disabled",
-			"message": "Database branching is not enabled",
-		})
+		return SendErrorWithCode(c, 503, "Database branching is not enabled", "SERVICE_UNAVAILABLE")
 	}
 
 	var req CreateBranchRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "invalid_request",
-			"message": "Failed to parse request body: " + err.Error(),
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Name == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "validation_error",
-			"message": "Branch name is required",
-		})
+		return SendBadRequest(c, "Branch name is required", ErrCodeMissingField)
 	}
 
 	// Get user ID from context
@@ -110,10 +115,7 @@ func (h *BranchHandler) CreateBranch(c fiber.Ctx) error {
 	if req.ExpiresIn != nil && *req.ExpiresIn != "" {
 		duration, err := time.ParseDuration(*req.ExpiresIn)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":   "validation_error",
-				"message": "Invalid expires_in duration: " + err.Error(),
-			})
+			return SendBadRequest(c, "Invalid expires_in duration format", ErrCodeInvalidFormat)
 		}
 		t := time.Now().Add(duration)
 		expiresAt = &t
@@ -122,6 +124,13 @@ func (h *BranchHandler) CreateBranch(c fiber.Ctx) error {
 	// Normalize DataCloneModeFull alias ("full" -> "full_clone")
 	if req.DataCloneMode == branching.DataCloneModeFull {
 		req.DataCloneMode = branching.DataCloneModeFullClone
+	}
+
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
+	if err := h.requireRouter(c); err != nil {
+		return err
 	}
 
 	// Create branch request
@@ -142,51 +151,28 @@ func (h *BranchHandler) CreateBranch(c fiber.Ctx) error {
 		log.Error().Err(err).Str("name", req.Name).Msg("Failed to create branch")
 
 		if errors.Is(err, branching.ErrBranchExists) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error":   "branch_exists",
-				"message": "A branch with this name already exists",
-			})
+			return SendConflict(c, "A branch with this name already exists", ErrCodeAlreadyExists)
 		}
 		if errors.Is(err, branching.ErrMaxBranchesReached) {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "max_branches_reached",
-				"message": "Maximum number of branches has been reached",
-			})
+			return SendForbidden(c, "Maximum number of branches has been reached", ErrCodeAccessDenied)
 		}
 		if errors.Is(err, branching.ErrInvalidSlug) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":   "invalid_slug",
-				"message": err.Error(),
-			})
+			return SendBadRequest(c, "Branch name contains invalid characters", ErrCodeInvalidInput)
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "create_failed",
-			"message": "Failed to create branch: " + err.Error(),
-		})
+		return SendInternalError(c, "Failed to create branch")
 	}
 
-	// Warmup the connection pool
-	if h.router != nil {
-		go func() {
-			if err := h.router.WarmupPool(c.RequestCtx(), branch.Slug); err != nil {
-				log.Warn().Err(err).Str("slug", branch.Slug).Msg("Failed to warmup branch pool")
-			}
-		}()
-	}
+	go func() {
+		if err := h.router.WarmupPool(c.RequestCtx(), branch.Slug); err != nil {
+			log.Warn().Err(err).Str("slug", branch.Slug).Msg("Failed to warmup branch pool")
+		}
+	}()
 
 	return c.Status(fiber.StatusCreated).JSON(branch)
 }
 
 // ListBranches handles GET /admin/branches
 func (h *BranchHandler) ListBranches(c fiber.Ctx) error {
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
-	}
-
 	filter := branching.ListBranchesFilter{
 		Limit:  100,
 		Offset: 0,
@@ -230,13 +216,14 @@ func (h *BranchHandler) ListBranches(c fiber.Ctx) error {
 		}
 	}
 
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
+
 	branches, err := h.manager.GetStorage().ListBranches(c.RequestCtx(), filter)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list branches")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "list_failed",
-			"message": "Failed to list branches",
-		})
+		return SendInternalError(c, "Failed to list branches")
 	}
 
 	// Get total count
@@ -256,20 +243,16 @@ func (h *BranchHandler) ListBranches(c fiber.Ctx) error {
 
 // GetBranch handles GET /admin/branches/:id
 func (h *BranchHandler) GetBranch(c fiber.Ctx) error {
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
-	}
-
 	idParam := c.Params("id")
 
 	// Try to parse as UUID first
 	var branch *branching.Branch
 	var err error
 	tenantFilter := getTenantFilter(c)
+
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
 		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id, tenantFilter)
@@ -280,16 +263,10 @@ func (h *BranchHandler) GetBranch(c fiber.Ctx) error {
 
 	if err != nil {
 		if errors.Is(err, branching.ErrBranchNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":   "branch_not_found",
-				"message": "Branch not found",
-			})
+			return SendNotFound(c, "Branch not found")
 		}
 		log.Error().Err(err).Str("id", idParam).Msg("Failed to get branch")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "get_failed",
-			"message": "Failed to get branch",
-		})
+		return SendInternalError(c, "Failed to get branch")
 	}
 
 	return c.JSON(branch)
@@ -297,14 +274,6 @@ func (h *BranchHandler) GetBranch(c fiber.Ctx) error {
 
 // DeleteBranch handles DELETE /admin/branches/:id
 func (h *BranchHandler) DeleteBranch(c fiber.Ctx) error {
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
-	}
-
 	idParam := c.Params("id")
 
 	// Try to parse as UUID first
@@ -312,6 +281,13 @@ func (h *BranchHandler) DeleteBranch(c fiber.Ctx) error {
 	var branch *branching.Branch
 	var err error
 	tenantFilter := getTenantFilter(c)
+
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
+	if err := h.requireRouter(c); err != nil {
+		return err
+	}
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
 		branchID = id
@@ -326,15 +302,9 @@ func (h *BranchHandler) DeleteBranch(c fiber.Ctx) error {
 
 	if err != nil {
 		if errors.Is(err, branching.ErrBranchNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":   "branch_not_found",
-				"message": "Branch not found",
-			})
+			return SendNotFound(c, "Branch not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "get_failed",
-			"message": "Failed to get branch",
-		})
+		return SendInternalError(c, "Failed to get branch")
 	}
 
 	// Get user ID from context
@@ -355,39 +325,24 @@ func (h *BranchHandler) DeleteBranch(c fiber.Ctx) error {
 		hasAccess, err := h.manager.GetStorage().HasAccess(c.RequestCtx(), branch.ID, *userID, branching.BranchAccessAdmin)
 		if err != nil {
 			log.Error().Err(err).Str("branch_id", branch.ID.String()).Msg("Failed to check branch access")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "access_check_failed",
-				"message": "Failed to verify branch access",
-			})
+			return SendInternalError(c, "Failed to verify branch access")
 		}
 		if !hasAccess {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "access_denied",
-				"message": "You do not have permission to delete this branch",
-			})
+			return SendForbidden(c, "You do not have permission to delete this branch", ErrCodeAccessDenied)
 		}
 	}
 
-	// Close the connection pool first
-	if h.router != nil {
-		h.router.ClosePool(branch.Slug)
-	}
+	h.router.ClosePool(branch.Slug)
 
 	// Delete the branch
 	if err := h.manager.DeleteBranch(c.RequestCtx(), branchID, userID); err != nil {
 		log.Error().Err(err).Str("id", idParam).Msg("Failed to delete branch")
 
 		if errors.Is(err, branching.ErrCannotDeleteMainBranch) {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "cannot_delete_main",
-				"message": "Cannot delete the main branch",
-			})
+			return SendForbidden(c, "Cannot delete the main branch", ErrCodeAccessDenied)
 		}
 
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "delete_failed",
-			"message": "Failed to delete branch: " + err.Error(),
-		})
+		return SendInternalError(c, "Failed to delete branch")
 	}
 
 	return c.Status(fiber.StatusNoContent).Send(nil)
@@ -395,14 +350,6 @@ func (h *BranchHandler) DeleteBranch(c fiber.Ctx) error {
 
 // ResetBranch handles POST /admin/branches/:id/reset
 func (h *BranchHandler) ResetBranch(c fiber.Ctx) error {
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
-	}
-
 	idParam := c.Params("id")
 
 	// Try to parse as UUID first
@@ -410,6 +357,13 @@ func (h *BranchHandler) ResetBranch(c fiber.Ctx) error {
 	var branch *branching.Branch
 	var err error
 	tenantFilter := getTenantFilter(c)
+
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
+	if err := h.requireRouter(c); err != nil {
+		return err
+	}
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
 		branchID = id
@@ -424,15 +378,9 @@ func (h *BranchHandler) ResetBranch(c fiber.Ctx) error {
 
 	if err != nil {
 		if errors.Is(err, branching.ErrBranchNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":   "branch_not_found",
-				"message": "Branch not found",
-			})
+			return SendNotFound(c, "Branch not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "get_failed",
-			"message": "Failed to get branch",
-		})
+		return SendInternalError(c, "Failed to get branch")
 	}
 
 	// Get user ID from context
@@ -453,46 +401,28 @@ func (h *BranchHandler) ResetBranch(c fiber.Ctx) error {
 		hasAccess, err := h.manager.GetStorage().HasAccess(c.RequestCtx(), branch.ID, *userID, branching.BranchAccessAdmin)
 		if err != nil {
 			log.Error().Err(err).Str("branch_id", branch.ID.String()).Msg("Failed to check branch access")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "access_check_failed",
-				"message": "Failed to verify branch access",
-			})
+			return SendInternalError(c, "Failed to verify branch access")
 		}
 		if !hasAccess {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "access_denied",
-				"message": "You do not have permission to reset this branch",
-			})
+			return SendForbidden(c, "You do not have permission to reset this branch", ErrCodeAccessDenied)
 		}
 	}
 
-	// Close the connection pool before reset
-	if h.router != nil {
-		h.router.ClosePool(branch.Slug)
-	}
+	h.router.ClosePool(branch.Slug)
 
 	// Reset the branch
 	if err := h.manager.ResetBranch(c.RequestCtx(), branchID, userID); err != nil {
 		log.Error().Err(err).Str("id", idParam).Msg("Failed to reset branch")
 
 		if errors.Is(err, branching.ErrCannotDeleteMainBranch) {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "cannot_reset_main",
-				"message": "Cannot reset the main branch",
-			})
+			return SendForbidden(c, "Cannot reset the main branch", ErrCodeAccessDenied)
 		}
 
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "reset_failed",
-			"message": "Failed to reset branch: " + err.Error(),
-		})
+		return SendInternalError(c, "Failed to reset branch")
 	}
 
-	// Refresh the connection pool
-	if h.router != nil {
-		if err := h.router.RefreshPool(c.RequestCtx(), branch.Slug); err != nil {
-			log.Warn().Err(err).Str("slug", branch.Slug).Msg("Failed to refresh branch pool after reset")
-		}
+	if err := h.router.RefreshPool(c.RequestCtx(), branch.Slug); err != nil {
+		log.Warn().Err(err).Str("slug", branch.Slug).Msg("Failed to refresh branch pool after reset")
 	}
 
 	// Get updated branch
@@ -506,18 +436,14 @@ func (h *BranchHandler) ResetBranch(c fiber.Ctx) error {
 
 // GetBranchActivity handles GET /admin/branches/:id/activity
 func (h *BranchHandler) GetBranchActivity(c fiber.Ctx) error {
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
-	}
-
 	idParam := c.Params("id")
 
 	// Try to parse as UUID first
 	var branchID uuid.UUID
+
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
 		branchID = id
@@ -526,15 +452,9 @@ func (h *BranchHandler) GetBranchActivity(c fiber.Ctx) error {
 		branch, err := h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), idParam, getTenantFilter(c))
 		if err != nil {
 			if errors.Is(err, branching.ErrBranchNotFound) {
-				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error":   "branch_not_found",
-					"message": "Branch not found",
-				})
+				return SendNotFound(c, "Branch not found")
 			}
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "get_failed",
-				"message": "Failed to get branch",
-			})
+			return SendInternalError(c, "Failed to get branch")
 		}
 		branchID = branch.ID
 	}
@@ -547,10 +467,7 @@ func (h *BranchHandler) GetBranchActivity(c fiber.Ctx) error {
 	activity, err := h.manager.GetStorage().GetActivityLog(c.RequestCtx(), branchID, limit)
 	if err != nil {
 		log.Error().Err(err).Str("id", idParam).Msg("Failed to get branch activity")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "get_activity_failed",
-			"message": "Failed to get branch activity",
-		})
+		return SendInternalError(c, "Failed to get branch activity")
 	}
 
 	return c.JSON(fiber.Map{
@@ -560,11 +477,8 @@ func (h *BranchHandler) GetBranchActivity(c fiber.Ctx) error {
 
 // GetPoolStats handles GET /admin/branches/stats/pools
 func (h *BranchHandler) GetPoolStats(c fiber.Ctx) error {
-	// Nil check for router (can happen in tests)
-	if h.router == nil {
-		return c.JSON(fiber.Map{
-			"pools": []map[string]interface{}{},
-		})
+	if err := h.requireRouter(c); err != nil {
+		return err
 	}
 
 	stats := h.router.GetPoolStats()
@@ -575,12 +489,8 @@ func (h *BranchHandler) GetPoolStats(c fiber.Ctx) error {
 
 // GetActiveBranch handles GET /admin/branches/active
 func (h *BranchHandler) GetActiveBranch(c fiber.Ctx) error {
-	// Nil check for router (can happen in tests)
-	if h.router == nil {
-		return c.JSON(fiber.Map{
-			"branch": "main",
-			"source": "default",
-		})
+	if err := h.requireRouter(c); err != nil {
+		return err
 	}
 
 	branch := h.router.GetDefaultBranch()
@@ -594,39 +504,29 @@ func (h *BranchHandler) GetActiveBranch(c fiber.Ctx) error {
 
 // SetActiveBranchRequest represents the request body for setting the active branch
 type SetActiveBranchRequest struct {
-	Branch string `json:"branch" validate:"required"`
+	Branch string `json:"branch"`
 }
 
 // SetActiveBranch handles POST /admin/branches/active
 func (h *BranchHandler) SetActiveBranch(c fiber.Ctx) error {
 	if !h.config.Enabled {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error":   "branching_disabled",
-			"message": "Database branching is not enabled",
-		})
+		return SendErrorWithCode(c, 503, "Database branching is not enabled", "SERVICE_UNAVAILABLE")
 	}
 
 	var req SetActiveBranchRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "invalid_request",
-			"message": "Failed to parse request body: " + err.Error(),
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Branch == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "validation_error",
-			"message": "Branch slug is required",
-		})
+		return SendBadRequest(c, "Branch slug is required", ErrCodeMissingField)
 	}
 
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
+	if err := h.requireRouter(c); err != nil {
+		return err
 	}
 
 	// Verify the branch exists (unless it's "main")
@@ -634,26 +534,11 @@ func (h *BranchHandler) SetActiveBranch(c fiber.Ctx) error {
 		_, err := h.manager.GetStorage().GetBranchBySlug(c.RequestCtx(), req.Branch, nil)
 		if err != nil {
 			if errors.Is(err, branching.ErrBranchNotFound) {
-				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-					"error":   "branch_not_found",
-					"message": "Branch not found: " + req.Branch,
-				})
+				return SendNotFound(c, "Branch not found: "+req.Branch)
 			}
 			log.Error().Err(err).Str("branch", req.Branch).Msg("Failed to verify branch")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "verification_failed",
-				"message": "Failed to verify branch exists",
-			})
+			return SendInternalError(c, "Failed to verify branch exists")
 		}
-	}
-
-	// Nil check for router (can happen in tests)
-	if h.router == nil {
-		return c.JSON(fiber.Map{
-			"branch":   req.Branch,
-			"previous": "main",
-			"message":  "Active branch set successfully",
-		})
 	}
 
 	// Get previous branch for response
@@ -671,13 +556,8 @@ func (h *BranchHandler) SetActiveBranch(c fiber.Ctx) error {
 
 // ResetActiveBranch handles DELETE /admin/branches/active
 func (h *BranchHandler) ResetActiveBranch(c fiber.Ctx) error {
-	// Nil check for router (can happen in tests)
-	if h.router == nil {
-		return c.JSON(fiber.Map{
-			"branch":   "main",
-			"previous": "main",
-			"message":  "Active branch reset to default",
-		})
+	if err := h.requireRouter(c); err != nil {
+		return err
 	}
 
 	// Get current branch for response
@@ -700,13 +580,6 @@ func (h *BranchHandler) ResetActiveBranch(c fiber.Ctx) error {
 
 // ListGitHubConfigs handles GET /admin/branches/github/configs
 func (h *BranchHandler) ListGitHubConfigs(c fiber.Ctx) error {
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.JSON(fiber.Map{
-			"configs": []*branching.GitHubConfig{},
-		})
-	}
-
 	// Get tenant ID from context (set by tenant middleware)
 	var tenantID *uuid.UUID
 	if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
@@ -724,13 +597,14 @@ func (h *BranchHandler) ListGitHubConfigs(c fiber.Ctx) error {
 		tenantID = nil
 	}
 
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
+
 	configs, err := h.manager.GetStorage().ListGitHubConfigs(c.RequestCtx(), tenantID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list GitHub configs")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "list_failed",
-			"message": "Failed to list GitHub configurations",
-		})
+		return SendInternalError(c, "Failed to list GitHub configurations")
 	}
 
 	return c.JSON(fiber.Map{
@@ -740,7 +614,7 @@ func (h *BranchHandler) ListGitHubConfigs(c fiber.Ctx) error {
 
 // UpsertGitHubConfigRequest represents the request for creating/updating GitHub config
 type UpsertGitHubConfigRequest struct {
-	Repository           string                  `json:"repository" validate:"required"`
+	Repository           string                  `json:"repository"`
 	AutoCreateOnPR       *bool                   `json:"auto_create_on_pr,omitempty"`
 	AutoDeleteOnMerge    *bool                   `json:"auto_delete_on_merge,omitempty"`
 	DefaultDataCloneMode branching.DataCloneMode `json:"default_data_clone_mode,omitempty"`
@@ -750,26 +624,16 @@ type UpsertGitHubConfigRequest struct {
 // UpsertGitHubConfig handles POST /admin/branches/github/configs
 func (h *BranchHandler) UpsertGitHubConfig(c fiber.Ctx) error {
 	var req UpsertGitHubConfigRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "invalid_request",
-			"message": "Failed to parse request body: " + err.Error(),
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Repository == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "validation_error",
-			"message": "Repository is required",
-		})
+		return SendBadRequest(c, "Repository is required", ErrCodeMissingField)
 	}
 
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
+	if err := h.requireManager(c); err != nil {
+		return err
 	}
 
 	config := &branching.GitHubConfig{
@@ -794,10 +658,7 @@ func (h *BranchHandler) UpsertGitHubConfig(c fiber.Ctx) error {
 
 	if err := h.manager.GetStorage().UpsertGitHubConfig(c.RequestCtx(), config); err != nil {
 		log.Error().Err(err).Str("repository", req.Repository).Msg("Failed to upsert GitHub config")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "upsert_failed",
-			"message": "Failed to save GitHub configuration",
-		})
+		return SendInternalError(c, "Failed to save GitHub configuration")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(config)
@@ -805,28 +666,18 @@ func (h *BranchHandler) UpsertGitHubConfig(c fiber.Ctx) error {
 
 // DeleteGitHubConfig handles DELETE /admin/branches/github/configs/:repository
 func (h *BranchHandler) DeleteGitHubConfig(c fiber.Ctx) error {
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
-	}
-
 	repository := c.Params("repository")
+
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
 
 	if err := h.manager.GetStorage().DeleteGitHubConfig(c.RequestCtx(), repository); err != nil {
 		if errors.Is(err, branching.ErrGitHubConfigNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":   "config_not_found",
-				"message": "GitHub configuration not found",
-			})
+			return SendNotFound(c, "GitHub configuration not found")
 		}
 		log.Error().Err(err).Str("repository", repository).Msg("Failed to delete GitHub config")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "delete_failed",
-			"message": "Failed to delete GitHub configuration",
-		})
+		return SendInternalError(c, "Failed to delete GitHub configuration")
 	}
 
 	return c.Status(fiber.StatusNoContent).Send(nil)
@@ -836,19 +687,15 @@ func (h *BranchHandler) DeleteGitHubConfig(c fiber.Ctx) error {
 
 // ListBranchAccess handles GET /admin/branches/:id/access
 func (h *BranchHandler) ListBranchAccess(c fiber.Ctx) error {
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
-	}
-
 	idParam := c.Params("id")
 
 	// Try to parse as UUID first, then as slug
 	var branch *branching.Branch
 	var err error
+
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
 		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id, getTenantFilter(c))
@@ -858,15 +705,9 @@ func (h *BranchHandler) ListBranchAccess(c fiber.Ctx) error {
 
 	if err != nil {
 		if errors.Is(err, branching.ErrBranchNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":   "branch_not_found",
-				"message": "Branch not found",
-			})
+			return SendNotFound(c, "Branch not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "get_failed",
-			"message": "Failed to get branch",
-		})
+		return SendInternalError(c, "Failed to get branch")
 	}
 
 	// Check authorization
@@ -884,26 +725,17 @@ func (h *BranchHandler) ListBranchAccess(c fiber.Ctx) error {
 	if !isAdmin && userID != nil {
 		hasAccess, err := h.manager.GetStorage().HasAccess(c.RequestCtx(), branch.ID, *userID, branching.BranchAccessAdmin)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "access_check_failed",
-				"message": "Failed to verify branch access",
-			})
+			return SendInternalError(c, "Failed to verify branch access")
 		}
 		if !hasAccess {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "access_denied",
-				"message": "You do not have permission to view access grants for this branch",
-			})
+			return SendForbidden(c, "You do not have permission to view access grants for this branch", ErrCodeAccessDenied)
 		}
 	}
 
 	accessList, err := h.manager.GetStorage().GetBranchAccessList(c.RequestCtx(), branch.ID)
 	if err != nil {
 		log.Error().Err(err).Str("branch_id", branch.ID.String()).Msg("Failed to list branch access")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "list_failed",
-			"message": "Failed to list branch access",
-		})
+		return SendInternalError(c, "Failed to list branch access")
 	}
 
 	return c.JSON(fiber.Map{
@@ -913,25 +745,21 @@ func (h *BranchHandler) ListBranchAccess(c fiber.Ctx) error {
 
 // GrantBranchAccessRequest represents the request body for granting access
 type GrantBranchAccessRequest struct {
-	UserID      string `json:"user_id" validate:"required"`
-	AccessLevel string `json:"access_level" validate:"required,oneof=read write admin"`
+	UserID      string `json:"user_id"`
+	AccessLevel string `json:"access_level"`
 }
 
 // GrantBranchAccess handles POST /admin/branches/:id/access
 func (h *BranchHandler) GrantBranchAccess(c fiber.Ctx) error {
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
-	}
-
 	idParam := c.Params("id")
 
 	// Try to parse as UUID first, then as slug
 	var branch *branching.Branch
 	var err error
+
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
 		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id, getTenantFilter(c))
@@ -941,49 +769,31 @@ func (h *BranchHandler) GrantBranchAccess(c fiber.Ctx) error {
 
 	if err != nil {
 		if errors.Is(err, branching.ErrBranchNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":   "branch_not_found",
-				"message": "Branch not found",
-			})
+			return SendNotFound(c, "Branch not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "get_failed",
-			"message": "Failed to get branch",
-		})
+		return SendInternalError(c, "Failed to get branch")
 	}
 
 	// Parse request body
 	var req GrantBranchAccessRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "invalid_request",
-			"message": "Failed to parse request body: " + err.Error(),
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.UserID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "validation_error",
-			"message": "user_id is required",
-		})
+		return SendBadRequest(c, "user_id is required", ErrCodeMissingField)
 	}
 
 	targetUserID, err := uuid.Parse(req.UserID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "validation_error",
-			"message": "Invalid user_id format",
-		})
+		return SendBadRequest(c, "Invalid user_id format", ErrCodeInvalidID)
 	}
 
 	accessLevel := branching.BranchAccessLevel(req.AccessLevel)
 	if accessLevel != branching.BranchAccessRead &&
 		accessLevel != branching.BranchAccessWrite &&
 		accessLevel != branching.BranchAccessAdmin {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "validation_error",
-			"message": "access_level must be one of: read, write, admin",
-		})
+		return SendBadRequest(c, "access_level must be one of: read, write, admin", ErrCodeInvalidInput)
 	}
 
 	// Check authorization
@@ -1001,16 +811,10 @@ func (h *BranchHandler) GrantBranchAccess(c fiber.Ctx) error {
 	if !isAdmin && grantedBy != nil {
 		hasAccess, err := h.manager.GetStorage().HasAccess(c.RequestCtx(), branch.ID, *grantedBy, branching.BranchAccessAdmin)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "access_check_failed",
-				"message": "Failed to verify branch access",
-			})
+			return SendInternalError(c, "Failed to verify branch access")
 		}
 		if !hasAccess {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "access_denied",
-				"message": "You do not have permission to grant access to this branch",
-			})
+			return SendForbidden(c, "You do not have permission to grant access to this branch", ErrCodeAccessDenied)
 		}
 	}
 
@@ -1028,10 +832,7 @@ func (h *BranchHandler) GrantBranchAccess(c fiber.Ctx) error {
 			Str("branch_id", branch.ID.String()).
 			Str("user_id", targetUserID.String()).
 			Msg("Failed to grant branch access")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "grant_failed",
-			"message": "Failed to grant access",
-		})
+		return SendInternalError(c, "Failed to grant access")
 	}
 
 	// Log activity
@@ -1051,20 +852,16 @@ func (h *BranchHandler) GrantBranchAccess(c fiber.Ctx) error {
 
 // RevokeBranchAccess handles DELETE /admin/branches/:id/access/:user_id
 func (h *BranchHandler) RevokeBranchAccess(c fiber.Ctx) error {
-	// Nil check for manager (can happen in tests)
-	if h.manager == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "not_initialized",
-			"message": "Branch manager not initialized",
-		})
-	}
-
 	idParam := c.Params("id")
 	userIDParam := c.Params("user_id")
 
 	// Try to parse as UUID first, then as slug
 	var branch *branching.Branch
 	var err error
+
+	if err := h.requireManager(c); err != nil {
+		return err
+	}
 
 	if id, parseErr := uuid.Parse(idParam); parseErr == nil {
 		branch, err = h.manager.GetStorage().GetBranch(c.RequestCtx(), id, getTenantFilter(c))
@@ -1074,23 +871,14 @@ func (h *BranchHandler) RevokeBranchAccess(c fiber.Ctx) error {
 
 	if err != nil {
 		if errors.Is(err, branching.ErrBranchNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":   "branch_not_found",
-				"message": "Branch not found",
-			})
+			return SendNotFound(c, "Branch not found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "get_failed",
-			"message": "Failed to get branch",
-		})
+		return SendInternalError(c, "Failed to get branch")
 	}
 
 	targetUserID, err := uuid.Parse(userIDParam)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "validation_error",
-			"message": "Invalid user_id format",
-		})
+		return SendBadRequest(c, "Invalid user_id format", ErrCodeInvalidID)
 	}
 
 	// Check authorization
@@ -1108,16 +896,10 @@ func (h *BranchHandler) RevokeBranchAccess(c fiber.Ctx) error {
 	if !isAdmin && currentUserID != nil {
 		hasAccess, err := h.manager.GetStorage().HasAccess(c.RequestCtx(), branch.ID, *currentUserID, branching.BranchAccessAdmin)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "access_check_failed",
-				"message": "Failed to verify branch access",
-			})
+			return SendInternalError(c, "Failed to verify branch access")
 		}
 		if !hasAccess {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "access_denied",
-				"message": "You do not have permission to revoke access from this branch",
-			})
+			return SendForbidden(c, "You do not have permission to revoke access from this branch", ErrCodeAccessDenied)
 		}
 	}
 
@@ -1127,10 +909,7 @@ func (h *BranchHandler) RevokeBranchAccess(c fiber.Ctx) error {
 			Str("branch_id", branch.ID.String()).
 			Str("user_id", targetUserID.String()).
 			Msg("Failed to revoke branch access")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "revoke_failed",
-			"message": "Failed to revoke access",
-		})
+		return SendInternalError(c, "Failed to revoke access")
 	}
 
 	// Log activity

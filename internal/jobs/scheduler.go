@@ -3,194 +3,66 @@ package jobs
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/scheduler"
 )
 
-// ScheduleConfig contains schedule configuration including run parameters
 type ScheduleConfig struct {
 	CronExpression string                 `json:"cron_expression"`
 	Params         map[string]interface{} `json:"params,omitempty"`
 }
 
-// MinCronInterval is the minimum allowed interval between cron job runs (1 minute)
-// This prevents DoS attacks via extremely frequent cron schedules
-const MinCronInterval = time.Minute
-
-// ValidateCronSchedule validates a cron expression and ensures it doesn't run too frequently.
-// Returns an error if the schedule would run more frequently than MinCronInterval.
-func ValidateCronSchedule(cronExpr string) error {
-	// Use the same parser as the scheduler
-	parser := cron.NewParser(
-		cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
-	)
-
-	schedule, err := parser.Parse(cronExpr)
-	if err != nil {
-		return err
-	}
-
-	// Calculate the next 5 runs to check interval
-	now := time.Now()
-	var lastRun time.Time
-	for i := 0; i < 5; i++ {
-		nextRun := schedule.Next(now)
-		if i > 0 && !lastRun.IsZero() {
-			interval := nextRun.Sub(lastRun)
-			if interval < MinCronInterval {
-				return &CronIntervalError{
-					Expression: cronExpr,
-					Interval:   interval,
-					MinAllowed: MinCronInterval,
-				}
-			}
-		}
-		lastRun = nextRun
-		now = nextRun
-	}
-
-	return nil
-}
-
-// CronIntervalError is returned when a cron schedule runs too frequently
-type CronIntervalError struct {
-	Expression string
-	Interval   time.Duration
-	MinAllowed time.Duration
-}
-
-func (e *CronIntervalError) Error() string {
-	return "cron schedule runs too frequently: " + e.Expression + " would run every " +
-		e.Interval.String() + ", minimum allowed is " + e.MinAllowed.String()
-}
-
-// Scheduler manages scheduled execution of jobs via cron
 type Scheduler struct {
-	cron          *cron.Cron
-	storage       *Storage
-	maxConcurrent int
-	activeMu      sync.Mutex
-	activeCount   int
-	jobEntries    map[string]cron.EntryID // job function name -> cron entry ID
-	jobsMu        sync.RWMutex
-	ctx           context.Context
-	cancel        context.CancelFunc
+	inner   *scheduler.CronScheduler
+	storage *Storage
 }
 
-// NewScheduler creates a new scheduler for jobs
 func NewScheduler(db *database.Connection) *Scheduler {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Use a parser that supports both standard 5-field cron expressions
-	// and 6-field expressions with optional seconds
-	// 5-field: "*/5 * * * *" (every 5 minutes)
-	// 6-field: "0 */5 * * * *" (every 5 minutes at second 0)
-	parser := cron.NewParser(
-		cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
-	)
-
 	return &Scheduler{
-		cron:          cron.New(cron.WithParser(parser)),
-		storage:       NewStorage(db),
-		maxConcurrent: 20, // Max concurrent scheduled job submissions
-		jobEntries:    make(map[string]cron.EntryID),
-		ctx:           ctx,
-		cancel:        cancel,
+		inner:   scheduler.NewCronScheduler(20),
+		storage: NewStorage(db),
 	}
 }
 
-// Start initializes the scheduler and loads all enabled scheduled jobs
-// It runs asynchronously to avoid blocking server startup and retries on database errors
 func (s *Scheduler) Start() error {
-	log.Info().Msg("Starting job scheduler")
-
-	// Start the cron scheduler immediately
-	s.cron.Start()
-
-	// Load jobs asynchronously with retry logic to handle race conditions during startup
-	go func() {
-		defer func() {
-			if rec := recover(); rec != nil {
-				log.Error().
-					Interface("panic", rec).
-					Msg("Panic in job scheduler async loader - recovered")
-			}
-		}()
-
-		maxRetries := 5
-		retryDelay := 100 * time.Millisecond
-
-		for attempt := 1; attempt <= maxRetries; attempt++ {
-			functions, err := s.storage.ListAllScheduledJobFunctions(s.ctx)
-			if err != nil {
-				if attempt < maxRetries {
-					log.Debug().
-						Err(err).
-						Int("attempt", attempt).
-						Int("max_retries", maxRetries).
-						Dur("retry_delay", retryDelay).
-						Msg("Failed to list scheduled job functions, retrying")
-					time.Sleep(retryDelay)
-					retryDelay *= 2
-					continue
-				}
-				log.Error().Err(err).Msg("Failed to list scheduled job functions after all retries")
-				return
-			}
-
-			for _, fn := range functions {
-				if err := s.ScheduleJob(fn); err != nil {
-					log.Error().
-						Err(err).
-						Str("job", fn.Name).
-						Str("namespace", fn.Namespace).
-						Str("schedule", *fn.Schedule).
-						Msg("Failed to schedule job")
-				}
-			}
-
-			log.Info().Int("scheduled_jobs", len(s.jobEntries)).Msg("Job scheduler started successfully")
-			return
+	return s.inner.Start(func(ctx context.Context) ([]scheduler.Schedulable, error) {
+		functions, err := s.storage.ListAllScheduledJobFunctions(ctx)
+		if err != nil {
+			return nil, err
 		}
-	}()
 
-	return nil
+		for _, fn := range functions {
+			if err := s.ScheduleJob(fn); err != nil {
+				log.Error().
+					Err(err).
+					Str("job", fn.Name).
+					Str("namespace", fn.Namespace).
+					Str("schedule", *fn.Schedule).
+					Msg("Failed to schedule job")
+			}
+		}
+
+		return nil, nil
+	}, "jobs")
 }
 
-// Stop gracefully shuts down the scheduler
 func (s *Scheduler) Stop() {
-	log.Info().Msg("Stopping job scheduler")
-	s.cancel()
-
-	// Stop accepting new jobs
-	ctx := s.cron.Stop()
-
-	// Wait for scheduled submissions to complete (with timeout)
-	select {
-	case <-ctx.Done():
-		log.Info().Msg("All scheduled job submissions completed")
-	case <-time.After(30 * time.Second):
-		log.Warn().Msg("Scheduler shutdown timeout - some submissions may not have completed")
-	}
+	s.inner.Stop("jobs")
 }
 
-// ScheduleJob adds or updates a job function's cron schedule
 func (s *Scheduler) ScheduleJob(fn *JobFunctionSummary) error {
 	if fn.Schedule == nil || *fn.Schedule == "" {
 		return nil
 	}
 
-	// Parse the schedule which may include params
 	scheduleConfig := s.parseScheduleConfig(*fn.Schedule)
 
-	// Validate the cron expression to prevent DoS via frequent schedules
-	if err := ValidateCronSchedule(scheduleConfig.CronExpression); err != nil {
+	if err := scheduler.ValidateCronSchedule(scheduleConfig.CronExpression); err != nil {
 		log.Error().
 			Err(err).
 			Str("job", fn.Name).
@@ -199,26 +71,13 @@ func (s *Scheduler) ScheduleJob(fn *JobFunctionSummary) error {
 		return err
 	}
 
-	s.jobsMu.Lock()
-	defer s.jobsMu.Unlock()
-
-	// Create a unique key for the job
 	jobKey := fn.Namespace + "/" + fn.Name
-
-	// Remove existing schedule if present
-	if existingID, exists := s.jobEntries[jobKey]; exists {
-		s.cron.Remove(existingID)
-		delete(s.jobEntries, jobKey)
-		log.Debug().Str("job", fn.Name).Msg("Removed existing cron schedule")
-	}
-
-	// Capture job details for the closure
 	jobName := fn.Name
 	jobNamespace := fn.Namespace
 	jobTenantID := fn.TenantID
 	scheduleParams := scheduleConfig.Params
 
-	entryID, err := s.cron.AddFunc(scheduleConfig.CronExpression, func() {
+	entryID, err := s.inner.AddFunc(jobKey, scheduleConfig.CronExpression, func() {
 		s.enqueueScheduledJob(jobName, jobNamespace, jobTenantID, scheduleParams)
 	})
 	if err != nil {
@@ -230,7 +89,6 @@ func (s *Scheduler) ScheduleJob(fn *JobFunctionSummary) error {
 		return err
 	}
 
-	s.jobEntries[jobKey] = entryID
 	log.Info().
 		Str("job", fn.Name).
 		Str("namespace", jobNamespace).
@@ -242,7 +100,6 @@ func (s *Scheduler) ScheduleJob(fn *JobFunctionSummary) error {
 	return nil
 }
 
-// ScheduleJobFunction schedules a full JobFunction (not just summary)
 func (s *Scheduler) ScheduleJobFunction(fn *JobFunction) error {
 	summary := &JobFunctionSummary{
 		ID:                     fn.ID,
@@ -264,21 +121,14 @@ func (s *Scheduler) ScheduleJobFunction(fn *JobFunction) error {
 	return s.ScheduleJob(summary)
 }
 
-// UnscheduleJob removes a job's cron schedule
 func (s *Scheduler) UnscheduleJob(namespace, jobName string) {
-	s.jobsMu.Lock()
-	defer s.jobsMu.Unlock()
-
 	jobKey := namespace + "/" + jobName
-
-	if entryID, exists := s.jobEntries[jobKey]; exists {
-		s.cron.Remove(entryID)
-		delete(s.jobEntries, jobKey)
+	if s.inner.IsScheduled(jobKey) {
+		s.inner.Remove(jobKey)
 		log.Info().Str("job", jobName).Str("namespace", namespace).Msg("Job unscheduled")
 	}
 }
 
-// RescheduleJob updates a job's schedule (helper method)
 func (s *Scheduler) RescheduleJob(fn *JobFunctionSummary) error {
 	s.UnscheduleJob(fn.Namespace, fn.Name)
 	if fn.Enabled && fn.Schedule != nil && *fn.Schedule != "" {
@@ -287,16 +137,12 @@ func (s *Scheduler) RescheduleJob(fn *JobFunctionSummary) error {
 	return nil
 }
 
-// parseScheduleConfig parses a schedule string that may contain params
-// Format: "cron_expression" or "cron_expression|params_json"
-// Example: "0 2 * * *" or "0 2 * * *|{\"type\":\"daily\"}"
 func (s *Scheduler) parseScheduleConfig(schedule string) ScheduleConfig {
 	config := ScheduleConfig{
 		CronExpression: schedule,
 		Params:         make(map[string]interface{}),
 	}
 
-	// Check if schedule contains params separated by |
 	for i := len(schedule) - 1; i >= 0; i-- {
 		if schedule[i] == '|' {
 			config.CronExpression = schedule[:i]
@@ -316,33 +162,18 @@ func (s *Scheduler) parseScheduleConfig(schedule string) ScheduleConfig {
 	return config
 }
 
-// enqueueScheduledJob enqueues a job triggered by cron
 func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace, tenantID string, params map[string]interface{}) {
-	// Check concurrent submission limit
-	s.activeMu.Lock()
-	if s.activeCount >= s.maxConcurrent {
-		s.activeMu.Unlock()
-		log.Warn().
-			Str("job", jobName).
-			Int("active", s.activeCount).
-			Int("max", s.maxConcurrent).
-			Msg("Skipping scheduled job submission - concurrent limit reached")
+	if !s.inner.Guard.Acquire(jobName) {
 		return
 	}
-	s.activeCount++
-	s.activeMu.Unlock()
+	defer s.inner.Guard.Release()
 
-	// Decrement counter when done
-	defer func() {
-		s.activeMu.Lock()
-		s.activeCount--
-		s.activeMu.Unlock()
-	}()
+	ctx := s.inner.Context()
 
-	fn, err := s.storage.GetJobFunction(s.ctx, jobNamespace, jobName)
+	fn, err := s.storage.GetJobFunction(ctx, jobNamespace, jobName)
 	if err != nil {
 		if tenantID != "" {
-			tenantCtx := database.ContextWithTenant(s.ctx, tenantID)
+			tenantCtx := database.ContextWithTenant(ctx, tenantID)
 			fn, err = s.storage.GetJobFunction(tenantCtx, jobNamespace, jobName)
 			if err != nil {
 				log.Error().
@@ -362,7 +193,6 @@ func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace, tenantID string, 
 		}
 	}
 
-	// Check if job is still enabled
 	if !fn.Enabled {
 		log.Debug().
 			Str("job", jobName).
@@ -377,7 +207,6 @@ func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace, tenantID string, 
 		Interface("params", params).
 		Msg("Enqueuing scheduled job")
 
-	// Prepare payload with schedule params and trigger info
 	payload := map[string]interface{}{
 		"_trigger":      "cron",
 		"_scheduled_at": time.Now().UTC().Format(time.RFC3339),
@@ -411,9 +240,9 @@ func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace, tenantID string, 
 		TenantID:               tenantID,
 	}
 
-	enqueueCtx := s.ctx
+	enqueueCtx := ctx
 	if tenantID != "" {
-		enqueueCtx = database.ContextWithTenant(s.ctx, tenantID)
+		enqueueCtx = database.ContextWithTenant(ctx, tenantID)
 	}
 
 	if err := s.storage.EnqueueJob(enqueueCtx, job); err != nil {
@@ -431,58 +260,14 @@ func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace, tenantID string, 
 		Msg("Scheduled job enqueued successfully")
 }
 
-// GetScheduledJobs returns a list of all currently scheduled jobs
-func (s *Scheduler) GetScheduledJobs() []ScheduledJobInfo {
-	s.jobsMu.RLock()
-	defer s.jobsMu.RUnlock()
-
-	jobs := make([]ScheduledJobInfo, 0, len(s.jobEntries))
-	for key, entryID := range s.jobEntries {
-		entry := s.cron.Entry(entryID)
-		info := ScheduledJobInfo{
-			Key:     key,
-			EntryID: int(entryID),
-			NextRun: entry.Next,
-			PrevRun: entry.Prev,
-		}
-		jobs = append(jobs, info)
-	}
-	return jobs
+func (s *Scheduler) GetScheduledJobs() []scheduler.ScheduledEntryInfo {
+	return s.inner.GetScheduledEntries()
 }
 
-// GetScheduleInfo returns schedule information for a job
 func (s *Scheduler) GetScheduleInfo(namespace, jobName string) (string, bool) {
-	s.jobsMu.RLock()
-	defer s.jobsMu.RUnlock()
-
-	jobKey := namespace + "/" + jobName
-	entryID, exists := s.jobEntries[jobKey]
-	if !exists {
-		return "", false
-	}
-
-	entry := s.cron.Entry(entryID)
-	if entry.Next.IsZero() {
-		return "Not scheduled", true
-	}
-
-	return entry.Next.Format(time.RFC3339), true
+	return s.inner.GetScheduleInfo(namespace + "/" + jobName)
 }
 
-// IsScheduled checks if a job is currently scheduled
 func (s *Scheduler) IsScheduled(namespace, jobName string) bool {
-	s.jobsMu.RLock()
-	defer s.jobsMu.RUnlock()
-
-	jobKey := namespace + "/" + jobName
-	_, exists := s.jobEntries[jobKey]
-	return exists
-}
-
-// ScheduledJobInfo contains information about a scheduled job
-type ScheduledJobInfo struct {
-	Key     string    `json:"key"`
-	EntryID int       `json:"entry_id"`
-	NextRun time.Time `json:"next_run"`
-	PrevRun time.Time `json:"prev_run"`
+	return s.inner.IsScheduled(namespace + "/" + jobName)
 }

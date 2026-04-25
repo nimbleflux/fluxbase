@@ -12,47 +12,51 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
-	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/observability"
 )
 
 // Service provides a high-level authentication API
 type Service struct {
-	userRepo                *UserRepository
-	sessionRepo             *SessionRepository
-	magicLinkRepo           *MagicLinkRepository
-	emailVerificationRepo   *EmailVerificationRepository
-	jwtManager              *JWTManager
-	passwordHasher          *PasswordHasher
-	oauthManager            *OAuthManager
-	magicLinkService        *MagicLinkService
-	passwordResetService    *PasswordResetService
-	tokenBlacklistService   *TokenBlacklistService
-	impersonationService    *ImpersonationService
-	otpService              *OTPService
-	identityService         *IdentityService
-	systemSettings          *SystemSettingsService
-	settingsCache           *SettingsCache
-	nonceRepo               *NonceRepository
-	oidcVerifier            *OIDCVerifier
-	config                  *config.AuthConfig
-	emailService            RealEmailService
-	baseURL                 string
-	emailVerificationExpiry time.Duration
-	metrics                 *observability.Metrics
-	encryptionKey           string // 32-byte key for encrypting sensitive data (TOTP secrets)
-	totpRateLimiter         *TOTPRateLimiter
+	userRepo                 *UserRepository
+	sessionRepo              *SessionRepository
+	magicLinkRepo            *MagicLinkRepository
+	emailVerificationRepo    *EmailVerificationRepository
+	jwtManager               *JWTManager
+	passwordHasher           *PasswordHasher
+	oauthManager             *OAuthManager
+	magicLinkService         *MagicLinkService
+	passwordResetService     *PasswordResetService
+	tokenBlacklistService    *TokenBlacklistService
+	impersonationService     *ImpersonationService
+	otpService               *OTPService
+	identityService          *IdentityService
+	systemSettings           *SystemSettingsService
+	settingsCache            *SettingsCache
+	nonceRepo                *NonceRepository
+	oidcVerifier             *OIDCVerifier
+	config                   *config.AuthConfig
+	emailService             RealEmailService
+	baseURL                  string
+	emailVerificationExpiry  time.Duration
+	metrics                  *observability.Metrics
+	mfaService               *MFAService
+	nonceService             *NonceService
+	emailVerificationService *EmailVerificationService
 }
 
 // SetEncryptionKey sets the encryption key for encrypting sensitive data at rest
 func (s *Service) SetEncryptionKey(key string) {
-	s.encryptionKey = key
+	if s.mfaService != nil {
+		s.mfaService.SetEncryptionKey(key)
+	}
 }
 
 // SetTOTPRateLimiter sets the TOTP rate limiter for protecting against brute force attacks
 func (s *Service) SetTOTPRateLimiter(limiter *TOTPRateLimiter) {
-	s.totpRateLimiter = limiter
+	if s.mfaService != nil {
+		s.mfaService.SetTOTPRateLimiter(limiter)
+	}
 }
 
 // SetMetrics sets the metrics instance for recording auth metrics
@@ -178,6 +182,7 @@ func NewService(
 
 	// Create nonce repository for distributed reauthentication
 	nonceRepo := NewNonceRepository(db)
+	nonceService := NewNonceService(nonceRepo, userRepo)
 
 	// Create OIDC verifier for ID token authentication
 	oidcVerifier, err := NewOIDCVerifier(context.Background(), cfg)
@@ -196,29 +201,43 @@ func NewService(
 
 	// Create email verification repository
 	emailVerificationRepo := NewEmailVerificationRepository(db)
+	emailVerificationService := NewEmailVerificationService(
+		emailVerificationRepo,
+		userRepo,
+		settingsCache,
+		realEmailService,
+		baseURL,
+		emailVerificationExpiry,
+	)
+
+	// Create MFA service
+	mfaService := NewMFAService(userRepo, sessionRepo, jwtManager, passwordHasher, db, cfg)
 
 	return &Service{
-		userRepo:                userRepo,
-		sessionRepo:             sessionRepo,
-		magicLinkRepo:           magicLinkRepo,
-		emailVerificationRepo:   emailVerificationRepo,
-		jwtManager:              jwtManager,
-		passwordHasher:          passwordHasher,
-		oauthManager:            oauthManager,
-		magicLinkService:        magicLinkService,
-		passwordResetService:    passwordResetService,
-		tokenBlacklistService:   tokenBlacklistService,
-		impersonationService:    impersonationService,
-		otpService:              otpService,
-		identityService:         identityService,
-		systemSettings:          systemSettingsService,
-		settingsCache:           settingsCache,
-		nonceRepo:               nonceRepo,
-		oidcVerifier:            oidcVerifier,
-		config:                  cfg,
-		emailService:            realEmailService,
-		baseURL:                 baseURL,
-		emailVerificationExpiry: emailVerificationExpiry,
+		userRepo:                 userRepo,
+		sessionRepo:              sessionRepo,
+		magicLinkRepo:            magicLinkRepo,
+		emailVerificationRepo:    emailVerificationRepo,
+		jwtManager:               jwtManager,
+		passwordHasher:           passwordHasher,
+		oauthManager:             oauthManager,
+		magicLinkService:         magicLinkService,
+		passwordResetService:     passwordResetService,
+		tokenBlacklistService:    tokenBlacklistService,
+		impersonationService:     impersonationService,
+		otpService:               otpService,
+		identityService:          identityService,
+		systemSettings:           systemSettingsService,
+		settingsCache:            settingsCache,
+		nonceRepo:                nonceRepo,
+		oidcVerifier:             oidcVerifier,
+		config:                   cfg,
+		emailService:             realEmailService,
+		baseURL:                  baseURL,
+		emailVerificationExpiry:  emailVerificationExpiry,
+		mfaService:               mfaService,
+		nonceService:             nonceService,
+		emailVerificationService: emailVerificationService,
 	}
 }
 
@@ -969,348 +988,51 @@ func (s *Service) GetAccessTokenExpirySeconds() int64 {
 	return int64(s.config.JWTExpiry.Seconds())
 }
 
-// TOTPSetupResponse represents the TOTP setup data
-type TOTPSetupResponse struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
-	TOTP struct {
-		QRCode string `json:"qr_code"`
-		Secret string `json:"secret"`
-		URI    string `json:"uri"`
-	} `json:"totp"`
-}
-
 // SetupTOTP generates a new TOTP secret for 2FA setup
-// If issuer is empty, uses the configured default from AuthConfig.TOTPIssuer
 func (s *Service) SetupTOTP(ctx context.Context, userID string, issuer string) (*TOTPSetupResponse, error) {
-	// Use provided issuer, or fall back to configured default
-	if issuer == "" {
-		issuer = s.config.TOTPIssuer
-	}
-
-	// Generate TOTP secret and QR code
-	secret, qrCodeDataURI, otpauthURI, err := GenerateTOTPSecret(issuer, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate TOTP secret: %w", err)
-	}
-
-	// Generate a unique factor ID
-	factorID := uuid.New().String()
-
-	// Store the secret in a temporary setup table (expires in 10 minutes)
-	query := `
-		INSERT INTO auth.two_factor_setups (user_id, factor_id, secret, qr_code_data_uri, otpauth_uri, expires_at)
-		VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '10 minutes')
-		ON CONFLICT (user_id) DO UPDATE
-			SET factor_id = EXCLUDED.factor_id,
-			    secret = EXCLUDED.secret,
-			    qr_code_data_uri = EXCLUDED.qr_code_data_uri,
-			    otpauth_uri = EXCLUDED.otpauth_uri,
-			    expires_at = EXCLUDED.expires_at,
-			    verified = FALSE
-	`
-
-	_, err = s.userRepo.db.Pool().Exec(ctx, query, userID, factorID, secret, qrCodeDataURI, otpauthURI)
-	if err != nil {
-		return nil, fmt.Errorf("failed to store TOTP setup: %w", err)
-	}
-
-	// Build response in Supabase-compatible format
-	response := &TOTPSetupResponse{
-		ID:   factorID,
-		Type: "totp",
-	}
-	response.TOTP.QRCode = qrCodeDataURI
-	response.TOTP.Secret = secret
-	response.TOTP.URI = otpauthURI
-
-	return response, nil
+	return s.mfaService.SetupTOTP(ctx, userID, issuer)
 }
 
 // EnableTOTP enables 2FA after verifying the TOTP code
 func (s *Service) EnableTOTP(ctx context.Context, userID, code string) ([]string, error) {
-	// Fetch the pending TOTP setup
-	var secret string
-	var expiresAt time.Time
-	query := `
-		SELECT secret, expires_at
-		FROM auth.two_factor_setups
-		WHERE user_id = $1 AND verified = FALSE
-	`
-
-	err := s.userRepo.db.Pool().QueryRow(ctx, query, userID).Scan(&secret, &expiresAt)
-	if err != nil {
-		return nil, fmt.Errorf("2FA setup not found or expired: %w", err)
-	}
-
-	// Check if setup has expired
-	if time.Now().After(expiresAt) {
-		return nil, errors.New("2FA setup has expired, please start again")
-	}
-
-	// Verify the TOTP code
-	valid, err := VerifyTOTPCode(code, secret)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify TOTP code: %w", err)
-	}
-
-	if !valid {
-		return nil, errors.New("invalid TOTP code")
-	}
-
-	// Generate backup codes
-	backupCodes, hashedCodes, err := GenerateBackupCodes(10)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate backup codes: %w", err)
-	}
-
-	// Encrypt the TOTP secret before storing (encryption is required)
-	if s.encryptionKey == "" {
-		return nil, errors.New("TOTP encryption key not configured - cannot store TOTP secrets securely")
-	}
-	encryptedSecret, err := crypto.Encrypt(secret, s.encryptionKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt TOTP secret: %w", err)
-	}
-	secretToStore := encryptedSecret
-
-	// Enable TOTP for the user
-	updateQuery := `
-		UPDATE auth.users
-		SET totp_secret = $1, totp_enabled = TRUE, backup_codes = $2, updated_at = NOW()
-		WHERE id = $3
-	`
-
-	_, err = s.userRepo.db.Pool().Exec(ctx, updateQuery, secretToStore, hashedCodes, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to enable TOTP: %w", err)
-	}
-
-	// Mark setup as verified
-	_, _ = s.userRepo.db.Pool().Exec(ctx, `
-		UPDATE auth.two_factor_setups
-		SET verified = TRUE
-		WHERE user_id = $1
-	`, userID)
-
-	return backupCodes, nil
+	return s.mfaService.EnableTOTP(ctx, userID, code)
 }
 
 // VerifyTOTP verifies a TOTP code during login
 func (s *Service) VerifyTOTP(ctx context.Context, userID, code string) error {
-	return s.VerifyTOTPWithContext(ctx, userID, code, "", "")
+	return s.mfaService.VerifyTOTP(ctx, userID, code)
 }
 
 // VerifyTOTPWithContext verifies a TOTP code with IP address and user agent for rate limiting
 func (s *Service) VerifyTOTPWithContext(ctx context.Context, userID, code, ipAddress, userAgent string) error {
-	// Check rate limit before attempting verification
-	if s.totpRateLimiter != nil {
-		if err := s.totpRateLimiter.CheckRateLimit(ctx, userID); err != nil {
-			return err
-		}
-	}
-
-	// Fetch user's TOTP secret and backup codes
-	var storedSecret string
-	var backupCodes []string
-	query := `
-		SELECT totp_secret, COALESCE(backup_codes, ARRAY[]::text[])
-		FROM auth.users
-		WHERE id = $1 AND totp_enabled = TRUE
-	`
-
-	err := s.userRepo.db.Pool().QueryRow(ctx, query, userID).Scan(&storedSecret, &backupCodes)
-	if err != nil {
-		return fmt.Errorf("2FA not enabled for this user: %w", err)
-	}
-
-	// Decrypt the TOTP secret
-	secret := storedSecret
-	if s.encryptionKey == "" {
-		// This should not happen in production - encryption key should always be set
-		log.Warn().Str("user_id", userID).Msg("TOTP encryption key not configured - TOTP secrets may be stored insecurely")
-	} else {
-		decrypted, err := crypto.Decrypt(storedSecret, s.encryptionKey)
-		if err != nil {
-			// Log but don't fail - might be a legacy unencrypted secret
-			log.Warn().
-				Err(err).
-				Str("user_id", userID).
-				Msg("TOTP secret decrypted via plaintext fallback - consider migrating to encrypted storage")
-		} else {
-			secret = decrypted
-		}
-	}
-
-	// Try TOTP code first
-	valid, err := VerifyTOTPCode(code, secret)
-	if err == nil && valid {
-		// Record successful attempt (clears rate limit counter effectively)
-		if s.totpRateLimiter != nil {
-			_ = s.totpRateLimiter.RecordAttempt(ctx, userID, true, ipAddress, userAgent)
-		}
-		return nil
-	}
-
-	// Try backup codes
-	for i, hashedCode := range backupCodes {
-		match, err := VerifyBackupCode(code, hashedCode)
-		if err == nil && match {
-			// Remove used backup code
-			backupCodes = append(backupCodes[:i], backupCodes[i+1:]...)
-
-			_, err = s.userRepo.db.Pool().Exec(ctx, `
-				UPDATE auth.users
-				SET backup_codes = $1, updated_at = NOW()
-				WHERE id = $2
-			`, backupCodes, userID)
-			if err != nil {
-				return fmt.Errorf("failed to update backup codes: %w", err)
-			}
-
-			// Log successful recovery code usage
-			_, _ = s.userRepo.db.Pool().Exec(ctx, `
-				INSERT INTO auth.two_factor_recovery_attempts (user_id, code_used, success)
-				VALUES ($1, $2, TRUE)
-			`, userID, "backup_code")
-
-			// Record successful attempt
-			if s.totpRateLimiter != nil {
-				_ = s.totpRateLimiter.RecordAttempt(ctx, userID, true, ipAddress, userAgent)
-			}
-
-			return nil
-		}
-	}
-
-	// Record failed attempt for rate limiting
-	if s.totpRateLimiter != nil {
-		_ = s.totpRateLimiter.RecordAttempt(ctx, userID, false, ipAddress, userAgent)
-	} else {
-		// Fallback: Log failed attempt directly if no rate limiter configured
-		_, _ = s.userRepo.db.Pool().Exec(ctx, `
-			INSERT INTO auth.two_factor_recovery_attempts (user_id, code_used, success)
-			VALUES ($1, $2, FALSE)
-		`, userID, "totp_code")
-	}
-
-	return errors.New("invalid 2FA code")
+	return s.mfaService.VerifyTOTPWithContext(ctx, userID, code, ipAddress, userAgent)
 }
 
 // DisableTOTP disables 2FA for a user
 func (s *Service) DisableTOTP(ctx context.Context, userID, password string) error {
-	// Verify password first
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("user not found: %w", err)
-	}
-
-	if user.PasswordHash != "" {
-		err := s.passwordHasher.ComparePassword(user.PasswordHash, password)
-		if err != nil {
-			return errors.New("invalid password")
-		}
-	}
-
-	// Disable TOTP
-	query := `
-		UPDATE auth.users
-		SET totp_enabled = FALSE, totp_secret = NULL, backup_codes = NULL, updated_at = NOW()
-		WHERE id = $1
-	`
-
-	_, err = s.userRepo.db.Pool().Exec(ctx, query, userID)
-	if err != nil {
-		return fmt.Errorf("failed to disable 2FA: %w", err)
-	}
-
-	// Clean up pending setups
-	_, _ = s.userRepo.db.Pool().Exec(ctx, `
-		DELETE FROM auth.two_factor_setups WHERE user_id = $1
-	`, userID)
-
-	return nil
+	return s.mfaService.DisableTOTP(ctx, userID, password)
 }
 
 // IsTOTPEnabled checks if 2FA is enabled for a user
 func (s *Service) IsTOTPEnabled(ctx context.Context, userID string) (bool, error) {
-	var enabled bool
-	query := `SELECT COALESCE(totp_enabled, FALSE) FROM auth.users WHERE id = $1`
-
-	err := s.userRepo.db.Pool().QueryRow(ctx, query, userID).Scan(&enabled)
-	if err != nil {
-		return false, fmt.Errorf("failed to check 2FA status: %w", err)
-	}
-
-	return enabled, nil
+	return s.mfaService.IsTOTPEnabled(ctx, userID)
 }
 
 // GenerateTokensForUser generates JWT tokens for a user after successful 2FA verification
 func (s *Service) GenerateTokensForUser(ctx context.Context, userID string) (*SignInResponse, error) {
-	// Get user details
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
-	}
-
-	// Generate JWT token pair with metadata
-	accessToken, refreshToken, _, err := s.jwtManager.GenerateTokenPair(user.ID, user.Email, user.Role, user.UserMetadata, user.AppMetadata)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate tokens: %w", err)
-	}
-
-	// Create session
-	expiresAt := time.Now().Add(s.config.RefreshExpiry)
-	_, err = s.sessionRepo.Create(ctx, user.ID, accessToken, refreshToken, expiresAt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
-	}
-
-	return &SignInResponse{
-		User:         user,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    int64(s.config.JWTExpiry.Seconds()),
-	}, nil
+	return s.mfaService.GenerateTokensForUser(ctx, userID)
 }
 
-// Reauthenticate generates a security nonce for sensitive operations.
-// The nonce is stored with a 5-minute TTL and can only be used once.
 func (s *Service) Reauthenticate(ctx context.Context, userID string) (string, error) {
-	// Verify user exists
-	_, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return "", fmt.Errorf("user not found: %w", err)
-	}
-
-	// Generate a secure random nonce
-	nonce := uuid.New().String()
-
-	// Store nonce with 5-minute expiry for later verification (distributed across instances)
-	if err := s.nonceRepo.Set(ctx, nonce, userID, 5*time.Minute); err != nil {
-		return "", fmt.Errorf("failed to store nonce: %w", err)
-	}
-
-	return nonce, nil
+	return s.nonceService.Reauthenticate(ctx, userID)
 }
 
-// VerifyNonce validates a nonce for sensitive operations.
-// The nonce is single-use and will be invalidated after verification.
-// Returns true if the nonce is valid and belongs to the specified user.
 func (s *Service) VerifyNonce(ctx context.Context, nonce, userID string) bool {
-	valid, err := s.nonceRepo.Validate(ctx, nonce, userID)
-	if err != nil {
-		// Log error but return false to maintain backward compatibility
-		return false
-	}
-	return valid
+	return s.nonceService.VerifyNonce(ctx, nonce, userID)
 }
 
-// CleanupExpiredNonces removes expired nonces from the database.
-// This is optional maintenance - nonces are single-use and deleted on validation.
-// Expired but unused nonces will simply fail validation and can be cleaned up periodically.
 func (s *Service) CleanupExpiredNonces(ctx context.Context) (int64, error) {
-	return s.nonceRepo.Cleanup(ctx)
+	return s.nonceService.CleanupExpiredNonces(ctx)
 }
 
 // SignInWithIDToken signs in a user with an OAuth ID token (Google, Apple, Microsoft, or custom OIDC)
@@ -1520,70 +1242,17 @@ func (s *Service) CreateUser(ctx context.Context, email, password string) (*User
 
 // IsEmailVerificationRequired checks if email verification is required based on settings and email configuration
 func (s *Service) IsEmailVerificationRequired(ctx context.Context) bool {
-	// Check if the setting is enabled
-	required := s.settingsCache.GetBool(ctx, "app.auth.require_email_verification", false)
-	if !required {
-		return false
-	}
-
-	// Also check if email is configured - can't require verification without email
-	if s.emailService == nil {
-		return false
-	}
-	return s.emailService.IsConfigured()
+	return s.emailVerificationService.IsEmailVerificationRequired(ctx)
 }
 
 // SendEmailVerification sends a verification email to the user
 func (s *Service) SendEmailVerification(ctx context.Context, userID, email string) error {
-	if s.emailService == nil || !s.emailService.IsConfigured() {
-		return fmt.Errorf("email service is not configured")
-	}
-
-	// Delete any existing tokens for this user
-	_ = s.emailVerificationRepo.DeleteByUserID(ctx, userID)
-
-	// Create new verification token
-	tokenWithPlaintext, err := s.emailVerificationRepo.Create(ctx, userID, s.emailVerificationExpiry)
-	if err != nil {
-		return fmt.Errorf("failed to create verification token: %w", err)
-	}
-
-	// Build verification link
-	link := fmt.Sprintf("%s/auth/verify-email?token=%s", s.baseURL, tokenWithPlaintext.PlaintextToken)
-
-	// Send verification email
-	if err := s.emailService.SendVerificationEmail(ctx, email, tokenWithPlaintext.PlaintextToken, link); err != nil {
-		return fmt.Errorf("failed to send verification email: %w", err)
-	}
-
-	return nil
+	return s.emailVerificationService.SendEmailVerification(ctx, userID, email)
 }
 
 // VerifyEmailToken validates the verification token and marks the user's email as verified
 func (s *Service) VerifyEmailToken(ctx context.Context, token string) (*User, error) {
-	// Validate the token
-	emailToken, err := s.emailVerificationRepo.Validate(ctx, token)
-	if err != nil {
-		return nil, err
-	}
-
-	// Mark token as used
-	if err := s.emailVerificationRepo.MarkAsUsed(ctx, emailToken.ID); err != nil {
-		return nil, fmt.Errorf("failed to mark token as used: %w", err)
-	}
-
-	// Mark user's email as verified
-	if err := s.userRepo.VerifyEmail(ctx, emailToken.UserID); err != nil {
-		return nil, fmt.Errorf("failed to verify email: %w", err)
-	}
-
-	// Get updated user
-	user, err := s.userRepo.GetByID(ctx, emailToken.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user: %w", err)
-	}
-
-	return user, nil
+	return s.emailVerificationService.VerifyEmailToken(ctx, token)
 }
 
 // =============================================================================

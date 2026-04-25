@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/jobs"
+	"github.com/nimbleflux/fluxbase/internal/loader"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
@@ -246,81 +247,57 @@ type JobConfig struct {
 	DisableLogs  bool
 }
 
-// parseJobAnnotations extracts configuration from @fluxbase: comments in job code
 func parseJobAnnotations(code string) JobConfig {
+	annotations := loader.ParseAnnotations(code, []string{"//"})
 	config := JobConfig{
-		Timeout:    300, // Default timeout for jobs (5 minutes)
-		Memory:     256, // Default memory limit for jobs
-		MaxRetries: 3,   // Default retries
+		Timeout:    300,
+		Memory:     256,
+		MaxRetries: 3,
 		AllowNet:   true,
 		AllowEnv:   true,
 	}
 
-	// Match @fluxbase:annotation patterns in comments
-	// Process line by line to avoid multiline regex matching issues
-	lineAnnotationPattern := regexp.MustCompile(`^//\s*@fluxbase:(\S+)(?:\s+(.*))?$`)
-	blockAnnotationPattern := regexp.MustCompile(`^\s*\*\s*@fluxbase:(\S+)(?:\s+(.*))?$`)
-
-	lines := strings.Split(code, "\n")
-	for _, line := range lines {
-		trimmedLine := strings.TrimSpace(line)
-
-		var matches []string
-		if matches = lineAnnotationPattern.FindStringSubmatch(trimmedLine); matches == nil {
-			matches = blockAnnotationPattern.FindStringSubmatch(trimmedLine)
+	if v, ok := annotations["schedule"]; ok {
+		config.Schedule = strings.Trim(v, `"'`)
+	}
+	if v, ok := annotations["description"]; ok {
+		config.Description = v
+	}
+	if v, ok := annotations["timeout"]; ok {
+		if t, err := strconv.Atoi(v); err == nil && t > 0 {
+			config.Timeout = t
 		}
-
-		if len(matches) < 2 {
-			continue
+	}
+	if v, ok := annotations["memory"]; ok {
+		if m, err := strconv.Atoi(v); err == nil && m > 0 {
+			config.Memory = m
 		}
-
-		annotation := strings.ToLower(strings.TrimSpace(matches[1]))
-		value := ""
-		if len(matches) > 2 {
-			value = strings.TrimSpace(matches[2])
+	}
+	if v, ok := annotations["max-retries"]; ok {
+		if r, err := strconv.Atoi(v); err == nil && r >= 0 {
+			config.MaxRetries = r
 		}
-
-		switch annotation {
-		case "schedule":
-			// Remove surrounding quotes if present
-			config.Schedule = strings.Trim(value, `"'`)
-		case "description":
-			config.Description = value
-		case "timeout":
-			if t, err := strconv.Atoi(value); err == nil && t > 0 {
-				config.Timeout = t
-			}
-		case "memory":
-			if m, err := strconv.Atoi(value); err == nil && m > 0 {
-				config.Memory = m
-			}
-		case "max-retries":
-			if r, err := strconv.Atoi(value); err == nil && r >= 0 {
-				config.MaxRetries = r
-			}
-		case "require-role":
-			// Parse comma-separated roles
-			var roles []string
-			for _, role := range strings.Split(value, ",") {
-				role = strings.TrimSpace(strings.ToLower(role))
-				if role != "" {
-					roles = append(roles, role)
-				}
-			}
-			if len(roles) > 0 {
-				config.RequireRoles = roles
-			}
-		case "allow-net":
-			config.AllowNet = true
-		case "deny-net":
-			config.AllowNet = false
-		case "allow-env":
-			config.AllowEnv = true
-		case "deny-env":
-			config.AllowEnv = false
-		case "disable-logs":
-			config.DisableLogs = true
+	}
+	if v, ok := annotations["require-role"]; ok {
+		roles := loader.ParseRoleList(v)
+		if len(roles) > 0 {
+			config.RequireRoles = roles
 		}
+	}
+	if _, ok := annotations["allow-net"]; ok {
+		config.AllowNet = true
+	}
+	if _, ok := annotations["deny-net"]; ok {
+		config.AllowNet = false
+	}
+	if _, ok := annotations["allow-env"]; ok {
+		config.AllowEnv = true
+	}
+	if _, ok := annotations["deny-env"]; ok {
+		config.AllowEnv = false
+	}
+	if _, ok := annotations["disable-logs"]; ok {
+		config.DisableLogs = true
 	}
 
 	return config

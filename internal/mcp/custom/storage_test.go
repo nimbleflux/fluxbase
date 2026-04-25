@@ -8,6 +8,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/mcp"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // =============================================================================
@@ -19,7 +23,7 @@ func TestNewStorage(t *testing.T) {
 		storage := NewStorage(nil)
 
 		require.NotNil(t, storage)
-		assert.Nil(t, storage.db)
+		assert.Nil(t, storage.DB)
 	})
 }
 
@@ -30,10 +34,10 @@ func TestNewStorage(t *testing.T) {
 func TestStorage_Struct(t *testing.T) {
 	t.Run("stores database pool", func(t *testing.T) {
 		storage := &Storage{
-			db: nil,
+			TenantAware: database.TenantAware{DB: nil},
 		}
 
-		assert.Nil(t, storage.db)
+		assert.Nil(t, storage.DB)
 	})
 }
 
@@ -477,8 +481,8 @@ func TestToolExecutionResult_Struct(t *testing.T) {
 	t.Run("stores successful result", func(t *testing.T) {
 		result := ToolExecutionResult{
 			Success: true,
-			Content: []Content{
-				{Type: "text", Text: "Hello"},
+			Content: []mcp.Content{
+				{Type: mcp.ContentTypeText, Text: "Hello"},
 			},
 			DurationMs: 150,
 			Logs:       "Execution completed",
@@ -513,8 +517,8 @@ func TestResourceReadResult_Struct(t *testing.T) {
 	t.Run("stores successful result", func(t *testing.T) {
 		result := ResourceReadResult{
 			Success: true,
-			Content: []Content{
-				{Type: "text", Text: "Resource data"},
+			Content: []mcp.Content{
+				{Type: mcp.ContentTypeText, Text: "Resource data"},
 			},
 			DurationMs: 25,
 		}
@@ -526,39 +530,39 @@ func TestResourceReadResult_Struct(t *testing.T) {
 }
 
 // =============================================================================
-// Content Struct Tests
+// Content Struct Tests (mcp.Content)
 // =============================================================================
 
 func TestContent_Struct(t *testing.T) {
 	t.Run("stores text content", func(t *testing.T) {
-		content := Content{
-			Type: "text",
+		content := mcp.Content{
+			Type: mcp.ContentTypeText,
 			Text: "Hello World",
 		}
 
-		assert.Equal(t, "text", content.Type)
+		assert.Equal(t, mcp.ContentTypeText, content.Type)
 		assert.Equal(t, "Hello World", content.Text)
 	})
 
 	t.Run("stores image content", func(t *testing.T) {
-		content := Content{
-			Type:     "image",
+		content := mcp.Content{
+			Type:     mcp.ContentTypeImage,
 			MimeType: "image/png",
 			Data:     "base64encodeddata",
 		}
 
-		assert.Equal(t, "image", content.Type)
+		assert.Equal(t, mcp.ContentTypeImage, content.Type)
 		assert.Equal(t, "image/png", content.MimeType)
 		assert.Equal(t, "base64encodeddata", content.Data)
 	})
 
 	t.Run("stores resource content", func(t *testing.T) {
-		content := Content{
-			Type: "resource",
+		content := mcp.Content{
+			Type: mcp.ContentTypeResource,
 			URI:  "fluxbase://tables/users",
 		}
 
-		assert.Equal(t, "resource", content.Type)
+		assert.Equal(t, mcp.ContentTypeResource, content.Type)
 		assert.Equal(t, "fluxbase://tables/users", content.URI)
 	})
 }

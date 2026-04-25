@@ -199,7 +199,7 @@ func TestAcceptInvitationResponse_Struct(t *testing.T) {
 // =============================================================================
 
 func TestValidateInvitation_EmptyToken(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewInvitationHandler(nil, nil, nil, "https://example.com")
 
 	app.Get("/invitations/:token/validate", handler.ValidateInvitation)
@@ -219,7 +219,7 @@ func TestValidateInvitation_EmptyToken(t *testing.T) {
 // =============================================================================
 
 func TestAcceptInvitation_EmptyToken(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewInvitationHandler(nil, nil, nil, "https://example.com")
 
 	app.Post("/invitations/:token/accept", handler.AcceptInvitation)
@@ -237,7 +237,7 @@ func TestAcceptInvitation_EmptyToken(t *testing.T) {
 }
 
 func TestAcceptInvitation_InvalidBody(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewInvitationHandler(nil, nil, nil, "https://example.com")
 
 	app.Post("/invitations/:token/accept", handler.AcceptInvitation)
@@ -266,7 +266,7 @@ func TestAcceptInvitation_InvalidBody(t *testing.T) {
 // =============================================================================
 
 func TestRevokeInvitation_EmptyToken(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewInvitationHandler(nil, nil, nil, "https://example.com")
 
 	app.Delete("/admin/invitations/:token", handler.RevokeInvitation)
@@ -286,7 +286,7 @@ func TestRevokeInvitation_EmptyToken(t *testing.T) {
 // =============================================================================
 
 func TestCreateInvitation_NoUserID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewInvitationHandler(nil, nil, nil, "https://example.com")
 
 	app.Post("/admin/invitations", handler.CreateInvitation)
@@ -312,7 +312,7 @@ func TestCreateInvitation_NoUserID(t *testing.T) {
 }
 
 func TestCreateInvitation_InvalidBody(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewInvitationHandler(nil, nil, nil, "https://example.com")
 
 	// Middleware to set user_id
@@ -343,7 +343,7 @@ func TestCreateInvitation_InvalidBody(t *testing.T) {
 }
 
 func TestCreateInvitation_InvalidUserID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewInvitationHandler(nil, nil, nil, "https://example.com")
 
 	// Middleware to set invalid user_id

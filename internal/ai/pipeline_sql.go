@@ -54,7 +54,7 @@ func (p *SQLPipeline) ExecuteTransform(ctx context.Context, kb *KnowledgeBase, d
 		transformedMetadata map[string]interface{}
 	)
 
-	err := p.storage.db.QueryRow(ctx, query, document.Content, document.Metadata).Scan(
+	err := p.storage.DB.QueryRow(ctx, query, document.Content, document.Metadata).Scan(
 		&transformedContent,
 		&transformedMetadata,
 	)
@@ -82,7 +82,7 @@ func (p *SQLPipeline) ValidateTransformFunction(ctx context.Context, functionNam
 	`
 
 	var exists int
-	err := p.storage.db.QueryRow(ctx, query, functionName).Scan(&exists)
+	err := p.storage.DB.QueryRow(ctx, query, functionName).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("failed to validate transformation function: %w", err)
 	}

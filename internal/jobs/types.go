@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/nimbleflux/fluxbase/internal/runtime"
 )
 
 // ErrDuplicateJob is returned when a duplicate job is already pending or running
@@ -137,7 +139,7 @@ func (j *Job) FlattenProgress() {
 		return
 	}
 
-	var progress Progress
+	var progress runtime.Progress
 	if err := json.Unmarshal([]byte(*j.Progress), &progress); err != nil {
 		return
 	}
@@ -173,14 +175,6 @@ type JobFunctionFile struct {
 	CreatedAt     time.Time `db:"created_at" json:"created_at"`
 }
 
-// Progress represents job execution progress
-type Progress struct {
-	Percent              int                    `json:"percent"`
-	Message              string                 `json:"message,omitempty"`
-	EstimatedSecondsLeft *int                   `json:"estimated_seconds_left,omitempty"`
-	Data                 map[string]interface{} `json:"data,omitempty"`
-}
-
 // Note: ExecutionLog is now in the central logging schema (logging.entries)
 
 // CalculateETA computes the estimated completion time for a running job
@@ -198,7 +192,7 @@ func (j *Job) CalculateETA() {
 		return
 	}
 
-	var progress Progress
+	var progress runtime.Progress
 	if err := json.Unmarshal([]byte(*j.Progress), &progress); err != nil {
 		return
 	}
@@ -271,11 +265,5 @@ type JobFunctionCount struct {
 	Count int    `json:"count"`
 }
 
-// Permissions represents execution permissions for a job
-type Permissions struct {
-	AllowNet      bool
-	AllowEnv      bool
-	AllowRead     bool
-	AllowWrite    bool
-	MemoryLimitMB int // V8 heap memory limit in MB (0 = use default)
-}
+// Permissions is an alias for runtime.Permissions for backward compatibility.
+type Permissions = runtime.Permissions

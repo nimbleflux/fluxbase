@@ -44,7 +44,7 @@ func parseErrorResponse(t *testing.T, body []byte) map[string]interface{} {
 func TestSignUp_CaptchaRequired_ReturnsError(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"signup"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/signup", handler.SignUp)
 
 	// Request without captcha token
@@ -67,7 +67,7 @@ func TestSignUp_CaptchaRequired_ReturnsError(t *testing.T) {
 func TestSignUp_CaptchaInvalid_ReturnsError(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"signup"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/signup", handler.SignUp)
 
 	// Request with invalid captcha token
@@ -127,7 +127,7 @@ func TestSignUp_CaptchaNotConfiguredForEndpoint_SkipsVerification(t *testing.T) 
 func TestSignIn_CaptchaRequired_ReturnsError(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"login"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/signin", handler.SignIn)
 
 	// Request without captcha token
@@ -150,7 +150,7 @@ func TestSignIn_CaptchaRequired_ReturnsError(t *testing.T) {
 func TestSignIn_CaptchaInvalid_ReturnsError(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"login"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/signin", handler.SignIn)
 
 	// Request with invalid captcha token
@@ -190,7 +190,7 @@ func TestSignIn_CaptchaDisabled_SkipsVerification(t *testing.T) {
 func TestMagicLink_CaptchaRequired_ReturnsError(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"magic_link"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/magiclink", handler.SendMagicLink)
 
 	// Request without captcha token
@@ -213,7 +213,7 @@ func TestMagicLink_CaptchaRequired_ReturnsError(t *testing.T) {
 func TestMagicLink_CaptchaInvalid_ReturnsError(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"magic_link"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/magiclink", handler.SendMagicLink)
 
 	// Request with invalid captcha token
@@ -253,7 +253,7 @@ func TestMagicLink_CaptchaDisabled_SkipsVerification(t *testing.T) {
 func TestPasswordReset_CaptchaRequired_ReturnsError(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"password_reset"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/password/reset", handler.RequestPasswordReset)
 
 	// Request without captcha token
@@ -276,7 +276,7 @@ func TestPasswordReset_CaptchaRequired_ReturnsError(t *testing.T) {
 func TestPasswordReset_CaptchaInvalid_ReturnsError(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"password_reset"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/password/reset", handler.RequestPasswordReset)
 
 	// Request with invalid captcha token
@@ -346,7 +346,7 @@ func TestCaptcha_HandlerIntegration_MultipleEndpoints(t *testing.T) {
 	// Test actual handler integration with multiple endpoints
 	handler := createTestHandlerWithCaptcha([]string{"signup", "login"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/signup", handler.SignUp)
 	app.Post("/auth/signin", handler.SignIn)
 
@@ -401,7 +401,7 @@ func TestNilCaptchaService_SkipsVerification(t *testing.T) {
 func TestSignUp_EmptyCaptchaToken_TreatedAsMissing(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"signup"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/signup", handler.SignUp)
 
 	// Empty string captcha token
@@ -424,7 +424,7 @@ func TestSignUp_EmptyCaptchaToken_TreatedAsMissing(t *testing.T) {
 func TestSignUp_WhitespaceCaptchaToken_Treated_AsInvalid(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"signup"})
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Post("/auth/signup", handler.SignUp)
 
 	// Whitespace-only captcha token
@@ -448,7 +448,7 @@ func TestSignUp_WhitespaceCaptchaToken_Treated_AsInvalid(t *testing.T) {
 func TestCaptcha_InvalidJSON_ReturnsParseError(t *testing.T) {
 	handler := createTestHandlerWithCaptcha([]string{"signup"})
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{ErrorHandler: customErrorHandler})
 	app.Post("/auth/signup", handler.SignUp)
 
 	// Invalid JSON

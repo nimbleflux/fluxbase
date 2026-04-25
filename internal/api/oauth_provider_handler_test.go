@@ -489,7 +489,7 @@ func TestProviderNamePattern(t *testing.T) {
 
 func TestCreateOAuthProvider_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Post("/oauth/providers", handler.CreateOAuthProvider)
@@ -510,7 +510,7 @@ func TestCreateOAuthProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid provider name format", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Post("/oauth/providers", handler.CreateOAuthProvider)
@@ -538,7 +538,7 @@ func TestCreateOAuthProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("missing required fields", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Post("/oauth/providers", handler.CreateOAuthProvider)
@@ -563,7 +563,7 @@ func TestCreateOAuthProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("custom provider missing URLs", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Post("/oauth/providers", handler.CreateOAuthProvider)
@@ -598,7 +598,7 @@ func TestCreateOAuthProvider_Validation(t *testing.T) {
 
 func TestGetOAuthProvider_Validation(t *testing.T) {
 	t.Run("invalid provider ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Get("/oauth/providers/:id", handler.GetOAuthProvider)
@@ -618,7 +618,7 @@ func TestGetOAuthProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("valid UUID format accepted", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Get("/oauth/providers/:id", handler.GetOAuthProvider)
@@ -640,7 +640,7 @@ func TestGetOAuthProvider_Validation(t *testing.T) {
 
 func TestUpdateOAuthProvider_Validation(t *testing.T) {
 	t.Run("invalid provider ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Put("/oauth/providers/:id", handler.UpdateOAuthProvider)
@@ -657,7 +657,7 @@ func TestUpdateOAuthProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Put("/oauth/providers/:id", handler.UpdateOAuthProvider)
@@ -673,7 +673,7 @@ func TestUpdateOAuthProvider_Validation(t *testing.T) {
 	})
 
 	t.Run("no fields to update", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Put("/oauth/providers/:id", handler.UpdateOAuthProvider)
@@ -701,7 +701,7 @@ func TestUpdateOAuthProvider_Validation(t *testing.T) {
 
 func TestDeleteOAuthProvider_Validation(t *testing.T) {
 	t.Run("invalid provider ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Delete("/oauth/providers/:id", handler.DeleteOAuthProvider)
@@ -722,7 +722,7 @@ func TestDeleteOAuthProvider_Validation(t *testing.T) {
 
 func TestUpdateAuthSettings_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewOAuthProviderHandler(nil, nil, "", "", nil)
 
 		app.Put("/auth/settings", handler.UpdateAuthSettings)
@@ -953,7 +953,7 @@ func TestOAuth2Endpoints(t *testing.T) {
 
 func TestGetUserIDFromContext(t *testing.T) {
 	t.Run("no user ID in context returns nil", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		var result *uuid.UUID
 
 		app.Get("/test", func(c fiber.Ctx) error {
@@ -968,7 +968,7 @@ func TestGetUserIDFromContext(t *testing.T) {
 	})
 
 	t.Run("valid UUID string in context", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		var result *uuid.UUID
 		expectedID := "550e8400-e29b-41d4-a716-446655440000"
 
@@ -986,7 +986,7 @@ func TestGetUserIDFromContext(t *testing.T) {
 	})
 
 	t.Run("invalid UUID string returns nil", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		var result *uuid.UUID
 
 		app.Get("/test", func(c fiber.Ctx) error {

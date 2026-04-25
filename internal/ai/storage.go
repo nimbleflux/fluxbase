@@ -18,6 +18,7 @@ import (
 
 // Storage handles database operations for AI entities
 type Storage struct {
+	database.TenantAware
 	db     *database.Connection
 	config *config.AIConfig
 }
@@ -25,8 +26,9 @@ type Storage struct {
 // NewStorage creates a new AI storage instance
 func NewStorage(db *database.Connection) *Storage {
 	return &Storage{
-		db:     db,
-		config: nil, // Will be set via SetConfig if needed
+		TenantAware: database.TenantAware{DB: db},
+		db:          db,
+		config:      nil,
 	}
 }
 
@@ -38,7 +40,7 @@ func (s *Storage) SetConfig(cfg *config.AIConfig) {
 // UserExists checks if a user exists in auth.users
 func (s *Storage) UserExists(ctx context.Context, userID string) (bool, error) {
 	var exists bool
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1)`
 		return tx.QueryRow(ctx, query, userID).Scan(&exists)
 	})
@@ -262,7 +264,7 @@ func (s *Storage) GetChatbot(ctx context.Context, id string) (*Chatbot, error) {
 	var intentRulesJSON, requiredColumnsJSON []byte
 	var defaultTable *string
 	var responseLanguage *string
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		tenantID := database.TenantFromContext(ctx)
 		query := `
 			SELECT
@@ -278,7 +280,7 @@ func (s *Storage) GetChatbot(ctx context.Context, id string) (*Chatbot, error) {
 			FROM ai.chatbots
 			WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 		`
-		return tx.QueryRow(ctx, query, id, tenantOrNil(tenantID)).Scan(
+		return tx.QueryRow(ctx, query, id, database.TenantOrNil(tenantID)).Scan(
 			&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
 			&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
 			&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
@@ -328,7 +330,7 @@ func (s *Storage) GetChatbotByName(ctx context.Context, namespace, name string) 
 	var intentRulesJSON, requiredColumnsJSON []byte
 	var defaultTable *string
 	var responseLanguage *string
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		tenantID := database.TenantFromContext(ctx)
 		query := `
 			SELECT
@@ -344,7 +346,7 @@ func (s *Storage) GetChatbotByName(ctx context.Context, namespace, name string) 
 			FROM ai.chatbots
 			WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))
 		`
-		return tx.QueryRow(ctx, query, namespace, name, tenantOrNil(tenantID)).Scan(
+		return tx.QueryRow(ctx, query, namespace, name, database.TenantOrNil(tenantID)).Scan(
 			&chatbot.ID, &chatbot.Name, &chatbot.Namespace, &chatbot.Description,
 			&chatbot.Code, &chatbot.OriginalCode, &chatbot.IsBundled, &chatbot.BundleError,
 			&chatbot.AllowedTables, &chatbot.AllowedOperations, &chatbot.AllowedSchemas, &chatbot.HTTPAllowedDomains,
@@ -391,7 +393,7 @@ func (s *Storage) GetChatbotByName(ctx context.Context, namespace, name string) 
 // ListChatbots lists all chatbots with optional filtering
 func (s *Storage) ListChatbots(ctx context.Context, enabledOnly bool) ([]*Chatbot, error) {
 	var chatbots []*Chatbot
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		tenantID := database.TenantFromContext(ctx)
 		query := `
 			SELECT
@@ -408,7 +410,7 @@ func (s *Storage) ListChatbots(ctx context.Context, enabledOnly bool) ([]*Chatbo
 			WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 		`
 
-		args := []interface{}{tenantOrNil(tenantID)}
+		args := []interface{}{database.TenantOrNil(tenantID)}
 
 		if enabledOnly {
 			query += " AND enabled = true"
@@ -474,7 +476,7 @@ func (s *Storage) ListChatbots(ctx context.Context, enabledOnly bool) ([]*Chatbo
 // ListChatbotsByNamespace lists chatbots filtered by namespace
 func (s *Storage) ListChatbotsByNamespace(ctx context.Context, namespace string) ([]*Chatbot, error) {
 	var chatbots []*Chatbot
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		tenantID := database.TenantFromContext(ctx)
 		query := `
 			SELECT
@@ -492,7 +494,7 @@ func (s *Storage) ListChatbotsByNamespace(ctx context.Context, namespace string)
 			ORDER BY name
 		`
 
-		rows, err := tx.Query(ctx, query, namespace, tenantOrNil(tenantID))
+		rows, err := tx.Query(ctx, query, namespace, database.TenantOrNil(tenantID))
 		if err != nil {
 			return fmt.Errorf("failed to list chatbots by namespace: %w", err)
 		}
@@ -552,7 +554,7 @@ func (s *Storage) ListChatbotsByNamespace(ctx context.Context, namespace string)
 // Used for smart chatbot lookup when namespace is not specified
 func (s *Storage) FindChatbotsByName(ctx context.Context, name string, enabledOnly bool) ([]*Chatbot, error) {
 	var chatbots []*Chatbot
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		tenantID := database.TenantFromContext(ctx)
 		query := `
 			SELECT
@@ -569,7 +571,7 @@ func (s *Storage) FindChatbotsByName(ctx context.Context, name string, enabledOn
 			WHERE name = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 		`
 
-		args := []interface{}{name, tenantOrNil(tenantID)}
+		args := []interface{}{name, database.TenantOrNil(tenantID)}
 
 		if enabledOnly {
 			query += " AND enabled = true"
@@ -812,14 +814,14 @@ func (s *Storage) UpdateProviderWithTenant(ctx context.Context, tenantID string,
 // GetProvider retrieves a provider by ID
 func (s *Storage) GetProvider(ctx context.Context, id string) (*ProviderRecord, error) {
 	provider := &ProviderRecord{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		tenantID := database.TenantFromContext(ctx)
 		query := `
 			SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
 			FROM ai.providers
 			WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 		`
-		return tx.QueryRow(ctx, query, id, tenantOrNil(tenantID)).Scan(
+		return tx.QueryRow(ctx, query, id, database.TenantOrNil(tenantID)).Scan(
 			&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
 			&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
 			&provider.CreatedAt, &provider.UpdatedAt,
@@ -847,14 +849,14 @@ func (s *Storage) GetProviderByName(ctx context.Context, name string) (*Provider
 	}
 
 	provider := &ProviderRecord{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		tenantID := database.TenantFromContext(ctx)
 		query := `
 			SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
 			FROM ai.providers
 			WHERE name = $1 AND enabled = true AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 		`
-		return tx.QueryRow(ctx, query, name, tenantOrNil(tenantID)).Scan(
+		return tx.QueryRow(ctx, query, name, database.TenantOrNil(tenantID)).Scan(
 			&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
 			&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
 			&provider.CreatedAt, &provider.UpdatedAt,
@@ -874,7 +876,7 @@ func (s *Storage) GetProviderByName(ctx context.Context, name string) (*Provider
 // GetDefaultProvider retrieves the default provider
 func (s *Storage) GetDefaultProvider(ctx context.Context) (*ProviderRecord, error) {
 	provider := &ProviderRecord{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		tenantID := database.TenantFromContext(ctx)
 		query := `
 			SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
@@ -882,7 +884,7 @@ func (s *Storage) GetDefaultProvider(ctx context.Context) (*ProviderRecord, erro
 			WHERE is_default = true AND enabled = true AND (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 			LIMIT 1
 		`
-		return tx.QueryRow(ctx, query, tenantOrNil(tenantID)).Scan(
+		return tx.QueryRow(ctx, query, database.TenantOrNil(tenantID)).Scan(
 			&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
 			&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
 			&provider.CreatedAt, &provider.UpdatedAt,
@@ -1060,7 +1062,7 @@ func (s *Storage) ListProviders(ctx context.Context, enabledOnly bool) ([]*Provi
 	}
 
 	// Query database providers
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		tenantID := database.TenantFromContext(ctx)
 		query := `
 			SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
@@ -1068,7 +1070,7 @@ func (s *Storage) ListProviders(ctx context.Context, enabledOnly bool) ([]*Provi
 			WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 		`
 
-		args := []interface{}{tenantOrNil(tenantID)}
+		args := []interface{}{database.TenantOrNil(tenantID)}
 
 		if enabledOnly {
 			query += " AND enabled = true"
@@ -1166,7 +1168,7 @@ func (s *Storage) DeleteProviderWithTenant(ctx context.Context, tenantID string,
 // Returns nil if no explicit preference is set (use default provider in auto mode)
 func (s *Storage) GetEmbeddingProviderPreference(ctx context.Context) (*ProviderRecord, error) {
 	provider := &ProviderRecord{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		tenantID := database.TenantFromContext(ctx)
 		query := `
 			SELECT id, name, display_name, provider_type, is_default, use_for_embeddings, embedding_model, config, enabled, created_by, created_at, updated_at
@@ -1174,7 +1176,7 @@ func (s *Storage) GetEmbeddingProviderPreference(ctx context.Context) (*Provider
 			WHERE use_for_embeddings = true AND enabled = true AND (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 			LIMIT 1
 		`
-		return tx.QueryRow(ctx, query, tenantOrNil(tenantID)).Scan(
+		return tx.QueryRow(ctx, query, database.TenantOrNil(tenantID)).Scan(
 			&provider.ID, &provider.Name, &provider.DisplayName, &provider.ProviderType,
 			&provider.IsDefault, &provider.UseForEmbeddings, &provider.EmbeddingModel, &provider.Config, &provider.Enabled, &provider.CreatedBy,
 			&provider.CreatedAt, &provider.UpdatedAt,
@@ -1335,7 +1337,7 @@ func (s *Storage) ListUserConversations(ctx context.Context, opts ListUserConver
 			AND (c.tenant_id = $2 OR ($2 IS NULL AND c.tenant_id IS NULL))
 	`
 
-	args := []interface{}{opts.UserID, tenantOrNil(tenantID)}
+	args := []interface{}{opts.UserID, database.TenantOrNil(tenantID)}
 	argIndex := 3
 
 	if opts.ChatbotName != nil {
@@ -1387,7 +1389,7 @@ func (s *Storage) ListUserConversations(ctx context.Context, opts ListUserConver
 		WHERE c.user_id = $1 AND c.status = 'active'
 			AND (c.tenant_id = $2 OR ($2 IS NULL AND c.tenant_id IS NULL))
 	`
-	countArgs := []interface{}{opts.UserID, tenantOrNil(tenantID)}
+	countArgs := []interface{}{opts.UserID, database.TenantOrNil(tenantID)}
 	countArgIndex := 3
 
 	if opts.ChatbotName != nil {
@@ -1440,7 +1442,7 @@ func (s *Storage) GetUserConversation(ctx context.Context, userID, conversationI
 	`
 
 	var conv UserConversationDetail
-	err := s.db.QueryRow(ctx, query, conversationID, userID, tenantOrNil(tenantID)).Scan(
+	err := s.db.QueryRow(ctx, query, conversationID, userID, database.TenantOrNil(tenantID)).Scan(
 		&conv.ID,
 		&conv.ChatbotName,
 		&conv.Namespace,
@@ -1626,20 +1628,4 @@ func (s *Storage) SetConversationTitle(ctx context.Context, conversationID, titl
 
 		return nil
 	})
-}
-
-// withTenant executes fn inside a transaction with the tenant-aware role set via RLS.
-func (s *Storage) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	tenantID := database.TenantFromContext(ctx)
-	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
-}
-
-// tenantOrNil converts a tenant ID string to a value suitable for SQL queries.
-// Empty string becomes nil (matches rows where tenant_id IS NULL), non-empty
-// becomes the string value (matches rows with that specific tenant_id).
-func tenantOrNil(tenantID string) interface{} {
-	if tenantID == "" {
-		return nil
-	}
-	return tenantID
 }

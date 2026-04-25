@@ -229,10 +229,8 @@ func (h *RESTHandler) makeBatchPatchHandler(table database.TableInfo) fiber.Hand
 
 		// Parse request body
 		var data map[string]interface{}
-		if err := c.Bind().Body(&data); err != nil {
-			return c.Status(400).JSON(fiber.Map{
-				"error": "Invalid request body",
-			})
+		if err := ParseBody(c, &data); err != nil {
+			return err
 		}
 
 		if len(data) == 0 {

@@ -172,16 +172,16 @@ func TestUsesMainDatabase(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2: RequireTenantAdmin unit tests
+// Phase 2: RequireTenantRole("tenant_admin") unit tests
 // ---------------------------------------------------------------------------
 
-func TestRequireTenantAdmin_InstanceAdminWithoutTenantContext(t *testing.T) {
+func TestRequireTenantRole_TenantAdmin_InstanceAdminWithoutTenantContext(t *testing.T) {
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
 		c.Locals("is_instance_admin", true)
 		return c.Next()
 	})
-	app.Use(RequireTenantAdmin())
+	app.Use(RequireTenantRole("tenant_admin"))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
@@ -192,7 +192,7 @@ func TestRequireTenantAdmin_InstanceAdminWithoutTenantContext(t *testing.T) {
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 }
 
-func TestRequireTenantAdmin_InstanceAdminWithHeaderSource_NeedsRole(t *testing.T) {
+func TestRequireTenantRole_TenantAdmin_InstanceAdminWithHeaderSource_NeedsRole(t *testing.T) {
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
 		c.Locals("is_instance_admin", true)
@@ -200,7 +200,7 @@ func TestRequireTenantAdmin_InstanceAdminWithHeaderSource_NeedsRole(t *testing.T
 		c.Locals("tenant_source", "header")
 		return c.Next()
 	})
-	app.Use(RequireTenantAdmin())
+	app.Use(RequireTenantRole("tenant_admin"))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
@@ -211,7 +211,7 @@ func TestRequireTenantAdmin_InstanceAdminWithHeaderSource_NeedsRole(t *testing.T
 	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
 
-func TestRequireTenantAdmin_TenantAdminRole_Passes(t *testing.T) {
+func TestRequireTenantRole_TenantAdmin_TenantAdminRole_Passes(t *testing.T) {
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
 		c.Locals("is_instance_admin", false)
@@ -220,7 +220,7 @@ func TestRequireTenantAdmin_TenantAdminRole_Passes(t *testing.T) {
 		c.Locals("tenant_role", "tenant_admin")
 		return c.Next()
 	})
-	app.Use(RequireTenantAdmin())
+	app.Use(RequireTenantRole("tenant_admin"))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
@@ -231,7 +231,7 @@ func TestRequireTenantAdmin_TenantAdminRole_Passes(t *testing.T) {
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 }
 
-func TestRequireTenantAdmin_NoTenantRole_Forbidden(t *testing.T) {
+func TestRequireTenantRole_TenantAdmin_NoTenantRole_Forbidden(t *testing.T) {
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
 		c.Locals("is_instance_admin", false)
@@ -240,7 +240,7 @@ func TestRequireTenantAdmin_NoTenantRole_Forbidden(t *testing.T) {
 		// tenant_role is empty
 		return c.Next()
 	})
-	app.Use(RequireTenantAdmin())
+	app.Use(RequireTenantRole("tenant_admin"))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
@@ -255,7 +255,7 @@ func TestRequireTenantAdmin_NoTenantRole_Forbidden(t *testing.T) {
 	assert.Contains(t, string(body), "tenant membership required")
 }
 
-func TestRequireTenantAdmin_NonAdminRole_Forbidden(t *testing.T) {
+func TestRequireTenantRole_TenantAdmin_NonAdminRole_Forbidden(t *testing.T) {
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
 		c.Locals("is_instance_admin", false)
@@ -264,7 +264,7 @@ func TestRequireTenantAdmin_NonAdminRole_Forbidden(t *testing.T) {
 		c.Locals("tenant_role", "tenant_viewer")
 		return c.Next()
 	})
-	app.Use(RequireTenantAdmin())
+	app.Use(RequireTenantRole("tenant_admin"))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
@@ -276,10 +276,10 @@ func TestRequireTenantAdmin_NonAdminRole_Forbidden(t *testing.T) {
 
 	body := make([]byte, resp.ContentLength)
 	resp.Body.Read(body)
-	assert.Contains(t, string(body), "tenant admin role required")
+	assert.Contains(t, string(body), "tenant_admin role required")
 }
 
-func TestRequireTenantAdmin_JWTSource_ActingAsTenantAdmin(t *testing.T) {
+func TestRequireTenantRole_TenantAdmin_JWTSource_ActingAsTenantAdmin(t *testing.T) {
 	// JWT source counts as "acting as tenant admin" for instance admins,
 	// but non-admin with jwt source still needs tenant_role
 	app := fiber.New()
@@ -290,7 +290,7 @@ func TestRequireTenantAdmin_JWTSource_ActingAsTenantAdmin(t *testing.T) {
 		// no tenant_role
 		return c.Next()
 	})
-	app.Use(RequireTenantAdmin())
+	app.Use(RequireTenantRole("tenant_admin"))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
@@ -301,7 +301,7 @@ func TestRequireTenantAdmin_JWTSource_ActingAsTenantAdmin(t *testing.T) {
 	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
 
-func TestRequireTenantAdmin_InstanceAdminJWTSource_WithRole(t *testing.T) {
+func TestRequireTenantRole_TenantAdmin_InstanceAdminJWTSource_WithRole(t *testing.T) {
 	// Instance admin acting as tenant admin via JWT with role
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
@@ -311,7 +311,7 @@ func TestRequireTenantAdmin_InstanceAdminJWTSource_WithRole(t *testing.T) {
 		c.Locals("tenant_role", "tenant_admin")
 		return c.Next()
 	})
-	app.Use(RequireTenantAdmin())
+	app.Use(RequireTenantRole("tenant_admin"))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})

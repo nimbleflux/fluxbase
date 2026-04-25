@@ -16,7 +16,7 @@ func TestNewStorage(t *testing.T) {
 		storage := NewStorage(nil)
 
 		require.NotNil(t, storage)
-		assert.Nil(t, storage.db)
+		assert.Nil(t, storage.DB)
 	})
 }
 

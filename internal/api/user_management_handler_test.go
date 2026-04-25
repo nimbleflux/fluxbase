@@ -36,7 +36,7 @@ func TestListUsers_DefaultParameters(t *testing.T) {
 
 	t.Run("default pagination values", func(t *testing.T) {
 		// The handler uses defaultLimit=100 and maxLimit=1000
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Get("/users", handler.ListUsers)
@@ -52,7 +52,7 @@ func TestListUsers_DefaultParameters(t *testing.T) {
 	})
 
 	t.Run("custom pagination parameters", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Get("/users", handler.ListUsers)
@@ -67,7 +67,7 @@ func TestListUsers_DefaultParameters(t *testing.T) {
 	})
 
 	t.Run("exclude_admins parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Get("/users", handler.ListUsers)
@@ -81,7 +81,7 @@ func TestListUsers_DefaultParameters(t *testing.T) {
 	})
 
 	t.Run("search parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Get("/users", handler.ListUsers)
@@ -95,7 +95,7 @@ func TestListUsers_DefaultParameters(t *testing.T) {
 	})
 
 	t.Run("user type parameter - app", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Get("/users", handler.ListUsers)
@@ -109,7 +109,7 @@ func TestListUsers_DefaultParameters(t *testing.T) {
 	})
 
 	t.Run("user type parameter - dashboard", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Get("/users", handler.ListUsers)
@@ -129,7 +129,7 @@ func TestListUsers_DefaultParameters(t *testing.T) {
 
 func TestGetUserByID_ParameterParsing(t *testing.T) {
 	t.Run("valid user ID format", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Get("/users/:id", handler.GetUserByID)
@@ -143,7 +143,7 @@ func TestGetUserByID_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("with type parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Get("/users/:id", handler.GetUserByID)
@@ -163,7 +163,7 @@ func TestGetUserByID_ParameterParsing(t *testing.T) {
 
 func TestInviteUser_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Post("/users/invite", handler.InviteUser)
@@ -188,7 +188,7 @@ func TestInviteUser_Validation(t *testing.T) {
 	})
 
 	t.Run("empty body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Post("/users/invite", handler.InviteUser)
@@ -211,7 +211,7 @@ func TestInviteUser_Validation(t *testing.T) {
 
 func TestDeleteUser_ParameterParsing(t *testing.T) {
 	t.Run("with user ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Delete("/users/:id", handler.DeleteUser)
@@ -225,7 +225,7 @@ func TestDeleteUser_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("with type parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Delete("/users/:id", handler.DeleteUser)
@@ -245,7 +245,7 @@ func TestDeleteUser_ParameterParsing(t *testing.T) {
 
 func TestUpdateUserRole_Validation(t *testing.T) {
 	t.Run("invalid body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Patch("/users/:id/role", handler.UpdateUserRole)
@@ -261,7 +261,7 @@ func TestUpdateUserRole_Validation(t *testing.T) {
 	})
 
 	t.Run("valid body structure", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Patch("/users/:id/role", handler.UpdateUserRole)
@@ -285,7 +285,7 @@ func TestUpdateUserRole_Validation(t *testing.T) {
 
 func TestUpdateUser_Validation(t *testing.T) {
 	t.Run("invalid body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Patch("/users/:id", handler.UpdateUser)
@@ -301,7 +301,7 @@ func TestUpdateUser_Validation(t *testing.T) {
 	})
 
 	t.Run("valid body with email update", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Patch("/users/:id", handler.UpdateUser)
@@ -319,7 +319,7 @@ func TestUpdateUser_Validation(t *testing.T) {
 	})
 
 	t.Run("valid body with password update", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Patch("/users/:id", handler.UpdateUser)
@@ -342,7 +342,7 @@ func TestUpdateUser_Validation(t *testing.T) {
 
 func TestResetUserPassword_ParameterParsing(t *testing.T) {
 	t.Run("with user ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Post("/users/:id/reset-password", handler.ResetUserPassword)
@@ -356,7 +356,7 @@ func TestResetUserPassword_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("with type parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Post("/users/:id/reset-password", handler.ResetUserPassword)
@@ -376,7 +376,7 @@ func TestResetUserPassword_ParameterParsing(t *testing.T) {
 
 func TestLockUser_ParameterParsing(t *testing.T) {
 	t.Run("with user ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Post("/users/:id/lock", handler.LockUser)
@@ -390,7 +390,7 @@ func TestLockUser_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("with type parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Post("/users/:id/lock", handler.LockUser)
@@ -410,7 +410,7 @@ func TestLockUser_ParameterParsing(t *testing.T) {
 
 func TestUnlockUser_ParameterParsing(t *testing.T) {
 	t.Run("with user ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewUserManagementHandler(nil, nil)
 
 		app.Post("/users/:id/unlock", handler.UnlockUser)

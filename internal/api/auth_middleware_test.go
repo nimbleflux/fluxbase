@@ -392,7 +392,7 @@ func TestRequireRole_ServiceKeyTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 
 			// Simulate service key auth having already validated the key
 			app.Use(func(c fiber.Ctx) error {
@@ -487,7 +487,7 @@ func TestRequireRole_JWTAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 
 			app.Use(func(c fiber.Ctx) error {
 				c.Locals("auth_type", "jwt")

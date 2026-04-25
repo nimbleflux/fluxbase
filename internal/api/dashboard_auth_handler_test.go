@@ -485,7 +485,7 @@ func TestGetIPAddress(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 
 			var capturedIP string
 			app.Get("/test", func(c fiber.Ctx) error {
@@ -609,7 +609,7 @@ func TestBuildOAuthConfig(t *testing.T) {
 func TestRequireDashboardAuth(t *testing.T) {
 	handler := NewDashboardAuthHandler(nil, nil, nil, nil, nil, "", "", nil)
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Use(handler.RequireDashboardAuth)
 	app.Get("/protected", func(c fiber.Ctx) error {
 		return c.SendString("OK")
@@ -669,7 +669,7 @@ func TestRequireDashboardAuth(t *testing.T) {
 // =============================================================================
 
 func TestDashboardAuthHandler_InitiateSAMLLogin_SAMLNotConfigured(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewDashboardAuthHandler(nil, nil, nil, nil, nil, "", "", nil) // samlService is nil
 
 	app.Get("/dashboard/auth/sso/saml/:provider", handler.InitiateSAMLLogin)
@@ -683,11 +683,11 @@ func TestDashboardAuthHandler_InitiateSAMLLogin_SAMLNotConfigured(t *testing.T) 
 	assert.Equal(t, 500, resp.StatusCode)
 
 	body, _ := io.ReadAll(resp.Body)
-	assert.Contains(t, string(body), "SAML not configured")
+	assert.Contains(t, string(body), "not_initialized")
 }
 
 func TestDashboardAuthHandler_SAMLACSCallback_SAMLNotConfigured(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewDashboardAuthHandler(nil, nil, nil, nil, nil, "", "", nil) // samlService is nil
 
 	app.Post("/dashboard/auth/sso/saml/acs", handler.SAMLACSCallback)
@@ -699,25 +699,13 @@ func TestDashboardAuthHandler_SAMLACSCallback_SAMLNotConfigured(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 
-	// Should redirect to login with error (303 See Other is correct for POST → GET redirect)
-	assert.Equal(t, 303, resp.StatusCode)
-	location := resp.Header.Get("Location")
-	assert.Contains(t, location, "/admin/login")
-	// URL may encode space as %20 or +, both are valid
-	assert.True(t, strings.Contains(location, "SAML%20not%20configured") || strings.Contains(location, "SAML+not+configured"),
-		"Expected location to contain 'SAML not configured' encoded, got: %s", location)
+	assert.Equal(t, 500, resp.StatusCode)
 }
 
 func TestDashboardAuthHandler_SAMLACSCallback_MissingResponse(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewDashboardAuthHandler(nil, nil, nil, nil, nil, "", "", nil)
 
-	// Need to have samlService to get past the nil check
-	// But we're testing the missing SAMLResponse validation
-	// So we'll test the flow where SAML is configured but response is missing
-	// For now, test that empty SAMLResponse results in redirect
-
-	// Since samlService is nil, it will redirect with "SAML not configured"
 	app.Post("/dashboard/auth/sso/saml/acs", handler.SAMLACSCallback)
 
 	req := httptest.NewRequest("POST", "/dashboard/auth/sso/saml/acs", nil)
@@ -727,8 +715,7 @@ func TestDashboardAuthHandler_SAMLACSCallback_MissingResponse(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 
-	// 303 See Other is correct for POST → GET redirect in Fiber v3
-	assert.Equal(t, 303, resp.StatusCode)
+	assert.Equal(t, 500, resp.StatusCode)
 }
 
 // =============================================================================

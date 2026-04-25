@@ -352,7 +352,7 @@ func TestGetUserIDStorage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 			var result string
 			app.Get("/test", func(c fiber.Ctx) error {
 				if tt.userID != nil {

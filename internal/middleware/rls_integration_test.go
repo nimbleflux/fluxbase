@@ -239,21 +239,15 @@ func TestSetTenantDBSessionContext_SetsTenantID(t *testing.T) {
 	tenantPool, err := env.router.GetPool(env.tenant.ID)
 	require.NoError(t, err, "Failed to get tenant pool")
 
-	pgxTx, err := tenantPool.Begin(ctx)
+	tx, err := tenantPool.Begin(ctx)
 	require.NoError(t, err, "Failed to begin transaction")
-	defer func() { _ = pgxTx.Rollback(ctx) }()
-
-	// Type-assert to *pgxpool.Tx (the concrete pointer type returned by pgxpool.Pool.Begin).
-	tx, ok := pgxTx.(*pgxpool.Tx)
-	require.True(t, ok, "Expected pgx.Tx to be backed by *pgxpool.Tx")
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	tenantID := env.tenant.ID
 
-	// Call SetTenantDBSessionContext — dereference pointer to match pgxpool.Tx value parameter.
-	err = SetTenantDBSessionContext(ctx, *tx, tenantID)
-	require.NoError(t, err, "SetTenantDBSessionContext failed")
+	err = SetTenantSessionContext(ctx, tx, tenantID)
+	require.NoError(t, err, "SetTenantSessionContext failed")
 
-	// Query app.current_tenant_id.
 	var currentTenantID string
 	err = tx.QueryRow(ctx, "SELECT current_setting('app.current_tenant_id', true)").Scan(&currentTenantID)
 	require.NoError(t, err, "Failed to query app.current_tenant_id")
@@ -268,19 +262,13 @@ func TestSetTenantDBSessionContext_EmptyTenantID_Noop(t *testing.T) {
 	tenantPool, err := env.router.GetPool(env.tenant.ID)
 	require.NoError(t, err, "Failed to get tenant pool")
 
-	pgxTx, err := tenantPool.Begin(ctx)
+	tx, err := tenantPool.Begin(ctx)
 	require.NoError(t, err, "Failed to begin transaction")
-	defer func() { _ = pgxTx.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Type-assert to *pgxpool.Tx (the concrete pointer type returned by pgxpool.Pool.Begin).
-	tx, ok := pgxTx.(*pgxpool.Tx)
-	require.True(t, ok, "Expected pgx.Tx to be backed by *pgxpool.Tx")
+	err = SetTenantSessionContext(ctx, tx, "")
+	require.NoError(t, err, "SetTenantSessionContext with empty tenantID should not error")
 
-	// Call with empty tenant ID — should return no error. Dereference to match value parameter.
-	err = SetTenantDBSessionContext(ctx, *tx, "")
-	require.NoError(t, err, "SetTenantDBSessionContext with empty tenantID should not error")
-
-	// Query app.current_tenant_id — should return NULL (not set).
 	var currentTenantID *string
 	err = tx.QueryRow(ctx, "SELECT current_setting('app.current_tenant_id', true)").Scan(&currentTenantID)
 	require.NoError(t, err, "Failed to query app.current_tenant_id")

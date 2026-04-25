@@ -146,7 +146,7 @@ func (e *TableExporter) ExportTable(ctx context.Context, req ExportTableRequest)
 
 		// Delete old document-entity links so they can be recreated
 		// The entities themselves will be updated via ON CONFLICT when recreated
-		if _, err := e.storage.db.Exec(ctx, "DELETE FROM ai.document_entities WHERE document_id = $1", existingDoc.ID); err != nil {
+		if _, err := e.storage.DB.Exec(ctx, "DELETE FROM ai.document_entities WHERE document_id = $1", existingDoc.ID); err != nil {
 			log.Warn().Err(err).Str("document_id", existingDoc.ID).Msg("Failed to delete old document-entity links")
 		}
 

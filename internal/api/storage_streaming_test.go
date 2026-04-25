@@ -13,7 +13,7 @@ import (
 
 // TestStreamUpload_EmptyKeyValidation tests that empty key is rejected
 func TestStreamUpload_EmptyKeyValidation(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 
 	handler := &StorageHandler{
 		storageManager: nil, // Empty key check happens before storage access
@@ -75,7 +75,7 @@ func TestStreamUpload_RouteMatching(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 
 			handler := &StorageHandler{
 				storageManager: nil,
@@ -131,7 +131,7 @@ func TestStreamUpload_ParameterExtraction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 
 			// Custom handler to verify parameter extraction
 			app.Post("/storage/:bucket/stream/*", func(c fiber.Ctx) error {

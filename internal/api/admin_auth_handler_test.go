@@ -272,7 +272,7 @@ func TestInitialSetup_RequestValidation(t *testing.T) {
 
 func TestAdminLogin_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := fiber.New(fiber.Config{ErrorHandler: customErrorHandler})
 		handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 		app.Post("/login", handler.AdminLogin)
@@ -312,7 +312,7 @@ func TestAdminLogin_Validation(t *testing.T) {
 
 func TestAdminRefreshToken_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := fiber.New(fiber.Config{ErrorHandler: customErrorHandler})
 		handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 		app.Post("/refresh", handler.AdminRefreshToken)
@@ -344,7 +344,7 @@ func TestAdminRefreshToken_Validation(t *testing.T) {
 
 func TestAdminLogout_Validation(t *testing.T) {
 	t.Run("missing authorization header", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 		app.Post("/logout", handler.AdminLogout)
@@ -368,7 +368,7 @@ func TestAdminLogout_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid authorization header format - no Bearer", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 		app.Post("/logout", handler.AdminLogout)
@@ -393,7 +393,7 @@ func TestAdminLogout_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid authorization header format - single part", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 		app.Post("/logout", handler.AdminLogout)
@@ -423,7 +423,7 @@ func TestAdminLogout_Validation(t *testing.T) {
 
 func TestGetCurrentAdmin_Authorization(t *testing.T) {
 	t.Run("no user_id in context", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 		app.Get("/me", handler.GetCurrentAdmin)
@@ -447,7 +447,7 @@ func TestGetCurrentAdmin_Authorization(t *testing.T) {
 	})
 
 	t.Run("user_id present but non-admin role", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 		// Middleware to set user context
@@ -479,7 +479,7 @@ func TestGetCurrentAdmin_Authorization(t *testing.T) {
 	})
 
 	t.Run("authenticated admin user", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 		// Middleware to set admin user context
@@ -516,7 +516,7 @@ func TestGetCurrentAdmin_Authorization(t *testing.T) {
 	})
 
 	t.Run("authenticated admin with empty email", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 		// Middleware to set admin user context with empty email
@@ -585,7 +585,7 @@ func TestAuthorizationHeaderParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 			handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 			app.Post("/logout", handler.AdminLogout)
@@ -614,7 +614,7 @@ func TestRoleValidation(t *testing.T) {
 
 	t.Run("admin roles are allowed", func(t *testing.T) {
 		for _, role := range validAdminRoles {
-			app := fiber.New()
+			app := newTestApp(t)
 			handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 			app.Use(func(c fiber.Ctx) error {
@@ -637,7 +637,7 @@ func TestRoleValidation(t *testing.T) {
 
 	t.Run("non-admin roles are denied", func(t *testing.T) {
 		for _, role := range nonAdminRoles {
-			app := fiber.New()
+			app := newTestApp(t)
 			handler := NewAdminAuthHandler(nil, nil, nil, nil, nil)
 
 			app.Use(func(c fiber.Ctx) error {
