@@ -7,67 +7,40 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/runtime"
+	"github.com/nimbleflux/fluxbase/internal/scheduler"
 	"github.com/nimbleflux/fluxbase/internal/secrets"
 )
 
-// Scheduler manages scheduled execution of edge functions via cron
 type Scheduler struct {
-	cron           *cron.Cron
+	inner          *scheduler.CronScheduler
 	storage        *Storage
 	runtime        *runtime.DenoRuntime
 	secretsStorage *secrets.Storage
-	maxConcurrent  int
-	activeMu       sync.Mutex
-	activeCount    int
-	functionJobs   map[string]cron.EntryID // function name -> cron entry ID
-	jobsMu         sync.RWMutex
-	ctx            context.Context
-	cancel         context.CancelFunc
 	jwtSecret      string
 	publicURL      string
-	logCounters    sync.Map // map[uuid.UUID]*int for tracking log line numbers per execution
+	logCounters    sync.Map
 }
 
-// NewScheduler creates a new scheduler for edge functions
 func NewScheduler(db *database.Connection, jwtSecret, publicURL string, secretsStorage *secrets.Storage) *Scheduler {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Use a parser that supports both standard 5-field cron expressions
-	// and 6-field expressions with optional seconds
-	// 5-field: "*/5 * * * *" (every 5 minutes)
-	// 6-field: "0 */5 * * * *" (every 5 minutes at second 0)
-	parser := cron.NewParser(
-		cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
-	)
-
 	s := &Scheduler{
-		cron:           cron.New(cron.WithParser(parser)),
+		inner:          scheduler.NewCronScheduler(10),
 		storage:        NewStorage(db),
 		runtime:        runtime.NewRuntime(runtime.RuntimeTypeFunction, jwtSecret, publicURL),
 		secretsStorage: secretsStorage,
-		maxConcurrent:  10,
-		functionJobs:   make(map[string]cron.EntryID),
-		ctx:            ctx,
-		cancel:         cancel,
 		jwtSecret:      jwtSecret,
 		publicURL:      publicURL,
 	}
 
-	// Set up log callback to capture console.log output
 	s.runtime.SetLogCallback(s.handleLogMessage)
 
 	return s
 }
 
-// handleLogMessage is called when a scheduled function outputs a log message
-// Note: Execution logs are now stored in the central logging schema (logging.entries)
 func (s *Scheduler) handleLogMessage(executionID uuid.UUID, level string, message string) {
-	// Get and increment the line counter for this execution
 	counterVal, ok := s.logCounters.Load(executionID)
 	if !ok {
 		log.Debug().
@@ -87,7 +60,6 @@ func (s *Scheduler) handleLogMessage(executionID uuid.UUID, level string, messag
 	lineNumber := *counterPtr
 	*counterPtr = lineNumber + 1
 
-	// Log to zerolog - central logging service will capture this
 	log.Debug().
 		Str("execution_id", executionID.String()).
 		Str("level", level).
@@ -96,110 +68,42 @@ func (s *Scheduler) handleLogMessage(executionID uuid.UUID, level string, messag
 		Msg("Scheduled function execution log")
 }
 
-// Start initializes the scheduler and loads all enabled cron functions
-// It runs asynchronously to avoid blocking server startup and retries on database errors
 func (s *Scheduler) Start() error {
-	log.Info().Msg("Starting edge functions scheduler")
-
-	// Start the cron scheduler immediately
-	s.cron.Start()
-
-	// Load functions asynchronously with retry logic to handle race conditions during startup
-	go func() {
-		defer func() {
-			if rec := recover(); rec != nil {
-				log.Error().
-					Interface("panic", rec).
-					Msg("Panic in edge functions scheduler async loader - recovered")
-			}
-		}()
-
-		maxRetries := 5
-		retryDelay := 100 * time.Millisecond
-
-		for attempt := 1; attempt <= maxRetries; attempt++ {
-			// Use a timeout context to prevent indefinite hanging if database pool has issues
-			ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
-
-			functions, err := s.storage.ListFunctions(ctx)
-			cancel()
-
-			if err != nil {
-				if attempt < maxRetries {
-					log.Debug().
-						Err(err).
-						Int("attempt", attempt).
-						Int("max_retries", maxRetries).
-						Dur("retry_delay", retryDelay).
-						Msg("Failed to load functions for scheduler, retrying")
-					time.Sleep(retryDelay)
-					retryDelay *= 2 // Exponential backoff
-					continue
-				}
-				log.Error().Err(err).Msg("Failed to load functions for scheduler after all retries")
-				return
-			}
-
-			// Schedule each function that has a cron schedule
-			for _, fn := range functions {
-				if fn.Enabled && fn.CronSchedule != nil && *fn.CronSchedule != "" {
-					if err := s.ScheduleFunction(fn); err != nil {
-						log.Error().
-							Err(err).
-							Str("function", fn.Name).
-							Str("schedule", *fn.CronSchedule).
-							Msg("Failed to schedule function")
-					}
-				}
-			}
-
-			log.Info().Int("scheduled_functions", len(s.functionJobs)).Msg("Edge functions scheduler started successfully")
-			return
+	return s.inner.Start(func(ctx context.Context) ([]scheduler.Schedulable, error) {
+		functions, err := s.storage.ListFunctions(ctx)
+		if err != nil {
+			return nil, err
 		}
-	}()
 
-	return nil
+		for _, fn := range functions {
+			if fn.Enabled && fn.CronSchedule != nil && *fn.CronSchedule != "" {
+				if err := s.ScheduleFunction(fn); err != nil {
+					log.Error().
+						Err(err).
+						Str("function", fn.Name).
+						Str("schedule", *fn.CronSchedule).
+						Msg("Failed to schedule function")
+				}
+			}
+		}
+
+		return nil, nil
+	}, "edge functions")
 }
 
-// Stop gracefully shuts down the scheduler
 func (s *Scheduler) Stop() {
-	log.Info().Msg("Stopping edge functions scheduler")
-	s.cancel()
-
-	// Stop accepting new jobs
-	ctx := s.cron.Stop()
-
-	// Wait for running jobs to complete (with timeout)
-	select {
-	case <-ctx.Done():
-		log.Info().Msg("All scheduled functions completed")
-	case <-time.After(30 * time.Second):
-		log.Warn().Msg("Scheduler shutdown timeout - some functions may not have completed")
-	}
+	s.inner.Stop("edge functions")
 }
 
-// ScheduleFunction adds or updates a function's cron schedule
 func (s *Scheduler) ScheduleFunction(fn EdgeFunctionSummary) error {
 	if fn.CronSchedule == nil || *fn.CronSchedule == "" {
 		return nil
 	}
 
-	s.jobsMu.Lock()
-	defer s.jobsMu.Unlock()
-
-	// Remove existing schedule if present
-	if existingID, exists := s.functionJobs[fn.Name]; exists {
-		s.cron.Remove(existingID)
-		delete(s.functionJobs, fn.Name)
-		log.Debug().Str("function", fn.Name).Msg("Removed existing cron schedule")
-	}
-
-	// Capture only name and namespace - fetch fresh data at execution time
 	funcName := fn.Name
 	funcNamespace := fn.Namespace
 
-	// Add new schedule
-	entryID, err := s.cron.AddFunc(*fn.CronSchedule, func() {
+	entryID, err := s.inner.AddFunc(fn.Name, *fn.CronSchedule, func() {
 		s.executeScheduledFunction(funcName, funcNamespace)
 	})
 	if err != nil {
@@ -211,7 +115,6 @@ func (s *Scheduler) ScheduleFunction(fn EdgeFunctionSummary) error {
 		return err
 	}
 
-	s.functionJobs[fn.Name] = entryID
 	log.Info().
 		Str("function", fn.Name).
 		Str("schedule", *fn.CronSchedule).
@@ -221,19 +124,13 @@ func (s *Scheduler) ScheduleFunction(fn EdgeFunctionSummary) error {
 	return nil
 }
 
-// UnscheduleFunction removes a function's cron schedule
 func (s *Scheduler) UnscheduleFunction(functionName string) {
-	s.jobsMu.Lock()
-	defer s.jobsMu.Unlock()
-
-	if entryID, exists := s.functionJobs[functionName]; exists {
-		s.cron.Remove(entryID)
-		delete(s.functionJobs, functionName)
+	if s.inner.IsScheduled(functionName) {
+		s.inner.Remove(functionName)
 		log.Info().Str("function", functionName).Msg("Function unscheduled")
 	}
 }
 
-// RescheduleFunction updates a function's schedule (helper method)
 func (s *Scheduler) RescheduleFunction(fn EdgeFunctionSummary) error {
 	s.UnscheduleFunction(fn.Name)
 	if fn.Enabled && fn.CronSchedule != nil && *fn.CronSchedule != "" {
@@ -242,31 +139,15 @@ func (s *Scheduler) RescheduleFunction(fn EdgeFunctionSummary) error {
 	return nil
 }
 
-// executeScheduledFunction executes a function triggered by cron
 func (s *Scheduler) executeScheduledFunction(funcName, funcNamespace string) {
-	// Check concurrent execution limit
-	s.activeMu.Lock()
-	if s.activeCount >= s.maxConcurrent {
-		s.activeMu.Unlock()
-		log.Warn().
-			Str("function", funcName).
-			Int("active", s.activeCount).
-			Int("max", s.maxConcurrent).
-			Msg("Skipping scheduled execution - concurrent limit reached")
+	if !s.inner.Guard.Acquire(funcName) {
 		return
 	}
-	s.activeCount++
-	s.activeMu.Unlock()
+	defer s.inner.Guard.Release()
 
-	// Decrement counter when done
-	defer func() {
-		s.activeMu.Lock()
-		s.activeCount--
-		s.activeMu.Unlock()
-	}()
+	ctx := s.inner.Context()
 
-	// Fetch the current function data from storage
-	fn, err := s.storage.GetFunctionByNamespace(s.ctx, funcName, funcNamespace)
+	fn, err := s.storage.GetFunctionByNamespace(ctx, funcName, funcNamespace)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -276,7 +157,6 @@ func (s *Scheduler) executeScheduledFunction(funcName, funcNamespace string) {
 		return
 	}
 
-	// Check if function is still enabled
 	if !fn.Enabled {
 		log.Debug().
 			Str("function", funcName).
@@ -291,7 +171,6 @@ func (s *Scheduler) executeScheduledFunction(funcName, funcNamespace string) {
 
 	start := time.Now()
 
-	// Prepare execution request (empty for cron triggers)
 	executionID := uuid.New()
 	req := runtime.ExecutionRequest{
 		ID:        executionID,
@@ -303,21 +182,16 @@ func (s *Scheduler) executeScheduledFunction(funcName, funcNamespace string) {
 		Body:      "{}",
 	}
 
-	// Create execution record BEFORE running to enable real-time logging
-	// Skip if execution logs are disabled for this function
 	if !fn.DisableExecutionLogs {
-		if err := s.storage.CreateExecution(s.ctx, executionID, fn.ID, "cron"); err != nil {
+		if err := s.storage.CreateExecution(ctx, executionID, fn.ID, "cron"); err != nil {
 			log.Error().Err(err).Str("execution_id", executionID.String()).Msg("Failed to create execution record")
-			// Continue anyway - logging will still work via stderr fallback
 		}
 	}
 
-	// Initialize log counter for this execution
 	lineCounter := 0
 	s.logCounters.Store(executionID, &lineCounter)
 	defer s.logCounters.Delete(executionID)
 
-	// Build permissions from function config
 	perms := runtime.Permissions{
 		AllowNet:   fn.AllowNet,
 		AllowEnv:   fn.AllowEnv,
@@ -325,29 +199,24 @@ func (s *Scheduler) executeScheduledFunction(funcName, funcNamespace string) {
 		AllowWrite: fn.AllowWrite,
 	}
 
-	// Build timeout override from function settings
 	var timeoutOverride *time.Duration
 	if fn.TimeoutSeconds > 0 {
 		timeout := time.Duration(fn.TimeoutSeconds) * time.Second
 		timeoutOverride = &timeout
 	}
 
-	// Load secrets for this function's namespace
 	var functionSecrets map[string]string
 	if s.secretsStorage != nil {
 		var err error
-		functionSecrets, err = s.secretsStorage.GetSecretsForNamespace(s.ctx, fn.Namespace)
+		functionSecrets, err = s.secretsStorage.GetSecretsForNamespace(ctx, fn.Namespace)
 		if err != nil {
 			log.Warn().Err(err).Str("namespace", fn.Namespace).Msg("Failed to load secrets for scheduled function execution")
-			// Continue without secrets - don't fail the function invocation
 		}
 	}
 
-	// Execute (nil cancel signal for scheduled executions)
-	result, err := s.runtime.Execute(s.ctx, fn.Code, req, perms, nil, timeoutOverride, functionSecrets)
+	result, err := s.runtime.Execute(ctx, fn.Code, req, perms, nil, timeoutOverride, functionSecrets)
 	duration := time.Since(start)
 
-	// Determine final status
 	status := "success"
 	var errorMessage *string
 	durationMs := int(duration.Milliseconds())
@@ -374,7 +243,6 @@ func (s *Scheduler) executeScheduledFunction(funcName, funcNamespace string) {
 			Msg("Scheduled function execution completed")
 	}
 
-	// Serialize result to JSON
 	var resultStr *string
 	if result != nil {
 		if resultJSON, jsonErr := json.Marshal(result); jsonErr == nil {
@@ -383,8 +251,6 @@ func (s *Scheduler) executeScheduledFunction(funcName, funcNamespace string) {
 		}
 	}
 
-	// Complete execution record asynchronously
-	// Skip if execution logs are disabled for this function
 	if !fn.DisableExecutionLogs {
 		go func() {
 			defer func() {
@@ -407,38 +273,19 @@ func (s *Scheduler) executeScheduledFunction(funcName, funcNamespace string) {
 	}
 }
 
-// GetScheduledFunctions returns a list of all currently scheduled functions
 func (s *Scheduler) GetScheduledFunctions() []string {
-	s.jobsMu.RLock()
-	defer s.jobsMu.RUnlock()
-
-	functions := make([]string, 0, len(s.functionJobs))
-	for name := range s.functionJobs {
-		functions = append(functions, name)
+	entries := s.inner.GetScheduledEntries()
+	functions := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		functions = append(functions, entry.Key)
 	}
 	return functions
 }
 
-// GetScheduleInfo returns schedule information for a function
 func (s *Scheduler) GetScheduleInfo(functionName string) (string, bool) {
-	s.jobsMu.RLock()
-	defer s.jobsMu.RUnlock()
-
-	entryID, exists := s.functionJobs[functionName]
-	if !exists {
-		return "", false
-	}
-
-	entry := s.cron.Entry(entryID)
-	if entry.Next.IsZero() {
-		return "Not scheduled", true
-	}
-
-	return entry.Next.Format(time.RFC3339), true
+	return s.inner.GetScheduleInfo(functionName)
 }
 
-// IsScheduled returns true if the function is scheduled
 func (s *Scheduler) IsScheduled(functionName string) bool {
-	_, exists := s.GetScheduleInfo(functionName)
-	return exists
+	return s.inner.IsScheduled(functionName)
 }

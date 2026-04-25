@@ -31,6 +31,13 @@ func NewRESTHandler(db *database.Connection, parser *QueryParser, schemaCache *d
 	}
 }
 
+func (h *RESTHandler) requireSchemaCache(c fiber.Ctx) error {
+	if h.schemaCache == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // SchemaCache returns the schema cache for external access (e.g., migrations handler)
 func (h *RESTHandler) SchemaCache() *database.SchemaCache {
 	return h.schemaCache
@@ -59,7 +66,9 @@ func (h *RESTHandler) HandleDynamicTable(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 	schema, tableName := h.parseTableFromPath(c)
 
-	// Debug logging for service_role troubleshooting
+	if err := h.requireSchemaCache(c); err != nil {
+		return err
+	}
 	log.Debug().
 		Str("method", c.Method()).
 		Str("schema", schema).
@@ -135,7 +144,10 @@ func (h *RESTHandler) HandleDynamicTableById(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 	schema, tableName := h.parseTableFromPath(c)
 
-	// Look up table in cache
+	if err := h.requireSchemaCache(c); err != nil {
+		return err
+	}
+
 	tableInfo, exists, err := h.schemaCache.GetTable(ctx, schema, tableName)
 	if err != nil {
 		log.Error().Err(err).Str("schema", schema).Str("table", tableName).Msg("Failed to lookup table")
@@ -149,7 +161,6 @@ func (h *RESTHandler) HandleDynamicTableById(c fiber.Ctx) error {
 		})
 	}
 
-	// Check if table is writable for write operations
 	isWritable, err := h.schemaCache.IsTableWritable(ctx, schema, tableName)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
@@ -194,7 +205,10 @@ func (h *RESTHandler) HandleDynamicQuery(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 	schema, tableName := h.parseTableFromPath(c)
 
-	// Look up table in cache
+	if err := h.requireSchemaCache(c); err != nil {
+		return err
+	}
+
 	tableInfo, exists, err := h.schemaCache.GetTable(ctx, schema, tableName)
 	if err != nil {
 		log.Error().Err(err).Str("schema", schema).Str("table", tableName).Msg("Failed to lookup table")
@@ -278,7 +292,10 @@ func (h *RESTHandler) BuildFullTablePath(table database.TableInfo) string {
 func (h *RESTHandler) HandleGetTables(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
-	// Get all tables from cache
+	if err := h.requireSchemaCache(c); err != nil {
+		return err
+	}
+
 	tables, err := h.schemaCache.GetAllTables(ctx)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{

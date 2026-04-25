@@ -43,6 +43,13 @@ func NewEmailSettingsHandler(
 	}
 }
 
+func (h *EmailSettingsHandler) requireService(c fiber.Ctx) error {
+	if h.settingsService == nil || h.settingsCache == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // EmailSettingsResponse represents the email settings returned to the UI
 type EmailSettingsResponse struct {
 	Enabled     bool   `json:"enabled"`
@@ -115,6 +122,10 @@ type TestEmailSettingsRequest struct {
 // GET /api/v1/admin/email/settings
 func (h *EmailSettingsHandler) GetSettings(c fiber.Ctx) error {
 	ctx := context.Background()
+
+	if err := h.requireService(c); err != nil {
+		return err
+	}
 
 	response := EmailSettingsResponse{
 		Overrides: make(map[string]OverrideInfo),
@@ -219,32 +230,21 @@ func (h *EmailSettingsHandler) UpdateSettings(c fiber.Ctx) error {
 	ctx := context.Background()
 
 	var req UpdateEmailSettingsRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse update email settings request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Nil check for dependencies (can happen in tests)
-	if h.settingsService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Settings service not initialized",
-		})
+	if err := h.requireService(c); err != nil {
+		return err
 	}
 
-	// Track which settings were updated
 	var updatedKeys []string
 
 	// Helper to update a setting with override check
 	updateSetting := func(key string, value interface{}) error {
 		// Check if overridden by env var
 		if h.settingsCache != nil && h.settingsCache.IsOverriddenByEnv(key) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "This setting is controlled by an environment variable and cannot be changed",
-				"code":  "ENV_OVERRIDE",
-				"key":   key,
-			})
+			return SendConflict(c, "This setting is controlled by an environment variable and cannot be changed", "ENV_OVERRIDE")
 		}
 
 		if err := h.settingsService.SetSetting(ctx, key, map[string]interface{}{"value": value}, ""); err != nil {
@@ -263,11 +263,7 @@ func (h *EmailSettingsHandler) UpdateSettings(c fiber.Ctx) error {
 
 		// Check if overridden by env var
 		if h.settingsCache != nil && h.settingsCache.IsOverriddenByEnv(key) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "This setting is controlled by an environment variable and cannot be changed",
-				"code":  "ENV_OVERRIDE",
-				"key":   key,
-			})
+			return SendConflict(c, "This setting is controlled by an environment variable and cannot be changed", "ENV_OVERRIDE")
 		}
 
 		// Use SecretsService to encrypt and store the secret
@@ -395,31 +391,22 @@ func (h *EmailSettingsHandler) UpdateSettings(c fiber.Ctx) error {
 // POST /api/v1/admin/email/settings/test
 func (h *EmailSettingsHandler) TestSettings(c fiber.Ctx) error {
 	var req TestEmailSettingsRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse test email request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.RecipientEmail == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Recipient email is required",
-		})
+		return SendBadRequest(c, "Recipient email is required", ErrCodeMissingField)
 	}
 
 	// Get current email service
 	if h.emailManager == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error": "Email service not initialized",
-		})
+		return SendErrorWithCode(c, 503, "Email service not initialized", ErrCodeFeatureDisabled)
 	}
 
 	service := h.emailManager.GetService()
 	if service == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error": "Email service not available",
-		})
+		return SendErrorWithCode(c, 503, "Email service not available", ErrCodeFeatureDisabled)
 	}
 
 	// Send test email
@@ -439,10 +426,7 @@ func (h *EmailSettingsHandler) TestSettings(c fiber.Ctx) error {
 
 	if err := service.Send(ctx, req.RecipientEmail, subject, body); err != nil {
 		log.Error().Err(err).Str("recipient", req.RecipientEmail).Msg("Failed to send test email")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "Failed to send test email",
-			"details": err.Error(),
-		})
+		return SendInternalError(c, "Failed to send test email")
 	}
 
 	log.Info().Str("recipient", req.RecipientEmail).Msg("Test email sent successfully")
@@ -469,9 +453,7 @@ func (h *EmailSettingsHandler) GetSettingsForTenant(c fiber.Ctx) error {
 
 	tenantID := GetTenantID(c)
 	if tenantID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "tenant context required",
-		})
+		return SendBadRequest(c, "tenant context required", ErrCodeMissingField)
 	}
 
 	isDefaultTenant, _ := c.Locals("is_default_tenant").(bool)
@@ -590,24 +572,17 @@ func (h *EmailSettingsHandler) GetSettingsForTenant(c fiber.Ctx) error {
 // PUT /api/v1/admin/email/settings/tenant
 func (h *EmailSettingsHandler) UpdateSettingsForTenant(c fiber.Ctx) error {
 	if h.unifiedService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Unified settings service not available",
-		})
+		return SendInternalError(c, "Unified settings service not available")
 	}
 
 	tenantID := GetTenantID(c)
 	if tenantID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "tenant context required",
-		})
+		return SendBadRequest(c, "tenant context required", ErrCodeMissingField)
 	}
 
 	var req UpdateEmailSettingsRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse update email settings request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	ctx := context.Background()
@@ -617,11 +592,7 @@ func (h *EmailSettingsHandler) UpdateSettingsForTenant(c fiber.Ctx) error {
 	updateSetting := func(path string, value any) error {
 		if err := h.unifiedService.SetTenantSetting(ctx, tenantID, "email."+path, value, false); err != nil {
 			if errors.Is(err, settings.ErrNotOverridable) {
-				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-					"error": "This setting cannot be overridden at tenant level",
-					"code":  "NOT_OVERRIDABLE",
-					"key":   path,
-				})
+				return SendForbidden(c, "This setting cannot be overridden at tenant level", "NOT_OVERRIDABLE")
 			}
 			log.Error().Err(err).Str("path", path).Msg("Failed to update tenant email setting")
 			return err
@@ -637,11 +608,7 @@ func (h *EmailSettingsHandler) UpdateSettingsForTenant(c fiber.Ctx) error {
 		}
 		if err := h.unifiedService.SetTenantSetting(ctx, tenantID, "email."+path, *value, true); err != nil {
 			if errors.Is(err, settings.ErrNotOverridable) {
-				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-					"error": "This setting cannot be overridden at tenant level",
-					"code":  "NOT_OVERRIDABLE",
-					"key":   path,
-				})
+				return SendForbidden(c, "This setting cannot be overridden at tenant level", "NOT_OVERRIDABLE")
 			}
 			log.Error().Err(err).Str("path", path).Msg("Failed to update tenant email secret")
 			return err
@@ -728,31 +695,23 @@ func (h *EmailSettingsHandler) UpdateSettingsForTenant(c fiber.Ctx) error {
 // DELETE /api/v1/admin/email/settings/tenant/:field
 func (h *EmailSettingsHandler) DeleteSettingForTenant(c fiber.Ctx) error {
 	if h.unifiedService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Unified settings service not available",
-		})
+		return SendInternalError(c, "Unified settings service not available")
 	}
 
 	tenantID := GetTenantID(c)
 	if tenantID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "tenant context required",
-		})
+		return SendBadRequest(c, "tenant context required", ErrCodeMissingField)
 	}
 
 	field := c.Params("field")
 	if field == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "field parameter required",
-		})
+		return SendBadRequest(c, "field parameter required", ErrCodeMissingField)
 	}
 
 	ctx := context.Background()
 	if err := h.unifiedService.DeleteTenantSetting(ctx, tenantID, "email."+field); err != nil {
 		log.Error().Err(err).Str("field", field).Msg("Failed to delete tenant email setting")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to delete tenant email setting override",
-		})
+		return SendInternalError(c, "Failed to delete tenant email setting override")
 	}
 
 	h.unifiedService.InvalidateCache(tenantID, "email."+field)
@@ -767,44 +726,31 @@ func (h *EmailSettingsHandler) DeleteSettingForTenant(c fiber.Ctx) error {
 func (h *EmailSettingsHandler) TestSettingsForTenant(c fiber.Ctx) error {
 	tenantID := GetTenantID(c)
 	if tenantID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "tenant context required",
-		})
+		return SendBadRequest(c, "tenant context required", ErrCodeMissingField)
 	}
 
 	var req TestEmailSettingsRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.RecipientEmail == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Recipient email is required",
-		})
+		return SendBadRequest(c, "Recipient email is required", ErrCodeMissingField)
 	}
 
 	if h.emailManager == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error": "Email service not initialized",
-		})
+		return SendErrorWithCode(c, 503, "Email service not initialized", ErrCodeFeatureDisabled)
 	}
 
 	// Get tenant-resolved email config
 	emailCfg := GetEmailConfig(c, h.config)
 	if emailCfg == nil || !emailCfg.IsConfigured() {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error": "Email service not configured for this tenant",
-		})
+		return SendErrorWithCode(c, 503, "Email service not configured for this tenant", ErrCodeFeatureDisabled)
 	}
 
 	service, err := h.emailManager.GetServiceForConfig(emailCfg)
 	if err != nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error":   "Failed to create email service for tenant",
-			"details": err.Error(),
-		})
+		return SendErrorWithCode(c, 503, "Failed to create email service for tenant", ErrCodeFeatureDisabled)
 	}
 
 	ctx := context.Background()
@@ -823,10 +769,7 @@ func (h *EmailSettingsHandler) TestSettingsForTenant(c fiber.Ctx) error {
 
 	if err := service.Send(ctx, req.RecipientEmail, subject, body); err != nil {
 		log.Error().Err(err).Str("recipient", req.RecipientEmail).Str("tenant_id", tenantID).Msg("Failed to send tenant test email")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "Failed to send test email",
-			"details": err.Error(),
-		})
+		return SendInternalError(c, "Failed to send test email")
 	}
 
 	log.Info().Str("recipient", req.RecipientEmail).Str("tenant_id", tenantID).Msg("Tenant test email sent successfully")

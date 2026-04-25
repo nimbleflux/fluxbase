@@ -334,7 +334,7 @@ func TestValidEndpoints(t *testing.T) {
 
 func TestUpdateCaptchaSettings_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCaptchaSettingsHandler(nil, nil, nil, nil, nil)
 
 		app.Put("/settings/captcha", handler.UpdateSettings)
@@ -355,7 +355,7 @@ func TestUpdateCaptchaSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid provider", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCaptchaSettingsHandler(nil, nil, nil, nil, nil)
 
 		app.Put("/settings/captcha", handler.UpdateSettings)
@@ -374,11 +374,11 @@ func TestUpdateCaptchaSettings_Validation(t *testing.T) {
 		var result map[string]interface{}
 		_ = json.Unmarshal(respBody, &result)
 		assert.Contains(t, result["error"], "Invalid provider")
-		assert.Equal(t, "INVALID_PROVIDER", result["code"])
+		assert.Equal(t, "INVALID_INPUT", result["code"])
 	})
 
 	t.Run("invalid provider - recaptcha instead of recaptcha_v3", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCaptchaSettingsHandler(nil, nil, nil, nil, nil)
 
 		app.Put("/settings/captcha", handler.UpdateSettings)
@@ -395,7 +395,7 @@ func TestUpdateCaptchaSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid endpoint", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCaptchaSettingsHandler(nil, nil, nil, nil, nil)
 
 		app.Put("/settings/captcha", handler.UpdateSettings)
@@ -414,11 +414,11 @@ func TestUpdateCaptchaSettings_Validation(t *testing.T) {
 		var result map[string]interface{}
 		_ = json.Unmarshal(respBody, &result)
 		assert.Contains(t, result["error"], "Invalid endpoint")
-		assert.Equal(t, "INVALID_ENDPOINT", result["code"])
+		assert.Equal(t, "INVALID_INPUT", result["code"])
 	})
 
 	t.Run("score threshold below 0", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCaptchaSettingsHandler(nil, nil, nil, nil, nil)
 
 		app.Put("/settings/captcha", handler.UpdateSettings)
@@ -437,11 +437,11 @@ func TestUpdateCaptchaSettings_Validation(t *testing.T) {
 		var result map[string]interface{}
 		_ = json.Unmarshal(respBody, &result)
 		assert.Contains(t, result["error"], "Score threshold must be between 0.0 and 1.0")
-		assert.Equal(t, "INVALID_SCORE_THRESHOLD", result["code"])
+		assert.Equal(t, "INVALID_INPUT", result["code"])
 	})
 
 	t.Run("score threshold above 1", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCaptchaSettingsHandler(nil, nil, nil, nil, nil)
 
 		app.Put("/settings/captcha", handler.UpdateSettings)
@@ -463,7 +463,7 @@ func TestUpdateCaptchaSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("valid score threshold at boundary 0", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCaptchaSettingsHandler(nil, nil, nil, nil, nil)
 
 		app.Put("/settings/captcha", handler.UpdateSettings)
@@ -483,7 +483,7 @@ func TestUpdateCaptchaSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("valid score threshold at boundary 1", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCaptchaSettingsHandler(nil, nil, nil, nil, nil)
 
 		app.Put("/settings/captcha", handler.UpdateSettings)
@@ -502,7 +502,7 @@ func TestUpdateCaptchaSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("all valid endpoints accepted", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCaptchaSettingsHandler(nil, nil, nil, nil, nil)
 
 		app.Put("/settings/captcha", handler.UpdateSettings)
@@ -524,7 +524,7 @@ func TestUpdateCaptchaSettings_Validation(t *testing.T) {
 
 		for _, provider := range providers {
 			t.Run(provider, func(t *testing.T) {
-				app := fiber.New()
+				app := newTestApp(t)
 				handler := NewCaptchaSettingsHandler(nil, nil, nil, nil, nil)
 
 				app.Put("/settings/captcha", handler.UpdateSettings)

@@ -164,7 +164,7 @@ func TestIsUserAuthenticated(t *testing.T) {
 // Tests for request ID / correlation ID support
 
 func TestGetRequestID_FromMiddleware(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Use(requestid.New(requestid.Config{
 		Generator: func() string {
 			return "test-request-id-123"
@@ -202,7 +202,7 @@ func TestGetRequestID_FromHeader(t *testing.T) {
 }
 
 func TestGetRequestID_MiddlewareUsesHeader(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Use(requestid.New(requestid.Config{
 		Generator: func() string {
 			return "generated-id"
@@ -241,7 +241,7 @@ func TestGetRequestID_Empty(t *testing.T) {
 }
 
 func TestSendError_IncludesRequestID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Use(requestid.New())
 
 	app.Get("/test", func(c fiber.Ctx) error {
@@ -262,7 +262,7 @@ func TestSendError_IncludesRequestID(t *testing.T) {
 }
 
 func TestSendErrorWithCode_IncludesRequestIDAndCode(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Use(requestid.New())
 
 	app.Get("/test", func(c fiber.Ctx) error {
@@ -284,7 +284,7 @@ func TestSendErrorWithCode_IncludesRequestIDAndCode(t *testing.T) {
 }
 
 func TestSendErrorWithDetails_FullResponse(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Use(requestid.New())
 
 	app.Get("/test", func(c fiber.Ctx) error {
@@ -310,7 +310,7 @@ func TestSendErrorWithDetails_FullResponse(t *testing.T) {
 }
 
 func TestSendError_UsesProvidedRequestID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 
 	app.Use(requestid.New(requestid.Config{
 		Generator: func() string {
@@ -333,7 +333,7 @@ func TestSendError_UsesProvidedRequestID(t *testing.T) {
 }
 
 func TestHandleDatabaseError_IncludesRequestID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Use(requestid.New())
 
 	app.Get("/test", func(c fiber.Ctx) error {

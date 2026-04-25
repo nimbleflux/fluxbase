@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/runtime"
 )
 
 // =============================================================================
@@ -462,7 +464,7 @@ func TestProgressToJSON(t *testing.T) {
 	})
 
 	t.Run("basic progress", func(t *testing.T) {
-		progress := &Progress{
+		progress := &runtime.Progress{
 			Percent: 50,
 			Message: "Processing...",
 		}
@@ -477,7 +479,7 @@ func TestProgressToJSON(t *testing.T) {
 
 	t.Run("progress with all fields", func(t *testing.T) {
 		estSeconds := 30
-		progress := &Progress{
+		progress := &runtime.Progress{
 			Percent:              75,
 			Message:              "Almost done",
 			EstimatedSecondsLeft: &estSeconds,
@@ -501,7 +503,7 @@ func TestProgressToJSON(t *testing.T) {
 	})
 
 	t.Run("progress with zero values", func(t *testing.T) {
-		progress := &Progress{
+		progress := &runtime.Progress{
 			Percent: 0,
 			Message: "",
 		}
@@ -511,13 +513,13 @@ func TestProgressToJSON(t *testing.T) {
 		require.NotNil(t, result)
 
 		// Should still produce valid JSON
-		var parsed Progress
+		var parsed runtime.Progress
 		err = json.Unmarshal([]byte(*result), &parsed)
 		require.NoError(t, err)
 	})
 
 	t.Run("progress with special characters", func(t *testing.T) {
-		progress := &Progress{
+		progress := &runtime.Progress{
 			Percent: 50,
 			Message: `Processing "file.txt" with special chars: <>&`,
 		}
@@ -527,7 +529,7 @@ func TestProgressToJSON(t *testing.T) {
 		require.NotNil(t, result)
 
 		// Should be valid JSON
-		var parsed Progress
+		var parsed runtime.Progress
 		err = json.Unmarshal([]byte(*result), &parsed)
 		require.NoError(t, err)
 		assert.Equal(t, `Processing "file.txt" with special chars: <>&`, parsed.Message)
@@ -601,7 +603,7 @@ func TestJSONToProgress(t *testing.T) {
 
 	t.Run("roundtrip ProgressToJSON and JSONToProgress", func(t *testing.T) {
 		estSeconds := 60
-		original := &Progress{
+		original := &runtime.Progress{
 			Percent:              42,
 			Message:              "Processing items",
 			EstimatedSecondsLeft: &estSeconds,

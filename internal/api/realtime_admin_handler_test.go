@@ -218,7 +218,7 @@ func TestRealtimeTableStatus_Struct(t *testing.T) {
 
 func TestHandleEnableRealtime_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)
@@ -243,7 +243,7 @@ func TestHandleEnableRealtime_Validation(t *testing.T) {
 	})
 
 	t.Run("missing table name", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)
@@ -269,7 +269,7 @@ func TestHandleEnableRealtime_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid event type", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)
@@ -295,7 +295,7 @@ func TestHandleEnableRealtime_Validation(t *testing.T) {
 	})
 
 	t.Run("system schema prevention - auth", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)
@@ -321,7 +321,7 @@ func TestHandleEnableRealtime_Validation(t *testing.T) {
 	})
 
 	t.Run("system schema prevention - pg_catalog", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)
@@ -338,7 +338,7 @@ func TestHandleEnableRealtime_Validation(t *testing.T) {
 	})
 
 	t.Run("system schema prevention - information_schema", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)
@@ -356,7 +356,7 @@ func TestHandleEnableRealtime_Validation(t *testing.T) {
 
 	t.Run("system schema prevention - platform", func(t *testing.T) {
 		// platform is a user data schema (not blocked by system schema protection)
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)
@@ -375,7 +375,7 @@ func TestHandleEnableRealtime_Validation(t *testing.T) {
 	})
 
 	t.Run("valid events accepted", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)
@@ -412,7 +412,7 @@ func TestHandleEnableRealtime_Validation(t *testing.T) {
 
 func TestHandleDisableRealtime_ParameterValidation(t *testing.T) {
 	t.Run("valid schema and table", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Delete("/realtime/:schema/:table", handler.HandleDisableRealtime)
@@ -428,7 +428,7 @@ func TestHandleDisableRealtime_ParameterValidation(t *testing.T) {
 	})
 
 	t.Run("schema with underscore", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Delete("/realtime/:schema/:table", handler.HandleDisableRealtime)
@@ -450,7 +450,7 @@ func TestHandleDisableRealtime_ParameterValidation(t *testing.T) {
 
 func TestHandleListRealtimeTables_ParameterParsing(t *testing.T) {
 	t.Run("default enabled filter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Get("/realtime/tables", handler.HandleListRealtimeTables)
@@ -466,7 +466,7 @@ func TestHandleListRealtimeTables_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("enabled=true filter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Get("/realtime/tables", handler.HandleListRealtimeTables)
@@ -481,7 +481,7 @@ func TestHandleListRealtimeTables_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("enabled=false filter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Get("/realtime/tables", handler.HandleListRealtimeTables)
@@ -502,7 +502,7 @@ func TestHandleListRealtimeTables_ParameterParsing(t *testing.T) {
 
 func TestHandleGetRealtimeStatus_ParameterValidation(t *testing.T) {
 	t.Run("valid schema and table", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Get("/realtime/:schema/:table/status", handler.HandleGetRealtimeStatus)
@@ -524,7 +524,7 @@ func TestHandleGetRealtimeStatus_ParameterValidation(t *testing.T) {
 
 func TestHandleUpdateRealtimeConfig_Validation(t *testing.T) {
 	t.Run("invalid body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Patch("/realtime/:schema/:table", handler.HandleUpdateRealtimeConfig)
@@ -540,7 +540,7 @@ func TestHandleUpdateRealtimeConfig_Validation(t *testing.T) {
 	})
 
 	t.Run("no updates provided", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Patch("/realtime/:schema/:table", handler.HandleUpdateRealtimeConfig)
@@ -566,7 +566,7 @@ func TestHandleUpdateRealtimeConfig_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid event type in update", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Patch("/realtime/:schema/:table", handler.HandleUpdateRealtimeConfig)
@@ -592,7 +592,7 @@ func TestHandleUpdateRealtimeConfig_Validation(t *testing.T) {
 	})
 
 	t.Run("valid events update", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Patch("/realtime/:schema/:table", handler.HandleUpdateRealtimeConfig)
@@ -610,7 +610,7 @@ func TestHandleUpdateRealtimeConfig_Validation(t *testing.T) {
 	})
 
 	t.Run("valid exclude update", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Patch("/realtime/:schema/:table", handler.HandleUpdateRealtimeConfig)
@@ -669,7 +669,7 @@ func TestSystemSchemaProtection(t *testing.T) {
 	}
 
 	t.Run("system schemas should be blocked", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)
@@ -688,7 +688,7 @@ func TestSystemSchemaProtection(t *testing.T) {
 	})
 
 	t.Run("allowed schemas should pass validation", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewRealtimeAdminHandler(nil)
 
 		app.Post("/realtime/enable", handler.HandleEnableRealtime)

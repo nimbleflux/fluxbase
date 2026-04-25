@@ -416,7 +416,7 @@ func TestGetSchemaGraph_ParameterParsing(t *testing.T) {
 	t.Run("default schemas parameter", func(t *testing.T) {
 		// Note: Full testing requires mocked database
 		// This test verifies the handler setup and default parameter
-		app := fiber.New()
+		app := newTestApp(t)
 		server := &Server{db: nil}
 
 		app.Get("/schema/graph", server.GetSchemaGraph)
@@ -432,7 +432,7 @@ func TestGetSchemaGraph_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("custom schemas parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		server := &Server{db: nil}
 
 		app.Get("/schema/graph", server.GetSchemaGraph)
@@ -447,7 +447,7 @@ func TestGetSchemaGraph_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("single schema parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		server := &Server{db: nil}
 
 		app.Get("/schema/graph", server.GetSchemaGraph)
@@ -461,7 +461,7 @@ func TestGetSchemaGraph_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("schemas with whitespace", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		server := &Server{db: nil}
 
 		app.Get("/schema/graph", server.GetSchemaGraph)
@@ -482,7 +482,7 @@ func TestGetSchemaGraph_ParameterParsing(t *testing.T) {
 
 func TestGetTableRelationships_ParameterValidation(t *testing.T) {
 	t.Run("missing schema parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		server := &Server{db: nil}
 
 		app.Get("/tables/:schema/:table/relationships", server.GetTableRelationships)
@@ -498,7 +498,7 @@ func TestGetTableRelationships_ParameterValidation(t *testing.T) {
 	})
 
 	t.Run("missing table parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		server := &Server{db: nil}
 
 		app.Get("/tables/:schema/:table/relationships", server.GetTableRelationships)
@@ -514,7 +514,7 @@ func TestGetTableRelationships_ParameterValidation(t *testing.T) {
 	})
 
 	t.Run("valid schema and table parameters", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		server := &Server{db: nil}
 
 		app.Get("/tables/:schema/:table/relationships", server.GetTableRelationships)
@@ -531,7 +531,7 @@ func TestGetTableRelationships_ParameterValidation(t *testing.T) {
 	})
 
 	t.Run("schema and table with underscores", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		server := &Server{db: nil}
 
 		app.Get("/tables/:schema/:table/relationships", server.GetTableRelationships)

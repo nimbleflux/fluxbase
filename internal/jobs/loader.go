@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -16,6 +15,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/functions"
+	"github.com/nimbleflux/fluxbase/internal/loader"
 )
 
 //go:embed builtin/*.ts
@@ -582,12 +582,13 @@ type JobAnnotations struct {
 
 // parseAnnotations parses @fluxbase: annotations from job code
 func parseAnnotations(code string) JobAnnotations {
-	annotations := JobAnnotations{
-		TimeoutSeconds:         300,  // 5 minutes default
-		MemoryLimitMB:          256,  // 256MB default
-		MaxRetries:             0,    // No retries by default
-		ProgressTimeoutSeconds: 300,  // 5 minutes default (matches config default)
-		Enabled:                true, // Enabled by default
+	annotations := loader.ParseAnnotations(code, []string{"//", "/*"})
+	result := JobAnnotations{
+		TimeoutSeconds:         300,
+		MemoryLimitMB:          256,
+		MaxRetries:             0,
+		ProgressTimeoutSeconds: 300,
+		Enabled:                true,
 		AllowNet:               true,
 		AllowEnv:               true,
 		AllowRead:              false,
@@ -595,100 +596,84 @@ func parseAnnotations(code string) JobAnnotations {
 		ScheduleParams:         make(map[string]interface{}),
 	}
 
-	// Parse schedule (cron expression)
-	// Supports: @fluxbase:schedule 0 2 * * *
-	if match := regexp.MustCompile(`@fluxbase:schedule\s+([0-9*,/\-\s]+)`).FindStringSubmatch(code); match != nil {
-		schedule := strings.TrimSpace(match[1])
-		annotations.Schedule = &schedule
+	if v, ok := annotations["schedule"]; ok {
+		schedule := strings.TrimSpace(v)
+		if schedule != "" {
+			result.Schedule = &schedule
+		}
 	}
 
-	// Parse schedule params (JSON object)
-	// Supports: @fluxbase:schedule-params {"type": "daily", "notify": true}
-	if match := regexp.MustCompile(`@fluxbase:schedule-params\s+(\{[^}]+\})`).FindStringSubmatch(code); match != nil {
-		paramsJSON := strings.TrimSpace(match[1])
+	if v, ok := annotations["schedule-params"]; ok {
 		var params map[string]interface{}
-		if err := json.Unmarshal([]byte(paramsJSON), &params); err == nil {
-			annotations.ScheduleParams = params
+		if err := json.Unmarshal([]byte(v), &params); err == nil {
+			result.ScheduleParams = params
 		} else {
-			log.Warn().Err(err).Str("params", paramsJSON).Msg("Failed to parse schedule-params annotation")
+			log.Warn().Err(err).Str("params", v).Msg("Failed to parse schedule-params annotation")
 		}
 	}
 
-	// If we have schedule and schedule params, combine them using the pipe format
-	if annotations.Schedule != nil && len(annotations.ScheduleParams) > 0 {
-		if paramsJSON, err := json.Marshal(annotations.ScheduleParams); err == nil {
-			combined := *annotations.Schedule + "|" + string(paramsJSON)
-			annotations.Schedule = &combined
+	if result.Schedule != nil && len(result.ScheduleParams) > 0 {
+		if paramsJSON, err := json.Marshal(result.ScheduleParams); err == nil {
+			combined := *result.Schedule + "|" + string(paramsJSON)
+			result.Schedule = &combined
 		}
 	}
 
-	// Parse timeout
-	if match := regexp.MustCompile(`@fluxbase:timeout\s+(\d+)`).FindStringSubmatch(code); match != nil {
-		if timeout, err := strconv.Atoi(match[1]); err == nil {
-			annotations.TimeoutSeconds = timeout
+	if v, ok := annotations["timeout"]; ok {
+		if timeout, err := strconv.Atoi(v); err == nil {
+			result.TimeoutSeconds = timeout
 		}
 	}
-
-	// Parse memory limit
-	if match := regexp.MustCompile(`@fluxbase:memory\s+(\d+)`).FindStringSubmatch(code); match != nil {
-		if memory, err := strconv.Atoi(match[1]); err == nil {
-			annotations.MemoryLimitMB = memory
+	if v, ok := annotations["memory"]; ok {
+		if memory, err := strconv.Atoi(v); err == nil {
+			result.MemoryLimitMB = memory
 		}
 	}
-
-	// Parse max retries
-	if match := regexp.MustCompile(`@fluxbase:max-retries\s+(\d+)`).FindStringSubmatch(code); match != nil {
-		if retries, err := strconv.Atoi(match[1]); err == nil {
-			annotations.MaxRetries = retries
+	if v, ok := annotations["max-retries"]; ok {
+		if retries, err := strconv.Atoi(v); err == nil {
+			result.MaxRetries = retries
 		}
 	}
-
-	// Parse progress timeout
-	if match := regexp.MustCompile(`@fluxbase:progress-timeout\s+(\d+)`).FindStringSubmatch(code); match != nil {
-		if timeout, err := strconv.Atoi(match[1]); err == nil {
-			annotations.ProgressTimeoutSeconds = timeout
+	if v, ok := annotations["progress-timeout"]; ok {
+		if timeout, err := strconv.Atoi(v); err == nil {
+			result.ProgressTimeoutSeconds = timeout
 			log.Debug().Int("progress_timeout_seconds", timeout).Msg("Parsed progress-timeout annotation")
 		}
 	}
-
-	// Parse enabled
-	if regexp.MustCompile(`@fluxbase:enabled\s+false`).MatchString(code) {
-		annotations.Enabled = false
-	}
-
-	// Parse permissions
-	if regexp.MustCompile(`@fluxbase:allow-read\s+true`).MatchString(code) {
-		annotations.AllowRead = true
-	}
-	if regexp.MustCompile(`@fluxbase:allow-write\s+true`).MatchString(code) {
-		annotations.AllowWrite = true
-	}
-	if regexp.MustCompile(`@fluxbase:allow-net\s+false`).MatchString(code) {
-		annotations.AllowNet = false
-	}
-	if regexp.MustCompile(`@fluxbase:allow-env\s+false`).MatchString(code) {
-		annotations.AllowEnv = false
-	}
-
-	// Parse require-role (supports comma-separated list of roles)
-	if match := regexp.MustCompile(`@fluxbase:require-role\s+(.+)`).FindStringSubmatch(code); match != nil {
-		rolesStr := strings.TrimSpace(match[1])
-		var roles []string
-		for _, role := range strings.Split(rolesStr, ",") {
-			role = strings.TrimSpace(role)
-			if role != "" {
-				roles = append(roles, role)
-			}
+	if v, ok := annotations["enabled"]; ok {
+		if v == "false" {
+			result.Enabled = false
 		}
+	}
+	if v, ok := annotations["allow-read"]; ok {
+		if v == "true" {
+			result.AllowRead = true
+		}
+	}
+	if v, ok := annotations["allow-write"]; ok {
+		if v == "true" {
+			result.AllowWrite = true
+		}
+	}
+	if v, ok := annotations["allow-net"]; ok {
+		if v == "false" {
+			result.AllowNet = false
+		}
+	}
+	if v, ok := annotations["allow-env"]; ok {
+		if v == "false" {
+			result.AllowEnv = false
+		}
+	}
+	if v, ok := annotations["require-role"]; ok {
+		roles := loader.ParseRoleList(v)
 		if len(roles) > 0 {
-			annotations.RequireRoles = roles
+			result.RequireRoles = roles
 		}
 	}
-
-	// Parse disable-execution-logs
-	if regexp.MustCompile(`@fluxbase:disable-execution-logs(?:\s+true)?`).MatchString(code) {
-		annotations.DisableExecutionLogs = true
+	if _, ok := annotations["disable-execution-logs"]; ok {
+		result.DisableExecutionLogs = true
 	}
 
-	return annotations
+	return result
 }

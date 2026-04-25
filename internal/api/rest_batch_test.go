@@ -20,7 +20,7 @@ import (
 // =============================================================================
 
 func TestMakeBatchPatchHandler_InvalidBody(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := &RESTHandler{
 		parser: NewQueryParser(&config.Config{}),
 	}
@@ -99,7 +99,7 @@ func TestMakeBatchPatchHandler_InvalidBody(t *testing.T) {
 // =============================================================================
 
 func TestMakeBatchDeleteHandler_Validation(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := &RESTHandler{
 		parser: NewQueryParser(&config.Config{}),
 	}
@@ -148,7 +148,7 @@ func TestMakeBatchDeleteHandler_Validation(t *testing.T) {
 // =============================================================================
 
 func TestBatchInsert_EmptyArray(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := &RESTHandler{config: &config.Config{}}
 
 	table := database.TableInfo{
@@ -179,7 +179,7 @@ func TestBatchInsert_EmptyArray(t *testing.T) {
 }
 
 func TestBatchInsert_UnknownColumn(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	cfg := &config.Config{} // Provide config to avoid nil pointer dereference (H-4)
 	handler := &RESTHandler{config: cfg}
 
@@ -213,7 +213,7 @@ func TestBatchInsert_UnknownColumn(t *testing.T) {
 }
 
 func TestBatchInsert_UpsertWithoutPrimaryKey(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := &RESTHandler{config: &config.Config{}}
 
 	table := database.TableInfo{
@@ -247,7 +247,7 @@ func TestBatchInsert_UpsertWithoutPrimaryKey(t *testing.T) {
 }
 
 func TestBatchInsert_UpsertWithUnknownConflictColumn(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := &RESTHandler{config: &config.Config{}}
 
 	table := database.TableInfo{
@@ -788,7 +788,7 @@ func TestXAffectedCountHeader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 			app.Get("/test", func(c fiber.Ctx) error {
 				affectedCount := tt.count
 				c.Set("X-Affected-Count", fmt.Sprintf("%d", affectedCount))
@@ -818,7 +818,7 @@ func TestContentRangeHeader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 			app.Get("/test", func(c fiber.Ctx) error {
 				affectedCount := tt.count
 				c.Set("Content-Range", fmt.Sprintf("*/%d", affectedCount))

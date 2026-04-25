@@ -33,7 +33,7 @@ func TestNewCustomMCPHandler(t *testing.T) {
 
 func TestGetTool_Validation(t *testing.T) {
 	t.Run("invalid tool ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Get("/tools/:id", handler.GetTool)
@@ -53,7 +53,7 @@ func TestGetTool_Validation(t *testing.T) {
 	})
 
 	t.Run("valid UUID format accepted", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Get("/tools/:id", handler.GetTool)
@@ -71,7 +71,7 @@ func TestGetTool_Validation(t *testing.T) {
 
 func TestCreateTool_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/tools", handler.CreateTool)
@@ -92,7 +92,7 @@ func TestCreateTool_Validation(t *testing.T) {
 	})
 
 	t.Run("missing name", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/tools", handler.CreateTool)
@@ -114,7 +114,7 @@ func TestCreateTool_Validation(t *testing.T) {
 	})
 
 	t.Run("missing code", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/tools", handler.CreateTool)
@@ -138,7 +138,7 @@ func TestCreateTool_Validation(t *testing.T) {
 
 func TestUpdateTool_Validation(t *testing.T) {
 	t.Run("invalid tool ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Put("/tools/:id", handler.UpdateTool)
@@ -155,7 +155,7 @@ func TestUpdateTool_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Put("/tools/:id", handler.UpdateTool)
@@ -173,7 +173,7 @@ func TestUpdateTool_Validation(t *testing.T) {
 
 func TestDeleteTool_Validation(t *testing.T) {
 	t.Run("invalid tool ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Delete("/tools/:id", handler.DeleteTool)
@@ -190,7 +190,7 @@ func TestDeleteTool_Validation(t *testing.T) {
 
 func TestSyncTool_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/tools/sync", handler.SyncTool)
@@ -206,7 +206,7 @@ func TestSyncTool_Validation(t *testing.T) {
 	})
 
 	t.Run("missing name", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/tools/sync", handler.SyncTool)
@@ -228,7 +228,7 @@ func TestSyncTool_Validation(t *testing.T) {
 	})
 
 	t.Run("missing code", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/tools/sync", handler.SyncTool)
@@ -247,7 +247,7 @@ func TestSyncTool_Validation(t *testing.T) {
 
 func TestTestTool_Validation(t *testing.T) {
 	t.Run("invalid tool ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/tools/:id/test", handler.TestTool)
@@ -264,7 +264,7 @@ func TestTestTool_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/tools/:id/test", handler.TestTool)
@@ -286,7 +286,7 @@ func TestTestTool_Validation(t *testing.T) {
 
 func TestGetResource_Validation(t *testing.T) {
 	t.Run("invalid resource ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Get("/resources/:id", handler.GetResource)
@@ -308,7 +308,7 @@ func TestGetResource_Validation(t *testing.T) {
 
 func TestCreateResource_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/resources", handler.CreateResource)
@@ -324,7 +324,7 @@ func TestCreateResource_Validation(t *testing.T) {
 	})
 
 	t.Run("missing URI", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/resources", handler.CreateResource)
@@ -346,7 +346,7 @@ func TestCreateResource_Validation(t *testing.T) {
 	})
 
 	t.Run("missing name", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/resources", handler.CreateResource)
@@ -368,7 +368,7 @@ func TestCreateResource_Validation(t *testing.T) {
 	})
 
 	t.Run("missing code", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/resources", handler.CreateResource)
@@ -392,7 +392,7 @@ func TestCreateResource_Validation(t *testing.T) {
 
 func TestUpdateResource_Validation(t *testing.T) {
 	t.Run("invalid resource ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Put("/resources/:id", handler.UpdateResource)
@@ -411,7 +411,7 @@ func TestUpdateResource_Validation(t *testing.T) {
 
 func TestDeleteResource_Validation(t *testing.T) {
 	t.Run("invalid resource ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Delete("/resources/:id", handler.DeleteResource)
@@ -428,7 +428,7 @@ func TestDeleteResource_Validation(t *testing.T) {
 
 func TestSyncResource_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/resources/sync", handler.SyncResource)
@@ -444,7 +444,7 @@ func TestSyncResource_Validation(t *testing.T) {
 	})
 
 	t.Run("missing URI", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/resources/sync", handler.SyncResource)
@@ -463,7 +463,7 @@ func TestSyncResource_Validation(t *testing.T) {
 
 func TestTestResource_Validation(t *testing.T) {
 	t.Run("invalid resource ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/resources/:id/test", handler.TestResource)
@@ -480,7 +480,7 @@ func TestTestResource_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomMCPHandler(nil, nil, nil)
 
 		app.Post("/resources/:id/test", handler.TestResource)

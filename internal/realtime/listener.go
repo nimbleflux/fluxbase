@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nimbleflux/fluxbase/internal/jobs"
 	"github.com/nimbleflux/fluxbase/internal/pubsub"
+	"github.com/nimbleflux/fluxbase/internal/runtime"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -245,7 +245,7 @@ func (l *Listener) enrichJobWithETA(event *ChangeEvent) {
 	}
 
 	// Extract progress fields
-	var progress jobs.Progress
+	var progress runtime.Progress
 	if percent, ok := progressData["percent"].(float64); ok {
 		progress.Percent = int(percent)
 	}

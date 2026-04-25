@@ -45,7 +45,7 @@ func ClientKeyAuth(clientKeyService *auth.ClientKeyService) fiber.Handler {
 			}
 			if errors.Is(err, auth.ErrClientKeyExpired) {
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"error": "Client key has expired",
+					"error": "Client key has been expired",
 				})
 			}
 			if errors.Is(err, auth.ErrUserClientKeysDisabled) {
@@ -301,17 +301,42 @@ func RequireScope(requiredScopes ...string) fiber.Handler {
 // RequireAuthOrServiceKey requires either JWT, client key, OR service key authentication
 // This is the most comprehensive auth middleware that accepts all authentication methods
 func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, securityCfg *config.SecurityConfig, jwtManager ...*auth.JWTManager) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		// Debug logging for service_role troubleshooting
-		log.Debug().
-			Str("path", c.Path()).
-			Str("method", c.Method()).
-			Bool("has_auth_header", c.Get("Authorization") != "").
-			Bool("has_clientkey_header", c.Get("X-Client-Key") != "").
-			Bool("has_service_key_header", c.Get("X-Service-Key") != "").
-			Msg("RequireAuthOrServiceKey: Incoming request")
+	return authOrServiceKey(authService, clientKeyService, db, securityCfg, true, jwtManager...)
+}
 
-		// First, try service key authentication (highest privilege)
+// OptionalAuthOrServiceKey allows either JWT, client key, OR service key authentication
+// If no authentication is provided, the request continues (for anonymous access with RLS)
+// IMPORTANT: If invalid credentials are provided, returns 401 (does not fall back to anonymous)
+//
+// Supports Supabase-compatible authentication:
+// - clientkey header containing a JWT with role claim (anon, service_role, authenticated)
+// - Authorization: Bearer <jwt> with role claim
+// - X-Service-Key header with hashed service key or service role JWT
+// - Dashboard admin JWT tokens (when jwtManager is provided)
+func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, securityCfg *config.SecurityConfig, jwtManager ...*auth.JWTManager) fiber.Handler {
+	return authOrServiceKey(authService, clientKeyService, db, securityCfg, false, jwtManager...)
+}
+
+func authOrServiceKey(
+	authService *auth.Service,
+	clientKeyService *auth.ClientKeyService,
+	db *pgxpool.Pool,
+	securityCfg *config.SecurityConfig,
+	required bool,
+	jwtManager ...*auth.JWTManager,
+) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if required {
+			log.Debug().
+				Str("path", c.Path()).
+				Str("method", c.Method()).
+				Bool("has_auth_header", c.Get("Authorization") != "").
+				Bool("has_clientkey_header", c.Get("X-Client-Key") != "").
+				Bool("has_service_key_header", c.Get("X-Service-Key") != "").
+				Msg("RequireAuthOrServiceKey: Incoming request")
+		}
+
+		// 1. Service key authentication (highest privilege)
 		serviceKey := c.Get("X-Service-Key")
 		authHeader := c.Get("Authorization")
 
@@ -320,16 +345,14 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 		}
 
 		if serviceKey != "" {
-			// Check if this is a JWT (service role token) instead of a service key
-			// This allows users to use FLUXBASE_SERVICE_ROLE_KEY JWT with X-Service-Key header
 			if strings.HasPrefix(serviceKey, "eyJ") {
 				claims, err := authService.ValidateServiceRoleToken(serviceKey)
 				if err == nil {
-					// Valid service role JWT
 					c.Locals("user_role", claims.Role)
 					c.Locals("auth_type", "service_role_jwt")
 					c.Locals("jwt_claims", claims)
 					c.Locals("rls_role", claims.Role)
+					c.Locals("claims", claims)
 
 					log.Debug().
 						Str("role", claims.Role).
@@ -338,41 +361,43 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 
 					return c.Next()
 				}
-				// JWT validation failed
 				log.Debug().Err(err).Msg("X-Service-Key JWT validation failed")
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 					"error": "Invalid service role token",
 				})
 			}
 
-			// Validate as service key (sk_... format)
 			if validateServiceKey(c, db, serviceKey) {
 				return c.Next()
 			}
-			// If service key validation failed, don't try other methods
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid service key",
 			})
 		}
 
-		// Try JWT authentication
+		// 2. JWT authentication via Authorization Bearer header or token query param
+		// The token query param is used by WebSocket connections (browsers can't set headers)
+		token := ""
 		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-			token := strings.TrimPrefix(authHeader, "Bearer ")
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+		} else if queryToken := c.Query("token"); queryToken != "" {
+			token = queryToken
+		}
 
+		if token != "" {
 			// First, try to validate as auth.users token (app users)
 			claims, err := authService.ValidateToken(token)
 			if err != nil {
 				log.Debug().
 					Err(err).
-					Msg("RequireAuthOrServiceKey: authService.ValidateToken failed")
+					Msg("authOrServiceKey: authService.ValidateToken failed")
 			}
 			if err == nil {
-				// DEBUG: Log what we got from validation
 				log.Debug().
 					Str("role", claims.Role).
 					Str("user_id", claims.UserID).
 					Str("subject", claims.Subject).
-					Msg("RequireAuthOrServiceKey: JWT validated, checking role")
+					Msg("authOrServiceKey: JWT validated, checking role")
 
 				// Check if this is a platform admin token (platform.users)
 				// Platform tokens use the same JWT secret but have role="instance_admin"
@@ -381,7 +406,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 					log.Debug().
 						Str("user_id", claims.Subject).
 						Str("role", claims.Role).
-						Msg("RequireAuthOrServiceKey: Detected instance_admin token")
+						Msg("authOrServiceKey: Detected instance_admin token")
 
 					c.Locals("user_id", claims.Subject)
 					c.Locals("user_email", claims.Email)
@@ -391,7 +416,6 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 					c.Locals("is_anonymous", false)
 					c.Locals("is_instance_admin", true)
 
-					// Set RLS context for platform admin
 					c.Locals("rls_user_id", claims.Subject)
 					c.Locals("rls_role", claims.Role)
 					c.Locals("claims", claims)
@@ -424,13 +448,12 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 				c.Locals("session_id", claims.SessionID)
 				c.Locals("auth_type", "jwt")
 				c.Locals("is_anonymous", claims.IsAnonymous)
+				c.Locals("jwt_claims", claims)
 
-				// Set RLS context
 				c.Locals("rls_user_id", claims.UserID)
 				c.Locals("rls_role", claims.Role)
-
 				c.Locals("claims", claims)
-				c.Locals("jwt_claims", claims)
+
 				// SECURITY: Log audit entry for impersonation tokens
 				// Impersonation tokens have an impersonated_by claim indicating the admin who issued them
 				if claims.ImpersonatedBy != "" {
@@ -449,243 +472,6 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 			if len(jwtManager) > 0 && jwtManager[0] != nil {
 				dashboardClaims, err := jwtManager[0].ValidateAccessToken(token)
 				if err == nil {
-					// Successfully validated as platform.users token
-					c.Locals("user_id", dashboardClaims.Subject)
-					c.Locals("user_email", dashboardClaims.Email)
-					c.Locals("user_name", dashboardClaims.Name)
-					c.Locals("user_role", dashboardClaims.Role)
-					c.Locals("auth_type", "jwt")
-					c.Locals("is_anonymous", false)
-
-					// Set RLS context for platform admin
-					c.Locals("rls_user_id", dashboardClaims.Subject)
-					c.Locals("rls_role", dashboardClaims.Role)
-
-					c.Locals("claims", dashboardClaims)
-					c.Locals("jwt_claims", dashboardClaims)
-					return c.Next()
-				}
-			}
-
-			// User JWT and platform JWT validation failed, try service role JWT (anon/service_role)
-			// This handles the Supabase pattern where JWTs have role claims instead of user claims
-			if strings.HasPrefix(token, "eyJ") {
-				claims, err := authService.ValidateServiceRoleToken(token)
-				if err == nil {
-					// Check if this is a service_role or anon token
-					if claims.Role == "service_role" || claims.Role == "anon" {
-						// SECURITY: Check emergency revocation for service_role tokens
-						// This provides a mechanism to revoke compromised service_role tokens immediately
-						if claims.Role == "service_role" {
-							isRevoked, err := authService.IsServiceRoleTokenRevoked(c.RequestCtx(), claims.ID)
-							if err != nil {
-								log.Error().Err(err).Str("jti", claims.ID).Msg("Failed to check service_role token emergency revocation status")
-								// Fail-closed by default: reject request when DB check fails
-								// Operators can opt into fail-open behavior via security.service_role_fail_open config
-								if securityCfg == nil || !securityCfg.ServiceRoleFailOpen {
-									return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-										"error":   "service_unavailable",
-										"message": "Unable to verify token status",
-									})
-								}
-								// Fail-open mode: log warning and continue (insecure, for backward compatibility)
-								log.Warn().Str("jti", claims.ID).Msg("Service role revocation check failed - allowing request due to fail-open configuration")
-							} else if isRevoked {
-								log.Warn().Str("jti", claims.ID).Msg("Service role token has been emergency revoked")
-								return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-									"error":             "Service role token has been revoked",
-									"error_code":        "token_revoked",
-									"revocation_reason": "emergency_revocation",
-								})
-							}
-						}
-
-						// Valid service role JWT
-						c.Locals("user_role", claims.Role)
-						c.Locals("auth_type", "service_role_jwt")
-						c.Locals("jwt_claims", claims)
-						c.Locals("rls_role", claims.Role)
-
-						c.Locals("claims", claims)
-						log.Debug().
-							Str("role", claims.Role).
-							Str("issuer", claims.Issuer).
-							Msg("Authenticated with service role JWT via Bearer header")
-
-						return c.Next()
-					}
-				}
-			}
-
-			// Bearer token was provided but invalid - return specific error
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid or expired Bearer token",
-			})
-		}
-
-		// Try client key authentication (header only, query parameter removed for security)
-		clientKey := c.Get("X-Client-Key")
-
-		if clientKey != "" {
-			validatedKey, err := clientKeyService.ValidateClientKey(c.RequestCtx(), clientKey)
-			if err == nil {
-				// Valid client key
-				c.Locals("client_key_id", validatedKey.ID)
-				c.Locals("client_key_name", validatedKey.Name)
-				c.Locals("client_key_scopes", validatedKey.Scopes)
-				c.Locals("auth_type", "clientkey")
-				// Store allowed namespaces
-				if validatedKey.AllowedNamespaces != nil {
-					c.Locals("allowed_namespaces", validatedKey.AllowedNamespaces)
-				}
-
-				if validatedKey.UserID != nil {
-					c.Locals("user_id", *validatedKey.UserID)
-					c.Locals("rls_user_id", *validatedKey.UserID)
-					c.Locals("rls_role", "authenticated")
-				}
-
-				return c.Next()
-			}
-			// Client key was provided but invalid - return specific error
-			if errors.Is(err, auth.ErrUserClientKeysDisabled) {
-				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-					"error": "User client keys are disabled. Contact an administrator.",
-				})
-			}
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid client key",
-			})
-		}
-
-		// No authentication provided at all
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required. Provide Bearer token, X-Client-Key, or X-Service-Key",
-		})
-	}
-}
-
-// OptionalAuthOrServiceKey allows either JWT, client key, OR service key authentication
-// If no authentication is provided, the request continues (for anonymous access with RLS)
-// IMPORTANT: If invalid credentials are provided, returns 401 (does not fall back to anonymous)
-//
-// Supports Supabase-compatible authentication:
-// - clientkey header containing a JWT with role claim (anon, service_role, authenticated)
-// - Authorization: Bearer <jwt> with role claim
-// - X-Service-Key header with hashed service key or service role JWT
-// - Dashboard admin JWT tokens (when jwtManager is provided)
-func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.ClientKeyService, db *pgxpool.Pool, securityCfg *config.SecurityConfig, jwtManager ...*auth.JWTManager) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		// First, try service key authentication (highest privilege)
-		serviceKey := c.Get("X-Service-Key")
-		authHeader := c.Get("Authorization")
-
-		if serviceKey == "" && strings.HasPrefix(authHeader, "ServiceKey ") {
-			serviceKey = strings.TrimPrefix(authHeader, "ServiceKey ")
-		}
-
-		if serviceKey != "" {
-			// Check if this is a JWT (service role token) instead of a service key
-			// This allows users to use FLUXBASE_SERVICE_ROLE_KEY JWT with X-Service-Key header
-			if strings.HasPrefix(serviceKey, "eyJ") {
-				claims, err := authService.ValidateServiceRoleToken(serviceKey)
-				if err == nil {
-					// Valid service role JWT
-					c.Locals("user_role", claims.Role)
-					c.Locals("auth_type", "service_role_jwt")
-					c.Locals("jwt_claims", claims)
-					c.Locals("rls_role", claims.Role)
-
-					c.Locals("claims", claims)
-					log.Debug().
-						Str("role", claims.Role).
-						Str("issuer", claims.Issuer).
-						Msg("Authenticated with service role JWT via X-Service-Key header")
-
-					return c.Next()
-				}
-				// JWT validation failed
-				log.Debug().Err(err).Msg("X-Service-Key JWT validation failed")
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"error": "Invalid service role token",
-				})
-			}
-
-			// Validate as service key (sk_... format)
-			if validateServiceKey(c, db, serviceKey) {
-				return c.Next()
-			}
-			// If service key validation failed, don't try other methods
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid service key",
-			})
-		}
-
-		// Try JWT authentication via Authorization Bearer header or token query param
-		// The token query param is used by WebSocket connections (browsers can't set headers)
-		// Check user JWT first (most common case), then service role JWT
-		token := ""
-		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-			token = strings.TrimPrefix(authHeader, "Bearer ")
-		} else if queryToken := c.Query("token"); queryToken != "" {
-			token = queryToken
-		}
-
-		if token != "" {
-
-			// First, try to validate as a user JWT token (most common case)
-			claims, err := authService.ValidateToken(token)
-			if err == nil {
-				// Check if token has been revoked
-				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.IsTokenRevokedWithClaims(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
-				if err != nil {
-					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
-					return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-						"error":   "service_unavailable",
-						"message": "Unable to verify token status",
-					})
-				}
-				if isRevoked {
-					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-						"error":   "token_revoked",
-						"message": "Token has been revoked",
-					})
-				}
-
-				// Valid JWT token
-				c.Locals("user_id", claims.UserID)
-				c.Locals("user_email", claims.Email)
-				c.Locals("user_role", claims.Role)
-				c.Locals("session_id", claims.SessionID)
-				c.Locals("auth_type", "jwt")
-				c.Locals("is_anonymous", claims.IsAnonymous)
-				c.Locals("jwt_claims", claims)
-
-				// Set RLS context
-				c.Locals("rls_user_id", claims.UserID)
-				c.Locals("rls_role", claims.Role)
-
-				c.Locals("claims", claims)
-				// SECURITY: Log audit entry for impersonation tokens
-				// Impersonation tokens have an impersonated_by claim indicating the admin who issued them
-				if claims.ImpersonatedBy != "" {
-					log.Info().
-						Str("user_id", claims.UserID).
-						Str("impersonated_by", claims.ImpersonatedBy).
-						Str("path", c.Path()).
-						Str("method", c.Method()).
-						Msg("Impersonated request")
-				}
-
-				return c.Next()
-			}
-
-			// If auth.users validation failed and jwtManager is provided, try platform.users token
-			if len(jwtManager) > 0 && jwtManager[0] != nil {
-				dashboardClaims, err := jwtManager[0].ValidateAccessToken(token)
-				if err == nil {
-					// Successfully validated as platform.users token
 					c.Locals("user_id", dashboardClaims.Subject)
 					c.Locals("user_email", dashboardClaims.Email)
 					c.Locals("user_name", dashboardClaims.Name)
@@ -694,7 +480,6 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 					c.Locals("is_anonymous", false)
 					c.Locals("jwt_claims", dashboardClaims)
 
-					// Set RLS context for platform admin (maps to service_role in RLS middleware)
 					c.Locals("rls_user_id", dashboardClaims.Subject)
 					c.Locals("rls_role", dashboardClaims.Role)
 					c.Locals("claims", dashboardClaims)
@@ -707,12 +492,11 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				}
 			}
 
-			// User JWT validation failed, try service role JWT (anon/service_role)
-			// This handles the Supabase pattern where the same JWT is sent as both clientkey and Bearer
+			// User JWT and platform JWT validation failed, try service role JWT (anon/service_role)
+			// This handles the Supabase pattern where JWTs have role claims instead of user claims
 			if strings.HasPrefix(token, "eyJ") {
 				claims, err := authService.ValidateServiceRoleToken(token)
 				if err == nil {
-					// Check if this is a service_role or anon token (not a user token)
 					if claims.Role == "service_role" || claims.Role == "anon" {
 						// SECURITY: Check emergency revocation for service_role tokens
 						// This provides a mechanism to revoke compromised service_role tokens immediately
@@ -720,15 +504,12 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 							isRevoked, err := authService.IsServiceRoleTokenRevoked(c.RequestCtx(), claims.ID)
 							if err != nil {
 								log.Error().Err(err).Str("jti", claims.ID).Msg("Failed to check service_role token emergency revocation status")
-								// Fail-closed by default: reject request when DB check fails
-								// Operators can opt into fail-open behavior via security.service_role_fail_open config
 								if securityCfg == nil || !securityCfg.ServiceRoleFailOpen {
 									return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 										"error":   "service_unavailable",
 										"message": "Unable to verify token status",
 									})
 								}
-								// Fail-open mode: log warning and continue (insecure, for backward compatibility)
 								log.Warn().Str("jti", claims.ID).Msg("Service role revocation check failed - allowing request due to fail-open configuration")
 							} else if isRevoked {
 								log.Warn().Str("jti", claims.ID).Msg("Service role token has been emergency revoked")
@@ -743,8 +524,8 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 						c.Locals("user_role", claims.Role)
 						c.Locals("auth_type", "service_role_jwt")
 						c.Locals("jwt_claims", claims)
-						c.Locals("claims", claims)
 						c.Locals("rls_role", claims.Role)
+						c.Locals("claims", claims)
 
 						log.Debug().
 							Str("role", claims.Role).
@@ -754,21 +535,19 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 						return c.Next()
 					}
 				} else {
-					// Both user JWT and service role JWT validation failed
 					log.Debug().
 						Err(err).
 						Msg("Bearer token validation failed (tried user JWT then service role JWT)")
 				}
 			}
 
-			// If Bearer token was provided but invalid, return 401
-			// Don't fall back to anonymous access when invalid credentials are provided
+			// Bearer token was provided but invalid - return specific error
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid or expired Bearer token",
 			})
 		}
 
-		// Check for Supabase-style clientkey header (lowercase)
+		// 3. Check for Supabase-style clientkey header (lowercase)
 		// This header may contain a JWT with role claim (anon, service_role, authenticated)
 		fluxbaseClientKey := c.Get("clientkey")
 		if fluxbaseClientKey != "" && strings.HasPrefix(fluxbaseClientKey, "eyJ") {
@@ -801,10 +580,8 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				c.Locals("is_anonymous", claims.IsAnonymous)
 				c.Locals("jwt_claims", claims)
 
-				// Set RLS context
 				c.Locals("rls_user_id", claims.UserID)
 				c.Locals("rls_role", claims.Role)
-
 				c.Locals("claims", claims)
 				return c.Next()
 			}
@@ -818,15 +595,12 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 					isRevoked, err := authService.IsServiceRoleTokenRevoked(c.RequestCtx(), srClaims.ID)
 					if err != nil {
 						log.Error().Err(err).Str("jti", srClaims.ID).Msg("Failed to check service_role token emergency revocation status")
-						// Fail-closed by default: reject request when DB check fails
-						// Operators can opt into fail-open behavior via security.service_role_fail_open config
 						if securityCfg == nil || !securityCfg.ServiceRoleFailOpen {
 							return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 								"error":   "service_unavailable",
 								"message": "Unable to verify token status",
 							})
 						}
-						// Fail-open mode: log warning and continue (insecure, for backward compatibility)
 						log.Warn().Str("jti", srClaims.ID).Msg("Service role revocation check failed - allowing request due to fail-open configuration")
 					} else if isRevoked {
 						log.Warn().Str("jti", srClaims.ID).Msg("Service role token has been emergency revoked")
@@ -843,7 +617,6 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				c.Locals("auth_type", "service_role_jwt")
 				c.Locals("jwt_claims", srClaims)
 
-				// Set RLS context based on role claim
 				c.Locals("rls_role", srClaims.Role)
 				if srClaims.UserID != "" {
 					c.Locals("claims", srClaims)
@@ -864,7 +637,7 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 				Msg("clientkey header JWT validation failed (tried user JWT then service role JWT)")
 		}
 
-		// Try client key authentication (X-Client-Key header or clientkey query param)
+		// 4. Client key authentication (X-Client-Key header, clientkey query param, or clientkey header fallback)
 		clientKey := c.Get("X-Client-Key")
 		if clientKey == "" {
 			clientKey = c.Query("clientkey")
@@ -877,28 +650,20 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 		if clientKey != "" {
 			validatedKey, err := clientKeyService.ValidateClientKey(c.RequestCtx(), clientKey)
 			if err == nil {
-				// Valid client key
 				c.Locals("client_key_id", validatedKey.ID)
 				c.Locals("client_key_name", validatedKey.Name)
 				c.Locals("client_key_scopes", validatedKey.Scopes)
-				// Store allowed namespaces
+				c.Locals("auth_type", "clientkey")
 				if validatedKey.AllowedNamespaces != nil {
 					c.Locals("allowed_namespaces", validatedKey.AllowedNamespaces)
 				}
-
-				c.Locals("auth_type", "clientkey")
-
-				// Set RLS context if client key has user association
 				if validatedKey.UserID != nil {
 					c.Locals("user_id", *validatedKey.UserID)
 					c.Locals("rls_user_id", *validatedKey.UserID)
 					c.Locals("rls_role", "authenticated")
 				}
-
 				return c.Next()
 			}
-			// If client key was provided but invalid, return specific error
-			// Don't fall back to anonymous access when invalid credentials are provided
 			if errors.Is(err, auth.ErrUserClientKeysDisabled) {
 				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 					"error": "User client keys are disabled. Contact an administrator.",
@@ -909,8 +674,12 @@ func OptionalAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.
 			})
 		}
 
-		// No authentication provided - allow anonymous access with RLS
-		// The RLS middleware will set role to 'anon' if no auth is present
+		// 5. No authentication provided
+		if required {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Authentication required. Provide Bearer token, X-Client-Key, or X-Service-Key",
+			})
+		}
 		return c.Next()
 	}
 }

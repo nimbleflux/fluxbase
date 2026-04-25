@@ -251,7 +251,7 @@ func TestBatchSettingsResponse_Struct(t *testing.T) {
 
 func TestGetSetting_ParameterValidation(t *testing.T) {
 	t.Run("empty key parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Get("/settings/:key", handler.GetSetting)
@@ -268,7 +268,7 @@ func TestGetSetting_ParameterValidation(t *testing.T) {
 	})
 
 	t.Run("valid key parameter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Get("/settings/:key", handler.GetSetting)
@@ -284,7 +284,7 @@ func TestGetSetting_ParameterValidation(t *testing.T) {
 	})
 
 	t.Run("key with dots", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Get("/settings/:key", handler.GetSetting)
@@ -300,7 +300,7 @@ func TestGetSetting_ParameterValidation(t *testing.T) {
 	})
 
 	t.Run("key with underscores", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Get("/settings/:key", handler.GetSetting)
@@ -315,7 +315,7 @@ func TestGetSetting_ParameterValidation(t *testing.T) {
 	})
 
 	t.Run("key with hyphens", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Get("/settings/:key", handler.GetSetting)
@@ -336,7 +336,7 @@ func TestGetSetting_ParameterValidation(t *testing.T) {
 
 func TestGetSettings_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Post("/settings/batch", handler.GetSettings)
@@ -361,7 +361,7 @@ func TestGetSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("empty keys array", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Post("/settings/batch", handler.GetSettings)
@@ -383,11 +383,11 @@ func TestGetSettings_Validation(t *testing.T) {
 		err = json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Contains(t, result["error"], "At least one key is required")
+		assert.Contains(t, result["error"], "keys is required")
 	})
 
 	t.Run("missing keys field", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Post("/settings/batch", handler.GetSettings)
@@ -409,11 +409,11 @@ func TestGetSettings_Validation(t *testing.T) {
 		err = json.Unmarshal(respBody, &result)
 		require.NoError(t, err)
 
-		assert.Contains(t, result["error"], "At least one key is required")
+		assert.Contains(t, result["error"], "keys is required")
 	})
 
 	t.Run("too many keys", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Post("/settings/batch", handler.GetSettings)
@@ -448,7 +448,7 @@ func TestGetSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("exactly 100 keys allowed", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Post("/settings/batch", handler.GetSettings)
@@ -476,7 +476,7 @@ func TestGetSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("valid request with single key", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Post("/settings/batch", handler.GetSettings)
@@ -494,7 +494,7 @@ func TestGetSettings_Validation(t *testing.T) {
 	})
 
 	t.Run("valid request with multiple keys", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSettingsHandler(nil)
 
 		app.Post("/settings/batch", handler.GetSettings)

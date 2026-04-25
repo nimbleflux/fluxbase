@@ -81,6 +81,13 @@ func NewOpenAPIHandler(db *database.Connection) *OpenAPIHandler {
 	return &OpenAPIHandler{db: db}
 }
 
+func (h *OpenAPIHandler) requireDB(c fiber.Ctx) error {
+	if h.db == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // GetOpenAPISpec generates and returns the OpenAPI specification
 // Admin users get full spec with database schema; non-admin users get minimal spec
 func (h *OpenAPIHandler) GetOpenAPISpec(c fiber.Ctx) error {
@@ -96,7 +103,10 @@ func (h *OpenAPIHandler) GetOpenAPISpec(c fiber.Ctx) error {
 
 	ctx := context.Background()
 
-	// Add auth context for audit logging
+	if err := h.requireDB(c); err != nil {
+		return err
+	}
+
 	if userID, ok := GetUserID(c); ok {
 		ctx = database.ContextWithAuth(ctx, userID, role, isAdmin)
 	}

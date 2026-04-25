@@ -18,50 +18,21 @@ import (
 )
 
 type Storage struct {
+	database.TenantAware
 	pool          *pgxpool.Pool
 	encryptionKey string
 }
 
-func NewStorage(pool *pgxpool.Pool, encryptionKey string) *Storage {
+func NewStorage(db *database.Connection, encryptionKey string) *Storage {
+	var pool *pgxpool.Pool
+	if db != nil {
+		pool = db.Pool()
+	}
 	return &Storage{
+		TenantAware:   database.TenantAware{DB: db},
 		pool:          pool,
 		encryptionKey: encryptionKey,
 	}
-}
-
-// withTenant wraps a database operation with the appropriate role based on tenant
-// context. When a tenant context is active, it uses tenant_service (NOBYPASSRLS) so
-// RLS policies enforce tenant isolation. When no tenant context, it uses service_role
-// (BYPASSRLS) for full instance-admin access.
-func (s *Storage) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	tenantID := database.TenantFromContext(ctx)
-
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	if tenantID != "" {
-		_, err = tx.Exec(ctx, "SET LOCAL ROLE tenant_service")
-		if err != nil {
-			return fmt.Errorf("failed to SET LOCAL ROLE tenant_service: %w", err)
-		}
-		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
-		if err != nil {
-			return fmt.Errorf("failed to set tenant context: %w", err)
-		}
-	} else {
-		_, err = tx.Exec(ctx, "SET LOCAL ROLE service_role")
-		if err != nil {
-			return fmt.Errorf("failed to SET LOCAL ROLE service_role: %w", err)
-		}
-	}
-
-	if err := fn(tx); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
 }
 
 // CreateBranch creates a new branch record
@@ -79,7 +50,7 @@ func (s *Storage) CreateBranch(ctx context.Context, branch *Branch) error {
 		branch.ID = uuid.New()
 	}
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			branch.ID,
 			branch.Name,
@@ -116,7 +87,7 @@ func (s *Storage) GetBranch(ctx context.Context, id uuid.UUID, tenantID *uuid.UU
 	}
 
 	branch := &Branch{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, args...).Scan(
 			&branch.ID,
 			&branch.Name,
@@ -163,7 +134,7 @@ func (s *Storage) GetBranchBySlug(ctx context.Context, slug string, tenantID *uu
 	}
 
 	branch := &Branch{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, args...).Scan(
 			&branch.ID,
 			&branch.Name,
@@ -203,7 +174,7 @@ func (s *Storage) GetBranchByGitHubPR(ctx context.Context, repo string, prNumber
 		WHERE github_repo = $1 AND github_pr_number = $2 AND status != 'deleted'`
 
 	branch := &Branch{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, repo, prNumber).Scan(
 			&branch.ID,
 			&branch.Name,
@@ -244,7 +215,7 @@ func (s *Storage) GetMainBranch(ctx context.Context) (*Branch, error) {
 		LIMIT 1`
 
 	branch := &Branch{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query).Scan(
 			&branch.ID,
 			&branch.Name,
@@ -332,7 +303,7 @@ func (s *Storage) ListBranches(ctx context.Context, filter ListBranchesFilter) (
 	}
 
 	var branches []*Branch
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("failed to list branches: %w", err)
@@ -382,7 +353,7 @@ func (s *Storage) UpdateBranchStatus(ctx context.Context, id uuid.UUID, status B
 		SET status = $1, error_message = $2, updated_at = NOW()
 		WHERE id = $3`
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, query, status, errorMessage, id)
 		if err != nil {
 			return fmt.Errorf("failed to update branch status: %w", err)
@@ -410,7 +381,7 @@ func (s *Storage) DeleteBranch(ctx context.Context, id uuid.UUID, tenantID *uuid
 		args = append(args, *tenantID)
 	}
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("failed to delete branch: %w", err)
@@ -455,7 +426,7 @@ func (s *Storage) CountBranches(ctx context.Context, filter ListBranchesFilter) 
 	}
 
 	var count int
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, args...).Scan(&count)
 	})
 	if err != nil {
@@ -470,7 +441,7 @@ func (s *Storage) CountBranchesByUser(ctx context.Context, userID uuid.UUID) (in
 	query := `SELECT COUNT(*) FROM branching.branches WHERE created_by = $1 AND status NOT IN ('deleted', 'deleting')`
 
 	var count int
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, userID).Scan(&count)
 	})
 	if err != nil {
@@ -501,7 +472,7 @@ func (s *Storage) LogActivity(ctx context.Context, log *ActivityLog) error {
 		}
 	}
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			log.ID,
 			log.BranchID,
@@ -530,7 +501,7 @@ func (s *Storage) GetActivityLog(ctx context.Context, branchID uuid.UUID, limit 
 		LIMIT $2`
 
 	var logs []*ActivityLog
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, branchID, limit)
 		if err != nil {
 			return fmt.Errorf("failed to get activity log: %w", err)
@@ -579,7 +550,7 @@ func (s *Storage) RecordMigration(ctx context.Context, branchID uuid.UUID, versi
 		VALUES ($1, $2, $3)
 		ON CONFLICT (branch_id, migration_version) DO NOTHING`
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, branchID, version, name)
 		if err != nil {
 			return fmt.Errorf("failed to record migration: %w", err)
@@ -597,7 +568,7 @@ func (s *Storage) GetMigrationHistory(ctx context.Context, branchID uuid.UUID) (
 		ORDER BY migration_version ASC`
 
 	var history []*MigrationHistory
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, branchID)
 		if err != nil {
 			return fmt.Errorf("failed to get migration history: %w", err)
@@ -641,7 +612,7 @@ func (s *Storage) GetExpiredBranches(ctx context.Context) ([]*Branch, error) {
 			AND type != 'main'`
 
 	var branches []*Branch
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query)
 		if err != nil {
 			return fmt.Errorf("failed to get expired branches: %w", err)
@@ -696,7 +667,7 @@ func (s *Storage) GetGitHubConfig(ctx context.Context, repository string) (*GitH
 
 	config := &GitHubConfig{}
 	var encryptedSecret *string
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, repository).Scan(
 			&config.ID,
 			&config.Repository,
@@ -755,7 +726,7 @@ func (s *Storage) UpsertGitHubConfig(ctx context.Context, config *GitHubConfig) 
 		config.ID = uuid.New()
 	}
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			config.ID,
 			config.Repository,
@@ -772,7 +743,7 @@ func (s *Storage) UpsertGitHubConfig(ctx context.Context, config *GitHubConfig) 
 func (s *Storage) DeleteGitHubConfig(ctx context.Context, repository string) error {
 	query := `DELETE FROM branching.github_config WHERE repository = $1`
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, query, repository)
 		if err != nil {
 			return fmt.Errorf("failed to delete GitHub config: %w", err)
@@ -801,7 +772,7 @@ func (s *Storage) ListGitHubConfigs(ctx context.Context, tenantID *uuid.UUID) ([
 	query += " ORDER BY repository"
 
 	var configs []*GitHubConfig
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("failed to list GitHub configs: %w", err)
@@ -863,7 +834,7 @@ func (s *Storage) GrantAccess(ctx context.Context, access *BranchAccess) error {
 		access.ID = uuid.New()
 	}
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			access.ID,
 			access.BranchID,
@@ -879,7 +850,7 @@ func (s *Storage) GrantAccess(ctx context.Context, access *BranchAccess) error {
 func (s *Storage) RevokeAccess(ctx context.Context, branchID, userID uuid.UUID) error {
 	query := `DELETE FROM branching.branch_access WHERE branch_id = $1 AND user_id = $2`
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, branchID, userID)
 		return err
 	})
@@ -894,7 +865,7 @@ func (s *Storage) GetBranchAccessList(ctx context.Context, branchID uuid.UUID) (
 		ORDER BY granted_at DESC`
 
 	var accessList []*BranchAccess
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, branchID)
 		if err != nil {
 			return fmt.Errorf("failed to list branch access: %w", err)
@@ -934,7 +905,7 @@ func (s *Storage) GetUserAccess(ctx context.Context, branchID, userID uuid.UUID)
 		WHERE branch_id = $1 AND user_id = $2`
 
 	access := &BranchAccess{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, branchID, userID).Scan(
 			&access.ID,
 			&access.BranchID,
@@ -958,7 +929,7 @@ func (s *Storage) GetUserAccess(ctx context.Context, branchID, userID uuid.UUID)
 // HasAccess checks if a user has at least the specified access level to a branch
 func (s *Storage) HasAccess(ctx context.Context, branchID, userID uuid.UUID, minLevel BranchAccessLevel) (bool, error) {
 	var result bool
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		// First check if user is the creator (always has admin access)
 		var createdBy *uuid.UUID
 		err := tx.QueryRow(ctx,
@@ -1120,7 +1091,7 @@ func (s *Storage) CountBranchesByTenant(ctx context.Context, tenantID uuid.UUID)
 	query := `SELECT COUNT(*) FROM branching.branches WHERE tenant_id = $1 AND status NOT IN ('deleted', 'deleting')`
 
 	var count int
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, tenantID).Scan(&count)
 	})
 	if err != nil {
@@ -1189,7 +1160,7 @@ func (s *Storage) SetBranchExpiresAt(ctx context.Context, id uuid.UUID, expiresA
 		SET expires_at = $1, updated_at = NOW()
 		WHERE id = $2`
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, query, expiresAt, id)
 		if err != nil {
 			return fmt.Errorf("failed to set branch expiration: %w", err)

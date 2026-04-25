@@ -23,20 +23,12 @@ var (
 
 // Storage handles database operations for custom MCP tools and resources.
 type Storage struct {
-	db *database.Connection
+	database.TenantAware
 }
 
 // NewStorage creates a new Storage instance.
 func NewStorage(db *database.Connection) *Storage {
-	return &Storage{db: db}
-}
-
-// withTenant wraps SQL operations with tenant-aware role setting (tenant_service for
-// named tenants, service_role for the default tenant). Existing WHERE tenant_id
-// clauses are kept as defense-in-depth.
-func (s *Storage) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	tenantID := database.TenantFromContext(ctx)
-	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
+	return &Storage{TenantAware: database.TenantAware{DB: db}}
 }
 
 // Tool Operations
@@ -105,7 +97,7 @@ func (s *Storage) CreateTool(ctx context.Context, req *CreateToolRequest, create
 	}
 
 	tool := &CustomTool{}
-	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			INSERT INTO mcp.custom_tools (
 				name, namespace, description, code, input_schema,
@@ -121,7 +113,7 @@ func (s *Storage) CreateTool(ctx context.Context, req *CreateToolRequest, create
 			req.Name, namespace, req.Description, req.Code, inputSchemaJSON,
 			requiredScopes, timeoutSeconds, memoryLimitMB,
 			allowNet, allowEnv, allowRead, allowWrite,
-			enabled, createdBy, tenantOrNil(tenantID),
+			enabled, createdBy, database.TenantOrNil(tenantID),
 		).Scan(
 			&tool.ID, &tool.Name, &tool.Namespace, &tool.Description, &tool.Code, &tool.InputSchema,
 			&tool.RequiredScopes, &tool.TimeoutSeconds, &tool.MemoryLimitMB,
@@ -144,7 +136,7 @@ func (s *Storage) GetTool(ctx context.Context, id uuid.UUID) (*CustomTool, error
 	tenantID := database.TenantFromContext(ctx)
 
 	tool := &CustomTool{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT id, name, namespace, description, code, input_schema,
 				required_scopes, timeout_seconds, memory_limit_mb,
@@ -152,7 +144,7 @@ func (s *Storage) GetTool(ctx context.Context, id uuid.UUID) (*CustomTool, error
 				enabled, version, created_by, created_at, updated_at, tenant_id
 			FROM mcp.custom_tools
 			WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
-		`, id, tenantOrNil(tenantID)).Scan(
+		`, id, database.TenantOrNil(tenantID)).Scan(
 			&tool.ID, &tool.Name, &tool.Namespace, &tool.Description, &tool.Code, &tool.InputSchema,
 			&tool.RequiredScopes, &tool.TimeoutSeconds, &tool.MemoryLimitMB,
 			&tool.AllowNet, &tool.AllowEnv, &tool.AllowRead, &tool.AllowWrite,
@@ -178,7 +170,7 @@ func (s *Storage) GetToolByName(ctx context.Context, name, namespace string) (*C
 	}
 
 	tool := &CustomTool{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT id, name, namespace, description, code, input_schema,
 				required_scopes, timeout_seconds, memory_limit_mb,
@@ -187,7 +179,7 @@ func (s *Storage) GetToolByName(ctx context.Context, name, namespace string) (*C
 			FROM mcp.custom_tools
 			WHERE name = $1 AND namespace = $2
 				AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))
-		`, name, namespace, tenantOrNil(tenantID)).Scan(
+		`, name, namespace, database.TenantOrNil(tenantID)).Scan(
 			&tool.ID, &tool.Name, &tool.Namespace, &tool.Description, &tool.Code, &tool.InputSchema,
 			&tool.RequiredScopes, &tool.TimeoutSeconds, &tool.MemoryLimitMB,
 			&tool.AllowNet, &tool.AllowEnv, &tool.AllowRead, &tool.AllowWrite,
@@ -221,7 +213,7 @@ func (s *Storage) ListTools(ctx context.Context, filter ListToolsFilter) ([]*Cus
 
 	// Tenant filter is always first
 	query += fmt.Sprintf(" AND (tenant_id = $%d OR ($%d IS NULL AND tenant_id IS NULL))", argNum, argNum)
-	args = append(args, tenantOrNil(tenantID))
+	args = append(args, database.TenantOrNil(tenantID))
 	argNum++
 
 	if filter.Namespace != "" {
@@ -248,7 +240,7 @@ func (s *Storage) ListTools(ctx context.Context, filter ListToolsFilter) ([]*Cus
 	}
 
 	var tools []*CustomTool
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("failed to list custom tools: %w", err)
@@ -336,7 +328,7 @@ func (s *Storage) UpdateTool(ctx context.Context, id uuid.UUID, req *UpdateToolR
 	tenantID := database.TenantFromContext(ctx)
 
 	tool := &CustomTool{}
-	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			UPDATE mcp.custom_tools SET
 				name = $2,
@@ -362,7 +354,7 @@ func (s *Storage) UpdateTool(ctx context.Context, id uuid.UUID, req *UpdateToolR
 			id, existing.Name, existing.Description, existing.Code, inputSchemaJSON,
 			existing.RequiredScopes, existing.TimeoutSeconds, existing.MemoryLimitMB,
 			existing.AllowNet, existing.AllowEnv, existing.AllowRead, existing.AllowWrite,
-			existing.Enabled, tenantOrNil(tenantID),
+			existing.Enabled, database.TenantOrNil(tenantID),
 		).Scan(
 			&tool.ID, &tool.Name, &tool.Namespace, &tool.Description, &tool.Code, &tool.InputSchema,
 			&tool.RequiredScopes, &tool.TimeoutSeconds, &tool.MemoryLimitMB,
@@ -385,11 +377,11 @@ func (s *Storage) DeleteTool(ctx context.Context, id uuid.UUID) error {
 	tenantID := database.TenantFromContext(ctx)
 
 	var rowsAffected int64
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, `
 			DELETE FROM mcp.custom_tools
 			WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
-		`, id, tenantOrNil(tenantID))
+		`, id, database.TenantOrNil(tenantID))
 		if err != nil {
 			return err
 		}
@@ -488,7 +480,7 @@ func (s *Storage) CreateResource(ctx context.Context, req *CreateResourceRequest
 	}
 
 	resource := &CustomResource{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			INSERT INTO mcp.custom_resources (
 				uri, name, namespace, description, mime_type,
@@ -502,7 +494,7 @@ func (s *Storage) CreateResource(ctx context.Context, req *CreateResourceRequest
 		`,
 			req.URI, req.Name, namespace, req.Description, mimeType,
 			req.Code, isTemplate, requiredScopes,
-			timeoutSeconds, cacheTTLSeconds, enabled, createdBy, tenantOrNil(tenantID),
+			timeoutSeconds, cacheTTLSeconds, enabled, createdBy, database.TenantOrNil(tenantID),
 		).Scan(
 			&resource.ID, &resource.URI, &resource.Name, &resource.Namespace, &resource.Description, &resource.MimeType,
 			&resource.Code, &resource.IsTemplate, &resource.RequiredScopes,
@@ -525,7 +517,7 @@ func (s *Storage) GetResource(ctx context.Context, id uuid.UUID) (*CustomResourc
 	tenantID := database.TenantFromContext(ctx)
 
 	resource := &CustomResource{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT id, uri, name, namespace, description, mime_type,
 				code, is_template, required_scopes,
@@ -533,7 +525,7 @@ func (s *Storage) GetResource(ctx context.Context, id uuid.UUID) (*CustomResourc
 				created_by, created_at, updated_at, tenant_id
 			FROM mcp.custom_resources
 			WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
-		`, id, tenantOrNil(tenantID)).Scan(
+		`, id, database.TenantOrNil(tenantID)).Scan(
 			&resource.ID, &resource.URI, &resource.Name, &resource.Namespace, &resource.Description, &resource.MimeType,
 			&resource.Code, &resource.IsTemplate, &resource.RequiredScopes,
 			&resource.TimeoutSeconds, &resource.CacheTTLSeconds, &resource.Enabled, &resource.Version,
@@ -559,7 +551,7 @@ func (s *Storage) GetResourceByURI(ctx context.Context, uri, namespace string) (
 	}
 
 	resource := &CustomResource{}
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT id, uri, name, namespace, description, mime_type,
 				code, is_template, required_scopes,
@@ -568,7 +560,7 @@ func (s *Storage) GetResourceByURI(ctx context.Context, uri, namespace string) (
 			FROM mcp.custom_resources
 			WHERE uri = $1 AND namespace = $2
 				AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))
-		`, uri, namespace, tenantOrNil(tenantID)).Scan(
+		`, uri, namespace, database.TenantOrNil(tenantID)).Scan(
 			&resource.ID, &resource.URI, &resource.Name, &resource.Namespace, &resource.Description, &resource.MimeType,
 			&resource.Code, &resource.IsTemplate, &resource.RequiredScopes,
 			&resource.TimeoutSeconds, &resource.CacheTTLSeconds, &resource.Enabled, &resource.Version,
@@ -602,7 +594,7 @@ func (s *Storage) ListResources(ctx context.Context, filter ListResourcesFilter)
 
 	// Tenant filter is always first
 	query += fmt.Sprintf(" AND (tenant_id = $%d OR ($%d IS NULL AND tenant_id IS NULL))", argNum, argNum)
-	args = append(args, tenantOrNil(tenantID))
+	args = append(args, database.TenantOrNil(tenantID))
 	argNum++
 
 	if filter.Namespace != "" {
@@ -629,7 +621,7 @@ func (s *Storage) ListResources(ctx context.Context, filter ListResourcesFilter)
 	}
 
 	var resources []*CustomResource
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("failed to list custom resources: %w", err)
@@ -706,7 +698,7 @@ func (s *Storage) UpdateResource(ctx context.Context, id uuid.UUID, req *UpdateR
 	tenantID := database.TenantFromContext(ctx)
 
 	resource := &CustomResource{}
-	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			UPDATE mcp.custom_resources SET
 				uri = $2,
@@ -730,7 +722,7 @@ func (s *Storage) UpdateResource(ctx context.Context, id uuid.UUID, req *UpdateR
 			id, existing.URI, existing.Name, existing.Description, existing.MimeType,
 			existing.Code, existing.IsTemplate, existing.RequiredScopes,
 			existing.TimeoutSeconds, existing.CacheTTLSeconds, existing.Enabled,
-			tenantOrNil(tenantID),
+			database.TenantOrNil(tenantID),
 		).Scan(
 			&resource.ID, &resource.URI, &resource.Name, &resource.Namespace, &resource.Description, &resource.MimeType,
 			&resource.Code, &resource.IsTemplate, &resource.RequiredScopes,
@@ -753,11 +745,11 @@ func (s *Storage) DeleteResource(ctx context.Context, id uuid.UUID) error {
 	tenantID := database.TenantFromContext(ctx)
 
 	var rowsAffected int64
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		result, err := tx.Exec(ctx, `
 			DELETE FROM mcp.custom_resources
 			WHERE id = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
-		`, id, tenantOrNil(tenantID))
+		`, id, database.TenantOrNil(tenantID))
 		if err != nil {
 			return err
 		}
@@ -830,12 +822,4 @@ func containsAt(s, substr string, start int) bool {
 		}
 	}
 	return false
-}
-
-// tenantOrNil returns nil for empty tenant IDs so SQL IS NULL comparisons work correctly.
-func tenantOrNil(tenantID string) interface{} {
-	if tenantID == "" {
-		return nil
-	}
-	return tenantID
 }

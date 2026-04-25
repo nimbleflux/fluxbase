@@ -17,17 +17,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
-// TracerConfig holds configuration for OpenTelemetry tracing
-type TracerConfig struct {
-	Enabled     bool    `mapstructure:"enabled"`
-	Endpoint    string  `mapstructure:"endpoint"`     // OTLP endpoint (e.g., "localhost:4317")
-	ServiceName string  `mapstructure:"service_name"` // Service name for traces
-	Environment string  `mapstructure:"environment"`  // Environment (development, staging, production)
-	SampleRate  float64 `mapstructure:"sample_rate"`  // Sample rate 0.0-1.0 (1.0 = 100%)
-	Insecure    bool    `mapstructure:"insecure"`     // Use insecure connection (for local dev)
-}
+// TracerConfig is an alias for config.TracingConfig.
+type TracerConfig = config.TracingConfig
 
 // DefaultTracerConfig returns sensible defaults for tracing
 func DefaultTracerConfig() TracerConfig {

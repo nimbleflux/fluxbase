@@ -39,6 +39,20 @@ func NewSAMLProviderHandler(db *pgxpool.Pool, samlService *auth.SAMLService) *SA
 	}
 }
 
+func (h *SAMLProviderHandler) requireDB(c fiber.Ctx) error {
+	if h.db == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
+func (h *SAMLProviderHandler) requireSAMLService(c fiber.Ctx) error {
+	if h.samlService == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // SAMLProviderConfig represents a SAML provider configuration for API responses
 type SAMLProviderConfig struct {
 	ID                   uuid.UUID         `json:"id"`
@@ -128,14 +142,10 @@ var samlProviderNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,49}$`)
 func (h *SAMLProviderHandler) ListSAMLProviders(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// Get database-managed providers
 	query := `
 		SELECT id, name, COALESCE(display_name, name), enabled, entity_id, acs_url,
 		       idp_metadata_url, idp_metadata_xml, attribute_mapping, auto_create_users,
@@ -151,9 +161,7 @@ func (h *SAMLProviderHandler) ListSAMLProviders(c fiber.Ctx) error {
 	rows, err := h.db.Query(ctx, query)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list SAML providers")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to retrieve SAML providers",
-		})
+		return SendInternalError(c, "Failed to retrieve SAML providers")
 	}
 	defer rows.Close()
 
@@ -225,16 +233,11 @@ func (h *SAMLProviderHandler) GetSAMLProvider(c fiber.Ctx) error {
 
 	providerID, err := uuid.Parse(id)
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid provider ID",
-		})
+		return SendBadRequest(c, "Invalid provider ID", ErrCodeInvalidID)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
 	query := `
@@ -259,15 +262,11 @@ func (h *SAMLProviderHandler) GetSAMLProvider(c fiber.Ctx) error {
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "SAML provider not found",
-		})
+		return SendNotFound(c, "SAML provider not found")
 	}
 	if err != nil {
 		log.Error().Err(err).Str("id", id).Msg("Failed to get SAML provider")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to retrieve SAML provider",
-		})
+		return SendInternalError(c, "Failed to retrieve SAML provider")
 	}
 
 	p.AttributeMapping = attrMapping
@@ -283,40 +282,28 @@ func (h *SAMLProviderHandler) CreateSAMLProvider(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 	var req CreateSAMLProviderRequest
 
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate provider name
 	if !samlProviderNamePattern.MatchString(req.Name) {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Provider name must start with a letter and contain only lowercase letters, numbers, underscores, and hyphens (2-50 chars)",
-		})
+		return SendBadRequest(c, "Provider name must start with a letter and contain only lowercase letters, numbers, underscores, and hyphens (2-50 chars)", ErrCodeInvalidInput)
 	}
 
 	// Require metadata URL or XML
 	if (req.IdPMetadataURL == nil || *req.IdPMetadataURL == "") &&
 		(req.IdPMetadataXML == nil || *req.IdPMetadataXML == "") {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Either idp_metadata_url or idp_metadata_xml must be provided",
-		})
+		return SendBadRequest(c, "Either idp_metadata_url or idp_metadata_xml must be provided", ErrCodeMissingField)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// Validate and parse metadata
 	metadataInfo, err := h.validateMetadata(ctx, req.IdPMetadataURL, req.IdPMetadataXML)
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": fmt.Sprintf("Invalid IdP metadata: %v", err),
-		})
+		return SendBadRequest(c, fmt.Sprintf("Invalid IdP metadata: %v", err), ErrCodeInvalidInput)
 	}
 
 	// Set defaults
@@ -392,14 +379,10 @@ func (h *SAMLProviderHandler) CreateSAMLProvider(c fiber.Ctx) error {
 	).Scan(&id, &createdAt, &updatedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			return c.Status(409).JSON(fiber.Map{
-				"error": fmt.Sprintf("SAML provider '%s' already exists", req.Name),
-			})
+			return SendConflict(c, fmt.Sprintf("SAML provider '%s' already exists", req.Name), ErrCodeDuplicateKey)
 		}
 		log.Error().Err(err).Str("provider", req.Name).Msg("Failed to create SAML provider")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to create SAML provider",
-		})
+		return SendInternalError(c, "Failed to create SAML provider")
 	}
 
 	// Reload SAML service to pick up new provider
@@ -430,44 +413,30 @@ func (h *SAMLProviderHandler) UpdateSAMLProvider(c fiber.Ctx) error {
 
 	providerID, err := uuid.Parse(id)
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid provider ID",
-		})
+		return SendBadRequest(c, "Invalid provider ID", ErrCodeInvalidID)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// Check if provider exists and is database-managed
 	var source string
 	var providerName string
 	err = h.db.QueryRow(ctx, "SELECT name, COALESCE(source, 'database') FROM auth.saml_providers WHERE id = $1", providerID).Scan(&providerName, &source)
 	if errors.Is(err, sql.ErrNoRows) {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "SAML provider not found",
-		})
+		return SendNotFound(c, "SAML provider not found")
 	}
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to check provider",
-		})
+		return SendInternalError(c, "Failed to check provider")
 	}
 
 	if source == "config" {
-		return c.Status(403).JSON(fiber.Map{
-			"error": "Cannot modify config-file managed providers. Edit your fluxbase.yaml instead.",
-		})
+		return SendForbidden(c, "Cannot modify config-file managed providers. Edit your fluxbase.yaml instead.", ErrCodeAccessDenied)
 	}
 
 	var req UpdateSAMLProviderRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// If metadata is being updated, validate it
@@ -476,9 +445,7 @@ func (h *SAMLProviderHandler) UpdateSAMLProvider(c fiber.Ctx) error {
 		(req.IdPMetadataXML != nil && *req.IdPMetadataXML != "") {
 		metadataInfo, err = h.validateMetadata(ctx, req.IdPMetadataURL, req.IdPMetadataXML)
 		if err != nil {
-			return c.Status(400).JSON(fiber.Map{
-				"error": fmt.Sprintf("Invalid IdP metadata: %v", err),
-			})
+			return SendBadRequest(c, fmt.Sprintf("Invalid IdP metadata: %v", err), ErrCodeInvalidInput)
 		}
 	}
 
@@ -569,9 +536,7 @@ func (h *SAMLProviderHandler) UpdateSAMLProvider(c fiber.Ctx) error {
 	}
 
 	if len(updates) == 0 {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "No fields to update",
-		})
+		return SendBadRequest(c, "No fields to update", ErrCodeInvalidInput)
 	}
 
 	query := fmt.Sprintf(
@@ -583,15 +548,11 @@ func (h *SAMLProviderHandler) UpdateSAMLProvider(c fiber.Ctx) error {
 	err = h.db.QueryRow(ctx, query, args...).Scan(&displayName)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "SAML provider not found",
-		})
+		return SendNotFound(c, "SAML provider not found")
 	}
 	if err != nil {
 		log.Error().Err(err).Str("id", id).Msg("Failed to update SAML provider")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to update SAML provider",
-		})
+		return SendInternalError(c, "Failed to update SAML provider")
 	}
 
 	// Reload SAML service
@@ -616,31 +577,25 @@ func (h *SAMLProviderHandler) DeleteSAMLProvider(c fiber.Ctx) error {
 
 	providerID, err := uuid.Parse(id)
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid provider ID",
-		})
+		return SendBadRequest(c, "Invalid provider ID", ErrCodeInvalidID)
 	}
 
-	// Check if database connection is available
-	if h.db == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database connection not initialized",
-		})
+	if err := h.requireDB(c); err != nil {
+		return err
 	}
 
-	// Check source before deleting
 	var source string
 	var providerName string
 	err = h.db.QueryRow(ctx, "SELECT name, COALESCE(source, 'database') FROM auth.saml_providers WHERE id = $1", providerID).Scan(&providerName, &source)
 	if errors.Is(err, sql.ErrNoRows) {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "SAML provider not found",
-		})
+		return SendNotFound(c, "SAML provider not found")
 	}
 	if source == "config" {
-		return c.Status(403).JSON(fiber.Map{
-			"error": "Cannot delete config-file managed providers. Remove from your fluxbase.yaml instead.",
-		})
+		return SendForbidden(c, "Cannot delete config-file managed providers. Remove from your fluxbase.yaml instead.", ErrCodeAccessDenied)
+	}
+
+	if err := h.requireSAMLService(c); err != nil {
+		return err
 	}
 
 	query := "DELETE FROM auth.saml_providers WHERE id = $1 RETURNING display_name"
@@ -649,15 +604,11 @@ func (h *SAMLProviderHandler) DeleteSAMLProvider(c fiber.Ctx) error {
 	err = h.db.QueryRow(ctx, query, providerID).Scan(&displayName)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "SAML provider not found",
-		})
+		return SendNotFound(c, "SAML provider not found")
 	}
 	if err != nil {
 		log.Error().Err(err).Str("id", id).Msg("Failed to delete SAML provider")
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to delete SAML provider",
-		})
+		return SendInternalError(c, "Failed to delete SAML provider")
 	}
 
 	// Remove from SAML service
@@ -677,17 +628,13 @@ func (h *SAMLProviderHandler) DeleteSAMLProvider(c fiber.Ctx) error {
 func (h *SAMLProviderHandler) ValidateMetadata(c fiber.Ctx) error {
 	var req ValidateMetadataRequest
 
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if (req.MetadataURL == nil || *req.MetadataURL == "") &&
 		(req.MetadataXML == nil || *req.MetadataXML == "") {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Either metadata_url or metadata_xml must be provided",
-		})
+		return SendBadRequest(c, "Either metadata_url or metadata_xml must be provided", ErrCodeMissingField)
 	}
 
 	result, err := h.validateMetadata(c.RequestCtx(), req.MetadataURL, req.MetadataXML)
@@ -712,32 +659,24 @@ func (h *SAMLProviderHandler) ValidateMetadata(c fiber.Ctx) error {
 func (h *SAMLProviderHandler) UploadMetadata(c fiber.Ctx) error {
 	file, err := c.FormFile("metadata")
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "No metadata file provided",
-		})
+		return SendBadRequest(c, "No metadata file provided", ErrCodeMissingField)
 	}
 
 	// Check file size (max 1MB)
 	if file.Size > 1024*1024 {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Metadata file too large (max 1MB)",
-		})
+		return SendBadRequest(c, "Metadata file too large (max 1MB)", ErrCodeInvalidInput)
 	}
 
 	// Read file content
 	f, err := file.Open()
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to read file",
-		})
+		return SendInternalError(c, "Failed to read file")
 	}
 	defer func() { _ = f.Close() }()
 
 	content, err := io.ReadAll(f)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to read file content",
-		})
+		return SendInternalError(c, "Failed to read file content")
 	}
 
 	xmlStr := string(content)
@@ -765,16 +704,12 @@ func (h *SAMLProviderHandler) GetSPMetadata(c fiber.Ctx) error {
 	providerName := c.Params("provider")
 
 	if h.samlService == nil {
-		return c.Status(503).JSON(fiber.Map{
-			"error": "SAML service not available",
-		})
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
 	}
 
 	metadata, err := h.samlService.GetSPMetadata(providerName)
 	if err != nil {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "Provider not found or not initialized",
-		})
+		return SendNotFound(c, "Provider not found or not initialized")
 	}
 
 	c.Set("Content-Type", "application/xml")

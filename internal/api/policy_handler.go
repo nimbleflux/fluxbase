@@ -295,8 +295,8 @@ func (s *Server) ToggleTableRLS(c fiber.Ctx) error {
 	var req struct {
 		Enabled bool `json:"enabled"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return SendBadRequest(c, "Invalid request body", "INVALID_BODY")
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate table exists
@@ -343,8 +343,8 @@ func (s *Server) CreatePolicy(c fiber.Ctx) error {
 	pool := s.policyPool(c)
 
 	var req CreatePolicyRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return SendBadRequest(c, "Invalid request body", "INVALID_BODY")
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate inputs
@@ -448,8 +448,8 @@ func (s *Server) UpdatePolicy(c fiber.Ctx) error {
 	policyName := c.Params("policy")
 
 	var req UpdatePolicyRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return SendBadRequest(c, "Invalid request body", "INVALID_BODY")
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Build ALTER POLICY statement

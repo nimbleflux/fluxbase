@@ -314,7 +314,7 @@ func TestGetPoolForQuery_TenantPoolUsed(t *testing.T) {
 	handler := &SQLHandler{db: &pgxpool.Pool{}}
 	tenantPool := &pgxpool.Pool{}
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		c.Locals("tenant_db", tenantPool)
 		pool := handler.getPoolForQuery(c, "SELECT * FROM public.foo")
@@ -333,7 +333,7 @@ func TestGetPoolForQuery_BranchPoolOverridesTenantPool(t *testing.T) {
 	branchPool := &pgxpool.Pool{}
 	tenantPool := &pgxpool.Pool{}
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		c.Locals("branch_pool", branchPool)
 		c.Locals("tenant_db", tenantPool)
@@ -352,7 +352,7 @@ func TestGetPoolForQuery_NoContext_ReturnsMainDB(t *testing.T) {
 	mainPool := &pgxpool.Pool{}
 	handler := &SQLHandler{db: mainPool}
 
-	app := fiber.New()
+	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
 		pool := handler.getPoolForQuery(c, "SELECT 1")
 		assert.Equal(t, mainPool, pool, "should use main pool when no tenant context")
@@ -383,7 +383,7 @@ func TestGetPoolForQuery_TenantPoolForAllSchemas(t *testing.T) {
 			name = name[:50]
 		}
 		t.Run(name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 			app.Get("/test", func(c fiber.Ctx) error {
 				c.Locals("tenant_db", tenantPool)
 				pool := handler.getPoolForQuery(c, query)

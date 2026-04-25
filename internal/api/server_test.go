@@ -132,6 +132,25 @@ func TestNormalizePaginationParams_DifferentDefaults(t *testing.T) {
 // customErrorHandler Tests
 // =============================================================================
 
+func getExpectedErrCode(statusCode int) string {
+	switch {
+	case statusCode == 400:
+		return ErrCodeInvalidBody
+	case statusCode == 401:
+		return ErrCodeAuthRequired
+	case statusCode == 403:
+		return ErrCodeAccessDenied
+	case statusCode == 404:
+		return ErrCodeNotFound
+	case statusCode == 409:
+		return ErrCodeConflict
+	case statusCode < 500:
+		return ErrCodeInvalidInput
+	default:
+		return ErrCodeInternalError
+	}
+}
+
 func TestCustomErrorHandler(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -210,7 +229,9 @@ func TestCustomErrorHandler(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.expectedError, result["error"])
-			assert.Equal(t, float64(tt.expectedCode), result["code"])
+
+			expectedCode := getExpectedErrCode(tt.expectedCode)
+			assert.Equal(t, expectedCode, result["code"])
 		})
 	}
 }

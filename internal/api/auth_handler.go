@@ -167,18 +167,12 @@ func (h *AuthHandler) getRefreshToken(c fiber.Ctx) string {
 func (h *AuthHandler) SignUp(c fiber.Ctx) error {
 	// Check if signup is enabled
 	if !h.authService.IsSignupEnabled() {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "User registration is currently disabled",
-			"code":  "SIGNUP_DISABLED",
-		})
+		return SendErrorWithCode(c, 403, "User registration is currently disabled", "SIGNUP_DISABLED")
 	}
 
 	var req auth.SignUpRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse signup request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// CAPTCHA verification with adaptive trust support
@@ -190,10 +184,7 @@ func (h *AuthHandler) SignUp(c fiber.Ctx) error {
 			if req.CaptchaToken != "" {
 				if err := h.captchaService.Verify(middleware.CtxWithTenant(c), req.CaptchaToken, c.IP()); err != nil {
 					log.Warn().Err(err).Str("email", req.Email).Msg("CAPTCHA verification failed for signup")
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "CAPTCHA verification failed",
-						"code":  "CAPTCHA_INVALID",
-					})
+					return SendBadRequest(c, "CAPTCHA verification failed", "CAPTCHA_INVALID")
 				}
 				captchaVerified = true
 			}
@@ -201,43 +192,25 @@ func (h *AuthHandler) SignUp(c fiber.Ctx) error {
 			// Validate the challenge (checks if CAPTCHA was required and if it was verified)
 			if err := h.captchaTrustService.ValidateChallenge(middleware.CtxWithTenant(c), req.ChallengeID, "signup", c.IP(), captchaVerified); err != nil {
 				if errors.Is(err, auth.ErrCaptchaRequired) {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "CAPTCHA verification required",
-						"code":  "CAPTCHA_REQUIRED",
-					})
+					return SendBadRequest(c, "CAPTCHA verification required", "CAPTCHA_REQUIRED")
 				}
 				if errors.Is(err, auth.ErrChallengeExpired) {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Challenge expired, please request a new one",
-						"code":  "CHALLENGE_EXPIRED",
-					})
+					return SendBadRequest(c, "Challenge expired, please request a new one", "CHALLENGE_EXPIRED")
 				}
 				if errors.Is(err, auth.ErrChallengeConsumed) {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Challenge already used, please request a new one",
-						"code":  "CHALLENGE_CONSUMED",
-					})
+					return SendBadRequest(c, "Challenge already used, please request a new one", "CHALLENGE_CONSUMED")
 				}
 				log.Warn().Err(err).Str("email", req.Email).Msg("Challenge validation failed for signup")
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "Invalid challenge",
-					"code":  "CHALLENGE_INVALID",
-				})
+				return SendBadRequest(c, "Invalid challenge", "CHALLENGE_INVALID")
 			}
 		} else {
 			// Fall back to static CAPTCHA verification (no challenge_id provided)
 			if err := h.captchaService.VerifyForEndpoint(middleware.CtxWithTenant(c), "signup", req.CaptchaToken, c.IP()); err != nil {
 				if errors.Is(err, auth.ErrCaptchaRequired) {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "CAPTCHA verification required",
-						"code":  "CAPTCHA_REQUIRED",
-					})
+					return SendBadRequest(c, "CAPTCHA verification required", "CAPTCHA_REQUIRED")
 				}
 				log.Warn().Err(err).Str("email", req.Email).Msg("CAPTCHA verification failed for signup")
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "CAPTCHA verification failed",
-					"code":  "CAPTCHA_INVALID",
-				})
+				return SendBadRequest(c, "CAPTCHA verification failed", "CAPTCHA_INVALID")
 			}
 			captchaVerified = req.CaptchaToken != ""
 		}
@@ -245,23 +218,17 @@ func (h *AuthHandler) SignUp(c fiber.Ctx) error {
 
 	// Validate required fields
 	if req.Email == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Email is required",
-		})
+		return SendMissingField(c, "Email")
 	}
 	if req.Password == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Password is required",
-		})
+		return SendMissingField(c, "Password")
 	}
 
 	// Create user
 	resp, err := h.authService.SignUp(middleware.CtxWithTenant(c), req)
 	if err != nil {
 		log.Error().Err(err).Str("email", req.Email).Msg("Failed to sign up user")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Registration failed", ErrCodeInvalidInput)
 	}
 
 	// Issue trust token if CAPTCHA was verified (for use in subsequent requests)
@@ -307,18 +274,12 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 
 	// Check if password login is disabled for app users
 	if h.isPasswordLoginDisabled(ctx) {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Password login is disabled. Please use an OAuth or SAML provider to sign in.",
-			"code":  "PASSWORD_LOGIN_DISABLED",
-		})
+		return SendErrorWithCode(c, 403, "Password login is disabled. Please use an OAuth or SAML provider to sign in.", "PASSWORD_LOGIN_DISABLED")
 	}
 
 	var req auth.SignInRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse signin request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// CAPTCHA verification with adaptive trust support
@@ -330,10 +291,7 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 			if req.CaptchaToken != "" {
 				if err := h.captchaService.Verify(middleware.CtxWithTenant(c), req.CaptchaToken, c.IP()); err != nil {
 					log.Warn().Err(err).Str("email", req.Email).Msg("CAPTCHA verification failed for login")
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "CAPTCHA verification failed",
-						"code":  "CAPTCHA_INVALID",
-					})
+					return SendBadRequest(c, "CAPTCHA verification failed", "CAPTCHA_INVALID")
 				}
 				captchaVerified = true
 			}
@@ -341,43 +299,25 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 			// Validate the challenge (checks if CAPTCHA was required and if it was verified)
 			if err := h.captchaTrustService.ValidateChallenge(middleware.CtxWithTenant(c), req.ChallengeID, "login", c.IP(), captchaVerified); err != nil {
 				if errors.Is(err, auth.ErrCaptchaRequired) {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "CAPTCHA verification required",
-						"code":  "CAPTCHA_REQUIRED",
-					})
+					return SendBadRequest(c, "CAPTCHA verification required", "CAPTCHA_REQUIRED")
 				}
 				if errors.Is(err, auth.ErrChallengeExpired) {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Challenge expired, please request a new one",
-						"code":  "CHALLENGE_EXPIRED",
-					})
+					return SendBadRequest(c, "Challenge expired, please request a new one", "CHALLENGE_EXPIRED")
 				}
 				if errors.Is(err, auth.ErrChallengeConsumed) {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "Challenge already used, please request a new one",
-						"code":  "CHALLENGE_CONSUMED",
-					})
+					return SendBadRequest(c, "Challenge already used, please request a new one", "CHALLENGE_CONSUMED")
 				}
 				log.Warn().Err(err).Str("email", req.Email).Msg("Challenge validation failed for login")
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "Invalid challenge",
-					"code":  "CHALLENGE_INVALID",
-				})
+				return SendBadRequest(c, "Invalid challenge", "CHALLENGE_INVALID")
 			}
 		} else {
 			// Fall back to static CAPTCHA verification (no challenge_id provided)
 			if err := h.captchaService.VerifyForEndpoint(middleware.CtxWithTenant(c), "login", req.CaptchaToken, c.IP()); err != nil {
 				if errors.Is(err, auth.ErrCaptchaRequired) {
-					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-						"error": "CAPTCHA verification required",
-						"code":  "CAPTCHA_REQUIRED",
-					})
+					return SendBadRequest(c, "CAPTCHA verification required", "CAPTCHA_REQUIRED")
 				}
 				log.Warn().Err(err).Str("email", req.Email).Msg("CAPTCHA verification failed for login")
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "CAPTCHA verification failed",
-					"code":  "CAPTCHA_INVALID",
-				})
+				return SendBadRequest(c, "CAPTCHA verification failed", "CAPTCHA_INVALID")
 			}
 			captchaVerified = req.CaptchaToken != ""
 		}
@@ -385,9 +325,7 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 
 	// Validate required fields
 	if req.Email == "" || req.Password == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Email and password are required",
-		})
+		return SendBadRequest(c, "Email and password are required", ErrCodeInvalidInput)
 	}
 
 	// Authenticate user
@@ -401,24 +339,15 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 		// Check for locked account
 		if errors.Is(err, auth.ErrAccountLocked) {
 			log.Warn().Str("email", req.Email).Msg("Login attempt on locked account")
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Account locked due to too many failed login attempts. Please contact support.",
-				"code":  "ACCOUNT_LOCKED",
-			})
+			return SendErrorWithCode(c, 403, "Account locked due to too many failed login attempts. Please contact support.", "ACCOUNT_LOCKED")
 		}
 		// Check for email not verified
 		if errors.Is(err, auth.ErrEmailNotVerified) {
 			log.Warn().Str("email", req.Email).Msg("Login attempt with unverified email")
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":                       "Please verify your email address before signing in. Check your inbox for the verification link.",
-				"code":                        "EMAIL_NOT_VERIFIED",
-				"requires_email_verification": true,
-			})
+			return SendErrorWithDetails(c, 403, "Please verify your email address before signing in. Check your inbox for the verification link.", "EMAIL_NOT_VERIFIED", "", "", map[string]bool{"requires_email_verification": true})
 		}
 		log.Error().Err(err).Str("email", req.Email).Msg("Failed to sign in user")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid email or password",
-		})
+		return SendUnauthorized(c, "Invalid email or password", ErrCodeInvalidCredentials)
 	}
 
 	// Record successful login for trust tracking
@@ -492,9 +421,7 @@ func (h *AuthHandler) SignOut(c fiber.Ctx) error {
 	// Get token from cookie or Authorization header
 	token := h.getAccessToken(c)
 	if token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "No authentication token provided",
-		})
+		return SendBadRequest(c, "No authentication token provided", ErrCodeMissingAuth)
 	}
 
 	ctx := middleware.CtxWithTenant(c)
@@ -533,9 +460,7 @@ func (h *AuthHandler) SignOut(c fiber.Ctx) error {
 		log.Error().Err(err).Msg("Failed to sign out user")
 		// Clear cookies even if sign out fails
 		h.clearAuthCookies(c)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to sign out",
-		})
+		return SendInternalError(c, "Failed to sign out")
 	}
 
 	// Clear authentication cookies
@@ -572,9 +497,7 @@ func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
 
 	// Validate required fields
 	if req.RefreshToken == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Refresh token is required",
-		})
+		return SendMissingField(c, "Refresh token")
 	}
 
 	// Refresh token
@@ -583,9 +506,7 @@ func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
 		log.Error().Err(err).Msg("Failed to refresh token")
 		// Clear cookies on refresh failure
 		h.clearAuthCookies(c)
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid or expired refresh token",
-		})
+		return SendUnauthorized(c, "Invalid or expired refresh token", ErrCodeInvalidToken)
 	}
 
 	// Set httpOnly cookies for new tokens
@@ -600,9 +521,7 @@ func (h *AuthHandler) GetUser(c fiber.Ctx) error {
 	// Get token from Authorization header
 	token := c.Get("Authorization")
 	if token == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authorization header is required",
-		})
+		return SendUnauthorized(c, "Authorization header is required", ErrCodeMissingAuth)
 	}
 
 	// Remove "Bearer " prefix if present
@@ -614,9 +533,7 @@ func (h *AuthHandler) GetUser(c fiber.Ctx) error {
 	user, err := h.authService.GetUser(middleware.CtxWithTenant(c), token)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get user")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid or expired token",
-		})
+		return SendInvalidToken(c)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(user)
@@ -628,26 +545,19 @@ func (h *AuthHandler) UpdateUser(c fiber.Ctx) error {
 	// Get user ID from context (set by auth middleware)
 	userID := c.Locals("user_id")
 	if userID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
+		return SendMissingAuth(c)
 	}
 
 	var req auth.UpdateUserRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse update user request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Update user
 	user, err := h.authService.UpdateUser(middleware.CtxWithTenant(c), userID.(string), req)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to update user")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Failed to update user", ErrCodeInvalidInput)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(user)
@@ -660,43 +570,30 @@ func (h *AuthHandler) SendMagicLink(c fiber.Ctx) error {
 		Email        string `json:"email"`
 		CaptchaToken string `json:"captcha_token,omitempty"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse magic link request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Verify CAPTCHA if enabled for magic_link
 	if h.captchaService != nil {
 		if err := h.captchaService.VerifyForEndpoint(middleware.CtxWithTenant(c), "magic_link", req.CaptchaToken, c.IP()); err != nil {
 			if errors.Is(err, auth.ErrCaptchaRequired) {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "CAPTCHA verification required",
-					"code":  "CAPTCHA_REQUIRED",
-				})
+				return SendBadRequest(c, "CAPTCHA verification required", "CAPTCHA_REQUIRED")
 			}
 			log.Warn().Err(err).Str("email", req.Email).Msg("CAPTCHA verification failed for magic link")
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "CAPTCHA verification failed",
-				"code":  "CAPTCHA_INVALID",
-			})
+			return SendBadRequest(c, "CAPTCHA verification failed", "CAPTCHA_INVALID")
 		}
 	}
 
 	// Validate email
 	if req.Email == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Email is required",
-		})
+		return SendMissingField(c, "Email")
 	}
 
 	// Send magic link
 	if err := h.authService.SendMagicLink(middleware.CtxWithTenant(c), req.Email); err != nil {
 		log.Error().Err(err).Str("email", req.Email).Msg("Failed to send magic link")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Failed to send magic link", ErrCodeInvalidInput)
 	}
 
 	// Return Supabase-compatible OTP response
@@ -712,27 +609,20 @@ func (h *AuthHandler) VerifyMagicLink(c fiber.Ctx) error {
 	var req struct {
 		Token string `json:"token"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse verify magic link request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate token
 	if req.Token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Token is required",
-		})
+		return SendMissingField(c, "Token")
 	}
 
 	// Verify magic link
 	resp, err := h.authService.VerifyMagicLink(middleware.CtxWithTenant(c), req.Token)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to verify magic link")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Invalid or expired magic link token", ErrCodeInvalidInput)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(resp)
@@ -747,67 +637,44 @@ func (h *AuthHandler) RequestPasswordReset(c fiber.Ctx) error {
 		CaptchaToken string `json:"captcha_token,omitempty"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse password reset request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Verify CAPTCHA if enabled for password_reset
 	if h.captchaService != nil {
 		if err := h.captchaService.VerifyForEndpoint(middleware.CtxWithTenant(c), "password_reset", req.CaptchaToken, c.IP()); err != nil {
 			if errors.Is(err, auth.ErrCaptchaRequired) {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "CAPTCHA verification required",
-					"code":  "CAPTCHA_REQUIRED",
-				})
+				return SendBadRequest(c, "CAPTCHA verification required", "CAPTCHA_REQUIRED")
 			}
 			log.Warn().Err(err).Str("email", req.Email).Msg("CAPTCHA verification failed for password reset")
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "CAPTCHA verification failed",
-				"code":  "CAPTCHA_INVALID",
-			})
+			return SendBadRequest(c, "CAPTCHA verification failed", "CAPTCHA_INVALID")
 		}
 	}
 
 	// Validate email
 	if req.Email == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Email is required",
-		})
+		return SendMissingField(c, "Email")
 	}
 
 	// Request password reset (this won't reveal if user exists)
 	if err := h.authService.RequestPasswordReset(middleware.CtxWithTenant(c), req.Email, req.RedirectTo); err != nil {
 		// Check for SMTP not configured error - this should be returned to the user
 		if errors.Is(err, auth.ErrSMTPNotConfigured) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "SMTP is not configured. Please configure an email provider to enable password reset.",
-				"code":  "SMTP_NOT_CONFIGURED",
-			})
+			return SendBadRequest(c, "SMTP is not configured. Please configure an email provider to enable password reset.", "SMTP_NOT_CONFIGURED")
 		}
 		// Check for invalid redirect URL - return error to prevent misuse
 		if errors.Is(err, auth.ErrInvalidRedirectURL) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid redirect_to URL. Must be a valid HTTP or HTTPS URL.",
-				"code":  "INVALID_REDIRECT_URL",
-			})
+			return SendBadRequest(c, "Invalid redirect_to URL. Must be a valid HTTP or HTTPS URL.", "INVALID_REDIRECT_URL")
 		}
 		// Check for rate limiting - user requested reset too soon
 		if errors.Is(err, auth.ErrPasswordResetTooSoon) {
-			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error": "Password reset requested too recently. Please wait 60 seconds before trying again.",
-				"code":  "RATE_LIMITED",
-			})
+			return SendErrorWithCode(c, 429, "Password reset requested too recently. Please wait 60 seconds before trying again.", ErrCodeRateLimited)
 		}
 		// Check for email sending failure - this should be returned to the user
 		if errors.Is(err, auth.ErrEmailSendFailed) {
 			log.Error().Err(err).Str("email", req.Email).Msg("Failed to send password reset email")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to send password reset email. Please try again later.",
-				"code":  "EMAIL_SEND_FAILED",
-			})
+			return SendInternalError(c, "Failed to send password reset email. Please try again later.")
 		}
 		log.Error().Err(err).Str("email", req.Email).Msg("Failed to request password reset")
 		// Don't reveal if user exists - always return success
@@ -828,41 +695,30 @@ func (h *AuthHandler) ResetPassword(c fiber.Ctx) error {
 		NewPassword string `json:"new_password"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse reset password request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate required fields
 	if req.Token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Token is required",
-		})
+		return SendMissingField(c, "Token")
 	}
 	if req.NewPassword == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "New password is required",
-		})
+		return SendMissingField(c, "New password")
 	}
 
 	// Reset password and get user ID
 	userID, err := h.authService.ResetPassword(middleware.CtxWithTenant(c), req.Token, req.NewPassword)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to reset password")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Invalid or expired reset token", ErrCodeInvalidInput)
 	}
 
 	// Generate new tokens for the user (Supabase-compatible)
 	resp, err := h.authService.GenerateTokensForUser(middleware.CtxWithTenant(c), userID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate tokens after password reset")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to generate authentication tokens",
-		})
+		return SendInternalError(c, "Failed to generate authentication tokens")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(resp)
@@ -875,26 +731,19 @@ func (h *AuthHandler) VerifyPasswordResetToken(c fiber.Ctx) error {
 		Token string `json:"token"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse verify token request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate token
 	if req.Token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Token is required",
-		})
+		return SendMissingField(c, "Token")
 	}
 
 	// Verify token
 	if err := h.authService.VerifyPasswordResetToken(middleware.CtxWithTenant(c), req.Token); err != nil {
 		log.Error().Err(err).Msg("Failed to verify password reset token")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Invalid or expired reset token", ErrCodeInvalidInput)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -908,43 +757,28 @@ func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 	var req struct {
 		Token string `json:"token"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Token is required",
-		})
+		return SendMissingField(c, "Token")
 	}
 
 	user, err := h.authService.VerifyEmailToken(middleware.CtxWithTenant(c), req.Token)
 	if err != nil {
 		// Check for specific token errors
 		if errors.Is(err, auth.ErrEmailVerificationTokenNotFound) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid or expired verification token",
-				"code":  "INVALID_TOKEN",
-			})
+			return SendBadRequest(c, "Invalid or expired verification token", "INVALID_TOKEN")
 		}
 		if errors.Is(err, auth.ErrEmailVerificationTokenExpired) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Verification token has expired. Please request a new one.",
-				"code":  "TOKEN_EXPIRED",
-			})
+			return SendBadRequest(c, "Verification token has expired. Please request a new one.", "TOKEN_EXPIRED")
 		}
 		if errors.Is(err, auth.ErrEmailVerificationTokenUsed) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "This verification token has already been used",
-				"code":  "TOKEN_USED",
-			})
+			return SendBadRequest(c, "This verification token has already been used", "TOKEN_USED")
 		}
 		log.Error().Err(err).Msg("Failed to verify email")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Email verification failed", ErrCodeInvalidInput)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -959,16 +793,12 @@ func (h *AuthHandler) ResendVerificationEmail(c fiber.Ctx) error {
 	var req struct {
 		Email string `json:"email"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Email == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Email is required",
-		})
+		return SendMissingField(c, "Email")
 	}
 
 	// Get user by email
@@ -990,9 +820,7 @@ func (h *AuthHandler) ResendVerificationEmail(c fiber.Ctx) error {
 	// Send verification email
 	if err := h.authService.SendEmailVerification(middleware.CtxWithTenant(c), user.ID, user.Email); err != nil {
 		log.Error().Err(err).Str("email", req.Email).Msg("Failed to resend verification email")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to send verification email. Please try again later.",
-		})
+		return SendInternalError(c, "Failed to send verification email. Please try again later.")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -1004,9 +832,7 @@ func (h *AuthHandler) ResendVerificationEmail(c fiber.Ctx) error {
 // Anonymous sign-in reduces security by allowing anyone to get tokens
 // Use regular signup/signin flow instead
 func (h *AuthHandler) SignInAnonymous(c fiber.Ctx) error {
-	return c.Status(fiber.StatusGone).JSON(fiber.Map{
-		"error": "Anonymous sign-in has been disabled for security reasons",
-	})
+	return SendErrorWithCode(c, 410, "Anonymous sign-in has been disabled for security reasons", "GONE")
 }
 
 // GetCSRFToken returns the current CSRF token for the client
@@ -1025,16 +851,12 @@ func (h *AuthHandler) GetCSRFToken(c fiber.Ctx) error {
 func (h *AuthHandler) StartImpersonation(c fiber.Ctx) error {
 	adminUserID := c.Locals("user_id")
 	if adminUserID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendMissingAuth(c)
 	}
 
 	var req auth.StartImpersonationRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	req.IPAddress = c.IP()
@@ -1044,17 +866,14 @@ func (h *AuthHandler) StartImpersonation(c fiber.Ctx) error {
 
 	resp, err := h.authService.StartImpersonation(middleware.CtxWithTenant(c), adminUserID.(string), tenantID, req)
 	if err != nil {
-		statusCode := fiber.StatusInternalServerError
 		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
-			statusCode = fiber.StatusForbidden
+			return SendForbidden(c, "Insufficient permissions", ErrCodeAccessDenied)
 		} else if errors.Is(err, auth.ErrSelfImpersonation) {
-			statusCode = fiber.StatusBadRequest
+			return SendBadRequest(c, "Cannot impersonate yourself", ErrCodeInvalidInput)
 		} else if errors.Is(err, auth.ErrTargetUserNotInTenant) {
-			statusCode = fiber.StatusForbidden
+			return SendForbidden(c, "Target user is not in this tenant", ErrCodeAccessDenied)
 		}
-		return c.Status(statusCode).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to start impersonation")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(resp)
@@ -1065,21 +884,15 @@ func (h *AuthHandler) StopImpersonation(c fiber.Ctx) error {
 	// Get admin user ID from context
 	adminUserID := c.Locals("user_id")
 	if adminUserID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendMissingAuth(c)
 	}
 
 	err := h.authService.StopImpersonation(middleware.CtxWithTenant(c), adminUserID.(string))
 	if err != nil {
 		if errors.Is(err, auth.ErrNoActiveImpersonation) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
-			})
+			return SendNotFound(c, "No active impersonation session found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to stop impersonation")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -1092,21 +905,15 @@ func (h *AuthHandler) GetActiveImpersonation(c fiber.Ctx) error {
 	// Get admin user ID from context
 	adminUserID := c.Locals("user_id")
 	if adminUserID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendMissingAuth(c)
 	}
 
 	session, err := h.authService.GetActiveImpersonation(middleware.CtxWithTenant(c), adminUserID.(string))
 	if err != nil {
 		if errors.Is(err, auth.ErrNoActiveImpersonation) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
-			})
+			return SendNotFound(c, "No active impersonation session found")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to get active impersonation")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(session)
@@ -1117,9 +924,7 @@ func (h *AuthHandler) ListImpersonationSessions(c fiber.Ctx) error {
 	// Get admin user ID from context
 	adminUserID := c.Locals("user_id")
 	if adminUserID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendMissingAuth(c)
 	}
 
 	limit := fiber.Query[int](c, "limit", 50)
@@ -1127,9 +932,7 @@ func (h *AuthHandler) ListImpersonationSessions(c fiber.Ctx) error {
 
 	sessions, err := h.authService.ListImpersonationSessions(middleware.CtxWithTenant(c), adminUserID.(string), limit, offset)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to list impersonation sessions")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(sessions)
@@ -1139,24 +942,18 @@ func (h *AuthHandler) ListImpersonationSessions(c fiber.Ctx) error {
 func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
 	adminUserID := c.Locals("user_id")
 	if adminUserID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendMissingAuth(c)
 	}
 
 	var req struct {
 		Reason string `json:"reason"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Reason == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Reason is required",
-		})
+		return SendMissingField(c, "Reason")
 	}
 
 	ipAddress := c.IP()
@@ -1165,13 +962,10 @@ func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
 
 	resp, err := h.authService.StartAnonImpersonation(middleware.CtxWithTenant(c), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
 	if err != nil {
-		statusCode := fiber.StatusInternalServerError
 		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
-			statusCode = fiber.StatusForbidden
+			return SendForbidden(c, "Insufficient permissions", ErrCodeAccessDenied)
 		}
-		return c.Status(statusCode).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to start anonymous impersonation")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(resp)
@@ -1180,24 +974,18 @@ func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
 func (h *AuthHandler) StartServiceImpersonation(c fiber.Ctx) error {
 	adminUserID := c.Locals("user_id")
 	if adminUserID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendMissingAuth(c)
 	}
 
 	var req struct {
 		Reason string `json:"reason"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Reason == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Reason is required",
-		})
+		return SendMissingField(c, "Reason")
 	}
 
 	ipAddress := c.IP()
@@ -1206,13 +994,10 @@ func (h *AuthHandler) StartServiceImpersonation(c fiber.Ctx) error {
 
 	resp, err := h.authService.StartServiceImpersonation(middleware.CtxWithTenant(c), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
 	if err != nil {
-		statusCode := fiber.StatusInternalServerError
 		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
-			statusCode = fiber.StatusForbidden
+			return SendForbidden(c, "Insufficient permissions", ErrCodeAccessDenied)
 		}
-		return c.Status(statusCode).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendInternalError(c, "Failed to start service impersonation")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(resp)
@@ -1224,9 +1009,7 @@ func (h *AuthHandler) SetupTOTP(c fiber.Ctx) error {
 	// Get user ID from JWT token
 	userID := c.Locals("user_id")
 	if userID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
+		return SendMissingAuth(c)
 	}
 
 	// Parse optional issuer from request body
@@ -1239,9 +1022,7 @@ func (h *AuthHandler) SetupTOTP(c fiber.Ctx) error {
 	response, err := h.authService.SetupTOTP(middleware.CtxWithTenant(c), userID.(string), req.Issuer)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to setup TOTP")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to setup 2FA",
-		})
+		return SendInternalError(c, "Failed to setup 2FA")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(response)
@@ -1253,32 +1034,24 @@ func (h *AuthHandler) EnableTOTP(c fiber.Ctx) error {
 	// Get user ID from JWT token
 	userID := c.Locals("user_id")
 	if userID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
+		return SendMissingAuth(c)
 	}
 
 	var req struct {
 		Code string `json:"code"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Code == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Code is required",
-		})
+		return SendMissingField(c, "Code")
 	}
 
 	backupCodes, err := h.authService.EnableTOTP(middleware.CtxWithTenant(c), userID.(string), req.Code)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to enable TOTP")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Invalid 2FA code", ErrCodeInvalidInput)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -1295,34 +1068,26 @@ func (h *AuthHandler) VerifyTOTP(c fiber.Ctx) error {
 		UserID string `json:"user_id"`
 		Code   string `json:"code"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.UserID == "" || req.Code == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "User ID and code are required",
-		})
+		return SendBadRequest(c, "User ID and code are required", ErrCodeMissingField)
 	}
 
 	// Verify the 2FA code
 	err := h.authService.VerifyTOTP(middleware.CtxWithTenant(c), req.UserID, req.Code)
 	if err != nil {
 		log.Warn().Err(err).Str("user_id", req.UserID).Msg("Failed to verify TOTP")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Invalid 2FA code", ErrCodeInvalidCredentials)
 	}
 
 	// Generate a complete sign-in response with tokens
 	resp, err := h.authService.GenerateTokensForUser(middleware.CtxWithTenant(c), req.UserID)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", req.UserID).Msg("Failed to generate tokens after 2FA verification")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to complete authentication",
-		})
+		return SendInternalError(c, "Failed to complete authentication")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(resp)
@@ -1334,32 +1099,24 @@ func (h *AuthHandler) DisableTOTP(c fiber.Ctx) error {
 	// Get user ID from JWT token
 	userID := c.Locals("user_id")
 	if userID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
+		return SendMissingAuth(c)
 	}
 
 	var req struct {
 		Password string `json:"password"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Password == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Password is required to disable 2FA",
-		})
+		return SendMissingField(c, "Password")
 	}
 
 	err := h.authService.DisableTOTP(middleware.CtxWithTenant(c), userID.(string), req.Password)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to disable TOTP")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Failed to disable 2FA", ErrCodeInvalidCredentials)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -1374,17 +1131,13 @@ func (h *AuthHandler) GetTOTPStatus(c fiber.Ctx) error {
 	// Get user ID from JWT token
 	userID := c.Locals("user_id")
 	if userID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
+		return SendMissingAuth(c)
 	}
 
 	enabled, err := h.authService.IsTOTPEnabled(middleware.CtxWithTenant(c), userID.(string))
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to check TOTP status")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to check 2FA status",
-		})
+		return SendInternalError(c, "Failed to check 2FA status")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -1401,24 +1154,13 @@ func (h *AuthHandler) SendOTP(c fiber.Ctx) error {
 		Options *map[string]interface{} `json:"options,omitempty"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate that either email or phone is provided
 	if err := auth.ValidateOTPContact(req.Email, req.Phone); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
-	}
-
-	// Validate auth service is initialized (after input validation)
-	if h.authService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Authentication service not available",
-		})
+		return SendBadRequest(c, "Email or phone is required", ErrCodeMissingField)
 	}
 
 	// Send OTP
@@ -1439,9 +1181,7 @@ func (h *AuthHandler) SendOTP(c fiber.Ctx) error {
 
 	if err != nil {
 		log.Error().Str("error", err.Error()).Msg("Failed to send OTP")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to send OTP code",
-		})
+		return SendInternalError(c, "Failed to send OTP code")
 	}
 
 	// Return Supabase-compatible OTP response
@@ -1462,16 +1202,12 @@ func (h *AuthHandler) VerifyOTP(c fiber.Ctx) error {
 		Type  string  `json:"type"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "OTP token is required",
-		})
+		return SendMissingField(c, "OTP token")
 	}
 
 	// Verify OTP
@@ -1480,25 +1216,19 @@ func (h *AuthHandler) VerifyOTP(c fiber.Ctx) error {
 
 	// Validate that either email or phone is provided
 	if err := auth.ValidateOTPContact(req.Email, req.Phone); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Email or phone is required", ErrCodeMissingField)
 	}
 
 	if req.Email != nil {
 		otpCode, err = h.authService.VerifyOTP(middleware.CtxWithTenant(c), *req.Email, req.Token)
 	} else if req.Phone != nil {
 		// Phone OTP not yet fully implemented
-		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-			"error": "Phone-based OTP authentication not yet implemented",
-		})
+		return SendErrorWithCode(c, 501, "Phone-based OTP authentication not yet implemented", "NOT_IMPLEMENTED")
 	}
 
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to verify OTP")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid or expired OTP code",
-		})
+		return SendUnauthorized(c, "Invalid or expired OTP code", ErrCodeInvalidCredentials)
 	}
 
 	// Get existing user - auto-creation is disabled for security
@@ -1508,9 +1238,7 @@ func (h *AuthHandler) VerifyOTP(c fiber.Ctx) error {
 		user, err = h.authService.GetUserByEmail(middleware.CtxWithTenant(c), *otpCode.Email)
 		if err != nil {
 			log.Warn().Str("email", *otpCode.Email).Msg("OTP verification for non-existent user")
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "No account found for this email - please sign up first",
-			})
+			return SendNotFound(c, "No account found for this email - please sign up first")
 		}
 	}
 
@@ -1518,9 +1246,7 @@ func (h *AuthHandler) VerifyOTP(c fiber.Ctx) error {
 	resp, err := h.authService.GenerateTokensForUser(middleware.CtxWithTenant(c), user.ID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate tokens")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to complete authentication",
-		})
+		return SendInternalError(c, "Failed to complete authentication")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(resp)
@@ -1536,17 +1262,13 @@ func (h *AuthHandler) ResendOTP(c fiber.Ctx) error {
 		Options *map[string]interface{} `json:"options,omitempty"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate that either email or phone is provided
 	if err := auth.ValidateOTPContact(req.Email, req.Phone); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Email or phone is required", ErrCodeMissingField)
 	}
 
 	purpose := "signin" // Default purpose
@@ -1567,9 +1289,7 @@ func (h *AuthHandler) ResendOTP(c fiber.Ctx) error {
 
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to resend OTP")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to resend OTP code",
-		})
+		return SendInternalError(c, "Failed to resend OTP code")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -1583,17 +1303,13 @@ func (h *AuthHandler) ResendOTP(c fiber.Ctx) error {
 func (h *AuthHandler) GetUserIdentities(c fiber.Ctx) error {
 	userID := c.Locals("user_id")
 	if userID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
+		return SendMissingAuth(c)
 	}
 
 	identities, err := h.authService.GetUserIdentities(middleware.CtxWithTenant(c), userID.(string))
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to get user identities")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve identities",
-		})
+		return SendInternalError(c, "Failed to retrieve identities")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -1606,33 +1322,25 @@ func (h *AuthHandler) GetUserIdentities(c fiber.Ctx) error {
 func (h *AuthHandler) LinkIdentity(c fiber.Ctx) error {
 	userID := c.Locals("user_id")
 	if userID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
+		return SendMissingAuth(c)
 	}
 
 	var req struct {
 		Provider string `json:"provider"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Provider == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Provider is required",
-		})
+		return SendMissingField(c, "Provider")
 	}
 
 	authURL, state, err := h.authService.LinkIdentity(middleware.CtxWithTenant(c), userID.(string), req.Provider)
 	if err != nil {
 		log.Error().Err(err).Str("provider", req.Provider).Msg("Failed to initiate identity linking")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Failed to link identity", ErrCodeInvalidInput)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -1647,24 +1355,18 @@ func (h *AuthHandler) LinkIdentity(c fiber.Ctx) error {
 func (h *AuthHandler) UnlinkIdentity(c fiber.Ctx) error {
 	userID := c.Locals("user_id")
 	if userID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
+		return SendMissingAuth(c)
 	}
 
 	identityID := c.Params("id")
 	if identityID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Identity ID is required",
-		})
+		return SendMissingField(c, "Identity ID")
 	}
 
 	err := h.authService.UnlinkIdentity(middleware.CtxWithTenant(c), userID.(string), identityID)
 	if err != nil {
 		log.Error().Err(err).Str("identity_id", identityID).Msg("Failed to unlink identity")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Failed to unlink identity", ErrCodeInvalidInput)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -1677,17 +1379,13 @@ func (h *AuthHandler) UnlinkIdentity(c fiber.Ctx) error {
 func (h *AuthHandler) Reauthenticate(c fiber.Ctx) error {
 	userID := c.Locals("user_id")
 	if userID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
+		return SendMissingAuth(c)
 	}
 
 	nonce, err := h.authService.Reauthenticate(middleware.CtxWithTenant(c), userID.(string))
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to reauthenticate")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to generate security nonce",
-		})
+		return SendInternalError(c, "Failed to generate security nonce")
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -1704,16 +1402,12 @@ func (h *AuthHandler) SignInWithIDToken(c fiber.Ctx) error {
 		Nonce    *string `json:"nonce,omitempty"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Provider == "" || req.Token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Provider and token are required",
-		})
+		return SendBadRequest(c, "Provider and token are required", ErrCodeMissingField)
 	}
 
 	nonce := ""
@@ -1724,9 +1418,7 @@ func (h *AuthHandler) SignInWithIDToken(c fiber.Ctx) error {
 	resp, err := h.authService.SignInWithIDToken(middleware.CtxWithTenant(c), req.Provider, req.Token, nonce)
 	if err != nil {
 		log.Error().Err(err).Str("provider", req.Provider).Msg("Failed to sign in with ID token")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return SendBadRequest(c, "Invalid ID token", ErrCodeInvalidCredentials)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(resp)
@@ -1775,11 +1467,8 @@ func (h *AuthHandler) GetCaptchaConfig(c fiber.Ctx) error {
 func (h *AuthHandler) CheckCaptcha(c fiber.Ctx) error {
 	// Parse request
 	var req auth.CaptchaCheckRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-			"code":  "INVALID_REQUEST",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate endpoint
@@ -1790,10 +1479,7 @@ func (h *AuthHandler) CheckCaptcha(c fiber.Ctx) error {
 		"magic_link":     true,
 	}
 	if !validEndpoints[req.Endpoint] {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid endpoint. Must be one of: signup, login, password_reset, magic_link",
-			"code":  "INVALID_ENDPOINT",
-		})
+		return SendBadRequest(c, "Invalid endpoint. Must be one of: signup, login, password_reset, magic_link", "INVALID_ENDPOINT")
 	}
 
 	// If CAPTCHA is not enabled at all, return early

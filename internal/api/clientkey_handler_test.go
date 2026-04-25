@@ -200,7 +200,7 @@ func TestUpdateClientKeyRequest_Struct(t *testing.T) {
 
 func TestCreateClientKey_Validation(t *testing.T) {
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Post("/client-keys", handler.CreateClientKey)
@@ -225,7 +225,7 @@ func TestCreateClientKey_Validation(t *testing.T) {
 	})
 
 	t.Run("missing name", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Post("/client-keys", handler.CreateClientKey)
@@ -251,7 +251,7 @@ func TestCreateClientKey_Validation(t *testing.T) {
 	})
 
 	t.Run("empty name", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Post("/client-keys", handler.CreateClientKey)
@@ -277,7 +277,7 @@ func TestCreateClientKey_Validation(t *testing.T) {
 	})
 
 	t.Run("valid body but nil service", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Post("/client-keys", handler.CreateClientKey)
@@ -295,7 +295,7 @@ func TestCreateClientKey_Validation(t *testing.T) {
 	})
 
 	t.Run("valid body with user_id in context", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		// Middleware to set user_id
@@ -325,7 +325,7 @@ func TestCreateClientKey_Validation(t *testing.T) {
 
 func TestListClientKeys_ParameterParsing(t *testing.T) {
 	t.Run("without parameters", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Get("/client-keys", handler.ListClientKeys)
@@ -342,7 +342,7 @@ func TestListClientKeys_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("with valid user_id filter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		// Set admin role to allow filtering
@@ -365,7 +365,7 @@ func TestListClientKeys_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("with invalid user_id filter", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Get("/client-keys", handler.ListClientKeys)
@@ -389,7 +389,7 @@ func TestListClientKeys_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("non-admin trying to list other user's keys", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		currentUserID := uuid.New().String()
@@ -423,7 +423,7 @@ func TestListClientKeys_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("admin can list other user's keys", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		otherUserID := uuid.New().String()
@@ -448,7 +448,7 @@ func TestListClientKeys_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("instance_admin can list other user's keys", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		// Set instance_admin role
@@ -471,7 +471,7 @@ func TestListClientKeys_ParameterParsing(t *testing.T) {
 	})
 
 	t.Run("service_role can list other user's keys", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		// Set service_role
@@ -500,7 +500,7 @@ func TestListClientKeys_ParameterParsing(t *testing.T) {
 
 func TestGetClientKey_Validation(t *testing.T) {
 	t.Run("invalid client key ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Get("/client-keys/:id", handler.GetClientKey)
@@ -524,7 +524,7 @@ func TestGetClientKey_Validation(t *testing.T) {
 	})
 
 	t.Run("valid client key ID format", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Get("/client-keys/:id", handler.GetClientKey)
@@ -547,7 +547,7 @@ func TestGetClientKey_Validation(t *testing.T) {
 
 func TestUpdateClientKey_Validation(t *testing.T) {
 	t.Run("invalid client key ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Patch("/client-keys/:id", handler.UpdateClientKey)
@@ -573,7 +573,7 @@ func TestUpdateClientKey_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Patch("/client-keys/:id", handler.UpdateClientKey)
@@ -599,7 +599,7 @@ func TestUpdateClientKey_Validation(t *testing.T) {
 	})
 
 	t.Run("valid request", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Patch("/client-keys/:id", handler.UpdateClientKey)
@@ -624,7 +624,7 @@ func TestUpdateClientKey_Validation(t *testing.T) {
 
 func TestRevokeClientKey_Validation(t *testing.T) {
 	t.Run("invalid client key ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Post("/client-keys/:id/revoke", handler.RevokeClientKey)
@@ -648,7 +648,7 @@ func TestRevokeClientKey_Validation(t *testing.T) {
 	})
 
 	t.Run("valid client key ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Post("/client-keys/:id/revoke", handler.RevokeClientKey)
@@ -671,7 +671,7 @@ func TestRevokeClientKey_Validation(t *testing.T) {
 
 func TestDeleteClientKey_Validation(t *testing.T) {
 	t.Run("invalid client key ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Delete("/client-keys/:id", handler.DeleteClientKey)
@@ -695,7 +695,7 @@ func TestDeleteClientKey_Validation(t *testing.T) {
 	})
 
 	t.Run("valid client key ID", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewClientKeyHandler(nil)
 
 		app.Delete("/client-keys/:id", handler.DeleteClientKey)
@@ -802,7 +802,7 @@ func TestAdminRoleVerification(t *testing.T) {
 	t.Run("admin roles allow cross-user access", func(t *testing.T) {
 		for _, role := range adminRoles {
 			t.Run(role, func(t *testing.T) {
-				app := fiber.New()
+				app := newTestApp(t)
 				handler := NewClientKeyHandler(nil)
 
 				app.Use(func(c fiber.Ctx) error {
@@ -830,7 +830,7 @@ func TestAdminRoleVerification(t *testing.T) {
 	t.Run("non-admin roles deny cross-user access", func(t *testing.T) {
 		for _, role := range nonAdminRoles {
 			t.Run(role, func(t *testing.T) {
-				app := fiber.New()
+				app := newTestApp(t)
 				handler := NewClientKeyHandler(nil)
 
 				app.Use(func(c fiber.Ctx) error {

@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/nimbleflux/fluxbase/internal/loader"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/nimbleflux/fluxbase/internal/rpc"
 )
@@ -234,95 +234,52 @@ type RPCConfig struct {
 	DisableLogs    bool
 }
 
-// parseRPCAnnotations extracts configuration from @fluxbase: comments in SQL code
 func parseRPCAnnotations(sqlCode string) RPCConfig {
+	annotations := loader.ParseAnnotations(sqlCode, []string{"--"})
 	config := RPCConfig{
-		Timeout:        30, // Default timeout
+		Timeout:        30,
 		AllowedSchemas: []string{"public"},
 		AllowedTables:  []string{},
 	}
 
-	// Match @fluxbase:annotation patterns in SQL comments
-	// Process line by line to avoid multiline regex matching issues
-	lineAnnotationPattern := regexp.MustCompile(`^--\s*@fluxbase:(\S+)(?:\s+(.*))?$`)
-	blockAnnotationPattern := regexp.MustCompile(`^\s*\*\s*@fluxbase:(\S+)(?:\s+(.*))?$`)
-
-	lines := strings.Split(sqlCode, "\n")
-	for _, line := range lines {
-		trimmedLine := strings.TrimSpace(line)
-
-		var matches []string
-		if matches = lineAnnotationPattern.FindStringSubmatch(trimmedLine); matches == nil {
-			matches = blockAnnotationPattern.FindStringSubmatch(trimmedLine)
+	if v, ok := annotations["description"]; ok {
+		config.Description = v
+	}
+	if _, ok := annotations["public"]; ok {
+		config.IsPublic = true
+	}
+	if v, ok := annotations["timeout"]; ok {
+		if t, err := strconv.Atoi(v); err == nil && t > 0 {
+			config.Timeout = t
 		}
-
-		if len(matches) < 2 {
-			continue
+	}
+	if v, ok := annotations["require-role"]; ok {
+		roles := loader.ParseRoleList(v)
+		if len(roles) > 0 {
+			config.RequireRoles = roles
 		}
-
-		annotation := strings.ToLower(strings.TrimSpace(matches[1]))
-		value := ""
-		if len(matches) > 2 {
-			value = strings.TrimSpace(matches[2])
+	}
+	if v, ok := annotations["allowed-tables"]; ok {
+		tables := loader.ParseCommaList(v)
+		if len(tables) > 0 {
+			config.AllowedTables = tables
 		}
-
-		switch annotation {
-		case "description":
-			config.Description = value
-		case "public":
-			config.IsPublic = true
-		case "timeout":
-			if t, err := strconv.Atoi(value); err == nil && t > 0 {
-				config.Timeout = t
-			}
-		case "require-role":
-			// Parse comma-separated roles
-			var roles []string
-			for _, role := range strings.Split(value, ",") {
-				role = strings.TrimSpace(strings.ToLower(role))
-				if role != "" {
-					roles = append(roles, role)
-				}
-			}
-			if len(roles) > 0 {
-				config.RequireRoles = roles
-			}
-		case "allowed-tables":
-			tables := parseCommaSeparatedList(value)
-			if len(tables) > 0 {
-				config.AllowedTables = tables
-			}
-		case "allowed-schemas":
-			schemas := parseCommaSeparatedList(value)
-			if len(schemas) > 0 {
-				config.AllowedSchemas = schemas
-			}
-		case "schedule":
-			schedule := strings.Trim(value, `"'`)
-			if schedule != "" {
-				config.Schedule = &schedule
-			}
-		case "disable-logs":
-			config.DisableLogs = true
+	}
+	if v, ok := annotations["allowed-schemas"]; ok {
+		schemas := loader.ParseCommaList(v)
+		if len(schemas) > 0 {
+			config.AllowedSchemas = schemas
 		}
+	}
+	if v, ok := annotations["schedule"]; ok {
+		schedule := strings.Trim(v, `"'`)
+		if schedule != "" {
+			config.Schedule = &schedule
+		}
+	}
+	if _, ok := annotations["disable-logs"]; ok {
+		config.DisableLogs = true
 	}
 
 	return config
-}
-
-// parseCommaSeparatedList parses a comma-separated string into a slice
-func parseCommaSeparatedList(s string) []string {
-	if s == "" {
-		return nil
-	}
-
-	parts := strings.Split(s, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
 }

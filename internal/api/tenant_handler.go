@@ -52,8 +52,8 @@ type TenantAdminAssignment struct {
 
 type CreateTenantRequest struct {
 	// Basic info
-	Slug     string                 `json:"slug" validate:"required,slug"`
-	Name     string                 `json:"name" validate:"required,min=1,max=255"`
+	Slug     string                 `json:"slug"`
+	Name     string                 `json:"name"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 
 	// Database selection
@@ -81,12 +81,12 @@ type CreateTenantResponse struct {
 }
 
 type UpdateTenantRequest struct {
-	Name     *string                `json:"name,omitempty" validate:"omitempty,min=1,max=255"`
+	Name     *string                `json:"name,omitempty"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type AssignAdminRequest struct {
-	UserID string `json:"user_id" validate:"required,uuid"`
+	UserID string `json:"user_id"`
 }
 
 func NewTenantHandler(db *database.Connection, manager *tenantdb.Manager, storage *tenantdb.Storage, invitationService *auth.InvitationService, emailService email.Service, cfg *config.Config) *TenantHandler {
@@ -121,7 +121,7 @@ func (h *TenantHandler) ListTenants(c fiber.Ctx) error {
 	tenants, err := h.Storage.GetAllActiveTenants(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list tenants")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to list tenants")
+		return SendInternalError(c, "Failed to list tenants")
 	}
 
 	result := make([]TenantResponse, len(tenants))
@@ -137,13 +137,13 @@ func (h *TenantHandler) ListMyTenants(c fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(string)
 
 	if userID == "" {
-		return fiber.NewError(fiber.StatusUnauthorized, "Authentication required")
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	tenants, err := h.Storage.GetTenantsForUser(ctx, userID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list user tenants")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to list tenants")
+		return SendInternalError(c, "Failed to list tenants")
 	}
 
 	type TenantWithRole struct {
@@ -171,17 +171,17 @@ func (h *TenantHandler) GetTenant(c fiber.Ctx) error {
 	if !isInstanceAdmin {
 		hasAccess, err := h.Storage.IsUserAssignedToTenant(ctx, userID, tenantID)
 		if err != nil || !hasAccess {
-			return fiber.NewError(fiber.StatusForbidden, "Access denied to this tenant")
+			return SendForbidden(c, "Access denied to this tenant", ErrCodeAccessDenied)
 		}
 	}
 
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendNotFound(c, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	return c.JSON(tenantToResponse(t))
@@ -191,17 +191,17 @@ func (h *TenantHandler) CreateTenant(c fiber.Ctx) error {
 	ctx := c.Context()
 
 	var req CreateTenantRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if !isValidSlug(req.Slug) {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid slug format (use lowercase letters, numbers, and hyphens)")
+		return SendBadRequest(c, "Invalid slug format (use lowercase letters, numbers, and hyphens)", ErrCodeInvalidInput)
 	}
 
 	existing, _ := h.Storage.GetTenantBySlug(ctx, req.Slug)
 	if existing != nil {
-		return fiber.NewError(fiber.StatusConflict, "Tenant with this slug already exists")
+		return SendConflict(c, "Tenant with this slug already exists", ErrCodeAlreadyExists)
 	}
 
 	metadata := make(map[string]any)
@@ -219,10 +219,10 @@ func (h *TenantHandler) CreateTenant(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrMaxTenantsReached) {
-			return fiber.NewError(fiber.StatusConflict, "Maximum number of tenants reached")
+			return SendConflict(c, "Maximum number of tenants reached", ErrCodeConflict)
 		}
 		log.Error().Err(err).Msg("Failed to create tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to create tenant: %v", err))
+		return SendInternalError(c, "Failed to create tenant")
 	}
 
 	log.Info().Str("tenant_id", t.ID).Str("slug", t.Slug).Msg("Tenant created")
@@ -277,17 +277,17 @@ func (h *TenantHandler) UpdateTenant(c fiber.Ctx) error {
 	tenantID := c.Params("id")
 
 	var req UpdateTenantRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendNotFound(c, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update tenant")
+		return SendInternalError(c, "Failed to update tenant")
 	}
 
 	updateReq := tenantdb.UpdateTenantRequest{
@@ -297,13 +297,13 @@ func (h *TenantHandler) UpdateTenant(c fiber.Ctx) error {
 
 	if err := h.Storage.UpdateTenant(ctx, t.ID, updateReq); err != nil {
 		log.Error().Err(err).Msg("Failed to update tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update tenant")
+		return SendInternalError(c, "Failed to update tenant")
 	}
 
 	t, err = h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get updated tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get updated tenant")
+		return SendInternalError(c, "Failed to get updated tenant")
 	}
 
 	return c.JSON(tenantToResponse(t))
@@ -317,26 +317,26 @@ func (h *TenantHandler) DeleteTenant(c fiber.Ctx) error {
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendNotFound(c, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete tenant")
+		return SendInternalError(c, "Failed to delete tenant")
 	}
 
 	if t.IsDefault {
-		return fiber.NewError(fiber.StatusBadRequest, "Cannot delete the default tenant")
+		return SendBadRequest(c, "Cannot delete the default tenant", ErrCodeInvalidInput)
 	}
 
 	if hard {
 		if err := h.Manager.HardDeleteTenantDatabase(ctx, tenantID); err != nil {
 			log.Error().Err(err).Msg("Failed to hard delete tenant")
-			return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete tenant")
+			return SendInternalError(c, "Failed to delete tenant")
 		}
 		log.Info().Str("tenant_id", tenantID).Msg("Tenant hard-deleted")
 	} else {
 		if err := h.Manager.DeleteTenantDatabase(ctx, tenantID); err != nil {
 			log.Error().Err(err).Msg("Failed to soft delete tenant")
-			return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete tenant")
+			return SendInternalError(c, "Failed to delete tenant")
 		}
 		log.Info().Str("tenant_id", tenantID).Msg("Tenant soft-deleted")
 	}
@@ -350,10 +350,10 @@ func (h *TenantHandler) RecoverTenant(c fiber.Ctx) error {
 
 	if err := h.Manager.RecoverTenantDatabase(ctx, tenantID); err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotDeleted) {
-			return fiber.NewError(fiber.StatusBadRequest, "Tenant is not in a deleted state")
+			return SendBadRequest(c, "Tenant is not in a deleted state", ErrCodeInvalidInput)
 		}
 		log.Error().Err(err).Msg("Failed to recover tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to recover tenant")
+		return SendInternalError(c, "Failed to recover tenant")
 	}
 
 	log.Info().Str("tenant_id", tenantID).Msg("Tenant recovered")
@@ -367,7 +367,7 @@ func (h *TenantHandler) ListDeletedTenants(c fiber.Ctx) error {
 	tenants, err := h.Manager.ListDeletedTenants(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list deleted tenants")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to list deleted tenants")
+		return SendInternalError(c, "Failed to list deleted tenants")
 	}
 
 	result := make([]TenantResponse, len(tenants))
@@ -385,10 +385,10 @@ func (h *TenantHandler) MigrateTenant(c fiber.Ctx) error {
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendNotFound(c, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to migrate tenant")
+		return SendInternalError(c, "Failed to migrate tenant")
 	}
 
 	if t.UsesMainDatabase() {
@@ -397,7 +397,7 @@ func (h *TenantHandler) MigrateTenant(c fiber.Ctx) error {
 
 	if err := h.Manager.MigrateTenant(ctx, tenantID); err != nil {
 		log.Error().Err(err).Msg("Failed to migrate tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to migrate tenant")
+		return SendInternalError(c, "Failed to migrate tenant")
 	}
 
 	log.Info().Str("tenant_id", tenantID).Msg("Tenant migrated")
@@ -414,7 +414,7 @@ func (h *TenantHandler) ListAdmins(c fiber.Ctx) error {
 	if !isInstanceAdmin {
 		hasAccess, err := h.Storage.IsUserAssignedToTenant(ctx, userID, tenantID)
 		if err != nil || !hasAccess {
-			return fiber.NewError(fiber.StatusForbidden, "Access denied to this tenant")
+			return SendForbidden(c, "Access denied to this tenant", ErrCodeAccessDenied)
 		}
 	}
 
@@ -428,7 +428,7 @@ func (h *TenantHandler) ListAdmins(c fiber.Ctx) error {
 	`, tenantID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list admins")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to list admins")
+		return SendInternalError(c, "Failed to list admins")
 	}
 	defer rows.Close()
 
@@ -464,8 +464,8 @@ func (h *TenantHandler) AssignAdmin(c fiber.Ctx) error {
 	tenantID := c.Params("id")
 
 	var req AssignAdminRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	var userExists bool
@@ -474,7 +474,7 @@ func (h *TenantHandler) AssignAdmin(c fiber.Ctx) error {
 		req.UserID,
 	).Scan(&userExists)
 	if err != nil || !userExists {
-		return fiber.NewError(fiber.StatusBadRequest, "User not found")
+		return SendBadRequest(c, "User not found", ErrCodeNotFound)
 	}
 
 	var assignment TenantAdminAssignment
@@ -497,11 +497,11 @@ func (h *TenantHandler) AssignAdmin(c fiber.Ctx) error {
 			)
 			if err != nil {
 				log.Error().Err(err).Msg("Failed to get existing assignment")
-				return fiber.NewError(fiber.StatusInternalServerError, "Failed to assign admin")
+				return SendInternalError(c, "Failed to assign admin")
 			}
 		} else {
 			log.Error().Err(err).Msg("Failed to assign admin")
-			return fiber.NewError(fiber.StatusInternalServerError, "Failed to assign admin")
+			return SendInternalError(c, "Failed to assign admin")
 		}
 	}
 
@@ -524,11 +524,11 @@ func (h *TenantHandler) RemoveAdmin(c fiber.Ctx) error {
 	`, tenantID, userID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to remove admin")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to remove admin")
+		return SendInternalError(c, "Failed to remove admin")
 	}
 
 	if result.RowsAffected() == 0 {
-		return fiber.NewError(fiber.StatusNotFound, "Admin assignment not found")
+		return SendNotFound(c, "Admin assignment not found")
 	}
 
 	log.Info().
@@ -755,10 +755,10 @@ func (h *TenantHandler) GetTenantSchemaStatus(c fiber.Ctx) error {
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendNotFound(c, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	// Check if declarative service is configured
@@ -776,7 +776,7 @@ func (h *TenantHandler) GetTenantSchemaStatus(c fiber.Ctx) error {
 	status, err := h.Manager.GetTenantSchemaStatus(ctx, tenantID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get tenant schema status")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant schema status")
+		return SendInternalError(c, "Failed to get tenant schema status")
 	}
 
 	return c.JSON(fiber.Map{
@@ -802,27 +802,27 @@ func (h *TenantHandler) ApplyTenantSchema(c fiber.Ctx) error {
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendNotFound(c, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	// Check if tenant uses main database
 	if t.UsesMainDatabase() {
-		return fiber.NewError(fiber.StatusBadRequest, "Cannot apply declarative schema to tenant using main database")
+		return SendBadRequest(c, "Cannot apply declarative schema to tenant using main database", ErrCodeInvalidInput)
 	}
 
 	// Check if declarative service is configured
 	declarativeSvc := h.Manager.GetDeclarativeService()
 	if declarativeSvc == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Tenant declarative schemas are not enabled")
+		return SendBadRequest(c, "Tenant declarative schemas are not enabled", ErrCodeFeatureDisabled)
 	}
 
 	// Apply the schema
 	if err := h.Manager.ApplyTenantDeclarativeSchema(ctx, tenantID); err != nil {
 		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to apply tenant schema")
-		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to apply schema: %v", err))
+		return SendInternalError(c, "Failed to apply schema")
 	}
 
 	log.Info().Str("tenant_id", tenantID).Str("tenant_slug", t.Slug).Msg("Tenant schema applied")
@@ -836,7 +836,7 @@ func (h *TenantHandler) ApplyTenantSchema(c fiber.Ctx) error {
 
 // UploadTenantSchemaRequest represents the request body for uploading a tenant schema
 type UploadTenantSchemaRequest struct {
-	Schema string `json:"schema" validate:"required"`
+	Schema string `json:"schema"`
 }
 
 // GetStoredSchema retrieves the stored schema content for a tenant
@@ -848,23 +848,23 @@ func (h *TenantHandler) GetStoredSchema(c fiber.Ctx) error {
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendNotFound(c, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	// Check if declarative service is configured
 	declarativeSvc := h.Manager.GetDeclarativeService()
 	if declarativeSvc == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Tenant declarative schemas are not enabled")
+		return SendBadRequest(c, "Tenant declarative schemas are not enabled", ErrCodeFeatureDisabled)
 	}
 
 	// Get stored schema content
 	content, fingerprint, updatedAt, err := declarativeSvc.GetStoredSchemaContent(ctx, t.Slug)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get stored schema")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stored schema")
+		return SendInternalError(c, "Failed to get stored schema")
 	}
 
 	if content == "" {
@@ -894,32 +894,32 @@ func (h *TenantHandler) UploadTenantSchema(c fiber.Ctx) error {
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendNotFound(c, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	// Check if declarative service is configured
 	declarativeSvc := h.Manager.GetDeclarativeService()
 	if declarativeSvc == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Tenant declarative schemas are not enabled")
+		return SendBadRequest(c, "Tenant declarative schemas are not enabled", ErrCodeFeatureDisabled)
 	}
 
 	// Parse request body
 	var req UploadTenantSchemaRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Schema == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Schema content cannot be empty")
+		return SendBadRequest(c, "Schema content cannot be empty", ErrCodeInvalidInput)
 	}
 
 	// Store the schema content
 	if err := declarativeSvc.StoreSchemaContent(ctx, t.Slug, req.Schema); err != nil {
 		log.Error().Err(err).Msg("Failed to store schema")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to store schema")
+		return SendInternalError(c, "Failed to store schema")
 	}
 
 	// Calculate fingerprint for response
@@ -944,38 +944,38 @@ func (h *TenantHandler) ApplyUploadedTenantSchema(c fiber.Ctx) error {
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendNotFound(c, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	// Check if tenant uses main database
 	if t.UsesMainDatabase() {
-		return fiber.NewError(fiber.StatusBadRequest, "Cannot apply declarative schema to tenant using main database")
+		return SendBadRequest(c, "Cannot apply declarative schema to tenant using main database", ErrCodeInvalidInput)
 	}
 
 	// Check if declarative service is configured
 	declarativeSvc := h.Manager.GetDeclarativeService()
 	if declarativeSvc == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Tenant declarative schemas are not enabled")
+		return SendBadRequest(c, "Tenant declarative schemas are not enabled", ErrCodeFeatureDisabled)
 	}
 
 	// Get stored schema content
 	content, fingerprint, _, err := declarativeSvc.GetStoredSchemaContent(ctx, t.Slug)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get stored schema")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get stored schema")
+		return SendInternalError(c, "Failed to get stored schema")
 	}
 
 	if content == "" {
-		return fiber.NewError(fiber.StatusNotFound, "No stored schema found for this tenant. Upload a schema first.")
+		return SendNotFound(c, "No stored schema found for this tenant. Upload a schema first.")
 	}
 
 	// Apply the schema from stored content
 	if err := declarativeSvc.ApplyTenantSchemaFromContent(ctx, t, content); err != nil {
 		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to apply tenant schema")
-		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to apply schema: %v", err))
+		return SendInternalError(c, "Failed to apply schema")
 	}
 
 	log.Info().Str("tenant_id", tenantID).Str("tenant_slug", t.Slug).Msg("Tenant stored schema applied")
@@ -997,22 +997,22 @@ func (h *TenantHandler) DeleteStoredSchema(c fiber.Ctx) error {
 	t, err := h.Storage.GetTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, tenantdb.ErrTenantNotFound) {
-			return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+			return SendNotFound(c, "Tenant not found")
 		}
 		log.Error().Err(err).Msg("Failed to get tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get tenant")
+		return SendInternalError(c, "Failed to get tenant")
 	}
 
 	// Check if declarative service is configured
 	declarativeSvc := h.Manager.GetDeclarativeService()
 	if declarativeSvc == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Tenant declarative schemas are not enabled")
+		return SendBadRequest(c, "Tenant declarative schemas are not enabled", ErrCodeFeatureDisabled)
 	}
 
 	// Delete the stored schema
 	if err := declarativeSvc.DeleteStoredSchema(ctx, t.Slug); err != nil {
 		log.Error().Err(err).Msg("Failed to delete stored schema")
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to delete stored schema")
+		return SendInternalError(c, "Failed to delete stored schema")
 	}
 
 	log.Info().Str("tenant_id", tenantID).Str("tenant_slug", t.Slug).Msg("Tenant stored schema deleted")
@@ -1024,21 +1024,21 @@ func (h *TenantHandler) DeleteStoredSchema(c fiber.Ctx) error {
 func (h *TenantHandler) RepairTenant(c fiber.Ctx) error {
 	tenantID := c.Params("id")
 	if tenantID == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Tenant ID is required")
+		return SendBadRequest(c, "Tenant ID is required", ErrCodeMissingField)
 	}
 
 	t, err := h.Storage.GetTenant(c.Context(), tenantID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusNotFound, "Tenant not found")
+		return SendNotFound(c, "Tenant not found")
 	}
 
 	if t.UsesMainDatabase() {
-		return fiber.NewError(fiber.StatusBadRequest, "Cannot repair default tenant (uses main database)")
+		return SendBadRequest(c, "Cannot repair default tenant (uses main database)", ErrCodeInvalidInput)
 	}
 
 	if err := h.Manager.RepairTenant(c.Context(), t); err != nil {
 		log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to repair tenant")
-		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to repair tenant: %s", err.Error()))
+		return SendInternalError(c, "Failed to repair tenant")
 	}
 
 	log.Info().Str("tenant_id", tenantID).Msg("Tenant repaired successfully")

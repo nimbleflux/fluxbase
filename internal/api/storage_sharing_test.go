@@ -36,7 +36,7 @@ func TestShareObject_ValidationErrors(t *testing.T) {
 			key:            "",
 			requestBody:    map[string]string{"user_id": "user-123", "permission": "read"},
 			expectedStatus: fiber.StatusBadRequest,
-			expectedError:  "bucket and key are required",
+			expectedError:  "Bucket and key are required",
 		},
 		{
 			name:           "invalid JSON body",
@@ -44,7 +44,7 @@ func TestShareObject_ValidationErrors(t *testing.T) {
 			key:            "test.txt",
 			requestBody:    "invalid-json",
 			expectedStatus: fiber.StatusBadRequest,
-			expectedError:  "invalid request body",
+			expectedError:  "Invalid request body",
 		},
 		{
 			name:           "missing user_id",
@@ -60,7 +60,7 @@ func TestShareObject_ValidationErrors(t *testing.T) {
 			key:            "test.txt",
 			requestBody:    map[string]string{"user_id": "user-123"},
 			expectedStatus: fiber.StatusBadRequest,
-			expectedError:  "permission must be 'read' or 'write'",
+			expectedError:  "Permission must be 'read' or 'write'",
 		},
 		{
 			name:           "invalid permission value",
@@ -68,7 +68,7 @@ func TestShareObject_ValidationErrors(t *testing.T) {
 			key:            "test.txt",
 			requestBody:    map[string]string{"user_id": "user-123", "permission": "delete"},
 			expectedStatus: fiber.StatusBadRequest,
-			expectedError:  "permission must be 'read' or 'write'",
+			expectedError:  "Permission must be 'read' or 'write'",
 		},
 		{
 			name:           "empty permission",
@@ -76,7 +76,7 @@ func TestShareObject_ValidationErrors(t *testing.T) {
 			key:            "test.txt",
 			requestBody:    map[string]string{"user_id": "user-123", "permission": ""},
 			expectedStatus: fiber.StatusBadRequest,
-			expectedError:  "permission must be 'read' or 'write'",
+			expectedError:  "Permission must be 'read' or 'write'",
 		},
 		{
 			name:           "empty user_id",
@@ -94,7 +94,7 @@ func TestShareObject_ValidationErrors(t *testing.T) {
 				t.Skip("Skipping test that depends on route matching behavior")
 			}
 
-			app := fiber.New()
+			app := newTestApp(t)
 
 			// Create a minimal handler (will fail at DB access, but validation runs first)
 			handler := &StorageHandler{
@@ -177,7 +177,7 @@ func TestRevokeShare_ValidationErrors(t *testing.T) {
 				t.Skip("Skipping test that depends on route matching behavior")
 			}
 
-			app := fiber.New()
+			app := newTestApp(t)
 
 			handler := &StorageHandler{
 				db: nil, // Validation will fail before DB access
@@ -213,7 +213,7 @@ func TestShareObject_PermissionValues(t *testing.T) {
 
 	for _, perm := range invalidPermissions {
 		t.Run("invalid_permission_"+perm, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 			handler := &StorageHandler{db: nil}
 			app.Post("/storage/:bucket/*", handler.ShareObject)
 
@@ -235,7 +235,7 @@ func TestShareObject_PermissionValues(t *testing.T) {
 			var result map[string]interface{}
 			err = json.NewDecoder(resp.Body).Decode(&result)
 			require.NoError(t, err)
-			assert.Contains(t, result["error"], "permission must be 'read' or 'write'")
+			assert.Contains(t, result["error"], "Permission must be 'read' or 'write'")
 		})
 	}
 }
@@ -285,10 +285,10 @@ func TestShareObject_JSONParsing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.skipTest {
-				t.Skip("Skipping test that would require database access")
+				t.Skip("Skipping test that depends on route matching behavior")
 			}
 
-			app := fiber.New()
+			app := newTestApp(t)
 			handler := &StorageHandler{db: nil}
 			app.Post("/storage/:bucket/*", handler.ShareObject)
 

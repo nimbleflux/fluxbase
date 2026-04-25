@@ -73,7 +73,7 @@ func TestCreateWebhook_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := fiber.New()
+			app := newTestApp(t)
 			handler := NewWebhookHandler(nil)
 
 			app.Post("/webhooks", handler.CreateWebhook)
@@ -182,7 +182,7 @@ func TestWebhook_DefaultValues(t *testing.T) {
 // =============================================================================
 
 func TestGetWebhook_InvalidID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewWebhookHandler(nil)
 
 	app.Get("/webhooks/:id", handler.GetWebhook)
@@ -251,7 +251,7 @@ func TestGetWebhook_InvalidID(t *testing.T) {
 // =============================================================================
 
 func TestUpdateWebhook_InvalidID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewWebhookHandler(nil)
 
 	app.Patch("/webhooks/:id", handler.UpdateWebhook)
@@ -276,7 +276,7 @@ func TestUpdateWebhook_InvalidID(t *testing.T) {
 }
 
 func TestUpdateWebhook_InvalidBody(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewWebhookHandler(nil)
 
 	app.Patch("/webhooks/:id", handler.UpdateWebhook)
@@ -306,7 +306,7 @@ func TestUpdateWebhook_InvalidBody(t *testing.T) {
 // =============================================================================
 
 func TestDeleteWebhook_InvalidID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewWebhookHandler(nil)
 
 	app.Delete("/webhooks/:id", handler.DeleteWebhook)
@@ -334,7 +334,7 @@ func TestDeleteWebhook_InvalidID(t *testing.T) {
 // =============================================================================
 
 func TestTestWebhook_InvalidID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewWebhookHandler(nil)
 
 	app.Post("/webhooks/:id/test", handler.TestWebhook)
@@ -362,7 +362,7 @@ func TestTestWebhook_InvalidID(t *testing.T) {
 // =============================================================================
 
 func TestListDeliveries_InvalidID(t *testing.T) {
-	app := fiber.New()
+	app := newTestApp(t)
 	handler := NewWebhookHandler(nil)
 
 	app.Get("/webhooks/:id/deliveries", handler.ListDeliveries)

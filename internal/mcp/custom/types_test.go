@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 func TestCustomTool_Defaults(t *testing.T) {
@@ -88,19 +90,19 @@ func TestListToolsFilter(t *testing.T) {
 }
 
 func TestContent_Types(t *testing.T) {
-	textContent := Content{
-		Type: "text",
+	textContent := mcp.Content{
+		Type: mcp.ContentTypeText,
 		Text: "Hello, world!",
 	}
-	assert.Equal(t, "text", textContent.Type)
+	assert.Equal(t, mcp.ContentTypeText, textContent.Type)
 	assert.Equal(t, "Hello, world!", textContent.Text)
 
-	imageContent := Content{
-		Type:     "image",
+	imageContent := mcp.Content{
+		Type:     mcp.ContentTypeImage,
 		MimeType: "image/png",
 		Data:     "base64encodeddata",
 	}
-	assert.Equal(t, "image", imageContent.Type)
+	assert.Equal(t, mcp.ContentTypeImage, imageContent.Type)
 	assert.Equal(t, "image/png", imageContent.MimeType)
 }
 

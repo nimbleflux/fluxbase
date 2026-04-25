@@ -31,7 +31,7 @@ func TestNewCustomSettingsHandler(t *testing.T) {
 
 func TestCreateCustomSetting_Validation(t *testing.T) {
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Post("/settings/custom", handler.CreateSetting)
@@ -53,7 +53,7 @@ func TestCreateCustomSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid user ID in context returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Post("/settings/custom", func(c fiber.Ctx) error {
@@ -79,7 +79,7 @@ func TestCreateCustomSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Post("/settings/custom", func(c fiber.Ctx) error {
@@ -104,7 +104,7 @@ func TestCreateCustomSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("missing key", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Post("/settings/custom", func(c fiber.Ctx) error {
@@ -130,7 +130,7 @@ func TestCreateCustomSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("missing value", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Post("/settings/custom", func(c fiber.Ctx) error {
@@ -162,7 +162,7 @@ func TestCreateCustomSetting_Validation(t *testing.T) {
 
 func TestListCustomSettings_Validation(t *testing.T) {
 	t.Run("missing user role returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Get("/settings/custom", handler.ListSettings)
@@ -183,7 +183,7 @@ func TestListCustomSettings_Validation(t *testing.T) {
 
 func TestGetCustomSetting_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Get("/settings/custom/*", handler.GetSetting)
@@ -209,7 +209,7 @@ func TestGetCustomSetting_Validation(t *testing.T) {
 
 func TestUpdateCustomSetting_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Put("/settings/custom/*", handler.UpdateSetting)
@@ -226,7 +226,7 @@ func TestUpdateCustomSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("missing value returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Put("/settings/custom/*", func(c fiber.Ctx) error {
@@ -258,7 +258,7 @@ func TestUpdateCustomSetting_Validation(t *testing.T) {
 
 func TestDeleteCustomSetting_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Delete("/settings/custom/*", handler.DeleteSetting)
@@ -273,7 +273,7 @@ func TestDeleteCustomSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("missing user role returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Delete("/settings/custom/*", handler.DeleteSetting)
@@ -294,7 +294,7 @@ func TestDeleteCustomSetting_Validation(t *testing.T) {
 
 func TestCreateSecretSetting_Validation(t *testing.T) {
 	t.Run("missing user context returns unauthorized", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Post("/settings/custom/secret", handler.CreateSecretSetting)
@@ -311,7 +311,7 @@ func TestCreateSecretSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("missing key", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Post("/settings/custom/secret", func(c fiber.Ctx) error {
@@ -336,7 +336,7 @@ func TestCreateSecretSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("missing value", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Post("/settings/custom/secret", func(c fiber.Ctx) error {
@@ -363,7 +363,7 @@ func TestCreateSecretSetting_Validation(t *testing.T) {
 
 func TestGetSecretSetting_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Get("/settings/custom/secret/*", handler.GetSecretSetting)
@@ -380,7 +380,7 @@ func TestGetSecretSetting_Validation(t *testing.T) {
 
 func TestDeleteSecretSetting_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewCustomSettingsHandler(nil)
 
 		app.Delete("/settings/custom/secret/*", handler.DeleteSecretSetting)

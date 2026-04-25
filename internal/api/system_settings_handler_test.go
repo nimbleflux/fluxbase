@@ -212,7 +212,7 @@ func TestGetDefaultSetting(t *testing.T) {
 
 func TestGetSetting_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 
 		app.Get("/settings/*", handler.GetSetting)
@@ -237,7 +237,7 @@ func TestGetSetting_Validation(t *testing.T) {
 
 func TestUpdateSetting_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 
 		app.Put("/settings/*", handler.UpdateSetting)
@@ -259,7 +259,7 @@ func TestUpdateSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 
 		app.Put("/settings/*", handler.UpdateSetting)
@@ -280,7 +280,7 @@ func TestUpdateSetting_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid setting key", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 
 		app.Put("/settings/*", handler.UpdateSetting)
@@ -299,7 +299,7 @@ func TestUpdateSetting_Validation(t *testing.T) {
 		var result map[string]interface{}
 		_ = json.Unmarshal(respBody, &result)
 		assert.Equal(t, "Invalid setting key", result["error"])
-		assert.Equal(t, "INVALID_SETTING_KEY", result["code"])
+		assert.Equal(t, "INVALID_INPUT", result["code"])
 	})
 }
 
@@ -309,7 +309,7 @@ func TestUpdateSetting_Validation(t *testing.T) {
 
 func TestDeleteSetting_Validation(t *testing.T) {
 	t.Run("empty key returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 
 		app.Delete("/settings/*", handler.DeleteSetting)
@@ -391,7 +391,7 @@ func TestSystemSettingsResponseFormats(t *testing.T) {
 
 func TestSystemSettingsInternalErrors(t *testing.T) {
 	t.Run("list settings with nil service returns 500", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 		app.Get("/settings", handler.ListSettings)
 
@@ -403,13 +403,11 @@ func TestSystemSettingsInternalErrors(t *testing.T) {
 		assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
 
 		body, _ := io.ReadAll(resp.Body)
-		var result map[string]interface{}
-		_ = json.Unmarshal(body, &result)
-		assert.Equal(t, "Settings service not initialized", result["error"])
+		assert.Contains(t, string(body), "not_initialized")
 	})
 
 	t.Run("delete setting with nil service returns 500", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 		app.Delete("/settings/*", handler.DeleteSetting)
 
@@ -421,9 +419,7 @@ func TestSystemSettingsInternalErrors(t *testing.T) {
 		assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
 
 		body, _ := io.ReadAll(resp.Body)
-		var result map[string]interface{}
-		_ = json.Unmarshal(body, &result)
-		assert.Equal(t, "Settings service not initialized", result["error"])
+		assert.Contains(t, string(body), "not_initialized")
 	})
 }
 
@@ -474,7 +470,7 @@ func TestSettingCategories(t *testing.T) {
 
 func TestSystemSettingsHTTPMethods(t *testing.T) {
 	t.Run("list settings uses GET", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 		app.Get("/settings", handler.ListSettings)
 
@@ -488,7 +484,7 @@ func TestSystemSettingsHTTPMethods(t *testing.T) {
 	})
 
 	t.Run("get setting uses GET", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 		app.Get("/settings/*", handler.GetSetting)
 
@@ -502,7 +498,7 @@ func TestSystemSettingsHTTPMethods(t *testing.T) {
 	})
 
 	t.Run("update setting uses PUT", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 		app.Put("/settings/*", handler.UpdateSetting)
 
@@ -516,7 +512,7 @@ func TestSystemSettingsHTTPMethods(t *testing.T) {
 	})
 
 	t.Run("delete setting uses DELETE", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewSystemSettingsHandler(nil, nil)
 		app.Delete("/settings/*", handler.DeleteSetting)
 

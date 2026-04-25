@@ -378,7 +378,7 @@ func TestIdentityRoutes(t *testing.T) {
 		switch resp.StatusCode {
 		case http.StatusBadRequest:
 			// OAuth not configured - this is expected in test environment
-			assert.Contains(t, result["error"], "invalid OAuth provider")
+			assert.Contains(t, result["error"], "Failed to link identity")
 		case http.StatusOK:
 			// OAuth configured - should have URL
 			assert.NotNil(t, result["url"])

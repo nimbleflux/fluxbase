@@ -398,7 +398,7 @@ func TestUpdateAppSettingsRequest_Struct(t *testing.T) {
 
 func TestUpdateAppSettings_Validation(t *testing.T) {
 	t.Run("invalid request body returns error", func(t *testing.T) {
-		app := fiber.New()
+		app := newTestApp(t)
 		handler := NewAppSettingsHandler(nil, nil, nil)
 
 		app.Put("/admin/app/settings", handler.UpdateAppSettings)

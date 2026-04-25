@@ -15,7 +15,6 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
-// VectorHandler handles vector search endpoints
 type VectorHandler struct {
 	vectorManager   *VectorManager
 	config          *config.AIConfig
@@ -24,7 +23,6 @@ type VectorHandler struct {
 	db              *database.Connection
 }
 
-// NewVectorHandler creates a new vector handler using a VectorManager
 func NewVectorHandler(vectorManager *VectorManager, schemaInspector *database.SchemaInspector, db *database.Connection, baseConfig *config.Config) (*VectorHandler, error) {
 	handler := &VectorHandler{
 		vectorManager:   vectorManager,
@@ -37,8 +35,6 @@ func NewVectorHandler(vectorManager *VectorManager, schemaInspector *database.Sc
 	return handler, nil
 }
 
-// getConfig returns the AI config to use for the current request.
-// It checks for tenant-specific config in fiber context locals and falls back to base config.
 func (h *VectorHandler) getConfig(c fiber.Ctx) *config.AIConfig {
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
 		return &tc.AI
@@ -49,17 +45,13 @@ func (h *VectorHandler) getConfig(c fiber.Ctx) *config.AIConfig {
 	return &h.baseConfig.AI
 }
 
-// inferProviderType determines the AI provider type from explicit config or client keys
 func inferProviderType(cfg *config.AIConfig) string {
-	// First check explicit embedding provider
 	if cfg.EmbeddingProvider != "" {
 		return cfg.EmbeddingProvider
 	}
-	// Then check explicit AI provider type
 	if cfg.ProviderType != "" {
 		return cfg.ProviderType
 	}
-	// Infer from configured client keys (in order of preference)
 	if cfg.OpenAIAPIKey != "" {
 		return "openai"
 	}
@@ -72,12 +64,9 @@ func inferProviderType(cfg *config.AIConfig) string {
 	return ""
 }
 
-// buildEmbeddingConfig builds the embedding service config from AI config
 func buildEmbeddingConfig(cfg *config.AIConfig) (ai.EmbeddingServiceConfig, error) {
-	// Determine provider type (fallback to main provider or infer from client keys)
 	providerType := inferProviderType(cfg)
 
-	// Determine default model based on provider if not explicitly set
 	defaultModel := cfg.EmbeddingModel
 	if defaultModel == "" {
 		switch providerType {
@@ -90,7 +79,6 @@ func buildEmbeddingConfig(cfg *config.AIConfig) (ai.EmbeddingServiceConfig, erro
 		}
 	}
 
-	// Build provider config using the map-based configuration
 	providerCfg := ai.ProviderConfig{
 		Type:   ai.ProviderType(providerType),
 		Model:  defaultModel,
@@ -130,19 +118,14 @@ func buildEmbeddingConfig(cfg *config.AIConfig) (ai.EmbeddingServiceConfig, erro
 	}, nil
 }
 
-// buildEmbeddingConfigFromAIProvider builds embedding config using AI provider settings as fallback
-// This allows embeddings to work when only the main AI provider is configured (e.g., OpenAI for chatbots)
-// or when the provider can be inferred from client keys
 func buildEmbeddingConfigFromAIProvider(cfg *config.AIConfig) (ai.EmbeddingServiceConfig, error) {
 	providerType := inferProviderType(cfg)
 
-	// Build provider config using the main AI provider credentials
 	providerCfg := ai.ProviderConfig{
 		Type:   ai.ProviderType(providerType),
 		Config: make(map[string]string),
 	}
 
-	// Determine default embedding model based on provider
 	var defaultModel string
 
 	switch providerType {
@@ -165,7 +148,6 @@ func buildEmbeddingConfigFromAIProvider(cfg *config.AIConfig) (ai.EmbeddingServi
 		}
 		providerCfg.Config["api_key"] = cfg.AzureAPIKey
 		providerCfg.Config["endpoint"] = cfg.AzureEndpoint
-		// For Azure, we need a deployment name - try embedding-specific first, then fall back to main
 		deploymentName := cfg.AzureEmbeddingDeploymentName
 		if deploymentName == "" {
 			deploymentName = cfg.AzureDeploymentName
@@ -191,7 +173,6 @@ func buildEmbeddingConfigFromAIProvider(cfg *config.AIConfig) (ai.EmbeddingServi
 		return ai.EmbeddingServiceConfig{}, fmt.Errorf("unsupported provider type for embedding fallback: %s", providerType)
 	}
 
-	// Use explicit embedding model if configured, otherwise use provider default
 	if cfg.EmbeddingModel != "" {
 		defaultModel = cfg.EmbeddingModel
 	}
@@ -204,15 +185,13 @@ func buildEmbeddingConfigFromAIProvider(cfg *config.AIConfig) (ai.EmbeddingServi
 	}, nil
 }
 
-// EmbedRequest represents a request to generate embeddings
 type EmbedRequest struct {
-	Text     string   `json:"text,omitempty"`     // Single text to embed
-	Texts    []string `json:"texts,omitempty"`    // Multiple texts to embed
-	Model    string   `json:"model,omitempty"`    // Optional model override
-	Provider string   `json:"provider,omitempty"` // Optional provider ID (admin-only)
+	Text     string   `json:"text,omitempty"`
+	Texts    []string `json:"texts,omitempty"`
+	Model    string   `json:"model,omitempty"`
+	Provider string   `json:"provider,omitempty"`
 }
 
-// EmbedResponse represents the response from embedding generation
 type EmbedResponse struct {
 	Embeddings [][]float32 `json:"embeddings"`
 	Model      string      `json:"model"`
@@ -220,72 +199,57 @@ type EmbedResponse struct {
 	Usage      *EmbedUsage `json:"usage,omitempty"`
 }
 
-// EmbedUsage represents token usage for embedding
 type EmbedUsage struct {
 	PromptTokens int `json:"prompt_tokens"`
 	TotalTokens  int `json:"total_tokens"`
 }
 
-// VectorSearchRequest represents a request for vector search
 type VectorSearchRequest struct {
 	Table          string              `json:"table"`
 	Column         string              `json:"column"`
-	Query          string              `json:"query,omitempty"`  // Text to search (will be auto-embedded)
-	Vector         []float64           `json:"vector,omitempty"` // Direct vector input
-	Metric         string              `json:"metric,omitempty"` // Distance metric: l2, cosine, inner_product
+	Query          string              `json:"query,omitempty"`
+	Vector         []float64           `json:"vector,omitempty"`
+	Metric         string              `json:"metric,omitempty"`
 	MatchThreshold *float64            `json:"match_threshold,omitempty"`
 	MatchCount     *int                `json:"match_count,omitempty"`
 	Select         string              `json:"select,omitempty"`
 	Filters        []VectorQueryFilter `json:"filters,omitempty"`
 }
 
-// VectorQueryFilter represents a filter for the search
 type VectorQueryFilter struct {
 	Column   string      `json:"column"`
 	Operator string      `json:"operator"`
 	Value    interface{} `json:"value"`
 }
 
-// VectorSearchResponse represents the response from vector search
 type VectorSearchResponse struct {
 	Data      []map[string]interface{} `json:"data"`
 	Distances []float64                `json:"distances,omitempty"`
 	Model     string                   `json:"model,omitempty"`
 }
 
-// HandleEmbed handles POST /api/v1/vector/embed
 func (h *VectorHandler) HandleEmbed(c fiber.Ctx) error {
 	var req EmbedRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Determine which embedding service to use
 	var embeddingService *ai.EmbeddingService
 	var err error
 
 	if req.Provider != "" {
-		// Provider selection is admin-only
 		role, _ := c.Locals("user_role").(string)
 		isAdmin := role == "admin" || role == "instance_admin" || role == "service_role" || role == "tenant_service"
 
 		if !isAdmin {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Provider selection requires admin privileges",
-			})
+			return SendForbidden(c, "Provider selection requires admin privileges", ErrCodeAccessDenied)
 		}
 
-		// Get embedding service for specified provider
 		embeddingService, err = h.vectorManager.GetEmbeddingServiceForProvider(c.RequestCtx(), req.Provider)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
-			})
+			return SendBadRequest(c, "Invalid embedding provider", ErrCodeInvalidInput)
 		}
 	} else {
-		// Use default embedding service
 		embeddingService = h.vectorManager.GetEmbeddingService()
 	}
 
@@ -295,7 +259,6 @@ func (h *VectorHandler) HandleEmbed(c fiber.Ctx) error {
 		})
 	}
 
-	// Collect texts to embed
 	var texts []string
 	if req.Text != "" {
 		texts = append(texts, req.Text)
@@ -303,18 +266,13 @@ func (h *VectorHandler) HandleEmbed(c fiber.Ctx) error {
 	texts = append(texts, req.Texts...)
 
 	if len(texts) == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "No text provided for embedding",
-		})
+		return SendBadRequest(c, "No text provided for embedding", ErrCodeInvalidInput)
 	}
 
-	// Generate embeddings
 	resp, err := embeddingService.Embed(c.RequestCtx(), texts, req.Model)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate embeddings")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to generate embeddings: " + err.Error(),
-		})
+		return SendInternalError(c, "Failed to generate embeddings")
 	}
 
 	result := EmbedResponse{
@@ -333,8 +291,6 @@ func (h *VectorHandler) HandleEmbed(c fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// HandleSearch handles POST /api/v1/vector/search
-// This is a convenience endpoint that auto-embeds query text and performs vector similarity search
 func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 	if h.db == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -343,32 +299,23 @@ func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 	}
 
 	var req VectorSearchRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	if req.Table == "" || req.Column == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "table and column are required",
-		})
+		return SendBadRequest(c, "table and column are required", ErrCodeMissingField)
 	}
 
-	// Validate table and column names (prevent SQL injection)
 	if !isValidIdentifier(req.Table) || !isValidIdentifier(req.Column) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid table or column name",
-		})
+		return SendBadRequest(c, "Invalid table or column name", ErrCodeInvalidInput)
 	}
 
-	// Determine the query vector
 	var queryVector []float64
 	var embeddingModel string
 
 	//nolint:gocritic // Conditions check different request fields, not switch-compatible
 	if req.Query != "" {
-		// Auto-embed the query text
 		embeddingService := h.vectorManager.GetEmbeddingService()
 		if embeddingService == nil {
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -379,12 +326,9 @@ func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 		embedding, err := embeddingService.EmbedSingle(c.RequestCtx(), req.Query, "")
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to embed query")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to embed query: " + err.Error(),
-			})
+			return SendInternalError(c, "Failed to embed query")
 		}
 
-		// Convert float32 to float64
 		queryVector = make([]float64, len(embedding))
 		for i, v := range embedding {
 			queryVector[i] = float64(v)
@@ -393,12 +337,9 @@ func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 	} else if len(req.Vector) > 0 {
 		queryVector = req.Vector
 	} else {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Either query or vector must be provided",
-		})
+		return SendBadRequest(c, "Either query or vector must be provided", ErrCodeMissingField)
 	}
 
-	// Validate and normalize metric
 	metric := strings.ToLower(req.Metric)
 	if metric == "" {
 		metric = "cosine"
@@ -413,15 +354,11 @@ func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 	case "inner_product", "ip":
 		distanceOp = "<#>"
 	default:
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid metric; use l2, cosine, or inner_product",
-		})
+		return SendBadRequest(c, "Invalid metric; use l2, cosine, or inner_product", ErrCodeInvalidInput)
 	}
 
-	// Build select columns
 	selectCols := "*"
 	if req.Select != "" {
-		// Validate select columns
 		cols := strings.Split(req.Select, ",")
 		validCols := make([]string, 0, len(cols))
 		for _, col := range cols {
@@ -435,19 +372,14 @@ func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 		}
 	}
 
-	// Set defaults
 	matchCount := 10
 	if req.MatchCount != nil && *req.MatchCount > 0 {
 		matchCount = *req.MatchCount
 		if matchCount > 1000 {
-			matchCount = 1000 // Cap at 1000
+			matchCount = 1000
 		}
 	}
 
-	// Get user context for RLS
-	// The middleware can set either:
-	// 1. A *auth.TokenClaims struct in "user" local
-	// 2. Individual fields: "user_id", "user_role", etc.
 	userID := ""
 	userRole := "anon"
 	var claims *auth.TokenClaims
@@ -456,20 +388,17 @@ func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 		userRole = user.Role
 		claims = user
 	} else {
-		// Try individual locals (set by OptionalAuthOrServiceKey middleware)
 		if id, ok := c.Locals("user_id").(string); ok && id != "" {
 			userID = id
 		}
 		if role, ok := c.Locals("user_role").(string); ok && role != "" {
 			userRole = role
 		}
-		// Try to get claims from jwt_claims local
 		if jwtClaims, ok := c.Locals("jwt_claims").(*auth.TokenClaims); ok {
 			claims = jwtClaims
 		}
 	}
 
-	// Execute vector search with RLS context
 	data, distances, err := h.executeVectorSearch(middleware.CtxWithTenant(c), vectorSearchParams{
 		table:          req.Table,
 		column:         req.Column,
@@ -488,9 +417,7 @@ func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 			Str("table", req.Table).
 			Str("column", req.Column).
 			Msg("Vector search failed")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Vector search failed: " + err.Error(),
-		})
+		return SendInternalError(c, "Vector search failed")
 	}
 
 	result := VectorSearchResponse{
@@ -509,7 +436,6 @@ func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// vectorSearchParams holds parameters for vector search execution
 type vectorSearchParams struct {
 	table          string
 	column         string
@@ -524,26 +450,20 @@ type vectorSearchParams struct {
 	claims         *auth.TokenClaims
 }
 
-// executeVectorSearch executes the vector similarity search with RLS context
 func (h *VectorHandler) executeVectorSearch(ctx context.Context, params vectorSearchParams) ([]map[string]interface{}, []float64, error) {
-	// Format the vector as PostgreSQL array literal
 	vectorStr := formatVectorLiteral(params.queryVector)
 
-	// Build the base query
-	// Using subquery to calculate distance once
 	query := fmt.Sprintf(`
 		SELECT %s, (%s %s '%s'::vector) as _distance
 		FROM %s
 		WHERE 1=1
 	`, params.selectCols, params.column, params.distanceOp, vectorStr, params.table)
 
-	// Add threshold filter if specified
 	if params.matchThreshold != nil {
 		query += fmt.Sprintf(" AND (%s %s '%s'::vector) < %f",
 			params.column, params.distanceOp, vectorStr, *params.matchThreshold)
 	}
 
-	// Add custom filters
 	for i, filter := range params.filters {
 		if !isValidIdentifier(filter.Column) {
 			continue
@@ -552,39 +472,32 @@ func (h *VectorHandler) executeVectorSearch(ctx context.Context, params vectorSe
 		if op == "" {
 			continue
 		}
-		// Use parameter placeholder to prevent injection
 		query += fmt.Sprintf(" AND %s %s $%d", filter.Column, op, i+1)
 	}
 
-	// Add ordering and limit
 	query += fmt.Sprintf(" ORDER BY _distance LIMIT %d", params.matchCount)
 
-	// Collect filter values for parameterized query
 	filterValues := make([]interface{}, len(params.filters))
 	for i, filter := range params.filters {
 		filterValues[i] = filter.Value
 	}
 
-	// Execute with RLS context
 	tx, err := h.db.Pool().Begin(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Set RLS context
 	if err := middleware.SetRLSContext(ctx, tx, params.userID, params.userRole, params.claims); err != nil {
 		return nil, nil, fmt.Errorf("failed to set RLS context: %w", err)
 	}
 
-	// Execute query
 	rows, err := tx.Query(ctx, query, filterValues...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
 
-	// Collect results
 	var data []map[string]interface{}
 	var distances []float64
 
@@ -624,7 +537,6 @@ func (h *VectorHandler) executeVectorSearch(ctx context.Context, params vectorSe
 	return data, distances, nil
 }
 
-// formatVectorLiteral formats a float64 slice as PostgreSQL vector literal
 func formatVectorLiteral(v []float64) string {
 	parts := make([]string, len(v))
 	for i, f := range v {
@@ -633,7 +545,6 @@ func formatVectorLiteral(v []float64) string {
 	return "[" + strings.Join(parts, ",") + "]"
 }
 
-// normalizeOperator converts filter operators to SQL operators
 func normalizeOperator(op string) string {
 	switch strings.ToLower(op) {
 	case "eq", "=":
@@ -661,17 +572,14 @@ func normalizeOperator(op string) string {
 	}
 }
 
-// IsEmbeddingConfigured returns whether the embedding service is available
 func (h *VectorHandler) IsEmbeddingConfigured() bool {
 	return h.vectorManager.GetEmbeddingService() != nil
 }
 
-// GetEmbeddingService returns the embedding service (may be nil if not configured)
 func (h *VectorHandler) GetEmbeddingService() *ai.EmbeddingService {
 	return h.vectorManager.GetEmbeddingService()
 }
 
-// VectorCapabilities represents the vector search capabilities of the system
 type VectorCapabilities struct {
 	Enabled           bool   `json:"enabled"`
 	PgVectorInstalled bool   `json:"pgvector_installed"`
@@ -681,14 +589,9 @@ type VectorCapabilities struct {
 	EmbeddingModel    string `json:"embedding_model,omitempty"`
 }
 
-// HandleGetCapabilities handles GET /api/v1/capabilities/vector
-// Returns information about vector search capabilities
-// Non-admin users only receive minimal info (enabled status)
 func (h *VectorHandler) HandleGetCapabilities(c fiber.Ctx) error {
-	// EmbeddingEnabled reflects actual service availability (including fallback)
 	embeddingAvailable := h.vectorManager.GetEmbeddingService() != nil
 
-	// Check pgvector installation status
 	pgVectorInstalled := false
 	var pgVectorVersion string
 	if h.schemaInspector != nil {
@@ -701,18 +604,15 @@ func (h *VectorHandler) HandleGetCapabilities(c fiber.Ctx) error {
 		}
 	}
 
-	// Check if user has admin role
 	role, _ := c.Locals("user_role").(string)
 	isAdmin := role == "admin" || role == "instance_admin" || role == "service_role" || role == "tenant_service"
 
-	// Non-admin users only get minimal info (enabled status)
 	if !isAdmin {
 		return c.JSON(fiber.Map{
 			"enabled": pgVectorInstalled && embeddingAvailable,
 		})
 	}
 
-	// Admin users get full details
 	caps := VectorCapabilities{
 		Enabled:           pgVectorInstalled && embeddingAvailable,
 		PgVectorInstalled: pgVectorInstalled,
@@ -720,19 +620,15 @@ func (h *VectorHandler) HandleGetCapabilities(c fiber.Ctx) error {
 		EmbeddingEnabled:  embeddingAvailable,
 	}
 
-	// Add embedding provider info if embedding is available
 	if embeddingAvailable {
-		// Get tenant-specific config
 		cfg := h.getConfig(c)
 
-		// Determine actual provider being used
 		provider := cfg.EmbeddingProvider
 		if provider == "" {
 			provider = cfg.ProviderType
 		}
 		caps.EmbeddingProvider = provider
 
-		// Get model from service if available
 		embeddingService := h.vectorManager.GetEmbeddingService()
 		if embeddingService != nil {
 			caps.EmbeddingModel = embeddingService.DefaultModel()
@@ -744,7 +640,6 @@ func (h *VectorHandler) HandleGetCapabilities(c fiber.Ctx) error {
 	return c.JSON(caps)
 }
 
-// IsPgVectorInstalled checks whether pgvector is installed on the database
 func (h *VectorHandler) IsPgVectorInstalled(c fiber.Ctx) bool {
 	if h.schemaInspector == nil {
 		return false

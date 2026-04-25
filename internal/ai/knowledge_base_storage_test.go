@@ -12,7 +12,7 @@ func TestNewKnowledgeBaseStorage(t *testing.T) {
 	t.Run("creates storage with nil db", func(t *testing.T) {
 		storage := NewKnowledgeBaseStorage(nil)
 		assert.NotNil(t, storage)
-		assert.Nil(t, storage.db)
+		assert.Nil(t, storage.DB)
 	})
 }
 

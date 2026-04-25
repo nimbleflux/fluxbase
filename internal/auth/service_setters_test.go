@@ -11,52 +11,52 @@ import (
 // =============================================================================
 
 func TestService_SetEncryptionKey(t *testing.T) {
-	service := &Service{}
+	service := &Service{mfaService: &MFAService{}}
 
 	t.Run("sets encryption key", func(t *testing.T) {
 		key := "test-encryption-key-123"
 		service.SetEncryptionKey(key)
 
-		assert.Equal(t, key, service.encryptionKey)
+		assert.Equal(t, key, service.mfaService.encryptionKey)
 	})
 
 	t.Run("can be updated multiple times", func(t *testing.T) {
 		service.SetEncryptionKey("key1")
-		assert.Equal(t, "key1", service.encryptionKey)
+		assert.Equal(t, "key1", service.mfaService.encryptionKey)
 
 		service.SetEncryptionKey("key2")
-		assert.Equal(t, "key2", service.encryptionKey)
+		assert.Equal(t, "key2", service.mfaService.encryptionKey)
 	})
 
 	t.Run("empty string is allowed", func(t *testing.T) {
 		service.SetEncryptionKey("")
-		assert.Equal(t, "", service.encryptionKey)
+		assert.Equal(t, "", service.mfaService.encryptionKey)
 	})
 }
 
 func TestService_SetTOTPRateLimiter(t *testing.T) {
-	service := &Service{}
+	service := &Service{mfaService: &MFAService{}}
 
 	t.Run("sets TOTP rate limiter", func(t *testing.T) {
 		limiter := &TOTPRateLimiter{}
 		service.SetTOTPRateLimiter(limiter)
 
-		assert.Same(t, limiter, service.totpRateLimiter)
+		assert.Same(t, limiter, service.mfaService.totpRateLimiter)
 	})
 
 	t.Run("can be updated", func(t *testing.T) {
 		limiter1 := &TOTPRateLimiter{}
 		service.SetTOTPRateLimiter(limiter1)
-		assert.Same(t, limiter1, service.totpRateLimiter)
+		assert.Same(t, limiter1, service.mfaService.totpRateLimiter)
 
 		limiter2 := &TOTPRateLimiter{}
 		service.SetTOTPRateLimiter(limiter2)
-		assert.Same(t, limiter2, service.totpRateLimiter)
+		assert.Same(t, limiter2, service.mfaService.totpRateLimiter)
 	})
 
 	t.Run("nil is allowed", func(t *testing.T) {
 		service.SetTOTPRateLimiter(nil)
-		assert.Nil(t, service.totpRateLimiter)
+		assert.Nil(t, service.mfaService.totpRateLimiter)
 	})
 }
 

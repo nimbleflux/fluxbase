@@ -15,19 +15,16 @@ import (
 
 // KnowledgeGraph handles entity and relationship storage and queries
 type KnowledgeGraph struct {
+	database.TenantAware
 	storage *KnowledgeBaseStorage
 }
 
 // NewKnowledgeGraph creates a new knowledge graph service
 func NewKnowledgeGraph(storage *KnowledgeBaseStorage) *KnowledgeGraph {
 	return &KnowledgeGraph{
-		storage: storage,
+		TenantAware: database.TenantAware{DB: storage.DB},
+		storage:     storage,
 	}
-}
-
-func (kg *KnowledgeGraph) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	tenantID := database.TenantFromContext(ctx)
-	return database.WrapWithTenantAwareRole(ctx, kg.storage.db, tenantID, fn)
 }
 
 // ============================================================================
@@ -57,7 +54,7 @@ func (kg *KnowledgeGraph) AddEntity(ctx context.Context, entity *Entity) error {
 		RETURNING id, created_at, updated_at
 	`
 
-	return kg.withTenant(ctx, func(tx pgx.Tx) error {
+	return kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			entity.ID, entity.KnowledgeBaseID, entity.EntityType, entity.Name,
 			entity.CanonicalName, entity.Aliases, entity.Metadata,
@@ -76,7 +73,7 @@ func (kg *KnowledgeGraph) GetEntity(ctx context.Context, entityID string) (*Enti
 	`
 
 	var entity Entity
-	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+	err := kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, entityID).Scan(
 			&entity.ID, &entity.KnowledgeBaseID, &entity.EntityType, &entity.Name,
 			&entity.CanonicalName, &entity.Aliases, &entity.Metadata,
@@ -112,7 +109,7 @@ func (kg *KnowledgeGraph) ListEntities(ctx context.Context, kbID string, entityT
 	query += " ORDER BY canonical_name"
 
 	entities := make([]Entity, 0)
-	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+	err := kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, args...)
 		if queryErr != nil {
 			return fmt.Errorf("failed to list entities: %w", queryErr)
@@ -162,7 +159,7 @@ func (kg *KnowledgeGraph) SearchEntities(ctx context.Context, kbID string, query
 	}
 
 	entities := make([]Entity, 0)
-	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+	err := kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, sqlQuery, kbID, query, typeStrings, limit)
 		if queryErr != nil {
 			return fmt.Errorf("failed to search entities: %w", queryErr)
@@ -215,7 +212,7 @@ func (kg *KnowledgeGraph) AddRelationship(ctx context.Context, rel *EntityRelati
 		RETURNING created_at
 	`
 
-	return kg.withTenant(ctx, func(tx pgx.Tx) error {
+	return kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query,
 			rel.ID, rel.KnowledgeBaseID, rel.SourceEntityID, rel.TargetEntityID,
 			rel.RelationshipType, rel.Direction, rel.Confidence, rel.Metadata,
@@ -241,7 +238,7 @@ func (kg *KnowledgeGraph) GetRelationships(ctx context.Context, kbID string, ent
 	`
 
 	relationships := make([]EntityRelationship, 0)
-	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+	err := kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, kbID, entityID)
 		if queryErr != nil {
 			return fmt.Errorf("failed to get relationships: %w", queryErr)
@@ -304,7 +301,7 @@ func (kg *KnowledgeGraph) FindRelatedEntities(ctx context.Context, kbID string, 
 	}
 
 	related := make([]RelatedEntity, 0)
-	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+	err := kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, kbID, entityID, maxDepth, typeStrings)
 		if queryErr != nil {
 			return fmt.Errorf("failed to find related entities: %w", queryErr)
@@ -355,7 +352,7 @@ func (kg *KnowledgeGraph) AddDocumentEntities(ctx context.Context, docEntities [
 			context = EXCLUDED.context
 	`
 
-	return kg.withTenant(ctx, func(tx pgx.Tx) error {
+	return kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		for _, de := range docEntities {
 			if de.ID == "" {
 				de.ID = uuid.New().String()
@@ -391,7 +388,7 @@ func (kg *KnowledgeGraph) GetDocumentEntities(ctx context.Context, documentID st
 	`
 
 	docEntities := make([]DocumentEntity, 0)
-	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+	err := kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, documentID)
 		if queryErr != nil {
 			return fmt.Errorf("failed to get document entities: %w", queryErr)
@@ -436,7 +433,7 @@ func (kg *KnowledgeGraph) GetEntitiesByDocument(ctx context.Context, documentID 
 	`
 
 	entities := make([]Entity, 0)
-	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+	err := kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		rows, queryErr := tx.Query(ctx, query, documentID)
 		if queryErr != nil {
 			return fmt.Errorf("failed to get document entities: %w", queryErr)
@@ -484,7 +481,7 @@ func (kg *KnowledgeGraph) BatchAddEntities(ctx context.Context, entities []Entit
 			updated_at = NOW()
 	`
 
-	return kg.withTenant(ctx, func(tx pgx.Tx) error {
+	return kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		batch := &pgx.Batch{}
 
 		for _, entity := range entities {
@@ -533,7 +530,7 @@ func (kg *KnowledgeGraph) DeleteOrphanedEntitiesByDocument(ctx context.Context, 
 	`
 
 	var rowsAffected int64
-	err := kg.withTenant(ctx, func(tx pgx.Tx) error {
+	err := kg.WithTenant(ctx, func(tx pgx.Tx) error {
 		result, execErr := tx.Exec(ctx, query, documentID)
 		if execErr != nil {
 			return fmt.Errorf("failed to delete orphaned entities: %w", execErr)

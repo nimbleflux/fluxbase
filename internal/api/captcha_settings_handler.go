@@ -12,16 +12,14 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/settings"
 )
 
-// CaptchaSettingsHandler handles captcha configuration management
 type CaptchaSettingsHandler struct {
 	settingsService *auth.SystemSettingsService
 	settingsCache   *auth.SettingsCache
 	secretsService  *settings.SecretsService
-	envConfig       *config.SecurityConfig // Fallback config from environment
-	captchaService  *auth.CaptchaService   // Service to reload after updates
+	envConfig       *config.SecurityConfig
+	captchaService  *auth.CaptchaService
 }
 
-// NewCaptchaSettingsHandler creates a new captcha settings handler
 func NewCaptchaSettingsHandler(
 	settingsService *auth.SystemSettingsService,
 	settingsCache *auth.SettingsCache,
@@ -38,31 +36,28 @@ func NewCaptchaSettingsHandler(
 	}
 }
 
-// CaptchaSettingsResponse represents the captcha settings returned to the UI
 type CaptchaSettingsResponse struct {
 	Enabled        bool     `json:"enabled"`
 	Provider       string   `json:"provider"`
 	SiteKey        string   `json:"site_key"`
-	SecretKeySet   bool     `json:"secret_key_set"`  // true if secret key is configured
-	ScoreThreshold float64  `json:"score_threshold"` // For reCAPTCHA v3
-	Endpoints      []string `json:"endpoints"`       // Protected endpoints
-	CapServerURL   string   `json:"cap_server_url"`  // For Cap provider
-	CapAPIKeySet   bool     `json:"cap_api_key_set"` // true if Cap API key is configured
+	SecretKeySet   bool     `json:"secret_key_set"`
+	ScoreThreshold float64  `json:"score_threshold"`
+	Endpoints      []string `json:"endpoints"`
+	CapServerURL   string   `json:"cap_server_url"`
+	CapAPIKeySet   bool     `json:"cap_api_key_set"`
 
-	// Override information
 	Overrides map[string]OverrideInfo `json:"_overrides"`
 }
 
-// UpdateCaptchaSettingsRequest represents the request to update captcha settings
 type UpdateCaptchaSettingsRequest struct {
 	Enabled        *bool     `json:"enabled,omitempty"`
 	Provider       *string   `json:"provider,omitempty"`
 	SiteKey        *string   `json:"site_key,omitempty"`
-	SecretKey      *string   `json:"secret_key,omitempty"`      // Only set if changing
-	ScoreThreshold *float64  `json:"score_threshold,omitempty"` // For reCAPTCHA v3
+	SecretKey      *string   `json:"secret_key,omitempty"`
+	ScoreThreshold *float64  `json:"score_threshold,omitempty"`
 	Endpoints      *[]string `json:"endpoints,omitempty"`
-	CapServerURL   *string   `json:"cap_server_url,omitempty"` // For Cap provider
-	CapAPIKey      *string   `json:"cap_api_key,omitempty"`    // Only set if changing
+	CapServerURL   *string   `json:"cap_server_url,omitempty"`
+	CapAPIKey      *string   `json:"cap_api_key,omitempty"`
 }
 
 var validProviders = map[string]bool{
@@ -79,8 +74,6 @@ var validEndpoints = map[string]bool{
 	"magic_link":     true,
 }
 
-// GetSettings returns the current captcha settings
-// GET /api/v1/admin/settings/captcha
 func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 	ctx := context.Background()
 
@@ -88,7 +81,6 @@ func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 		Overrides: make(map[string]OverrideInfo),
 	}
 
-	// Helper to get string value with override check
 	getString := func(key, defaultVal string) (string, bool) {
 		if h.settingsCache != nil && h.settingsCache.IsOverriddenByEnv(key) {
 			return h.settingsCache.GetString(ctx, key, defaultVal), true
@@ -96,7 +88,6 @@ func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 		return h.settingsCache.GetString(ctx, key, defaultVal), false
 	}
 
-	// Helper to get bool value with override check
 	getBool := func(key string, defaultVal bool) (bool, bool) {
 		if h.settingsCache != nil && h.settingsCache.IsOverriddenByEnv(key) {
 			return h.settingsCache.GetBool(ctx, key, defaultVal), true
@@ -104,7 +95,6 @@ func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 		return h.settingsCache.GetBool(ctx, key, defaultVal), false
 	}
 
-	// Helper to get float64 value with override check
 	getFloat64 := func(key string, defaultVal float64) (float64, bool) {
 		var result float64
 		if h.settingsCache != nil {
@@ -116,7 +106,6 @@ func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 		return defaultVal, false
 	}
 
-	// Helper to get string slice with override check
 	getStringSlice := func(key string, defaultVal []string) ([]string, bool) {
 		var result []string
 		if h.settingsCache != nil {
@@ -128,7 +117,6 @@ func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 		return defaultVal, false
 	}
 
-	// Helper to add override info
 	addOverride := func(field, key string) {
 		if h.settingsCache != nil && h.settingsCache.IsOverriddenByEnv(key) {
 			response.Overrides[field] = OverrideInfo{
@@ -138,7 +126,6 @@ func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 		}
 	}
 
-	// Get basic settings
 	response.Enabled, _ = getBool("app.security.captcha.enabled", false)
 	addOverride("enabled", "app.security.captcha.enabled")
 
@@ -148,7 +135,6 @@ func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 	response.SiteKey, _ = getString("app.security.captcha.site_key", "")
 	addOverride("site_key", "app.security.captcha.site_key")
 
-	// Check if secret key is set (don't return the actual value)
 	secretKey, _ := getString("app.security.captcha.secret_key", "")
 	response.SecretKeySet = secretKey != ""
 	addOverride("secret_key", "app.security.captcha.secret_key")
@@ -159,7 +145,6 @@ func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 	response.Endpoints, _ = getStringSlice("app.security.captcha.endpoints", []string{"signup", "login", "password_reset", "magic_link"})
 	addOverride("endpoints", "app.security.captcha.endpoints")
 
-	// Cap provider settings
 	response.CapServerURL, _ = getString("app.security.captcha.cap_server_url", "")
 	addOverride("cap_server_url", "app.security.captcha.cap_server_url")
 
@@ -170,71 +155,43 @@ func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// UpdateSettings updates captcha settings
-// PUT /api/v1/admin/settings/captcha
 func (h *CaptchaSettingsHandler) UpdateSettings(c fiber.Ctx) error {
 	ctx := context.Background()
 
 	var req UpdateCaptchaSettingsRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse update captcha settings request")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Validate provider if provided
 	if req.Provider != nil {
 		if !validProviders[*req.Provider] {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid provider. Must be one of: hcaptcha, recaptcha_v3, turnstile, cap",
-				"code":  "INVALID_PROVIDER",
-			})
+			return SendBadRequest(c, "Invalid provider. Must be one of: hcaptcha, recaptcha_v3, turnstile, cap", ErrCodeInvalidInput)
 		}
 	}
 
-	// Validate endpoints if provided
 	if req.Endpoints != nil {
 		for _, endpoint := range *req.Endpoints {
 			if !validEndpoints[endpoint] {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": fmt.Sprintf("Invalid endpoint: %s. Must be one of: signup, login, password_reset, magic_link", endpoint),
-					"code":  "INVALID_ENDPOINT",
-				})
+				return SendBadRequest(c, fmt.Sprintf("Invalid endpoint: %s. Must be one of: signup, login, password_reset, magic_link", endpoint), ErrCodeInvalidInput)
 			}
 		}
 	}
 
-	// Validate score threshold if provided
 	if req.ScoreThreshold != nil {
 		if *req.ScoreThreshold < 0.0 || *req.ScoreThreshold > 1.0 {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Score threshold must be between 0.0 and 1.0",
-				"code":  "INVALID_SCORE_THRESHOLD",
-			})
+			return SendBadRequest(c, "Score threshold must be between 0.0 and 1.0", ErrCodeInvalidInput)
 		}
 	}
 
-	// Nil check for dependencies (can happen in tests)
 	if h.settingsService == nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Settings service not initialized",
-			"code":  "NOT_INITIALIZED",
-		})
+		return SendInternalError(c, "Settings service not initialized")
 	}
 
-	// Track which settings were updated
 	var updatedKeys []string
 
-	// Helper to update a setting with override check
 	updateSetting := func(key string, value interface{}) error {
-		// Check if overridden by env var or config
 		if h.settingsCache != nil && h.settingsCache.IsOverriddenByEnv(key) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "This setting is controlled by configuration file or environment variable and cannot be changed",
-				"code":  "CONFIG_OVERRIDE",
-				"key":   key,
-			})
+			return SendConflict(c, "This setting is controlled by configuration file or environment variable and cannot be changed", ErrCodeConflict)
 		}
 
 		if err := h.settingsService.SetSetting(ctx, key, map[string]interface{}{"value": value}, ""); err != nil {
@@ -245,31 +202,23 @@ func (h *CaptchaSettingsHandler) UpdateSettings(c fiber.Ctx) error {
 		return nil
 	}
 
-	// Helper to encrypt and update a secret using SecretsService
 	updateSecret := func(key string, value *string) error {
 		if value == nil {
-			return nil // Not updating this field
+			return nil
 		}
 
-		// Check if overridden by env var or config
 		if h.settingsCache != nil && h.settingsCache.IsOverriddenByEnv(key) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "This setting is controlled by configuration file or environment variable and cannot be changed",
-				"code":  "CONFIG_OVERRIDE",
-				"key":   key,
-			})
+			return SendConflict(c, "This setting is controlled by configuration file or environment variable and cannot be changed", ErrCodeConflict)
 		}
 
-		// Use SecretsService to encrypt and store the secret
 		if h.secretsService != nil && *value != "" {
 			if err := h.secretsService.SetSystemSecret(ctx, key, *value, "Captcha provider secret"); err != nil {
 				log.Error().Err(err).Str("key", key).Msg("Failed to store secret")
 				return err
 			}
 		} else if *value == "" {
-			// Clear the secret by deleting it
 			if h.secretsService != nil {
-				_ = h.secretsService.DeleteSystemSecret(ctx, key) // Ignore not found errors
+				_ = h.secretsService.DeleteSystemSecret(ctx, key)
 			}
 		}
 
@@ -277,7 +226,6 @@ func (h *CaptchaSettingsHandler) UpdateSettings(c fiber.Ctx) error {
 		return nil
 	}
 
-	// Update basic settings
 	if req.Enabled != nil {
 		if err := updateSetting("app.security.captcha.enabled", *req.Enabled); err != nil {
 			return err
@@ -312,7 +260,6 @@ func (h *CaptchaSettingsHandler) UpdateSettings(c fiber.Ctx) error {
 		}
 	}
 
-	// Cap provider settings
 	if req.CapServerURL != nil {
 		if err := updateSetting("app.security.captcha.cap_server_url", *req.CapServerURL); err != nil {
 			return err
@@ -323,23 +270,19 @@ func (h *CaptchaSettingsHandler) UpdateSettings(c fiber.Ctx) error {
 		return err
 	}
 
-	// Invalidate cache for all updated keys to ensure GetSettings returns fresh values
 	if h.settingsCache != nil && len(updatedKeys) > 0 {
 		for _, key := range updatedKeys {
 			h.settingsCache.Invalidate(key)
 		}
 	}
 
-	// Refresh captcha service with new settings
 	if h.captchaService != nil && len(updatedKeys) > 0 {
 		if err := h.captchaService.ReloadFromSettings(ctx, h.settingsCache, h.envConfig); err != nil {
 			log.Warn().Err(err).Msg("Failed to refresh captcha service after settings update")
-			// Don't fail the request - settings are saved, service will refresh on next restart
 		}
 	}
 
 	log.Info().Strs("keys", updatedKeys).Msg("Captcha settings updated")
 
-	// Return updated settings
 	return h.GetSettings(c)
 }

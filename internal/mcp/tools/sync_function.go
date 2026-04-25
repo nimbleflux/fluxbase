@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/functions"
+	"github.com/nimbleflux/fluxbase/internal/loader"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
@@ -285,69 +286,54 @@ type FunctionConfig struct {
 	RateLimitPerDay      int
 }
 
-// parseFluxbaseAnnotations extracts configuration from @fluxbase: comments in code
 func parseFluxbaseAnnotations(code string) FunctionConfig {
+	annotations := loader.ParseAnnotations(code, []string{"//"})
 	config := FunctionConfig{
-		Timeout:  30,  // Default timeout
-		Memory:   128, // Default memory limit
+		Timeout:  30,
+		Memory:   128,
 		AllowNet: true,
 		AllowEnv: true,
 	}
 
-	// Match @fluxbase:annotation patterns in comments
-	// Process line by line to avoid multiline regex matching issues
-	lineAnnotationPattern := regexp.MustCompile(`^//\s*@fluxbase:(\S+)(?:\s+(.*))?$`)
-	blockAnnotationPattern := regexp.MustCompile(`^\s*\*\s*@fluxbase:(\S+)(?:\s+(.*))?$`)
-
-	lines := strings.Split(code, "\n")
-	for _, line := range lines {
-		trimmedLine := strings.TrimSpace(line)
-
-		var matches []string
-		if matches = lineAnnotationPattern.FindStringSubmatch(trimmedLine); matches == nil {
-			matches = blockAnnotationPattern.FindStringSubmatch(trimmedLine)
+	if _, ok := annotations["public"]; ok {
+		config.IsPublic = true
+	}
+	if _, ok := annotations["allow-unauthenticated"]; ok {
+		config.AllowUnauthenticated = true
+	}
+	if v, ok := annotations["description"]; ok {
+		config.Description = v
+	}
+	if v, ok := annotations["timeout"]; ok {
+		if t, err := strconv.Atoi(v); err == nil && t > 0 {
+			config.Timeout = t
 		}
-
-		if len(matches) < 2 {
-			continue
+	}
+	if v, ok := annotations["memory"]; ok {
+		if m, err := strconv.Atoi(v); err == nil && m > 0 {
+			config.Memory = m
 		}
-
-		annotation := strings.ToLower(strings.TrimSpace(matches[1]))
-		value := ""
-		if len(matches) > 2 {
-			value = strings.TrimSpace(matches[2])
-		}
-
-		switch annotation {
-		case "public":
-			config.IsPublic = true
-		case "allow-unauthenticated":
-			config.AllowUnauthenticated = true
-		case "description":
-			config.Description = value
-		case "timeout":
-			if t, err := strconv.Atoi(value); err == nil && t > 0 {
-				config.Timeout = t
-			}
-		case "memory":
-			if m, err := strconv.Atoi(value); err == nil && m > 0 {
-				config.Memory = m
-			}
-		case "rate-limit":
-			parseRateLimit(value, &config)
-		case "cors-origins":
-			config.CorsOrigins = value
-		case "allow-net":
-			config.AllowNet = true
-		case "deny-net":
-			config.AllowNet = false
-		case "allow-env":
-			config.AllowEnv = true
-		case "deny-env":
-			config.AllowEnv = false
-		case "disable-logs":
-			config.DisableLogs = true
-		}
+	}
+	if v, ok := annotations["rate-limit"]; ok {
+		parseRateLimit(v, &config)
+	}
+	if v, ok := annotations["cors-origins"]; ok {
+		config.CorsOrigins = v
+	}
+	if _, ok := annotations["allow-net"]; ok {
+		config.AllowNet = true
+	}
+	if _, ok := annotations["deny-net"]; ok {
+		config.AllowNet = false
+	}
+	if _, ok := annotations["allow-env"]; ok {
+		config.AllowEnv = true
+	}
+	if _, ok := annotations["deny-env"]; ok {
+		config.AllowEnv = false
+	}
+	if _, ok := annotations["disable-logs"]; ok {
+		config.DisableLogs = true
 	}
 
 	return config

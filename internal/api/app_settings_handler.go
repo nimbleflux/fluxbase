@@ -27,6 +27,13 @@ func NewAppSettingsHandler(settingsService *auth.SystemSettingsService, settings
 	}
 }
 
+func (h *AppSettingsHandler) requireService(c fiber.Ctx) error {
+	if h.settingsService == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // AppSettings represents the structured application settings
 type AppSettings struct {
 	Authentication AuthenticationSettings `json:"authentication"`
@@ -124,13 +131,14 @@ type UpdateAppSettingsRequest struct {
 func (h *AppSettingsHandler) GetAppSettings(c fiber.Ctx) error {
 	ctx := context.Background()
 
-	// Get all system settings
+	if err := h.requireService(c); err != nil {
+		return err
+	}
+
 	settings, err := h.settingsService.ListSettings(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list system settings")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve application settings",
-		})
+		return SendInternalError(c, "Failed to retrieve application settings")
 	}
 
 	// Build structured response
@@ -145,20 +153,18 @@ func (h *AppSettingsHandler) UpdateAppSettings(c fiber.Ctx) error {
 	ctx := context.Background()
 
 	var req UpdateAppSettingsRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse request body")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Update authentication settings
+	if err := h.requireService(c); err != nil {
+		return err
+	}
+
 	if req.Authentication != nil {
 		if err := h.updateAuthSettings(ctx, req.Authentication); err != nil {
 			log.Error().Err(err).Msg("Failed to update authentication settings")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to update authentication settings",
-			})
+			return SendInternalError(c, "Failed to update authentication settings")
 		}
 	}
 
@@ -166,9 +172,7 @@ func (h *AppSettingsHandler) UpdateAppSettings(c fiber.Ctx) error {
 	if req.Features != nil {
 		if err := h.updateFeatureSettings(ctx, req.Features); err != nil {
 			log.Error().Err(err).Msg("Failed to update feature settings")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to update feature settings",
-			})
+			return SendInternalError(c, "Failed to update feature settings")
 		}
 	}
 
@@ -176,9 +180,7 @@ func (h *AppSettingsHandler) UpdateAppSettings(c fiber.Ctx) error {
 	if req.Email != nil {
 		if err := h.updateEmailSettings(ctx, req.Email); err != nil {
 			log.Error().Err(err).Msg("Failed to update email settings")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to update email settings",
-			})
+			return SendInternalError(c, "Failed to update email settings")
 		}
 	}
 
@@ -186,9 +188,7 @@ func (h *AppSettingsHandler) UpdateAppSettings(c fiber.Ctx) error {
 	if req.Security != nil {
 		if err := h.updateSecuritySettings(ctx, req.Security); err != nil {
 			log.Error().Err(err).Msg("Failed to update security settings")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to update security settings",
-			})
+			return SendInternalError(c, "Failed to update security settings")
 		}
 	}
 
@@ -196,9 +196,7 @@ func (h *AppSettingsHandler) UpdateAppSettings(c fiber.Ctx) error {
 	settings, err := h.settingsService.ListSettings(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list system settings after update")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve updated settings",
-		})
+		return SendInternalError(c, "Failed to retrieve updated settings")
 	}
 
 	appSettings := h.buildAppSettings(settings)

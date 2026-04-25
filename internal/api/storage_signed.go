@@ -64,18 +64,14 @@ func (h *StorageHandler) GenerateSignedURL(c fiber.Ctx) error {
 	// Get tenant-specific storage service
 	svc, err := h.getService(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get storage service",
-		})
+		return SendInternalError(c, "Failed to get storage service")
 	}
 
 	bucket := c.Params("bucket")
 	key := c.Params("*")
 
 	if bucket == "" || key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "bucket and key are required",
-		})
+		return SendBadRequest(c, "Bucket and key are required", ErrCodeMissingField)
 	}
 
 	// Parse request body
@@ -91,10 +87,8 @@ func (h *StorageHandler) GenerateSignedURL(c fiber.Ctx) error {
 			Fit     string `json:"fit"`
 		} `json:"transform,omitempty"`
 	}
-	if err := c.Bind().Body(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Default values
@@ -123,9 +117,7 @@ func (h *StorageHandler) GenerateSignedURL(c fiber.Ctx) error {
 	url, err := svc.Provider.GenerateSignedURL(c.RequestCtx(), bucket, key, opts)
 	if err != nil {
 		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to generate signed URL")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to generate signed URL",
-		})
+		return SendInternalError(c, "Failed to generate signed URL")
 	}
 
 	return c.JSON(fiber.Map{
@@ -143,49 +135,39 @@ func (h *StorageHandler) DownloadSignedObject(c fiber.Ctx) error {
 	clientIP := c.IP()
 	if !signedURLRateLimiter.allow(clientIP) {
 		log.Warn().Str("ip", clientIP).Msg("Rate limit exceeded for signed URL download")
-		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"error": "rate limit exceeded, please try again later",
-		})
+		return SendErrorWithCode(c, fiber.StatusTooManyRequests, "Rate limit exceeded, please try again later", ErrCodeRateLimited)
 	}
 
 	token := c.Query("token")
 	if token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "token is required",
-		})
+		return SendBadRequest(c, "Token is required", ErrCodeMissingField)
 	}
 
 	// Get tenant-specific storage service
 	svc, err := h.getService(c)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to get storage service",
-		})
+		return SendInternalError(c, "Failed to get storage service")
 	}
 
 	// Only local storage supports signed URL validation
 	localStorage, ok := svc.Provider.(*storage.LocalStorage)
 	if !ok {
 		// For S3, the signed URL is handled directly by S3
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "this endpoint is only for local storage signed URLs",
-		})
+		return SendBadRequest(c, "This endpoint is only for local storage signed URLs", ErrCodeInvalidInput)
 	}
 
 	// Validate the token (use full validation to get transform options)
 	tokenResult, err := localStorage.ValidateSignedTokenFull(token)
 	if err != nil {
 		log.Warn().Err(err).Msg("Invalid signed URL token")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "invalid or expired token",
-		})
+		return SendUnauthorized(c, "Invalid or expired token", ErrCodeInvalidToken)
 	}
 
 	// Verify the request method matches the token
 	if tokenResult.Method != c.Method() {
-		return c.Status(fiber.StatusMethodNotAllowed).JSON(fiber.Map{
-			"error": fmt.Sprintf("token is only valid for %s requests", tokenResult.Method),
-		})
+		return SendErrorWithCode(c, fiber.StatusMethodNotAllowed,
+			fmt.Sprintf("Token is only valid for %s requests", tokenResult.Method),
+			ErrCodeInvalidInput)
 	}
 
 	// Download the file (no RLS check - token is the authorization)
@@ -197,14 +179,10 @@ func (h *StorageHandler) DownloadSignedObject(c fiber.Ctx) error {
 	reader, object, err := svc.Provider.Download(c.RequestCtx(), tokenResult.Bucket, tokenResult.Key, opts)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "file not found",
-			})
+			return SendNotFound(c, "File not found")
 		}
 		log.Error().Err(err).Str("bucket", tokenResult.Bucket).Str("key", tokenResult.Key).Msg("Failed to download file via signed URL")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to download file",
-		})
+		return SendInternalError(c, "Failed to download file")
 	}
 	defer func() { _ = reader.Close() }()
 

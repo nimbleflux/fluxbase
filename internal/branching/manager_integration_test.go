@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/test/dbhelpers"
 )
 
@@ -24,7 +25,7 @@ func TestManager_checkLimits_Integration(t *testing.T) {
 	defer testCtx.Close()
 
 	// Create a test storage with real connection
-	storage := NewStorage(testCtx.Pool, testEncryptionKey)
+	storage := NewStorage(database.NewConnectionWithPool(testCtx.Pool), testEncryptionKey)
 
 	// Create a config with limits
 	cfg := config.BranchingConfig{
@@ -115,7 +116,7 @@ func TestManager_GetBranchConnectionURL_Integration(t *testing.T) {
 	testCtx := dbhelpers.NewDBTestContext(t)
 	defer testCtx.Close()
 
-	storage := NewStorage(testCtx.Pool, testEncryptionKey)
+	storage := NewStorage(database.NewConnectionWithPool(testCtx.Pool), testEncryptionKey)
 	cfg := config.BranchingConfig{Enabled: true, DatabasePrefix: "test_"}
 
 	manager, err := NewManager(storage, cfg, testCtx.Pool, testCtx.DatabaseURL())
@@ -143,7 +144,7 @@ func TestManager_CreateBranchValidation_Integration(t *testing.T) {
 	testCtx := dbhelpers.NewDBTestContext(t)
 	defer testCtx.Close()
 
-	storage := NewStorage(testCtx.Pool, testEncryptionKey)
+	storage := NewStorage(database.NewConnectionWithPool(testCtx.Pool), testEncryptionKey)
 	cfg := config.BranchingConfig{
 		Enabled:            true,
 		MaxBranchesPerUser: 5,
@@ -186,7 +187,7 @@ func TestManager_CreateBranchRequest_Integration(t *testing.T) {
 	testCtx := dbhelpers.NewDBTestContext(t)
 	defer testCtx.Close()
 
-	storage := NewStorage(testCtx.Pool, testEncryptionKey)
+	storage := NewStorage(database.NewConnectionWithPool(testCtx.Pool), testEncryptionKey)
 	cfg := config.BranchingConfig{
 		Enabled:            true,
 		MaxBranchesPerUser: 5,
@@ -241,7 +242,7 @@ func TestManager_GitHubPR_Integration(t *testing.T) {
 	testCtx := dbhelpers.NewDBTestContext(t)
 	defer testCtx.Close()
 
-	storage := NewStorage(testCtx.Pool, testEncryptionKey)
+	storage := NewStorage(database.NewConnectionWithPool(testCtx.Pool), testEncryptionKey)
 	cfg := config.BranchingConfig{
 		Enabled:            true,
 		MaxBranchesPerUser: 5,
@@ -348,7 +349,7 @@ func TestManager_Cleanup_Integration(t *testing.T) {
 	testCtx := dbhelpers.NewDBTestContext(t)
 	defer testCtx.Close()
 
-	storage := NewStorage(testCtx.Pool, testEncryptionKey)
+	storage := NewStorage(database.NewConnectionWithPool(testCtx.Pool), testEncryptionKey)
 	cfg := config.BranchingConfig{
 		Enabled:            true,
 		MaxBranchesPerUser: 5,
@@ -373,7 +374,7 @@ func TestManager_Close_Integration(t *testing.T) {
 	testCtx := dbhelpers.NewDBTestContext(t)
 	defer testCtx.Close()
 
-	storage := NewStorage(testCtx.Pool, testEncryptionKey)
+	storage := NewStorage(database.NewConnectionWithPool(testCtx.Pool), testEncryptionKey)
 	cfg := config.BranchingConfig{
 		Enabled:        true,
 		DatabasePrefix: "test_",
@@ -412,7 +413,7 @@ func TestManager_ErrorHandling_Integration(t *testing.T) {
 		testCtx := dbhelpers.NewDBTestContext(t)
 		defer testCtx.Close()
 
-		storage := NewStorage(testCtx.Pool, testEncryptionKey)
+		storage := NewStorage(database.NewConnectionWithPool(testCtx.Pool), testEncryptionKey)
 		cfg := config.BranchingConfig{
 			Enabled:            true,
 			MaxBranchesPerUser: 1,
@@ -435,7 +436,7 @@ func TestManager_Transaction_Integration(t *testing.T) {
 	testCtx := dbhelpers.NewDBTestContext(t)
 	defer testCtx.Close()
 
-	storage := NewStorage(testCtx.Pool, testEncryptionKey)
+	storage := NewStorage(database.NewConnectionWithPool(testCtx.Pool), testEncryptionKey)
 	cfg := config.BranchingConfig{
 		Enabled:        true,
 		DatabasePrefix: "test_",
@@ -471,7 +472,7 @@ func TestManager_Getters_Integration(t *testing.T) {
 	testCtx := dbhelpers.NewDBTestContext(t)
 	defer testCtx.Close()
 
-	storage := NewStorage(testCtx.Pool, testEncryptionKey)
+	storage := NewStorage(database.NewConnectionWithPool(testCtx.Pool), testEncryptionKey)
 	cfg := config.BranchingConfig{
 		Enabled:            true,
 		MaxBranchesPerUser: 5,

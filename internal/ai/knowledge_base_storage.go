@@ -18,20 +18,12 @@ import (
 
 // KnowledgeBaseStorage handles database operations for knowledge bases
 type KnowledgeBaseStorage struct {
-	db *database.Connection
+	database.TenantAware
 }
 
 // NewKnowledgeBaseStorage creates a new knowledge base storage
 func NewKnowledgeBaseStorage(db *database.Connection) *KnowledgeBaseStorage {
-	return &KnowledgeBaseStorage{db: db}
-}
-
-// withTenant wraps a database operation with tenant-aware role switching.
-// It extracts the tenant ID from the context and sets the appropriate
-// database role for tenant isolation via RLS.
-func (s *KnowledgeBaseStorage) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	tenantID := database.TenantFromContext(ctx)
-	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
+	return &KnowledgeBaseStorage{TenantAware: database.TenantAware{DB: db}}
 }
 
 // ============================================================================
@@ -46,7 +38,7 @@ func (s *KnowledgeBaseStorage) CreateKnowledgeBase(ctx context.Context, kb *Know
 	kb.CreatedAt = time.Now()
 	kb.UpdatedAt = time.Now()
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			INSERT INTO ai.knowledge_bases (
 				id, name, namespace, description,
@@ -69,7 +61,7 @@ func (s *KnowledgeBaseStorage) CreateKnowledgeBase(ctx context.Context, kb *Know
 // GetKnowledgeBase retrieves a knowledge base by ID
 func (s *KnowledgeBaseStorage) GetKnowledgeBase(ctx context.Context, id string) (*KnowledgeBase, error) {
 	var kb KnowledgeBase
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT id, name, namespace, description,
 				embedding_model, embedding_dimensions,
@@ -102,7 +94,7 @@ func (s *KnowledgeBaseStorage) GetKnowledgeBase(ctx context.Context, id string) 
 // GetKnowledgeBaseByName retrieves a knowledge base by name and namespace
 func (s *KnowledgeBaseStorage) GetKnowledgeBaseByName(ctx context.Context, name, namespace string) (*KnowledgeBase, error) {
 	var kb KnowledgeBase
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT id, name, namespace, description,
 				embedding_model, embedding_dimensions,
@@ -133,7 +125,7 @@ func (s *KnowledgeBaseStorage) GetKnowledgeBaseByName(ctx context.Context, name,
 // ListKnowledgeBases lists knowledge bases with optional filtering
 func (s *KnowledgeBaseStorage) ListKnowledgeBases(ctx context.Context, namespace string, enabledOnly bool) ([]KnowledgeBase, error) {
 	var kbs []KnowledgeBase
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT id, name, namespace, description,
 				embedding_model, embedding_dimensions,
@@ -178,7 +170,7 @@ func (s *KnowledgeBaseStorage) ListKnowledgeBases(ctx context.Context, namespace
 
 // UpdateKnowledgeBase updates a knowledge base
 func (s *KnowledgeBaseStorage) UpdateKnowledgeBase(ctx context.Context, kb *KnowledgeBase) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			UPDATE ai.knowledge_bases SET
 				name = $2,
@@ -208,7 +200,7 @@ func (s *KnowledgeBaseStorage) UpdateKnowledgeBase(ctx context.Context, kb *Know
 
 // DeleteKnowledgeBase deletes a knowledge base and all its documents/chunks
 func (s *KnowledgeBaseStorage) DeleteKnowledgeBase(ctx context.Context, id string) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, "DELETE FROM ai.knowledge_bases WHERE id = $1", id)
 		return err
 	})
@@ -233,7 +225,7 @@ func (s *KnowledgeBaseStorage) CreateDocument(ctx context.Context, doc *Document
 		metadataJSON = doc.Metadata
 	}
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			INSERT INTO ai.documents (
 				id, knowledge_base_id, title, source_url, source_type,
@@ -252,7 +244,7 @@ func (s *KnowledgeBaseStorage) CreateDocument(ctx context.Context, doc *Document
 // GetDocument retrieves a document by ID
 func (s *KnowledgeBaseStorage) GetDocument(ctx context.Context, id string) (*Document, error) {
 	var doc Document
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT id, knowledge_base_id, title, source_url, source_type,
 				mime_type, content, content_hash, status, error_message,
@@ -279,7 +271,7 @@ func (s *KnowledgeBaseStorage) GetDocument(ctx context.Context, id string) (*Doc
 // ListDocuments lists documents in a knowledge base
 func (s *KnowledgeBaseStorage) ListDocuments(ctx context.Context, knowledgeBaseID string) ([]Document, error) {
 	var docs []Document
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT id, knowledge_base_id, title, source_url, source_type,
 				mime_type, content, content_hash, status, error_message,
@@ -319,7 +311,7 @@ func (s *KnowledgeBaseStorage) ListDocuments(ctx context.Context, knowledgeBaseI
 
 // UpdateDocumentStatus updates a document's processing status
 func (s *KnowledgeBaseStorage) UpdateDocumentStatus(ctx context.Context, id string, status DocumentStatus, errorMsg string) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			UPDATE ai.documents SET
 				status = $2, error_message = $3, updated_at = NOW()
@@ -332,7 +324,7 @@ func (s *KnowledgeBaseStorage) UpdateDocumentStatus(ctx context.Context, id stri
 
 // MarkDocumentIndexed marks a document as indexed
 func (s *KnowledgeBaseStorage) MarkDocumentIndexed(ctx context.Context, id string) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			UPDATE ai.documents SET
 				status = 'indexed', indexed_at = NOW(), updated_at = NOW()
@@ -345,7 +337,7 @@ func (s *KnowledgeBaseStorage) MarkDocumentIndexed(ctx context.Context, id strin
 
 // DeleteDocument deletes a document and its chunks
 func (s *KnowledgeBaseStorage) DeleteDocument(ctx context.Context, id string) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, "DELETE FROM ai.documents WHERE id = $1", id)
 		return err
 	})
@@ -410,7 +402,7 @@ func (s *KnowledgeBaseStorage) DeleteDocumentsByFilter(
 	whereClause := strings.Join(whereConditions, " AND ")
 
 	var rowsAffected int64
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := fmt.Sprintf("DELETE FROM ai.documents WHERE %s", whereClause)
 
 		result, err := tx.Exec(ctx, query, args...)
@@ -441,7 +433,7 @@ func (s *KnowledgeBaseStorage) UpdateDocumentMetadata(ctx context.Context, id st
 	}
 
 	var doc Document
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			UPDATE ai.documents SET
 				title = COALESCE($2, title),
@@ -478,7 +470,7 @@ func (s *KnowledgeBaseStorage) UpdateDocument(ctx context.Context, doc *Document
 		}
 	}
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			UPDATE ai.documents SET
 				title = COALESCE($2, title),
@@ -527,7 +519,7 @@ func (s *KnowledgeBaseStorage) FindDocumentByMetadata(ctx context.Context, knowl
 	args = append(args, knowledgeBaseID)
 
 	var doc Document
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := fmt.Sprintf(`
 			SELECT id, knowledge_base_id, title, source_url, source_type,
 				mime_type, content, content_hash, status, error_message,
@@ -559,7 +551,7 @@ func (s *KnowledgeBaseStorage) UpdateDocumentContent(ctx context.Context, id str
 	// Calculate new content hash
 	contentHash := hashContent(content)
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			UPDATE ai.documents SET
 				content = $2,
@@ -624,7 +616,7 @@ func (s *KnowledgeBaseStorage) CreateChunks(ctx context.Context, chunks []Chunk)
 		)
 	}
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		br := tx.SendBatch(ctx, batch)
 		defer func() { _ = br.Close() }()
 
@@ -641,7 +633,7 @@ func (s *KnowledgeBaseStorage) CreateChunks(ctx context.Context, chunks []Chunk)
 // GetChunksByDocument retrieves all chunks for a document
 func (s *KnowledgeBaseStorage) GetChunksByDocument(ctx context.Context, documentID string) ([]Chunk, error) {
 	var chunks []Chunk
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT id, document_id, knowledge_base_id, content,
 				chunk_index, start_offset, end_offset, token_count, metadata, created_at
@@ -680,7 +672,7 @@ func (s *KnowledgeBaseStorage) GetChunksByDocument(ctx context.Context, document
 
 // DeleteChunksByDocument deletes all chunks for a document
 func (s *KnowledgeBaseStorage) DeleteChunksByDocument(ctx context.Context, documentID string) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, "DELETE FROM ai.chunks WHERE document_id = $1", documentID)
 		return err
 	})
@@ -709,7 +701,7 @@ func (s *KnowledgeBaseStorage) LinkChatbotKnowledgeBase(ctx context.Context, lin
 		link.Priority = 100
 	}
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			INSERT INTO ai.chatbot_knowledge_bases (
 				id, chatbot_id, knowledge_base_id,
@@ -743,7 +735,7 @@ func (s *KnowledgeBaseStorage) LinkChatbotKnowledgeBase(ctx context.Context, lin
 // GetChatbotKnowledgeBases retrieves all knowledge base links for a chatbot
 func (s *KnowledgeBaseStorage) GetChatbotKnowledgeBases(ctx context.Context, chatbotID string) ([]ChatbotKnowledgeBase, error) {
 	var links []ChatbotKnowledgeBase
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT ckb.id, ckb.chatbot_id, ckb.knowledge_base_id,
 				ckb.access_level, ckb.filter_expression, ckb.context_weight,
@@ -797,7 +789,7 @@ func (s *KnowledgeBaseStorage) GetChatbotKnowledgeBaseLinks(ctx context.Context,
 // This is used to show which chatbots are using a specific knowledge base
 func (s *KnowledgeBaseStorage) GetKnowledgeBaseChatbots(ctx context.Context, knowledgeBaseID string) ([]ChatbotKnowledgeBase, error) {
 	var links []ChatbotKnowledgeBase
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT ckb.id, ckb.chatbot_id, ckb.knowledge_base_id,
 				ckb.access_level, ckb.filter_expression, ckb.context_weight,
@@ -844,7 +836,7 @@ func (s *KnowledgeBaseStorage) GetKnowledgeBaseChatbots(ctx context.Context, kno
 
 // UnlinkChatbotKnowledgeBase removes a link between chatbot and knowledge base
 func (s *KnowledgeBaseStorage) UnlinkChatbotKnowledgeBase(ctx context.Context, chatbotID, knowledgeBaseID string) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
 			"DELETE FROM ai.chatbot_knowledge_bases WHERE chatbot_id = $1 AND knowledge_base_id = $2",
 			chatbotID, knowledgeBaseID,
@@ -876,7 +868,7 @@ func (s *KnowledgeBaseStorage) SearchChunks(ctx context.Context, knowledgeBaseID
 		Msg("SearchChunks starting")
 
 	var results []RetrievalResult
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := fmt.Sprintf(`
 			SELECT
 				c.id as chunk_id,
@@ -997,7 +989,7 @@ func (s *KnowledgeBaseStorage) SearchChunksHybrid(ctx context.Context, knowledge
 // searchKeywordOnly performs full-text search only
 func (s *KnowledgeBaseStorage) searchKeywordOnly(ctx context.Context, knowledgeBaseID string, opts HybridSearchOptions) ([]RetrievalResult, error) {
 	var results []RetrievalResult
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		// Prepare the search query for PostgreSQL full-text search
 		// Use plainto_tsquery for simple word matching, or websearch_to_tsquery for more advanced
 		query := `
@@ -1097,7 +1089,7 @@ func (s *KnowledgeBaseStorage) searchHybrid(ctx context.Context, knowledgeBaseID
 	}
 
 	var results []RetrievalResult
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		// Hybrid query combining vector similarity and full-text search
 		// The final score is: (semantic_weight * vector_similarity) + (keyword_weight * text_rank) + keyword_boost_if_match
 		query := fmt.Sprintf(`
@@ -1748,7 +1740,7 @@ func (s *KnowledgeBaseStorage) SearchChunksWithFilter(
 	whereClause := strings.Join(whereConditions, " AND ")
 
 	var results []RetrievalResult
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := fmt.Sprintf(`
 			SELECT
 				c.id as chunk_id,
@@ -1943,7 +1935,7 @@ func (s *KnowledgeBaseStorage) LogRetrieval(ctx context.Context, log *RetrievalL
 	}
 	log.CreatedAt = time.Now()
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			INSERT INTO ai.retrieval_log (
 				id, chatbot_id, conversation_id, knowledge_base_id, user_id,
@@ -1998,7 +1990,7 @@ func sanitizeMetadataKey(key string) string {
 // GetPendingDocuments retrieves documents pending processing
 func (s *KnowledgeBaseStorage) GetPendingDocuments(ctx context.Context, limit int) ([]Document, error) {
 	var docs []Document
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT id, knowledge_base_id, title, source_url, source_type,
 				mime_type, content, content_hash, status, error_message,
@@ -2043,7 +2035,7 @@ func (s *KnowledgeBaseStorage) UpdateChunkEmbedding(ctx context.Context, chunkID
 		return err
 	}
 
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `UPDATE ai.chunks SET embedding = $2::vector WHERE id = $1`
 		_, err := tx.Exec(ctx, query, chunkID, string(embeddingJSON))
 		return err
@@ -2053,7 +2045,7 @@ func (s *KnowledgeBaseStorage) UpdateChunkEmbedding(ctx context.Context, chunkID
 // GetChunkEmbeddingPreview returns the first N values of a chunk's embedding for debugging
 func (s *KnowledgeBaseStorage) GetChunkEmbeddingPreview(ctx context.Context, chunkID string, n int) ([]float32, error) {
 	var embeddingText *string
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		// Get the embedding as text and parse the first N values
 		query := `SELECT left(embedding::text, 500) FROM ai.chunks WHERE id = $1`
 
@@ -2094,7 +2086,7 @@ type ChunkEmbeddingStats struct {
 // GetChunkEmbeddingStats returns statistics about chunk embeddings for debugging
 func (s *KnowledgeBaseStorage) GetChunkEmbeddingStats(ctx context.Context, knowledgeBaseID string) (*ChunkEmbeddingStats, error) {
 	var stats ChunkEmbeddingStats
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT
 				COUNT(*) as total,
@@ -2120,7 +2112,7 @@ func (s *KnowledgeBaseStorage) GetChunkEmbeddingStats(ctx context.Context, knowl
 // GetFirstChunkWithEmbedding returns the first chunk ID that has an embedding
 func (s *KnowledgeBaseStorage) GetFirstChunkWithEmbedding(ctx context.Context, knowledgeBaseID string) (string, error) {
 	var chunkID string
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT id FROM ai.chunks
 			WHERE knowledge_base_id = $1 AND embedding IS NOT NULL
@@ -2404,7 +2396,7 @@ func (s *KnowledgeBaseStorage) SyncChatbotKnowledgeBaseLinks(ctx context.Context
 // ListUserKnowledgeBases returns KBs accessible to user
 func (s *KnowledgeBaseStorage) ListUserKnowledgeBases(ctx context.Context, userID string) ([]KnowledgeBaseSummary, error) {
 	var kbs []KnowledgeBaseSummary
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT kb.id, kb.name, kb.namespace, kb.description, kb.enabled,
 				   kb.document_count, kb.total_chunks, kb.visibility,
@@ -2461,7 +2453,7 @@ func (s *KnowledgeBaseStorage) ListUserKnowledgeBases(ctx context.Context, userI
 // CanUserAccessKB checks if user has access
 func (s *KnowledgeBaseStorage) CanUserAccessKB(ctx context.Context, kbID, userID string) bool {
 	var hasAccess bool
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT EXISTS (
 				SELECT 1 FROM ai.knowledge_bases kb
@@ -2501,7 +2493,7 @@ func (s *KnowledgeBaseStorage) CheckKBPermission(ctx context.Context, kbID, user
 	}
 
 	var hasPermission bool
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT EXISTS (
 				SELECT 1 FROM ai.knowledge_bases kb
@@ -2526,7 +2518,7 @@ func (s *KnowledgeBaseStorage) CheckKBPermission(ctx context.Context, kbID, user
 // For public KBs, returns 'viewer' if no explicit permission exists.
 func (s *KnowledgeBaseStorage) GetUserKBPermission(ctx context.Context, kbID, userID string) (string, error) {
 	var permission string
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT
 				CASE
@@ -2555,7 +2547,7 @@ func (s *KnowledgeBaseStorage) GetUserKBPermission(ctx context.Context, kbID, us
 // GrantKBPermission grants permission to user
 func (s *KnowledgeBaseStorage) GrantKBPermission(ctx context.Context, kbID, userID, permission string, grantedBy *string) (*KBPermissionGrant, error) {
 	var grant KBPermissionGrant
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		// Upsert permission
 		query := `
 			INSERT INTO ai.knowledge_base_permissions (knowledge_base_id, user_id, permission, granted_by)
@@ -2579,7 +2571,7 @@ func (s *KnowledgeBaseStorage) GrantKBPermission(ctx context.Context, kbID, user
 // ListKBPermissions lists all permissions for a KB
 func (s *KnowledgeBaseStorage) ListKBPermissions(ctx context.Context, kbID string) ([]KBPermissionGrant, error) {
 	var grants []KBPermissionGrant
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT id, knowledge_base_id, user_id, permission, granted_by, granted_at
 			FROM ai.knowledge_base_permissions
@@ -2615,7 +2607,7 @@ func (s *KnowledgeBaseStorage) ListKBPermissions(ctx context.Context, kbID strin
 
 // RevokeKBPermission revokes permission from user
 func (s *KnowledgeBaseStorage) RevokeKBPermission(ctx context.Context, kbID, userID string) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `DELETE FROM ai.knowledge_base_permissions WHERE knowledge_base_id = $1 AND user_id = $2`
 		_, err := tx.Exec(ctx, query, kbID, userID)
 		if err != nil {
@@ -2632,7 +2624,7 @@ func (s *KnowledgeBaseStorage) RevokeKBPermission(ctx context.Context, kbID, use
 // GrantDocumentPermission grants permission on a document to a user
 func (s *KnowledgeBaseStorage) GrantDocumentPermission(ctx context.Context, documentID, userID, permission, grantedBy string) (*DocumentPermissionGrant, error) {
 	var grant DocumentPermissionGrant
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		// First check if the requester owns the document
 		var ownerID string
 		checkQuery := `SELECT owner_id FROM ai.documents WHERE id = $1`
@@ -2671,7 +2663,7 @@ func (s *KnowledgeBaseStorage) GrantDocumentPermission(ctx context.Context, docu
 // ListDocumentPermissions lists all permissions for a document
 func (s *KnowledgeBaseStorage) ListDocumentPermissions(ctx context.Context, documentID string) ([]DocumentPermissionGrant, error) {
 	var grants []DocumentPermissionGrant
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT id, document_id, user_id, permission, granted_by, granted_at
 			FROM ai.document_permissions
@@ -2707,7 +2699,7 @@ func (s *KnowledgeBaseStorage) ListDocumentPermissions(ctx context.Context, docu
 
 // RevokeDocumentPermission revokes permission from a user on a document
 func (s *KnowledgeBaseStorage) RevokeDocumentPermission(ctx context.Context, documentID, userID string) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `DELETE FROM ai.document_permissions WHERE document_id = $1 AND user_id = $2`
 		_, err := tx.Exec(ctx, query, documentID, userID)
 		if err != nil {
@@ -2720,7 +2712,7 @@ func (s *KnowledgeBaseStorage) RevokeDocumentPermission(ctx context.Context, doc
 // CanUserAccessDocument checks if a user can access a document
 func (s *KnowledgeBaseStorage) CanUserAccessDocument(ctx context.Context, documentID, userID string) (bool, error) {
 	var hasAccess bool
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		// Check if user owns the document
 		var ownerID *string
 		checkQuery := `SELECT owner_id FROM ai.documents WHERE id = $1`
@@ -2757,7 +2749,7 @@ func (s *KnowledgeBaseStorage) CanUserAccessDocument(ctx context.Context, docume
 // GetUserQuota retrieves quota information for a user
 func (s *KnowledgeBaseStorage) GetUserQuota(ctx context.Context, userID string) (*UserQuota, error) {
 	var quota UserQuota
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			SELECT user_id, max_documents, max_chunks, max_storage_bytes,
 			       used_documents, used_chunks, used_storage_bytes,
@@ -2787,7 +2779,7 @@ func (s *KnowledgeBaseStorage) GetUserQuota(ctx context.Context, userID string) 
 
 // SetUserQuota creates or updates quota for a user
 func (s *KnowledgeBaseStorage) SetUserQuota(ctx context.Context, quota *UserQuota) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			INSERT INTO ai.user_quotas (user_id, max_documents, max_chunks, max_storage_bytes)
 			VALUES ($1, $2, $3, $4)
@@ -2814,7 +2806,7 @@ func (s *KnowledgeBaseStorage) SetUserQuota(ctx context.Context, quota *UserQuot
 
 // UpdateUserQuotaUsage updates quota usage counters for a user
 func (s *KnowledgeBaseStorage) UpdateUserQuotaUsage(ctx context.Context, userID string, docsDelta int, chunksDelta int, storageDelta int64) error {
-	return s.withTenant(ctx, func(tx pgx.Tx) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
 		query := `
 			INSERT INTO ai.user_quotas (user_id, used_documents, used_chunks, used_storage_bytes)
 			VALUES ($1, GREATEST(0, $2), GREATEST(0, $3), GREATEST(0, $4))

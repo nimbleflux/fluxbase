@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/ai"
+	"github.com/nimbleflux/fluxbase/internal/loader"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
@@ -303,8 +303,8 @@ type ChatbotToolConfig struct {
 	DisableLogs          bool
 }
 
-// parseChatbotAnnotations extracts configuration from @fluxbase: comments in chatbot code
 func parseChatbotAnnotations(code string) ChatbotToolConfig {
+	annotations := loader.ParseAnnotations(code, []string{"//"})
 	config := ChatbotToolConfig{
 		AllowedTables:        []string{},
 		AllowedOperations:    []string{"SELECT"},
@@ -322,122 +322,106 @@ func parseChatbotAnnotations(code string) ChatbotToolConfig {
 		ResponseLanguage:     "auto",
 	}
 
-	// Match @fluxbase:annotation patterns in comments
-	// Process line by line to avoid multiline regex matching issues
-	lineAnnotationPattern := regexp.MustCompile(`^//\s*@fluxbase:(\S+)(?:\s+(.*))?$`)
-	blockAnnotationPattern := regexp.MustCompile(`^\s*\*\s*@fluxbase:(\S+)(?:\s+(.*))?$`)
-
-	lines := strings.Split(code, "\n")
-	for _, line := range lines {
-		trimmedLine := strings.TrimSpace(line)
-
-		var matches []string
-		if matches = lineAnnotationPattern.FindStringSubmatch(trimmedLine); matches == nil {
-			matches = blockAnnotationPattern.FindStringSubmatch(trimmedLine)
+	if v, ok := annotations["description"]; ok {
+		config.Description = v
+	}
+	if _, ok := annotations["public"]; ok {
+		config.IsPublic = true
+	}
+	if _, ok := annotations["allow-unauthenticated"]; ok {
+		config.AllowUnauthenticated = true
+	}
+	if v, ok := annotations["require-role"]; ok {
+		roles := loader.ParseRoleList(v)
+		if len(roles) > 0 {
+			config.RequireRoles = roles
 		}
-
-		if len(matches) < 2 {
-			continue
+	}
+	if v, ok := annotations["allowed-tables"]; ok {
+		tables := loader.ParseCommaList(v)
+		if len(tables) > 0 {
+			config.AllowedTables = tables
 		}
-
-		annotation := strings.ToLower(strings.TrimSpace(matches[1]))
-		value := ""
-		if len(matches) > 2 {
-			value = strings.TrimSpace(matches[2])
+	}
+	if v, ok := annotations["allowed-operations"]; ok {
+		ops := loader.ParseCommaList(v)
+		if len(ops) > 0 {
+			for i, op := range ops {
+				ops[i] = strings.ToUpper(op)
+			}
+			config.AllowedOperations = ops
 		}
-
-		switch annotation {
-		case "description":
-			config.Description = value
-		case "public":
-			config.IsPublic = true
-		case "allow-unauthenticated":
-			config.AllowUnauthenticated = true
-		case "require-role":
-			// Parse comma-separated roles
-			var roles []string
-			for _, role := range strings.Split(value, ",") {
-				role = strings.TrimSpace(strings.ToLower(role))
-				if role != "" {
-					roles = append(roles, role)
-				}
+	}
+	if v, ok := annotations["allowed-schemas"]; ok {
+		schemas := loader.ParseCommaList(v)
+		if len(schemas) > 0 {
+			config.AllowedSchemas = schemas
+		}
+	}
+	if v, ok := annotations["http-allowed-domains"]; ok {
+		domains := loader.ParseCommaList(v)
+		if len(domains) > 0 {
+			config.HTTPAllowedDomains = domains
+		}
+	}
+	if v, ok := annotations["model"]; ok {
+		config.Model = v
+	}
+	if v, ok := annotations["max-tokens"]; ok {
+		if t, err := strconv.Atoi(v); err == nil && t > 0 {
+			config.MaxTokens = t
+		}
+	}
+	if v, ok := annotations["temperature"]; ok {
+		if t, err := strconv.ParseFloat(v, 64); err == nil && t >= 0 && t <= 2 {
+			config.Temperature = t
+		}
+	}
+	if v, ok := annotations["rate-limit"]; ok {
+		if idx := strings.Index(v, "/"); idx > 0 {
+			if n, err := strconv.Atoi(strings.TrimSpace(v[:idx])); err == nil && n > 0 {
+				config.RateLimitPerMinute = n
 			}
-			if len(roles) > 0 {
-				config.RequireRoles = roles
-			}
-		case "allowed-tables":
-			tables := parseCommaSeparatedList(value)
-			if len(tables) > 0 {
-				config.AllowedTables = tables
-			}
-		case "allowed-operations":
-			ops := parseCommaSeparatedList(value)
-			if len(ops) > 0 {
-				// Normalize to uppercase
-				for i, op := range ops {
-					ops[i] = strings.ToUpper(op)
-				}
-				config.AllowedOperations = ops
-			}
-		case "allowed-schemas":
-			schemas := parseCommaSeparatedList(value)
-			if len(schemas) > 0 {
-				config.AllowedSchemas = schemas
-			}
-		case "http-allowed-domains":
-			domains := parseCommaSeparatedList(value)
-			if len(domains) > 0 {
-				config.HTTPAllowedDomains = domains
-			}
-		case "model":
-			config.Model = value
-		case "max-tokens":
-			if t, err := strconv.Atoi(value); err == nil && t > 0 {
-				config.MaxTokens = t
-			}
-		case "temperature":
-			if t, err := strconv.ParseFloat(value, 64); err == nil && t >= 0 && t <= 2 {
-				config.Temperature = t
-			}
-		case "rate-limit":
-			// Parse "N/min" format
-			if idx := strings.Index(value, "/"); idx > 0 {
-				if n, err := strconv.Atoi(strings.TrimSpace(value[:idx])); err == nil && n > 0 {
-					config.RateLimitPerMinute = n
-				}
-			}
-		case "daily-limit":
-			if n, err := strconv.Atoi(value); err == nil && n > 0 {
-				config.DailyRequestLimit = n
-			}
-		case "daily-token-budget":
-			if n, err := strconv.Atoi(value); err == nil && n > 0 {
-				config.DailyTokenBudget = n
-			}
-		case "persist-conversations":
-			config.PersistConversations = true
-		case "conversation-ttl":
-			if h, err := strconv.Atoi(value); err == nil && h > 0 {
-				config.ConversationTTLHours = h
-			}
-		case "max-turns":
-			if n, err := strconv.Atoi(value); err == nil && n > 0 {
-				config.MaxTurns = n
-			}
-		case "response-language":
-			config.ResponseLanguage = value
-		case "disable-logs":
-			config.DisableLogs = true
-		case "mcp-tools":
-			tools := parseCommaSeparatedList(value)
-			if len(tools) > 0 {
-				config.MCPTools = tools
-			}
-		case "use-mcp-schema":
-			// Supports both "@fluxbase:use-mcp-schema" and "@fluxbase:use-mcp-schema true"
-			if value == "" || strings.ToLower(value) == "true" {
-				config.UseMCPSchema = true
-			}
+		}
+	}
+	if v, ok := annotations["daily-limit"]; ok {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			config.DailyRequestLimit = n
+		}
+	}
+	if v, ok := annotations["daily-token-budget"]; ok {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			config.DailyTokenBudget = n
+		}
+	}
+	if _, ok := annotations["persist-conversations"]; ok {
+		config.PersistConversations = true
+	}
+	if v, ok := annotations["conversation-ttl"]; ok {
+		if h, err := strconv.Atoi(v); err == nil && h > 0 {
+			config.ConversationTTLHours = h
+		}
+	}
+	if v, ok := annotations["max-turns"]; ok {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			config.MaxTurns = n
+		}
+	}
+	if v, ok := annotations["response-language"]; ok {
+		config.ResponseLanguage = v
+	}
+	if _, ok := annotations["disable-logs"]; ok {
+		config.DisableLogs = true
+	}
+	if v, ok := annotations["mcp-tools"]; ok {
+		tools := loader.ParseCommaList(v)
+		if len(tools) > 0 {
+			config.MCPTools = tools
+		}
+	}
+	if v, ok := annotations["use-mcp-schema"]; ok {
+		if v == "" || strings.ToLower(v) == "true" {
+			config.UseMCPSchema = true
 		}
 	}
 

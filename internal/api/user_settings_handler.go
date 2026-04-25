@@ -41,38 +41,27 @@ func (h *UserSettingsHandler) CreateSecret(c fiber.Ctx) error {
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
 	if userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	var req settings.CreateSecretSettingRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse request body")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate required fields
 	if req.Key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "key")
 	}
 
 	if req.Value == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting value is required",
-		})
+		return SendMissingField(c, "value")
 	}
 
 	// Create user-specific secret with RLS context
@@ -84,21 +73,13 @@ func (h *UserSettingsHandler) CreateSecret(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, settings.ErrCustomSettingDuplicate) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "A secret with this key already exists",
-				"code":  "DUPLICATE_KEY",
-			})
+			return SendConflict(c, "A secret with this key already exists", ErrCodeDuplicateKey)
 		}
 		if errors.Is(err, settings.ErrCustomSettingInvalidKey) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid setting key format",
-				"code":  "INVALID_KEY",
-			})
+			return SendBadRequest(c, "Invalid setting key format", ErrCodeInvalidInput)
 		}
 		log.Error().Err(err).Str("key", req.Key).Str("user_id", userID.String()).Msg("Failed to create user secret")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to create secret",
-		})
+		return SendInternalError(c, "Failed to create secret")
 	}
 
 	log.Info().
@@ -116,25 +97,19 @@ func (h *UserSettingsHandler) GetSecret(c fiber.Ctx) error {
 	key := c.Params("*")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "key")
 	}
 
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
 	if userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	// Get user's secret with RLS context
@@ -146,14 +121,10 @@ func (h *UserSettingsHandler) GetSecret(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, settings.ErrCustomSettingNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Secret not found",
-			})
+			return SendNotFound(c, "Secret not found")
 		}
 		log.Error().Err(err).Str("key", key).Str("user_id", userID.String()).Msg("Failed to get user secret")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve secret",
-		})
+		return SendInternalError(c, "Failed to retrieve secret")
 	}
 
 	return c.JSON(metadata)
@@ -166,33 +137,24 @@ func (h *UserSettingsHandler) UpdateSecret(c fiber.Ctx) error {
 	key := c.Params("*")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "key")
 	}
 
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
 	if userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	var req settings.UpdateSecretSettingRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse request body")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Update user's secret with RLS context
@@ -204,14 +166,10 @@ func (h *UserSettingsHandler) UpdateSecret(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, settings.ErrCustomSettingNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Secret not found",
-			})
+			return SendNotFound(c, "Secret not found")
 		}
 		log.Error().Err(err).Str("key", key).Str("user_id", userID.String()).Msg("Failed to update user secret")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to update secret",
-		})
+		return SendInternalError(c, "Failed to update secret")
 	}
 
 	log.Info().
@@ -229,25 +187,19 @@ func (h *UserSettingsHandler) DeleteSecret(c fiber.Ctx) error {
 	key := c.Params("*")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "key")
 	}
 
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
 	if userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	// Delete user's secret with RLS context
@@ -256,14 +208,10 @@ func (h *UserSettingsHandler) DeleteSecret(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, settings.ErrCustomSettingNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Secret not found",
-			})
+			return SendNotFound(c, "Secret not found")
 		}
 		log.Error().Err(err).Str("key", key).Str("user_id", userID.String()).Msg("Failed to delete user secret")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to delete secret",
-		})
+		return SendInternalError(c, "Failed to delete secret")
 	}
 
 	log.Info().
@@ -282,17 +230,13 @@ func (h *UserSettingsHandler) ListSecrets(c fiber.Ctx) error {
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
 	if userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	// List user's secrets with RLS context
@@ -304,9 +248,7 @@ func (h *UserSettingsHandler) ListSecrets(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to list user secrets")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve secrets",
-		})
+		return SendInternalError(c, "Failed to retrieve secrets")
 	}
 
 	return c.JSON(secrets)
@@ -321,54 +263,40 @@ func (h *UserSettingsHandler) GetUserSecretValue(c fiber.Ctx) error {
 	// Require service_role for this privileged operation
 	role := c.Locals("user_role")
 	if role != "service_role" {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "This operation requires service_role",
-		})
+		return SendForbidden(c, "This operation requires service_role", ErrCodeAdminRequired)
 	}
 
 	// Check if secrets service is configured
 	if h.secretsService == nil {
 		log.Error().Msg("SecretsService not configured for UserSettingsHandler")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Secrets service not configured",
-		})
+		return SendInternalError(c, "Secrets service not configured")
 	}
 
 	// Parse target user ID from URL
 	targetUserIDStr := c.Params("user_id")
 	targetUserID, err := uuid.Parse(targetUserIDStr)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid user_id format",
-		})
+		return SendInvalidID(c, "user_id")
 	}
 
 	// Get secret key from URL
 	key := c.Params("key")
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Secret key is required",
-		})
+		return SendMissingField(c, "key")
 	}
 
 	// Retrieve and decrypt the secret (service_role bypasses RLS)
 	value, err := h.secretsService.GetUserSecret(ctx, targetUserID, key)
 	if err != nil {
 		if errors.Is(err, settings.ErrSecretNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Secret not found",
-			})
+			return SendNotFound(c, "Secret not found")
 		}
 		if errors.Is(err, settings.ErrDecryptionFailed) {
 			log.Error().Err(err).Str("key", key).Str("user_id", targetUserID.String()).Msg("Failed to decrypt user secret")
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to decrypt secret",
-			})
+			return SendInternalError(c, "Failed to decrypt secret")
 		}
 		log.Error().Err(err).Str("key", key).Str("user_id", targetUserID.String()).Msg("Failed to retrieve user secret")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve secret",
-		})
+		return SendInternalError(c, "Failed to retrieve secret")
 	}
 
 	log.Debug().
@@ -393,25 +321,19 @@ func (h *UserSettingsHandler) GetSetting(c fiber.Ctx) error {
 	key := c.Params("key")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "key")
 	}
 
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
 	if userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	// Get setting with fallback using RLS context
@@ -423,14 +345,10 @@ func (h *UserSettingsHandler) GetSetting(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, settings.ErrCustomSettingNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Setting not found",
-			})
+			return SendNotFound(c, "Setting not found")
 		}
 		log.Error().Err(err).Str("key", key).Str("user_id", userID.String()).Msg("Failed to get setting with fallback")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve setting",
-		})
+		return SendInternalError(c, "Failed to retrieve setting")
 	}
 
 	return c.JSON(result)
@@ -443,25 +361,19 @@ func (h *UserSettingsHandler) GetUserOwnSetting(c fiber.Ctx) error {
 	key := c.Params("key")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "key")
 	}
 
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
 	if userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	// Get user's own setting with RLS context
@@ -473,14 +385,10 @@ func (h *UserSettingsHandler) GetUserOwnSetting(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, settings.ErrCustomSettingNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Setting not found",
-			})
+			return SendNotFound(c, "Setting not found")
 		}
 		log.Error().Err(err).Str("key", key).Str("user_id", userID.String()).Msg("Failed to get user setting")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve setting",
-		})
+		return SendInternalError(c, "Failed to retrieve setting")
 	}
 
 	return c.JSON(setting)
@@ -493,9 +401,7 @@ func (h *UserSettingsHandler) GetSystemSettingPublic(c fiber.Ctx) error {
 	key := c.Params("key")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "key")
 	}
 
 	// Get system setting with RLS context
@@ -507,14 +413,10 @@ func (h *UserSettingsHandler) GetSystemSettingPublic(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, settings.ErrCustomSettingNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Setting not found",
-			})
+			return SendNotFound(c, "Setting not found")
 		}
 		log.Error().Err(err).Str("key", key).Msg("Failed to get system setting")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve setting",
-		})
+		return SendInternalError(c, "Failed to retrieve setting")
 	}
 
 	// Return only the value (not all metadata) for public access
@@ -531,33 +433,24 @@ func (h *UserSettingsHandler) SetSetting(c fiber.Ctx) error {
 	key := c.Params("key")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "key")
 	}
 
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
 	if userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	var req settings.CreateUserSettingRequest
-	if err := c.Bind().Body(&req); err != nil {
-		log.Error().Err(err).Msg("Failed to parse request body")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Use key from URL
@@ -565,9 +458,7 @@ func (h *UserSettingsHandler) SetSetting(c fiber.Ctx) error {
 
 	// Validate required fields
 	if req.Value == nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting value is required",
-		})
+		return SendMissingField(c, "value")
 	}
 
 	// Upsert the setting with RLS context
@@ -579,15 +470,10 @@ func (h *UserSettingsHandler) SetSetting(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, settings.ErrCustomSettingInvalidKey) {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid setting key format",
-				"code":  "INVALID_KEY",
-			})
+			return SendBadRequest(c, "Invalid setting key format", ErrCodeInvalidInput)
 		}
 		log.Error().Err(err).Str("key", key).Str("user_id", userID.String()).Msg("Failed to set user setting")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to save setting",
-		})
+		return SendInternalError(c, "Failed to save setting")
 	}
 
 	log.Info().
@@ -605,25 +491,19 @@ func (h *UserSettingsHandler) DeleteSetting(c fiber.Ctx) error {
 	key := c.Params("key")
 
 	if key == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Setting key is required",
-		})
+		return SendMissingField(c, "key")
 	}
 
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
 	if userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	// Delete user's setting with RLS context
@@ -632,14 +512,10 @@ func (h *UserSettingsHandler) DeleteSetting(c fiber.Ctx) error {
 	})
 	if err != nil {
 		if errors.Is(err, settings.ErrCustomSettingNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Setting not found",
-			})
+			return SendNotFound(c, "Setting not found")
 		}
 		log.Error().Err(err).Str("key", key).Str("user_id", userID.String()).Msg("Failed to delete user setting")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to delete setting",
-		})
+		return SendInternalError(c, "Failed to delete setting")
 	}
 
 	log.Info().
@@ -658,17 +534,13 @@ func (h *UserSettingsHandler) ListSettings(c fiber.Ctx) error {
 	// Get user ID from context
 	userIDStr := c.Locals("user_id")
 	if userIDStr == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
 	userID, err := uuid.Parse(userIDStr.(string))
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
+		return SendInternalError(c, "Invalid user ID")
 	}
 
 	// List user's settings with RLS context
@@ -680,9 +552,7 @@ func (h *UserSettingsHandler) ListSettings(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to list user settings")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve settings",
-		})
+		return SendInternalError(c, "Failed to retrieve settings")
 	}
 
 	// Return empty array instead of null

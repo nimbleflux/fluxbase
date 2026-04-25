@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
 // CustomTool represents a user-defined MCP tool implemented in TypeScript.
@@ -69,10 +71,10 @@ type CustomResource struct {
 
 // CreateToolRequest represents a request to create a custom tool.
 type CreateToolRequest struct {
-	Name           string         `json:"name" validate:"required,min=1,max=64"`
+	Name           string         `json:"name"`
 	Namespace      string         `json:"namespace,omitempty"`
 	Description    string         `json:"description,omitempty"`
-	Code           string         `json:"code" validate:"required"`
+	Code           string         `json:"code"`
 	InputSchema    map[string]any `json:"input_schema,omitempty"`
 	RequiredScopes []string       `json:"required_scopes,omitempty"`
 	TimeoutSeconds int            `json:"timeout_seconds,omitempty"`
@@ -102,12 +104,12 @@ type UpdateToolRequest struct {
 
 // CreateResourceRequest represents a request to create a custom resource.
 type CreateResourceRequest struct {
-	URI             string   `json:"uri" validate:"required,min=1,max=255"`
-	Name            string   `json:"name" validate:"required,min=1,max=64"`
+	URI             string   `json:"uri"`
+	Name            string   `json:"name"`
 	Namespace       string   `json:"namespace,omitempty"`
 	Description     string   `json:"description,omitempty"`
 	MimeType        string   `json:"mime_type,omitempty"`
-	Code            string   `json:"code" validate:"required"`
+	Code            string   `json:"code"`
 	IsTemplate      *bool    `json:"is_template,omitempty"`
 	RequiredScopes  []string `json:"required_scopes,omitempty"`
 	TimeoutSeconds  *int     `json:"timeout_seconds,omitempty"`
@@ -148,7 +150,7 @@ type ListResourcesFilter struct {
 // ToolExecutionResult represents the result of executing a custom tool.
 type ToolExecutionResult struct {
 	Success    bool           `json:"success"`
-	Content    []Content      `json:"content,omitempty"`
+	Content    []mcp.Content  `json:"content,omitempty"`
 	Error      string         `json:"error,omitempty"`
 	DurationMs int64          `json:"duration_ms"`
 	Logs       string         `json:"logs,omitempty"`
@@ -158,20 +160,11 @@ type ToolExecutionResult struct {
 // ResourceReadResult represents the result of reading a custom resource.
 type ResourceReadResult struct {
 	Success    bool           `json:"success"`
-	Content    []Content      `json:"content,omitempty"`
+	Content    []mcp.Content  `json:"content,omitempty"`
 	Error      string         `json:"error,omitempty"`
 	DurationMs int64          `json:"duration_ms"`
 	Logs       string         `json:"logs,omitempty"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
-}
-
-// Content represents content returned by a tool or resource.
-type Content struct {
-	Type     string `json:"type"` // "text", "image", "resource"
-	Text     string `json:"text,omitempty"`
-	MimeType string `json:"mimeType,omitempty"`
-	Data     string `json:"data,omitempty"` // Base64-encoded for binary
-	URI      string `json:"uri,omitempty"`
 }
 
 // SyncToolRequest represents a request to sync (create or update) a tool by name.

@@ -42,6 +42,27 @@ func NewAdminAuthHandler(
 	}
 }
 
+func (h *AdminAuthHandler) requireService(c fiber.Ctx) error {
+	if h.systemSettings == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
+func (h *AdminAuthHandler) requireDashboardAuth(c fiber.Ctx) error {
+	if h.dashboardAuth == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
+func (h *AdminAuthHandler) requireAuthService(c fiber.Ctx) error {
+	if h.authService == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "not_initialized")
+	}
+	return nil
+}
+
 // SetupStatusResponse represents the setup status
 type SetupStatusResponse struct {
 	NeedsSetup bool `json:"needs_setup"`
@@ -50,10 +71,10 @@ type SetupStatusResponse struct {
 
 // InitialSetupRequest represents the initial setup request
 type InitialSetupRequest struct {
-	Email      string `json:"email" validate:"required,email"`
-	Password   string `json:"password" validate:"required,min=12"`
-	Name       string `json:"name" validate:"required,min=2"`
-	SetupToken string `json:"setup_token" validate:"required"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	Name       string `json:"name"`
+	SetupToken string `json:"setup_token"`
 }
 
 // InitialSetupResponse represents the initial setup response
@@ -66,8 +87,8 @@ type InitialSetupResponse struct {
 
 // AdminLoginRequest represents an admin login request
 type AdminLoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // AdminLoginResponse represents an admin login response
@@ -83,7 +104,10 @@ type AdminLoginResponse struct {
 func (h *AdminAuthHandler) GetSetupStatus(c fiber.Ctx) error {
 	ctx := context.Background()
 
-	// Check if setup has been completed using system settings
+	if err := h.requireService(c); err != nil {
+		return err
+	}
+
 	setupComplete, err := h.systemSettings.IsSetupComplete(ctx)
 	if err != nil {
 		// If settings table doesn't exist yet (e.g., during bootstrap),
@@ -108,7 +132,14 @@ func (h *AdminAuthHandler) InitialSetup(c fiber.Ctx) error {
 
 	ctx := context.Background()
 
-	// Check if setup has already been completed using system settings
+	if err := h.requireService(c); err != nil {
+		return err
+	}
+
+	if err := h.requireDashboardAuth(c); err != nil {
+		return err
+	}
+
 	setupComplete, err := h.systemSettings.IsSetupComplete(ctx)
 	if err != nil {
 		return SendOperationFailed(c, "check setup status")
@@ -120,8 +151,8 @@ func (h *AdminAuthHandler) InitialSetup(c fiber.Ctx) error {
 
 	// Parse request
 	var req InitialSetupRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return SendInvalidBody(c)
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
 	// Validate setup token using constant-time comparison to prevent timing attacks
@@ -184,11 +215,14 @@ func (h *AdminAuthHandler) AdminLogin(c fiber.Ctx) error {
 	ctx := context.Background()
 
 	var req AdminLoginRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return SendInvalidBody(c)
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Use the platform auth service to sign in (platform.users, not auth.users)
+	if err := h.requireDashboardAuth(c); err != nil {
+		return err
+	}
+
 	user, loginResp, err := h.dashboardAuth.Login(ctx, req.Email, req.Password, nil, c.Get("User-Agent"))
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
@@ -229,14 +263,17 @@ func (h *AdminAuthHandler) AdminRefreshToken(c fiber.Ctx) error {
 	ctx := context.Background()
 
 	var req struct {
-		RefreshToken string `json:"refresh_token" validate:"required"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
-	if err := c.Bind().Body(&req); err != nil {
-		return SendInvalidBody(c)
+	if err := ParseBody(c, &req); err != nil {
+		return err
 	}
 
-	// Use DashboardAuthService which handles platform.sessions (not auth.sessions)
+	if err := h.requireDashboardAuth(c); err != nil {
+		return err
+	}
+
 	refreshResp, err := h.dashboardAuth.RefreshToken(ctx, req.RefreshToken)
 	if err != nil {
 		return SendUnauthorized(c, "Invalid or expired refresh token", ErrCodeInvalidToken)
@@ -296,7 +333,10 @@ func (h *AdminAuthHandler) AdminLogout(c fiber.Ctx) error {
 
 	token := parts[1]
 
-	// Sign out using the auth service
+	if err := h.requireAuthService(c); err != nil {
+		return err
+	}
+
 	if err := h.authService.SignOut(ctx, token); err != nil {
 		return SendOperationFailed(c, "logout")
 	}

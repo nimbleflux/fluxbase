@@ -60,7 +60,7 @@ type cachedSetting struct {
 
 // UnifiedService provides settings resolution with tenant/instance/config fallback
 type UnifiedService struct {
-	db                 *database.Connection
+	database.TenantAware
 	config             *config.Config
 	encryptionKey      string
 	tenantConfigLoader *config.TenantConfigLoader
@@ -73,21 +73,13 @@ type UnifiedService struct {
 // NewUnifiedService creates a new unified settings service
 func NewUnifiedService(db *database.Connection, cfg *config.Config, encryptionKey string) *UnifiedService {
 	return &UnifiedService{
-		db:            db,
+		TenantAware:   database.TenantAware{DB: db},
 		config:        cfg,
 		encryptionKey: encryptionKey,
 		cache:         make(map[string]map[string]*cachedSetting),
 		overridable:   make(map[string]bool),
 		cacheDuration: 5 * time.Minute,
 	}
-}
-
-// withTenant wraps a function in a tenant-aware transaction. If a tenant ID is
-// present in the context, the transaction runs as tenant_service (RLS-enforced).
-// Otherwise it runs with the default role.
-func (s *UnifiedService) withTenant(ctx context.Context, fn func(tx pgx.Tx) error) error {
-	tenantID := database.TenantFromContext(ctx)
-	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, fn)
 }
 
 // SetTenantConfigLoader sets the tenant configuration loader for per-tenant config resolution
@@ -277,7 +269,7 @@ func (s *UnifiedService) isPathOverridableCached(path string) bool {
 // getTenantSetting gets a tenant-specific setting value
 func (s *UnifiedService) getTenantSetting(ctx context.Context, tenantID, path string) (any, error) {
 	var settingsJSON []byte
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT settings FROM platform.instance_settings
 			WHERE tenant_id = $1
@@ -298,7 +290,7 @@ func (s *UnifiedService) getTenantSetting(ctx context.Context, tenantID, path st
 // getInstanceSetting gets an instance-level setting value
 func (s *UnifiedService) getInstanceSetting(ctx context.Context, path string) (any, error) {
 	var settingsJSON []byte
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT settings FROM platform.instance_settings
 			WHERE tenant_id IS NULL
@@ -516,7 +508,7 @@ func (s *UnifiedService) SetInstanceSetting(ctx context.Context, path string, va
 		return fmt.Errorf("failed to marshal settings: %w", err)
 	}
 
-	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			UPDATE platform.instance_settings
 			SET settings = $1, updated_at = NOW()
@@ -538,7 +530,7 @@ func (s *UnifiedService) SetInstanceSetting(ctx context.Context, path string, va
 // getOrCreateInstanceSettingsMap gets instance settings or creates empty map
 func (s *UnifiedService) getOrCreateInstanceSettingsMap(ctx context.Context) (map[string]any, error) {
 	var settingsJSON []byte
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT settings FROM platform.instance_settings WHERE tenant_id IS NULL LIMIT 1
 		`).Scan(&settingsJSON)
@@ -548,7 +540,7 @@ func (s *UnifiedService) getOrCreateInstanceSettingsMap(ctx context.Context) (ma
 			// Create new instance settings row
 			settings := make(map[string]any)
 			settingsJSON, _ := json.Marshal(settings)
-			err = s.withTenant(ctx, func(tx pgx.Tx) error {
+			err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 				_, err := tx.Exec(ctx, `
 					INSERT INTO platform.instance_settings (tenant_id, settings, created_at, updated_at)
 					VALUES (NULL, $1, NOW(), NOW())
@@ -613,7 +605,7 @@ func (s *UnifiedService) SetTenantSetting(ctx context.Context, tenantID, path st
 		return fmt.Errorf("failed to marshal settings: %w", err)
 	}
 
-	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			UPDATE platform.instance_settings
 			SET settings = $1, updated_at = NOW()
@@ -635,7 +627,7 @@ func (s *UnifiedService) SetTenantSetting(ctx context.Context, tenantID, path st
 // getOrCreateTenantSettingsMap gets tenant settings or creates empty map
 func (s *UnifiedService) getOrCreateTenantSettingsMap(ctx context.Context, tenantID string) (map[string]any, error) {
 	var settingsJSON []byte
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT settings FROM platform.instance_settings WHERE tenant_id = $1
 		`, tenantID).Scan(&settingsJSON)
@@ -645,7 +637,7 @@ func (s *UnifiedService) getOrCreateTenantSettingsMap(ctx context.Context, tenan
 			// Create new tenant settings row in instance_settings
 			settings := make(map[string]any)
 			settingsJSON, _ := json.Marshal(settings)
-			err = s.withTenant(ctx, func(tx pgx.Tx) error {
+			err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 				_, err := tx.Exec(ctx, `
 					INSERT INTO platform.instance_settings (tenant_id, settings, created_at, updated_at)
 					VALUES ($1, $2, NOW(), NOW())
@@ -689,7 +681,7 @@ func (s *UnifiedService) DeleteTenantSetting(ctx context.Context, tenantID, path
 		return fmt.Errorf("failed to marshal settings: %w", err)
 	}
 
-	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			UPDATE platform.instance_settings
 			SET settings = $1, updated_at = NOW()
@@ -746,7 +738,7 @@ func (s *UnifiedService) GetInstanceSettings(ctx context.Context) (*InstanceSett
 	var overridableJSON []byte
 	var createdAt, updatedAt time.Time
 
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT settings, overridable_settings, created_at, updated_at
 			FROM platform.instance_settings
@@ -799,7 +791,7 @@ func (s *UnifiedService) GetTenantSettings(ctx context.Context, tenantID string)
 	var settingsJSON []byte
 	var createdAt, updatedAt time.Time
 
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT settings, created_at, updated_at
 			FROM platform.instance_settings
@@ -847,7 +839,7 @@ func (s *UnifiedService) IsSettingOverridable(ctx context.Context, path string) 
 
 	// Get overridable settings list from database
 	var overridableJSON []byte
-	err := s.withTenant(ctx, func(tx pgx.Tx) error {
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT overridable_settings FROM platform.instance_settings WHERE tenant_id IS NULL LIMIT 1
 		`).Scan(&overridableJSON)
@@ -895,7 +887,7 @@ func (s *UnifiedService) SetOverridableSettings(ctx context.Context, paths []str
 		return fmt.Errorf("failed to marshal overridable settings: %w", err)
 	}
 
-	err = s.withTenant(ctx, func(tx pgx.Tx) error {
+	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			UPDATE platform.instance_settings
 			SET overridable_settings = $1, updated_at = NOW()
