@@ -154,7 +154,10 @@ func (s *Service) RunBootstrap(ctx context.Context) error {
 		return fmt.Errorf("failed to get admin pool: %w", err)
 	}
 
-	sql := SubstituteAppUser(bootstrapSQL, s.config.User)
+	sql, err := SubstituteAppUser(bootstrapSQL, s.config.User)
+	if err != nil {
+		return fmt.Errorf("invalid app user for bootstrap: %w", err)
+	}
 	_, err = adminPool.Exec(ctx, sql)
 	if err != nil {
 		return fmt.Errorf("failed to execute bootstrap SQL: %w", err)
@@ -182,7 +185,10 @@ func RunBootstrapOnDB(ctx context.Context, dbURL string, appUser string) error {
 	}
 	defer pool.Close()
 
-	sql := SubstituteAppUser(bootstrapSQL, appUser)
+	sql, err := SubstituteAppUser(bootstrapSQL, appUser)
+	if err != nil {
+		return fmt.Errorf("invalid app user for bootstrap: %w", err)
+	}
 	_, err = pool.Exec(ctx, sql)
 	if err != nil {
 		return fmt.Errorf("failed to execute bootstrap SQL: %w", err)

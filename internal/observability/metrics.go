@@ -2,8 +2,11 @@ package observability
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +16,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
+)
+
+var (
+	uuidPattern    = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	numericPattern = regexp.MustCompile(`^\d+$`)
 )
 
 var (
@@ -485,7 +493,9 @@ func (m *Metrics) RecordAuthToken(tokenType string) {
 
 // RecordRateLimitHit records a rate limit hit
 func (m *Metrics) RecordRateLimitHit(limiterType, identifier string) {
-	m.rateLimitHitsTotal.WithLabelValues(limiterType, identifier).Inc()
+	hash := sha256.Sum256([]byte(identifier))
+	hashed := fmt.Sprintf("%x", hash[:8])
+	m.rateLimitHitsTotal.WithLabelValues(limiterType, hashed).Inc()
 }
 
 // UpdateJobQueueDepth updates the job queue depth metric
@@ -585,15 +595,17 @@ func (m *Metrics) Handler() fiber.Handler {
 
 // normalizePath normalizes API paths for metrics (replaces IDs with placeholders)
 func normalizePath(path string) string {
-	// For metrics, we want to group paths like /api/v1/tables/users/123 -> /api/v1/tables/users/:id
-	// This prevents cardinality explosion
-
-	// Simple heuristic: if path segment looks like UUID or number, replace with :id
-	// This is a simplified version - production might need more sophisticated logic
-	if len(path) > 50 {
-		return "long_path" // Prevent cardinality explosion
+	if len(path) > 200 {
+		return "long_path"
 	}
-	return path
+
+	segments := strings.Split(path, "/")
+	for i, seg := range segments {
+		if uuidPattern.MatchString(seg) || numericPattern.MatchString(seg) {
+			segments[i] = ":id"
+		}
+	}
+	return strings.Join(segments, "/")
 }
 
 // statusClass returns the HTTP status class (2xx, 3xx, 4xx, 5xx)

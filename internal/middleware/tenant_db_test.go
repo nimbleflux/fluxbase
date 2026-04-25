@@ -683,3 +683,109 @@ func TestGetUserManagedTenantIDs_StorageError(t *testing.T) {
 	assert.Nil(t, ids)
 	assert.Contains(t, err.Error(), "failed to get user tenants")
 }
+
+// ---------------------------------------------------------------------------
+// resolveTenantID tests — validates the fix for the X-FB-Tenant header
+// being accepted without storage validation.
+// ---------------------------------------------------------------------------
+
+func TestResolveTenantID_ValidSlug(t *testing.T) {
+	tenantID := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	store := &mockTenantStore{
+		getTenantBySlugFunc: func(_ context.Context, slug string) (*tenantdb.Tenant, error) {
+			if slug == "acme" {
+				return &tenantdb.Tenant{ID: tenantID, Slug: "acme"}, nil
+			}
+			return nil, tenantdb.ErrTenantNotFound
+		},
+	}
+
+	app := fiber.New()
+	var gotID, gotSource string
+	app.Get("/test", func(c fiber.Ctx) error {
+		gotID, gotSource = resolveTenantID(c, "", false, nil, store)
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-FB-Tenant", "acme")
+	_, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, tenantID, gotID)
+	assert.Equal(t, "header", gotSource)
+}
+
+func TestResolveTenantID_InvalidSlugReturnsEmpty(t *testing.T) {
+	store := &mockTenantStore{
+		getTenantBySlugFunc: func(_ context.Context, _ string) (*tenantdb.Tenant, error) {
+			return nil, tenantdb.ErrTenantNotFound
+		},
+		getTenantFunc: func(_ context.Context, _ string) (*tenantdb.Tenant, error) {
+			return nil, tenantdb.ErrTenantNotFound
+		},
+		getDefaultTenantFunc: func(_ context.Context) (*tenantdb.Tenant, error) {
+			return &tenantdb.Tenant{ID: "default-id", Slug: "default"}, nil
+		},
+	}
+
+	app := fiber.New()
+	var gotID, gotSource string
+	app.Get("/test", func(c fiber.Ctx) error {
+		gotID, gotSource = resolveTenantID(c, "", false, nil, store)
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-FB-Tenant", "nonexistent")
+	_, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Empty(t, gotID, "Should return empty when header value matches no tenant")
+	assert.Empty(t, gotSource, "Source should be empty when tenant not found")
+}
+
+func TestResolveTenantID_FallbackToDefault(t *testing.T) {
+	store := &mockTenantStore{
+		getDefaultTenantFunc: func(_ context.Context) (*tenantdb.Tenant, error) {
+			return &tenantdb.Tenant{ID: "default-id", Slug: "default"}, nil
+		},
+	}
+
+	app := fiber.New()
+	var gotID, gotSource string
+	app.Get("/test", func(c fiber.Ctx) error {
+		gotID, gotSource = resolveTenantID(c, "", false, nil, store)
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	_, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, "default-id", gotID)
+	assert.Equal(t, "default", gotSource)
+}
+
+func TestResolveTenantID_JWTClaims(t *testing.T) {
+	tenantID := "jwt-tenant-id"
+	store := &mockTenantStore{
+		getDefaultTenantFunc: func(_ context.Context) (*tenantdb.Tenant, error) {
+			return &tenantdb.Tenant{ID: "default-id", Slug: "default"}, nil
+		},
+	}
+
+	claims := &auth.TokenClaims{}
+	tenantIDStr := tenantID
+	claims.TenantID = &tenantIDStr
+
+	app := fiber.New()
+	var gotID, gotSource string
+	app.Get("/test", func(c fiber.Ctx) error {
+		gotID, gotSource = resolveTenantID(c, "", false, claims, store)
+		return c.SendString("OK")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	_, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, tenantID, gotID)
+	assert.Equal(t, "jwt", gotSource)
+}

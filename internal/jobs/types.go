@@ -84,6 +84,7 @@ type JobFunctionSummary struct {
 	Version                int        `db:"version" json:"version"`
 	CreatedBy              *uuid.UUID `db:"created_by" json:"created_by,omitempty"`
 	Source                 string     `db:"source" json:"source"` // "filesystem" or "api"
+	TenantID               string     `db:"tenant_id" json:"tenant_id,omitempty"`
 	CreatedAt              time.Time  `db:"created_at" json:"created_at"`
 	UpdatedAt              time.Time  `db:"updated_at" json:"updated_at"`
 }
@@ -109,6 +110,7 @@ type Job struct {
 	UserRole               *string    `db:"user_role" json:"user_role,omitempty"`   // Role of user who submitted job
 	UserEmail              *string    `db:"user_email" json:"user_email,omitempty"` // Email of user who submitted job
 	UserName               *string    `db:"user_name" json:"user_name,omitempty"`   // Display name of user who submitted job
+	TenantID               string     `db:"tenant_id" json:"tenant_id,omitempty"`
 	CreatedAt              time.Time  `db:"created_at" json:"created_at"`
 	ScheduledAt            *time.Time `db:"scheduled_at" json:"scheduled_at,omitempty"`
 	StartedAt              *time.Time `db:"started_at" json:"started_at,omitempty"`

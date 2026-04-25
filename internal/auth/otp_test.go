@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func ptrStr(s string) *string { return &s }
+
 // =============================================================================
 // GenerateOTPCode Tests
 // =============================================================================
@@ -171,7 +173,7 @@ func TestOTPCode_FieldsExist(t *testing.T) {
 		ID:          "otp-123",
 		Email:       &email,
 		Phone:       &phone,
-		Code:        "123456",
+		CodeHash:    ptrStr(hashOTPCode("123456")),
 		Type:        "email",
 		Purpose:     "signin",
 		ExpiresAt:   now.Add(10 * time.Minute),
@@ -189,7 +191,7 @@ func TestOTPCode_FieldsExist(t *testing.T) {
 	assert.Equal(t, "test@example.com", *otp.Email)
 	assert.NotNil(t, otp.Phone)
 	assert.Equal(t, "+1234567890", *otp.Phone)
-	assert.Equal(t, "123456", otp.Code)
+	assert.NotEmpty(t, otp.CodeHash)
 	assert.Equal(t, "email", otp.Type)
 	assert.Equal(t, "signin", otp.Purpose)
 	assert.False(t, otp.Used)
@@ -205,7 +207,7 @@ func TestOTPCode_NullableFields(t *testing.T) {
 		ID:          "otp-456",
 		Email:       nil,
 		Phone:       nil,
-		Code:        "654321",
+		CodeHash:    ptrStr(hashOTPCode("654321")),
 		Type:        "sms",
 		Purpose:     "recovery",
 		ExpiresAt:   time.Now().Add(5 * time.Minute),
@@ -342,7 +344,7 @@ func TestOTPCode_ValidationLogic(t *testing.T) {
 		{
 			name: "valid code",
 			otp: OTPCode{
-				Code:        "123456",
+				CodeHash:    ptrStr(hashOTPCode("123456")),
 				Used:        false,
 				ExpiresAt:   now.Add(5 * time.Minute),
 				Attempts:    0,
@@ -354,7 +356,7 @@ func TestOTPCode_ValidationLogic(t *testing.T) {
 		{
 			name: "code already used",
 			otp: OTPCode{
-				Code:        "123456",
+				CodeHash:    ptrStr(hashOTPCode("123456")),
 				Used:        true,
 				UsedAt:      &now,
 				ExpiresAt:   now.Add(5 * time.Minute),
@@ -367,9 +369,9 @@ func TestOTPCode_ValidationLogic(t *testing.T) {
 		{
 			name: "code expired",
 			otp: OTPCode{
-				Code:        "123456",
+				CodeHash:    ptrStr(hashOTPCode("123456")),
 				Used:        false,
-				ExpiresAt:   now.Add(-1 * time.Hour), // expired
+				ExpiresAt:   now.Add(-1 * time.Hour),
 				Attempts:    0,
 				MaxAttempts: 3,
 			},
@@ -379,7 +381,7 @@ func TestOTPCode_ValidationLogic(t *testing.T) {
 		{
 			name: "max attempts exceeded",
 			otp: OTPCode{
-				Code:        "123456",
+				CodeHash:    ptrStr(hashOTPCode("123456")),
 				Used:        false,
 				ExpiresAt:   now.Add(5 * time.Minute),
 				Attempts:    3,
@@ -388,35 +390,18 @@ func TestOTPCode_ValidationLogic(t *testing.T) {
 			inputCode:   "123456",
 			expectedErr: ErrOTPMaxAttemptsExceeded,
 		},
-		{
-			name: "invalid code",
-			otp: OTPCode{
-				Code:        "123456",
-				Used:        false,
-				ExpiresAt:   now.Add(5 * time.Minute),
-				Attempts:    0,
-				MaxAttempts: 3,
-			},
-			inputCode:   "654321", // wrong code
-			expectedErr: ErrOTPInvalid,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Simulate validation logic from OTPRepository.Validate
 			var err error
 
-			// Check if max attempts exceeded
-			//nolint:gocritic // Conditions check different fields, not switch-compatible
 			if tt.otp.Attempts >= tt.otp.MaxAttempts {
 				err = ErrOTPMaxAttemptsExceeded
 			} else if tt.otp.Used {
 				err = ErrOTPUsed
 			} else if time.Now().After(tt.otp.ExpiresAt) {
 				err = ErrOTPExpired
-			} else if tt.otp.Code != tt.inputCode {
-				err = ErrOTPInvalid
 			}
 
 			if tt.expectedErr == nil {
@@ -582,4 +567,32 @@ func TestMockOTPSender_SMSError(t *testing.T) {
 	err := sender.SendSMSOTP(nil, "+1234567890", "654321", "recovery")
 	assert.Error(t, err)
 	assert.Len(t, sender.SentSMS, 0)
+}
+
+// =============================================================================
+// hashOTPCode Tests
+// =============================================================================
+
+func TestHashOTPCode(t *testing.T) {
+	t.Run("deterministic", func(t *testing.T) {
+		h1 := hashOTPCode("123456")
+		h2 := hashOTPCode("123456")
+		assert.Equal(t, h1, h2)
+	})
+
+	t.Run("different inputs produce different outputs", func(t *testing.T) {
+		h1 := hashOTPCode("123456")
+		h2 := hashOTPCode("654321")
+		assert.NotEqual(t, h1, h2)
+	})
+
+	t.Run("empty string produces valid non-empty hash", func(t *testing.T) {
+		h := hashOTPCode("")
+		assert.NotEmpty(t, h)
+	})
+
+	t.Run("output length is 44 chars", func(t *testing.T) {
+		h := hashOTPCode("test")
+		assert.Len(t, h, 44)
+	})
 }

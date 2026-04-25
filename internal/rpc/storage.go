@@ -89,6 +89,51 @@ func (s *Storage) UpdateProcedure(ctx context.Context, proc *Procedure) error {
 	return s.UpdateProcedureWithTenant(ctx, tenantID, proc)
 }
 
+func (s *Storage) UpdateProcedureForSync(ctx context.Context, tenantID string, proc *Procedure) error {
+	query := `
+		UPDATE rpc.procedures SET
+			description = $2,
+			sql_query = $3,
+			original_code = $4,
+			input_schema = $5,
+			output_schema = $6,
+			allowed_tables = $7,
+			allowed_schemas = $8,
+			max_execution_time_seconds = $9,
+			require_roles = $10,
+			is_public = $11,
+			disable_execution_logs = $12,
+			schedule = $13,
+			enabled = $14,
+			version = version + 1,
+			updated_at = $15
+		WHERE id = $1
+	`
+
+	proc.UpdatedAt = time.Now()
+
+	return database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query,
+			proc.ID,
+			proc.Description,
+			proc.SQLQuery,
+			proc.OriginalCode,
+			proc.InputSchema,
+			proc.OutputSchema,
+			proc.AllowedTables,
+			proc.AllowedSchemas,
+			proc.MaxExecutionTimeSeconds,
+			proc.RequireRoles,
+			proc.IsPublic,
+			proc.DisableExecutionLogs,
+			proc.Schedule,
+			proc.Enabled,
+			proc.UpdatedAt,
+		)
+		return err
+	})
+}
+
 // UpdateProcedureWithTenant updates an existing procedure in the database with tenant context
 func (s *Storage) UpdateProcedureWithTenant(ctx context.Context, tenantID string, proc *Procedure) error {
 	query := `
@@ -274,6 +319,47 @@ func (s *Storage) ListProcedures(ctx context.Context, namespace string) ([]*Proc
 	return procedures, nil
 }
 
+// ListProceduresForSync lists procedures matching the given tenant OR with NULL tenant_id.
+// Used by sync flows to find existing procedures regardless of backfill state.
+func (s *Storage) ListProceduresForSync(ctx context.Context, namespace string, tenantID string) ([]*Procedure, error) {
+	query := `
+		SELECT id, name, namespace, description, sql_query, original_code,
+			input_schema, output_schema, allowed_tables, allowed_schemas,
+			max_execution_time_seconds, require_roles, is_public, disable_execution_logs, schedule,
+			enabled, version, source, created_by, created_at, updated_at
+		FROM rpc.procedures
+		WHERE namespace = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+		ORDER BY name ASC
+	`
+	var procedures []*Procedure
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		rows, queryErr := tx.Query(ctx, query, namespace, tenantOrNil(tenantID))
+		if queryErr != nil {
+			return queryErr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			proc := &Procedure{}
+			if scanErr := rows.Scan(
+				&proc.ID, &proc.Name, &proc.Namespace, &proc.Description, &proc.SQLQuery, &proc.OriginalCode,
+				&proc.InputSchema, &proc.OutputSchema, &proc.AllowedTables, &proc.AllowedSchemas,
+				&proc.MaxExecutionTimeSeconds, &proc.RequireRoles, &proc.IsPublic, &proc.DisableExecutionLogs, &proc.Schedule,
+				&proc.Enabled, &proc.Version, &proc.Source, &proc.CreatedBy, &proc.CreatedAt, &proc.UpdatedAt,
+			); scanErr != nil {
+				return scanErr
+			}
+			procedures = append(procedures, proc)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list procedures for sync: %w", err)
+	}
+
+	return procedures, nil
+}
+
 // ListPublicProcedures lists all public and enabled procedures
 func (s *Storage) ListPublicProcedures(ctx context.Context, namespace string) ([]*ProcedureSummary, error) {
 	tenantID := database.TenantFromContext(ctx)
@@ -357,6 +443,26 @@ func (s *Storage) DeleteProcedureWithTenant(ctx context.Context, tenantID string
 	return nil
 }
 
+func (s *Storage) DeleteProcedureForSync(ctx context.Context, tenantID string, id string) error {
+	query := `DELETE FROM rpc.procedures WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)`
+
+	var result pgconn.CommandTag
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, id, tenantOrNil(tenantID))
+		return execErr
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete procedure: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("procedure not found: %s", id)
+	}
+
+	return nil
+}
+
 // DeleteProcedureByName deletes a procedure by namespace and name
 func (s *Storage) DeleteProcedureByName(ctx context.Context, namespace, name string) error {
 	tenantID := database.TenantFromContext(ctx)
@@ -434,7 +540,7 @@ func (s *Storage) ListScheduledProcedures(ctx context.Context) ([]*Procedure, er
 	tenantID := database.TenantFromContext(ctx)
 	var procedures []*Procedure
 	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
-		rows, queryErr := tx.Query(ctx, query, tenantOrNil(tenantID))
+		rows, queryErr := tx.Query(ctx, query)
 		if queryErr != nil {
 			return queryErr
 		}

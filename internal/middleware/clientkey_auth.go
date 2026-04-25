@@ -116,6 +116,7 @@ func OptionalClientKeyAuth(authService *auth.Service, clientKeyService *auth.Cli
 				c.Locals("session_id", claims.SessionID)
 				c.Locals("auth_type", "jwt")
 				c.Locals("claims", claims)
+				c.Locals("jwt_claims", claims)
 				return c.Next()
 			}
 		}
@@ -187,6 +188,7 @@ func RequireEitherAuth(authService *auth.Service, clientKeyService *auth.ClientK
 				c.Locals("session_id", claims.SessionID)
 				c.Locals("auth_type", "jwt")
 				c.Locals("claims", claims)
+				c.Locals("jwt_claims", claims)
 				return c.Next()
 			}
 		}
@@ -387,11 +389,13 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 					c.Locals("user_role", claims.Role)
 					c.Locals("auth_type", "jwt")
 					c.Locals("is_anonymous", false)
+					c.Locals("is_instance_admin", true)
 
 					// Set RLS context for platform admin
 					c.Locals("rls_user_id", claims.Subject)
 					c.Locals("rls_role", claims.Role)
 					c.Locals("claims", claims)
+					c.Locals("jwt_claims", claims)
 
 					return c.Next()
 				}
@@ -426,6 +430,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 				c.Locals("rls_role", claims.Role)
 
 				c.Locals("claims", claims)
+				c.Locals("jwt_claims", claims)
 				// SECURITY: Log audit entry for impersonation tokens
 				// Impersonation tokens have an impersonated_by claim indicating the admin who issued them
 				if claims.ImpersonatedBy != "" {
@@ -457,6 +462,7 @@ func RequireAuthOrServiceKey(authService *auth.Service, clientKeyService *auth.C
 					c.Locals("rls_role", dashboardClaims.Role)
 
 					c.Locals("claims", dashboardClaims)
+					c.Locals("jwt_claims", dashboardClaims)
 					return c.Next()
 				}
 			}
@@ -1134,7 +1140,8 @@ func mapKeyTypetoRole(keyType string) string {
 	case keys.KeyTypePublishable:
 		return "authenticated"
 	default:
-		return "service_role"
+		log.Warn().Str("key_type", keyType).Msg("mapKeyTypetoRole: unrecognized key type, defaulting to anon")
+		return "anon"
 	}
 }
 

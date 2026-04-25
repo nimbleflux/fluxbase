@@ -534,6 +534,10 @@ func (s *TriggerService) processWebhookEvents(ctx context.Context, webhookID uui
 
 // deliverEvent delivers a single webhook event
 func (s *TriggerService) deliverEvent(ctx context.Context, webhook *Webhook, event *WebhookEvent) {
+	if webhook.TenantID != nil {
+		ctx = database.ContextWithTenant(ctx, webhook.TenantID.String())
+	}
+
 	// Check rate limit for this endpoint
 	if !s.rateLimiter.allow(webhook.URL) {
 		log.Warn().

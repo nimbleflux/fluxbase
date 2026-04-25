@@ -200,6 +200,13 @@ func (h *RealtimeHandler) handleConnection(c *websocket.Conn) {
 			claims = claimsMap
 		}
 	}
+	if claims == nil {
+		if cl := c.Locals("jwt_claims"); cl != nil {
+			if claimsMap, ok := cl.(map[string]interface{}); ok {
+				claims = claimsMap
+			}
+		}
+	}
 
 	// Add connection to manager (checks connection limit)
 	connection, err := h.manager.AddConnection(connectionID, c, userID, role, claims)

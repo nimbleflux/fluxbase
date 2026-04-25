@@ -2,6 +2,7 @@ package email
 
 import (
 	"bytes"
+	"html"
 	"html/template"
 	"os"
 
@@ -129,17 +130,21 @@ func renderInvitationHTML(inviterName, inviteLink string) string {
 
 // Fallback HTML templates (simple versions)
 func fallbackMagicLinkHTML(link string) string {
-	return `<html><body><h2>Your Login Link</h2><p>Click the link below to log in:</p><p><a href="` + link + `">Log In</a></p><p>This link will expire soon</p></body></html>`
+	safe := html.EscapeString(link)
+	return `<html><body><h2>Your Login Link</h2><p>Click the link below to log in:</p><p><a href="` + safe + `">Log In</a></p><p>This link will expire soon</p></body></html>`
 }
 
 func fallbackVerificationHTML(link string) string {
-	return `<html><body><h2>Verify Your Email</h2><p>Click the link below to verify your email:</p><p><a href="` + link + `">Verify Email</a></p></body></html>`
+	safe := html.EscapeString(link)
+	return `<html><body><h2>Verify Your Email</h2><p>Click the link below to verify your email:</p><p><a href="` + safe + `">Verify Email</a></p></body></html>`
 }
 
 func fallbackPasswordResetHTML(link string) string {
-	return `<html><body><h2>Reset Your Password</h2><p>Click the link below to reset your password:</p><p><a href="` + link + `">Reset Password</a></p><p>This link will expire soon</p></body></html>`
+	safe := html.EscapeString(link)
+	return `<html><body><h2>Reset Your Password</h2><p>Click the link below to reset your password:</p><p><a href="` + safe + `">Reset Password</a></p><p>This link will expire soon</p></body></html>`
 }
 
 func fallbackInvitationHTML(link string) string {
-	return `<html><body><h2>You've Been Invited!</h2><p>Click the link below to accept your invitation:</p><p><a href="` + link + `">Accept Invitation</a></p><p>This invitation expires in 7 days</p></body></html>`
+	safe := html.EscapeString(link)
+	return `<html><body><h2>You've Been Invited!</h2><p>Click the link below to accept your invitation:</p><p><a href="` + safe + `">Accept Invitation</a></p><p>This invitation expires in 7 days</p></body></html>`
 }

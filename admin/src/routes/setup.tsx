@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { adminAuthAPI } from '@/lib/api'
-import { setTokens } from '@/lib/auth'
-import { setAuthToken } from '@/lib/fluxbase-client'
+import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -22,6 +21,7 @@ export const Route = createFileRoute('/setup')({
 
 function SetupPage() {
   const navigate = useNavigate()
+  const { auth } = useAuthStore()
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
@@ -80,18 +80,17 @@ function SetupPage() {
         setup_token: formData.setupToken,
       })
 
-      // Store tokens
-      setTokens(
-        {
-          access_token: response.access_token,
-          refresh_token: response.refresh_token,
-          expires_in: response.expires_in,
-        },
-        response.user
+      auth.setTokens(response.access_token, response.refresh_token)
+      auth.setUser({
+        accountNo: response.user.id,
+        email: response.user.email,
+        role: [response.user.role],
+        exp: Date.now() + response.expires_in * 1000,
+      })
+      localStorage.setItem(
+        'fluxbase_admin_user',
+        JSON.stringify(response.user),
       )
-
-      // Also set token in Fluxbase SDK
-      setAuthToken(response.access_token)
 
       toast.success('Welcome to Fluxbase!', {
         description: 'Your admin account has been created successfully.',

@@ -226,6 +226,7 @@ type DatabaseConfig struct {
 	MaxConnIdleTime    time.Duration `mapstructure:"max_conn_idle_time"`
 	HealthCheck        time.Duration `mapstructure:"health_check_period"`
 	UserMigrationsPath string        `mapstructure:"user_migrations_path"` // Path to user-provided migration files
+	SlowQueryThreshold time.Duration `mapstructure:"slow_query_threshold"` // Log queries slower than this (default: 1s)
 }
 
 // AuthConfig contains authentication settings
@@ -294,6 +295,9 @@ type SAMLProviderConfig struct {
 	// SP signing keys for SLO (Single Logout) - PEM-encoded
 	SPCertificate string `mapstructure:"sp_certificate"` // PEM-encoded X.509 certificate for signing
 	SPPrivateKey  string `mapstructure:"sp_private_key"` // PEM-encoded private key for signing
+
+	// Logout signature verification
+	RequireLogoutSignature *bool `mapstructure:"require_logout_signature"` // Require signed SAML logout messages (default: true)
 }
 
 // OAuthProviderConfig represents a unified OAuth/OIDC provider configuration
@@ -366,8 +370,6 @@ type CaptchaConfig struct {
 	// Cap provider settings (self-hosted proof-of-work CAPTCHA)
 	CapServerURL string `mapstructure:"cap_server_url"` // URL of Cap server (e.g., http://localhost:3000)
 	CapAPIKey    string `mapstructure:"cap_api_key"`    // API key for Cap server authentication
-	// Test mode settings (for development/testing only - DO NOT use in production)
-	TestBypassToken string `mapstructure:"test_bypass_token"` // Token that bypasses verification (leave empty in production)
 	// Adaptive trust settings for intelligent CAPTCHA decisions
 	AdaptiveTrust AdaptiveTrustConfig `mapstructure:"adaptive_trust"`
 }
@@ -815,6 +817,7 @@ func setDefaults() {
 	viper.SetDefault("database.max_conn_idle_time", "30m")
 	viper.SetDefault("database.health_check_period", "1m")
 	viper.SetDefault("database.user_migrations_path", "/migrations/user")
+	viper.SetDefault("database.slow_query_threshold", "1s")
 
 	// Auth defaults
 	viper.SetDefault("auth.jwt_secret", "your-secret-key-change-in-production")
@@ -1386,6 +1389,9 @@ func (dc *DatabaseConfig) Validate() error {
 	}
 	if !sslModeValid {
 		return fmt.Errorf("invalid ssl_mode: %s (must be one of: %v)", dc.SSLMode, validSSLModes)
+	}
+	if dc.SSLMode == "disable" {
+		log.Warn().Msg("database.ssl_mode is 'disable' — database connections are unencrypted. Set ssl_mode to 'require' or higher in production.")
 	}
 
 	// Validate connection pool settings

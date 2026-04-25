@@ -141,9 +141,7 @@ test.describe("SSO Login", () => {
     }
   });
 
-  test("callback page processes tokens and stores them", async ({
-    page,
-  }) => {
+  test("callback page processes tokens and stores them", async ({ page }) => {
     // Get real tokens via API login
     const loginResult = await rawLogin({
       email: ADMIN_EMAIL,
@@ -157,23 +155,45 @@ test.describe("SSO Login", () => {
     const callbackUrl = `login/callback#access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&redirect_to=%2Fadmin`;
     await page.goto(callbackUrl);
 
-    // Wait for token processing — the useEffect sets localStorage before redirecting
-    // Check localStorage for the stored access token
+    // Wait for token processing — the useEffect sets cookies via Zustand before redirecting
+    // Check cookies for the stored access token
     await expect
       .poll(
         async () => {
-          return page.evaluate(() =>
-            localStorage.getItem("fluxbase_admin_access_token"),
-          );
+          return page.evaluate(() => {
+            const prefix = "fluxbase_admin_token=";
+            const parts = document.cookie.split("; ");
+            for (const part of parts) {
+              if (part.startsWith(prefix)) {
+                try {
+                  return JSON.parse(part.substring(prefix.length));
+                } catch {
+                  return part.substring(prefix.length);
+                }
+              }
+            }
+            return null;
+          });
         },
         { timeout: 5_000 },
       )
       .toBe(accessToken);
 
-    // Verify refresh token is also stored
-    const storedRefresh = await page.evaluate(() =>
-      localStorage.getItem("fluxbase_admin_refresh_token"),
-    );
+    // Verify refresh token is also stored in cookie
+    const storedRefresh = await page.evaluate(() => {
+      const prefix = "fluxbase_admin_refresh_token=";
+      const parts = document.cookie.split("; ");
+      for (const part of parts) {
+        if (part.startsWith(prefix)) {
+          try {
+            return JSON.parse(part.substring(prefix.length));
+          } catch {
+            return part.substring(prefix.length);
+          }
+        }
+      }
+      return null;
+    });
     expect(storedRefresh).toBe(refreshToken);
   });
 
@@ -186,10 +206,21 @@ test.describe("SSO Login", () => {
     await page.waitForTimeout(2000);
 
     // The callback should have detected no tokens and attempted to redirect
-    // We can verify by checking that localStorage was NOT set
-    const storedToken = await page.evaluate(() =>
-      localStorage.getItem("fluxbase_admin_access_token"),
-    );
+    // We can verify by checking that auth cookies were NOT set
+    const storedToken = await page.evaluate(() => {
+      const prefix = "fluxbase_admin_token=";
+      const parts = document.cookie.split("; ");
+      for (const part of parts) {
+        if (part.startsWith(prefix)) {
+          try {
+            return JSON.parse(part.substring(prefix.length));
+          } catch {
+            return part.substring(prefix.length);
+          }
+        }
+      }
+      return null;
+    });
     expect(storedToken).toBeNull();
   });
 });

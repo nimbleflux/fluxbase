@@ -3,13 +3,16 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
@@ -23,11 +26,18 @@ var (
 	ErrInvitationAlreadyAccepted = errors.New("invitation has already been accepted")
 )
 
+// hashInvitationToken creates a SHA-256 hash of a token and returns it as hex.
+func hashInvitationToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
+}
+
 // InvitationToken represents an invitation for a new user
 type InvitationToken struct {
 	ID         uuid.UUID  `json:"id"`
 	Email      string     `json:"email"`
-	Token      string     `json:"token"`
+	Token      string     `json:"-" db:"token"`
+	TokenHash  *string    `json:"-" db:"token_hash"`
 	Role       string     `json:"role"`
 	TenantID   *uuid.UUID `json:"tenant_id,omitempty"`
 	InvitedBy  *uuid.UUID `json:"invited_by,omitempty"`
@@ -35,6 +45,14 @@ type InvitationToken struct {
 	Accepted   bool       `json:"accepted"`
 	AcceptedAt *time.Time `json:"accepted_at,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`
+}
+
+// InvitationTokenWithPlaintext wraps InvitationToken with the plaintext token
+// for one-time use (e.g., building invitation links). The plaintext is never
+// exposed in JSON responses.
+type InvitationTokenWithPlaintext struct {
+	*InvitationToken
+	PlaintextToken string `json:"token"`
 }
 
 // InvitationService handles user invitation operations
@@ -60,29 +78,29 @@ func (s *InvitationService) GenerateToken() (string, error) {
 }
 
 // CreateInvitation creates a new invitation token
-func (s *InvitationService) CreateInvitation(ctx context.Context, email, role string, invitedBy *uuid.UUID, expiryDuration time.Duration) (*InvitationToken, error) {
+func (s *InvitationService) CreateInvitation(ctx context.Context, email, role string, invitedBy *uuid.UUID, expiryDuration time.Duration) (*InvitationTokenWithPlaintext, error) {
 	return s.CreateInvitationWithTenant(ctx, email, role, nil, invitedBy, expiryDuration)
 }
 
 // CreateInvitationWithTenant creates a new invitation token with an optional tenant context
-func (s *InvitationService) CreateInvitationWithTenant(ctx context.Context, email, role string, tenantID *uuid.UUID, invitedBy *uuid.UUID, expiryDuration time.Duration) (*InvitationToken, error) {
-	// Generate secure token
+func (s *InvitationService) CreateInvitationWithTenant(ctx context.Context, email, role string, tenantID *uuid.UUID, invitedBy *uuid.UUID, expiryDuration time.Duration) (*InvitationTokenWithPlaintext, error) {
 	token, err := s.GenerateToken()
 	if err != nil {
 		return nil, err
 	}
 
-	// Calculate expiration time (default 7 days)
 	if expiryDuration == 0 {
 		expiryDuration = 7 * 24 * time.Hour
 	}
 	expiresAt := time.Now().Add(expiryDuration)
 
-	// Insert invitation token
+	tokenHash := hashInvitationToken(token)
+
 	invitation := &InvitationToken{
 		ID:        uuid.New(),
 		Email:     email,
 		Token:     token,
+		TokenHash: &tokenHash,
 		Role:      role,
 		TenantID:  tenantID,
 		InvitedBy: invitedBy,
@@ -93,13 +111,14 @@ func (s *InvitationService) CreateInvitationWithTenant(ctx context.Context, emai
 
 	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			INSERT INTO platform.invitation_tokens (id, email, token, role, tenant_id, invited_by, expires_at, accepted, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			RETURNING id, email, token, role, tenant_id, invited_by, expires_at, accepted, created_at
+			INSERT INTO platform.invitation_tokens (id, email, token, token_hash, role, tenant_id, invited_by, expires_at, accepted, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			RETURNING id, email, token, token_hash, role, tenant_id, invited_by, expires_at, accepted, created_at
 		`,
 			invitation.ID,
 			invitation.Email,
 			invitation.Token,
+			invitation.TokenHash,
 			invitation.Role,
 			invitation.TenantID,
 			invitation.InvitedBy,
@@ -110,6 +129,7 @@ func (s *InvitationService) CreateInvitationWithTenant(ctx context.Context, emai
 			&invitation.ID,
 			&invitation.Email,
 			&invitation.Token,
+			&invitation.TokenHash,
 			&invitation.Role,
 			&invitation.TenantID,
 			&invitation.InvitedBy,
@@ -122,22 +142,62 @@ func (s *InvitationService) CreateInvitationWithTenant(ctx context.Context, emai
 		return nil, err
 	}
 
-	return invitation, nil
+	return &InvitationTokenWithPlaintext{InvitationToken: invitation, PlaintextToken: token}, nil
+}
+
+func validateInvitation(invitation *InvitationToken) error {
+	if invitation.Accepted {
+		return ErrInvitationAlreadyAccepted
+	}
+	if time.Now().After(invitation.ExpiresAt) {
+		return ErrInvitationExpired
+	}
+	return nil
 }
 
 // ValidateToken validates an invitation token and returns the invitation
 func (s *InvitationService) ValidateToken(ctx context.Context, token string) (*InvitationToken, error) {
+	tokenHash := hashInvitationToken(token)
 	invitation := &InvitationToken{}
 
+	// Try hash-based lookup first
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
-			SELECT id, email, token, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
+			SELECT id, email, token, token_hash, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
+			FROM platform.invitation_tokens
+			WHERE token_hash = $1
+		`, tokenHash).Scan(
+			&invitation.ID,
+			&invitation.Email,
+			&invitation.Token,
+			&invitation.TokenHash,
+			&invitation.Role,
+			&invitation.TenantID,
+			&invitation.InvitedBy,
+			&invitation.ExpiresAt,
+			&invitation.Accepted,
+			&invitation.AcceptedAt,
+			&invitation.CreatedAt,
+		)
+	})
+	if err == nil {
+		return invitation, validateInvitation(invitation)
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+
+	// Fallback: plaintext lookup for legacy tokens
+	err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			SELECT id, email, token, token_hash, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
 			FROM platform.invitation_tokens
 			WHERE token = $1
 		`, token).Scan(
 			&invitation.ID,
 			&invitation.Email,
 			&invitation.Token,
+			&invitation.TokenHash,
 			&invitation.Role,
 			&invitation.TenantID,
 			&invitation.InvitedBy,
@@ -154,31 +214,34 @@ func (s *InvitationService) ValidateToken(ctx context.Context, token string) (*I
 		return nil, err
 	}
 
-	// Check if already accepted
-	if invitation.Accepted {
-		return nil, ErrInvitationAlreadyAccepted
+	// Lazy migration: backfill hash for this legacy token
+	if invitation.TokenHash == nil || *invitation.TokenHash == "" {
+		if migrateErr := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+			_, execErr := tx.Exec(ctx, `UPDATE platform.invitation_tokens SET token_hash = $1 WHERE id = $2`, tokenHash, invitation.ID)
+			return execErr
+		}); migrateErr != nil {
+			log.Debug().Err(migrateErr).Str("invitation_id", invitation.ID.String()).Msg("Failed to lazy-migrate invitation token hash")
+		}
+		invitation.TokenHash = &tokenHash
 	}
 
-	// Check if expired
-	if time.Now().After(invitation.ExpiresAt) {
-		return nil, ErrInvitationExpired
-	}
-
-	return invitation, nil
+	return invitation, validateInvitation(invitation)
 }
 
 // AcceptInvitation marks an invitation as accepted
 func (s *InvitationService) AcceptInvitation(ctx context.Context, token string) error {
 	now := time.Now()
+	tokenHash := hashInvitationToken(token)
 
+	// Try hash-based lookup first
 	var result pgconn.CommandTag
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		var err error
 		result, err = tx.Exec(ctx, `
 			UPDATE platform.invitation_tokens
 			SET accepted = true, accepted_at = $1
-			WHERE token = $2 AND accepted = false AND expires_at > $1
-		`, now, token)
+			WHERE token_hash = $2 AND accepted = false AND expires_at > $1
+		`, now, tokenHash)
 		return err
 	})
 	if err != nil {
@@ -186,8 +249,22 @@ func (s *InvitationService) AcceptInvitation(ctx context.Context, token string) 
 	}
 
 	if result.RowsAffected() == 0 {
-		// Token either doesn't exist, already accepted, or expired
-		// Need to query to determine which
+		// Fallback: try plaintext lookup for legacy tokens
+		err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+			var err error
+			result, err = tx.Exec(ctx, `
+				UPDATE platform.invitation_tokens
+				SET accepted = true, accepted_at = $1, token_hash = $3
+				WHERE token = $2 AND accepted = false AND expires_at > $1
+			`, now, token, tokenHash)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	if result.RowsAffected() == 0 {
 		_, err := s.ValidateToken(ctx, token)
 		return err
 	}
@@ -197,16 +274,32 @@ func (s *InvitationService) AcceptInvitation(ctx context.Context, token string) 
 
 // RevokeInvitation revokes (deletes) an invitation token
 func (s *InvitationService) RevokeInvitation(ctx context.Context, token string) error {
+	tokenHash := hashInvitationToken(token)
+
 	var result pgconn.CommandTag
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		var err error
 		result, err = tx.Exec(ctx, `
-			DELETE FROM platform.invitation_tokens WHERE token = $1
-		`, token)
+			DELETE FROM platform.invitation_tokens WHERE token_hash = $1
+		`, tokenHash)
 		return err
 	})
 	if err != nil {
 		return err
+	}
+
+	if result.RowsAffected() == 0 {
+		// Fallback: try plaintext lookup
+		err = database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+			var err error
+			result, err = tx.Exec(ctx, `
+				DELETE FROM platform.invitation_tokens WHERE token = $1
+			`, token)
+			return err
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	if result.RowsAffected() == 0 {
@@ -221,7 +314,7 @@ func (s *InvitationService) GetInvitationByEmail(ctx context.Context, email stri
 	var invitations []InvitationToken
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
-			SELECT id, email, token, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
+			SELECT id, email, token, token_hash, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
 			FROM platform.invitation_tokens
 			WHERE email = $1 AND accepted = false AND expires_at > NOW()
 			ORDER BY created_at DESC
@@ -237,6 +330,7 @@ func (s *InvitationService) GetInvitationByEmail(ctx context.Context, email stri
 				&inv.ID,
 				&inv.Email,
 				&inv.Token,
+				&inv.TokenHash,
 				&inv.Role,
 				&inv.TenantID,
 				&inv.InvitedBy,
@@ -258,7 +352,7 @@ func (s *InvitationService) GetInvitationByEmail(ctx context.Context, email stri
 // ListInvitations retrieves all invitations (for admin panel)
 func (s *InvitationService) ListInvitations(ctx context.Context, includeAccepted, includeExpired bool) ([]InvitationToken, error) {
 	query := `
-		SELECT id, email, token, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
+		SELECT id, email, token, token_hash, role, tenant_id, invited_by, expires_at, accepted, accepted_at, created_at
 		FROM platform.invitation_tokens
 		WHERE 1=1
 	`
@@ -289,6 +383,7 @@ func (s *InvitationService) ListInvitations(ctx context.Context, includeAccepted
 				&inv.ID,
 				&inv.Email,
 				&inv.Token,
+				&inv.TokenHash,
 				&inv.Role,
 				&inv.TenantID,
 				&inv.InvitedBy,

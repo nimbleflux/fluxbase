@@ -1,13 +1,15 @@
 package database
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 // =============================================================================
-// extractTableName Tests
+// ExtractTableName Tests
 // =============================================================================
 
 func TestExtractTableName(t *testing.T) {
@@ -128,13 +130,13 @@ func TestExtractTableName(t *testing.T) {
 		{
 			name:     "select with subquery",
 			sql:      "SELECT * FROM (SELECT * FROM users) as subq",
-			expected: "users", // extractTableName uses simple regex that finds first FROM
+			expected: "users", // ExtractTableName uses simple regex that finds first FROM
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractTableName(tt.sql)
+			result := ExtractTableName(tt.sql)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -151,13 +153,13 @@ func TestExtractTableName_CaseInsensitive(t *testing.T) {
 	}
 
 	for _, sql := range variations {
-		result := extractTableName(sql)
+		result := ExtractTableName(sql)
 		assert.Equal(t, "users", result, "Failed for SQL: %s", sql)
 	}
 }
 
 // =============================================================================
-// extractOperation Tests
+// ExtractOperation Tests
 // =============================================================================
 
 func TestExtractOperation(t *testing.T) {
@@ -286,7 +288,7 @@ func TestExtractOperation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractOperation(tt.sql)
+			result := ExtractOperation(tt.sql)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -375,35 +377,35 @@ func TestTruncateQuery_Length(t *testing.T) {
 func BenchmarkExtractTableName_SELECT(b *testing.B) {
 	sql := "SELECT id, name, email FROM users WHERE active = true ORDER BY created_at"
 	for i := 0; i < b.N; i++ {
-		_ = extractTableName(sql)
+		_ = ExtractTableName(sql)
 	}
 }
 
 func BenchmarkExtractTableName_INSERT(b *testing.B) {
 	sql := "INSERT INTO users (name, email) VALUES ('John', 'john@example.com')"
 	for i := 0; i < b.N; i++ {
-		_ = extractTableName(sql)
+		_ = ExtractTableName(sql)
 	}
 }
 
 func BenchmarkExtractTableName_UPDATE(b *testing.B) {
 	sql := "UPDATE users SET name = 'Jane', email = 'jane@example.com' WHERE id = 123"
 	for i := 0; i < b.N; i++ {
-		_ = extractTableName(sql)
+		_ = ExtractTableName(sql)
 	}
 }
 
 func BenchmarkExtractTableName_DELETE(b *testing.B) {
 	sql := "DELETE FROM users WHERE id = 123 AND active = false"
 	for i := 0; i < b.N; i++ {
-		_ = extractTableName(sql)
+		_ = ExtractTableName(sql)
 	}
 }
 
 func BenchmarkExtractOperation(b *testing.B) {
 	sql := "SELECT * FROM users WHERE active = true"
 	for i := 0; i < b.N; i++ {
-		_ = extractOperation(sql)
+		_ = ExtractOperation(sql)
 	}
 }
 
@@ -523,4 +525,77 @@ func BenchmarkQuoteIdentifier_WithQuotes(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = quoteIdentifier(identifier)
 	}
+}
+
+func TestSlowQueryTracker(t *testing.T) {
+	t.Run("starts at count 1", func(t *testing.T) {
+		tracker := newSlowQueryTracker()
+		count := tracker.record("select:users")
+		assert.Equal(t, 1, count)
+	})
+
+	t.Run("increments on repeated queries", func(t *testing.T) {
+		tracker := newSlowQueryTracker()
+		key := "select:users"
+		assert.Equal(t, 1, tracker.record(key))
+		assert.Equal(t, 2, tracker.record(key))
+		assert.Equal(t, 3, tracker.record(key))
+	})
+
+	t.Run("tracks different keys independently", func(t *testing.T) {
+		tracker := newSlowQueryTracker()
+		assert.Equal(t, 1, tracker.record("select:users"))
+		assert.Equal(t, 1, tracker.record("insert:orders"))
+		assert.Equal(t, 2, tracker.record("select:users"))
+		assert.Equal(t, 2, tracker.record("insert:orders"))
+	})
+}
+
+func TestWithCaller(t *testing.T) {
+	t.Run("retrieves caller from context", func(t *testing.T) {
+		ctx := WithCaller(context.Background(), "GET /api/v1/users")
+		assert.Equal(t, "GET /api/v1/users", getCallerFromContext(ctx))
+	})
+
+	t.Run("returns empty for nil context", func(t *testing.T) {
+		assert.Equal(t, "", getCallerFromContext(nil))
+	})
+
+	t.Run("returns empty for context without caller", func(t *testing.T) {
+		assert.Equal(t, "", getCallerFromContext(context.Background()))
+	})
+}
+
+func TestLogSlowQuery_Threshold(t *testing.T) {
+	c := &Connection{
+		slowQueryThreshold: 500 * time.Millisecond,
+		slowQueryTracker:   newSlowQueryTracker(),
+	}
+
+	t.Run("does not log below threshold", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			c.logSlowQuery(context.Background(), "SELECT 1", 100*time.Millisecond, "query")
+		})
+	})
+
+	t.Run("logs at threshold", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			c.logSlowQuery(context.Background(), "SELECT * FROM users", 600*time.Millisecond, "query")
+		})
+	})
+
+	t.Run("logs with caller context", func(t *testing.T) {
+		ctx := WithCaller(context.Background(), "GET /api/v1/users")
+		assert.NotPanics(t, func() {
+			c.logSlowQuery(ctx, "SELECT * FROM users", 600*time.Millisecond, "query")
+		})
+	})
+
+	t.Run("tracks occurrences", func(t *testing.T) {
+		for i := 0; i < 5; i++ {
+			assert.NotPanics(t, func() {
+				c.logSlowQuery(context.Background(), "SELECT * FROM orders", 600*time.Millisecond, "query")
+			})
+		}
+	})
 }

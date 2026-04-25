@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/tenantdb"
 )
 
@@ -49,8 +50,10 @@ func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
 		tenantRole, _ := c.Locals("tenant_role").(string)
 
 		var claims *auth.TokenClaims
-		if c, ok := c.Locals("claims").(*auth.TokenClaims); ok {
-			claims = c
+		if cl, ok := c.Locals("claims").(*auth.TokenClaims); ok {
+			claims = cl
+		} else if cl, ok := c.Locals("jwt_claims").(*auth.TokenClaims); ok {
+			claims = cl
 		}
 
 		// Respect prior explicit resolution from TenantMiddleware.
@@ -79,6 +82,7 @@ func TenantDBMiddleware(cfg TenantDBConfig) fiber.Handler {
 
 		c.Locals("tenant_id", tenantID)
 		c.Locals("tenant_source", tenantSource)
+		c.SetContext(database.ContextWithTenant(c.RequestCtx(), tenantID))
 
 		// Fetch tenant record and set DB context only for tenants with separate databases.
 		// For default tenants (UsesMainDatabase), tenant_db stays nil so handlers fall back
@@ -125,8 +129,9 @@ func resolveTenantID(c fiber.Ctx, userID string, isInstanceAdmin bool, claims *a
 			if _, err := storage.GetTenant(c.Context(), headerTenant); err == nil {
 				return headerTenant, "header"
 			}
+			log.Debug().Str("tenant", headerTenant).Msg("resolveTenantID: X-FB-Tenant header value does not match any known tenant")
 		}
-		return headerTenant, "header"
+		return "", ""
 	}
 
 	if claims != nil && claims.TenantID != nil && *claims.TenantID != "" {

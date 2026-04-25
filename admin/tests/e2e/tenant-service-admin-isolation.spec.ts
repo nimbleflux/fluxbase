@@ -6,6 +6,10 @@ import {
   rawListSecrets,
   rawCreateKnowledgeBase,
   rawListKnowledgeBases,
+  rawCreateWebhook,
+  rawListWebhooks,
+  rawCreateCustomSetting,
+  rawListCustomSettings,
   rawApiRequest,
 } from "./helpers/api";
 
@@ -496,5 +500,147 @@ test.describe("Tenant Admin Service Isolation", () => {
 
     // Default tenant's knowledge base should NOT appear
     expect(kbNames).not.toContain(kbName);
+  });
+
+  // ────────────────────────────────────────────────────────────────
+  // Webhooks
+  // ────────────────────────────────────────────────────────────────
+
+  test("tenant admin cannot see other tenant's webhooks", async ({
+    tenantAdminToken,
+    adminToken,
+    defaultTenantId,
+    thirdTenantId,
+  }) => {
+    const defaultWhName = `iso-wh-default-${Date.now()}`;
+    const thirdWhName = `iso-wh-third-${Date.now()}`;
+
+    const defaultResult = await rawCreateWebhook(
+      { name: defaultWhName, url: "https://example.com/wh-default" },
+      adminToken,
+      defaultTenantId,
+    );
+    if (defaultResult.body?.id) {
+      createdResources.push({
+        type: "webhook",
+        id: defaultResult.body.id,
+        cleanup: async () => {
+          await rawApiRequest({
+            method: "DELETE",
+            path: `/api/v1/webhooks/${defaultResult.body.id}`,
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              "X-FB-Tenant": defaultTenantId,
+            },
+          });
+        },
+      });
+    }
+
+    const thirdResult = await rawCreateWebhook(
+      { name: thirdWhName, url: "https://example.com/wh-third" },
+      adminToken,
+      thirdTenantId,
+    );
+    if (thirdResult.body?.id) {
+      createdResources.push({
+        type: "webhook",
+        id: thirdResult.body.id,
+        cleanup: async () => {
+          await rawApiRequest({
+            method: "DELETE",
+            path: `/api/v1/webhooks/${thirdResult.body.id}`,
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              "X-FB-Tenant": thirdTenantId,
+            },
+          });
+        },
+      });
+    }
+
+    const listResult = await rawListWebhooks(tenantAdminToken);
+    expect([200, 401, 403]).toContain(listResult.status);
+
+    if (listResult.status === 200) {
+      const webhooks = (
+        Array.isArray(listResult.body) ? listResult.body : []
+      ) as Array<{
+        name: string;
+      }>;
+      const whNames = webhooks.map((w: { name: string }) => w.name);
+      expect(whNames).not.toContain(defaultWhName);
+      expect(whNames).not.toContain(thirdWhName);
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────
+  // Settings
+  // ────────────────────────────────────────────────────────────────
+
+  test("tenant admin cannot see other tenant's custom settings", async ({
+    tenantAdminToken,
+    adminToken,
+    defaultTenantId,
+    thirdTenantId,
+  }) => {
+    const defaultKey = `iso-setting-default-${Date.now()}`;
+    const thirdKey = `iso-setting-third-${Date.now()}`;
+
+    await rawCreateCustomSetting(
+      { key: defaultKey, value: "default-val" },
+      adminToken,
+      defaultTenantId,
+    );
+    createdResources.push({
+      type: "setting",
+      id: defaultKey,
+      cleanup: async () => {
+        await rawApiRequest({
+          method: "DELETE",
+          path: `/api/v1/admin/settings/custom/${defaultKey}`,
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            "X-FB-Tenant": defaultTenantId,
+          },
+        });
+      },
+    });
+
+    await rawCreateCustomSetting(
+      { key: thirdKey, value: "third-val" },
+      adminToken,
+      thirdTenantId,
+    );
+    createdResources.push({
+      type: "setting",
+      id: thirdKey,
+      cleanup: async () => {
+        await rawApiRequest({
+          method: "DELETE",
+          path: `/api/v1/admin/settings/custom/${thirdKey}`,
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            "X-FB-Tenant": thirdTenantId,
+          },
+        });
+      },
+    });
+
+    const listResult = await rawListCustomSettings(tenantAdminToken);
+    expect([200, 401, 403]).toContain(listResult.status);
+
+    if (listResult.status === 200) {
+      const settings = (
+        Array.isArray(listResult.body)
+          ? listResult.body
+          : listResult.body?.settings || []
+      ) as Array<{
+        key: string;
+      }>;
+      const keys = settings.map((s: { key: string }) => s.key);
+      expect(keys).not.toContain(defaultKey);
+      expect(keys).not.toContain(thirdKey);
+    }
   });
 });

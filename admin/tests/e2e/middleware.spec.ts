@@ -54,9 +54,20 @@ test.describe("Middleware Verification", () => {
     // If none captured (e.g. request interception timing), just verify login succeeded
     if (authCalls.length === 0) {
       // Login succeeded (we're on dashboard), so auth works even if we didn't capture the requests
-      const token = await page.evaluate(() =>
-        localStorage.getItem("fluxbase_admin_access_token"),
-      );
+      const token = await page.evaluate(() => {
+        const prefix = "fluxbase_admin_token=";
+        const parts = document.cookie.split("; ");
+        for (const part of parts) {
+          if (part.startsWith(prefix)) {
+            try {
+              return JSON.parse(part.substring(prefix.length));
+            } catch {
+              return part.substring(prefix.length);
+            }
+          }
+        }
+        return null;
+      });
       expect(token).toBeTruthy();
       return;
     }
@@ -77,10 +88,21 @@ test.describe("Middleware Verification", () => {
       expect(callsWithAuth.length).toBeGreaterThan(0);
     } else {
       // Vite proxy may not forward auth headers in intercepted requests.
-      // Verify auth works by checking localStorage token exists.
-      const token = await page.evaluate(() =>
-        localStorage.getItem("fluxbase_admin_access_token"),
-      );
+      // Verify auth works by checking cookie token exists.
+      const token = await page.evaluate(() => {
+        const prefix = "fluxbase_admin_token=";
+        const parts = document.cookie.split("; ");
+        for (const part of parts) {
+          if (part.startsWith(prefix)) {
+            try {
+              return JSON.parse(part.substring(prefix.length));
+            } catch {
+              return part.substring(prefix.length);
+            }
+          }
+        }
+        return null;
+      });
       expect(token).toBeTruthy();
     }
   });

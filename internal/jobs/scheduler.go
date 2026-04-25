@@ -127,8 +127,7 @@ func (s *Scheduler) Start() error {
 		retryDelay := 100 * time.Millisecond
 
 		for attempt := 1; attempt <= maxRetries; attempt++ {
-			// Load all namespaces to get all job functions
-			namespaces, err := s.storage.ListJobNamespaces(s.ctx)
+			functions, err := s.storage.ListAllScheduledJobFunctions(s.ctx)
 			if err != nil {
 				if attempt < maxRetries {
 					log.Debug().
@@ -136,39 +135,23 @@ func (s *Scheduler) Start() error {
 						Int("attempt", attempt).
 						Int("max_retries", maxRetries).
 						Dur("retry_delay", retryDelay).
-						Msg("Failed to list job namespaces for scheduler, retrying")
+						Msg("Failed to list scheduled job functions, retrying")
 					time.Sleep(retryDelay)
-					retryDelay *= 2 // Exponential backoff
+					retryDelay *= 2
 					continue
 				}
-				log.Error().Err(err).Msg("Failed to list job namespaces for scheduler after all retries")
+				log.Error().Err(err).Msg("Failed to list scheduled job functions after all retries")
 				return
 			}
 
-			// If no namespaces exist, try with "default"
-			if len(namespaces) == 0 {
-				namespaces = []string{"default"}
-			}
-
-			// Load all job functions from each namespace
-			for _, ns := range namespaces {
-				functions, err := s.storage.ListJobFunctions(s.ctx, ns)
-				if err != nil {
-					log.Error().Err(err).Str("namespace", ns).Msg("Failed to load job functions for scheduler")
-					continue
-				}
-
-				// Schedule each function that has a cron schedule
-				for _, fn := range functions {
-					if fn.Enabled && fn.Schedule != nil && *fn.Schedule != "" {
-						if err := s.ScheduleJob(fn); err != nil {
-							log.Error().
-								Err(err).
-								Str("job", fn.Name).
-								Str("schedule", *fn.Schedule).
-								Msg("Failed to schedule job")
-						}
-					}
+			for _, fn := range functions {
+				if err := s.ScheduleJob(fn); err != nil {
+					log.Error().
+						Err(err).
+						Str("job", fn.Name).
+						Str("namespace", fn.Namespace).
+						Str("schedule", *fn.Schedule).
+						Msg("Failed to schedule job")
 				}
 			}
 
@@ -232,11 +215,11 @@ func (s *Scheduler) ScheduleJob(fn *JobFunctionSummary) error {
 	// Capture job details for the closure
 	jobName := fn.Name
 	jobNamespace := fn.Namespace
+	jobTenantID := fn.TenantID
 	scheduleParams := scheduleConfig.Params
 
-	// Add new schedule
 	entryID, err := s.cron.AddFunc(scheduleConfig.CronExpression, func() {
-		s.enqueueScheduledJob(jobName, jobNamespace, scheduleParams)
+		s.enqueueScheduledJob(jobName, jobNamespace, jobTenantID, scheduleParams)
 	})
 	if err != nil {
 		log.Error().
@@ -334,7 +317,7 @@ func (s *Scheduler) parseScheduleConfig(schedule string) ScheduleConfig {
 }
 
 // enqueueScheduledJob enqueues a job triggered by cron
-func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace string, params map[string]interface{}) {
+func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace, tenantID string, params map[string]interface{}) {
 	// Check concurrent submission limit
 	s.activeMu.Lock()
 	if s.activeCount >= s.maxConcurrent {
@@ -356,15 +339,27 @@ func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace string, params map
 		s.activeMu.Unlock()
 	}()
 
-	// Fetch the current job function data from storage
 	fn, err := s.storage.GetJobFunction(s.ctx, jobNamespace, jobName)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("job", jobName).
-			Str("namespace", jobNamespace).
-			Msg("Failed to fetch job function for scheduled execution")
-		return
+		if tenantID != "" {
+			tenantCtx := database.ContextWithTenant(s.ctx, tenantID)
+			fn, err = s.storage.GetJobFunction(tenantCtx, jobNamespace, jobName)
+			if err != nil {
+				log.Error().
+					Err(err).
+					Str("job", jobName).
+					Str("namespace", jobNamespace).
+					Msg("Failed to fetch job function for scheduled execution")
+				return
+			}
+		} else {
+			log.Error().
+				Err(err).
+				Str("job", jobName).
+				Str("namespace", jobNamespace).
+				Msg("Failed to fetch job function for scheduled execution")
+			return
+		}
 	}
 
 	// Check if job is still enabled
@@ -388,7 +383,6 @@ func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace string, params map
 		"_scheduled_at": time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Merge in any schedule params
 	for k, v := range params {
 		payload[k] = v
 	}
@@ -403,7 +397,6 @@ func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace string, params map
 	}
 	payloadStr := string(payloadJSON)
 
-	// Create job instance
 	job := &Job{
 		ID:                     uuid.New(),
 		Namespace:              fn.Namespace,
@@ -411,15 +404,19 @@ func (s *Scheduler) enqueueScheduledJob(jobName, jobNamespace string, params map
 		JobName:                fn.Name,
 		Status:                 JobStatusPending,
 		Payload:                &payloadStr,
-		Priority:               0, // Default priority for scheduled jobs
+		Priority:               0,
 		MaxRetries:             fn.MaxRetries,
 		ProgressTimeoutSeconds: &fn.ProgressTimeoutSeconds,
 		MaxDurationSeconds:     &fn.TimeoutSeconds,
-		// No user context for scheduled jobs (system-triggered)
+		TenantID:               tenantID,
 	}
 
-	// Enqueue the job
-	if err := s.storage.EnqueueJob(s.ctx, job); err != nil {
+	enqueueCtx := s.ctx
+	if tenantID != "" {
+		enqueueCtx = database.ContextWithTenant(s.ctx, tenantID)
+	}
+
+	if err := s.storage.EnqueueJob(enqueueCtx, job); err != nil {
 		log.Error().
 			Err(err).
 			Str("job", fn.Name).

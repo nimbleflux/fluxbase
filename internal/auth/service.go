@@ -365,6 +365,20 @@ func (s *Service) SignIn(ctx context.Context, req SignInRequest) (*SignInRespons
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
+	tenantID := database.TenantFromContext(ctx)
+	if tenantID != "" && user.TenantID != "" && user.TenantID != tenantID {
+		LogSecurityEvent(ctx, SecurityEvent{
+			Type:  SecurityEventLoginFailed,
+			Email: req.Email,
+			Details: map[string]interface{}{
+				"reason":         "tenant_mismatch",
+				"user_tenant_id": user.TenantID,
+				"request_tenant": tenantID,
+			},
+		})
+		return nil, fmt.Errorf("invalid email or password")
+	}
+
 	// Check if account is locked
 	if user.IsLocked {
 		// Check if lock has expired (if locked_until is set)

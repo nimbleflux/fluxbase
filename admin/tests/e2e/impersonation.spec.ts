@@ -66,7 +66,7 @@ test.describe("Impersonation Flow", () => {
     await adminPage
       .getByRole("combobox", { name: /impersonation type/i })
       .click();
-    await adminPage.getByText("Anonymous (anon key)").click();
+    await adminPage.getByRole("option", { name: /anonymous/i }).click();
 
     await adminPage.fill("#reason", "E2E test anon impersonation");
 
@@ -141,7 +141,7 @@ test.describe("Impersonation Flow", () => {
     await adminPage
       .getByRole("combobox", { name: /impersonation type/i })
       .click();
-    await adminPage.getByText("Anonymous (anon key)").click();
+    await adminPage.getByRole("option", { name: /anonymous/i }).click();
     await adminPage.fill("#reason", "E2E nav persistence test");
     await adminPage
       .getByRole("button", { name: /start impersonation/i })
@@ -176,7 +176,7 @@ test.describe("Impersonation Flow", () => {
     await tenantAdminPage
       .getByRole("combobox", { name: /impersonation type/i })
       .click();
-    await tenantAdminPage.getByText("Anonymous (anon key)").click();
+    await tenantAdminPage.getByRole("option", { name: /anonymous/i }).click();
 
     await tenantAdminPage.fill("#reason", "E2E tenant admin impersonation");
 
@@ -205,7 +205,7 @@ test.describe("Impersonation Flow", () => {
     await tenantAdminPage
       .getByRole("combobox", { name: /impersonation type/i })
       .click();
-    await tenantAdminPage.getByText("Anonymous (anon key)").click();
+    await tenantAdminPage.getByRole("option", { name: /anonymous/i }).click();
     await tenantAdminPage.fill("#reason", "E2E tenant lock test");
 
     await tenantAdminPage
@@ -239,9 +239,7 @@ test.describe("Impersonation Flow", () => {
     await expect(adminPage).toHaveURL(/functions/);
   });
 
-  test("impersonation popover appears on jobs page", async ({
-    adminPage,
-  }) => {
+  test("impersonation popover appears on jobs page", async ({ adminPage }) => {
     await adminPage.goto("jobs", { waitUntil: "networkidle" });
     await expect(adminPage).toHaveURL(/jobs/);
   });

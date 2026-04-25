@@ -761,7 +761,7 @@ func teardownTestTables() {
 	}
 
 	// Delete test background jobs
-	result, err = db.Exec(ctx, "DELETE FROM jobs.queue WHERE name LIKE 'test_%'")
+	result, err = db.Exec(ctx, "DELETE FROM jobs.queue WHERE job_name LIKE 'test_%'")
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to delete test background jobs")
 	} else if result.RowsAffected() > 0 {

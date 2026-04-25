@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 		Password:        getEnv("FLUXBASE_DATABASE_PASSWORD", "postgres"),
 		AdminUser:       getEnv("FLUXBASE_DATABASE_ADMIN_USER", "postgres"),
 		AdminPassword:   getEnv("FLUXBASE_DATABASE_ADMIN_PASSWORD", "postgres"),
-		Database:        getEnv("FLUXBASE_DATABASE_DATABASE", "fluxbase_test"),
+		Database:        getEnv("FLUXBASE_TEST_DATABASE", "fluxbase_test"),
 		SSLMode:         getEnv("FLUXBASE_DATABASE_SSLMODE", "disable"),
 		MaxConnections:  10,
 		MinConnections:  2,
@@ -113,7 +113,7 @@ func getSharedTestDB(t *testing.T) *pgxpool.Pool {
 			Password:        getEnv("FLUXBASE_DATABASE_PASSWORD", "postgres"),
 			AdminUser:       getEnv("FLUXBASE_DATABASE_ADMIN_USER", "postgres"),
 			AdminPassword:   getEnv("FLUXBASE_DATABASE_ADMIN_PASSWORD", "postgres"),
-			Database:        getEnv("FLUXBASE_DATABASE_DATABASE", "fluxbase_test"),
+			Database:        getEnv("FLUXBASE_TEST_DATABASE", "fluxbase_test"),
 			SSLMode:         getEnv("FLUXBASE_DATABASE_SSLMODE", "disable"),
 			MaxConnections:  10,
 			MinConnections:  2,
@@ -227,8 +227,12 @@ func TestGenerateClientKey(t *testing.T) {
 	service := NewClientKeyService(db, nil)
 	ctx := context.Background()
 
-	// Default scopes used in tests
 	defaultScopes := []string{"tables:read", "tables:write", "storage:read", "storage:write", "functions:read", "functions:execute"}
+
+	t.Cleanup(func() {
+		_, _ = db.Exec(ctx, "DELETE FROM auth.client_keys WHERE name IN ('test-default-key', 'test-custom-key', 'test-unique-1', 'test-unique-2')")
+		_, _ = db.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE 'clientkey-test-%@example.com'")
+	})
 
 	t.Run("Generate client key with default values", func(t *testing.T) {
 		result, err := service.GenerateClientKey(ctx, "test-default-key", nil, nil, defaultScopes, 0, nil)
@@ -309,6 +313,10 @@ func TestValidateClientKey(t *testing.T) {
 	// Create a test client key
 	created, err := service.GenerateClientKey(ctx, "test-validate-key", nil, nil, defaultScopes, 0, nil)
 	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_, _ = db.Exec(ctx, "DELETE FROM auth.client_keys WHERE name IN ('test-validate-key', 'test-expired-key', 'test-revokable-key', 'test-last-used')")
+	})
 
 	t.Run("Validate valid client key", func(t *testing.T) {
 		clientKey, err := service.ValidateClientKey(ctx, created.PlaintextKey)
@@ -397,6 +405,11 @@ func TestListClientKeys(t *testing.T) {
 	_, err = service.GenerateClientKey(ctx, "test-list-3", nil, &userID2, defaultScopes, 0, nil)
 	require.NoError(t, err)
 
+	t.Cleanup(func() {
+		_, _ = db.Exec(ctx, "DELETE FROM auth.client_keys WHERE name IN ('test-list-1', 'test-list-2', 'test-list-3')")
+		_, _ = db.Exec(ctx, "DELETE FROM auth.users WHERE email LIKE 'list-test-%@example.com'")
+	})
+
 	t.Run("List all client keys", func(t *testing.T) {
 		keys, err := service.ListClientKeys(ctx, nil)
 		require.NoError(t, err)
@@ -406,9 +419,8 @@ func TestListClientKeys(t *testing.T) {
 	t.Run("List client keys by user", func(t *testing.T) {
 		keys, err := service.ListClientKeys(ctx, &userID1)
 		require.NoError(t, err)
-		assert.Equal(t, 2, len(keys))
+		assert.Len(t, keys, 2)
 
-		// Verify all keys belong to userID1
 		for _, key := range keys {
 			assert.Equal(t, &userID1, key.UserID)
 		}
@@ -439,6 +451,10 @@ func TestRevokeClientKey(t *testing.T) {
 
 	// Default scopes used in tests
 	defaultScopes := []string{"tables:read", "tables:write"}
+
+	t.Cleanup(func() {
+		_, _ = db.Exec(ctx, "DELETE FROM auth.client_keys WHERE name = 'test-revoke'")
+	})
 
 	t.Run("Revoke existing client key", func(t *testing.T) {
 		created, err := service.GenerateClientKey(ctx, "test-revoke", nil, nil, defaultScopes, 0, nil)
@@ -482,6 +498,10 @@ func TestDeleteClientKey(t *testing.T) {
 	// Default scopes used in tests
 	defaultScopes := []string{"tables:read", "tables:write"}
 
+	t.Cleanup(func() {
+		_, _ = db.Exec(ctx, "DELETE FROM auth.client_keys WHERE name = 'test-delete'")
+	})
+
 	t.Run("Delete existing client key", func(t *testing.T) {
 		created, err := service.GenerateClientKey(ctx, "test-delete", nil, nil, defaultScopes, 0, nil)
 		require.NoError(t, err)
@@ -519,6 +539,10 @@ func TestUpdateClientKey(t *testing.T) {
 
 	created, err := service.GenerateClientKey(ctx, "test-update", nil, nil, defaultScopes, 0, nil)
 	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_, _ = db.Exec(ctx, "DELETE FROM auth.client_keys WHERE name IN ('test-update', 'test-updated-name')")
+	})
 
 	t.Run("Update client key name", func(t *testing.T) {
 		newName := "test-updated-name"
@@ -586,7 +610,6 @@ func TestClientKeyServiceNewClientKeyService(t *testing.T) {
 	}
 
 	db := getSharedTestDB(t)
-	defer db.Close()
 
 	service := NewClientKeyService(db, nil)
 	assert.NotNil(t, service)

@@ -883,83 +883,10 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE logging.entries_security TO tenant
 
 GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE logging.entries_system TO tenant_service;
 
--- ============================================================================
 -- ATTACH PARTITIONS
--- The child tables are created as regular tables and then attached as partitions
--- We use DO blocks to make ATTACH idempotent (check if already attached)
--- ============================================================================
-
--- Attach entries_ai partition for 'ai' category
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_class c
-        JOIN pg_inherits i ON c.oid = i.inhrelid
-        WHERE c.relname = 'entries_ai' AND i.inhparent = 'logging.entries'::regclass
-    ) THEN
-        EXECUTE 'ALTER TABLE logging.entries ATTACH PARTITION logging.entries_ai FOR VALUES IN (''ai'')';
-    END IF;
-END $$;
-
--- Attach entries_custom partition for 'custom' category
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_class c
-        JOIN pg_inherits i ON c.oid = i.inhrelid
-        WHERE c.relname = 'entries_custom' AND i.inhparent = 'logging.entries'::regclass
-    ) THEN
-        EXECUTE 'ALTER TABLE logging.entries ATTACH PARTITION logging.entries_custom FOR VALUES IN (''custom'')';
-    END IF;
-END $$;
-
--- Attach entries_execution partition for 'execution' category
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_class c
-        JOIN pg_inherits i ON c.oid = i.inhrelid
-        WHERE c.relname = 'entries_execution' AND i.inhparent = 'logging.entries'::regclass
-    ) THEN
-        EXECUTE 'ALTER TABLE logging.entries ATTACH PARTITION logging.entries_execution FOR VALUES IN (''execution'')';
-    END IF;
-END $$;
-
--- Attach entries_http partition for 'http' category
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_class c
-        JOIN pg_inherits i ON c.oid = i.inhrelid
-        WHERE c.relname = 'entries_http' AND i.inhparent = 'logging.entries'::regclass
-    ) THEN
-        EXECUTE 'ALTER TABLE logging.entries ATTACH PARTITION logging.entries_http FOR VALUES IN (''http'')';
-    END IF;
-END $$;
-
--- Attach entries_security partition for 'security' category
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_class c
-        JOIN pg_inherits i ON c.oid = i.inhrelid
-        WHERE c.relname = 'entries_security' AND i.inhparent = 'logging.entries'::regclass
-    ) THEN
-        EXECUTE 'ALTER TABLE logging.entries ATTACH PARTITION logging.entries_security FOR VALUES IN (''security'')';
-    END IF;
-END $$;
-
--- Attach entries_system partition for 'system' category
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_class c
-        JOIN pg_inherits i ON c.oid = i.inhrelid
-        WHERE c.relname = 'entries_system' AND i.inhparent = 'logging.entries'::regclass
-    ) THEN
-        EXECUTE 'ALTER TABLE logging.entries ATTACH PARTITION logging.entries_system FOR VALUES IN (''system'')';
-    END IF;
-END $$;
+-- The child tables are created as regular tables and then attached as partitions.
+-- ATTACH PARTITION blocks are in post-schema.sql because pgschema skips DO blocks
+-- during the plan path. post-schema.sql is always executed after all schema applies.
 
 --
 -- Name: execution_logs_migration_status; Type: PRIVILEGE; Schema: privileges; Owner: -
@@ -991,14 +918,9 @@ CREATE POLICY logging_entries_tenant ON entries TO PUBLIC
     USING (auth.has_tenant_access(tenant_id))
     WITH CHECK (auth.has_tenant_access(tenant_id));
 
---
--- Name: logging_entries_set_tenant_id; Type: TRIGGER; Schema: -; Owner: -
---
-
-CREATE OR REPLACE TRIGGER logging_entries_set_tenant_id
-    BEFORE INSERT ON entries
-    FOR EACH ROW
-    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+-- logging_entries_set_tenant_id trigger is defined in post-schema.sql (as a DO $$ block)
+-- because pgschema tries to DROP the auto-propagated triggers on partition children,
+-- which PostgreSQL forbids. Moving it here skips pgschema's plan/apply entirely.
 
 --
 -- Name: entries_ai; Type: RLS; Schema: -; Owner: -

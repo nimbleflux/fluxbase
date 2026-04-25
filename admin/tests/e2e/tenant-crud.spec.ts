@@ -137,24 +137,24 @@ test.describe("Tenant CRUD", () => {
   });
 
   test("delete non-default tenant", async ({ adminPage, adminToken }) => {
-    // Create a tenant to delete
     const slug = `e2e-delete-${Date.now()}`;
+    const tenantName = `Delete ${slug}`;
     const createResult = await rawCreateTenant(
-      { name: "To Be Deleted", slug },
+      { name: tenantName, slug },
       adminToken,
     );
     const tenantId = createResult.body.tenant.id;
 
     // Navigate to tenants page
     await adminPage.goto("tenants", { waitUntil: "networkidle" });
-    await expect(adminPage.getByText("To Be Deleted")).toBeVisible({
+    await expect(adminPage.getByText(tenantName)).toBeVisible({
       timeout: 10_000,
     });
 
     // Find the delete button for this tenant's row
-    const row = adminPage.getByRole("row").filter({ hasText: "To Be Deleted" });
-    const deleteButtons = row.getByRole("button");
-    const deleteBtn = deleteButtons.nth(1); // Second button is delete (first is edit)
+    const row = adminPage.getByRole("row").filter({ hasText: tenantName });
+    const buttons = row.getByRole("button");
+    const deleteBtn = buttons.nth(2); // Third button: Edit (0), Repair (1), Delete (2)
     await deleteBtn.click();
 
     // Confirm deletion in dialog

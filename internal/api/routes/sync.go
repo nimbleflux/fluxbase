@@ -7,6 +7,7 @@ import (
 type SyncDeps struct {
 	RequireSyncAuth fiber.Handler
 	RequireRole     fiber.Handler
+	TenantContext   fiber.Handler
 
 	// Function sync
 	RequireFunctionsSyncIPAllowlist fiber.Handler
@@ -103,6 +104,9 @@ func BuildSyncRoutes(deps *SyncDeps) *RouteGroup {
 	return &RouteGroup{
 		Name:   "sync",
 		Routes: routes,
+		Middlewares: []Middleware{
+			{Name: "TenantContext", Handler: deps.TenantContext},
+		},
 		AuthMiddlewares: &AuthMiddlewares{
 			Required: deps.RequireSyncAuth,
 		},

@@ -1086,3 +1086,199 @@ export async function rawDeleteMCPTool(
     headers,
   });
 }
+
+// ────────────────────────────────────────────────────────────────
+// Webhook Deliveries
+// ────────────────────────────────────────────────────────────────
+
+export async function rawListWebhookDeliveries(
+  webhookId: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: `/api/v1/webhooks/${webhookId}/deliveries`,
+    headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Settings (Custom)
+// ────────────────────────────────────────────────────────────────
+
+export async function rawCreateCustomSetting(
+  options: {
+    key: string;
+    value: string;
+    category?: string;
+    description?: string;
+  },
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/admin/settings/custom",
+    data: { ...options, value: { value: options.value } },
+    headers,
+  });
+}
+
+export async function rawListCustomSettings(
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "GET",
+    path: "/api/v1/admin/settings/custom",
+    headers,
+  });
+}
+
+export async function rawDeleteCustomSetting(
+  key: string,
+  accessToken: string,
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "DELETE",
+    path: `/api/v1/admin/settings/custom/${key}`,
+    headers,
+  });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Auth (Signup, Signin, Magic Link, OTP, Password Reset)
+// ────────────────────────────────────────────────────────────────
+
+export async function rawAuthSignUp(
+  options: {
+    email: string;
+    password: string;
+    name?: string;
+    user_metadata?: Record<string, unknown>;
+  },
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {};
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/auth/signup",
+    data: {
+      email: options.email,
+      password: options.password,
+      user_metadata: options.user_metadata || {
+        name: options.name || options.email,
+      },
+    },
+    headers,
+  });
+}
+
+export async function rawAuthSignIn(
+  options: {
+    email: string;
+    password: string;
+  },
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {};
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/auth/signin",
+    data: {
+      email: options.email,
+      password: options.password,
+    },
+    headers,
+  });
+}
+
+export async function rawSendMagicLink(
+  options: {
+    email: string;
+  },
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {};
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/auth/magiclink",
+    data: { email: options.email },
+    headers,
+  });
+}
+
+export async function rawSendOTP(
+  options: {
+    email?: string;
+    phone?: string;
+  },
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {};
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/auth/otp/signin",
+    data: {
+      email: options.email,
+      phone: options.phone,
+    },
+    headers,
+  });
+}
+
+export async function rawRequestPasswordReset(
+  options: {
+    email: string;
+  },
+  tenantId?: string,
+) {
+  const headers: Record<string, string> = {};
+  if (tenantId) {
+    headers["X-FB-Tenant"] = tenantId;
+  }
+  return rawApiRequest({
+    method: "POST",
+    path: "/api/v1/auth/password/reset",
+    data: { email: options.email },
+    headers,
+  });
+}

@@ -504,12 +504,12 @@ func (s *ElasticsearchLogStorage) Stats(ctx context.Context) (*LogStats, error) 
 	// Parse timestamp range
 	if searchResponse.Aggregations.MinTimestamp.ValueAsString != "" {
 		if t, err := time.Parse(time.RFC3339Nano, searchResponse.Aggregations.MinTimestamp.ValueAsString); err == nil {
-			stats.OldestEntry = t
+			stats.OldestEntry = &t
 		}
 	}
 	if searchResponse.Aggregations.MaxTimestamp.ValueAsString != "" {
 		if t, err := time.Parse(time.RFC3339Nano, searchResponse.Aggregations.MaxTimestamp.ValueAsString); err == nil {
-			stats.NewestEntry = t
+			stats.NewestEntry = &t
 		}
 	}
 

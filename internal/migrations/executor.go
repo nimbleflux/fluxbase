@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,8 +13,11 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
+const migrationLockID int64 = 0x466C7578_00000004
+
 // Executor handles migration execution
 type Executor struct {
+	mu      sync.Mutex
 	storage *Storage
 	db      *database.Connection
 }
@@ -28,6 +32,9 @@ func NewExecutor(db *database.Connection) *Executor {
 
 // ApplyMigration applies a single migration
 func (e *Executor) ApplyMigration(ctx context.Context, namespace, name string, executedBy *uuid.UUID) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	// Get migration
 	migration, err := e.storage.GetMigration(ctx, namespace, name)
 	if err != nil {
@@ -58,9 +65,16 @@ func (e *Executor) ApplyMigration(ctx context.Context, namespace, name string, e
 
 	// Execute migration in transaction with admin credentials
 	// Migrations require DDL privileges (CREATE TABLE, ALTER, etc.)
-	err = e.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
-		// Execute the up SQL
-		_, err := conn.Exec(ctx, migration.UpSQL)
+	err = e.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+		var acquired bool
+		if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", migrationLockID).Scan(&acquired); err != nil {
+			return fmt.Errorf("failed to acquire advisory lock: %w", err)
+		}
+		if !acquired {
+			return fmt.Errorf("another migration is already in progress")
+		}
+
+		_, err := tx.Exec(ctx, migration.UpSQL)
 		return err
 	})
 
@@ -124,6 +138,9 @@ func (e *Executor) ApplyMigration(ctx context.Context, namespace, name string, e
 
 // RollbackMigration rolls back a single migration
 func (e *Executor) RollbackMigration(ctx context.Context, namespace, name string, executedBy *uuid.UUID) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	// Get migration
 	migration, err := e.storage.GetMigration(ctx, namespace, name)
 	if err != nil {
@@ -150,9 +167,16 @@ func (e *Executor) RollbackMigration(ctx context.Context, namespace, name string
 
 	// Execute rollback in transaction with admin credentials
 	// Rollbacks may require DDL privileges (DROP TABLE, ALTER, etc.)
-	err = e.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
-		// Execute the down SQL
-		_, err := conn.Exec(ctx, *migration.DownSQL)
+	err = e.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+		var acquired bool
+		if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", migrationLockID).Scan(&acquired); err != nil {
+			return fmt.Errorf("failed to acquire advisory lock: %w", err)
+		}
+		if !acquired {
+			return fmt.Errorf("another migration is already in progress")
+		}
+
+		_, err := tx.Exec(ctx, *migration.DownSQL)
 		return err
 	})
 
@@ -268,7 +292,7 @@ func (e *Executor) ValidateMigration(ctx context.Context, sql string) error {
 			return fmt.Errorf("invalid SQL: %w", err)
 		}
 		// Deallocate prepared statement
-		_, _ = conn.Exec(ctx, "DEALLOCATE validate_migration")
+		_, _ = tx.Exec(ctx, "DEALLOCATE validate_migration")
 		return nil
 	})
 

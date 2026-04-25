@@ -1,8 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
-import type { AIProvider } from "@nimbleflux/fluxbase-sdk";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFluxbaseClient } from "@nimbleflux/fluxbase-sdk-react";
-import { Bot, Star, Sparkles } from "lucide-react";
+import type { AIProvider } from "@nimbleflux/fluxbase-sdk";
+import {
+  Bot,
+  Plus,
+  Star,
+  Sparkles,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Check,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -11,6 +23,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Table,
   TableBody,
   TableCell,
@@ -18,11 +37,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CreateProviderDialog } from "./create-provider-dialog";
+import { EditProviderDialog } from "./edit-provider-dialog";
 
 export function AIProvidersTab() {
   const client = useFluxbaseClient();
+  const queryClient = useQueryClient();
 
-  // Fetch providers using SDK
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<AIProvider | null>(
+    null,
+  );
+  const [deletingProvider, setDeletingProvider] = useState<AIProvider | null>(
+    null,
+  );
+
   const { data: providers = [], isLoading } = useQuery<AIProvider[]>({
     queryKey: ["ai-providers", client.admin.ai],
     queryFn: async () => {
@@ -32,19 +62,82 @@ export function AIProvidersTab() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await client.admin.ai.deleteProvider(id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-providers"] });
+      setDeletingProvider(null);
+      toast.success("Provider deleted successfully");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to delete provider");
+    },
+  });
+
+  const setDefaultMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await client.admin.ai.setDefaultProvider(id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-providers"] });
+      toast.success("Default provider updated");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to set default provider");
+    },
+  });
+
+  const setEmbeddingMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await client.admin.ai.setEmbeddingProvider(id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-providers"] });
+      toast.success("Embedding provider updated");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to set embedding provider");
+    },
+  });
+
+  const clearEmbeddingMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await client.admin.ai.clearEmbeddingProvider(id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-providers"] });
+      toast.success("Embedding provider cleared");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to clear embedding provider");
+    },
+  });
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="h-5 w-5" />
-              AI Providers
-            </CardTitle>
-            <CardDescription>
-              AI providers configured for chatbot and embedding functionality.
-              Providers are managed via environment variables or instance settings.
-            </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                AI Providers
+              </CardTitle>
+              <CardDescription>
+                Manage AI providers for chatbot and embedding functionality.
+                Providers can be configured here or via environment variables.
+              </CardDescription>
+            </div>
+            <Button onClick={() => setShowCreateDialog(true)} size="sm">
+              <Plus className="mr-1 h-4 w-4" />
+              Add Provider
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -59,7 +152,8 @@ export function AIProvidersTab() {
                 No providers configured
               </p>
               <p className="text-muted-foreground text-sm">
-                Configure an AI provider via environment variables to enable chatbot functionality
+                Add an AI provider or configure one via environment variables to
+                enable chatbot functionality
               </p>
             </div>
           ) : (
@@ -70,6 +164,7 @@ export function AIProvidersTab() {
                   <TableHead>Type</TableHead>
                   <TableHead>Model</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="w-[50px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -83,7 +178,7 @@ export function AIProvidersTab() {
                     <TableRow key={provider.id}>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
-                          {provider.display_name}
+                          {provider.display_name || provider.name}
                           {provider.is_default && (
                             <Badge variant="default" className="text-xs">
                               <Star className="mr-1 h-3 w-3" />
@@ -114,7 +209,7 @@ export function AIProvidersTab() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {provider.config.model ||
+                        {provider.config?.model ||
                           (provider.provider_type === "openai"
                             ? "gpt-4-turbo"
                             : "-")}
@@ -136,6 +231,70 @@ export function AIProvidersTab() {
                           </Badge>
                         )}
                       </TableCell>
+                      <TableCell>
+                        {!provider.from_config && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => setEditingProvider(provider)}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
+                              {!provider.is_default && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    setDefaultMutation.mutate(provider.id)
+                                  }
+                                  disabled={setDefaultMutation.isPending}
+                                >
+                                  <Star className="mr-2 h-4 w-4" />
+                                  Set as Default
+                                </DropdownMenuItem>
+                              )}
+                              {!isEmbeddingProvider && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    setEmbeddingMutation.mutate(provider.id)
+                                  }
+                                  disabled={setEmbeddingMutation.isPending}
+                                >
+                                  <Sparkles className="mr-2 h-4 w-4" />
+                                  Set as Embedding Provider
+                                </DropdownMenuItem>
+                              )}
+                              {isEmbeddingProvider && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    clearEmbeddingMutation.mutate(provider.id)
+                                  }
+                                  disabled={clearEmbeddingMutation.isPending}
+                                >
+                                  <Check className="mr-2 h-4 w-4" />
+                                  Clear Embedding Provider
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setDeletingProvider(provider)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -144,6 +303,35 @@ export function AIProvidersTab() {
           )}
         </CardContent>
       </Card>
+
+      <CreateProviderDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+      />
+
+      <EditProviderDialog
+        key={editingProvider?.id ?? "none"}
+        open={!!editingProvider}
+        onOpenChange={(open) => {
+          if (!open) setEditingProvider(null);
+        }}
+        provider={editingProvider}
+      />
+
+      <ConfirmDialog
+        open={!!deletingProvider}
+        onOpenChange={(open) => {
+          if (!open) setDeletingProvider(null);
+        }}
+        title="Delete AI Provider"
+        desc={`Are you sure you want to delete "${deletingProvider?.display_name || deletingProvider?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        destructive
+        handleConfirm={() => {
+          if (deletingProvider) deleteMutation.mutate(deletingProvider.id);
+        }}
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   );
 }

@@ -48,7 +48,7 @@ func setupAuthTestServer(t *testing.T) (*fiber.App, *auth.Service, *database.Con
 		dbPassword = "fluxbase_app_password"
 	}
 
-	dbDatabase := os.Getenv("FLUXBASE_DATABASE_DATABASE")
+	dbDatabase := os.Getenv("FLUXBASE_TEST_DATABASE")
 	if dbDatabase == "" {
 		dbDatabase = "fluxbase_test"
 	}
@@ -179,7 +179,7 @@ func TestOTPFlow(t *testing.T) {
 		// Verify OTP
 		verifyReq := map[string]interface{}{
 			"email": testEmail,
-			"token": otpCode.Code,
+			"token": otpCode.PlaintextCode,
 			"type":  "email",
 		}
 		body, _ := json.Marshal(verifyReq)

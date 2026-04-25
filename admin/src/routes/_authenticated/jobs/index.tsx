@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import z from "zod";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   ListTodo,
@@ -104,8 +105,8 @@ const getStatusBadgeVariant = (
 
 function JobsPage() {
   const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"functions" | "queue">("queue");
-  const [jobFunctions, setJobFunctions] = useState<JobFunction[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [workers, setWorkers] = useState<JobWorker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,6 +117,15 @@ function JobsPage() {
   const [syncing, setSyncing] = useState(false);
   const [namespaces, setNamespaces] = useState<string[]>(["default"]);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
+
+  // Job functions via TanStack Query
+  const { data: jobFunctions = [], refetch: refetchJobFunctions } = useQuery({
+    queryKey: ["job-functions", selectedNamespace, currentTenantId],
+    queryFn: async () => {
+      const data = await jobsApi.listFunctions(selectedNamespace);
+      return data || [];
+    },
+  });
 
   const [jobsOffset, setJobsOffset] = useState(0);
   const [hasMoreJobs, setHasMoreJobs] = useState(true);
@@ -211,15 +221,6 @@ function JobsPage() {
     fetchNamespaces();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTenantId]);
-
-  const fetchJobFunctions = useCallback(async () => {
-    try {
-      const data = await jobsApi.listFunctions(selectedNamespace);
-      setJobFunctions(data || []);
-    } catch {
-      toast.error("Failed to fetch job functions");
-    }
-  }, [selectedNamespace]);
 
   const fetchJobs = useCallback(
     async (reset = true) => {
@@ -389,11 +390,15 @@ function JobsPage() {
     setJobsOffset(0);
     setHasMoreJobs(true);
     try {
-      await Promise.all([fetchJobFunctions(), fetchJobs(true), fetchWorkers()]);
+      await Promise.all([
+        refetchJobFunctions(),
+        fetchJobs(true),
+        fetchWorkers(),
+      ]);
     } finally {
       setLoading(false);
     }
-  }, [fetchJobFunctions, fetchJobs, fetchWorkers]);
+  }, [refetchJobFunctions, fetchJobs, fetchWorkers]);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -407,13 +412,11 @@ function JobsPage() {
           ? "default"
           : availableNamespaces[0];
 
-        const [functionsData, jobsData, workersData] = await Promise.all([
-          jobsApi.listFunctions(ns),
+        const [jobsData, workersData] = await Promise.all([
           jobsApi.listJobs({ namespace: ns, limit: JOBS_PAGE_SIZE, offset: 0 }),
           jobsApi.listWorkers(),
         ]);
 
-        setJobFunctions(functionsData || []);
         setJobs(jobsData || []);
         setJobsOffset(JOBS_PAGE_SIZE);
         setHasMoreJobs((jobsData || []).length >= JOBS_PAGE_SIZE);
@@ -439,16 +442,12 @@ function JobsPage() {
       setJobsOffset(0);
       setHasMoreJobs(true);
       try {
-        const [functionsData, jobsData] = await Promise.all([
-          jobsApi.listFunctions(selectedNamespace),
-          jobsApi.listJobs({
-            namespace: selectedNamespace,
-            status: statusFilter !== "all" ? statusFilter : undefined,
-            limit: JOBS_PAGE_SIZE,
-            offset: 0,
-          }),
-        ]);
-        setJobFunctions(functionsData || []);
+        const jobsData = await jobsApi.listJobs({
+          namespace: selectedNamespace,
+          status: statusFilter !== "all" ? statusFilter : undefined,
+          limit: JOBS_PAGE_SIZE,
+          offset: 0,
+        });
         setJobs(jobsData || []);
         setJobsOffset(JOBS_PAGE_SIZE);
         setHasMoreJobs((jobsData || []).length >= JOBS_PAGE_SIZE);
@@ -484,7 +483,7 @@ function JobsPage() {
       const newNamespaces = await jobsApi.listNamespaces();
       setNamespaces(newNamespaces.length > 0 ? newNamespaces : ["default"]);
 
-      await fetchJobFunctions();
+      queryClient.invalidateQueries({ queryKey: ["job-functions"] });
     } catch {
       toast.error("Failed to sync jobs from filesystem");
     } finally {
@@ -588,7 +587,7 @@ function JobsPage() {
         enabled: !fn.enabled,
       });
       toast.success(`Job "${fn.name}" ${fn.enabled ? "disabled" : "enabled"}`);
-      await fetchJobFunctions();
+      queryClient.invalidateQueries({ queryKey: ["job-functions"] });
     } catch {
       toast.error("Failed to update job function");
     } finally {
@@ -652,7 +651,7 @@ function JobsPage() {
       );
       toast.success("Job function updated");
       setIsEditDialogOpen(false);
-      await fetchJobFunctions();
+      queryClient.invalidateQueries({ queryKey: ["job-functions"] });
     } catch {
       toast.error("Failed to update job function");
     }
@@ -664,7 +663,7 @@ function JobsPage() {
       await jobsApi.deleteFunction(deleteConfirm.namespace, deleteConfirm.name);
       toast.success(`Job function "${deleteConfirm.name}" deleted`);
       setDeleteConfirm(null);
-      await fetchJobFunctions();
+      queryClient.invalidateQueries({ queryKey: ["job-functions"] });
     } catch {
       toast.error("Failed to delete job function");
     }

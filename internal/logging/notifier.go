@@ -84,6 +84,7 @@ func (n *PubSubNotifier) notifyAllLogs(ctx context.Context, entry *storage.LogEn
 		Category:       entry.Category,
 		Level:          entry.Level,
 		Message:        entry.Message,
+		TenantID:       entry.TenantID,
 		CustomCategory: entry.CustomCategory,
 		RequestID:      entry.RequestID,
 		TraceID:        entry.TraceID,

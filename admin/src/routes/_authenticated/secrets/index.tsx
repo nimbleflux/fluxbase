@@ -3,14 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Lock, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
-import {
-  secretsApi,
-  type Secret,
-  type SecretVersion,
-  type CreateSecretRequest,
-  type UpdateSecretRequest,
-  type SecretsStats,
-} from "@/lib/api";
+import { secretsApi, type Secret, type SecretVersion, type CreateSecretRequest, type UpdateSecretRequest, type SecretsStats } from "@/lib/api";
+import { useTenantStore } from "@/stores/tenant-store";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -50,6 +44,7 @@ export const Route = createFileRoute("/_authenticated/secrets/")({
 
 function SecretsPage() {
   const queryClient = useQueryClient();
+  const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
@@ -58,17 +53,17 @@ function SecretsPage() {
   const [scopeFilter, setScopeFilter] = useState<string>("");
 
   const { data: secrets, isLoading } = useQuery<Secret[]>({
-    queryKey: ["secrets", scopeFilter],
+    queryKey: ["secrets", scopeFilter, currentTenantId],
     queryFn: () => secretsApi.list(scopeFilter || undefined),
   });
 
   const { data: stats } = useQuery<SecretsStats>({
-    queryKey: ["secrets-stats"],
+    queryKey: ["secrets-stats", currentTenantId],
     queryFn: secretsApi.getStats,
   });
 
   const { data: versions } = useQuery<SecretVersion[]>({
-    queryKey: ["secret-versions", selectedSecret?.id],
+    queryKey: ["secret-versions", selectedSecret?.id, currentTenantId],
     queryFn: () => secretsApi.getVersions(selectedSecret!.id),
     enabled: !!selectedSecret && isHistoryDialogOpen,
   });

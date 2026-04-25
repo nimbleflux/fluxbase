@@ -18,9 +18,20 @@ const API_BASE = process.env.PLAYWRIGHT_API_URL || "http://localhost:5050";
 test.describe("Tenant Admin Data Isolation", () => {
   test("tenant admin can log in", async ({ tenantAdminPage }) => {
     await expect(tenantAdminPage).toHaveURL(/\/admin\/?$/);
-    const token = await tenantAdminPage.evaluate(() =>
-      localStorage.getItem("fluxbase_admin_access_token"),
-    );
+    const token = await tenantAdminPage.evaluate(() => {
+      const prefix = "fluxbase_admin_token=";
+      const parts = document.cookie.split("; ");
+      for (const part of parts) {
+        if (part.startsWith(prefix)) {
+          try {
+            return JSON.parse(part.substring(prefix.length));
+          } catch {
+            return part.substring(prefix.length);
+          }
+        }
+      }
+      return null;
+    });
     expect(token).toBeTruthy();
   });
 
@@ -28,9 +39,20 @@ test.describe("Tenant Admin Data Isolation", () => {
     tenantAdminPage,
     tenantAdminInfo,
   }) => {
-    const token = await tenantAdminPage.evaluate(() =>
-      localStorage.getItem("fluxbase_admin_access_token"),
-    );
+    const token = await tenantAdminPage.evaluate(() => {
+      const prefix = "fluxbase_admin_token=";
+      const parts = document.cookie.split("; ");
+      for (const part of parts) {
+        if (part.startsWith(prefix)) {
+          try {
+            return JSON.parse(part.substring(prefix.length));
+          } catch {
+            return part.substring(prefix.length);
+          }
+        }
+      }
+      return null;
+    });
     expect(token).toBeTruthy();
     // Decode JWT payload (base64url decode)
     const payloadB64 = token!.split(".")[1];

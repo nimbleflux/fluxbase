@@ -564,6 +564,31 @@ func TestValidatePathComponent(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			name:      "valid my-category",
+			component: "my-category",
+			wantErr:   false,
+		},
+		{
+			name:      "valid category_123",
+			component: "category_123",
+			wantErr:   false,
+		},
+		{
+			name:      "valid logs",
+			component: "logs",
+			wantErr:   false,
+		},
+		{
+			name:      "valid single char",
+			component: "a",
+			wantErr:   false,
+		},
+		{
+			name:      "valid test-category-name",
+			component: "test-category-name",
+			wantErr:   false,
+		},
+		{
 			name:      "empty component",
 			component: "",
 			wantErr:   true,
@@ -576,10 +601,28 @@ func TestValidatePathComponent(t *testing.T) {
 			errMsg:    "path traversal detected",
 		},
 		{
+			name:      "path traversal ../etc",
+			component: "../etc",
+			wantErr:   true,
+			errMsg:    "path traversal detected",
+		},
+		{
+			name:      "path traversal sub/../../etc",
+			component: "sub/../../etc",
+			wantErr:   true,
+			errMsg:    "path traversal detected",
+		},
+		{
 			name:      "path traversal embedded",
 			component: "foo/../bar",
 			wantErr:   true,
 			errMsg:    "path traversal detected",
+		},
+		{
+			name:      "null byte injection in middle",
+			component: "cat\x00egory",
+			wantErr:   true,
+			errMsg:    "null bytes not allowed",
 		},
 		{
 			name:      "null byte injection",
@@ -588,8 +631,14 @@ func TestValidatePathComponent(t *testing.T) {
 			errMsg:    "null bytes not allowed",
 		},
 		{
-			name:      "absolute path with leading slash",
+			name:      "absolute path /etc/passwd",
 			component: "/etc/passwd",
+			wantErr:   true,
+			errMsg:    "absolute paths not allowed",
+		},
+		{
+			name:      "absolute path /var/logs",
+			component: "/var/logs",
 			wantErr:   true,
 			errMsg:    "absolute paths not allowed",
 		},

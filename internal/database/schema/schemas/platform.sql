@@ -144,11 +144,13 @@ CREATE INDEX IF NOT EXISTS idx_instance_settings_settings ON instance_settings U
 
 CREATE INDEX IF NOT EXISTS idx_instance_settings_tenant_id ON instance_settings (tenant_id);
 
+ALTER TABLE instance_settings ENABLE ROW LEVEL SECURITY;
+
 --
 -- Name: instance_settings; Type: RLS; Schema: -; Owner: -
 --
 
-ALTER TABLE instance_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE instance_settings FORCE ROW LEVEL SECURITY;
 
 --
 -- Name: instance_settings_delete; Type: POLICY; Schema: -; Owner: -
@@ -875,6 +877,7 @@ CREATE TABLE IF NOT EXISTS invitation_tokens (
     id uuid DEFAULT gen_random_uuid(),
     email text NOT NULL,
     token text NOT NULL,
+    token_hash text,
     role text DEFAULT 'dashboard_user' NOT NULL,
     tenant_id uuid,
     invited_by uuid,
@@ -911,6 +914,12 @@ CREATE INDEX IF NOT EXISTS idx_dashboard_invitation_tokens_expires_at ON invitat
 --
 
 CREATE INDEX IF NOT EXISTS idx_dashboard_invitation_tokens_token ON invitation_tokens (token);
+
+--
+-- Name: idx_dashboard_invitation_tokens_token_hash; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_dashboard_invitation_tokens_token_hash ON invitation_tokens (token_hash) WHERE token_hash IS NOT NULL;
 
 --
 -- Name: idx_dashboard_invitation_tokens_tenant_id; Type: INDEX; Schema: -; Owner: -
@@ -1802,6 +1811,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE oauth_providers TO authenticated;
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE oauth_providers TO service_role;
 
 --
+-- Name: oauth_providers; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE oauth_providers TO tenant_service;
+
+--
 -- Name: password_reset_tokens; Type: PRIVILEGE; Schema: privileges; Owner: -
 --
 
@@ -1878,6 +1893,12 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE tenant_admin_assignments TO authen
 --
 
 GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE tenant_admin_assignments TO service_role;
+
+--
+-- Name: tenant_admin_assignments; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE tenant_admin_assignments TO tenant_service;
 
 --
 -- Name: tenant_memberships; Type: PRIVILEGE; Schema: privileges; Owner: -

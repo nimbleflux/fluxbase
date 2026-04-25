@@ -36,8 +36,10 @@ type AdminExecutor interface {
 	Executor
 
 	// ExecuteWithAdminRole executes a database operation using admin credentials
-	// Used for migrations that require DDL privileges (CREATE TABLE, ALTER, etc.)
-	ExecuteWithAdminRole(ctx context.Context, fn func(conn *pgx.Conn) error) error
+	// inside a transaction. Used for migrations that require DDL privileges
+	// (CREATE TABLE, ALTER, etc.). The callback receives the transaction, not a
+	// raw connection, so all statements are properly transactional.
+	ExecuteWithAdminRole(ctx context.Context, fn func(tx pgx.Tx) error) error
 
 	// Inspector returns the schema inspector for introspecting database structure
 	Inspector() *SchemaInspector

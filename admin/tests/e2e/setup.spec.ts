@@ -77,9 +77,20 @@ test.describe("Setup / Onboarding", () => {
     // Should redirect to dashboard or home
     await expect(page).toHaveURL(/\/(admin\/?)?$/, { timeout: 15_000 });
 
-    const token = await page.evaluate(() =>
-      localStorage.getItem("fluxbase_admin_access_token"),
-    );
+    const token = await page.evaluate(() => {
+      const prefix = "fluxbase_admin_token=";
+      const parts = document.cookie.split("; ");
+      for (const part of parts) {
+        if (part.startsWith(prefix)) {
+          try {
+            return JSON.parse(part.substring(prefix.length));
+          } catch {
+            return part.substring(prefix.length);
+          }
+        }
+      }
+      return null;
+    });
     expect(token).toBeTruthy();
   });
 

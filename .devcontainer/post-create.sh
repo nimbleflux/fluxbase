@@ -161,14 +161,8 @@ EOF
 fi
 echo "✅ Shell completions configured"
 
-# Install Claude Code CLI
-echo "🤖 Installing Claude Code CLI..."
-bun add -g @anthropic-ai/claude-code 2>/dev/null || true
-if command -v claude &> /dev/null; then
-  echo "✅ Claude Code CLI installed"
-else
-  echo "⚠️  Claude Code CLI installation failed - you can install it manually with: bun add -g @anthropic-ai/claude-code"
-fi
+echo "🤖 Installing AI coding CLIs..."
+bun add -g @anthropic-ai/claude-code opencode-ai 2>/dev/null || true
 
 # Configure Claude MCP server for Fluxbase
 # The .mcp.json file uses FLUXBASE_SERVICE_ROLE_KEY which is generated at runtime

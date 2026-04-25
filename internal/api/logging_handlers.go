@@ -1,16 +1,25 @@
 package api
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/logging"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 )
+
+func ctxForLogs(c fiber.Ctx) context.Context {
+	if middleware.IsInstanceAdminFromContext(c) && middleware.GetTenantSourceFromContext(c) == "default" {
+		return database.ContextWithTenant(c.RequestCtx(), "")
+	}
+	return middleware.CtxWithTenant(c)
+}
 
 // LoggingHandler handles logging-related API endpoints
 type LoggingHandler struct {
@@ -118,7 +127,7 @@ func (h *LoggingHandler) QueryLogs(c fiber.Ctx) error {
 	opts.HideStaticAssets = c.Query("hide_static_assets") == "true"
 
 	// Query logs
-	result, err := h.loggingService.Query(middleware.CtxWithTenant(c), opts)
+	result, err := h.loggingService.Query(ctxForLogs(c), opts)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -196,7 +205,7 @@ func (h *LoggingHandler) GetLogStats(c fiber.Ctx) error {
 		})
 	}
 
-	stats, err := h.loggingService.Stats(middleware.CtxWithTenant(c))
+	stats, err := h.loggingService.Stats(ctxForLogs(c))
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),

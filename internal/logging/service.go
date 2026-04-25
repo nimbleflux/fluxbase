@@ -160,6 +160,11 @@ func (s *Service) Log(ctx context.Context, entry *storage.LogEntry) {
 		entry.LineNumber = s.nextLineNumber(entry.ExecutionID)
 	}
 
+	// Capture tenant ID from context before batching (batcher discards context)
+	if entry.TenantID == "" {
+		entry.TenantID = database.TenantFromContext(ctx)
+	}
+
 	// Add to batch
 	s.batcher.Add(entry)
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/mcp/custom"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // CustomMCPHandler handles custom MCP tool and resource management requests.
@@ -67,7 +68,7 @@ func (h *CustomMCPHandler) ListTools(c fiber.Ctx) error {
 		})
 	}
 
-	tools, err := h.storage.ListTools(c.RequestCtx(), filter)
+	tools, err := h.storage.ListTools(middleware.CtxWithTenant(c), filter)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to list custom tools: %v", err),
@@ -96,7 +97,7 @@ func (h *CustomMCPHandler) GetTool(c fiber.Ctx) error {
 		})
 	}
 
-	tool, err := h.storage.GetTool(c.RequestCtx(), id)
+	tool, err := h.storage.GetTool(middleware.CtxWithTenant(c), id)
 	if err != nil {
 		if errors.Is(err, custom.ErrToolNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -145,7 +146,7 @@ func (h *CustomMCPHandler) CreateTool(c fiber.Ctx) error {
 		createdBy = &userID
 	}
 
-	tool, err := h.storage.CreateTool(c.RequestCtx(), &req, createdBy)
+	tool, err := h.storage.CreateTool(middleware.CtxWithTenant(c), &req, createdBy)
 	if err != nil {
 		if errors.Is(err, custom.ErrToolAlreadyExists) {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
@@ -193,7 +194,7 @@ func (h *CustomMCPHandler) UpdateTool(c fiber.Ctx) error {
 		}
 	}
 
-	tool, err := h.storage.UpdateTool(c.RequestCtx(), id, &req)
+	tool, err := h.storage.UpdateTool(middleware.CtxWithTenant(c), id, &req)
 	if err != nil {
 		if errors.Is(err, custom.ErrToolNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -232,7 +233,7 @@ func (h *CustomMCPHandler) DeleteTool(c fiber.Ctx) error {
 	}
 
 	// Get tool first to get name for unregistering
-	tool, err := h.storage.GetTool(c.RequestCtx(), id)
+	tool, err := h.storage.GetTool(middleware.CtxWithTenant(c), id)
 	if err != nil {
 		if errors.Is(err, custom.ErrToolNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -244,7 +245,7 @@ func (h *CustomMCPHandler) DeleteTool(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.storage.DeleteTool(c.RequestCtx(), id); err != nil {
+	if err := h.storage.DeleteTool(middleware.CtxWithTenant(c), id); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to delete tool: %v", err),
 		})
@@ -295,7 +296,7 @@ func (h *CustomMCPHandler) SyncTool(c fiber.Ctx) error {
 		createdBy = &userID
 	}
 
-	tool, err := h.storage.SyncTool(c.RequestCtx(), &req, createdBy)
+	tool, err := h.storage.SyncTool(middleware.CtxWithTenant(c), &req, createdBy)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to sync tool: %v", err),
@@ -328,7 +329,7 @@ func (h *CustomMCPHandler) TestTool(c fiber.Ctx) error {
 		})
 	}
 
-	tool, err := h.storage.GetTool(c.RequestCtx(), id)
+	tool, err := h.storage.GetTool(middleware.CtxWithTenant(c), id)
 	if err != nil {
 		if errors.Is(err, custom.ErrToolNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -381,7 +382,7 @@ func (h *CustomMCPHandler) ListResources(c fiber.Ctx) error {
 		filter.Offset = offset
 	}
 
-	resources, err := h.storage.ListResources(c.RequestCtx(), filter)
+	resources, err := h.storage.ListResources(middleware.CtxWithTenant(c), filter)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to list custom resources: %v", err),
@@ -403,7 +404,7 @@ func (h *CustomMCPHandler) GetResource(c fiber.Ctx) error {
 		})
 	}
 
-	resource, err := h.storage.GetResource(c.RequestCtx(), id)
+	resource, err := h.storage.GetResource(middleware.CtxWithTenant(c), id)
 	if err != nil {
 		if errors.Is(err, custom.ErrResourceNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -457,7 +458,7 @@ func (h *CustomMCPHandler) CreateResource(c fiber.Ctx) error {
 		createdBy = &userID
 	}
 
-	resource, err := h.storage.CreateResource(c.RequestCtx(), &req, createdBy)
+	resource, err := h.storage.CreateResource(middleware.CtxWithTenant(c), &req, createdBy)
 	if err != nil {
 		if errors.Is(err, custom.ErrResourceExists) {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
@@ -504,7 +505,7 @@ func (h *CustomMCPHandler) UpdateResource(c fiber.Ctx) error {
 		}
 	}
 
-	resource, err := h.storage.UpdateResource(c.RequestCtx(), id, &req)
+	resource, err := h.storage.UpdateResource(middleware.CtxWithTenant(c), id, &req)
 	if err != nil {
 		if errors.Is(err, custom.ErrResourceNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -543,7 +544,7 @@ func (h *CustomMCPHandler) DeleteResource(c fiber.Ctx) error {
 	}
 
 	// Get resource first to get URI for unregistering
-	resource, err := h.storage.GetResource(c.RequestCtx(), id)
+	resource, err := h.storage.GetResource(middleware.CtxWithTenant(c), id)
 	if err != nil {
 		if errors.Is(err, custom.ErrResourceNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -555,7 +556,7 @@ func (h *CustomMCPHandler) DeleteResource(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.storage.DeleteResource(c.RequestCtx(), id); err != nil {
+	if err := h.storage.DeleteResource(middleware.CtxWithTenant(c), id); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to delete resource: %v", err),
 		})
@@ -611,7 +612,7 @@ func (h *CustomMCPHandler) SyncResource(c fiber.Ctx) error {
 		createdBy = &userID
 	}
 
-	resource, err := h.storage.SyncResource(c.RequestCtx(), &req, createdBy)
+	resource, err := h.storage.SyncResource(middleware.CtxWithTenant(c), &req, createdBy)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Failed to sync resource: %v", err),
@@ -644,7 +645,7 @@ func (h *CustomMCPHandler) TestResource(c fiber.Ctx) error {
 		})
 	}
 
-	resource, err := h.storage.GetResource(c.RequestCtx(), id)
+	resource, err := h.storage.GetResource(middleware.CtxWithTenant(c), id)
 	if err != nil {
 		if errors.Is(err, custom.ErrResourceNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{

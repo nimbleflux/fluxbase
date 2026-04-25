@@ -17,6 +17,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // MCPOAuthHandler handles OAuth 2.1 authentication for MCP clients
@@ -158,8 +159,10 @@ func (h *MCPOAuthHandler) HandleClientRegistration(c fiber.Ctx) error {
 	}
 
 	// Insert client into database
-	err = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(c.RequestCtx(), `
+	tenantCtx := middleware.CtxWithTenant(c)
+	tenantID := database.TenantFromContext(tenantCtx)
+	err = database.WrapWithServiceRoleAndTenant(tenantCtx, h.db, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(tenantCtx, `
 			INSERT INTO auth.mcp_oauth_clients (client_id, client_name, client_type, redirect_uris, scopes, metadata)
 			VALUES ($1, $2, 'public', $3, $4, $5)
 		`, clientID, req.ClientName, req.RedirectURIs, scopes, map[string]any{
@@ -324,8 +327,10 @@ func (h *MCPOAuthHandler) HandleAuthorize(c fiber.Ctx) error {
 	}
 
 	// Store authorization code (now includes user_id)
-	err = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(c.RequestCtx(), `
+	tenantCtx := middleware.CtxWithTenant(c)
+	tenantID := database.TenantFromContext(tenantCtx)
+	err = database.WrapWithServiceRoleAndTenant(tenantCtx, h.db, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(tenantCtx, `
 			INSERT INTO auth.mcp_oauth_codes (code, client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, state)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		`, code, clientID, userID, redirectURI, requestedScopes, codeChallenge, codeChallengeMethod, state)
@@ -487,8 +492,11 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 	accessTokenHash := hashToken(accessToken)
 	refreshTokenHash := hashToken(refreshToken)
 
-	err = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(c.RequestCtx(), `
+	tenantCtx := middleware.CtxWithTenant(c)
+	tenantID := database.TenantFromContext(tenantCtx)
+
+	err = database.WrapWithServiceRoleAndTenant(tenantCtx, h.db, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(tenantCtx, `
 			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
 			VALUES ('access', $1, $2, $3, $4, $5)
 		`, accessTokenHash, clientID, authCode.UserID, authCode.Scopes, accessTokenExpiry)
@@ -502,8 +510,8 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 		})
 	}
 
-	err = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(c.RequestCtx(), `
+	err = database.WrapWithServiceRoleAndTenant(tenantCtx, h.db, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(tenantCtx, `
 			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
 			VALUES ('refresh', $1, $2, $3, $4, $5)
 		`, refreshTokenHash, clientID, authCode.UserID, authCode.Scopes, refreshTokenExpiry)
@@ -596,16 +604,19 @@ func (h *MCPOAuthHandler) handleRefreshTokenGrant(c fiber.Ctx) error {
 	accessTokenHash := hashToken(newAccessToken)
 	newRefreshTokenHash := hashToken(newRefreshToken)
 
-	_ = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(c.RequestCtx(), `
+	tenantCtx := middleware.CtxWithTenant(c)
+	tenantID := database.TenantFromContext(tenantCtx)
+
+	_ = database.WrapWithServiceRoleAndTenant(tenantCtx, h.db, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(tenantCtx, `
 			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
 			VALUES ('access', $1, $2, $3, $4, $5)
 		`, accessTokenHash, clientID, token.UserID, token.Scopes, accessTokenExpiry)
 		return err
 	})
 
-	_ = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(c.RequestCtx(), `
+	_ = database.WrapWithServiceRoleAndTenant(tenantCtx, h.db, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(tenantCtx, `
 			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
 			VALUES ('refresh', $1, $2, $3, $4, $5)
 		`, newRefreshTokenHash, clientID, token.UserID, token.Scopes, refreshTokenExpiry)

@@ -339,11 +339,11 @@ func (s *LokiLogStorage) Stats(ctx context.Context) (*LogStats, error) {
 
 		// Track time range
 		if len(result.Entries) > 0 {
-			if stats.OldestEntry.IsZero() || result.Entries[0].Timestamp.Before(stats.OldestEntry) {
-				stats.OldestEntry = result.Entries[0].Timestamp
+			if stats.OldestEntry == nil || result.Entries[0].Timestamp.Before(*stats.OldestEntry) {
+				stats.OldestEntry = &result.Entries[0].Timestamp
 			}
-			if stats.NewestEntry.IsZero() || result.Entries[len(result.Entries)-1].Timestamp.After(stats.NewestEntry) {
-				stats.NewestEntry = result.Entries[len(result.Entries)-1].Timestamp
+			if stats.NewestEntry == nil || result.Entries[len(result.Entries)-1].Timestamp.After(*stats.NewestEntry) {
+				stats.NewestEntry = &result.Entries[len(result.Entries)-1].Timestamp
 			}
 		}
 	}

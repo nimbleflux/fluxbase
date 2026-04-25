@@ -59,6 +59,7 @@ func BuildTenantsAdminRoutes(deps *TenantsAdminDeps) *RouteGroup {
 			{Method: "DELETE", Path: "/tenants/:id", Handler: deps.DeleteTenant, Summary: "Delete tenant (soft by default, ?hard=true for permanent)", Roles: []string{"admin", "instance_admin"}},
 			{Method: "POST", Path: "/tenants/:id/recover", Handler: deps.RecoverTenant, Summary: "Recover soft-deleted tenant", Roles: []string{"admin", "instance_admin"}},
 			{Method: "POST", Path: "/tenants/:id/migrate", Handler: deps.MigrateTenant, Summary: "Migrate tenant", Roles: []string{"admin", "instance_admin"}},
+			{Method: "POST", Path: "/tenants/:id/repair", Handler: deps.RepairTenant, Summary: "Repair tenant database", Roles: []string{"admin", "instance_admin"}},
 
 			// Tenant Admins/Members (uses default roles)
 			{Method: "GET", Path: "/tenants/:id/admins", Handler: deps.ListAdmins, Summary: "List tenant admins", Roles: nil}, // No role restriction

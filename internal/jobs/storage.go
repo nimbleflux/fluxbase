@@ -87,6 +87,27 @@ func (s *Storage) UpdateJobFunctionWithTenant(ctx context.Context, tenantID stri
 	})
 }
 
+func (s *Storage) UpdateJobFunctionForSync(ctx context.Context, tenantID string, fn *JobFunction) error {
+	query := `
+		UPDATE jobs.functions SET
+			description = $1, code = $2, original_code = $3, is_bundled = $4, bundle_error = $5,
+			enabled = $6, schedule = $7, timeout_seconds = $8, memory_limit_mb = $9,
+			max_retries = $10, progress_timeout_seconds = $11, allow_net = $12, allow_env = $13,
+			allow_read = $14, allow_write = $15, require_roles = $16, disable_execution_logs = $17, version = version + 1
+		WHERE id = $18
+		RETURNING version, updated_at
+	`
+
+	return database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			fn.Description, fn.Code, fn.OriginalCode, fn.IsBundled, fn.BundleError,
+			fn.Enabled, fn.Schedule, fn.TimeoutSeconds, fn.MemoryLimitMB,
+			fn.MaxRetries, fn.ProgressTimeoutSeconds, fn.AllowNet, fn.AllowEnv,
+			fn.AllowRead, fn.AllowWrite, fn.RequireRoles, fn.DisableExecutionLogs, fn.ID,
+		).Scan(&fn.Version, &fn.UpdatedAt)
+	})
+}
+
 // UpsertJobFunction creates or updates a job function atomically
 func (s *Storage) UpsertJobFunction(ctx context.Context, fn *JobFunction) error {
 	tenantID := database.TenantFromContext(ctx)
@@ -243,7 +264,7 @@ func (s *Storage) ListJobFunctions(ctx context.Context, namespace string) ([]*Jo
 		SELECT id, name, namespace, description, is_bundled, bundle_error,
 			enabled, schedule, timeout_seconds, memory_limit_mb, max_retries,
 			progress_timeout_seconds, allow_net, allow_env, allow_read, allow_write, require_roles, disable_execution_logs,
-			version, created_by, source, created_at, updated_at
+			version, created_by, source, COALESCE(tenant_id::text, ''), created_at, updated_at
 		FROM jobs.functions
 		WHERE namespace = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))
 		ORDER BY name
@@ -265,7 +286,51 @@ func (s *Storage) ListJobFunctions(ctx context.Context, namespace string) ([]*Jo
 				&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
 				&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
 				&fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.RequireRoles, &fn.DisableExecutionLogs,
-				&fn.Version, &fn.CreatedBy, &fn.Source, &fn.CreatedAt, &fn.UpdatedAt,
+				&fn.Version, &fn.CreatedBy, &fn.Source, &fn.TenantID, &fn.CreatedAt, &fn.UpdatedAt,
+			); err != nil {
+				return err
+			}
+			functions = append(functions, &fn)
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return functions, nil
+}
+
+// ListJobFunctionsForSync lists job functions matching the given tenant OR with NULL tenant_id.
+// Used by sync flows to find existing functions regardless of backfill state.
+func (s *Storage) ListJobFunctionsForSync(ctx context.Context, namespace string, tenantID string) ([]*JobFunctionSummary, error) {
+	query := `
+		SELECT id, name, namespace, description, is_bundled, bundle_error,
+			enabled, schedule, timeout_seconds, memory_limit_mb, max_retries,
+			progress_timeout_seconds, allow_net, allow_env, allow_read, allow_write, require_roles, disable_execution_logs,
+			version, created_by, source, COALESCE(tenant_id::text, ''), created_at, updated_at
+		FROM jobs.functions
+		WHERE namespace = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+		ORDER BY name
+	`
+
+	var functions []*JobFunctionSummary
+	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, namespace, tenantOrNil(tenantID))
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var fn JobFunctionSummary
+			if err := rows.Scan(
+				&fn.ID, &fn.Name, &fn.Namespace, &fn.Description,
+				&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
+				&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
+				&fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.RequireRoles, &fn.DisableExecutionLogs,
+				&fn.Version, &fn.CreatedBy, &fn.Source, &fn.TenantID, &fn.CreatedAt, &fn.UpdatedAt,
 			); err != nil {
 				return err
 			}
@@ -287,7 +352,7 @@ func (s *Storage) ListAllJobFunctions(ctx context.Context) ([]*JobFunctionSummar
 		SELECT id, name, namespace, description, is_bundled, bundle_error,
 			enabled, schedule, timeout_seconds, memory_limit_mb, max_retries,
 			progress_timeout_seconds, allow_net, allow_env, allow_read, allow_write, require_roles, disable_execution_logs,
-			version, created_by, source, created_at, updated_at
+			version, created_by, source, COALESCE(tenant_id::text, ''), created_at, updated_at
 		FROM jobs.functions
 		WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 			ORDER BY namespace, name
@@ -309,7 +374,7 @@ func (s *Storage) ListAllJobFunctions(ctx context.Context) ([]*JobFunctionSummar
 				&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
 				&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
 				&fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.RequireRoles, &fn.DisableExecutionLogs,
-				&fn.Version, &fn.CreatedBy, &fn.Source, &fn.CreatedAt, &fn.UpdatedAt,
+				&fn.Version, &fn.CreatedBy, &fn.Source, &fn.TenantID, &fn.CreatedAt, &fn.UpdatedAt,
 			); err != nil {
 				return err
 			}
@@ -334,6 +399,26 @@ func (s *Storage) DeleteJobFunction(ctx context.Context, namespace, name string)
 // DeleteJobFunctionWithTenant deletes a job function with tenant context
 func (s *Storage) DeleteJobFunctionWithTenant(ctx context.Context, tenantID string, namespace, name string) error {
 	query := `DELETE FROM jobs.functions WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))`
+
+	var result pgconn.CommandTag
+	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, namespace, name, tenantOrNil(tenantID))
+		return execErr
+	})
+	if err != nil {
+		return err
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("job function not found: %s/%s", namespace, name)
+	}
+
+	return nil
+}
+
+func (s *Storage) DeleteJobFunctionForSync(ctx context.Context, tenantID string, namespace, name string) error {
+	query := `DELETE FROM jobs.functions WHERE namespace = $1 AND name = $2 AND (tenant_id = $3 OR tenant_id IS NULL)`
 
 	var result pgconn.CommandTag
 	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
@@ -509,24 +594,30 @@ func (s *Storage) ClaimNextJob(ctx context.Context, workerID uuid.UUID) (*Job, e
 		RETURNING id, namespace, function_id, job_name, status, payload, result, progress,
 		          priority, max_duration_seconds, progress_timeout_seconds, max_retries,
 		          retry_count, error_message, worker_id, created_by, user_role, user_email, created_at,
-		          scheduled_at, started_at, last_progress_at, completed_at
+		          scheduled_at, started_at, last_progress_at, completed_at,
+		          COALESCE(tenant_id::text, '')
 	`
 
 	var job Job
-	err := s.conn.Pool().QueryRow(ctx, query, JobStatusRunning, workerID, JobStatusPending).Scan(
-		&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
-		&job.Payload, &job.Result, &job.Progress, &job.Priority,
-		&job.MaxDurationSeconds, &job.ProgressTimeoutSeconds, &job.MaxRetries,
-		&job.RetryCount, &job.ErrorMessage, &job.WorkerID, &job.CreatedBy, &job.UserRole, &job.UserEmail,
-		&job.CreatedAt, &job.ScheduledAt, &job.StartedAt, &job.LastProgressAt, &job.CompletedAt,
-	)
+	var tenantID string
+	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, JobStatusRunning, workerID, JobStatusPending).Scan(
+			&job.ID, &job.Namespace, &job.JobFunctionID, &job.JobName, &job.Status,
+			&job.Payload, &job.Result, &job.Progress, &job.Priority,
+			&job.MaxDurationSeconds, &job.ProgressTimeoutSeconds, &job.MaxRetries,
+			&job.RetryCount, &job.ErrorMessage, &job.WorkerID, &job.CreatedBy, &job.UserRole, &job.UserEmail,
+			&job.CreatedAt, &job.ScheduledAt, &job.StartedAt, &job.LastProgressAt, &job.CompletedAt,
+			&tenantID,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil // No jobs available
+			return nil, nil
 		}
 		return nil, err
 	}
 
+	job.TenantID = tenantID
 	return &job, nil
 }
 
@@ -538,7 +629,8 @@ func (s *Storage) UpdateJobProgress(ctx context.Context, jobID uuid.UUID, progre
 		WHERE id = $2 AND status = $3
 	`
 
-	result, err := s.conn.Pool().Exec(ctx, query, progress, jobID, JobStatusRunning)
+	tenantID := database.TenantFromContext(ctx)
+	result, err := s.updateWithTenantRole(ctx, tenantID, query, progress, jobID, JobStatusRunning)
 	if err != nil {
 		return err
 	}
@@ -560,7 +652,8 @@ func (s *Storage) CompleteJob(ctx context.Context, jobID uuid.UUID, result strin
 		WHERE id = $3 AND status = $4
 	`
 
-	cmdTag, err := s.conn.Pool().Exec(ctx, query, JobStatusCompleted, result, jobID, JobStatusRunning)
+	tenantID := database.TenantFromContext(ctx)
+	cmdTag, err := s.updateWithTenantRole(ctx, tenantID, query, JobStatusCompleted, result, jobID, JobStatusRunning)
 	if err != nil {
 		return err
 	}
@@ -580,7 +673,8 @@ func (s *Storage) FailJob(ctx context.Context, jobID uuid.UUID, errorMessage str
 		WHERE id = $3 AND status = $4
 	`
 
-	cmdTag, err := s.conn.Pool().Exec(ctx, query, JobStatusFailed, errorMessage, jobID, JobStatusRunning)
+	tenantID := database.TenantFromContext(ctx)
+	cmdTag, err := s.updateWithTenantRole(ctx, tenantID, query, JobStatusFailed, errorMessage, jobID, JobStatusRunning)
 	if err != nil {
 		return err
 	}
@@ -626,7 +720,8 @@ func (s *Storage) InterruptJob(ctx context.Context, jobID uuid.UUID, reason stri
 		WHERE id = $3 AND status = $4
 	`
 
-	result, err := s.conn.Pool().Exec(ctx, query, JobStatusInterrupted, reason, jobID, JobStatusRunning)
+	tenantID := database.TenantFromContext(ctx)
+	result, err := s.updateWithTenantRole(ctx, tenantID, query, JobStatusInterrupted, reason, jobID, JobStatusRunning)
 	if err != nil {
 		return err
 	}
@@ -1193,10 +1288,12 @@ func (s *Storage) RegisterWorker(ctx context.Context, worker *WorkerRecord) erro
 		RETURNING started_at, last_heartbeat_at
 	`
 
-	return s.conn.Pool().QueryRow(ctx, query,
-		worker.ID, worker.Name, worker.Hostname, worker.Status,
-		worker.MaxConcurrentJobs, worker.Metadata,
-	).Scan(&worker.StartedAt, &worker.LastHeartbeatAt)
+	return database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query,
+			worker.ID, worker.Name, worker.Hostname, worker.Status,
+			worker.MaxConcurrentJobs, worker.Metadata,
+		).Scan(&worker.StartedAt, &worker.LastHeartbeatAt)
+	})
 }
 
 // UpdateWorkerHeartbeat updates a worker's heartbeat timestamp
@@ -1207,22 +1304,26 @@ func (s *Storage) UpdateWorkerHeartbeat(ctx context.Context, workerID uuid.UUID,
 		WHERE id = $2
 	`
 
-	_, err := s.conn.Pool().Exec(ctx, query, currentJobCount, workerID)
-	return err
+	return database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, currentJobCount, workerID)
+		return err
+	})
 }
 
-// UpdateWorkerStatus updates a worker's status
 func (s *Storage) UpdateWorkerStatus(ctx context.Context, workerID uuid.UUID, status WorkerStatus) error {
 	query := `UPDATE jobs.workers SET status = $1 WHERE id = $2`
-	_, err := s.conn.Pool().Exec(ctx, query, status, workerID)
-	return err
+	return database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, status, workerID)
+		return err
+	})
 }
 
-// DeregisterWorker removes a worker from the registry
 func (s *Storage) DeregisterWorker(ctx context.Context, workerID uuid.UUID) error {
 	query := `DELETE FROM jobs.workers WHERE id = $1`
-	_, err := s.conn.Pool().Exec(ctx, query, workerID)
-	return err
+	return database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, workerID)
+		return err
+	})
 }
 
 // GetWorker retrieves a worker by ID
@@ -1300,7 +1401,12 @@ func (s *Storage) CleanupStaleWorkers(ctx context.Context, timeout time.Duration
 		WHERE last_heartbeat_at < NOW() - $1::INTERVAL
 	`
 
-	result, err := s.conn.Pool().Exec(ctx, query, timeout.String())
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, timeout.String())
+		return execErr
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -1308,8 +1414,6 @@ func (s *Storage) CleanupStaleWorkers(ctx context.Context, timeout time.Duration
 	return result.RowsAffected(), nil
 }
 
-// ResetOrphanedJobs resets jobs that are running but have no worker (worker was deleted)
-// Returns the number of jobs reset to pending status
 func (s *Storage) ResetOrphanedJobs(ctx context.Context) (int64, error) {
 	query := `
 		UPDATE jobs.queue
@@ -1321,7 +1425,12 @@ func (s *Storage) ResetOrphanedJobs(ctx context.Context) (int64, error) {
 		  AND worker_id IS NULL
 	`
 
-	result, err := s.conn.Pool().Exec(ctx, query, JobStatusPending, JobStatusRunning)
+	var result pgconn.CommandTag
+	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, JobStatusPending, JobStatusRunning)
+		return execErr
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -1399,4 +1508,60 @@ func tenantOrNil(tenantID string) interface{} {
 		return nil
 	}
 	return tenantID
+}
+
+// updateWithTenantRole executes an UPDATE query with tenant-aware role wrapping.
+// Workers use this after claiming a job to operate within the job's tenant context.
+func (s *Storage) updateWithTenantRole(ctx context.Context, tenantID string, query string, args ...interface{}) (pgconn.CommandTag, error) {
+	var result pgconn.CommandTag
+	err := database.WrapWithTenantAwareRole(ctx, s.conn, tenantID, func(tx pgx.Tx) error {
+		var execErr error
+		result, execErr = tx.Exec(ctx, query, args...)
+		return execErr
+	})
+	return result, err
+}
+
+// ListAllScheduledJobFunctions lists all enabled scheduled job functions across all tenants.
+// Used by the scheduler which runs cross-tenant.
+func (s *Storage) ListAllScheduledJobFunctions(ctx context.Context) ([]*JobFunctionSummary, error) {
+	query := `
+		SELECT id, name, namespace, description, is_bundled, bundle_error,
+			enabled, schedule, timeout_seconds, memory_limit_mb, max_retries,
+			progress_timeout_seconds, allow_net, allow_env, allow_read, allow_write, require_roles, disable_execution_logs,
+			version, created_by, source, COALESCE(tenant_id::text, ''), created_at, updated_at
+		FROM jobs.functions
+		WHERE enabled = true AND schedule IS NOT NULL AND schedule != ''
+		ORDER BY namespace, name
+	`
+
+	var functions []*JobFunctionSummary
+	err := database.WrapWithServiceRole(ctx, s.conn, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var fn JobFunctionSummary
+			if err := rows.Scan(
+				&fn.ID, &fn.Name, &fn.Namespace, &fn.Description,
+				&fn.IsBundled, &fn.BundleError, &fn.Enabled, &fn.Schedule, &fn.TimeoutSeconds,
+				&fn.MemoryLimitMB, &fn.MaxRetries, &fn.ProgressTimeoutSeconds,
+				&fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.RequireRoles, &fn.DisableExecutionLogs,
+				&fn.Version, &fn.CreatedBy, &fn.Source, &fn.TenantID, &fn.CreatedAt, &fn.UpdatedAt,
+			); err != nil {
+				return err
+			}
+			functions = append(functions, &fn)
+		}
+
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return functions, nil
 }

@@ -560,9 +560,11 @@ func TestLogging_Postgres_Stats(t *testing.T) {
 		stats, err := logStorage.Stats(ctx)
 		require.NoError(t, err)
 		assert.Equal(t, int64(5), stats.TotalEntries)
+		assert.NotNil(t, stats.OldestEntry)
 		assert.False(t, stats.OldestEntry.IsZero())
+		assert.NotNil(t, stats.NewestEntry)
 		assert.False(t, stats.NewestEntry.IsZero())
-		assert.True(t, stats.NewestEntry.After(stats.OldestEntry))
+		assert.True(t, stats.NewestEntry.After(*stats.OldestEntry))
 	})
 
 	t.Run("counts entries by category", func(t *testing.T) {

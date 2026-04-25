@@ -68,6 +68,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -1609,8 +1610,67 @@ func (tc *TestContext) ExecuteSQLAsSuperuser(sql string, args ...interface{}) {
 	pool, err := tc.getSuperuserPool(ctx)
 	require.NoError(tc.T, err, "Failed to get superuser pool")
 
-	_, err = pool.Exec(ctx, sql, args...)
-	require.NoError(tc.T, err, "Failed to execute SQL as superuser")
+	statements := splitSQLStatements(sql)
+	paramRE := regexp.MustCompile(`\$[1-9][0-9]*`)
+	for _, stmt := range statements {
+		if len(args) > 0 && paramRE.MatchString(stmt) {
+			_, err = pool.Exec(ctx, stmt, args...)
+		} else {
+			_, err = pool.Exec(ctx, stmt)
+		}
+		require.NoError(tc.T, err, "Failed to execute SQL as superuser")
+	}
+}
+
+// splitSQLStatements splits a multi-statement SQL string into individual statements.
+// It handles semicolons inside dollar-quoted strings and strips whitespace.
+func splitSQLStatements(sql string) []string {
+	var statements []string
+	var current strings.Builder
+	inDollarQuote := false
+	dollarTag := ""
+
+	for i := 0; i < len(sql); i++ {
+		if !inDollarQuote && i+1 < len(sql) && sql[i] == '$' {
+			tagStart := i
+			j := i + 1
+			for j < len(sql) && (sql[j] == '_' || (sql[j] >= 'a' && sql[j] <= 'z') || (sql[j] >= 'A' && sql[j] <= 'Z') || (sql[j] >= '0' && sql[j] <= '9')) {
+				j++
+			}
+			if j >= i+1 && j < len(sql) && sql[j] == '$' {
+				dollarTag = sql[tagStart : j+1]
+				inDollarQuote = true
+				current.WriteString(sql[tagStart : j+1])
+				i = j
+				continue
+			}
+		} else if inDollarQuote && len(dollarTag) > 0 {
+			if i+len(dollarTag) <= len(sql) && sql[i:i+len(dollarTag)] == dollarTag {
+				current.WriteString(dollarTag)
+				i += len(dollarTag) - 1
+				inDollarQuote = false
+				dollarTag = ""
+				continue
+			}
+		}
+
+		if sql[i] == ';' && !inDollarQuote {
+			stmt := strings.TrimSpace(current.String())
+			if stmt != "" {
+				statements = append(statements, stmt)
+			}
+			current.Reset()
+		} else {
+			current.WriteByte(sql[i])
+		}
+	}
+
+	stmt := strings.TrimSpace(current.String())
+	if stmt != "" {
+		statements = append(statements, stmt)
+	}
+
+	return statements
 }
 
 // ExecuteSQLWithRLSContext executes SQL with RLS context set up (role and JWT claims).
@@ -1964,6 +2024,48 @@ func (tc *TestContext) QuerySQLAsTenant(tenantID, sql string, args ...interface{
 	// Execute the query
 	rows, err := tx.Query(ctx, sql, args...)
 	require.NoError(tc.T, err, "Failed to query as tenant")
+	defer rows.Close()
+
+	results := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		values, err := rows.Values()
+		require.NoError(tc.T, err)
+
+		row := make(map[string]interface{})
+		for i, col := range rows.FieldDescriptions() {
+			row[string(col.Name)] = convertPgTypeToGoType(values[i])
+		}
+		results = append(results, row)
+	}
+
+	err = tx.Commit(ctx)
+	require.NoError(tc.T, err, "Failed to commit transaction")
+
+	return results
+}
+
+// QuerySQLAsTenantService queries with tenant context and 'tenant_service' JWT role.
+// Use this for tables whose RLS policies require current_user_role() IN ('instance_admin', 'tenant_service')
+// in addition to has_tenant_access(tenant_id), such as auth.service_keys.
+func (tc *TestContext) QuerySQLAsTenantService(tenantID, sql string, args ...interface{}) []map[string]interface{} {
+	ctx := context.Background()
+
+	pool, err := tc.getRLSPool(ctx)
+	require.NoError(tc.T, err, "Failed to get RLS pool")
+
+	tx, err := pool.Begin(ctx)
+	require.NoError(tc.T, err, "Failed to begin transaction")
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
+	require.NoError(tc.T, err, "Failed to set app.current_tenant_id")
+
+	jwtClaims := fmt.Sprintf(`{"sub":"00000000-0000-0000-0000-000000000000","role":"tenant_service"}`)
+	_, err = tx.Exec(ctx, "SELECT set_config('request.jwt.claims', $1, true)", jwtClaims)
+	require.NoError(tc.T, err, "Failed to set request.jwt.claims")
+
+	rows, err := tx.Query(ctx, sql, args...)
+	require.NoError(tc.T, err, "Failed to query as tenant service")
 	defer rows.Close()
 
 	results := make([]map[string]interface{}, 0)
@@ -2794,6 +2896,20 @@ func (tc *TestContext) CreateServiceKey(name string) string {
 		string(keyHash),
 		keyPrefix,
 	).Scan(&keyID)
+	if err != nil {
+		// Fallback: use superuser pool to bypass RLS when tc.DB is an
+		// RLS-enforced connection (e.g. fluxbase_rls_test user).
+		pool, poolErr := tc.getSuperuserPool(ctx)
+		if poolErr != nil {
+			require.NoError(tc.T, err, "Failed to insert service key (superuser fallback also failed: %v)", poolErr)
+		}
+		err = pool.QueryRow(ctx, query,
+			name,
+			"Test service key for "+name,
+			string(keyHash),
+			keyPrefix,
+		).Scan(&keyID)
+	}
 	require.NoError(tc.T, err, "Failed to insert service key")
 	require.NotEmpty(tc.T, keyID, "Service key ID is empty")
 

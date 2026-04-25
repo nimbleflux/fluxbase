@@ -119,13 +119,14 @@ export class FluxbaseFetch {
   }
 
   /**
-   * Internal request implementation with retry capability
+   * Full request implementation returning response with headers, status, and data.
+   * Used by both requestInternal and requestWithHeadersInternal.
    */
-  private async requestInternal<T = unknown>(
+  private async requestFull<T = unknown>(
     path: string,
     options: FetchOptions,
     isRetry: boolean,
-  ): Promise<T> {
+  ): Promise<FetchResponseWithHeaders<T>> {
     const url = `${this.baseUrl}${path}`;
     const headers = { ...this.defaultHeaders, ...options.headers };
     if (this.beforeRequestCallback) {
@@ -143,15 +144,11 @@ export class FluxbaseFetch {
     }
 
     try {
-      // Determine if body is FormData (needs special handling for multipart uploads)
-      // Use constructor.name check for cross-runtime compatibility (Deno, Node, Browser)
-      // instanceof can fail across different realms/contexts in bundled IIFE code
       const isFormData =
         options.body &&
         (options.body.constructor?.name === "FormData" ||
           options.body instanceof FormData);
 
-      // For FormData, omit Content-Type to let runtime set multipart/form-data with boundary
       const requestHeaders = isFormData
         ? Object.fromEntries(
             Object.entries(headers).filter(
@@ -173,7 +170,6 @@ export class FluxbaseFetch {
 
       clearTimeout(timeoutId);
 
-      // Parse response
       const contentType = response.headers.get("content-type");
       let data: unknown;
 
@@ -187,7 +183,6 @@ export class FluxbaseFetch {
         console.log(`[Fluxbase SDK] Response:`, response.status, data);
       }
 
-      // Handle 401 errors with automatic token refresh
       if (
         response.status === 401 &&
         !isRetry &&
@@ -196,12 +191,10 @@ export class FluxbaseFetch {
       ) {
         const refreshSuccess = await this.handleTokenRefresh();
         if (refreshSuccess) {
-          // Retry the request with the new token
-          return this.requestInternal<T>(path, options, true);
+          return this.requestFull<T>(path, options, true);
         }
       }
 
-      // Handle errors
       if (!response.ok) {
         const error = new Error(
           typeof data === "object" && data && "error" in data
@@ -215,7 +208,11 @@ export class FluxbaseFetch {
         throw error;
       }
 
-      return data as T;
+      return {
+        data: data as T,
+        headers: response.headers,
+        status: response.status,
+      };
     } catch (err) {
       clearTimeout(timeoutId);
 
@@ -238,7 +235,6 @@ export class FluxbaseFetch {
    * Multiple concurrent requests that fail with 401 will share the same refresh operation
    */
   private async handleTokenRefresh(): Promise<boolean> {
-    // If already refreshing, wait for the existing refresh to complete
     if (this.isRefreshing && this.refreshPromise) {
       return this.refreshPromise;
     }
@@ -270,6 +266,29 @@ export class FluxbaseFetch {
       }
       return false;
     }
+  }
+
+  /**
+   * Internal request implementation with retry capability
+   */
+  private async requestInternal<T = unknown>(
+    path: string,
+    options: FetchOptions,
+    isRetry: boolean,
+  ): Promise<T> {
+    const { data } = await this.requestFull<T>(path, options, isRetry);
+    return data;
+  }
+
+  /**
+   * Internal request implementation that returns response with headers
+   */
+  private async requestWithHeadersInternal<T = unknown>(
+    path: string,
+    options: FetchOptions,
+    isRetry: boolean,
+  ): Promise<FetchResponseWithHeaders<T>> {
+    return this.requestFull<T>(path, options, isRetry);
   }
 
   /**
@@ -315,125 +334,6 @@ export class FluxbaseFetch {
     options: FetchOptions,
   ): Promise<FetchResponseWithHeaders<T>> {
     return this.requestWithHeadersInternal<T>(path, options, false);
-  }
-
-  /**
-   * Internal request implementation that returns response with headers
-   */
-  private async requestWithHeadersInternal<T = unknown>(
-    path: string,
-    options: FetchOptions,
-    isRetry: boolean,
-  ): Promise<FetchResponseWithHeaders<T>> {
-    const url = `${this.baseUrl}${path}`;
-    const headers = { ...this.defaultHeaders, ...options.headers };
-    if (this.beforeRequestCallback) {
-      this.beforeRequestCallback(headers);
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      options.timeout ?? this.timeout,
-    );
-
-    if (this.debug) {
-      console.log(`[Fluxbase SDK] ${options.method} ${url}`, options.body);
-    }
-
-    try {
-      // Determine if body is FormData (needs special handling for multipart uploads)
-      // Use constructor.name check for cross-runtime compatibility (Deno, Node, Browser)
-      // instanceof can fail across different realms/contexts in bundled IIFE code
-      const isFormData =
-        options.body &&
-        (options.body.constructor?.name === "FormData" ||
-          options.body instanceof FormData);
-
-      // For FormData, omit Content-Type to let runtime set multipart/form-data with boundary
-      const requestHeaders = isFormData
-        ? Object.fromEntries(
-            Object.entries(headers).filter(
-              ([key]) => key.toLowerCase() !== "content-type",
-            ),
-          )
-        : headers;
-
-      const response = await fetch(url, {
-        method: options.method,
-        headers: requestHeaders,
-        body: isFormData
-          ? (options.body as FormData)
-          : options.body
-            ? JSON.stringify(options.body)
-            : undefined,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      // Parse response
-      const contentType = response.headers.get("content-type");
-      let data: unknown;
-
-      if (contentType?.includes("application/json")) {
-        data = await response.json();
-      } else {
-        data = await response.text();
-      }
-
-      if (this.debug) {
-        console.log(`[Fluxbase SDK] Response:`, response.status, data);
-      }
-
-      // Handle 401 errors with automatic token refresh
-      if (
-        response.status === 401 &&
-        !isRetry &&
-        !options.skipAutoRefresh &&
-        this.refreshTokenCallback
-      ) {
-        const refreshSuccess = await this.handleTokenRefresh();
-        if (refreshSuccess) {
-          // Retry the request with the new token
-          return this.requestWithHeadersInternal<T>(path, options, true);
-        }
-      }
-
-      // Handle errors
-      if (!response.ok) {
-        const error = new Error(
-          typeof data === "object" && data && "error" in data
-            ? String(data.error)
-            : response.statusText,
-        ) as FluxbaseError;
-
-        error.status = response.status;
-        error.details = data;
-
-        throw error;
-      }
-
-      return {
-        data: data as T,
-        headers: response.headers,
-        status: response.status,
-      };
-    } catch (err) {
-      clearTimeout(timeoutId);
-
-      if (err instanceof Error) {
-        if (err.name === "AbortError") {
-          const timeoutError = new Error("Request timeout") as FluxbaseError;
-          timeoutError.status = 408;
-          throw timeoutError;
-        }
-
-        throw err;
-      }
-
-      throw new Error("Unknown error occurred");
-    }
   }
 
   /**

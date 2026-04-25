@@ -241,8 +241,8 @@ func (t *CreateSchemaTool) Execute(ctx context.Context, args map[string]any, aut
 	query := fmt.Sprintf("CREATE SCHEMA %s", quoteIdentifier(name))
 	log.Info().Str("schema", name).Str("query", query).Msg("MCP DDL: Creating schema")
 
-	err = t.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err = t.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -473,8 +473,8 @@ func (t *CreateTableTool) Execute(ctx context.Context, args map[string]any, auth
 		Int("columns", len(columnsRaw)).
 		Msg("MCP DDL: Creating table")
 
-	err := t.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err := t.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -611,8 +611,8 @@ func (t *DropTableTool) Execute(ctx context.Context, args map[string]any, authCt
 
 	log.Info().Str("table", fmt.Sprintf("%s.%s", schema, table)).Str("query", query).Msg("MCP DDL: Dropping table")
 
-	err = t.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err = t.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -778,8 +778,8 @@ func (t *AddColumnTool) Execute(ctx context.Context, args map[string]any, authCt
 		Str("query", query).
 		Msg("MCP DDL: Adding column")
 
-	err := t.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err := t.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -911,8 +911,8 @@ func (t *DropColumnTool) Execute(ctx context.Context, args map[string]any, authC
 		Str("query", query).
 		Msg("MCP DDL: Dropping column")
 
-	err := t.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err := t.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {
@@ -1063,8 +1063,8 @@ func (t *RenameTableTool) Execute(ctx context.Context, args map[string]any, auth
 		Str("query", query).
 		Msg("MCP DDL: Renaming table")
 
-	err = t.db.ExecuteWithAdminRole(ctx, func(conn *pgx.Conn) error {
-		_, execErr := conn.Exec(ctx, query)
+	err = t.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+		_, execErr := tx.Exec(ctx, query)
 		return execErr
 	})
 	if err != nil {

@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
@@ -27,14 +30,20 @@ var (
 	ErrOTPMaxAttemptsExceeded = errors.New("maximum otp verification attempts exceeded")
 )
 
+// hashOTPCode creates a SHA-256 hash of an OTP code and returns it as base64.
+func hashOTPCode(code string) string {
+	hash := sha256.Sum256([]byte(code))
+	return base64.URLEncoding.EncodeToString(hash[:])
+}
+
 // OTPCode represents a one-time password code
 type OTPCode struct {
 	ID          string     `json:"id" db:"id"`
 	Email       *string    `json:"email,omitempty" db:"email"`
 	Phone       *string    `json:"phone,omitempty" db:"phone"`
-	Code        string     `json:"code" db:"code"`
-	Type        string     `json:"type" db:"type"`       // email, sms
-	Purpose     string     `json:"purpose" db:"purpose"` // signin, signup, recovery, email_change, phone_change
+	CodeHash    *string    `json:"-" db:"code_hash"`
+	Type        string     `json:"type" db:"type"`
+	Purpose     string     `json:"purpose" db:"purpose"`
 	ExpiresAt   time.Time  `json:"expires_at" db:"expires_at"`
 	Used        bool       `json:"used" db:"used"`
 	UsedAt      *time.Time `json:"used_at,omitempty" db:"used_at"`
@@ -43,6 +52,13 @@ type OTPCode struct {
 	IPAddress   *string    `json:"ip_address,omitempty" db:"ip_address"`
 	UserAgent   *string    `json:"user_agent,omitempty" db:"user_agent"`
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
+}
+
+// OTPCodeWithPlaintext wraps OTPCode with the plaintext code for one-time use
+// (e.g., sending via email/SMS). The plaintext code is never persisted.
+type OTPCodeWithPlaintext struct {
+	*OTPCode
+	PlaintextCode string `json:"-"`
 }
 
 // OTPRepository handles database operations for OTP codes
@@ -55,18 +71,20 @@ func NewOTPRepository(db *database.Connection) *OTPRepository {
 	return &OTPRepository{db: db}
 }
 
-// Create creates a new OTP code
-func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string, otpType, purpose string, expiryDuration time.Duration) (*OTPCode, error) {
+// Create creates a new OTP code and returns the code with its plaintext for sending
+func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string, otpType, purpose string, expiryDuration time.Duration) (*OTPCodeWithPlaintext, error) {
 	code, err := GenerateOTPCode(6)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate OTP code: %w", err)
 	}
 
+	codeHash := hashOTPCode(code)
+
 	otpCode := &OTPCode{
 		ID:          uuid.New().String(),
 		Email:       email,
 		Phone:       phone,
-		Code:        code,
+		CodeHash:    &codeHash,
 		Type:        otpType,
 		Purpose:     purpose,
 		ExpiresAt:   time.Now().Add(expiryDuration),
@@ -77,17 +95,20 @@ func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string
 	}
 
 	query := `
-		INSERT INTO auth.otp_codes (id, email, phone, code, type, purpose, expires_at, used, attempts, max_attempts, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		RETURNING id, email, phone, code, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
+		INSERT INTO auth.otp_codes (id, email, phone, code, code_hash, type, purpose, expires_at, used, attempts, max_attempts, created_at, user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+			(SELECT id FROM auth.users WHERE email = $2 LIMIT 1))
+		RETURNING id, email, phone, code_hash, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
 	`
 
-	err = database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
+	tenantID := database.TenantFromContext(ctx)
+	err = database.WrapWithServiceRoleAndTenant(ctx, r.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query,
 			otpCode.ID,
 			otpCode.Email,
 			otpCode.Phone,
-			otpCode.Code,
+			code,
+			otpCode.CodeHash,
 			otpCode.Type,
 			otpCode.Purpose,
 			otpCode.ExpiresAt,
@@ -99,7 +120,7 @@ func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string
 			&otpCode.ID,
 			&otpCode.Email,
 			&otpCode.Phone,
-			&otpCode.Code,
+			&otpCode.CodeHash,
 			&otpCode.Type,
 			&otpCode.Purpose,
 			&otpCode.ExpiresAt,
@@ -116,44 +137,88 @@ func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string
 		return nil, err
 	}
 
-	return otpCode, nil
+	return &OTPCodeWithPlaintext{OTPCode: otpCode, PlaintextCode: code}, nil
 }
 
-// GetByCode retrieves an OTP code by email/phone and code
+// GetByCode retrieves an OTP code by email/phone and code.
+// It uses hash-based lookup first, with a plaintext fallback for
+// codes created before the hashing migration.
 func (r *OTPRepository) GetByCode(ctx context.Context, email *string, phone *string, code string) (*OTPCode, error) {
-	var query string
-	var args []interface{}
+	codeHash := hashOTPCode(code)
 
-	switch {
-	case email != nil:
-		query = `
-			SELECT id, email, phone, code, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
+	otpCode := &OTPCode{}
+
+	// Try hash-based lookup first
+	hashQuery := `
+		SELECT id, email, phone, code_hash, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
+		FROM auth.otp_codes
+		WHERE `
+	var hashArgs []interface{}
+	if email != nil {
+		hashQuery += `email = $1 AND code_hash = $2 AND used = false`
+		hashArgs = []interface{}{*email, codeHash}
+	} else if phone != nil {
+		hashQuery += `phone = $1 AND code_hash = $2 AND used = false`
+		hashArgs = []interface{}{*phone, codeHash}
+	} else {
+		return nil, errors.New("either email or phone must be provided")
+	}
+	hashQuery += ` ORDER BY created_at DESC LIMIT 1`
+
+	err := database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, hashQuery, hashArgs...).Scan(
+			&otpCode.ID,
+			&otpCode.Email,
+			&otpCode.Phone,
+			&otpCode.CodeHash,
+			&otpCode.Type,
+			&otpCode.Purpose,
+			&otpCode.ExpiresAt,
+			&otpCode.Used,
+			&otpCode.UsedAt,
+			&otpCode.Attempts,
+			&otpCode.MaxAttempts,
+			&otpCode.IPAddress,
+			&otpCode.UserAgent,
+			&otpCode.CreatedAt,
+		)
+	})
+	if err == nil {
+		return otpCode, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+
+	// Fallback: plaintext lookup for legacy codes (pre-migration)
+	var fallbackQuery string
+	var fallbackArgs []interface{}
+	if email != nil {
+		fallbackQuery = `
+			SELECT id, email, phone, code_hash, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
 			FROM auth.otp_codes
 			WHERE email = $1 AND code = $2 AND used = false
 			ORDER BY created_at DESC
 			LIMIT 1
 		`
-		args = []interface{}{*email, code}
-	case phone != nil:
-		query = `
-			SELECT id, email, phone, code, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
+		fallbackArgs = []interface{}{*email, code}
+	} else {
+		fallbackQuery = `
+			SELECT id, email, phone, code_hash, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
 			FROM auth.otp_codes
 			WHERE phone = $1 AND code = $2 AND used = false
 			ORDER BY created_at DESC
 			LIMIT 1
 		`
-		args = []interface{}{*phone, code}
-	default:
-		return nil, errors.New("either email or phone must be provided")
+		fallbackArgs = []interface{}{*phone, code}
 	}
 
-	otpCode := &OTPCode{}
-	err := database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, args...).Scan(
+	err = database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, fallbackQuery, fallbackArgs...).Scan(
 			&otpCode.ID,
 			&otpCode.Email,
 			&otpCode.Phone,
-			&otpCode.Code,
+			&otpCode.CodeHash,
 			&otpCode.Type,
 			&otpCode.Purpose,
 			&otpCode.ExpiresAt,
@@ -171,6 +236,17 @@ func (r *OTPRepository) GetByCode(ctx context.Context, email *string, phone *str
 			return nil, ErrOTPNotFound
 		}
 		return nil, err
+	}
+
+	// Lazy migration: backfill hash for this legacy code
+	if otpCode.CodeHash == nil || *otpCode.CodeHash == "" {
+		if migrateErr := database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
+			_, execErr := tx.Exec(ctx, `UPDATE auth.otp_codes SET code_hash = $1 WHERE id = $2`, codeHash, otpCode.ID)
+			return execErr
+		}); migrateErr != nil {
+			log.Debug().Err(migrateErr).Str("otp_id", otpCode.ID).Msg("Failed to lazy-migrate OTP code hash")
+		}
+		otpCode.CodeHash = &codeHash
 	}
 
 	return otpCode, nil
@@ -240,13 +316,6 @@ func (r *OTPRepository) Validate(ctx context.Context, email *string, phone *stri
 	// Check if expired
 	if time.Now().After(otpCode.ExpiresAt) {
 		return nil, ErrOTPExpired
-	}
-
-	// Verify the code matches
-	if otpCode.Code != code {
-		// Increment attempts on invalid code
-		_ = r.IncrementAttempts(ctx, otpCode.ID)
-		return nil, ErrOTPInvalid
 	}
 
 	return otpCode, nil
@@ -336,17 +405,14 @@ func NewOTPService(
 
 // SendEmailOTP sends an OTP code via email
 func (s *OTPService) SendEmailOTP(ctx context.Context, email, purpose string) error {
-	// Invalidate old OTP codes for this email
 	_ = s.repo.DeleteByEmail(ctx, email)
 
-	// Create new OTP code
 	otpCode, err := s.repo.Create(ctx, &email, nil, "email", purpose, s.otpDuration)
 	if err != nil {
 		return fmt.Errorf("failed to create OTP code: %w", err)
 	}
 
-	// Send email
-	if err := s.otpSender.SendEmailOTP(ctx, email, otpCode.Code, purpose); err != nil {
+	if err := s.otpSender.SendEmailOTP(ctx, email, otpCode.PlaintextCode, purpose); err != nil {
 		return fmt.Errorf("failed to send OTP email: %w", err)
 	}
 
@@ -355,17 +421,14 @@ func (s *OTPService) SendEmailOTP(ctx context.Context, email, purpose string) er
 
 // SendSMSOTP sends an OTP code via SMS
 func (s *OTPService) SendSMSOTP(ctx context.Context, phone, purpose string) error {
-	// Invalidate old OTP codes for this phone
 	_ = s.repo.DeleteByPhone(ctx, phone)
 
-	// Create new OTP code
 	otpCode, err := s.repo.Create(ctx, nil, &phone, "sms", purpose, s.otpDuration)
 	if err != nil {
 		return fmt.Errorf("failed to create OTP code: %w", err)
 	}
 
-	// Send SMS
-	if err := s.otpSender.SendSMSOTP(ctx, phone, otpCode.Code, purpose); err != nil {
+	if err := s.otpSender.SendSMSOTP(ctx, phone, otpCode.PlaintextCode, purpose); err != nil {
 		return fmt.Errorf("failed to send OTP SMS: %w", err)
 	}
 

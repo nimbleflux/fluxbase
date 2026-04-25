@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // Cookie names for authentication tokens
@@ -187,7 +188,7 @@ func (h *AuthHandler) SignUp(c fiber.Ctx) error {
 		if req.ChallengeID != "" && h.captchaTrustService != nil {
 			// Verify CAPTCHA token if one was provided
 			if req.CaptchaToken != "" {
-				if err := h.captchaService.Verify(c.RequestCtx(), req.CaptchaToken, c.IP()); err != nil {
+				if err := h.captchaService.Verify(middleware.CtxWithTenant(c), req.CaptchaToken, c.IP()); err != nil {
 					log.Warn().Err(err).Str("email", req.Email).Msg("CAPTCHA verification failed for signup")
 					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 						"error": "CAPTCHA verification failed",
@@ -198,7 +199,7 @@ func (h *AuthHandler) SignUp(c fiber.Ctx) error {
 			}
 
 			// Validate the challenge (checks if CAPTCHA was required and if it was verified)
-			if err := h.captchaTrustService.ValidateChallenge(c.RequestCtx(), req.ChallengeID, "signup", c.IP(), captchaVerified); err != nil {
+			if err := h.captchaTrustService.ValidateChallenge(middleware.CtxWithTenant(c), req.ChallengeID, "signup", c.IP(), captchaVerified); err != nil {
 				if errors.Is(err, auth.ErrCaptchaRequired) {
 					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 						"error": "CAPTCHA verification required",
@@ -225,7 +226,7 @@ func (h *AuthHandler) SignUp(c fiber.Ctx) error {
 			}
 		} else {
 			// Fall back to static CAPTCHA verification (no challenge_id provided)
-			if err := h.captchaService.VerifyForEndpoint(c.RequestCtx(), "signup", req.CaptchaToken, c.IP()); err != nil {
+			if err := h.captchaService.VerifyForEndpoint(middleware.CtxWithTenant(c), "signup", req.CaptchaToken, c.IP()); err != nil {
 				if errors.Is(err, auth.ErrCaptchaRequired) {
 					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 						"error": "CAPTCHA verification required",
@@ -255,7 +256,7 @@ func (h *AuthHandler) SignUp(c fiber.Ctx) error {
 	}
 
 	// Create user
-	resp, err := h.authService.SignUp(c.RequestCtx(), req)
+	resp, err := h.authService.SignUp(middleware.CtxWithTenant(c), req)
 	if err != nil {
 		log.Error().Err(err).Str("email", req.Email).Msg("Failed to sign up user")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -266,7 +267,7 @@ func (h *AuthHandler) SignUp(c fiber.Ctx) error {
 	// Issue trust token if CAPTCHA was verified (for use in subsequent requests)
 	var trustToken string
 	if captchaVerified && h.captchaTrustService != nil && h.captchaTrustService.IsEnabled() {
-		trustToken, _ = h.captchaTrustService.IssueTrustToken(c.RequestCtx(), c.IP(), req.DeviceFingerprint, c.Get("User-Agent"))
+		trustToken, _ = h.captchaTrustService.IssueTrustToken(middleware.CtxWithTenant(c), c.IP(), req.DeviceFingerprint, c.Get("User-Agent"))
 	}
 
 	// Check if email verification is required (don't set cookies, no tokens returned)
@@ -302,7 +303,7 @@ func (h *AuthHandler) SignUp(c fiber.Ctx) error {
 // SignIn handles user login
 // POST /auth/signin
 func (h *AuthHandler) SignIn(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Check if password login is disabled for app users
 	if h.isPasswordLoginDisabled(ctx) {
@@ -327,7 +328,7 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 		if req.ChallengeID != "" && h.captchaTrustService != nil {
 			// Verify CAPTCHA token if one was provided
 			if req.CaptchaToken != "" {
-				if err := h.captchaService.Verify(c.RequestCtx(), req.CaptchaToken, c.IP()); err != nil {
+				if err := h.captchaService.Verify(middleware.CtxWithTenant(c), req.CaptchaToken, c.IP()); err != nil {
 					log.Warn().Err(err).Str("email", req.Email).Msg("CAPTCHA verification failed for login")
 					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 						"error": "CAPTCHA verification failed",
@@ -338,7 +339,7 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 			}
 
 			// Validate the challenge (checks if CAPTCHA was required and if it was verified)
-			if err := h.captchaTrustService.ValidateChallenge(c.RequestCtx(), req.ChallengeID, "login", c.IP(), captchaVerified); err != nil {
+			if err := h.captchaTrustService.ValidateChallenge(middleware.CtxWithTenant(c), req.ChallengeID, "login", c.IP(), captchaVerified); err != nil {
 				if errors.Is(err, auth.ErrCaptchaRequired) {
 					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 						"error": "CAPTCHA verification required",
@@ -365,7 +366,7 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 			}
 		} else {
 			// Fall back to static CAPTCHA verification (no challenge_id provided)
-			if err := h.captchaService.VerifyForEndpoint(c.RequestCtx(), "login", req.CaptchaToken, c.IP()); err != nil {
+			if err := h.captchaService.VerifyForEndpoint(middleware.CtxWithTenant(c), "login", req.CaptchaToken, c.IP()); err != nil {
 				if errors.Is(err, auth.ErrCaptchaRequired) {
 					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 						"error": "CAPTCHA verification required",
@@ -390,7 +391,7 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 	}
 
 	// Authenticate user
-	resp, err := h.authService.SignIn(c.RequestCtx(), req)
+	resp, err := h.authService.SignIn(middleware.CtxWithTenant(c), req)
 	if err != nil {
 		// Record failed attempt for trust tracking
 		if h.captchaTrustService != nil {
@@ -437,7 +438,7 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 	}
 
 	// Check if user has 2FA enabled
-	twoFAEnabled, err := h.authService.IsTOTPEnabled(c.RequestCtx(), resp.User.ID)
+	twoFAEnabled, err := h.authService.IsTOTPEnabled(middleware.CtxWithTenant(c), resp.User.ID)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", resp.User.ID).Msg("Failed to check 2FA status")
 		// Continue with login - don't block if 2FA check fails
@@ -496,7 +497,7 @@ func (h *AuthHandler) SignOut(c fiber.Ctx) error {
 		})
 	}
 
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 
 	// Get user ID from token before signing out
 	var userID string
@@ -577,7 +578,7 @@ func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
 	}
 
 	// Refresh token
-	resp, err := h.authService.RefreshToken(c.RequestCtx(), req)
+	resp, err := h.authService.RefreshToken(middleware.CtxWithTenant(c), req)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to refresh token")
 		// Clear cookies on refresh failure
@@ -610,7 +611,7 @@ func (h *AuthHandler) GetUser(c fiber.Ctx) error {
 	}
 
 	// Get user
-	user, err := h.authService.GetUser(c.RequestCtx(), token)
+	user, err := h.authService.GetUser(middleware.CtxWithTenant(c), token)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get user")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -641,7 +642,7 @@ func (h *AuthHandler) UpdateUser(c fiber.Ctx) error {
 	}
 
 	// Update user
-	user, err := h.authService.UpdateUser(c.RequestCtx(), userID.(string), req)
+	user, err := h.authService.UpdateUser(middleware.CtxWithTenant(c), userID.(string), req)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to update user")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -668,7 +669,7 @@ func (h *AuthHandler) SendMagicLink(c fiber.Ctx) error {
 
 	// Verify CAPTCHA if enabled for magic_link
 	if h.captchaService != nil {
-		if err := h.captchaService.VerifyForEndpoint(c.RequestCtx(), "magic_link", req.CaptchaToken, c.IP()); err != nil {
+		if err := h.captchaService.VerifyForEndpoint(middleware.CtxWithTenant(c), "magic_link", req.CaptchaToken, c.IP()); err != nil {
 			if errors.Is(err, auth.ErrCaptchaRequired) {
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "CAPTCHA verification required",
@@ -691,7 +692,7 @@ func (h *AuthHandler) SendMagicLink(c fiber.Ctx) error {
 	}
 
 	// Send magic link
-	if err := h.authService.SendMagicLink(c.RequestCtx(), req.Email); err != nil {
+	if err := h.authService.SendMagicLink(middleware.CtxWithTenant(c), req.Email); err != nil {
 		log.Error().Err(err).Str("email", req.Email).Msg("Failed to send magic link")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -726,7 +727,7 @@ func (h *AuthHandler) VerifyMagicLink(c fiber.Ctx) error {
 	}
 
 	// Verify magic link
-	resp, err := h.authService.VerifyMagicLink(c.RequestCtx(), req.Token)
+	resp, err := h.authService.VerifyMagicLink(middleware.CtxWithTenant(c), req.Token)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to verify magic link")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -755,7 +756,7 @@ func (h *AuthHandler) RequestPasswordReset(c fiber.Ctx) error {
 
 	// Verify CAPTCHA if enabled for password_reset
 	if h.captchaService != nil {
-		if err := h.captchaService.VerifyForEndpoint(c.RequestCtx(), "password_reset", req.CaptchaToken, c.IP()); err != nil {
+		if err := h.captchaService.VerifyForEndpoint(middleware.CtxWithTenant(c), "password_reset", req.CaptchaToken, c.IP()); err != nil {
 			if errors.Is(err, auth.ErrCaptchaRequired) {
 				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 					"error": "CAPTCHA verification required",
@@ -778,7 +779,7 @@ func (h *AuthHandler) RequestPasswordReset(c fiber.Ctx) error {
 	}
 
 	// Request password reset (this won't reveal if user exists)
-	if err := h.authService.RequestPasswordReset(c.RequestCtx(), req.Email, req.RedirectTo); err != nil {
+	if err := h.authService.RequestPasswordReset(middleware.CtxWithTenant(c), req.Email, req.RedirectTo); err != nil {
 		// Check for SMTP not configured error - this should be returned to the user
 		if errors.Is(err, auth.ErrSMTPNotConfigured) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -847,7 +848,7 @@ func (h *AuthHandler) ResetPassword(c fiber.Ctx) error {
 	}
 
 	// Reset password and get user ID
-	userID, err := h.authService.ResetPassword(c.RequestCtx(), req.Token, req.NewPassword)
+	userID, err := h.authService.ResetPassword(middleware.CtxWithTenant(c), req.Token, req.NewPassword)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to reset password")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -856,7 +857,7 @@ func (h *AuthHandler) ResetPassword(c fiber.Ctx) error {
 	}
 
 	// Generate new tokens for the user (Supabase-compatible)
-	resp, err := h.authService.GenerateTokensForUser(c.RequestCtx(), userID)
+	resp, err := h.authService.GenerateTokensForUser(middleware.CtxWithTenant(c), userID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate tokens after password reset")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -889,7 +890,7 @@ func (h *AuthHandler) VerifyPasswordResetToken(c fiber.Ctx) error {
 	}
 
 	// Verify token
-	if err := h.authService.VerifyPasswordResetToken(c.RequestCtx(), req.Token); err != nil {
+	if err := h.authService.VerifyPasswordResetToken(middleware.CtxWithTenant(c), req.Token); err != nil {
 		log.Error().Err(err).Msg("Failed to verify password reset token")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -919,7 +920,7 @@ func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 		})
 	}
 
-	user, err := h.authService.VerifyEmailToken(c.RequestCtx(), req.Token)
+	user, err := h.authService.VerifyEmailToken(middleware.CtxWithTenant(c), req.Token)
 	if err != nil {
 		// Check for specific token errors
 		if errors.Is(err, auth.ErrEmailVerificationTokenNotFound) {
@@ -971,7 +972,7 @@ func (h *AuthHandler) ResendVerificationEmail(c fiber.Ctx) error {
 	}
 
 	// Get user by email
-	user, err := h.authService.GetUserByEmail(c.RequestCtx(), req.Email)
+	user, err := h.authService.GetUserByEmail(middleware.CtxWithTenant(c), req.Email)
 	if err != nil {
 		// Don't reveal if email exists - return generic success message
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -987,7 +988,7 @@ func (h *AuthHandler) ResendVerificationEmail(c fiber.Ctx) error {
 	}
 
 	// Send verification email
-	if err := h.authService.SendEmailVerification(c.RequestCtx(), user.ID, user.Email); err != nil {
+	if err := h.authService.SendEmailVerification(middleware.CtxWithTenant(c), user.ID, user.Email); err != nil {
 		log.Error().Err(err).Str("email", req.Email).Msg("Failed to resend verification email")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to send verification email. Please try again later.",
@@ -1041,7 +1042,7 @@ func (h *AuthHandler) StartImpersonation(c fiber.Ctx) error {
 
 	tenantID := c.Get("X-FB-Tenant")
 
-	resp, err := h.authService.StartImpersonation(c.RequestCtx(), adminUserID.(string), tenantID, req)
+	resp, err := h.authService.StartImpersonation(middleware.CtxWithTenant(c), adminUserID.(string), tenantID, req)
 	if err != nil {
 		statusCode := fiber.StatusInternalServerError
 		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
@@ -1069,7 +1070,7 @@ func (h *AuthHandler) StopImpersonation(c fiber.Ctx) error {
 		})
 	}
 
-	err := h.authService.StopImpersonation(c.RequestCtx(), adminUserID.(string))
+	err := h.authService.StopImpersonation(middleware.CtxWithTenant(c), adminUserID.(string))
 	if err != nil {
 		if errors.Is(err, auth.ErrNoActiveImpersonation) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -1096,7 +1097,7 @@ func (h *AuthHandler) GetActiveImpersonation(c fiber.Ctx) error {
 		})
 	}
 
-	session, err := h.authService.GetActiveImpersonation(c.RequestCtx(), adminUserID.(string))
+	session, err := h.authService.GetActiveImpersonation(middleware.CtxWithTenant(c), adminUserID.(string))
 	if err != nil {
 		if errors.Is(err, auth.ErrNoActiveImpersonation) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -1124,7 +1125,7 @@ func (h *AuthHandler) ListImpersonationSessions(c fiber.Ctx) error {
 	limit := fiber.Query[int](c, "limit", 50)
 	offset := fiber.Query[int](c, "offset", 0)
 
-	sessions, err := h.authService.ListImpersonationSessions(c.RequestCtx(), adminUserID.(string), limit, offset)
+	sessions, err := h.authService.ListImpersonationSessions(middleware.CtxWithTenant(c), adminUserID.(string), limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -1162,7 +1163,7 @@ func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
 	userAgent := c.Get("User-Agent")
 	tenantID := c.Get("X-FB-Tenant")
 
-	resp, err := h.authService.StartAnonImpersonation(c.RequestCtx(), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
+	resp, err := h.authService.StartAnonImpersonation(middleware.CtxWithTenant(c), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
 	if err != nil {
 		statusCode := fiber.StatusInternalServerError
 		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
@@ -1203,7 +1204,7 @@ func (h *AuthHandler) StartServiceImpersonation(c fiber.Ctx) error {
 	userAgent := c.Get("User-Agent")
 	tenantID := c.Get("X-FB-Tenant")
 
-	resp, err := h.authService.StartServiceImpersonation(c.RequestCtx(), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
+	resp, err := h.authService.StartServiceImpersonation(middleware.CtxWithTenant(c), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
 	if err != nil {
 		statusCode := fiber.StatusInternalServerError
 		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
@@ -1235,7 +1236,7 @@ func (h *AuthHandler) SetupTOTP(c fiber.Ctx) error {
 	// Ignore parse errors - issuer is optional and will default to config value
 	_ = c.Bind().Body(&req)
 
-	response, err := h.authService.SetupTOTP(c.RequestCtx(), userID.(string), req.Issuer)
+	response, err := h.authService.SetupTOTP(middleware.CtxWithTenant(c), userID.(string), req.Issuer)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to setup TOTP")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -1272,7 +1273,7 @@ func (h *AuthHandler) EnableTOTP(c fiber.Ctx) error {
 		})
 	}
 
-	backupCodes, err := h.authService.EnableTOTP(c.RequestCtx(), userID.(string), req.Code)
+	backupCodes, err := h.authService.EnableTOTP(middleware.CtxWithTenant(c), userID.(string), req.Code)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to enable TOTP")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1307,7 +1308,7 @@ func (h *AuthHandler) VerifyTOTP(c fiber.Ctx) error {
 	}
 
 	// Verify the 2FA code
-	err := h.authService.VerifyTOTP(c.RequestCtx(), req.UserID, req.Code)
+	err := h.authService.VerifyTOTP(middleware.CtxWithTenant(c), req.UserID, req.Code)
 	if err != nil {
 		log.Warn().Err(err).Str("user_id", req.UserID).Msg("Failed to verify TOTP")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1316,7 +1317,7 @@ func (h *AuthHandler) VerifyTOTP(c fiber.Ctx) error {
 	}
 
 	// Generate a complete sign-in response with tokens
-	resp, err := h.authService.GenerateTokensForUser(c.RequestCtx(), req.UserID)
+	resp, err := h.authService.GenerateTokensForUser(middleware.CtxWithTenant(c), req.UserID)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", req.UserID).Msg("Failed to generate tokens after 2FA verification")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -1353,7 +1354,7 @@ func (h *AuthHandler) DisableTOTP(c fiber.Ctx) error {
 		})
 	}
 
-	err := h.authService.DisableTOTP(c.RequestCtx(), userID.(string), req.Password)
+	err := h.authService.DisableTOTP(middleware.CtxWithTenant(c), userID.(string), req.Password)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to disable TOTP")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1378,7 +1379,7 @@ func (h *AuthHandler) GetTOTPStatus(c fiber.Ctx) error {
 		})
 	}
 
-	enabled, err := h.authService.IsTOTPEnabled(c.RequestCtx(), userID.(string))
+	enabled, err := h.authService.IsTOTPEnabled(middleware.CtxWithTenant(c), userID.(string))
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to check TOTP status")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -1430,7 +1431,7 @@ func (h *AuthHandler) SendOTP(c fiber.Ctx) error {
 	}
 
 	if req.Email != nil {
-		err = h.authService.SendOTP(c.RequestCtx(), *req.Email, purpose)
+		err = h.authService.SendOTP(middleware.CtxWithTenant(c), *req.Email, purpose)
 	} else if req.Phone != nil {
 		// SMS OTP not yet fully implemented
 		err = fmt.Errorf("SMS OTP not yet implemented")
@@ -1485,7 +1486,7 @@ func (h *AuthHandler) VerifyOTP(c fiber.Ctx) error {
 	}
 
 	if req.Email != nil {
-		otpCode, err = h.authService.VerifyOTP(c.RequestCtx(), *req.Email, req.Token)
+		otpCode, err = h.authService.VerifyOTP(middleware.CtxWithTenant(c), *req.Email, req.Token)
 	} else if req.Phone != nil {
 		// Phone OTP not yet fully implemented
 		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
@@ -1504,7 +1505,7 @@ func (h *AuthHandler) VerifyOTP(c fiber.Ctx) error {
 	// Users must register via signup endpoint first
 	var user *auth.User
 	if req.Email != nil && otpCode.Email != nil {
-		user, err = h.authService.GetUserByEmail(c.RequestCtx(), *otpCode.Email)
+		user, err = h.authService.GetUserByEmail(middleware.CtxWithTenant(c), *otpCode.Email)
 		if err != nil {
 			log.Warn().Str("email", *otpCode.Email).Msg("OTP verification for non-existent user")
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -1514,7 +1515,7 @@ func (h *AuthHandler) VerifyOTP(c fiber.Ctx) error {
 	}
 
 	// Generate tokens
-	resp, err := h.authService.GenerateTokensForUser(c.RequestCtx(), user.ID)
+	resp, err := h.authService.GenerateTokensForUser(middleware.CtxWithTenant(c), user.ID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate tokens")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -1558,7 +1559,7 @@ func (h *AuthHandler) ResendOTP(c fiber.Ctx) error {
 	// Resend OTP
 	var err error
 	if req.Email != nil {
-		err = h.authService.ResendOTP(c.RequestCtx(), *req.Email, purpose)
+		err = h.authService.ResendOTP(middleware.CtxWithTenant(c), *req.Email, purpose)
 	} else if req.Phone != nil {
 		// SMS OTP not yet fully implemented
 		err = fmt.Errorf("SMS OTP not yet implemented")
@@ -1587,7 +1588,7 @@ func (h *AuthHandler) GetUserIdentities(c fiber.Ctx) error {
 		})
 	}
 
-	identities, err := h.authService.GetUserIdentities(c.RequestCtx(), userID.(string))
+	identities, err := h.authService.GetUserIdentities(middleware.CtxWithTenant(c), userID.(string))
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to get user identities")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -1626,7 +1627,7 @@ func (h *AuthHandler) LinkIdentity(c fiber.Ctx) error {
 		})
 	}
 
-	authURL, state, err := h.authService.LinkIdentity(c.RequestCtx(), userID.(string), req.Provider)
+	authURL, state, err := h.authService.LinkIdentity(middleware.CtxWithTenant(c), userID.(string), req.Provider)
 	if err != nil {
 		log.Error().Err(err).Str("provider", req.Provider).Msg("Failed to initiate identity linking")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1658,7 +1659,7 @@ func (h *AuthHandler) UnlinkIdentity(c fiber.Ctx) error {
 		})
 	}
 
-	err := h.authService.UnlinkIdentity(c.RequestCtx(), userID.(string), identityID)
+	err := h.authService.UnlinkIdentity(middleware.CtxWithTenant(c), userID.(string), identityID)
 	if err != nil {
 		log.Error().Err(err).Str("identity_id", identityID).Msg("Failed to unlink identity")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1681,7 +1682,7 @@ func (h *AuthHandler) Reauthenticate(c fiber.Ctx) error {
 		})
 	}
 
-	nonce, err := h.authService.Reauthenticate(c.RequestCtx(), userID.(string))
+	nonce, err := h.authService.Reauthenticate(middleware.CtxWithTenant(c), userID.(string))
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to reauthenticate")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -1720,7 +1721,7 @@ func (h *AuthHandler) SignInWithIDToken(c fiber.Ctx) error {
 		nonce = *req.Nonce
 	}
 
-	resp, err := h.authService.SignInWithIDToken(c.RequestCtx(), req.Provider, req.Token, nonce)
+	resp, err := h.authService.SignInWithIDToken(middleware.CtxWithTenant(c), req.Provider, req.Token, nonce)
 	if err != nil {
 		log.Error().Err(err).Str("provider", req.Provider).Msg("Failed to sign in with ID token")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1806,7 +1807,7 @@ func (h *AuthHandler) CheckCaptcha(c fiber.Ctx) error {
 
 	// If adaptive trust service is available, use it
 	if h.captchaTrustService != nil {
-		response, err := h.captchaTrustService.CheckCaptchaRequired(c.RequestCtx(), req, c.IP(), c.Get("User-Agent"))
+		response, err := h.captchaTrustService.CheckCaptchaRequired(middleware.CtxWithTenant(c), req, c.IP(), c.Get("User-Agent"))
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to check CAPTCHA requirement")
 			// Fall back to requiring CAPTCHA on error
@@ -1840,7 +1841,7 @@ func (h *AuthHandler) CheckCaptcha(c fiber.Ctx) error {
 // GetAuthConfig returns the public authentication configuration for clients
 // GET /auth/config
 func (h *AuthHandler) GetAuthConfig(c fiber.Ctx) error {
-	ctx := c.RequestCtx()
+	ctx := middleware.CtxWithTenant(c)
 	settingsCache := h.authService.GetSettingsCache()
 
 	// Build response

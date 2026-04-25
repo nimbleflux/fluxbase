@@ -123,7 +123,7 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 	// Build GROUP BY clause - include tenant assignments for all user types
 	groupByClause := "u.id, u.email, u.email_verified, u.role, u.user_metadata, u.app_metadata, u.created_at, u.updated_at, u.password_hash, u.is_locked, ta.assignments"
 
-	// Build WHERE clause for tenant filtering (app users only)
+	// Build WHERE clause for tenant filtering
 	var whereClause string
 	var args []interface{}
 	if userType == "app" && tenantID != "" {
@@ -131,6 +131,13 @@ func (s *UserManagementService) ListEnrichedUsers(ctx context.Context, userType 
 			WHERE u.id IN (
 				SELECT tm.user_id FROM platform.tenant_memberships tm
 				WHERE tm.tenant_id = $1
+			)`
+		args = append(args, tenantID)
+	} else if userType == "platform" && tenantID != "" {
+		whereClause = `
+			WHERE u.id IN (
+				SELECT taa.user_id FROM platform.tenant_admin_assignments taa
+				WHERE taa.tenant_id = $1
 			)`
 		args = append(args, tenantID)
 	}

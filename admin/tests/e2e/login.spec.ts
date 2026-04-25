@@ -15,10 +15,21 @@ test.describe("Login / Logout", () => {
     // Should redirect to dashboard
     await expect(page).toHaveURL(/\/admin\/$/, { timeout: 10_000 });
 
-    // Tokens should be stored
-    const token = await page.evaluate(() =>
-      localStorage.getItem("fluxbase_admin_access_token"),
-    );
+    // Tokens should be stored (in cookies via Zustand auth store)
+    const token = await page.evaluate(() => {
+      const prefix = "fluxbase_admin_token=";
+      const parts = document.cookie.split("; ");
+      for (const part of parts) {
+        if (part.startsWith(prefix)) {
+          try {
+            return JSON.parse(part.substring(prefix.length));
+          } catch {
+            return part.substring(prefix.length);
+          }
+        }
+      }
+      return null;
+    });
     expect(token).toBeTruthy();
   });
 

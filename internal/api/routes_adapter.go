@@ -181,8 +181,10 @@ func (s *Server) buildDashboardAuthRouteDeps() *routes.DashboardAuthDeps {
 
 func (s *Server) buildOpenAPIRouteDeps() *routes.OpenAPIDeps {
 	return &routes.OpenAPIDeps{
-		OptionalAuth:   middleware.OptionalAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
-		GetOpenAPISpec: NewOpenAPIHandler(s.db).GetOpenAPISpec,
+		OptionalAuth:    middleware.OptionalAuthOrServiceKey(s.Auth.Handler.authService, s.Auth.ClientKeyService, s.db.Pool(), &s.config.Security, s.Auth.DashboardHandler.jwtManager),
+		TenantContext:   s.Middleware.Tenant,
+		TenantDBContext: s.Middleware.TenantDB,
+		GetOpenAPISpec:  NewOpenAPIHandler(s.db).GetOpenAPISpec,
 	}
 }
 
@@ -427,6 +429,7 @@ func (s *Server) buildSyncRouteDeps() *routes.SyncDeps {
 	deps := &routes.SyncDeps{
 		RequireSyncAuth: UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db.Pool()),
 		RequireRole:     RequireRole("admin", "instance_admin", "service_role"),
+		TenantContext:   s.Middleware.Tenant,
 	}
 
 	// Functions sync
@@ -561,6 +564,7 @@ func (s *Server) buildMigrationsRouteDeps() *routes.MigrationsDeps {
 			s.sharedMiddlewareStorage,
 			tenantPoolProvider,
 		),
+		TenantContext:     s.Middleware.Tenant,
 		RequireRole:       RequireRole,
 		CreateMigration:   s.Schema.Migrations.CreateMigration,
 		ListMigrations:    s.Schema.Migrations.ListMigrations,
@@ -723,6 +727,7 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			DeleteTenant:              s.Tenancy.Tenant.DeleteTenant,
 			RecoverTenant:             s.Tenancy.Tenant.RecoverTenant,
 			MigrateTenant:             s.Tenancy.Tenant.MigrateTenant,
+			RepairTenant:              s.Tenancy.Tenant.RepairTenant,
 			ListAdmins:                s.Tenancy.Tenant.ListAdmins,
 			AssignAdmin:               s.Tenancy.Tenant.AssignAdmin,
 			RemoveAdmin:               s.Tenancy.Tenant.RemoveAdmin,
@@ -781,6 +786,12 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			SyncChatbots:               s.AI.Handler.SyncChatbots,
 			GetAIMetrics:               s.AI.Handler.GetAIMetrics,
 			ListAIProviders:            s.AI.Handler.ListProviders,
+			CreateAIProvider:           s.AI.Handler.CreateProvider,
+			UpdateAIProvider:           s.AI.Handler.UpdateProvider,
+			DeleteAIProvider:           s.AI.Handler.DeleteProvider,
+			SetDefaultAIProvider:       s.AI.Handler.SetDefaultProvider,
+			SetEmbeddingAIProvider:     s.AI.Handler.SetEmbeddingProvider,
+			ClearEmbeddingAIProvider:   s.AI.Handler.ClearEmbeddingProvider,
 			ListAIConversations:        s.AI.Handler.GetConversations,
 			GetAIConversationMessages:  s.AI.Handler.GetConversationMessages,
 			GetAIAuditLog:              s.AI.Handler.GetAuditLog,
@@ -791,6 +802,7 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			LinkKnowledgeBase:          s.AI.KnowledgeBase.LinkKnowledgeBase,
 			UpdateChatbotKnowledgeBase: s.AI.KnowledgeBase.UpdateChatbotKnowledgeBase,
 			UnlinkKnowledgeBase:        s.AI.KnowledgeBase.UnlinkKnowledgeBase,
+			DeleteKnowledgeBase:        s.AI.KnowledgeBase.DeleteKnowledgeBase,
 		},
 		RPC: &routes.RPCAdminDeps{
 			ListRPCNamespaces:   s.RPC.Handler.ListNamespaces,

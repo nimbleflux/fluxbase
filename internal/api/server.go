@@ -14,6 +14,7 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/gofiber/storage/memory/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
@@ -344,6 +345,12 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			} else {
 				tenantManager.SetFDWConfig(fdwCfg)
 				log.Info().Msg("FDW enabled for tenant databases")
+
+				go func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+					defer cancel()
+					tenantManager.UpgradeAllTenantsFDW(ctx)
+				}()
 			}
 		}
 
@@ -1010,6 +1017,12 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		server.Branching.Handler = NewBranchHandler(branchManager, branchRouter, cfg.Branching)
 		server.Branching.GitHub = NewGitHubWebhookHandler(branchManager, branchRouter, cfg.Branching)
 
+		// Wire tenant resolver for tenant-aware branch cloning
+		if tenantManager != nil {
+			branchManager.SetTenantResolver(&branchTenantResolver{manager: tenantManager})
+			branchManager.SetFDWRepairer(&branchFDWRepairer{manager: tenantManager})
+		}
+
 		// Initialize cleanup scheduler if auto_delete_after is set
 		if cfg.Branching.AutoDeleteAfter > 0 {
 			// Use auto_delete_after as the interval, or default to hourly if it's very short
@@ -1042,6 +1055,9 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Int("max_complexity", cfg.GraphQL.MaxComplexity).
 			Bool("introspection", cfg.GraphQL.Introspection).
 			Msg("GraphQL API enabled")
+		if cfg.GraphQL.Introspection {
+			log.Warn().Msg("GraphQL introspection is enabled — consider setting graphql.introspection to false in production")
+		}
 	}
 
 	// Start realtime listener (unless disabled or in worker-only mode)
@@ -2407,3 +2423,30 @@ func (s *Server) handleRealtimeBroadcast(c fiber.Ctx) error {
 }
 
 // fiber:context-methods migrated
+
+type branchTenantResolver struct {
+	manager *tenantdb.Manager
+}
+
+func (r *branchTenantResolver) GetTenantDatabase(ctx context.Context, tenantID uuid.UUID) (*branching.TenantDatabaseInfo, error) {
+	tenant, err := r.manager.GetStorage().GetTenant(ctx, tenantID.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tenant: %w", err)
+	}
+	info := &branching.TenantDatabaseInfo{
+		Slug:      tenant.Slug,
+		IsDefault: tenant.IsDefault,
+	}
+	if tenant.DBName != nil {
+		info.DBName = *tenant.DBName
+	}
+	return info, nil
+}
+
+type branchFDWRepairer struct {
+	manager *tenantdb.Manager
+}
+
+func (r *branchFDWRepairer) RepairFDWForBranch(ctx context.Context, branchDBURL string, tenantID uuid.UUID) error {
+	return r.manager.RepairFDWForBranch(ctx, branchDBURL, tenantID)
+}

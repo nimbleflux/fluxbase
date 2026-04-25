@@ -2,6 +2,8 @@ package tenantdb
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -45,7 +47,27 @@ func setupTestStorage(t *testing.T) (*Storage, *pgxpool.Pool) {
 func getTestDatabaseURL(t *testing.T) string {
 	t.Helper()
 
-	url := "postgres://postgres:postgres@localhost:5432/fluxbase_test?sslmode=disable"
+	dbName := os.Getenv("FLUXBASE_TEST_DATABASE")
+	if dbName == "" {
+		dbName = "fluxbase_test"
+	}
+	dbUser := os.Getenv("FLUXBASE_DATABASE_ADMIN_USER")
+	if dbUser == "" {
+		dbUser = "postgres"
+	}
+	dbPassword := os.Getenv("FLUXBASE_DATABASE_ADMIN_PASSWORD")
+	if dbPassword == "" {
+		dbPassword = "postgres"
+	}
+	dbHost := os.Getenv("FLUXBASE_DATABASE_HOST")
+	if dbHost == "" {
+		dbHost = "localhost"
+	}
+	dbPort := os.Getenv("FLUXBASE_DATABASE_PORT")
+	if dbPort == "" {
+		dbPort = "5432"
+	}
+	url := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPassword, dbHost, dbPort, dbName)
 	return url
 }
 

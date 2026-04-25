@@ -161,9 +161,12 @@ func (h *SQLHandler) ExecuteSQL(c fiber.Ctx) error {
 
 	// Get user claims from JWT
 	var claims *auth.TokenClaims
-	if c.Locals("claims") != nil {
-		if jwtClaims, ok := c.Locals("claims").(*auth.TokenClaims); ok {
-			claims = jwtClaims
+	for _, key := range []string{"claims", "jwt_claims"} {
+		if c.Locals(key) != nil {
+			if jwtClaims, ok := c.Locals(key).(*auth.TokenClaims); ok {
+				claims = jwtClaims
+				break
+			}
 		}
 	}
 

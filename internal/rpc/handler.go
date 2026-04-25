@@ -272,6 +272,9 @@ func (h *Handler) ListNamespaces(c fiber.Ctx) error {
 func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 
+	syncCtx := database.ContextWithTenant(ctx, "")
+	currentTenantID := database.TenantFromContext(ctx)
+
 	var req SyncRequest
 	if err := c.Bind().Body(&req); err != nil {
 		// Body is optional, continue with defaults
@@ -335,8 +338,8 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 		result.Message = "Synced from SDK payload"
 	}
 
-	// Get existing procedures in namespace
-	existing, err := h.storage.ListProcedures(ctx, namespace)
+	// Get existing procedures in namespace (syncCtx to find NULL-tenant records)
+	existing, err := h.storage.ListProceduresForSync(syncCtx, namespace, currentTenantID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list existing procedures")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -401,7 +404,7 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 			if h.needsUpdate(existingProc, proc) {
 				proc.ID = existingProc.ID
 				if !req.Options.DryRun {
-					if err := h.storage.UpdateProcedure(ctx, proc); err != nil {
+					if err := h.storage.UpdateProcedureForSync(syncCtx, currentTenantID, proc); err != nil {
 						result.Errors = append(result.Errors, SyncError{
 							Procedure: spec.Name,
 							Error:     err.Error(),
@@ -434,7 +437,7 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 					if h.scheduler != nil {
 						h.scheduler.UnscheduleProcedure(proc.Namespace, name)
 					}
-					if err := h.storage.DeleteProcedure(ctx, proc.ID); err != nil {
+					if err := h.storage.DeleteProcedureForSync(syncCtx, currentTenantID, proc.ID); err != nil {
 						result.Errors = append(result.Errors, SyncError{
 							Procedure: name,
 							Error:     err.Error(),

@@ -6,6 +6,7 @@ import {
   rawListJobs,
   rawCancelJob,
 } from "./helpers/api";
+import { selectTenantByIndex } from "./helpers/selectors";
 
 test.describe("Background Jobs Execution", () => {
   let adminToken: string;
@@ -17,6 +18,16 @@ test.describe("Background Jobs Execution", () => {
       password: "test-password-32chars!!",
     });
     adminToken = result.body.access_token;
+  });
+
+  test.beforeEach(async ({ adminPage }) => {
+    const selector = adminPage.getByRole("combobox", { name: "Select tenant" });
+    if (await selector.isVisible().catch(() => false)) {
+      const text = await selector.textContent();
+      if (text?.includes("Select tenant")) {
+        await selectTenantByIndex(adminPage, 0);
+      }
+    }
   });
 
   const cleanupFunctions: Array<{ name: string }> = [];

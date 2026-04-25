@@ -5,7 +5,6 @@ import { KeyRound, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth-store";
 import { dashboardAuthAPI, type SSOProvider } from "@/lib/api";
-import { setAuthToken } from "@/lib/fluxbase-client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -58,23 +57,18 @@ function LoginPage() {
 
   // Redirect to dashboard if already authenticated
   useEffect(() => {
-    const accessToken = localStorage.getItem("fluxbase_admin_access_token");
-    if (accessToken && auth.user) {
-      // User is already logged in, redirect to intended destination
+    if (auth.accessToken && auth.user) {
       const params = new URLSearchParams(window.location.search);
-      // Check for return_to (MCP OAuth flow) or redirect (internal navigation)
       const returnTo = params.get("return_to");
       const redirect = params.get("redirect") || "/";
 
       if (returnTo) {
-        // External URL (e.g., MCP OAuth authorize) - use window.location
         window.location.href = returnTo;
       } else {
-        // Internal navigation - use router
         navigate({ to: redirect });
       }
     }
-  }, [auth.user, navigate]);
+  }, [auth.accessToken, auth.user, navigate]);
 
   // Redirect to OTP page if there's a pending 2FA session
   useEffect(() => {
@@ -254,7 +248,6 @@ function LoginPage() {
         return;
       }
 
-      // Store access token in Zustand auth store (also sets cookie and syncs SDK)
       auth.setAccessToken(response.access_token);
 
       // Store user in Zustand auth store so useAuth().user is available
@@ -266,22 +259,14 @@ function LoginPage() {
         exp: Date.now() + response.expires_in * 1000,
       });
 
-      // Store tokens and user in localStorage (for route guards and persistence)
-      localStorage.setItem(
-        "fluxbase_admin_access_token",
-        response.access_token,
-      );
-      localStorage.setItem(
-        "fluxbase_admin_refresh_token",
-        response.refresh_token,
-      );
+      // Store refresh token in Zustand (persists to cookie, syncs SDK)
+      auth.setTokens(response.access_token, response.refresh_token);
+
+      // Store user in localStorage for getStoredUser() backward compat
       localStorage.setItem(
         "fluxbase_admin_user",
         JSON.stringify(response.user),
       );
-
-      // Also set token in Fluxbase SDK
-      setAuthToken(response.access_token);
 
       toast.success("Welcome back!", {
         description: "You have successfully logged in.",

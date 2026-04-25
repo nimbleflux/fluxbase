@@ -11,6 +11,20 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
+var allowedFunctionColumns = map[string]bool{
+	"name": true, "namespace": true, "description": true, "code": true,
+	"original_code": true, "is_bundled": true, "bundle_error": true,
+	"enabled": true, "timeout_seconds": true, "memory_limit_mb": true,
+	"allow_net": true, "allow_env": true, "allow_read": true,
+	"allow_write": true, "allow_unauthenticated": true, "is_public": true,
+	"cron_schedule": true, "version": true, "created_by": true,
+	"source": true, "needs_rebundle": true, "cors_origins": true,
+	"cors_methods": true, "cors_headers": true, "cors_credentials": true,
+	"cors_max_age": true, "disable_execution_logs": true,
+	"rate_limit_per_minute": true, "rate_limit_per_hour": true,
+	"rate_limit_per_day": true,
+}
+
 // EdgeFunction represents a stored edge function
 type EdgeFunction struct {
 	ID                   uuid.UUID `json:"id"`
@@ -191,6 +205,40 @@ func (s *Storage) GetFunction(ctx context.Context, name string) (*EdgeFunction, 
 	`
 
 	fn := &EdgeFunction{}
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, name, tenantOrNil(tenantID)).Scan(
+			&fn.ID, &fn.Name, &fn.Namespace, &fn.Description, &fn.Code, &fn.OriginalCode, &fn.IsBundled, &fn.BundleError,
+			&fn.Version, &fn.CronSchedule, &fn.Enabled,
+			&fn.TimeoutSeconds, &fn.MemoryLimitMB, &fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.AllowUnauthenticated, &fn.IsPublic, &fn.DisableExecutionLogs,
+			&fn.CorsOrigins, &fn.CorsMethods, &fn.CorsHeaders, &fn.CorsCredentials, &fn.CorsMaxAge,
+			&fn.RateLimitPerMinute, &fn.RateLimitPerHour, &fn.RateLimitPerDay,
+			&fn.CreatedAt, &fn.UpdatedAt, &fn.CreatedBy, &fn.Source,
+		)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get function: %w", err)
+	}
+
+	return fn, nil
+}
+
+// GetFunctionForSync retrieves a function by name, matching either the given tenant or NULL tenant_id.
+// Used by sync/reload flows to find existing functions regardless of backfill state.
+func (s *Storage) GetFunctionForSync(ctx context.Context, name string, tenantID string) (*EdgeFunction, error) {
+	query := `
+		SELECT id, name, namespace, description, code, original_code, is_bundled, bundle_error, version, cron_schedule, enabled,
+		       timeout_seconds, memory_limit_mb, allow_net, allow_env, allow_read, allow_write, allow_unauthenticated, is_public, disable_execution_logs,
+		       cors_origins, cors_methods, cors_headers, cors_credentials, cors_max_age,
+		       rate_limit_per_minute, rate_limit_per_hour, rate_limit_per_day,
+		       created_at, updated_at, created_by, source
+		FROM functions.edge_functions
+		WHERE name = $1
+		  AND (tenant_id = $2 OR tenant_id IS NULL)
+		ORDER BY namespace
+		LIMIT 1
+	`
+
+	fn := &EdgeFunction{}
 	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, name, tenantOrNil(tenantID)).Scan(
 			&fn.ID, &fn.Name, &fn.Namespace, &fn.Description, &fn.Code, &fn.OriginalCode, &fn.IsBundled, &fn.BundleError,
@@ -206,6 +254,53 @@ func (s *Storage) GetFunction(ctx context.Context, name string) (*EdgeFunction, 
 	}
 
 	return fn, nil
+}
+
+// ListFunctionsForSync returns all public functions matching the given tenant OR with NULL tenant_id.
+// Used by the reload flow to find existing functions regardless of backfill state.
+func (s *Storage) ListFunctionsForSync(ctx context.Context, tenantID string) ([]EdgeFunctionSummary, error) {
+	query := `
+		SELECT id, name, namespace, description, is_bundled, bundle_error, version, cron_schedule, enabled,
+		       timeout_seconds, memory_limit_mb, allow_net, allow_env, allow_read, allow_write, allow_unauthenticated, is_public, disable_execution_logs,
+		       cors_origins, cors_methods, cors_headers, cors_credentials, cors_max_age,
+		       rate_limit_per_minute, rate_limit_per_hour, rate_limit_per_day,
+		       created_at, updated_at, created_by, source
+		FROM functions.edge_functions
+		WHERE is_public = true
+		  AND (tenant_id = $1 OR tenant_id IS NULL)
+		ORDER BY created_at DESC
+	`
+
+	var functions []EdgeFunctionSummary
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, tenantOrNil(tenantID))
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			fn := EdgeFunctionSummary{}
+			err := rows.Scan(
+				&fn.ID, &fn.Name, &fn.Namespace, &fn.Description, &fn.IsBundled, &fn.BundleError,
+				&fn.Version, &fn.CronSchedule, &fn.Enabled,
+				&fn.TimeoutSeconds, &fn.MemoryLimitMB, &fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.AllowUnauthenticated, &fn.IsPublic, &fn.DisableExecutionLogs,
+				&fn.CorsOrigins, &fn.CorsMethods, &fn.CorsHeaders, &fn.CorsCredentials, &fn.CorsMaxAge,
+				&fn.RateLimitPerMinute, &fn.RateLimitPerHour, &fn.RateLimitPerDay,
+				&fn.CreatedAt, &fn.UpdatedAt, &fn.CreatedBy, &fn.Source,
+			)
+			if err != nil {
+				return err
+			}
+			functions = append(functions, fn)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list functions for sync: %w", err)
+	}
+
+	return functions, nil
 }
 
 // GetFunctionByNamespace retrieves a function by name and namespace
@@ -224,7 +319,7 @@ func (s *Storage) GetFunctionByNamespace(ctx context.Context, name string, names
 	`
 
 	fn := &EdgeFunction{}
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, name, namespace, tenantOrNil(tenantID)).Scan(
 			&fn.ID, &fn.Name, &fn.Namespace, &fn.Description, &fn.Code, &fn.OriginalCode, &fn.IsBundled, &fn.BundleError,
 			&fn.Version, &fn.CronSchedule, &fn.Enabled,
@@ -258,7 +353,7 @@ func (s *Storage) ListFunctions(ctx context.Context) ([]EdgeFunctionSummary, err
 	`
 
 	var functions []EdgeFunctionSummary
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, tenantOrNil(tenantID))
 		if err != nil {
 			return err
@@ -289,6 +384,54 @@ func (s *Storage) ListFunctions(ctx context.Context) ([]EdgeFunctionSummary, err
 	return functions, nil
 }
 
+// ListFunctionsByNamespaceForSync returns all functions matching the given tenant OR with NULL tenant_id.
+// This is used by the sync flow to find existing functions regardless of whether they
+// have been backfilled to the current tenant or still have NULL tenant_id from pre-tenancy.
+func (s *Storage) ListFunctionsByNamespaceForSync(ctx context.Context, namespace string, tenantID string) ([]EdgeFunctionSummary, error) {
+	query := `
+		SELECT id, name, namespace, description, is_bundled, bundle_error, version, cron_schedule, enabled,
+		       timeout_seconds, memory_limit_mb, allow_net, allow_env, allow_read, allow_write, allow_unauthenticated, is_public, disable_execution_logs,
+		       cors_origins, cors_methods, cors_headers, cors_credentials, cors_max_age,
+		       rate_limit_per_minute, rate_limit_per_hour, rate_limit_per_day,
+		       created_at, updated_at, created_by, source
+		FROM functions.edge_functions
+		WHERE namespace = $1
+		  AND (tenant_id = $2 OR tenant_id IS NULL)
+		ORDER BY created_at DESC
+	`
+
+	var functions []EdgeFunctionSummary
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, namespace, tenantOrNil(tenantID))
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			fn := EdgeFunctionSummary{}
+			err := rows.Scan(
+				&fn.ID, &fn.Name, &fn.Namespace, &fn.Description, &fn.IsBundled, &fn.BundleError,
+				&fn.Version, &fn.CronSchedule, &fn.Enabled,
+				&fn.TimeoutSeconds, &fn.MemoryLimitMB, &fn.AllowNet, &fn.AllowEnv, &fn.AllowRead, &fn.AllowWrite, &fn.AllowUnauthenticated, &fn.IsPublic, &fn.DisableExecutionLogs,
+				&fn.CorsOrigins, &fn.CorsMethods, &fn.CorsHeaders, &fn.CorsCredentials, &fn.CorsMaxAge,
+				&fn.RateLimitPerMinute, &fn.RateLimitPerHour, &fn.RateLimitPerDay,
+				&fn.CreatedAt, &fn.UpdatedAt, &fn.CreatedBy, &fn.Source,
+			)
+			if err != nil {
+				return err
+			}
+			functions = append(functions, fn)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list functions for sync: %w", err)
+	}
+
+	return functions, nil
+}
+
 // ListAllFunctions returns all functions regardless of is_public setting (admin use)
 func (s *Storage) ListAllFunctions(ctx context.Context) ([]EdgeFunctionSummary, error) {
 	tenantID := database.TenantFromContext(ctx)
@@ -305,7 +448,7 @@ func (s *Storage) ListAllFunctions(ctx context.Context) ([]EdgeFunctionSummary, 
 	`
 
 	var functions []EdgeFunctionSummary
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, tenantOrNil(tenantID))
 		if err != nil {
 			return err
@@ -343,7 +486,7 @@ func (s *Storage) ListFunctionNamespaces(ctx context.Context) ([]string, error) 
 	query := `SELECT DISTINCT namespace FROM functions.edge_functions WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL)) ORDER BY namespace`
 
 	var namespaces []string
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, tenantOrNil(tenantID))
 		if err != nil {
 			return err
@@ -383,7 +526,7 @@ func (s *Storage) ListFunctionsByNamespace(ctx context.Context, namespace string
 	`
 
 	var functions []EdgeFunctionSummary
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, namespace, tenantOrNil(tenantID))
 		if err != nil {
 			return err
@@ -429,6 +572,9 @@ func (s *Storage) UpdateFunctionByNamespace(ctx context.Context, name string, na
 	argCount := 1
 
 	for key, value := range updates {
+		if !allowedFunctionColumns[key] {
+			continue
+		}
 		if argCount > 1 {
 			query += ", "
 		}
@@ -444,7 +590,7 @@ func (s *Storage) UpdateFunctionByNamespace(ctx context.Context, name string, na
 	query += fmt.Sprintf(" AND (tenant_id = $%d OR ($%d IS NULL AND tenant_id IS NULL))", argCount+2, argCount+2)
 	args = append(args, tenantOrNil(tenantID))
 
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, args...)
 		return err
 	})
@@ -460,17 +606,101 @@ func (s *Storage) DeleteFunction(ctx context.Context, name string) error {
 	return s.DeleteFunctionByNamespace(ctx, name, "default")
 }
 
-// DeleteFunctionByNamespace deletes a function by name and namespace
+// DeleteFunctionByNamespace deletes an existing function in a specific namespace
 func (s *Storage) DeleteFunctionByNamespace(ctx context.Context, name string, namespace string) error {
 	tenantID := database.TenantFromContext(ctx)
 
 	query := "DELETE FROM functions.edge_functions WHERE name = $1 AND namespace = $2 AND (tenant_id = $3 OR ($3 IS NULL AND tenant_id IS NULL))"
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, name, namespace, tenantOrNil(tenantID))
 		return err
 	})
 	if err != nil {
 		return fmt.Errorf("failed to delete function: %w", err)
+	}
+	return nil
+}
+
+// UpdateFunctionForSync updates a function matching the given tenant OR NULL tenant_id.
+// Used by sync/reload flows to update functions regardless of backfill state.
+func (s *Storage) UpdateFunctionForSync(ctx context.Context, name string, tenantID string, updates map[string]interface{}) error {
+	query := "UPDATE functions.edge_functions SET "
+	args := []interface{}{}
+	argCount := 1
+
+	for key, value := range updates {
+		if !allowedFunctionColumns[key] {
+			continue
+		}
+		if argCount > 1 {
+			query += ", "
+		}
+		query += fmt.Sprintf("%s = $%d", key, argCount)
+		args = append(args, value)
+		argCount++
+	}
+
+	query += fmt.Sprintf(" WHERE name = $%d AND namespace = 'default'", argCount)
+	args = append(args, name)
+
+	query += fmt.Sprintf(" AND (tenant_id = $%d OR tenant_id IS NULL)", argCount+1)
+	args = append(args, tenantOrNil(tenantID))
+
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, args...)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update function for sync: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateFunctionByNamespaceForSync updates a function by name+namespace matching the given tenant OR NULL tenant_id.
+func (s *Storage) UpdateFunctionByNamespaceForSync(ctx context.Context, name string, namespace string, tenantID string, updates map[string]interface{}) error {
+	query := "UPDATE functions.edge_functions SET "
+	args := []interface{}{}
+	argCount := 1
+
+	for key, value := range updates {
+		if !allowedFunctionColumns[key] {
+			continue
+		}
+		if argCount > 1 {
+			query += ", "
+		}
+		query += fmt.Sprintf("%s = $%d", key, argCount)
+		args = append(args, value)
+		argCount++
+	}
+
+	query += fmt.Sprintf(" WHERE name = $%d AND namespace = $%d", argCount, argCount+1)
+	args = append(args, name, namespace)
+
+	query += fmt.Sprintf(" AND (tenant_id = $%d OR tenant_id IS NULL)", argCount+2)
+	args = append(args, tenantOrNil(tenantID))
+
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, args...)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update function for sync: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteFunctionForSync deletes a function matching the given tenant OR NULL tenant_id.
+func (s *Storage) DeleteFunctionForSync(ctx context.Context, name string, namespace string, tenantID string) error {
+	query := "DELETE FROM functions.edge_functions WHERE name = $1 AND namespace = $2 AND (tenant_id = $3 OR tenant_id IS NULL)"
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, query, name, namespace, tenantOrNil(tenantID))
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete function for sync: %w", err)
 	}
 	return nil
 }
@@ -532,7 +762,7 @@ func (s *Storage) CompleteExecution(ctx context.Context, id uuid.UUID, status st
 		  AND (tenant_id = $8 OR ($8 IS NULL AND tenant_id IS NULL))
 	`
 
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, id, status, statusCode, durationMs, result, logs, errorMessage, tenantOrNil(tenantID))
 		return err
 	})
@@ -560,7 +790,7 @@ func (s *Storage) GetExecutions(ctx context.Context, functionName string, limit 
 	`
 
 	var executions []EdgeFunctionExecution
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, functionName, tenantOrNil(tenantID), limit)
 		if err != nil {
 			return err
@@ -679,7 +909,7 @@ func (s *Storage) ListAllExecutions(ctx context.Context, filters AdminExecutionF
 	var executions []AdminExecution
 	var total int
 
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		// Get total count
 		if err := tx.QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 			return fmt.Errorf("failed to count executions: %w", err)
@@ -753,7 +983,7 @@ func (s *Storage) GetSharedModule(ctx context.Context, modulePath string) (*Shar
 	`
 
 	module := &SharedModule{}
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, modulePath, tenantOrNil(tenantID)).Scan(
 			&module.ID, &module.ModulePath, &module.Content, &module.Description,
 			&module.Version, &module.CreatedAt, &module.UpdatedAt, &module.CreatedBy,
@@ -778,7 +1008,7 @@ func (s *Storage) ListSharedModules(ctx context.Context) ([]SharedModule, error)
 	`
 
 	var modules []SharedModule
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, tenantOrNil(tenantID))
 		if err != nil {
 			return err
@@ -816,7 +1046,7 @@ func (s *Storage) UpdateSharedModule(ctx context.Context, modulePath string, con
 		  AND (tenant_id = $4 OR ($4 IS NULL AND tenant_id IS NULL))
 	`
 
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, content, description, modulePath, tenantOrNil(tenantID))
 		return err
 	})
@@ -827,13 +1057,13 @@ func (s *Storage) UpdateSharedModule(ctx context.Context, modulePath string, con
 	return nil
 }
 
-// DeleteSharedModule deletes a shared module by path
+// DeleteSharedModule deletes a shared module
 func (s *Storage) DeleteSharedModule(ctx context.Context, modulePath string) error {
 	tenantID := database.TenantFromContext(ctx)
 
 	query := "DELETE FROM functions.shared_modules WHERE module_path = $1 AND (tenant_id = $2 OR ($2 IS NULL AND tenant_id IS NULL))"
 
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, query, modulePath, tenantOrNil(tenantID))
 		return err
 	})
@@ -893,7 +1123,7 @@ func (s *Storage) GetFunctionFiles(ctx context.Context, functionID uuid.UUID) ([
 	`
 
 	var files []FunctionFile
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, functionID, tenantOrNil(tenantID))
 		if err != nil {
 			return err

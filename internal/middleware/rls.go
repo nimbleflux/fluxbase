@@ -222,7 +222,7 @@ func SetRLSContext(ctx context.Context, tx pgx.Tx, userID string, role string, c
 		Msg("Set request.jwt.claims using parameterized query")
 
 	// Set tenant context for multi-tenancy (app.current_tenant_id)
-	// This is used by RLS policies that check auth.has_tenant_access() and storage.has_tenant_access()
+	// Priority: claims.TenantID > Go context tenant_id (from TenantMiddleware)
 	if claims != nil && claims.TenantID != nil {
 		tenantIDStr := *claims.TenantID
 		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantIDStr)
@@ -230,7 +230,14 @@ func SetRLSContext(ctx context.Context, tx pgx.Tx, userID string, role string, c
 			log.Error().Err(err).Str("tenant_id", tenantIDStr).Msg("Failed to set app.current_tenant_id")
 			return fmt.Errorf("failed to set app.current_tenant_id: %w", err)
 		}
-		log.Debug().Str("tenant_id", tenantIDStr).Msg("Set app.current_tenant_id for tenant isolation")
+		log.Debug().Str("tenant_id", tenantIDStr).Msg("Set app.current_tenant_id from claims")
+	} else if tenantID := database.TenantFromContext(ctx); tenantID != "" {
+		_, err = tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tenantID)
+		if err != nil {
+			log.Error().Err(err).Str("tenant_id", tenantID).Msg("Failed to set app.current_tenant_id")
+			return fmt.Errorf("failed to set app.current_tenant_id: %w", err)
+		}
+		log.Debug().Str("tenant_id", tenantID).Msg("Set app.current_tenant_id from context")
 	}
 
 	log.Debug().
@@ -323,14 +330,27 @@ func WrapWithRLS(ctx context.Context, conn *database.Connection, c fiber.Ctx, fn
 		userIDStr = fmt.Sprintf("%v", userID)
 	}
 
+	// When a tenant context is active, override instance_admin/service_role to tenant_service.
+	// This ensures FDW queries work (no user mapping for service_role on tenant DBs)
+	// and RLS enforces tenant isolation for the selected tenant.
+	roleStr := role.(string)
+	tenantID, hasTenant := c.Locals("tenant_id").(string)
+	isDefaultTenant, _ := c.Locals("is_default_tenant").(bool)
+	if hasTenant && tenantID != "" && !isDefaultTenant {
+		if roleStr == "instance_admin" || roleStr == "service_role" {
+			roleStr = "tenant_service"
+		}
+	}
+
 	log.Debug().
 		Str("user_id", userIDStr).
-		Str("role", role.(string)).
+		Str("role", roleStr).
 		Bool("has_jwt_claims", claims != nil).
+		Bool("tenant_context", hasTenant && tenantID != "").
 		Str("path", c.Path()).
 		Msg("WrapWithRLS: Retrieved RLS context from Fiber locals")
 
-	if err := SetRLSContext(ctx, tx, userIDStr, role.(string), claims); err != nil {
+	if err := SetRLSContext(ctx, tx, userIDStr, roleStr, claims); err != nil {
 		return err
 	}
 

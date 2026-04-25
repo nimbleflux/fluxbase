@@ -1282,7 +1282,9 @@ func (h *Handler) bundleFunctionFromFilesystem(ctx context.Context, functionName
 func (h *Handler) ReloadFunctions(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 
-	// Scan functions directory for all .ts files
+	syncCtx := database.ContextWithTenant(ctx, "")
+	currentTenantID := database.TenantFromContext(ctx)
+
 	functionFiles, err := ListFunctionFiles(h.functionsDir)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
@@ -1290,8 +1292,7 @@ func (h *Handler) ReloadFunctions(c fiber.Ctx) error {
 		})
 	}
 
-	// Get all existing functions from database
-	allFunctions, err := h.storage.ListFunctions(ctx)
+	allFunctions, err := h.storage.ListFunctionsForSync(syncCtx, currentTenantID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to list existing functions",
@@ -1313,7 +1314,7 @@ func (h *Handler) ReloadFunctions(c fiber.Ctx) error {
 	// Process each function file
 	for _, fileInfo := range functionFiles {
 		// Check if function exists in database
-		existingFn, err := h.storage.GetFunction(ctx, fileInfo.Name)
+		existingFn, err := h.storage.GetFunctionForSync(syncCtx, fileInfo.Name, currentTenantID)
 
 		if err != nil {
 			// Function doesn't exist in database - create it
@@ -1381,7 +1382,7 @@ func (h *Handler) ReloadFunctions(c fiber.Ctx) error {
 					"disable_execution_logs": config.DisableExecutionLogs,
 				}
 
-				if err := h.storage.UpdateFunction(ctx, fileInfo.Name, updates); err != nil {
+				if err := h.storage.UpdateFunctionForSync(syncCtx, fileInfo.Name, currentTenantID, updates); err != nil {
 					errors = append(errors, fmt.Sprintf("%s: failed to update: %v", fileInfo.Name, err))
 					continue
 				}
@@ -1396,7 +1397,7 @@ func (h *Handler) ReloadFunctions(c fiber.Ctx) error {
 	for _, dbFunc := range allFunctions {
 		if !diskFunctionNames[dbFunc.Name] && dbFunc.Source == "filesystem" {
 			// Function exists in DB but not on disk - delete it
-			if err := h.storage.DeleteFunction(ctx, dbFunc.Name); err != nil {
+			if err := h.storage.DeleteFunctionForSync(syncCtx, dbFunc.Name, "default", currentTenantID); err != nil {
 				errors = append(errors, fmt.Sprintf("%s: failed to delete: %v", dbFunc.Name, err))
 				continue
 			}
@@ -1454,7 +1455,8 @@ func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 
 	ctx := middleware.CtxWithTenant(c)
 
-	// Get user ID from context (if authenticated)
+	syncCtx := database.ContextWithTenant(ctx, "")
+
 	var createdBy *uuid.UUID
 	if userID := c.Locals("user_id"); userID != nil {
 		if uid, ok := userID.(string); ok {
@@ -1465,8 +1467,8 @@ func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 		}
 	}
 
-	// Get all existing functions in this namespace
-	existingFunctions, err := h.storage.ListFunctionsByNamespace(ctx, namespace)
+	currentTenantID := database.TenantFromContext(ctx)
+	existingFunctions, err := h.storage.ListFunctionsByNamespaceForSync(syncCtx, namespace, currentTenantID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to list existing functions in namespace",
@@ -1720,7 +1722,7 @@ func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 				updates["cron_schedule"] = *spec.CronSchedule
 			}
 
-			if err := h.storage.UpdateFunctionByNamespace(ctx, spec.Name, namespace, updates); err != nil {
+			if err := h.storage.UpdateFunctionByNamespaceForSync(syncCtx, spec.Name, namespace, currentTenantID, updates); err != nil {
 				errorList = append(errorList, fiber.Map{
 					"function": spec.Name,
 					"error":    err.Error(),
@@ -1769,7 +1771,7 @@ func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 	// Delete removed functions (after successful creates/updates for safety)
 	if req.Options.DeleteMissing {
 		for _, name := range toDelete {
-			if err := h.storage.DeleteFunctionByNamespace(ctx, name, namespace); err != nil {
+			if err := h.storage.DeleteFunctionForSync(syncCtx, name, namespace, currentTenantID); err != nil {
 				errorList = append(errorList, fiber.Map{
 					"function": name,
 					"error":    err.Error(),

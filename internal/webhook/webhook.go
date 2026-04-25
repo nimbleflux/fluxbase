@@ -41,6 +41,7 @@ type Webhook struct {
 	CreatedBy           *uuid.UUID        `json:"created_by,omitempty"`
 	CreatedAt           time.Time         `json:"created_at"`
 	UpdatedAt           time.Time         `json:"updated_at"`
+	TenantID            *uuid.UUID        `json:"tenant_id,omitempty"`
 }
 
 // EventConfig represents events a webhook subscribes to
@@ -375,7 +376,7 @@ func (s *WebhookService) List(ctx context.Context) ([]*Webhook, error) {
 	tenantID := database.TenantFromContext(ctx)
 
 	query := `
-		SELECT id, name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by, created_at, updated_at
+		SELECT id, name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by, created_at, updated_at, tenant_id
 		FROM auth.webhooks
 		WHERE (tenant_id = $1 OR ($1 IS NULL AND tenant_id IS NULL))
 		ORDER BY created_at DESC
@@ -410,6 +411,7 @@ func (s *WebhookService) List(ctx context.Context) ([]*Webhook, error) {
 				&webhook.CreatedBy,
 				&webhook.CreatedAt,
 				&webhook.UpdatedAt,
+				&webhook.TenantID,
 			)
 			if err != nil {
 				return err
@@ -455,7 +457,7 @@ func (s *WebhookService) Get(ctx context.Context, id uuid.UUID) (*Webhook, error
 	if tenantID != "" {
 		// Tenant context set — filter by tenant for isolation
 		query := `
-			SELECT id, name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by, created_at, updated_at
+			SELECT id, name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by, created_at, updated_at, tenant_id
 			FROM auth.webhooks
 			WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
 		`
@@ -476,6 +478,7 @@ func (s *WebhookService) Get(ctx context.Context, id uuid.UUID) (*Webhook, error
 				&webhook.CreatedBy,
 				&webhook.CreatedAt,
 				&webhook.UpdatedAt,
+				&webhook.TenantID,
 			)
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -487,7 +490,7 @@ func (s *WebhookService) Get(ctx context.Context, id uuid.UUID) (*Webhook, error
 	} else {
 		// No tenant context (internal/trigger system) — fetch without tenant filter
 		query := `
-			SELECT id, name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by, created_at, updated_at
+			SELECT id, name, description, url, secret, enabled, events, max_retries, retry_backoff_seconds, timeout_seconds, headers, scope, created_by, created_at, updated_at, tenant_id
 			FROM auth.webhooks
 			WHERE id = $1
 		`
@@ -508,6 +511,7 @@ func (s *WebhookService) Get(ctx context.Context, id uuid.UUID) (*Webhook, error
 				&webhook.CreatedBy,
 				&webhook.CreatedAt,
 				&webhook.UpdatedAt,
+				&webhook.TenantID,
 			)
 		})
 		if errors.Is(err, pgx.ErrNoRows) {

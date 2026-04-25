@@ -1,5 +1,11 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useMemo, useRef } from "react";
 import z from "zod";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Terminal,
@@ -84,29 +90,26 @@ function RPCPage() {
 }
 
 function RPCContent() {
+  const queryClient = useQueryClient();
   const currentTenantId = useTenantStore((state) => state.currentTenant?.id);
   const [activeTab, setActiveTab] = useState<"executions" | "procedures">(
     "executions",
   );
 
-  const [procedures, setProcedures] = useState<RPCProcedure[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [namespaces, setNamespaces] = useState<string[]>(["default"]);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
-
-  const [executions, setExecutions] = useState<RPCExecution[]>([]);
-  const [executionsLoading, setExecutionsLoading] = useState(false);
-  const executionsOffsetRef = useRef(0);
-  const [hasMoreExecutions, setHasMoreExecutions] = useState(true);
-  const [loadingMoreExecutions, setLoadingMoreExecutions] = useState(false);
-  const [totalExecutions, setTotalExecutions] = useState(0);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const hasInitialFetch = useRef(false);
+  const [namespacesLoaded, setNamespacesLoaded] = useState(false);
 
+  // Executions pagination state
+  const executionsOffsetRef = useRef(0);
+  const [hasMoreExecutions, setHasMoreExecutions] = useState(true);
+  const [loadingMoreExecutions, setLoadingMoreExecutions] = useState(false);
+
+  // Dialog state
   const [selectedExecution, setSelectedExecution] =
     useState<RPCExecution | null>(null);
   const [isExecutionDetailsOpen, setShowExecutionDetails] = useState(false);
@@ -126,108 +129,147 @@ function RPCContent() {
   const [showProcedureDetails, setShowProcedureDetails] = useState(false);
   const [loadingProcedure, setLoadingProcedure] = useState(false);
 
-  const executionsFetchIdRef = useRef(0);
-  const [namespacesLoaded, setNamespacesLoaded] = useState(false);
+  // --- Queries ---
 
-  const fetchProcedures = useCallback(async () => {
-    setLoading(true);
-    try {
+  // Procedures query
+  const {
+    data: procedures = [],
+    isLoading: isLoadingProcedures,
+    refetch: refetchProcedures,
+  } = useQuery({
+    queryKey: ["rpc-procedures", currentTenantId, selectedNamespace],
+    queryFn: async () => {
       const data = await rpcApi.listProcedures(selectedNamespace);
-      setProcedures(data || []);
-    } catch {
-      toast.error("Failed to fetch RPC procedures");
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedNamespace]);
+      return data || [];
+    },
+    enabled: namespacesLoaded,
+  });
 
-  const fetchExecutions = useCallback(
-    async (reset = true) => {
-      const isReset = reset;
-      const fetchId = ++executionsFetchIdRef.current;
+  // Executions query (initial page)
+  const {
+    data: executionsData,
+    isLoading: isLoadingExecutions,
+    refetch: refetchExecutions,
+  } = useQuery({
+    queryKey: [
+      "rpc-executions",
+      currentTenantId,
+      selectedNamespace,
+      searchQuery,
+      statusFilter,
+    ],
+    queryFn: async () => {
+      const result = await rpcApi.listExecutions({
+        namespace: selectedNamespace !== "all" ? selectedNamespace : undefined,
+        procedure: searchQuery || undefined,
+        status:
+          statusFilter !== "all"
+            ? (statusFilter as
+                | "pending"
+                | "running"
+                | "completed"
+                | "failed"
+                | "cancelled"
+                | "timeout")
+            : undefined,
+        limit: RPC_PAGE_SIZE,
+        offset: 0,
+      });
+      return result;
+    },
+    enabled: activeTab === "executions" && namespacesLoaded,
+    placeholderData: keepPreviousData,
+  });
 
-      if (isReset) {
-        setExecutionsLoading(true);
-        executionsOffsetRef.current = 0;
+  const [extraExecutions, setExtraExecutions] = useState<RPCExecution[]>([]);
+
+  // Merge initial page + extra pages
+  const executions = useMemo(() => {
+    const initial = executionsData?.executions || [];
+    return [...initial, ...extraExecutions];
+  }, [executionsData, extraExecutions]);
+
+  const totalExecutions = executionsData?.total || 0;
+
+  // Update hasMore when initial data changes
+  useMemo(() => {
+    const initial = executionsData?.executions || [];
+    setHasMoreExecutions(initial.length >= RPC_PAGE_SIZE);
+    setExtraExecutions([]);
+    executionsOffsetRef.current = RPC_PAGE_SIZE;
+  }, [executionsData]);
+
+  // --- Mutations ---
+
+  const syncMutation = useMutation({
+    mutationFn: async (namespace: string) => {
+      return await rpcApi.sync(namespace);
+    },
+    onSuccess: (result) => {
+      const { created, updated, deleted } = result.summary;
+      if (created > 0 || updated > 0 || deleted > 0) {
+        const messages = [];
+        if (created > 0) messages.push(`${created} created`);
+        if (updated > 0) messages.push(`${updated} updated`);
+        if (deleted > 0) messages.push(`${deleted} deleted`);
+        toast.success(`Procedures synced: ${messages.join(", ")}`);
       } else {
-        setLoadingMoreExecutions(true);
+        toast.info("No changes detected");
       }
+      queryClient.invalidateQueries({ queryKey: ["rpc-procedures"] });
+    },
+    onError: () => {
+      toast.error("Failed to sync procedures");
+    },
+  });
 
-      try {
-        const offset = isReset ? 0 : executionsOffsetRef.current;
-        const result = await rpcApi.listExecutions({
-          namespace:
-            selectedNamespace !== "all" ? selectedNamespace : undefined,
-          procedure: searchQuery || undefined,
-          status:
-            statusFilter !== "all"
-              ? (statusFilter as
-                  | "pending"
-                  | "running"
-                  | "completed"
-                  | "failed"
-                  | "cancelled"
-                  | "timeout")
-              : undefined,
-          limit: RPC_PAGE_SIZE,
-          offset,
-        });
+  const toggleMutation = useMutation({
+    mutationFn: async (proc: RPCProcedure) => {
+      return await rpcApi.updateProcedure(proc.namespace, proc.name, {
+        enabled: !proc.enabled,
+      });
+    },
+    onSuccess: (_data, proc) => {
+      queryClient.invalidateQueries({ queryKey: ["rpc-procedures"] });
+      toast.success(`Procedure ${proc.enabled ? "disabled" : "enabled"}`);
+    },
+    onError: () => {
+      toast.error("Failed to update procedure");
+    },
+  });
 
-        if (fetchId !== executionsFetchIdRef.current) {
-          return;
-        }
-
-        const execList = result.executions || [];
-        if (isReset) {
-          setExecutions(execList);
-          executionsOffsetRef.current = RPC_PAGE_SIZE;
-        } else {
-          setExecutions((prev) => [...prev, ...execList]);
-          executionsOffsetRef.current += RPC_PAGE_SIZE;
-        }
-
-        setTotalExecutions(result.total || 0);
-        setHasMoreExecutions(execList.length >= RPC_PAGE_SIZE);
-      } catch {
-        if (fetchId === executionsFetchIdRef.current) {
-          toast.error("Failed to fetch executions");
-        }
-      } finally {
-        if (fetchId === executionsFetchIdRef.current) {
-          setExecutionsLoading(false);
-          setLoadingMoreExecutions(false);
-        }
+  const cancelMutation = useMutation({
+    mutationFn: async (execId: string) => {
+      await rpcApi.cancelExecution(execId);
+      return execId;
+    },
+    onSuccess: (execId) => {
+      toast.success("Execution cancelled");
+      queryClient.invalidateQueries({ queryKey: ["rpc-executions"] });
+      if (selectedExecution?.id === execId) {
+        setSelectedExecution((prev) =>
+          prev ? { ...prev, status: "cancelled" } : null,
+        );
       }
     },
-    [selectedNamespace, searchQuery, statusFilter],
-  );
+    onError: () => {
+      toast.error("Failed to cancel execution");
+    },
+  });
+
+  // --- Handlers ---
 
   const openExecutionDetails = (exec: RPCExecution) => {
     setSelectedExecution(exec);
     setShowExecutionDetails(true);
   };
 
-  const cancelExecution = async (execId: string, e?: React.MouseEvent) => {
+  const cancelExecution = (execId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     setCancellingExecutionId(execId);
-    try {
-      await rpcApi.cancelExecution(execId);
-      toast.success("Execution cancelled");
-      setExecutions((prev) =>
-        prev.map((ex) =>
-          ex.id === execId ? { ...ex, status: "cancelled" } : ex,
-        ),
-      );
-      if (selectedExecution?.id === execId) {
-        setSelectedExecution((prev) =>
-          prev ? { ...prev, status: "cancelled" } : null,
-        );
-      }
-    } catch {
-      toast.error("Failed to cancel execution");
-    } finally {
-      setCancellingExecutionId(null);
-    }
+    cancelMutation.mutate(execId, {
+      onSettled: () => setCancellingExecutionId(null),
+    });
   };
 
   const openProcedureDetails = async (proc: RPCProcedure) => {
@@ -247,70 +289,42 @@ function RPCContent() {
     }
   };
 
-  const executions24h = useMemo(() => {
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    return executions.filter((exec) => {
-      const execTime = new Date(exec.created_at).getTime();
-      return execTime >= cutoff;
-    });
-  }, [executions]);
-
-  const executionStats = useMemo(() => {
-    const pending = executions24h.filter((e) => e.status === "pending").length;
-    const running = executions24h.filter((e) => e.status === "running").length;
-    const completed = executions24h.filter(
-      (e) => e.status === "completed",
-    ).length;
-    const failed = executions24h.filter(
-      (e) =>
-        e.status === "failed" ||
-        e.status === "cancelled" ||
-        e.status === "timeout",
-    ).length;
-    const total = executions24h.length;
-    const avgDuration =
-      executions24h.length > 0
-        ? Math.round(
-            executions24h.reduce((sum, e) => sum + (e.duration_ms || 0), 0) /
-              executions24h.length,
-          )
-        : 0;
-    return { pending, running, completed, failed, total, avgDuration };
-  }, [executions24h]);
-
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const result = await rpcApi.sync(selectedNamespace);
-      const { created, updated, deleted } = result.summary;
-      if (created > 0 || updated > 0 || deleted > 0) {
-        const messages = [];
-        if (created > 0) messages.push(`${created} created`);
-        if (updated > 0) messages.push(`${updated} updated`);
-        if (deleted > 0) messages.push(`${deleted} deleted`);
-        toast.success(`Procedures synced: ${messages.join(", ")}`);
-      } else {
-        toast.info("No changes detected");
-      }
-      await fetchProcedures();
-    } catch {
-      toast.error("Failed to sync procedures");
-    } finally {
-      setSyncing(false);
-    }
+  const handleSync = () => {
+    syncMutation.mutate(selectedNamespace);
   };
 
-  const toggleProcedure = async (proc: RPCProcedure) => {
+  const toggleProcedure = (proc: RPCProcedure) => {
+    toggleMutation.mutate(proc);
+  };
+
+  const loadMoreExecutions = async () => {
+    setLoadingMoreExecutions(true);
     try {
-      await rpcApi.updateProcedure(proc.namespace, proc.name, {
-        enabled: !proc.enabled,
+      const offset = executionsOffsetRef.current;
+      const result = await rpcApi.listExecutions({
+        namespace: selectedNamespace !== "all" ? selectedNamespace : undefined,
+        procedure: searchQuery || undefined,
+        status:
+          statusFilter !== "all"
+            ? (statusFilter as
+                | "pending"
+                | "running"
+                | "completed"
+                | "failed"
+                | "cancelled"
+                | "timeout")
+            : undefined,
+        limit: RPC_PAGE_SIZE,
+        offset,
       });
-      setProcedures((prev) =>
-        prev.map((p) => (p.id === proc.id ? { ...p, enabled: !p.enabled } : p)),
-      );
-      toast.success(`Procedure ${proc.enabled ? "disabled" : "enabled"}`);
+      const execList = result.executions || [];
+      setExtraExecutions((prev) => [...prev, ...execList]);
+      executionsOffsetRef.current += RPC_PAGE_SIZE;
+      setHasMoreExecutions(execList.length >= RPC_PAGE_SIZE);
     } catch {
-      toast.error("Failed to update procedure");
+      toast.error("Failed to load more executions");
+    } finally {
+      setLoadingMoreExecutions(false);
     }
   };
 
@@ -319,8 +333,12 @@ function RPCContent() {
     toast.success(`${label} copied to clipboard`);
   };
 
-  useEffect(() => {
-    const fetchNamespaces = async () => {
+  // --- Namespace loading effect ---
+  // Using a ref to avoid re-running on every render
+  const namespaceFetchRef = useRef(false);
+  if (!namespacesLoaded && !namespaceFetchRef.current) {
+    namespaceFetchRef.current = true;
+    (async () => {
       try {
         const data = await rpcApi.listNamespaces();
         const validNamespaces = data.length > 0 ? data : ["default"];
@@ -364,38 +382,43 @@ function RPCContent() {
       } finally {
         setNamespacesLoaded(true);
       }
-    };
-    fetchNamespaces();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTenantId]);
+    })();
+  }
 
-  useEffect(() => {
-    fetchProcedures();
-  }, [fetchProcedures]);
+  // --- Derived data ---
 
-  useEffect(() => {
-    if (activeTab === "executions" && namespacesLoaded) {
-      hasInitialFetch.current = true;
-      fetchExecutions(true);
-    }
-  }, [
-    activeTab,
-    selectedNamespace,
-    statusFilter,
-    namespacesLoaded,
-    fetchExecutions,
-  ]);
+  const executions24h = useMemo(() => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    return executions.filter((exec) => {
+      const execTime = new Date(exec.created_at).getTime();
+      return execTime >= cutoff;
+    });
+  }, [executions]);
 
-  useEffect(() => {
-    if (activeTab !== "executions" || !namespacesLoaded) return;
-    if (!hasInitialFetch.current) return;
-    const timer = setTimeout(() => {
-      fetchExecutions(true);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery, activeTab, fetchExecutions, namespacesLoaded]);
+  const executionStats = useMemo(() => {
+    const pending = executions24h.filter((e) => e.status === "pending").length;
+    const running = executions24h.filter((e) => e.status === "running").length;
+    const completed = executions24h.filter(
+      (e) => e.status === "completed",
+    ).length;
+    const failed = executions24h.filter(
+      (e) =>
+        e.status === "failed" ||
+        e.status === "cancelled" ||
+        e.status === "timeout",
+    ).length;
+    const total = executions24h.length;
+    const avgDuration =
+      executions24h.length > 0
+        ? Math.round(
+            executions24h.reduce((sum, e) => sum + (e.duration_ms || 0), 0) /
+              executions24h.length,
+          )
+        : 0;
+    return { pending, running, completed, failed, total, avgDuration };
+  }, [executions24h]);
 
-  if (loading) {
+  if (isLoadingProcedures) {
     return (
       <div className="flex h-96 items-center justify-center">
         <RefreshCw className="text-muted-foreground h-8 w-8 animate-spin" />
@@ -528,7 +551,7 @@ function RPCContent() {
               </SelectContent>
             </Select>
             <Button
-              onClick={() => fetchExecutions(true)}
+              onClick={() => refetchExecutions()}
               variant="outline"
               size="sm"
             >
@@ -538,7 +561,7 @@ function RPCContent() {
           </div>
 
           <ScrollArea className="h-[calc(100vh-24rem)]">
-            {executionsLoading ? (
+            {isLoadingExecutions ? (
               <div className="flex h-48 items-center justify-center">
                 <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
               </div>
@@ -618,7 +641,7 @@ function RPCContent() {
                     </span>
                     <Button
                       variant="outline"
-                      onClick={() => fetchExecutions(false)}
+                      onClick={loadMoreExecutions}
                       disabled={loadingMoreExecutions}
                     >
                       {loadingMoreExecutions ? (
@@ -666,9 +689,9 @@ function RPCContent() {
               onClick={handleSync}
               variant="outline"
               size="sm"
-              disabled={syncing}
+              disabled={syncMutation.isPending}
             >
-              {syncing ? (
+              {syncMutation.isPending ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                   Syncing...
@@ -681,7 +704,7 @@ function RPCContent() {
               )}
             </Button>
             <Button
-              onClick={() => fetchProcedures()}
+              onClick={() => refetchProcedures()}
               variant="outline"
               size="sm"
             >
@@ -726,7 +749,10 @@ function RPCContent() {
                     <p className="text-muted-foreground mb-4 text-sm">
                       Sync procedures from the filesystem to get started
                     </p>
-                    <Button onClick={handleSync} disabled={syncing}>
+                    <Button
+                      onClick={handleSync}
+                      disabled={syncMutation.isPending}
+                    >
                       <HardDrive className="mr-2 h-4 w-4" />
                       Sync from Filesystem
                     </Button>

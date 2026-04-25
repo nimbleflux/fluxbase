@@ -18,11 +18,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/beevik/etree"
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
+	dsig "github.com/russellhaering/goxmldsig"
+	"github.com/russellhaering/goxmldsig/etreeutils"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
@@ -72,6 +75,7 @@ type SAMLProvider struct {
 	AllowIDPInitiated        bool     `json:"allow_idp_initiated"`         // Allow IdP-initiated SSO (default: false)
 	AllowedRedirectHosts     []string `json:"allowed_redirect_hosts"`      // Whitelist for RelayState redirects
 	AllowInsecureMetadataURL bool     `json:"allow_insecure_metadata_url"` // Allow HTTP metadata URLs
+	RequireLogoutSignature   bool     `json:"require_logout_signature"`    // Require signed SAML logout messages (default: true)
 
 	// Login targeting
 	AllowDashboardLogin bool `json:"allow_dashboard_login"` // Allow for dashboard admin SSO
@@ -209,6 +213,12 @@ func (s *SAMLService) AddProviderFromConfig(cfg config.SAMLProviderConfig) error
 		CreatedAt:                time.Now(),
 		UpdatedAt:                time.Now(),
 	}
+
+	requireLogoutSig := true
+	if cfg.RequireLogoutSignature != nil {
+		requireLogoutSig = *cfg.RequireLogoutSignature
+	}
+	provider.RequireLogoutSignature = requireLogoutSig
 
 	// Set defaults for allow_app_login if not specified
 	if !cfg.AllowDashboardLogin && !cfg.AllowAppLogin {
@@ -758,7 +768,8 @@ func (s *SAMLService) CheckAssertionReplay(ctx context.Context, assertionID stri
 
 // CreateSAMLSession creates a new SAML session for tracking
 func (s *SAMLService) CreateSAMLSession(ctx context.Context, session *SAMLSession) error {
-	return database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+	tenantID := database.TenantFromContext(ctx)
+	return database.WrapWithServiceRoleAndTenant(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO auth.saml_sessions (id, user_id, provider_id, provider_name, name_id, name_id_format, session_index, attributes, expires_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -991,19 +1002,42 @@ func (s *SAMLService) ParseLogoutRequest(samlRequest, relayState string, isDefla
 		return nil, "", fmt.Errorf("%w: XML parse failed: %w", ErrSAMLInvalidLogoutRequest, err)
 	}
 
+	var nameID string
+	var nameIDFormat string
+	if logoutRequest.NameID != nil {
+		nameID = logoutRequest.NameID.Value
+		nameIDFormat = string(logoutRequest.NameID.Format)
+	}
+	var issuer string
+	if logoutRequest.Issuer != nil {
+		issuer = logoutRequest.Issuer.Value
+	}
+
 	// Find matching provider by issuer
 	providerName := ""
+	var provider *SAMLProvider
 	s.mu.RLock()
-	for name, provider := range s.providers {
-		if provider.metadata != nil && provider.metadata.EntityID == logoutRequest.Issuer.Value {
+	for name, p := range s.providers {
+		if p.metadata != nil && p.metadata.EntityID == issuer {
 			providerName = name
+			provider = p
 			break
 		}
 	}
 	s.mu.RUnlock()
 
 	if providerName == "" {
-		return nil, "", fmt.Errorf("%w: unknown issuer %s", ErrSAMLInvalidLogoutRequest, logoutRequest.Issuer.Value)
+		return nil, "", fmt.Errorf("%w: unknown issuer %s", ErrSAMLInvalidLogoutRequest, issuer)
+	}
+
+	if provider.RequireLogoutSignature {
+		if err := verifyLogoutSignature(requestXML, provider.metadata); err != nil {
+			return nil, "", fmt.Errorf("%w: signature verification failed: %w", ErrSAMLInvalidLogoutRequest, err)
+		}
+	} else {
+		log.Warn().
+			Str("provider", providerName).
+			Msg("SAML logout request signature verification skipped (RequireLogoutSignature is disabled)")
 	}
 
 	// Extract session index if present
@@ -1014,10 +1048,10 @@ func (s *SAMLService) ParseLogoutRequest(samlRequest, relayState string, isDefla
 
 	parsed := &ParsedLogoutRequest{
 		ID:           logoutRequest.ID,
-		NameID:       logoutRequest.NameID.Value,
-		NameIDFormat: string(logoutRequest.NameID.Format),
+		NameID:       nameID,
+		NameIDFormat: nameIDFormat,
 		SessionIndex: sessionIndex,
-		Issuer:       logoutRequest.Issuer.Value,
+		Issuer:       issuer,
 		Destination:  logoutRequest.Destination,
 		RelayState:   relayState,
 	}
@@ -1047,29 +1081,50 @@ func (s *SAMLService) ParseLogoutResponse(samlResponse string, isDeflated bool) 
 		return nil, "", fmt.Errorf("%w: XML parse failed: %w", ErrSAMLInvalidLogoutResponse, err)
 	}
 
+	var issuer string
+	if logoutResponse.Issuer != nil {
+		issuer = logoutResponse.Issuer.Value
+	}
+
 	// Find matching provider by issuer
 	providerName := ""
+	var provider *SAMLProvider
 	s.mu.RLock()
-	for name, provider := range s.providers {
-		if provider.metadata != nil && provider.metadata.EntityID == logoutResponse.Issuer.Value {
+	for name, p := range s.providers {
+		if p.metadata != nil && p.metadata.EntityID == issuer {
 			providerName = name
+			provider = p
 			break
 		}
 	}
 	s.mu.RUnlock()
 
 	if providerName == "" {
-		return nil, "", fmt.Errorf("%w: unknown issuer %s", ErrSAMLInvalidLogoutResponse, logoutResponse.Issuer.Value)
+		return nil, "", fmt.Errorf("%w: unknown issuer %s", ErrSAMLInvalidLogoutResponse, issuer)
+	}
+
+	if provider.RequireLogoutSignature {
+		if err := verifyLogoutSignature(responseXML, provider.metadata); err != nil {
+			return nil, "", fmt.Errorf("%w: signature verification failed: %w", ErrSAMLInvalidLogoutResponse, err)
+		}
+	} else {
+		log.Warn().
+			Str("provider", providerName).
+			Msg("SAML logout response signature verification skipped (RequireLogoutSignature is disabled)")
 	}
 
 	// Extract status
 	status := logoutResponse.Status.StatusCode.Value
+	var statusMessage string
+	if logoutResponse.Status.StatusMessage != nil {
+		statusMessage = logoutResponse.Status.StatusMessage.Value
+	}
 
 	parsed := &ParsedLogoutResponse{
 		InResponseTo:  logoutResponse.InResponseTo,
 		Status:        status,
-		StatusMessage: logoutResponse.Status.StatusMessage.Value,
-		Issuer:        logoutResponse.Issuer.Value,
+		StatusMessage: statusMessage,
+		Issuer:        issuer,
 	}
 
 	return parsed, providerName, nil
@@ -1099,6 +1154,90 @@ func (s *SAMLService) HasSigningKey(providerName string) bool {
 	}
 
 	return provider.spKey != nil && provider.spCert != nil
+}
+
+// verifyLogoutSignature verifies the XML digital signature of a SAML logout message
+// using the IdP's signing certificates extracted from metadata.
+func verifyLogoutSignature(xmlData []byte, idpMetadata *saml.EntityDescriptor) error {
+	doc := etree.NewDocument()
+	if err := doc.ReadFromBytes(xmlData); err != nil {
+		return fmt.Errorf("failed to parse XML: %w", err)
+	}
+
+	root := doc.Root()
+	if root == nil {
+		return errors.New("empty XML document")
+	}
+
+	sigEl := root.FindElement("./Signature")
+	if sigEl == nil {
+		return errors.New("signature element not present in logout message")
+	}
+
+	var certStrs []string
+	for _, idpSSODescriptor := range idpMetadata.IDPSSODescriptors {
+		for _, keyDescriptor := range idpSSODescriptor.KeyDescriptors {
+			if len(keyDescriptor.KeyInfo.X509Data.X509Certificates) != 0 {
+				switch keyDescriptor.Use {
+				case "", "signing":
+					for _, cert := range keyDescriptor.KeyInfo.X509Data.X509Certificates {
+						certStrs = append(certStrs, cert.Data)
+					}
+				}
+			}
+		}
+	}
+	if len(certStrs) == 0 {
+		return errors.New("no IdP signing certificates found in metadata")
+	}
+
+	certs := make([]*x509.Certificate, 0, len(certStrs))
+	for _, certStr := range certStrs {
+		cleaned := strings.Join(strings.Fields(certStr), "")
+		certBytes, err := base64.StdEncoding.DecodeString(cleaned)
+		if err != nil {
+			continue
+		}
+		parsedCert, err := x509.ParseCertificate(certBytes)
+		if err != nil {
+			continue
+		}
+		certs = append(certs, parsedCert)
+	}
+	if len(certs) == 0 {
+		return errors.New("failed to parse any IdP signing certificates")
+	}
+
+	certificateStore := dsig.MemoryX509CertificateStore{Roots: certs}
+	validationContext := dsig.NewDefaultValidationContext(&certificateStore)
+	validationContext.IdAttribute = "ID"
+
+	if root.FindElement("./Signature/KeyInfo/X509Data/X509Certificate") == nil {
+		if s := root.FindElement("./Signature"); s != nil {
+			if ki := s.FindElement("KeyInfo"); ki != nil {
+				s.RemoveChild(ki)
+			}
+		}
+	}
+
+	ctx, err := etreeutils.NSBuildParentContext(root)
+	if err != nil {
+		return fmt.Errorf("failed to build namespace context: %w", err)
+	}
+	ctx, err = ctx.SubContext(root)
+	if err != nil {
+		return fmt.Errorf("failed to build sub context: %w", err)
+	}
+	root, err = etreeutils.NSDetatch(ctx, root)
+	if err != nil {
+		return fmt.Errorf("failed to detach namespaces: %w", err)
+	}
+
+	if _, err := validationContext.Validate(root); err != nil {
+		return fmt.Errorf("signature verification failed: %w", err)
+	}
+
+	return nil
 }
 
 // inflateBytes decompresses deflated SAML data (used in HTTP-Redirect binding)
@@ -1415,25 +1554,26 @@ func (s *SAMLService) LoadProvidersFromDB(ctx context.Context) error {
 			}
 
 			provider := &SAMLProvider{
-				ID:                   id,
-				Name:                 name,
-				Enabled:              enabled,
-				EntityID:             entityID,
-				AcsURL:               acsURL,
-				SsoURL:               ssoURL,
-				SloURL:               sloURL,
-				Certificate:          certificate,
-				AttributeMapping:     attrMapping,
-				AutoCreateUsers:      autoCreateUsers,
-				DefaultRole:          defaultRole,
-				AllowIDPInitiated:    allowIDPInitiated,
-				AllowedRedirectHosts: allowedRedirectHosts,
-				CreatedAt:            createdAt,
-				UpdatedAt:            updatedAt,
-				idpDescriptor:        idpDescriptor,
-				metadata:             metadata,
-				AllowDashboardLogin:  allowDashboardLogin,
-				AllowAppLogin:        allowAppLogin,
+				ID:                     id,
+				Name:                   name,
+				Enabled:                enabled,
+				EntityID:               entityID,
+				AcsURL:                 acsURL,
+				SsoURL:                 ssoURL,
+				SloURL:                 sloURL,
+				Certificate:            certificate,
+				AttributeMapping:       attrMapping,
+				AutoCreateUsers:        autoCreateUsers,
+				DefaultRole:            defaultRole,
+				AllowIDPInitiated:      allowIDPInitiated,
+				AllowedRedirectHosts:   allowedRedirectHosts,
+				CreatedAt:              createdAt,
+				UpdatedAt:              updatedAt,
+				idpDescriptor:          idpDescriptor,
+				metadata:               metadata,
+				AllowDashboardLogin:    allowDashboardLogin,
+				AllowAppLogin:          allowAppLogin,
+				RequireLogoutSignature: true,
 			}
 
 			// Create SAML Service Provider config
@@ -1537,6 +1677,7 @@ func (s *SAMLService) ReloadProviderFromDB(ctx context.Context, name string) err
 		if provider.DefaultRole == "" {
 			provider.DefaultRole = "authenticated"
 		}
+		provider.RequireLogoutSignature = true
 
 		if err := s.loadProviderMetadata(provider, metadataCached, metadataXML, metadataURL); err != nil {
 			return fmt.Errorf("failed to load SAML metadata for provider %s: %w", name, err)
@@ -1630,7 +1771,8 @@ func (s *SAMLService) GetProviderForTenant(ctx context.Context, name string, ten
 			// Found tenant-specific provider
 			provider.AttributeMapping = attrMapping
 			provider.AllowedRedirectHosts = allowedRedirectHosts
-			provider.GroupAttribute = "groups" // default
+			provider.GroupAttribute = "groups"
+			provider.RequireLogoutSignature = true
 
 			// Load metadata if needed
 			if err := s.loadProviderMetadata(&provider, metadataCached, metadataXML, metadataURL); err != nil {

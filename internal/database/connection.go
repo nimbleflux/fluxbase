@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -23,12 +25,95 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/observability"
 )
 
-// Type aliases for backward compatibility with refactored code
+type callerKey struct{}
+
+func WithCaller(ctx context.Context, caller string) context.Context {
+	return context.WithValue(ctx, callerKey{}, caller)
+}
+
+func getCallerFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v, ok := ctx.Value(callerKey{}).(string); ok && v != "" {
+		return v
+	}
+	return ""
+}
+
+func getCallerFromRuntime() string {
+	for skip := 3; skip <= 8; skip++ {
+		if _, file, _, ok := runtime.Caller(skip); ok {
+			idx := strings.LastIndex(file, "/internal/")
+			if idx >= 0 {
+				return file[idx+1:]
+			}
+		}
+	}
+	return ""
+}
+
+type slowQueryEntry struct {
+	count     int
+	firstSeen time.Time
+}
+
+type slowQueryTracker struct {
+	mu      sync.Mutex
+	entries map[string]*slowQueryEntry
+	maxAge  time.Duration
+}
+
+func newSlowQueryTracker() *slowQueryTracker {
+	t := &slowQueryTracker{
+		entries: make(map[string]*slowQueryEntry),
+		maxAge:  1 * time.Hour,
+	}
+	go t.cleanupLoop()
+	return t
+}
+
+func (t *slowQueryTracker) record(queryKey string) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	now := time.Now()
+	e, ok := t.entries[queryKey]
+	if !ok {
+		t.entries[queryKey] = &slowQueryEntry{count: 1, firstSeen: now}
+		return 1
+	}
+	e.count++
+	return e.count
+}
+
+func (t *slowQueryTracker) cleanupLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		t.mu.Lock()
+		now := time.Now()
+		for k, e := range t.entries {
+			if now.Sub(e.firstSeen) > t.maxAge {
+				delete(t.entries, k)
+			}
+		}
+		t.mu.Unlock()
+	}
+}
+
+const slowQueryTruncationLimit = 500
+
 // These aliases allow the middleware and handlers to use simpler type names
 type (
 	Querier      interface{}
 	TxConnection = pgx.Tx
 )
+
+// errRow implements pgx.Row to return an error when the pool is closed.
+type errRow struct{ err error }
+
+func (r errRow) Scan(dest ...interface{}) error { return r.err }
 
 // quoteIdentifier safely quotes a PostgreSQL identifier to prevent SQL injection.
 // It wraps the identifier in double quotes and escapes any embedded double quotes.
@@ -38,10 +123,13 @@ func quoteIdentifier(identifier string) string {
 
 // Connection represents a database connection pool
 type Connection struct {
-	pool      *pgxpool.Pool
-	config    *config.DatabaseConfig
-	inspector *SchemaInspector
-	metrics   *observability.Metrics
+	pool               *pgxpool.Pool
+	poolMu             sync.RWMutex
+	config             *config.DatabaseConfig
+	inspector          *SchemaInspector
+	metrics            *observability.Metrics
+	slowQueryTracker   *slowQueryTracker
+	slowQueryThreshold time.Duration
 }
 
 // SetMetrics sets the metrics instance for recording database metrics
@@ -49,9 +137,9 @@ func (c *Connection) SetMetrics(m *observability.Metrics) {
 	c.metrics = m
 }
 
-// extractTableName attempts to extract the table name from a SQL query
+// ExtractTableName attempts to extract the table name from a SQL query
 // Returns "unknown" if the table cannot be determined
-func extractTableName(sql string) string {
+func ExtractTableName(sql string) string {
 	sql = strings.ToUpper(strings.TrimSpace(sql))
 
 	// Match common SQL patterns
@@ -76,8 +164,8 @@ func extractTableName(sql string) string {
 	return "unknown"
 }
 
-// extractOperation extracts the SQL operation type from a query
-func extractOperation(sql string) string {
+// ExtractOperation extracts the SQL operation type from a query
+func ExtractOperation(sql string) string {
 	sql = strings.ToUpper(strings.TrimSpace(sql))
 	switch {
 	case strings.HasPrefix(sql, "SELECT"):
@@ -102,10 +190,10 @@ func ExtractDDLMetadata(sql string) string {
 	}
 
 	// Extract operation
-	operation := extractOperation(sql)
+	operation := ExtractOperation(sql)
 
 	// Try to extract table name for better logging
-	tableName := extractTableName(sql)
+	tableName := ExtractTableName(sql)
 
 	if tableName != "unknown" && tableName != "" {
 		return fmt.Sprintf("%s (table: %s)", operation, tableName)
@@ -194,9 +282,16 @@ func NewConnection(cfg config.DatabaseConfig) (*Connection, error) {
 		return nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
+	slowQueryThreshold := cfg.SlowQueryThreshold
+	if slowQueryThreshold <= 0 {
+		slowQueryThreshold = 1 * time.Second
+	}
+
 	conn := &Connection{
-		pool:   pool,
-		config: &cfg,
+		pool:               pool,
+		config:             &cfg,
+		slowQueryTracker:   newSlowQueryTracker(),
+		slowQueryThreshold: slowQueryThreshold,
 	}
 
 	// Initialize schema inspector
@@ -218,12 +313,20 @@ func NewConnectionWithPool(pool *pgxpool.Pool) *Connection {
 
 // Close closes the database connection pool
 func (c *Connection) Close() {
-	c.pool.Close()
+	c.poolMu.Lock()
+	p := c.pool
+	c.pool = nil
+	c.poolMu.Unlock()
+	if p != nil {
+		p.Close()
+	}
 	log.Info().Msg("Database connection closed")
 }
 
 // Pool returns the underlying connection pool
 func (c *Connection) Pool() *pgxpool.Pool {
+	c.poolMu.RLock()
+	defer c.poolMu.RUnlock()
 	return c.pool
 }
 
@@ -231,8 +334,9 @@ func (c *Connection) Pool() *pgxpool.Pool {
 // This is safer than Reset() as it ensures a completely fresh pool state.
 // Use this after schema changes (migrations) to avoid prepared statement cache issues.
 func (c *Connection) RecreatePool() error {
-	// Close the old pool
-	c.pool.Close()
+	c.poolMu.RLock()
+	oldPool := c.pool
+	c.poolMu.RUnlock()
 
 	// Create a new pool with the same configuration
 	poolConfig, err := pgxpool.ParseConfig(c.config.RuntimeConnectionString())
@@ -301,7 +405,15 @@ func (c *Connection) RecreatePool() error {
 		return fmt.Errorf("unable to ping database: %w", err)
 	}
 
+	c.poolMu.Lock()
 	c.pool = pool
+	c.poolMu.Unlock()
+
+	// Close old pool outside the lock
+	if oldPool != nil {
+		oldPool.Close()
+	}
+
 	log.Info().Msg("Connection pool recreated successfully")
 	return nil
 }
@@ -623,86 +735,84 @@ func (c *Connection) grantRolesToRuntimeUser() error {
 
 // BeginTx starts a new transaction
 func (c *Connection) BeginTx(ctx context.Context) (pgx.Tx, error) {
+	c.poolMu.RLock()
+	defer c.poolMu.RUnlock()
+	if c.pool == nil {
+		return nil, fmt.Errorf("database connection closed")
+	}
 	return c.pool.Begin(ctx)
 }
 
 // Query executes a query that returns rows
 func (c *Connection) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	c.poolMu.RLock()
+	if c.pool == nil {
+		c.poolMu.RUnlock()
+		return nil, fmt.Errorf("database connection closed")
+	}
 	start := time.Now()
 	rows, err := c.pool.Query(ctx, sql, args...)
+	c.poolMu.RUnlock()
 	duration := time.Since(start)
 
 	// Record metrics
 	if c.metrics != nil {
-		operation := extractOperation(sql)
-		table := extractTableName(sql)
+		operation := ExtractOperation(sql)
+		table := ExtractTableName(sql)
 		c.metrics.RecordDBQuery(operation, table, duration, err)
 	}
 
-	// Log slow queries (> 1 second)
-	if duration > 1*time.Second {
-		sanitizedQuery := truncateQuery(logutil.SanitizeSQL(sql), 200)
-		log.Warn().
-			Dur("duration", duration).
-			Int64("duration_ms", duration.Milliseconds()).
-			Str("query", sanitizedQuery).
-			Bool("slow_query", true).
-			Msg("Slow query detected")
-	}
+	// Log slow queries
+	c.logSlowQuery(ctx, sql, duration, "query")
 
 	return rows, err
 }
 
 // QueryRow executes a query that returns a single row
 func (c *Connection) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	c.poolMu.RLock()
+	defer c.poolMu.RUnlock()
+	if c.pool == nil {
+		return errRow{fmt.Errorf("database connection closed")}
+	}
 	start := time.Now()
 	row := c.pool.QueryRow(ctx, sql, args...)
 	duration := time.Since(start)
 
 	// Record metrics
 	if c.metrics != nil {
-		operation := extractOperation(sql)
-		table := extractTableName(sql)
+		operation := ExtractOperation(sql)
+		table := ExtractTableName(sql)
 		c.metrics.RecordDBQuery(operation, table, duration, nil)
 	}
 
-	// Log slow queries (> 1 second)
-	if duration > 1*time.Second {
-		sanitizedQuery := truncateQuery(logutil.SanitizeSQL(sql), 200)
-		log.Warn().
-			Dur("duration", duration).
-			Int64("duration_ms", duration.Milliseconds()).
-			Str("query", sanitizedQuery).
-			Bool("slow_query", true).
-			Msg("Slow query detected")
-	}
+	// Log slow queries
+	c.logSlowQuery(ctx, sql, duration, "query_row")
 
 	return row
 }
 
 // Exec executes a query that doesn't return rows
 func (c *Connection) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	c.poolMu.RLock()
+	if c.pool == nil {
+		c.poolMu.RUnlock()
+		return pgconn.CommandTag{}, fmt.Errorf("database connection closed")
+	}
 	start := time.Now()
 	tag, err := c.pool.Exec(ctx, sql, args...)
+	c.poolMu.RUnlock()
 	duration := time.Since(start)
 
 	// Record metrics
 	if c.metrics != nil {
-		operation := extractOperation(sql)
-		table := extractTableName(sql)
+		operation := ExtractOperation(sql)
+		table := ExtractTableName(sql)
 		c.metrics.RecordDBQuery(operation, table, duration, err)
 	}
 
-	// Log slow queries (> 1 second)
-	if duration > 1*time.Second {
-		sanitizedQuery := truncateQuery(logutil.SanitizeSQL(sql), 200)
-		log.Warn().
-			Dur("duration", duration).
-			Int64("duration_ms", duration.Milliseconds()).
-			Str("query", sanitizedQuery).
-			Bool("slow_query", true).
-			Msg("Slow query detected")
-	}
+	// Log slow queries
+	c.logSlowQuery(ctx, sql, duration, "exec")
 
 	return tag, err
 }
@@ -732,7 +842,48 @@ func (c *Connection) Health(ctx context.Context) error {
 
 // Stats returns database connection pool statistics
 func (c *Connection) Stats() *pgxpool.Stat {
+	c.poolMu.RLock()
+	defer c.poolMu.RUnlock()
+	if c.pool == nil {
+		return nil
+	}
 	return c.pool.Stat()
+}
+
+func (c *Connection) logSlowQuery(ctx context.Context, sql string, duration time.Duration, opType string) {
+	if duration <= c.slowQueryThreshold {
+		return
+	}
+
+	operation := ExtractOperation(sql)
+	table := ExtractTableName(sql)
+	sanitizedQuery := truncateQuery(logutil.SanitizeSQL(sql), slowQueryTruncationLimit)
+
+	queryKey := operation + ":" + table
+	occurrences := 1
+	if c.slowQueryTracker != nil {
+		occurrences = c.slowQueryTracker.record(queryKey)
+	}
+
+	caller := getCallerFromContext(ctx)
+	if caller == "" {
+		caller = getCallerFromRuntime()
+	}
+
+	evt := log.Warn().
+		Dur("duration", duration).
+		Int64("duration_ms", duration.Milliseconds()).
+		Str("operation", operation).
+		Str("table", table).
+		Str("query", sanitizedQuery).
+		Int("occurrences", occurrences).
+		Bool("slow_query", true)
+
+	if caller != "" {
+		evt = evt.Str("caller", caller)
+	}
+
+	evt.Msg("Slow query detected")
 }
 
 // truncateQuery truncates a SQL query to a maximum length for logging
@@ -890,7 +1041,7 @@ func WrapWithTenantAwareRole(ctx context.Context, conn *Connection, tenantID str
 // ExecuteWithAdminRole executes a database operation using admin credentials
 // Used for migrations that require DDL privileges (CREATE TABLE, ALTER, etc.)
 // Creates a temporary admin connection that is closed after execution
-func (c *Connection) ExecuteWithAdminRole(ctx context.Context, fn func(conn *pgx.Conn) error) error {
+func (c *Connection) ExecuteWithAdminRole(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	// Get admin connection string
 	adminConnStr := c.config.AdminConnectionString()
 
@@ -933,8 +1084,8 @@ func (c *Connection) ExecuteWithAdminRole(ctx context.Context, fn func(conn *pgx
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Execute the wrapped function with the connection
-	if err := fn(adminConn); err != nil {
+	// Execute the wrapped function with the transaction
+	if err := fn(tx); err != nil {
 		return err
 	}
 
@@ -950,7 +1101,7 @@ func (c *Connection) ExecuteWithAdminRole(ctx context.Context, fn func(conn *pgx
 // ExecuteWithAdminRoleForDB executes a function with admin privileges against
 // a specific database (for tenant DDL operations). It replaces the database name
 // in the admin connection string with the provided dbName.
-func (c *Connection) ExecuteWithAdminRoleForDB(ctx context.Context, dbName string, fn func(conn *pgx.Conn) error) error {
+func (c *Connection) ExecuteWithAdminRoleForDB(ctx context.Context, dbName string, fn func(tx pgx.Tx) error) error {
 	adminConnStr := c.config.AdminConnectionString()
 
 	adminUser := c.config.AdminUser
@@ -984,7 +1135,7 @@ func (c *Connection) ExecuteWithAdminRoleForDB(ctx context.Context, dbName strin
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := fn(adminConn); err != nil {
+	if err := fn(tx); err != nil {
 		return err
 	}
 

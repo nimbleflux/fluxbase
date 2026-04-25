@@ -94,7 +94,10 @@ func (s *DeclarativeService) preprocessSchemaFile(schemaFile string) (string, fu
 		return schemaFile, nil, nil
 	}
 
-	substituted := bootstrap.SubstituteAppUser(string(content), s.appUser)
+	substituted, err := bootstrap.SubstituteAppUser(string(content), s.appUser)
+	if err != nil {
+		return "", nil, fmt.Errorf("invalid app user in %s: %w", schemaFile, err)
+	}
 	tmpFile, err := os.CreateTemp("", "fluxbase-schema-*.sql")
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create temp file: %w", err)
@@ -568,7 +571,10 @@ func (s *DeclarativeService) applySchemaDirectFallback(ctx context.Context, sche
 	}
 
 	// Substitute {{APP_USER}} placeholder with the runtime user
-	contentStr := bootstrap.SubstituteAppUser(string(content), s.appUser)
+	contentStr, err := bootstrap.SubstituteAppUser(string(content), s.appUser)
+	if err != nil {
+		return fmt.Errorf("invalid app user for schema apply: %w", err)
+	}
 
 	// Create connection
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
@@ -673,8 +679,22 @@ func (s *DeclarativeService) applyPlanDirectly(ctx context.Context, schema strin
 			}
 		}
 
+		// Skip DROP TRIGGER on partition tables (inherited from parent, cannot be dropped independently)
+		// Also skip on partitioned parent tables (triggers managed outside pgschema, e.g. in post-schema.sql)
+		if strings.HasPrefix(sqlUpper, "DROP TRIGGER") {
+			trigTable := extractDropTriggerTableName(change.SQL)
+			if partitions[trigTable] || partitionedTables[trigTable] {
+				log.Debug().Str("schema", schema).Str("table", trigTable).Msg("Skipping DROP TRIGGER on partition/partitioned table (managed outside schema SQL)")
+				continue
+			}
+		}
+
 		// Substitute {{APP_USER}} placeholder with the runtime user
-		sql := bootstrap.SubstituteAppUser(change.SQL, s.appUser)
+		sql, subErr := bootstrap.SubstituteAppUser(change.SQL, s.appUser)
+		if subErr != nil {
+			log.Warn().Err(subErr).Str("schema", schema).Msg("Skipping change with invalid app user")
+			continue
+		}
 
 		// Strip CONCURRENTLY from CREATE INDEX on partitioned tables
 		if strings.Contains(sqlUpper, "CREATE INDEX CONCURRENTLY") {
@@ -867,7 +887,10 @@ func (s *DeclarativeService) ensureMissingColumns(ctx context.Context, schema st
 	}
 
 	// Preprocess {{APP_USER}} substitution
-	sql := bootstrap.SubstituteAppUser(string(content), s.appUser)
+	sql, subErr := bootstrap.SubstituteAppUser(string(content), s.appUser)
+	if subErr != nil {
+		return fmt.Errorf("invalid app user in schema %s: %w", schema, subErr)
+	}
 
 	// Parse SQL using pgparser to find CREATE TABLE column definitions
 	stmts, err := parser.Parse(sql)
@@ -1037,6 +1060,27 @@ func extractTriggerTableName(sql string) string {
 		return ""
 	}
 	rest := strings.TrimSpace(sql[onIdx+len(" ON "):])
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return ""
+	}
+	name := fields[0]
+	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		name = name[idx+1:]
+	}
+	return strings.Trim(name, `"`)
+}
+
+// extractDropTriggerTableName extracts the table name from a DROP TRIGGER statement.
+// Format: "DROP TRIGGER [IF EXISTS] name ON [schema.]table"
+func extractDropTriggerTableName(sql string) string {
+	upper := strings.ToUpper(sql)
+	onIdx := strings.Index(upper, " ON ")
+	if onIdx < 0 {
+		return ""
+	}
+	rest := strings.TrimSpace(sql[onIdx+len(" ON "):])
+	rest = strings.TrimRight(rest, ";")
 	fields := strings.Fields(rest)
 	if len(fields) == 0 {
 		return ""

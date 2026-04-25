@@ -33,14 +33,24 @@ type FDWRoleCredentials struct {
 // accessed by tenant databases through foreign data wrappers.
 var fdwSchemas = []string{
 	"platform", "auth", "storage", "jobs", "functions", "realtime",
-	"ai", "rpc", "branching", "logging", "mcp",
+	"ai", "rpc", "branching", "logging", "mcp", "app",
 }
 
-// fdwExcludeTables lists tables that should NOT be imported via FDW
-// because they hold per-database local state.
+// fdwExcludeTables lists tables that should NOT be imported via FDW.
+// These are true singletons or instance-level infrastructure with no tenant_id.
 var fdwExcludeTables = map[string][]string{
-	"platform": {"schema_migrations"},
-	"logging":  {"execution_logs_migration_status"},
+	"platform": {
+		"schema_migrations", "migrations", "migration_execution_logs",
+		"bootstrap_state", "fluxbase_migrations", "declarative_state",
+		"rate_limits", "idempotency_keys",
+	},
+	"logging": {"execution_logs_migration_status"},
+	"auth": {
+		"captcha_challenges", "captcha_trust_tokens", "user_trust_signals",
+		"emergency_revocation", "rls_audit_log", "token_blacklist",
+		"webhook_monitored_tables", "saml_assertion_ids",
+		"nonces", "oauth_states",
+	},
 }
 
 // ParseFDWConfig extracts FDW connection details from a database URL.
@@ -168,6 +178,50 @@ func DropFDWRole(ctx context.Context, adminPool *pgxpool.Pool, tenantID string) 
 	if err != nil {
 		log.Warn().Err(err).Str("role", roleName).Msg("Failed to drop FDW role")
 	}
+}
+
+// GetFDWRoleForTenant retrieves the FDW role credentials for a tenant by reading
+// the user mapping from the tenant database. The role name is deterministic based
+// on the tenant ID, and the password is extracted from the existing user mapping.
+func GetFDWRoleForTenant(ctx context.Context, tenantPool *pgxpool.Pool, tenantID string) (FDWRoleCredentials, error) {
+	suffix := tenantID
+	if len(suffix) > 8 {
+		suffix = suffix[:8]
+	}
+	roleName := fmt.Sprintf("fdw_tenant_%s", suffix)
+
+	var umOptions string
+	err := tenantPool.QueryRow(ctx, `
+		SELECT umoptions::text FROM pg_user_mapping
+		WHERE umserver = (SELECT oid FROM pg_foreign_server WHERE srvname = $1)
+		LIMIT 1
+	`, fdwServerName).Scan(&umOptions)
+	if err != nil {
+		return FDWRoleCredentials{}, fmt.Errorf("failed to read FDW user mapping: %w", err)
+	}
+
+	password := extractOptionValue(umOptions, "password")
+	if password == "" {
+		return FDWRoleCredentials{}, fmt.Errorf("FDW user mapping has no password for tenant %s", tenantID)
+	}
+
+	return FDWRoleCredentials{
+		RoleName: roleName,
+		Password: password,
+	}, nil
+}
+
+// extractOptionValue extracts a value from pg_user_mapping options string format.
+// The umoptions column returns strings like {"user=fdw_tenant_xxx","password=yyy"}
+func extractOptionValue(options, key string) string {
+	prefix := key + "="
+	for _, part := range strings.Split(strings.Trim(options, "{}"), ",") {
+		part = strings.Trim(part, "\"")
+		if strings.HasPrefix(part, prefix) {
+			return strings.TrimPrefix(part, prefix)
+		}
+	}
+	return ""
 }
 
 // SetupFDW configures postgres_fdw in a tenant database so it can access
@@ -317,6 +371,20 @@ func importSchemaFDW(ctx context.Context, tenantPool *pgxpool.Pool, schema strin
 		return fmt.Errorf("failed to import foreign schema %s: %w", schema, err)
 	}
 
+	// Grant permissions on imported foreign tables to tenant_service and service_role.
+	// The IMPORT FOREIGN SCHEMA creates new table objects that don't inherit GRANTs
+	// from the local tables that were dropped during FDW setup.
+	for _, role := range []string{"tenant_service", "service_role"} {
+		_, err = tenantPool.Exec(ctx, fmt.Sprintf(
+			`GRANT ALL ON ALL TABLES IN SCHEMA %s TO %s`,
+			quoteIdent(schema), quoteIdent(role),
+		))
+		if err != nil {
+			log.Warn().Err(err).Str("schema", schema).Str("role", role).
+				Msg("Failed to grant permissions on imported foreign tables")
+		}
+	}
+
 	if len(localTables) > 0 {
 		log.Debug().Str("schema", schema).Int("tables", len(localTables)).
 			Msg("Imported schema tables via FDW")
@@ -328,25 +396,27 @@ func importSchemaFDW(ctx context.Context, tenantPool *pgxpool.Pool, schema strin
 // CreateFDWUserMapping creates a user mapping for the app user using
 // the per-tenant FDW role credentials. This overrides the default
 // admin user mapping with the tenant-specific role for RLS enforcement.
+// Also creates mappings for tenant_service and service_role so that
+// SET LOCAL ROLE can be used with FDW queries.
 func CreateFDWUserMapping(ctx context.Context, tenantPool *pgxpool.Pool, appUser string, fdwRole FDWRoleCredentials) error {
-	// Drop existing user mapping for the app user
-	_, _ = tenantPool.Exec(ctx, fmt.Sprintf(
-		`DROP USER MAPPING IF EXISTS FOR %s SERVER %s`,
-		quoteIdent(appUser), quoteIdent(fdwServerName),
-	))
+	for _, role := range []string{appUser, "tenant_service", "service_role"} {
+		_, _ = tenantPool.Exec(ctx, fmt.Sprintf(
+			`DROP USER MAPPING IF EXISTS FOR %s SERVER %s`,
+			quoteIdent(role), quoteIdent(fdwServerName),
+		))
 
-	// Create user mapping with tenant-specific FDW role
-	_, err := tenantPool.Exec(ctx, fmt.Sprintf(
-		`CREATE USER MAPPING FOR %s SERVER %s OPTIONS (user '%s', password '%s')`,
-		quoteIdent(appUser), quoteIdent(fdwServerName),
-		escapeSQLString(fdwRole.RoleName), escapeSQLString(fdwRole.Password),
-	))
-	if err != nil {
-		return fmt.Errorf("failed to create FDW user mapping for app user: %w", err)
+		_, err := tenantPool.Exec(ctx, fmt.Sprintf(
+			`CREATE USER MAPPING FOR %s SERVER %s OPTIONS (user '%s', password '%s')`,
+			quoteIdent(role), quoteIdent(fdwServerName),
+			escapeSQLString(fdwRole.RoleName), escapeSQLString(fdwRole.Password),
+		))
+		if err != nil {
+			return fmt.Errorf("failed to create FDW user mapping for %s: %w", role, err)
+		}
 	}
 
 	log.Debug().Str("app_user", appUser).Str("fdw_role", fdwRole.RoleName).
-		Msg("Created FDW user mapping with tenant-specific role")
+		Msg("Created FDW user mappings for app user, tenant_service, and service_role")
 
 	return nil
 }
@@ -410,6 +480,17 @@ func setupFDWLegacy(ctx context.Context, tenantPool *pgxpool.Pool, cfg FDWConfig
 	))
 	if err != nil {
 		return fmt.Errorf("failed to import foreign schema: %w", err)
+	}
+
+	for _, role := range []string{"tenant_service", "service_role"} {
+		_, err = tenantPool.Exec(ctx, fmt.Sprintf(
+			`GRANT ALL ON ALL TABLES IN SCHEMA auth TO %s`,
+			quoteIdent(role),
+		))
+		if err != nil {
+			log.Warn().Err(err).Str("role", role).
+				Msg("Failed to grant permissions on imported foreign tables (legacy)")
+		}
 	}
 
 	log.Info().

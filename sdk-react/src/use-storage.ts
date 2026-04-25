@@ -2,7 +2,7 @@
  * Storage hooks for Fluxbase SDK
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useMutation,
   useQuery,
@@ -231,12 +231,14 @@ export function useStorageDelete(bucket: string) {
 export function useStoragePublicUrl(bucket: string, path: string | null) {
   const client = useFluxbaseClient();
 
-  if (!path) {
-    return null;
-  }
+  return useMemo(() => {
+    if (!path) {
+      return null;
+    }
 
-  const { data } = client.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
+    const { data } = client.storage.from(bucket).getPublicUrl(path);
+    return data.publicUrl;
+  }, [client, bucket, path]);
 }
 
 /**
@@ -270,11 +272,13 @@ export function useStorageTransformUrl(
 ): string | null {
   const client = useFluxbaseClient();
 
-  if (!path) {
-    return null;
-  }
+  return useMemo(() => {
+    if (!path) {
+      return null;
+    }
 
-  return client.storage.from(bucket).getTransformUrl(path, transform);
+    return client.storage.from(bucket).getTransformUrl(path, transform);
+  }, [client, bucket, path, transform]);
 }
 
 /**

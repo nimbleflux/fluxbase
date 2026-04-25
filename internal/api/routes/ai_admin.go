@@ -19,6 +19,12 @@ type AIAdminDeps struct {
 	SyncChatbots               fiber.Handler
 	GetAIMetrics               fiber.Handler
 	ListAIProviders            fiber.Handler
+	CreateAIProvider           fiber.Handler
+	UpdateAIProvider           fiber.Handler
+	DeleteAIProvider           fiber.Handler
+	SetDefaultAIProvider       fiber.Handler
+	SetEmbeddingAIProvider     fiber.Handler
+	ClearEmbeddingAIProvider   fiber.Handler
 	ListAIConversations        fiber.Handler
 	GetAIConversationMessages  fiber.Handler
 	GetAIAuditLog              fiber.Handler
@@ -29,6 +35,7 @@ type AIAdminDeps struct {
 	LinkKnowledgeBase          fiber.Handler
 	UpdateChatbotKnowledgeBase fiber.Handler
 	UnlinkKnowledgeBase        fiber.Handler
+	DeleteKnowledgeBase        fiber.Handler
 }
 
 // BuildAIAdminRoutes creates the AI admin route group.
@@ -52,8 +59,15 @@ func BuildAIAdminRoutes(deps *AIAdminDeps) *RouteGroup {
 			{Method: "POST", Path: "/ai/chatbots/sync", Handler: deps.SyncChatbots, Summary: "Sync chatbots", Roles: []string{"admin", "instance_admin"}},
 			{Method: "GET", Path: "/ai/metrics", Handler: deps.GetAIMetrics, Summary: "Get AI metrics", Roles: []string{"admin", "instance_admin"}},
 
-			// AI Providers - instance admin only (override roles)
-			{Method: "GET", Path: "/ai/providers", Handler: deps.ListAIProviders, Summary: "List AI providers", Roles: []string{"admin", "instance_admin"}},
+			// AI Providers - uses default roles (admin, instance_admin, tenant_admin)
+			// Tenant scoping is handled by the storage layer via X-FB-Tenant header
+			{Method: "GET", Path: "/ai/providers", Handler: deps.ListAIProviders, Summary: "List AI providers"},
+			{Method: "POST", Path: "/ai/providers", Handler: deps.CreateAIProvider, Summary: "Create AI provider"},
+			{Method: "PUT", Path: "/ai/providers/:id", Handler: deps.UpdateAIProvider, Summary: "Update AI provider"},
+			{Method: "DELETE", Path: "/ai/providers/:id", Handler: deps.DeleteAIProvider, Summary: "Delete AI provider"},
+			{Method: "PUT", Path: "/ai/providers/:id/default", Handler: deps.SetDefaultAIProvider, Summary: "Set default AI provider"},
+			{Method: "PUT", Path: "/ai/providers/:id/embedding", Handler: deps.SetEmbeddingAIProvider, Summary: "Set embedding AI provider"},
+			{Method: "DELETE", Path: "/ai/providers/:id/embedding", Handler: deps.ClearEmbeddingAIProvider, Summary: "Clear embedding AI provider"},
 
 			// Conversations & Audit - instance admin only (override roles)
 			{Method: "GET", Path: "/ai/conversations", Handler: deps.ListAIConversations, Summary: "List AI conversations", Roles: []string{"admin", "instance_admin"}},
@@ -70,6 +84,9 @@ func BuildAIAdminRoutes(deps *AIAdminDeps) *RouteGroup {
 			{Method: "POST", Path: "/ai/chatbots/:id/knowledge-bases", Handler: deps.LinkKnowledgeBase, Summary: "Link knowledge base to chatbot"},
 			{Method: "PUT", Path: "/ai/chatbots/:id/knowledge-bases/:kb_id", Handler: deps.UpdateChatbotKnowledgeBase, Summary: "Update chatbot knowledge base link"},
 			{Method: "DELETE", Path: "/ai/chatbots/:id/knowledge-bases/:kb_id", Handler: deps.UnlinkKnowledgeBase, Summary: "Unlink knowledge base from chatbot"},
+
+			// Knowledge Base management (uses default roles)
+			{Method: "DELETE", Path: "/ai/knowledge-bases/:id", Handler: deps.DeleteKnowledgeBase, Summary: "Delete knowledge base"},
 		},
 	}
 }

@@ -56,6 +56,15 @@ func (s *LocalLogStorage) Write(ctx context.Context, entries []*LogEntry) error 
 	groups := make(map[string][]*LogEntry)
 
 	for _, entry := range entries {
+		if err := validatePathComponent(string(entry.Category)); err != nil {
+			return fmt.Errorf("invalid log category: %w", err)
+		}
+		if entry.ExecutionID != "" {
+			if err := validatePathComponent(entry.ExecutionID); err != nil {
+				return fmt.Errorf("invalid execution ID: %w", err)
+			}
+		}
+
 		// Ensure ID and timestamp are set
 		if entry.ID == uuid.Nil {
 			entry.ID = uuid.New()
@@ -84,14 +93,18 @@ func (s *LocalLogStorage) Write(ctx context.Context, entries []*LogEntry) error 
 	}
 
 	// Write each group to a separate file
+	cleanBase := filepath.Clean(s.basePath)
 	for groupKey, groupEntries := range groups {
 		var filePath string
 		if strings.HasSuffix(groupKey, "/batch") {
-			// For batch logs, add a UUID to make the filename unique
 			filePath = filepath.Join(s.basePath, groupKey+"_"+uuid.New().String()[:8]+".ndjson")
 		} else {
-			// For execution logs, use the execution ID as the filename
 			filePath = filepath.Join(s.basePath, groupKey+".ndjson")
+		}
+
+		filePath = filepath.Clean(filePath)
+		if !strings.HasPrefix(filePath, cleanBase) {
+			return fmt.Errorf("path traversal detected: file path escapes base directory")
 		}
 
 		if err := s.writeEntries(filePath, groupEntries, strings.Contains(groupKey, "exec_")); err != nil {
@@ -145,6 +158,12 @@ func (s *LocalLogStorage) writeEntries(filePath string, entries []*LogEntry, app
 // Note: Local filesystem is not optimized for querying - this requires scanning files.
 // For heavy querying, use PostgreSQL backend instead.
 func (s *LocalLogStorage) Query(ctx context.Context, opts LogQueryOptions) (*LogQueryResult, error) {
+	if opts.Category != "" {
+		if err := validatePathComponent(string(opts.Category)); err != nil {
+			return nil, fmt.Errorf("invalid log category: %w", err)
+		}
+	}
+
 	// Build directory path for scanning
 	searchPath := s.basePath
 	if opts.Category != "" {
@@ -154,6 +173,11 @@ func (s *LocalLogStorage) Query(ctx context.Context, opts LogQueryOptions) (*Log
 	// If we have time range, narrow down the path
 	if !opts.StartTime.IsZero() {
 		searchPath = filepath.Join(searchPath, opts.StartTime.Format("2006/01"))
+	}
+
+	searchPath = filepath.Clean(searchPath)
+	if !strings.HasPrefix(searchPath, filepath.Clean(s.basePath)) {
+		return nil, fmt.Errorf("path traversal detected: search path escapes base directory")
 	}
 
 	// Find all NDJSON files
@@ -276,10 +300,21 @@ func (s *LocalLogStorage) GetExecutionLogs(ctx context.Context, executionID stri
 
 // Delete removes logs matching the given options.
 func (s *LocalLogStorage) Delete(ctx context.Context, opts LogQueryOptions) (int64, error) {
+	if opts.Category != "" {
+		if err := validatePathComponent(string(opts.Category)); err != nil {
+			return 0, fmt.Errorf("invalid log category: %w", err)
+		}
+	}
+
 	// Build directory path for scanning
 	searchPath := s.basePath
 	if opts.Category != "" {
 		searchPath = filepath.Join(searchPath, string(opts.Category))
+	}
+
+	searchPath = filepath.Clean(searchPath)
+	if !strings.HasPrefix(searchPath, filepath.Clean(s.basePath)) {
+		return 0, fmt.Errorf("path traversal detected: search path escapes base directory")
 	}
 
 	// Find all NDJSON files

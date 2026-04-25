@@ -93,7 +93,8 @@
         "formulahendry.code-runner",
         "editorconfig.editorconfig",
         "chrmarti.regex",
-        "wix.vscode-import-cost"
+        "wix.vscode-import-cost",
+        "sst-dev.opencode"
       ]
     }
   },
