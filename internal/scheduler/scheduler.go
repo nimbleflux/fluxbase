@@ -29,11 +29,13 @@ type ConcurrencyGuard struct {
 func (g *ConcurrencyGuard) Acquire(name string) bool {
 	g.mu.Lock()
 	if g.activeCount >= g.MaxConcurrent {
+		active := g.activeCount
+		max := g.MaxConcurrent
 		g.mu.Unlock()
 		log.Warn().
 			Str("name", name).
-			Int("active", g.activeCount).
-			Int("max", g.MaxConcurrent).
+			Int("active", active).
+			Int("max", max).
 			Msg("Skipping scheduled execution - concurrent limit reached")
 		return false
 	}
