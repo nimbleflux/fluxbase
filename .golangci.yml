@@ -3,8 +3,6 @@ version: "2"
 run:
   timeout: 5m
   tests: true
-  build-tags:
-    - integration
 
 linters:
   default: none
@@ -21,7 +19,7 @@ linters:
       exclude-functions:
         - (io.Closer).Close
         - (*database/sql.Rows).Close
-        - (*database/sql.DB).Close
+        - (*database/sql/DB).Close
         - os.Setenv
         - os.Unsetenv
         - fmt.Fprintf
@@ -40,12 +38,10 @@ linters:
       errorf-multi: true
   exclusions:
     rules:
-      # Exclude some linters from running on tests files
       - path: _test\.go
         linters:
           - errcheck
           - govet
-      # Exclude CLI code from errcheck (many intentional discards)
       - path: cli/
         linters:
           - errcheck
