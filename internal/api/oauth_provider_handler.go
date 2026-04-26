@@ -19,6 +19,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // OAuthProviderHandler handles OAuth provider configuration management
@@ -900,9 +901,8 @@ func (h *OAuthProviderHandler) hasAppSSOProviders(ctx context.Context) (bool, er
 
 // Helper function to get user ID from context (set by auth middleware)
 func getUserIDFromContext(c fiber.Ctx) *uuid.UUID {
-	// Try to get from dashboard auth (set by middleware)
-	if userIDStr := c.Locals("user_id"); userIDStr != nil {
-		if uid, err := uuid.Parse(userIDStr.(string)); err == nil {
+	if uidStr := middleware.GetUserID(c); uidStr != "" {
+		if uid, err := uuid.Parse(uidStr); err == nil {
 			return &uid
 		}
 	}

@@ -106,11 +106,9 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 	}
 
 	// Set CreatedBy from authenticated user
-	if uid := c.Locals("user_id"); uid != nil {
-		if uidStr, ok := uid.(string); ok {
-			if parsed, err := uuid.Parse(uidStr); err == nil {
-				req.CreatedBy = &parsed
-			}
+	if uid := middleware.GetUserID(c); uid != "" {
+		if parsed, err := uuid.Parse(uid); err == nil {
+			req.CreatedBy = &parsed
 		}
 	}
 

@@ -39,12 +39,12 @@ func (h *UserSettingsHandler) CreateSecret(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Get user ID from context
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -101,12 +101,12 @@ func (h *UserSettingsHandler) GetSecret(c fiber.Ctx) error {
 	}
 
 	// Get user ID from context
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -141,12 +141,12 @@ func (h *UserSettingsHandler) UpdateSecret(c fiber.Ctx) error {
 	}
 
 	// Get user ID from context
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -191,12 +191,12 @@ func (h *UserSettingsHandler) DeleteSecret(c fiber.Ctx) error {
 	}
 
 	// Get user ID from context
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -228,12 +228,12 @@ func (h *UserSettingsHandler) ListSecrets(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Get user ID from context
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -325,12 +325,12 @@ func (h *UserSettingsHandler) GetSetting(c fiber.Ctx) error {
 	}
 
 	// Get user ID from context
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -365,12 +365,12 @@ func (h *UserSettingsHandler) GetUserOwnSetting(c fiber.Ctx) error {
 	}
 
 	// Get user ID from context
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -437,12 +437,12 @@ func (h *UserSettingsHandler) SetSetting(c fiber.Ctx) error {
 	}
 
 	// Get user ID from context
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -495,12 +495,12 @@ func (h *UserSettingsHandler) DeleteSetting(c fiber.Ctx) error {
 	}
 
 	// Get user ID from context
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -532,12 +532,12 @@ func (h *UserSettingsHandler) ListSettings(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 
 	// Get user ID from context
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")

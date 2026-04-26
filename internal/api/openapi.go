@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // OpenAPISpec represents the OpenAPI 3.0 specification
@@ -105,7 +106,7 @@ func (h *OpenAPIHandler) GetOpenAPISpec(c fiber.Ctx) error {
 		return err
 	}
 
-	if userID, ok := GetUserID(c); ok {
+	if userID := middleware.GetUserID(c); userID != "" {
 		ctx = database.ContextWithAuth(ctx, userID, role, isAdmin)
 	}
 

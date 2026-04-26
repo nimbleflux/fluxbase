@@ -2,6 +2,8 @@ package ai
 
 import (
 	"github.com/gofiber/fiber/v3"
+
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // ============================================================================
@@ -12,7 +14,7 @@ import (
 // POST /api/v1/admin/ai/knowledge-bases/:kb_id/documents/:doc_id/permissions
 func (h *KnowledgeBaseHandler) GrantDocumentPermission(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
-	userID := c.Locals("user_id").(string)
+	userID := middleware.GetUserID(c)
 	_ = c.Params("kb_id") // kb_id is part of the route but not used directly
 	docID := c.Params("doc_id")
 

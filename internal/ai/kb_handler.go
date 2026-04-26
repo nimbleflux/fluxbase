@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
@@ -147,7 +148,7 @@ func (h *KnowledgeBaseHandler) CreateKnowledgeBase(c fiber.Ctx) error {
 
 	// Set created_by and owner_id to current user if available
 	// For service role operations without a user context, these remain NULL
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		kb.CreatedBy = &uid
 		kb.OwnerID = &uid
 	}
@@ -417,7 +418,7 @@ func (h *KnowledgeBaseHandler) ExportTableToKnowledgeBase(c fiber.Ctx) error {
 
 	// Determine owner_id for the document
 	// Priority: 1) authenticated user, 2) KB's owner_id, 3) KB's created_by, 4) nil for system documents
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		req.OwnerID = &uid
 	} else if kb, err := h.storage.GetKnowledgeBase(ctx, kbID); err == nil && kb != nil {
 		if kb.OwnerID != nil {

@@ -31,14 +31,14 @@ func (h *CustomSettingsHandler) requireService(c fiber.Ctx) error {
 func (h *CustomSettingsHandler) CreateSetting(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 
-	userIDStr := c.Locals("user_id")
+	userIDStr := middleware.GetUserID(c)
 	userRole := c.Locals("user_role")
 
-	if userIDStr == nil || userRole == nil {
+	if userIDStr == "" || userRole == nil {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -173,14 +173,14 @@ func (h *CustomSettingsHandler) UpdateSetting(c fiber.Ctx) error {
 		return SendMissingField(c, "Setting key")
 	}
 
-	userIDStr := c.Locals("user_id")
+	userIDStr := middleware.GetUserID(c)
 	userRole := c.Locals("user_role")
 
-	if userIDStr == nil || userRole == nil {
+	if userIDStr == "" || userRole == nil {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -260,12 +260,12 @@ func (h *CustomSettingsHandler) DeleteSetting(c fiber.Ctx) error {
 func (h *CustomSettingsHandler) CreateSecretSetting(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")
@@ -340,12 +340,12 @@ func (h *CustomSettingsHandler) UpdateSecretSetting(c fiber.Ctx) error {
 		return SendMissingField(c, "Setting key")
 	}
 
-	userIDStr := c.Locals("user_id")
-	if userIDStr == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		log.Error().Err(err).Msg("Invalid user ID in context")
 		return SendInternalError(c, "Invalid user ID")

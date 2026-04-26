@@ -16,6 +16,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 
 	syncframework "github.com/nimbleflux/fluxbase/internal/sync"
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 // RegisterAdminRoutes registers admin-only routes for functions management
@@ -558,7 +559,7 @@ func (h *Handler) CreateSharedModule(c fiber.Ctx) error {
 
 	log.Info().
 		Str("module_path", module.ModulePath).
-		Str("user_id", toString(userID)).
+		Str("user_id", util.ToString(userID)).
 		Msg("Shared module created")
 
 	return c.Status(201).JSON(module)

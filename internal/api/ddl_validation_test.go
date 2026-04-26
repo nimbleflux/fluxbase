@@ -342,7 +342,7 @@ func TestIdentifierPatternRegex(t *testing.T) {
 
 		for _, s := range valid {
 			t.Run(s, func(t *testing.T) {
-				assert.True(t, identifierPattern.MatchString(s))
+				assert.True(t, validIdentifierRegex.MatchString(s))
 			})
 		}
 	})
@@ -361,7 +361,7 @@ func TestIdentifierPatternRegex(t *testing.T) {
 
 		for _, s := range invalid {
 			t.Run(s, func(t *testing.T) {
-				assert.False(t, identifierPattern.MatchString(s))
+				assert.False(t, validIdentifierRegex.MatchString(s))
 			})
 		}
 	})

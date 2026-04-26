@@ -388,7 +388,7 @@ func (h *VectorHandler) HandleSearch(c fiber.Ctx) error {
 		userRole = user.Role
 		claims = user
 	} else {
-		if id, ok := c.Locals("user_id").(string); ok && id != "" {
+		if id := middleware.GetUserID(c); id != "" {
 			userID = id
 		}
 		if role, ok := c.Locals("user_role").(string); ok && role != "" {

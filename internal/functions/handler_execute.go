@@ -13,6 +13,9 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/ratelimit"
 	"github.com/nimbleflux/fluxbase/internal/runtime"
+
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 // InvokeFunction invokes an edge function
@@ -189,7 +192,7 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 	}
 
 	// Log function invocation
-	reqID := getRequestID(c)
+	reqID := apperrors.GetRequestID(c)
 	log.Info().
 		Str("function_name", name).
 		Str("execution_id", executionID.String()).
@@ -306,7 +309,7 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 			Str("request_id", reqID).
 			Int("status", result.Status).
 			Str("logs", result.Logs).
-			Str("response_preview", truncateString(result.Body, 200)).
+			Str("response_preview", util.TruncateString(result.Body, 200)).
 			Int64("duration_ms", result.DurationMs).
 			Msg("Edge function returned error status")
 	}
@@ -331,7 +334,7 @@ func (h *Handler) GetExecutions(c fiber.Ctx) error {
 
 	executions, err := h.storage.GetExecutions(middleware.CtxWithTenant(c), name, limit)
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("function_name", name).
@@ -374,7 +377,7 @@ func (h *Handler) ListAllExecutions(c fiber.Ctx) error {
 
 	executions, total, err := h.storage.ListAllExecutions(middleware.CtxWithTenant(c), filters)
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("request_id", reqID).

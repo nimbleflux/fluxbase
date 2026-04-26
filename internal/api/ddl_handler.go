@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -45,10 +44,6 @@ func (h *DDLHandler) SetSchemaCache(cache *database.SchemaCache) {
 
 // Validation patterns
 var (
-	// identifierPattern matches valid PostgreSQL identifiers (schema/table/column names)
-	// Must start with letter or underscore, followed by letters, numbers, underscores
-	identifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-
 	// Reserved PostgreSQL keywords that should not be used as identifiers
 	reservedKeywords = map[string]bool{
 		"user": true, "table": true, "column": true, "index": true,
@@ -523,7 +518,7 @@ func validateIdentifier(name, entityType string) error {
 		return fmt.Errorf("%s name cannot exceed 63 characters", entityType)
 	}
 
-	if !identifierPattern.MatchString(name) {
+	if !validIdentifierRegex.MatchString(name) {
 		return fmt.Errorf("%s name must start with a letter or underscore and contain only letters, numbers, and underscores", entityType)
 	}
 

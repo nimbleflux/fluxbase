@@ -23,7 +23,7 @@ func isAdminUser(c fiber.Ctx) bool {
 // isTenantWriteBlocked returns true when tenant context is active but the table
 // has no tenant_id column. This prevents writing non-isolated data in multi-tenant mode.
 func isTenantWriteBlocked(c fiber.Ctx, table database.TableInfo) bool {
-	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantID := middleware.GetTenantID(c)
 	if tenantID == "" {
 		return false
 	}

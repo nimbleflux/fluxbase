@@ -10,6 +10,8 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 	syncframework "github.com/nimbleflux/fluxbase/internal/sync"
+
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 )
 
 // SyncJobs syncs job functions to a namespace
@@ -70,7 +72,7 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 	// If no jobs provided, fall back to filesystem sync
 	if len(req.Jobs) == 0 {
 		if err := h.loader.LoadFromFilesystem(ctx, namespace); err != nil {
-			reqID := getRequestID(c)
+			reqID := apperrors.GetRequestID(c)
 			log.Error().
 				Err(err).
 				Str("namespace", namespace).
@@ -151,7 +153,7 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 func (h *Handler) ListNamespaces(c fiber.Ctx) error {
 	namespaces, err := h.storage.ListJobNamespaces(middleware.CtxWithTenant(c))
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("request_id", reqID).
@@ -198,7 +200,7 @@ func (h *Handler) ListJobFunctions(c fiber.Ctx) error {
 	}
 
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("request_id", reqID).
@@ -252,7 +254,7 @@ func (h *Handler) UpdateJobFunction(c fiber.Ctx) error {
 
 	// Save changes
 	if err := h.storage.UpdateJobFunction(middleware.CtxWithTenant(c), fn); err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("namespace", namespace).
@@ -281,7 +283,7 @@ func (h *Handler) DeleteJobFunction(c fiber.Ctx) error {
 	name := c.Params("name")
 
 	if err := h.storage.DeleteJobFunction(middleware.CtxWithTenant(c), namespace, name); err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("namespace", namespace).
@@ -315,7 +317,7 @@ func (h *Handler) GetJobStats(c fiber.Ctx) error {
 
 	stats, err := h.storage.GetJobStats(middleware.CtxWithTenant(c), namespacePtr)
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("request_id", reqID).
@@ -334,7 +336,7 @@ func (h *Handler) GetJobStats(c fiber.Ctx) error {
 func (h *Handler) ListWorkers(c fiber.Ctx) error {
 	workers, err := h.storage.ListWorkers(middleware.CtxWithTenant(c))
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("request_id", reqID).

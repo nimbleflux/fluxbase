@@ -10,6 +10,9 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/middleware"
+
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 // SubmitJob submits a new job to the queue
@@ -198,7 +201,7 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 		JobName:                req.JobName,
 		Status:                 JobStatusPending,
 		Payload:                payloadJSON,
-		Priority:               valueOr(req.Priority, 0),
+		Priority:               util.ValueOr(req.Priority, 0),
 		MaxDurationSeconds:     &jobFunction.TimeoutSeconds,
 		ProgressTimeoutSeconds: &jobFunction.ProgressTimeoutSeconds,
 		MaxRetries:             jobFunction.MaxRetries,
@@ -210,7 +213,7 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 	}
 
 	if err := h.storage.CreateJob(middleware.CtxWithTenant(c), job); err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("job_name", req.JobName).
@@ -226,7 +229,7 @@ func (h *Handler) SubmitJob(c fiber.Ctx) error {
 	log.Info().
 		Str("job_id", job.ID.String()).
 		Str("job_name", req.JobName).
-		Str("user_id", toString(userID)).
+		Str("user_id", util.ToString(userID)).
 		Msg("Job submitted")
 
 	return c.Status(201).JSON(job)
@@ -394,7 +397,7 @@ func (h *Handler) ListJobs(c fiber.Ctx) error {
 
 	jobs, err := h.storage.ListJobs(middleware.CtxWithTenant(c), filters)
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("request_id", reqID).
@@ -440,7 +443,7 @@ func (h *Handler) CancelJob(c fiber.Ctx) error {
 	}
 
 	if err := h.storage.CancelJob(middleware.CtxWithTenant(c), jobID); err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("job_id", jobID.String()).
@@ -485,7 +488,7 @@ func (h *Handler) RetryJob(c fiber.Ctx) error {
 	}
 
 	if err := h.storage.RequeueJob(middleware.CtxWithTenant(c), jobID); err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("job_id", jobID.String()).
@@ -525,7 +528,7 @@ func (h *Handler) CancelJobAdmin(c fiber.Ctx) error {
 	}
 
 	if err := h.storage.CancelJob(middleware.CtxWithTenant(c), jobID); err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("job_id", jobID.String()).
@@ -570,7 +573,7 @@ func (h *Handler) RetryJobAdmin(c fiber.Ctx) error {
 	}
 
 	if err := h.storage.RequeueJob(middleware.CtxWithTenant(c), jobID); err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("job_id", jobID.String()).
@@ -599,7 +602,7 @@ func (h *Handler) ResubmitJobAdmin(c fiber.Ctx) error {
 	// Create new job based on the original
 	newJob, err := h.storage.ResubmitJob(middleware.CtxWithTenant(c), jobID)
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("job_id", jobID.String()).
@@ -643,7 +646,7 @@ func (h *Handler) TerminateJob(c fiber.Ctx) error {
 
 	// Cancel the job in database
 	if err := h.storage.CancelJob(middleware.CtxWithTenant(c), jobID); err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("job_id", jobID.String()).
@@ -663,7 +666,7 @@ func (h *Handler) TerminateJob(c fiber.Ctx) error {
 
 	log.Warn().
 		Str("job_id", jobID.String()).
-		Str("admin_user", toString(c.Locals("user_id"))).
+		Str("admin_user", util.ToString(c.Locals("user_id"))).
 		Msg("Job terminated by admin")
 
 	return c.JSON(fiber.Map{"message": "Job terminated"})
@@ -711,7 +714,7 @@ func (h *Handler) ListAllJobs(c fiber.Ctx) error {
 	// Use admin method to bypass RLS
 	jobs, err := h.storage.ListJobsAdmin(middleware.CtxWithTenant(c), filters)
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("request_id", reqID).

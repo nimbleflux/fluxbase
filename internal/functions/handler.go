@@ -8,19 +8,20 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/logging"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/ratelimit"
 	"github.com/nimbleflux/fluxbase/internal/runtime"
 	"github.com/nimbleflux/fluxbase/internal/secrets"
 	"github.com/nimbleflux/fluxbase/internal/settings"
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 // Handler manages HTTP endpoints for edge functions
@@ -513,11 +514,11 @@ func (h *Handler) CreateFunction(c fiber.Ctx) error {
 		defaultMemory = 128
 	}
 	// Validate against max limits
-	timeoutSeconds := valueOr(req.TimeoutSeconds, defaultTimeout)
+	timeoutSeconds := util.ValueOr(req.TimeoutSeconds, defaultTimeout)
 	if cfg.MaxTimeout > 0 && timeoutSeconds > cfg.MaxTimeout {
 		timeoutSeconds = cfg.MaxTimeout
 	}
-	memoryLimitMB := valueOr(req.MemoryLimitMB, defaultMemory)
+	memoryLimitMB := util.ValueOr(req.MemoryLimitMB, defaultMemory)
 	if cfg.MaxMemoryLimit > 0 && memoryLimitMB > cfg.MaxMemoryLimit {
 		memoryLimitMB = cfg.MaxMemoryLimit
 	}
@@ -532,10 +533,10 @@ func (h *Handler) CreateFunction(c fiber.Ctx) error {
 		Enabled:              req.Enabled != nil && *req.Enabled,
 		TimeoutSeconds:       timeoutSeconds,
 		MemoryLimitMB:        memoryLimitMB,
-		AllowNet:             valueOr(req.AllowNet, true),
-		AllowEnv:             valueOr(req.AllowEnv, true),
-		AllowRead:            valueOr(req.AllowRead, false),
-		AllowWrite:           valueOr(req.AllowWrite, false),
+		AllowNet:             util.ValueOr(req.AllowNet, true),
+		AllowEnv:             util.ValueOr(req.AllowEnv, true),
+		AllowRead:            util.ValueOr(req.AllowRead, false),
+		AllowWrite:           util.ValueOr(req.AllowWrite, false),
 		AllowUnauthenticated: allowUnauthenticated,
 		IsPublic:             isPublic,
 		CorsOrigins:          corsOrigins,
@@ -552,12 +553,12 @@ func (h *Handler) CreateFunction(c fiber.Ctx) error {
 	}
 
 	if err := h.storage.CreateFunction(middleware.CtxWithTenant(c), fn); err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("function_name", fn.Name).
 			Str("request_id", reqID).
-			Str("user_id", toString(createdBy)).
+			Str("user_id", util.ToString(createdBy)).
 			Msg("Failed to create edge function in database")
 
 		return c.Status(500).JSON(fiber.Map{
@@ -601,7 +602,7 @@ func (h *Handler) ListFunctions(c fiber.Ctx) error {
 	}
 
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("request_id", reqID).
@@ -621,7 +622,7 @@ func (h *Handler) ListFunctions(c fiber.Ctx) error {
 func (h *Handler) ListNamespaces(c fiber.Ctx) error {
 	namespaces, err := h.storage.ListFunctionNamespaces(middleware.CtxWithTenant(c))
 	if err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("request_id", reqID).
@@ -738,7 +739,7 @@ func (h *Handler) UpdateFunction(c fiber.Ctx) error {
 		}
 	}
 
-	reqID := getRequestID(c)
+	reqID := apperrors.GetRequestID(c)
 	if err := h.storage.UpdateFunction(middleware.CtxWithTenant(c), name, updates); err != nil {
 		log.Error().
 			Err(err).
@@ -777,7 +778,7 @@ func (h *Handler) DeleteFunction(c fiber.Ctx) error {
 	name := c.Params("name")
 
 	if err := h.storage.DeleteFunction(middleware.CtxWithTenant(c), name); err != nil {
-		reqID := getRequestID(c)
+		reqID := apperrors.GetRequestID(c)
 		log.Error().
 			Err(err).
 			Str("function_name", name).
@@ -799,44 +800,4 @@ func (h *Handler) DeleteFunction(c fiber.Ctx) error {
 // isAdminRole checks if the given role has admin privileges
 func isAdminRole(role string) bool {
 	return role == "admin" || role == "instance_admin" || role == "service_role" || role == "tenant_service"
-}
-
-func valueOr[T any](ptr *T, defaultVal T) T {
-	if ptr != nil {
-		return *ptr
-	}
-	return defaultVal
-}
-
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
-
-// getRequestID extracts the request ID from the fiber context
-func getRequestID(c fiber.Ctx) string {
-	requestID := requestid.FromContext(c)
-	if requestID != "" {
-		return requestID
-	}
-	return c.Get("X-Request-ID", "")
-}
-
-// toString converts a value to string for logging
-func toString(v interface{}) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	if uid, ok := v.(*uuid.UUID); ok {
-		if uid == nil {
-			return ""
-		}
-		return uid.String()
-	}
-	return fmt.Sprintf("%v", v)
 }

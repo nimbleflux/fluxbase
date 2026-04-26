@@ -216,16 +216,6 @@ func RequireRole(allowedRoles ...string) fiber.Handler {
 	}
 }
 
-// GetUserID is a helper to extract user ID from context
-func GetUserID(c fiber.Ctx) (string, bool) {
-	userID := c.Locals("user_id")
-	if userID == nil {
-		return "", false
-	}
-	id, ok := userID.(string)
-	return id, ok
-}
-
 // GetUserEmail is a helper to extract user email from context
 func GetUserEmail(c fiber.Ctx) (string, bool) {
 	email := c.Locals("user_email")

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 func TestSplitSQLStatements(t *testing.T) {
@@ -119,7 +120,7 @@ func TestTruncateString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := truncateString(tt.input, tt.maxLen)
+			result := util.TruncateString(tt.input, tt.maxLen)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

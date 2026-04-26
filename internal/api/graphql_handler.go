@@ -16,6 +16,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // GraphQLHandler handles GraphQL HTTP requests
@@ -263,7 +264,7 @@ func (h *GraphQLHandler) setupRLSContext(c fiber.Ctx, ctx context.Context) conte
 		ctx = context.WithValue(ctx, GraphQLRLSContextKey, rlsCtx)
 
 		// Propagate tenant context from middleware
-		if tenantID, ok := c.Locals("tenant_id").(string); ok && tenantID != "" {
+		if tenantID := middleware.GetTenantID(c); tenantID != "" {
 			ctx = database.ContextWithTenant(ctx, tenantID)
 		}
 
@@ -271,7 +272,7 @@ func (h *GraphQLHandler) setupRLSContext(c fiber.Ctx, ctx context.Context) conte
 	}
 
 	// Try individual locals (set by OptionalAuthOrServiceKey middleware)
-	userID, _ := c.Locals("user_id").(string)
+	userID := middleware.GetUserID(c)
 	userRole, _ := c.Locals("user_role").(string)
 
 	// Also check rls_role for service keys (which don't have user_id)
@@ -285,7 +286,7 @@ func (h *GraphQLHandler) setupRLSContext(c fiber.Ctx, ctx context.Context) conte
 	if userID == "" && userRole == "" {
 		// No user context available - anonymous access
 		// Propagate tenant context from middleware
-		if tenantID, ok := c.Locals("tenant_id").(string); ok && tenantID != "" {
+		if tenantID := middleware.GetTenantID(c); tenantID != "" {
 			ctx = database.ContextWithTenant(ctx, tenantID)
 		}
 		return ctx
@@ -310,7 +311,7 @@ func (h *GraphQLHandler) setupRLSContext(c fiber.Ctx, ctx context.Context) conte
 	ctx = context.WithValue(ctx, GraphQLRLSContextKey, rlsCtx)
 
 	// Propagate tenant context from middleware
-	if tenantID, ok := c.Locals("tenant_id").(string); ok && tenantID != "" {
+	if tenantID := middleware.GetTenantID(c); tenantID != "" {
 		ctx = database.ContextWithTenant(ctx, tenantID)
 	}
 

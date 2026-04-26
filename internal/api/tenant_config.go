@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // Global resolver instance - set by server during initialization
@@ -74,10 +75,7 @@ func GetTenantConfigFromLocals(c fiber.Ctx) *config.Config {
 // GetTenantID returns the current tenant ID from context.
 // Returns empty string if no tenant is set.
 func GetTenantID(c fiber.Ctx) string {
-	if id, ok := c.Locals("tenant_id").(string); ok {
-		return id
-	}
-	return ""
+	return middleware.GetTenantID(c)
 }
 
 // GetTenantSlug returns the current tenant slug from context.

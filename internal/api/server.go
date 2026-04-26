@@ -269,7 +269,7 @@ func (s *Server) handleHealth(c fiber.Ctx) error {
 func (s *Server) handleGetTables(c fiber.Ctx) error {
 	ctx := context.Background()
 
-	if userID, ok := GetUserID(c); ok {
+	if userID := middleware.GetUserID(c); userID != "" {
 		if userRole, ok := GetUserRole(c); ok {
 			ctx = database.ContextWithAuth(ctx, userID, userRole, userRole == "admin" || userRole == "service_role")
 		}
@@ -375,7 +375,7 @@ func (s *Server) handleGetTableSchema(c fiber.Ctx) error {
 func (s *Server) handleGetSchemas(c fiber.Ctx) error {
 	ctx := context.Background()
 
-	if userID, ok := GetUserID(c); ok {
+	if userID := middleware.GetUserID(c); userID != "" {
 		if userRole, ok := GetUserRole(c); ok {
 			ctx = database.ContextWithAuth(ctx, userID, userRole, userRole == "admin" || userRole == "service_role")
 		}

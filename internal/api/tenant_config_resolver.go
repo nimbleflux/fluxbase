@@ -9,6 +9,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/settings"
 )
 
@@ -119,10 +120,7 @@ func (r *TenantConfigResolver) getTenantID(c fiber.Ctx) string {
 	if c == nil {
 		return ""
 	}
-	if id, ok := c.Locals("tenant_id").(string); ok {
-		return id
-	}
-	return ""
+	return middleware.GetTenantID(c)
 }
 
 // applyInstanceSettings applies instance-level database settings to the resolved config.

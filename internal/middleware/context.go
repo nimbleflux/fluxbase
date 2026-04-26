@@ -47,6 +47,11 @@ func GetTenantSlug(c fiber.Ctx) string {
 	return slug
 }
 
+func GetTenantID(c fiber.Ctx) string {
+	id, _ := c.Locals("tenant_id").(string)
+	return id
+}
+
 func GetRLSUserID(c fiber.Ctx) string {
 	userID, _ := c.Locals("rls_user_id").(string)
 	return userID

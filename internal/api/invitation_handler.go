@@ -13,6 +13,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/email"
 	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 type InvitationHandler struct {
@@ -110,8 +111,8 @@ type AcceptInvitationResponse struct {
 func (h *InvitationHandler) CreateInvitation(c fiber.Ctx) error {
 	ctx := c.Context()
 
-	inviterID, ok := c.Locals("user_id").(string)
-	if !ok {
+	inviterID := middleware.GetUserID(c)
+	if inviterID == "" {
 		return SendUnauthorized(c, "User not authenticated", ErrCodeAuthRequired)
 	}
 

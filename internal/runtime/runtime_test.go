@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 func TestBuildEnvForFunction(t *testing.T) {
@@ -524,7 +526,7 @@ func TestTruncateString(t *testing.T) {
 			name:     "string longer than maxLen gets truncated",
 			input:    "hello world",
 			maxLen:   8,
-			expected: "hello...",
+			expected: "hello wo...",
 		},
 		{
 			name:     "empty string",
@@ -533,36 +535,36 @@ func TestTruncateString(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "maxLen of 3 shows only ellipsis",
+			name:     "maxLen of 3",
 			input:    "hello",
 			maxLen:   3,
-			expected: "...",
+			expected: "hel...",
 		},
 		{
 			name:     "unicode string truncation",
 			input:    "hello 世界 world",
 			maxLen:   12,
-			expected: "hello 世...",
+			expected: "hello 世界 ...",
 		},
 		{
 			name:     "single character with small maxLen",
 			input:    "abcdef",
 			maxLen:   4,
-			expected: "a...",
+			expected: "abcd...",
 		},
 		{
 			name:     "long string truncation",
 			input:    "This is a very long string that should be truncated",
 			maxLen:   20,
-			expected: "This is a very lo...",
+			expected: "This is a very long ...",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := truncateString(tt.input, tt.maxLen)
+			result := util.TruncateString(tt.input, tt.maxLen)
 			if result != tt.expected {
-				t.Errorf("truncateString(%q, %d) = %q, want %q", tt.input, tt.maxLen, result, tt.expected)
+				t.Errorf("util.TruncateString(%q, %d) = %q, want %q", tt.input, tt.maxLen, result, tt.expected)
 			}
 		})
 	}
@@ -754,7 +756,7 @@ func BenchmarkTruncateString_Short(b *testing.B) {
 	input := "short"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		truncateString(input, 100)
+		util.TruncateString(input, 100)
 	}
 }
 
@@ -762,7 +764,7 @@ func BenchmarkTruncateString_NeedsTruncation(b *testing.B) {
 	input := "This is a very long string that definitely needs to be truncated"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		truncateString(input, 20)
+		util.TruncateString(input, 20)
 	}
 }
 

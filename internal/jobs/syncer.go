@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	syncframework "github.com/nimbleflux/fluxbase/internal/sync"
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 type jobSyncItem struct {
@@ -120,16 +121,16 @@ func (s *jobSyncer) Create(ctx context.Context, item jobSyncItem, opts syncframe
 		OriginalCode:           &item.parsedCode,
 		IsBundled:              item.isBundled,
 		BundleError:            item.bundleError,
-		Enabled:                valueOr(item.Enabled, true),
+		Enabled:                util.ValueOr(item.Enabled, true),
 		Schedule:               item.Schedule,
-		TimeoutSeconds:         valueOr(item.TimeoutSeconds, valueOr(&item.annotations.TimeoutSeconds, 300)),
-		MemoryLimitMB:          valueOr(item.MemoryLimitMB, valueOr(&item.annotations.MemoryLimitMB, 256)),
-		MaxRetries:             valueOr(item.MaxRetries, item.annotations.MaxRetries),
-		ProgressTimeoutSeconds: valueOr(item.ProgressTimeoutSeconds, valueOr(&item.annotations.ProgressTimeoutSeconds, 60)),
-		AllowNet:               valueOr(item.AllowNet, true),
-		AllowEnv:               valueOr(item.AllowEnv, true),
-		AllowRead:              valueOr(item.AllowRead, false),
-		AllowWrite:             valueOr(item.AllowWrite, false),
+		TimeoutSeconds:         util.ValueOr(item.TimeoutSeconds, util.ValueOr(&item.annotations.TimeoutSeconds, 300)),
+		MemoryLimitMB:          util.ValueOr(item.MemoryLimitMB, util.ValueOr(&item.annotations.MemoryLimitMB, 256)),
+		MaxRetries:             util.ValueOr(item.MaxRetries, item.annotations.MaxRetries),
+		ProgressTimeoutSeconds: util.ValueOr(item.ProgressTimeoutSeconds, util.ValueOr(&item.annotations.ProgressTimeoutSeconds, 60)),
+		AllowNet:               util.ValueOr(item.AllowNet, true),
+		AllowEnv:               util.ValueOr(item.AllowEnv, true),
+		AllowRead:              util.ValueOr(item.AllowRead, false),
+		AllowWrite:             util.ValueOr(item.AllowWrite, false),
 		RequireRoles:           item.RequireRoles,
 		Version:                1,
 		CreatedBy:              s.createdBy,

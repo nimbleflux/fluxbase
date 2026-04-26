@@ -12,9 +12,9 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/nimbleflux/fluxbase/internal/database"
-
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // ServiceKeyHandler handles service key management requests
@@ -111,16 +111,10 @@ func (h *ServiceKeyHandler) checkDB(c fiber.Ctx) (*pgxpool.Pool, error) {
 	return h.db.Pool(), nil
 }
 
-// getTenantID extracts tenant_id from the request context
-func getTenantID(c fiber.Ctx) string {
-	tenantID, _ := c.Locals("tenant_id").(string)
-	return tenantID
-}
-
 // tenantFilterForServiceKey returns a WHERE clause fragment and args for tenant-scoped service key queries.
 // Returns ("", nil) when no tenant context is available.
 func tenantFilterForServiceKey(c fiber.Ctx, nextArgIdx int) (string, []interface{}) {
-	if tenantID := getTenantID(c); tenantID != "" {
+	if tenantID := middleware.GetTenantID(c); tenantID != "" {
 		return fmt.Sprintf(" AND tenant_id = $%d", nextArgIdx), []interface{}{uuid.MustParse(tenantID)}
 	}
 	return "", nil
@@ -143,7 +137,7 @@ func (h *ServiceKeyHandler) ListServiceKeys(c fiber.Ctx) error {
 	args := []interface{}{}
 	argIdx := 1
 
-	if tenantID := getTenantID(c); tenantID != "" {
+	if tenantID := middleware.GetTenantID(c); tenantID != "" {
 		query += fmt.Sprintf(" AND tenant_id = $%d", argIdx)
 		args = append(args, tenantID)
 		argIdx++
@@ -204,7 +198,7 @@ func (h *ServiceKeyHandler) GetServiceKey(c fiber.Ctx) error {
 	`
 	args := []interface{}{id}
 
-	if tenantID := getTenantID(c); tenantID != "" {
+	if tenantID := middleware.GetTenantID(c); tenantID != "" {
 		query += fmt.Sprintf(" AND tenant_id = $2")
 		args = append(args, uuid.MustParse(tenantID))
 	}
@@ -278,7 +272,7 @@ func (h *ServiceKeyHandler) CreateServiceKey(c fiber.Ctx) error {
 	// against platform.users — use typed nil to ensure pgx encodes as SQL NULL.
 	createdBy := (*uuid.UUID)(nil)
 	var createdByUUID *uuid.UUID
-	tenantID := getTenantID(c)
+	tenantID := middleware.GetTenantID(c)
 	tenantUUID := uuid.Nil
 	if tenantID != "" {
 		tenantUUID = uuid.MustParse(tenantID)
@@ -478,7 +472,7 @@ func (h *ServiceKeyHandler) RevokeServiceKey(c fiber.Ctx) error {
 
 	// revoked_by references platform.users(id)
 	var userID uuid.UUID
-	if userIDStr, ok := c.Locals("user_id").(string); ok {
+	if userIDStr := middleware.GetUserID(c); userIDStr != "" {
 		userID, _ = uuid.Parse(userIDStr)
 	}
 	reason := c.FormValue("reason", "")
@@ -605,7 +599,7 @@ func (h *ServiceKeyHandler) RotateServiceKey(c fiber.Ctx) error {
 	// Always pass nil for created_by to avoid FK violation (column is nullable).
 	var createdBy interface{}
 	var createdByUUID *uuid.UUID
-	tenantID := getTenantID(c)
+	tenantID := middleware.GetTenantID(c)
 	tenantUUID := uuid.Nil
 	if tenantID != "" {
 		tenantUUID = uuid.MustParse(tenantID)

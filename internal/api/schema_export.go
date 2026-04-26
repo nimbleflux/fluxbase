@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // SchemaExportHandler handles schema export operations for type generation
@@ -39,7 +40,7 @@ func (h *SchemaExportHandler) HandleExportTypeScript(c fiber.Ctx) error {
 	ctx := context.Background()
 
 	// Add auth context for audit logging
-	if userID, ok := GetUserID(c); ok {
+	if userID := middleware.GetUserID(c); userID != "" {
 		if userRole, ok := GetUserRole(c); ok {
 			ctx = database.ContextWithAuth(ctx, userID, userRole, userRole == "admin" || userRole == "service_role")
 		}

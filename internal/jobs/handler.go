@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/gofiber/fiber/v3/middleware/requestid"
-	"github.com/google/uuid"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
@@ -270,39 +268,6 @@ func (h *Handler) RegisterAdminRoutes(app *fiber.App) {
 	admin.Post("/queue/:id/retry", h.RetryJobAdmin)
 	admin.Post("/queue/:id/resubmit", h.ResubmitJobAdmin)
 	admin.Get("/queue/:id", h.GetJobAdmin) // Less specific route comes last
-}
-
-// Helper functions
-
-func valueOr[T any](ptr *T, defaultVal T) T {
-	if ptr != nil {
-		return *ptr
-	}
-	return defaultVal
-}
-
-func getRequestID(c fiber.Ctx) string {
-	requestID := requestid.FromContext(c)
-	if requestID != "" {
-		return requestID
-	}
-	return c.Get("X-Request-ID", "")
-}
-
-func toString(v interface{}) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	if uid, ok := v.(*uuid.UUID); ok {
-		if uid == nil {
-			return ""
-		}
-		return uid.String()
-	}
-	return fmt.Sprintf("%v", v)
 }
 
 // fiber:context-methods migrated

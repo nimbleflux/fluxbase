@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	syncframework "github.com/nimbleflux/fluxbase/internal/sync"
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 type functionSyncItem struct {
@@ -102,13 +103,13 @@ func (s *functionSyncer) Create(ctx context.Context, item functionSyncItem, opts
 		OriginalCode:         &br.originalCode,
 		IsBundled:            br.isBundled,
 		BundleError:          br.bundleError,
-		Enabled:              valueOr(item.enabled, true),
-		TimeoutSeconds:       valueOr(item.timeoutSeconds, 30),
-		MemoryLimitMB:        valueOr(item.memoryLimitMB, 128),
-		AllowNet:             valueOr(item.allowNet, true),
-		AllowEnv:             valueOr(item.allowEnv, true),
-		AllowRead:            valueOr(item.allowRead, false),
-		AllowWrite:           valueOr(item.allowWrite, false),
+		Enabled:              util.ValueOr(item.enabled, true),
+		TimeoutSeconds:       util.ValueOr(item.timeoutSeconds, 30),
+		MemoryLimitMB:        util.ValueOr(item.memoryLimitMB, 128),
+		AllowNet:             util.ValueOr(item.allowNet, true),
+		AllowEnv:             util.ValueOr(item.allowEnv, true),
+		AllowRead:            util.ValueOr(item.allowRead, false),
+		AllowWrite:           util.ValueOr(item.allowWrite, false),
 		AllowUnauthenticated: allowUnauthenticated,
 		IsPublic:             isPublic,
 		CronSchedule:         item.cronSchedule,

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -12,9 +11,6 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
-
-// validPolicyNameRegex ensures policy names are safe PostgreSQL identifiers
-var validPolicyNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // Policy represents a PostgreSQL RLS policy
 type Policy struct {
@@ -353,7 +349,7 @@ func (s *Server) CreatePolicy(c fiber.Ctx) error {
 	}
 
 	// Validate policy name format
-	if !validPolicyNameRegex.MatchString(req.Name) {
+	if !validIdentifierRegex.MatchString(req.Name) {
 		return SendBadRequest(c, "Invalid policy name: must start with a letter or underscore, followed by letters, digits, or underscores", "INVALID_NAME")
 	}
 

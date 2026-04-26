@@ -207,7 +207,7 @@ func (h *MonitoringHandler) getStorageStats(c fiber.Ctx) (*StorageStats, error) 
 
 	// Get user role for RLS
 	role, _ := c.Locals("user_role").(string)
-	userID, _ := c.Locals("user_id").(string)
+	userID := middleware.GetUserID(c)
 
 	// Determine DB role for RLS
 	dbRole := "authenticated"

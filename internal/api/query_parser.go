@@ -3,7 +3,6 @@ package api
 import (
 	"fmt"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -12,10 +11,6 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/query"
 )
-
-// validIdentifierRegex validates SQL identifiers (column names, table names, etc.)
-// Allows alphanumeric characters, underscores, and must start with a letter or underscore
-var validIdentifierRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // isValidIdentifier checks if a string is a valid SQL identifier
 func isValidIdentifier(s string) bool {

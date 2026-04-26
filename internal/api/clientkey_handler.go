@@ -8,6 +8,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 type ClientKeyHandler struct {
@@ -56,10 +57,9 @@ func (h *ClientKeyHandler) CreateClientKey(c fiber.Ctx) error {
 		return err
 	}
 
-	userID, ok := c.Locals("user_id").(uuid.UUID)
 	var userIDPtr *uuid.UUID
-	if ok {
-		userIDPtr = &userID
+	if uid, err := uuid.Parse(middleware.GetUserID(c)); err == nil {
+		userIDPtr = &uid
 	}
 
 	clientKey, err := h.clientKeyService.GenerateClientKey(
@@ -79,7 +79,7 @@ func (h *ClientKeyHandler) CreateClientKey(c fiber.Ctx) error {
 }
 
 func (h *ClientKeyHandler) ListClientKeys(c fiber.Ctx) error {
-	currentUserID, _ := c.Locals("user_id").(string)
+	currentUserID := middleware.GetUserID(c)
 	role, _ := c.Locals("user_role").(string)
 	isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
@@ -121,7 +121,7 @@ func (h *ClientKeyHandler) GetClientKey(c fiber.Ctx) error {
 		return SendInvalidID(c, "client key ID")
 	}
 
-	currentUserID, _ := c.Locals("user_id").(string)
+	currentUserID := middleware.GetUserID(c)
 	role, _ := c.Locals("user_role").(string)
 	isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 

@@ -22,17 +22,10 @@ func (h *Handler) ListUserConversations(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 
 	// Get authenticated user ID from context
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Authentication required",
-		})
-	}
-
-	userIDStr, ok := userID.(string)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid user ID",
 		})
 	}
 
@@ -85,17 +78,10 @@ func (h *Handler) GetUserConversation(c fiber.Ctx) error {
 	conversationID := c.Params("id")
 
 	// Get authenticated user ID from context
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Authentication required",
-		})
-	}
-
-	userIDStr, ok := userID.(string)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid user ID",
 		})
 	}
 
@@ -123,17 +109,10 @@ func (h *Handler) DeleteUserConversation(c fiber.Ctx) error {
 	conversationID := c.Params("id")
 
 	// Get authenticated user ID from context
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Authentication required",
-		})
-	}
-
-	userIDStr, ok := userID.(string)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid user ID",
 		})
 	}
 
@@ -163,17 +142,10 @@ func (h *Handler) UpdateUserConversation(c fiber.Ctx) error {
 	conversationID := c.Params("id")
 
 	// Get authenticated user ID from context
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Authentication required",
-		})
-	}
-
-	userIDStr, ok := userID.(string)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid user ID",
 		})
 	}
 

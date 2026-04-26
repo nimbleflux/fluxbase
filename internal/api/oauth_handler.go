@@ -752,13 +752,12 @@ func (h *OAuthHandler) Logout(c fiber.Ctx) error {
 	providerName := c.Params("provider")
 
 	// Get user ID from JWT
-	userID := c.Locals("user_id")
-	if userID == nil || userID.(string) == "" {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Authentication required",
 		})
 	}
-	userIDStr := userID.(string)
 
 	// Parse optional redirect URL from request body
 	var reqBody struct {
@@ -990,13 +989,12 @@ func (h *OAuthHandler) GetProviderToken(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 	providerName := c.Params("provider")
 
-	userID := c.Locals("user_id")
-	if userID == nil || userID.(string) == "" {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Authentication required",
 		})
 	}
-	userIDStr := userID.(string)
 
 	if err := h.requireDB(c); err != nil {
 		return err

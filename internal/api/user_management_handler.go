@@ -8,6 +8,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 type UserManagementHandler struct {
@@ -39,7 +40,7 @@ func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
 	offset := fiber.Query[int](c, "offset", 0)
 	userType := c.Query("type", "app")
 
-	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantID := middleware.GetTenantID(c)
 	tenantSource, _ := c.Locals("tenant_source").(string)
 	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
 
@@ -138,7 +139,7 @@ func (h *UserManagementHandler) InviteUser(c fiber.Ctx) error {
 	userType := c.Query("type", "app")
 
 	if req.TenantID == "" {
-		tenantID, _ := c.Locals("tenant_id").(string)
+		tenantID := middleware.GetTenantID(c)
 		req.TenantID = tenantID
 	}
 

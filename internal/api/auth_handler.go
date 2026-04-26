@@ -543,8 +543,8 @@ func (h *AuthHandler) GetUser(c fiber.Ctx) error {
 // PATCH /auth/user
 func (h *AuthHandler) UpdateUser(c fiber.Ctx) error {
 	// Get user ID from context (set by auth middleware)
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return SendMissingAuth(c)
 	}
 
@@ -553,10 +553,9 @@ func (h *AuthHandler) UpdateUser(c fiber.Ctx) error {
 		return err
 	}
 
-	// Update user
-	user, err := h.authService.UpdateUser(middleware.CtxWithTenant(c), userID.(string), req)
+	user, err := h.authService.UpdateUser(middleware.CtxWithTenant(c), userID, req)
 	if err != nil {
-		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to update user")
+		log.Error().Err(err).Str("user_id", userID).Msg("Failed to update user")
 		return SendBadRequest(c, "Failed to update user", ErrCodeInvalidInput)
 	}
 
@@ -849,8 +848,8 @@ func (h *AuthHandler) GetCSRFToken(c fiber.Ctx) error {
 
 // StartImpersonation starts an admin impersonation session
 func (h *AuthHandler) StartImpersonation(c fiber.Ctx) error {
-	adminUserID := c.Locals("user_id")
-	if adminUserID == nil {
+	adminUserID := middleware.GetUserID(c)
+	if adminUserID == "" {
 		return SendMissingAuth(c)
 	}
 
@@ -864,7 +863,7 @@ func (h *AuthHandler) StartImpersonation(c fiber.Ctx) error {
 
 	tenantID := c.Get("X-FB-Tenant")
 
-	resp, err := h.authService.StartImpersonation(middleware.CtxWithTenant(c), adminUserID.(string), tenantID, req)
+	resp, err := h.authService.StartImpersonation(middleware.CtxWithTenant(c), adminUserID, tenantID, req)
 	if err != nil {
 		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
 			return SendForbidden(c, "Insufficient permissions", ErrCodeAccessDenied)
@@ -881,13 +880,12 @@ func (h *AuthHandler) StartImpersonation(c fiber.Ctx) error {
 
 // StopImpersonation stops the active impersonation session
 func (h *AuthHandler) StopImpersonation(c fiber.Ctx) error {
-	// Get admin user ID from context
-	adminUserID := c.Locals("user_id")
-	if adminUserID == nil {
+	adminUserID := middleware.GetUserID(c)
+	if adminUserID == "" {
 		return SendMissingAuth(c)
 	}
 
-	err := h.authService.StopImpersonation(middleware.CtxWithTenant(c), adminUserID.(string))
+	err := h.authService.StopImpersonation(middleware.CtxWithTenant(c), adminUserID)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoActiveImpersonation) {
 			return SendNotFound(c, "No active impersonation session found")
@@ -902,13 +900,12 @@ func (h *AuthHandler) StopImpersonation(c fiber.Ctx) error {
 
 // GetActiveImpersonation gets the active impersonation session
 func (h *AuthHandler) GetActiveImpersonation(c fiber.Ctx) error {
-	// Get admin user ID from context
-	adminUserID := c.Locals("user_id")
-	if adminUserID == nil {
+	adminUserID := middleware.GetUserID(c)
+	if adminUserID == "" {
 		return SendMissingAuth(c)
 	}
 
-	session, err := h.authService.GetActiveImpersonation(middleware.CtxWithTenant(c), adminUserID.(string))
+	session, err := h.authService.GetActiveImpersonation(middleware.CtxWithTenant(c), adminUserID)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoActiveImpersonation) {
 			return SendNotFound(c, "No active impersonation session found")
@@ -921,16 +918,15 @@ func (h *AuthHandler) GetActiveImpersonation(c fiber.Ctx) error {
 
 // ListImpersonationSessions lists impersonation sessions for audit
 func (h *AuthHandler) ListImpersonationSessions(c fiber.Ctx) error {
-	// Get admin user ID from context
-	adminUserID := c.Locals("user_id")
-	if adminUserID == nil {
+	adminUserID := middleware.GetUserID(c)
+	if adminUserID == "" {
 		return SendMissingAuth(c)
 	}
 
 	limit := fiber.Query[int](c, "limit", 50)
 	offset := fiber.Query[int](c, "offset", 0)
 
-	sessions, err := h.authService.ListImpersonationSessions(middleware.CtxWithTenant(c), adminUserID.(string), limit, offset)
+	sessions, err := h.authService.ListImpersonationSessions(middleware.CtxWithTenant(c), adminUserID, limit, offset)
 	if err != nil {
 		return SendInternalError(c, "Failed to list impersonation sessions")
 	}
@@ -940,8 +936,8 @@ func (h *AuthHandler) ListImpersonationSessions(c fiber.Ctx) error {
 
 // StartAnonImpersonation starts impersonation as anonymous user
 func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
-	adminUserID := c.Locals("user_id")
-	if adminUserID == nil {
+	adminUserID := middleware.GetUserID(c)
+	if adminUserID == "" {
 		return SendMissingAuth(c)
 	}
 
@@ -960,7 +956,7 @@ func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
 	userAgent := c.Get("User-Agent")
 	tenantID := c.Get("X-FB-Tenant")
 
-	resp, err := h.authService.StartAnonImpersonation(middleware.CtxWithTenant(c), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
+	resp, err := h.authService.StartAnonImpersonation(middleware.CtxWithTenant(c), adminUserID, tenantID, req.Reason, ipAddress, userAgent)
 	if err != nil {
 		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
 			return SendForbidden(c, "Insufficient permissions", ErrCodeAccessDenied)
@@ -972,8 +968,8 @@ func (h *AuthHandler) StartAnonImpersonation(c fiber.Ctx) error {
 }
 
 func (h *AuthHandler) StartServiceImpersonation(c fiber.Ctx) error {
-	adminUserID := c.Locals("user_id")
-	if adminUserID == nil {
+	adminUserID := middleware.GetUserID(c)
+	if adminUserID == "" {
 		return SendMissingAuth(c)
 	}
 
@@ -992,7 +988,7 @@ func (h *AuthHandler) StartServiceImpersonation(c fiber.Ctx) error {
 	userAgent := c.Get("User-Agent")
 	tenantID := c.Get("X-FB-Tenant")
 
-	resp, err := h.authService.StartServiceImpersonation(middleware.CtxWithTenant(c), adminUserID.(string), tenantID, req.Reason, ipAddress, userAgent)
+	resp, err := h.authService.StartServiceImpersonation(middleware.CtxWithTenant(c), adminUserID, tenantID, req.Reason, ipAddress, userAgent)
 	if err != nil {
 		if errors.Is(err, auth.ErrNotAdmin) || errors.Is(err, auth.ErrNotTenantAdmin) {
 			return SendForbidden(c, "Insufficient permissions", ErrCodeAccessDenied)
@@ -1006,22 +1002,19 @@ func (h *AuthHandler) StartServiceImpersonation(c fiber.Ctx) error {
 // SetupTOTP initiates 2FA setup by generating a TOTP secret
 // POST /auth/2fa/setup
 func (h *AuthHandler) SetupTOTP(c fiber.Ctx) error {
-	// Get user ID from JWT token
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return SendMissingAuth(c)
 	}
 
-	// Parse optional issuer from request body
 	var req struct {
-		Issuer string `json:"issuer"` // Optional: custom issuer name for the QR code
+		Issuer string `json:"issuer"`
 	}
-	// Ignore parse errors - issuer is optional and will default to config value
 	_ = c.Bind().Body(&req)
 
-	response, err := h.authService.SetupTOTP(middleware.CtxWithTenant(c), userID.(string), req.Issuer)
+	response, err := h.authService.SetupTOTP(middleware.CtxWithTenant(c), userID, req.Issuer)
 	if err != nil {
-		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to setup TOTP")
+		log.Error().Err(err).Str("user_id", userID).Msg("Failed to setup TOTP")
 		return SendInternalError(c, "Failed to setup 2FA")
 	}
 
@@ -1031,9 +1024,8 @@ func (h *AuthHandler) SetupTOTP(c fiber.Ctx) error {
 // EnableTOTP enables 2FA after verifying the TOTP code
 // POST /auth/2fa/enable
 func (h *AuthHandler) EnableTOTP(c fiber.Ctx) error {
-	// Get user ID from JWT token
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return SendMissingAuth(c)
 	}
 
@@ -1048,9 +1040,9 @@ func (h *AuthHandler) EnableTOTP(c fiber.Ctx) error {
 		return SendMissingField(c, "Code")
 	}
 
-	backupCodes, err := h.authService.EnableTOTP(middleware.CtxWithTenant(c), userID.(string), req.Code)
+	backupCodes, err := h.authService.EnableTOTP(middleware.CtxWithTenant(c), userID, req.Code)
 	if err != nil {
-		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to enable TOTP")
+		log.Error().Err(err).Str("user_id", userID).Msg("Failed to enable TOTP")
 		return SendBadRequest(c, "Invalid 2FA code", ErrCodeInvalidInput)
 	}
 
@@ -1096,9 +1088,8 @@ func (h *AuthHandler) VerifyTOTP(c fiber.Ctx) error {
 // DisableTOTP disables 2FA for a user
 // POST /auth/2fa/disable
 func (h *AuthHandler) DisableTOTP(c fiber.Ctx) error {
-	// Get user ID from JWT token
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return SendMissingAuth(c)
 	}
 
@@ -1113,9 +1104,9 @@ func (h *AuthHandler) DisableTOTP(c fiber.Ctx) error {
 		return SendMissingField(c, "Password")
 	}
 
-	err := h.authService.DisableTOTP(middleware.CtxWithTenant(c), userID.(string), req.Password)
+	err := h.authService.DisableTOTP(middleware.CtxWithTenant(c), userID, req.Password)
 	if err != nil {
-		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to disable TOTP")
+		log.Error().Err(err).Str("user_id", userID).Msg("Failed to disable TOTP")
 		return SendBadRequest(c, "Failed to disable 2FA", ErrCodeInvalidCredentials)
 	}
 
@@ -1128,15 +1119,14 @@ func (h *AuthHandler) DisableTOTP(c fiber.Ctx) error {
 // GetTOTPStatus checks if 2FA is enabled for a user
 // GET /auth/2fa/status
 func (h *AuthHandler) GetTOTPStatus(c fiber.Ctx) error {
-	// Get user ID from JWT token
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return SendMissingAuth(c)
 	}
 
-	enabled, err := h.authService.IsTOTPEnabled(middleware.CtxWithTenant(c), userID.(string))
+	enabled, err := h.authService.IsTOTPEnabled(middleware.CtxWithTenant(c), userID)
 	if err != nil {
-		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to check TOTP status")
+		log.Error().Err(err).Str("user_id", userID).Msg("Failed to check TOTP status")
 		return SendInternalError(c, "Failed to check 2FA status")
 	}
 
@@ -1301,14 +1291,14 @@ func (h *AuthHandler) ResendOTP(c fiber.Ctx) error {
 // GetUserIdentities gets all OAuth identities linked to a user
 // GET /auth/user/identities
 func (h *AuthHandler) GetUserIdentities(c fiber.Ctx) error {
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return SendMissingAuth(c)
 	}
 
-	identities, err := h.authService.GetUserIdentities(middleware.CtxWithTenant(c), userID.(string))
+	identities, err := h.authService.GetUserIdentities(middleware.CtxWithTenant(c), userID)
 	if err != nil {
-		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to get user identities")
+		log.Error().Err(err).Str("user_id", userID).Msg("Failed to get user identities")
 		return SendInternalError(c, "Failed to retrieve identities")
 	}
 
@@ -1320,8 +1310,8 @@ func (h *AuthHandler) GetUserIdentities(c fiber.Ctx) error {
 // LinkIdentity initiates OAuth flow to link a provider
 // POST /auth/user/identities
 func (h *AuthHandler) LinkIdentity(c fiber.Ctx) error {
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return SendMissingAuth(c)
 	}
 
@@ -1337,7 +1327,7 @@ func (h *AuthHandler) LinkIdentity(c fiber.Ctx) error {
 		return SendMissingField(c, "Provider")
 	}
 
-	authURL, state, err := h.authService.LinkIdentity(middleware.CtxWithTenant(c), userID.(string), req.Provider)
+	authURL, state, err := h.authService.LinkIdentity(middleware.CtxWithTenant(c), userID, req.Provider)
 	if err != nil {
 		log.Error().Err(err).Str("provider", req.Provider).Msg("Failed to initiate identity linking")
 		return SendBadRequest(c, "Failed to link identity", ErrCodeInvalidInput)
@@ -1353,8 +1343,8 @@ func (h *AuthHandler) LinkIdentity(c fiber.Ctx) error {
 // UnlinkIdentity removes an OAuth identity from a user
 // DELETE /auth/user/identities/:id
 func (h *AuthHandler) UnlinkIdentity(c fiber.Ctx) error {
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return SendMissingAuth(c)
 	}
 
@@ -1363,7 +1353,7 @@ func (h *AuthHandler) UnlinkIdentity(c fiber.Ctx) error {
 		return SendMissingField(c, "Identity ID")
 	}
 
-	err := h.authService.UnlinkIdentity(middleware.CtxWithTenant(c), userID.(string), identityID)
+	err := h.authService.UnlinkIdentity(middleware.CtxWithTenant(c), userID, identityID)
 	if err != nil {
 		log.Error().Err(err).Str("identity_id", identityID).Msg("Failed to unlink identity")
 		return SendBadRequest(c, "Failed to unlink identity", ErrCodeInvalidInput)
@@ -1377,14 +1367,14 @@ func (h *AuthHandler) UnlinkIdentity(c fiber.Ctx) error {
 // Reauthenticate generates a security nonce
 // POST /auth/reauthenticate
 func (h *AuthHandler) Reauthenticate(c fiber.Ctx) error {
-	userID := c.Locals("user_id")
-	if userID == nil {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return SendMissingAuth(c)
 	}
 
-	nonce, err := h.authService.Reauthenticate(middleware.CtxWithTenant(c), userID.(string))
+	nonce, err := h.authService.Reauthenticate(middleware.CtxWithTenant(c), userID)
 	if err != nil {
-		log.Error().Err(err).Str("user_id", userID.(string)).Msg("Failed to reauthenticate")
+		log.Error().Err(err).Str("user_id", userID).Msg("Failed to reauthenticate")
 		return SendInternalError(c, "Failed to generate security nonce")
 	}
 

@@ -539,8 +539,8 @@ func (h *SAMLHandler) InitiateSAMLLogout(c fiber.Ctx) error {
 	}
 
 	// Get the current user from the JWT token
-	userID, ok := c.Locals("user_id").(string)
-	if !ok || userID == "" {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "authentication required",
 		})

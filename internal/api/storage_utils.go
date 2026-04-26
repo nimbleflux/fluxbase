@@ -10,12 +10,14 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // getTenantIDArg returns the tenant_id as an interface{} for SQL parameters.
 // Returns nil if no tenant context is set (which maps to SQL NULL).
 func getTenantIDArg(c fiber.Ctx) interface{} {
-	if id, ok := c.Locals("tenant_id").(string); ok && id != "" {
+	if id := middleware.GetTenantID(c); id != "" {
 		return id
 	}
 	return nil
@@ -69,21 +71,17 @@ func parseMetadata(c fiber.Ctx) map[string]string {
 
 // getUserID gets the user ID from Fiber context
 func getUserID(c fiber.Ctx) string {
-	if userID := c.Locals("user_id"); userID != nil {
-		if id, ok := userID.(string); ok {
-			return id
-		}
+	if id := middleware.GetUserID(c); id != "" {
+		return id
 	}
 	return "anonymous"
 }
 
 // setRLSContext sets PostgreSQL session variables for RLS enforcement in a transaction
 func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.Ctx) error {
-	// Get user ID and role from context
-	userID := c.Locals("user_id")
+	userIDStr := middleware.GetUserID(c)
 	role := c.Locals("user_role")
 
-	// Determine the role
 	var roleStr string
 	if role != nil {
 		if r, ok := role.(string); ok {
@@ -91,23 +89,14 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 		}
 	}
 
-	// Default role based on authentication state
 	if roleStr == "" {
-		if userID != nil {
+		if userIDStr != "" {
 			roleStr = "authenticated"
 		} else {
 			roleStr = "anon"
 		}
 	}
 
-	// Convert userID to string
-	var userIDStr string
-	if userID != nil {
-		userIDStr = fmt.Sprintf("%v", userID)
-	}
-
-	// Set request.jwt.claims with user ID and role (Supabase/Fluxbase format)
-	// This is read by auth.current_user_id() and auth.current_user_role() functions
 	var jwtClaims string
 	if userIDStr != "" {
 		jwtClaims = fmt.Sprintf(`{"sub":"%s","role":"%s"}`, userIDStr, roleStr)
@@ -120,8 +109,8 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 	}
 
 	// Set tenant context for multi-tenancy
-	tenantID := c.Locals("tenant_id")
-	if tid, ok := tenantID.(string); ok && tid != "" {
+	tid := middleware.GetTenantID(c)
+	if tid != "" {
 		if _, err := tx.Exec(ctx, "SELECT set_config('app.current_tenant_id', $1, true)", tid); err != nil {
 			return fmt.Errorf("failed to set tenant context: %w", err)
 		}
@@ -133,7 +122,7 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 	// all RLS policies are bypassed regardless of FORCE ROW LEVEL SECURITY.
 	// Exception: instance_admin and service_role keep BYPASSRLS for full admin access.
 	if roleStr == "instance_admin" || roleStr == "service_role" {
-		if tid, ok := tenantID.(string); ok && tid != "" {
+		if tid != "" {
 			if _, err := tx.Exec(ctx, "SET LOCAL ROLE tenant_service"); err != nil {
 				return fmt.Errorf("failed to SET LOCAL ROLE tenant_service: %w", err)
 			}
@@ -167,7 +156,7 @@ func (h *StorageHandler) setRLSContext(ctx context.Context, tx pgx.Tx, c fiber.C
 // Runs as BYPASSRLS user (before SET LOCAL ROLE), so RLS does not apply.
 func (h *StorageHandler) resolveTenantForObject(ctx context.Context, tx pgx.Tx, c fiber.Ctx, bucket, key string) {
 	// Skip if request already has tenant context (authenticated with tenant header/JWT)
-	if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
+	if tid := middleware.GetTenantID(c); tid != "" {
 		return
 	}
 
