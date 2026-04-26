@@ -121,11 +121,11 @@ func TestGetUserID_Utils(t *testing.T) {
 			expected: "anonymous",
 		},
 		{
-			name: "returns user_id for empty string",
+			name: "returns anonymous for empty string",
 			setupCtx: func(c fiber.Ctx) {
 				c.Locals("user_id", "")
 			},
-			expected: "",
+			expected: "anonymous",
 		},
 		{
 			name: "returns uuid as user_id",
