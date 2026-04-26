@@ -58,9 +58,6 @@ func (h *ClientKeyHandler) CreateClientKey(c fiber.Ctx) error {
 	}
 
 	var userIDPtr *uuid.UUID
-	if uid, err := uuid.Parse(middleware.GetUserID(c)); err == nil {
-		userIDPtr = &uid
-	}
 
 	clientKey, err := h.clientKeyService.GenerateClientKey(
 		c.RequestCtx(),
