@@ -13,19 +13,19 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/crypto"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // OAuthHandler handles OAuth authentication flow
 type OAuthHandler struct {
-	db              *pgxpool.Pool
+	db              *database.Connection
 	authSvc         *auth.Service
 	jwtManager      *auth.JWTManager
 	stateStore      *auth.StateStore
@@ -38,7 +38,7 @@ type OAuthHandler struct {
 }
 
 // NewOAuthHandler creates a new OAuth handler
-func NewOAuthHandler(db *pgxpool.Pool, authSvc *auth.Service, jwtManager *auth.JWTManager, baseURL, encryptionKey string, configProviders []config.OAuthProviderConfig) *OAuthHandler {
+func NewOAuthHandler(db *database.Connection, authSvc *auth.Service, jwtManager *auth.JWTManager, baseURL, encryptionKey string, configProviders []config.OAuthProviderConfig) *OAuthHandler {
 	stateStore := auth.NewStateStore()
 
 	// SECURITY: Validate encryption key for OAuth token storage
@@ -56,7 +56,7 @@ func NewOAuthHandler(db *pgxpool.Pool, authSvc *auth.Service, jwtManager *auth.J
 	}
 
 	// Create logout service
-	logoutService := auth.NewOAuthLogoutService(db, encryptionKey)
+	logoutService := auth.NewOAuthLogoutService(db.Pool(), encryptionKey)
 
 	// Create stop channel for cleanup goroutines
 	stopCleanup := make(chan struct{})
@@ -623,7 +623,7 @@ func (h *OAuthHandler) createOrLinkOAuthUser(
 	userInfo map[string]interface{},
 	token *oauth2.Token,
 ) (*auth.User, bool, error) {
-	tx, err := h.db.Begin(ctx)
+	tx, err := h.db.Pool().Begin(ctx)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to begin transaction: %w", err)
 	}

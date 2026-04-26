@@ -15,15 +15,16 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 type SQLHandler struct {
-	db          *pgxpool.Pool
+	db          *database.Connection
 	authService *auth.Service
 }
 
-func NewSQLHandler(db *pgxpool.Pool, authService *auth.Service) *SQLHandler {
+func NewSQLHandler(db *database.Connection, authService *auth.Service) *SQLHandler {
 	return &SQLHandler{
 		db:          db,
 		authService: authService,
@@ -153,7 +154,7 @@ func (h *SQLHandler) getPoolForQuery(c fiber.Ctx, query string) *pgxpool.Pool {
 	}
 
 	log.Debug().Msg("Using main pool for SQL execution")
-	return h.db
+	return h.db.Pool()
 }
 
 func (h *SQLHandler) executeWithRLSContext(c fiber.Ctx, pool *pgxpool.Pool, statements []string, claims *auth.TokenClaims, tenantID string, auditUserID string) error {

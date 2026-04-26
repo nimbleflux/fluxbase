@@ -8,10 +8,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
@@ -23,7 +23,7 @@ const (
 
 // AuthHandler handles authentication HTTP requests
 type AuthHandler struct {
-	db                  *pgxpool.Pool
+	db                  *database.Connection
 	authService         *auth.Service
 	captchaService      *auth.CaptchaService
 	captchaTrustService *auth.CaptchaTrustService
@@ -33,7 +33,7 @@ type AuthHandler struct {
 }
 
 // NewAuthHandler creates a new authentication handler
-func NewAuthHandler(db *pgxpool.Pool, authService *auth.Service, captchaService *auth.CaptchaService, baseURL string) *AuthHandler {
+func NewAuthHandler(db *database.Connection, authService *auth.Service, captchaService *auth.CaptchaService, baseURL string) *AuthHandler {
 	return &AuthHandler{
 		db:             db,
 		authService:    authService,

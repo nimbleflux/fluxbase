@@ -137,7 +137,7 @@ func (s *Server) initAuth() {
 	}
 	s.captchaService = captchaService
 
-	authHandler := NewAuthHandler(db.Pool(), authService, captchaService, cfg.GetPublicBaseURL())
+	authHandler := NewAuthHandler(db, authService, captchaService, cfg.GetPublicBaseURL())
 
 	dashboardJWTManager, err := auth.NewJWTManager(cfg.Auth.JWTSecret, 24*time.Hour, 168*time.Hour)
 	if err != nil {
@@ -162,7 +162,7 @@ func (s *Server) initAuth() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create JWT manager")
 	}
-	oauthHandler := NewOAuthHandler(db.Pool(), authService, jwtManager, cfg.GetPublicBaseURL(), cfg.EncryptionKey, cfg.Auth.OAuthProviders)
+	oauthHandler := NewOAuthHandler(db, authService, jwtManager, cfg.GetPublicBaseURL(), cfg.EncryptionKey, cfg.Auth.OAuthProviders)
 
 	samlService, samlErr := auth.NewSAMLService(db, cfg.GetPublicBaseURL(), cfg.Auth.SAMLProviders)
 	if samlErr != nil {
@@ -189,7 +189,7 @@ func (s *Server) initAuth() {
 		log.Error().Err(err).Msg("Failed to encrypt existing OAuth provider secrets")
 	}
 
-	s.sqlHandler = NewSQLHandler(db.Pool(), authService)
+	s.sqlHandler = NewSQLHandler(db, authService)
 
 	s.Auth.Handler = authHandler
 	s.Auth.AdminHandler = adminAuthHandler
@@ -299,7 +299,7 @@ func (s *Server) initTenancy() {
 	cfg := s.config
 	db := s.db
 
-	s.Tenancy.ServiceKey = NewServiceKeyHandler(db.Pool())
+	s.Tenancy.ServiceKey = NewServiceKeyHandler(db)
 
 	var tenantManager *tenantdb.Manager
 	var tenantStorage *tenantdb.Storage

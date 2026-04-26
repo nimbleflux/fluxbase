@@ -84,6 +84,10 @@ func (m *MockEmailService) IsConfigured() bool {
 	return m.configured
 }
 
+func (m *MockEmailService) SendInvitationEmail(ctx context.Context, to, inviterName, inviteLink string) error {
+	return m.sendError
+}
+
 func TestNewDefaultOTPSender(t *testing.T) {
 	mockEmail := &MockEmailService{configured: true}
 

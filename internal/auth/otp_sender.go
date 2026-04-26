@@ -5,25 +5,15 @@ import (
 	"fmt"
 )
 
-// RealEmailService defines the interface for the actual email service
-// This matches the email.Service interface from internal/email
-type RealEmailService interface {
-	Send(ctx context.Context, to, subject, body string) error
-	SendMagicLink(ctx context.Context, to, token, link string) error
-	SendPasswordReset(ctx context.Context, to, token, link string) error
-	SendVerificationEmail(ctx context.Context, to, token, link string) error
-	IsConfigured() bool
-}
-
 // DefaultOTPSender implements OTPSender using email service
 type DefaultOTPSender struct {
-	emailService RealEmailService
+	emailService EmailService
 	fromAddress  string
 	appName      string
 }
 
 // NewDefaultOTPSender creates a new OTP sender
-func NewDefaultOTPSender(emailService RealEmailService, fromAddress, appName string) *DefaultOTPSender {
+func NewDefaultOTPSender(emailService EmailService, fromAddress, appName string) *DefaultOTPSender {
 	if appName == "" {
 		appName = "Fluxbase"
 	}

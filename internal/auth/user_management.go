@@ -42,7 +42,7 @@ type UserManagementService struct {
 	userRepo       *UserRepository
 	sessionRepo    *SessionRepository
 	passwordHasher *PasswordHasher
-	emailService   EmailSender
+	emailService   EmailService
 	baseURL        string
 }
 
@@ -51,7 +51,7 @@ func NewUserManagementService(
 	userRepo *UserRepository,
 	sessionRepo *SessionRepository,
 	passwordHasher *PasswordHasher,
-	emailService EmailSender,
+	emailService EmailService,
 	baseURL string,
 ) *UserManagementService {
 	return &UserManagementService{

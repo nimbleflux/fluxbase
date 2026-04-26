@@ -225,23 +225,16 @@ func GenerateMagicLinkToken() (string, error) {
 type MagicLinkService struct {
 	repo         *MagicLinkRepository
 	userRepo     *UserRepository
-	emailSender  EmailSender
+	emailSender  EmailService
 	linkDuration time.Duration
 	baseURL      string
-}
-
-// EmailSender defines the interface for sending emails
-type EmailSender interface {
-	SendMagicLink(ctx context.Context, to, token, link string) error
-	SendPasswordReset(ctx context.Context, to, token, link string) error
-	SendInvitationEmail(ctx context.Context, to, inviterName, inviteLink string) error
 }
 
 // NewMagicLinkService creates a new magic link service
 func NewMagicLinkService(
 	repo *MagicLinkRepository,
 	userRepo *UserRepository,
-	emailSender EmailSender,
+	emailSender EmailService,
 	linkDuration time.Duration,
 	baseURL string,
 ) *MagicLinkService {

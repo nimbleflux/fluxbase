@@ -12,16 +12,18 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/nimbleflux/fluxbase/internal/database"
+
 	"github.com/nimbleflux/fluxbase/internal/auth"
 )
 
 // ServiceKeyHandler handles service key management requests
 type ServiceKeyHandler struct {
-	db *pgxpool.Pool
+	db *database.Connection
 }
 
 // NewServiceKeyHandler creates a new service key handler
-func NewServiceKeyHandler(db *pgxpool.Pool) *ServiceKeyHandler {
+func NewServiceKeyHandler(db *database.Connection) *ServiceKeyHandler {
 	return &ServiceKeyHandler{
 		db: db,
 	}
@@ -106,7 +108,7 @@ func (h *ServiceKeyHandler) checkDB(c fiber.Ctx) (*pgxpool.Pool, error) {
 	if h.db == nil {
 		return nil, errDBNotInitialized
 	}
-	return h.db, nil
+	return h.db.Pool(), nil
 }
 
 // getTenantID extracts tenant_id from the request context

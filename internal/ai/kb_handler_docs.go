@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 )
 
@@ -127,7 +128,7 @@ func (h *KnowledgeBaseHandler) AddDocument(c fiber.Ctx) error {
 
 	// Auto-set user_id in metadata for user isolation
 	metadata := req.Metadata
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		if metadata == nil {
 			metadata = make(map[string]string)
 		}
@@ -309,7 +310,7 @@ func (h *KnowledgeBaseHandler) UploadDocument(c fiber.Ctx) error {
 
 	// Auto-set user_id in metadata for user isolation
 	var metadata map[string]string
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		metadata = map[string]string{"user_id": uid}
 	}
 
@@ -398,10 +399,8 @@ func (h *KnowledgeBaseHandler) DeleteDocumentsByFilter(c fiber.Ctx) error {
 
 	// Get user ID from context (for user isolation)
 	var userID *string
-	if uid := c.Locals("user_id"); uid != nil {
-		if uidStr, ok := uid.(string); ok && uidStr != "" {
-			userID = &uidStr
-		}
+	if uid := middleware.GetUserID(c); uid != "" {
+		userID = &uid
 	}
 
 	// Build the filter

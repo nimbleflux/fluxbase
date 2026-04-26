@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 func TestSplitSQLStatements(t *testing.T) {
@@ -310,8 +312,12 @@ func TestFormatUUID(t *testing.T) {
 	})
 }
 
+func newTestSQLHandler(pool *pgxpool.Pool) *SQLHandler {
+	return &SQLHandler{db: database.NewConnectionFromPool(pool)}
+}
+
 func TestGetPoolForQuery_TenantPoolUsed(t *testing.T) {
-	handler := &SQLHandler{db: &pgxpool.Pool{}}
+	handler := newTestSQLHandler(nil)
 	tenantPool := &pgxpool.Pool{}
 
 	app := newTestApp(t)
@@ -329,7 +335,7 @@ func TestGetPoolForQuery_TenantPoolUsed(t *testing.T) {
 }
 
 func TestGetPoolForQuery_BranchPoolOverridesTenantPool(t *testing.T) {
-	handler := &SQLHandler{db: &pgxpool.Pool{}}
+	handler := newTestSQLHandler(nil)
 	branchPool := &pgxpool.Pool{}
 	tenantPool := &pgxpool.Pool{}
 
@@ -350,7 +356,7 @@ func TestGetPoolForQuery_BranchPoolOverridesTenantPool(t *testing.T) {
 
 func TestGetPoolForQuery_NoContext_ReturnsMainDB(t *testing.T) {
 	mainPool := &pgxpool.Pool{}
-	handler := &SQLHandler{db: mainPool}
+	handler := newTestSQLHandler(mainPool)
 
 	app := newTestApp(t)
 	app.Get("/test", func(c fiber.Ctx) error {
@@ -366,7 +372,7 @@ func TestGetPoolForQuery_NoContext_ReturnsMainDB(t *testing.T) {
 }
 
 func TestGetPoolForQuery_TenantPoolForAllSchemas(t *testing.T) {
-	handler := &SQLHandler{db: &pgxpool.Pool{}}
+	handler := newTestSQLHandler(nil)
 	tenantPool := &pgxpool.Pool{}
 
 	queries := []string{
