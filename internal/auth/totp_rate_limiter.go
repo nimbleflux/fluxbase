@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // ErrTOTPRateLimitExceeded is returned when a user has exceeded the TOTP attempt limit
@@ -16,7 +17,7 @@ var ErrTOTPRateLimitExceeded = errors.New("too many 2FA attempts, please try aga
 
 // TOTPRateLimiter provides rate limiting for TOTP verification attempts
 type TOTPRateLimiter struct {
-	db              *pgxpool.Pool
+	db              *database.Connection
 	maxAttempts     int           // Maximum failed attempts allowed within the window
 	windowDuration  time.Duration // Time window for counting attempts
 	lockoutDuration time.Duration // How long to lock out after exceeding limit
@@ -39,7 +40,7 @@ func DefaultTOTPRateLimiterConfig() TOTPRateLimiterConfig {
 }
 
 // NewTOTPRateLimiter creates a new TOTP rate limiter
-func NewTOTPRateLimiter(db *pgxpool.Pool, config TOTPRateLimiterConfig) *TOTPRateLimiter {
+func NewTOTPRateLimiter(db *database.Connection, config TOTPRateLimiterConfig) *TOTPRateLimiter {
 	if config.MaxAttempts <= 0 {
 		config.MaxAttempts = 5
 	}

@@ -12,7 +12,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 var (
@@ -68,13 +69,13 @@ type OAuthLogoutResult struct {
 
 // OAuthLogoutService handles OAuth Single Logout operations
 type OAuthLogoutService struct {
-	db            *pgxpool.Pool
+	db            *database.Connection
 	encryptionKey string
 	httpClient    *http.Client
 }
 
 // NewOAuthLogoutService creates a new OAuth logout service
-func NewOAuthLogoutService(db *pgxpool.Pool, encryptionKey string) *OAuthLogoutService {
+func NewOAuthLogoutService(db *database.Connection, encryptionKey string) *OAuthLogoutService {
 	return &OAuthLogoutService{
 		db:            db,
 		encryptionKey: encryptionKey,
@@ -107,7 +108,7 @@ func (s *OAuthLogoutService) ValidateLogoutState(ctx context.Context, state stri
 	var logoutState OAuthLogoutState
 
 	// Use a transaction to atomically read and delete
-	tx, err := s.db.Begin(ctx)
+	tx, err := s.db.Pool().Begin(ctx)
 	if err != nil {
 		return nil, err
 	}

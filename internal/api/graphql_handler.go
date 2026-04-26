@@ -57,7 +57,7 @@ type GraphQLErrorLocation struct {
 // NewGraphQLHandler creates a new GraphQL handler
 func NewGraphQLHandler(db *database.Connection, schemaCache *database.SchemaCache, cfg *config.GraphQLConfig, baseConfig *config.Config) *GraphQLHandler {
 	// Create resolver factory
-	resolverFactory := NewGraphQLResolverFactory(db.Pool(), schemaCache)
+	resolverFactory := NewGraphQLResolverFactory(db, schemaCache)
 
 	// Create schema generator
 	schemaGenerator := NewGraphQLSchemaGenerator(schemaCache, db, cfg.Introspection)

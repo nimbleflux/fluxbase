@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
@@ -53,12 +52,12 @@ type ClientKeyWithPlaintext struct {
 
 // ClientKeyService handles client key operations
 type ClientKeyService struct {
-	db            *pgxpool.Pool
+	db            *database.Connection
 	settingsCache *SettingsCache
 }
 
 // NewClientKeyService creates a new client key service
-func NewClientKeyService(db *pgxpool.Pool, settingsCache *SettingsCache) *ClientKeyService {
+func NewClientKeyService(db *database.Connection, settingsCache *SettingsCache) *ClientKeyService {
 	return &ClientKeyService{
 		db:            db,
 		settingsCache: settingsCache,

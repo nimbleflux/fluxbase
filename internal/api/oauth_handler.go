@@ -56,7 +56,7 @@ func NewOAuthHandler(db *database.Connection, authSvc *auth.Service, jwtManager 
 	}
 
 	// Create logout service
-	logoutService := auth.NewOAuthLogoutService(db.Pool(), encryptionKey)
+	logoutService := auth.NewOAuthLogoutService(db, encryptionKey)
 
 	// Create stop channel for cleanup goroutines
 	stopCleanup := make(chan struct{})

@@ -336,7 +336,7 @@ func (h *RESTHandler) makeBatchPatchHandler(table database.TableInfo) fiber.Hand
 		case strings.Contains(prefer, "return=minimal"):
 			return c.Status(200).Send(nil)
 		case strings.Contains(prefer, "return=headers-only"):
-			return c.JSON(fiber.Map{"affected": affectedCount})
+			return apperrors.SendAffected(c, affectedCount)
 		default:
 			// return=representation or no preference - return full records
 			return c.JSON(results)

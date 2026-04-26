@@ -173,7 +173,7 @@ func (s *Server) buildDashboardAuthRouteDeps() *routes.DashboardAuthDeps {
 		InitialSetup:    s.Auth.AdminHandler.InitialSetup,
 		AdminLogin:      s.Auth.AdminHandler.AdminLogin,
 		RefreshToken:    s.Auth.AdminHandler.AdminRefreshToken,
-		UnifiedAuth:     UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db.Pool()),
+		UnifiedAuth:     UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db),
 		AdminLogout:     s.Auth.AdminHandler.AdminLogout,
 		GetCurrentAdmin: s.Auth.AdminHandler.GetCurrentAdmin,
 	}
@@ -427,7 +427,7 @@ func (s *Server) buildSecretsRouteDeps() *routes.SecretsDeps {
 
 func (s *Server) buildSyncRouteDeps() *routes.SyncDeps {
 	deps := &routes.SyncDeps{
-		RequireSyncAuth: UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db.Pool()),
+		RequireSyncAuth: UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db),
 		RequireRole:     RequireRole("admin", "instance_admin", "service_role"),
 		TenantContext:   s.Middleware.Tenant,
 	}
@@ -636,7 +636,7 @@ func (s *Server) buildKnowledgeBaseRouteDeps() *routes.KnowledgeBaseDeps {
 }
 
 func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
-	unifiedAuth := UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db.Pool())
+	unifiedAuth := UnifiedAuthMiddleware(s.Auth.Handler.authService, s.Auth.DashboardHandler.jwtManager, s.db)
 	return &routes.AdminDeps{
 		UnifiedAuth:        unifiedAuth,
 		RequireRole:        RequireRole,

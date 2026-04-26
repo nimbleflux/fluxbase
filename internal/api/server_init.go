@@ -116,11 +116,11 @@ func (s *Server) initAuth() {
 
 	authService := auth.NewService(db, &cfg.Auth, s.emailService, cfg.GetPublicBaseURL())
 	authService.SetEncryptionKey(cfg.EncryptionKey)
-	totpRateLimiter := auth.NewTOTPRateLimiter(db.Pool(), auth.DefaultTOTPRateLimiterConfig())
+	totpRateLimiter := auth.NewTOTPRateLimiter(db, auth.DefaultTOTPRateLimiterConfig())
 	authService.SetTOTPRateLimiter(totpRateLimiter)
 	s.authService = authService
 
-	clientKeyService := auth.NewClientKeyService(db.Pool(), nil)
+	clientKeyService := auth.NewClientKeyService(db, nil)
 
 	s.userMgmtService = auth.NewUserManagementService(
 		auth.NewUserRepository(db),
