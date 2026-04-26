@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 )
 
 type UserManagementHandler struct {
@@ -257,9 +258,7 @@ func (h *UserManagementHandler) LockUser(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to lock user")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "User account locked successfully",
-	})
+	return apperrors.SendSuccess(c, "User account locked successfully")
 }
 
 func (h *UserManagementHandler) UnlockUser(c fiber.Ctx) error {
@@ -278,9 +277,7 @@ func (h *UserManagementHandler) UnlockUser(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to unlock user")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "User account unlocked successfully",
-	})
+	return apperrors.SendSuccess(c, "User account unlocked successfully")
 }
 
 // fiber:context-methods migrated

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nimbleflux/fluxbase/internal/loader"
 )
 
 // Annotation patterns for parsing SQL comments
@@ -299,4 +301,65 @@ func IsOptionalField(fieldName string) bool {
 // CleanFieldName removes the optional marker from a field name
 func CleanFieldName(fieldName string) string {
 	return strings.TrimSuffix(fieldName, "?")
+}
+
+type RPCAnnotations struct {
+	Description    string
+	IsPublic       bool
+	Timeout        int
+	RequireRoles   []string
+	AllowedTables  []string
+	AllowedSchemas []string
+	Schedule       *string
+	DisableLogs    bool
+}
+
+func ParseRPCAnnotations(sqlCode string) RPCAnnotations {
+	annotations := loader.ParseAnnotations(sqlCode, []string{"--"})
+	config := RPCAnnotations{
+		Timeout:        30,
+		AllowedSchemas: []string{"public"},
+		AllowedTables:  []string{},
+	}
+
+	if v, ok := annotations["description"]; ok {
+		config.Description = v
+	}
+	if _, ok := annotations["public"]; ok {
+		config.IsPublic = true
+	}
+	if v, ok := annotations["timeout"]; ok {
+		if t, err := strconv.Atoi(v); err == nil && t > 0 {
+			config.Timeout = t
+		}
+	}
+	if v, ok := annotations["require-role"]; ok {
+		roles := loader.ParseRoleList(v)
+		if len(roles) > 0 {
+			config.RequireRoles = roles
+		}
+	}
+	if v, ok := annotations["allowed-tables"]; ok {
+		tables := loader.ParseCommaList(v)
+		if len(tables) > 0 {
+			config.AllowedTables = tables
+		}
+	}
+	if v, ok := annotations["allowed-schemas"]; ok {
+		schemas := loader.ParseCommaList(v)
+		if len(schemas) > 0 {
+			config.AllowedSchemas = schemas
+		}
+	}
+	if v, ok := annotations["schedule"]; ok {
+		schedule := strings.Trim(v, "\"'")
+		if schedule != "" {
+			config.Schedule = &schedule
+		}
+	}
+	if _, ok := annotations["disable-logs"]; ok {
+		config.DisableLogs = true
+	}
+
+	return config
 }

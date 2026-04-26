@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/logutil"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
@@ -278,10 +279,7 @@ func (h *DDLHandler) DeleteTable(c fiber.Ctx) error {
 
 	h.invalidateCache(ctx)
 	log.Info().Str("table", schema+"."+table).Msg("Table dropped successfully")
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("Table '%s.%s' deleted successfully", schema, table),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("Table '%s.%s' deleted successfully", schema, table))
 }
 
 // AddColumnRequest represents a request to add a column to a table
@@ -437,10 +435,7 @@ func (h *DDLHandler) DropColumn(c fiber.Ctx) error {
 
 	h.invalidateCache(ctx)
 	log.Info().Str("table", schema+"."+table).Str("column", column).Msg("Column dropped successfully")
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("Column '%s' dropped from table '%s.%s'", column, schema, table),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("Column '%s' dropped from table '%s.%s'", column, schema, table))
 }
 
 // RenameTableRequest represents a request to rename a table
@@ -513,10 +508,7 @@ func (h *DDLHandler) RenameTable(c fiber.Ctx) error {
 
 	h.invalidateCache(ctx)
 	log.Info().Str("table", schema+"."+table).Str("newName", req.NewName).Msg("Table renamed successfully")
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("Table '%s.%s' renamed to '%s.%s'", schema, table, schema, req.NewName),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("Table '%s.%s' renamed to '%s.%s'", schema, table, schema, req.NewName))
 }
 
 // Helper functions

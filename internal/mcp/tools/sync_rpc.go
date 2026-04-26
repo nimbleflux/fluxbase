@@ -4,12 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/nimbleflux/fluxbase/internal/loader"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/nimbleflux/fluxbase/internal/rpc"
 )
@@ -110,8 +107,7 @@ func (t *SyncRPCTool) Execute(ctx context.Context, args map[string]any, authCtx 
 		}, nil
 	}
 
-	// Parse annotations from SQL comments
-	config := parseRPCAnnotations(sqlCode)
+	config := rpc.ParseRPCAnnotations(sqlCode)
 
 	log.Debug().
 		Str("name", name).
@@ -220,66 +216,4 @@ func (t *SyncRPCTool) Execute(ctx context.Context, args map[string]any, authCtx 
 	return &mcp.ToolResult{
 		Content: []mcp.Content{mcp.TextContent(string(resultJSON))},
 	}, nil
-}
-
-// RPCConfig holds parsed @fluxbase annotations for RPC procedures
-type RPCConfig struct {
-	Description    string
-	IsPublic       bool
-	Timeout        int
-	RequireRoles   []string
-	AllowedTables  []string
-	AllowedSchemas []string
-	Schedule       *string
-	DisableLogs    bool
-}
-
-func parseRPCAnnotations(sqlCode string) RPCConfig {
-	annotations := loader.ParseAnnotations(sqlCode, []string{"--"})
-	config := RPCConfig{
-		Timeout:        30,
-		AllowedSchemas: []string{"public"},
-		AllowedTables:  []string{},
-	}
-
-	if v, ok := annotations["description"]; ok {
-		config.Description = v
-	}
-	if _, ok := annotations["public"]; ok {
-		config.IsPublic = true
-	}
-	if v, ok := annotations["timeout"]; ok {
-		if t, err := strconv.Atoi(v); err == nil && t > 0 {
-			config.Timeout = t
-		}
-	}
-	if v, ok := annotations["require-role"]; ok {
-		roles := loader.ParseRoleList(v)
-		if len(roles) > 0 {
-			config.RequireRoles = roles
-		}
-	}
-	if v, ok := annotations["allowed-tables"]; ok {
-		tables := loader.ParseCommaList(v)
-		if len(tables) > 0 {
-			config.AllowedTables = tables
-		}
-	}
-	if v, ok := annotations["allowed-schemas"]; ok {
-		schemas := loader.ParseCommaList(v)
-		if len(schemas) > 0 {
-			config.AllowedSchemas = schemas
-		}
-	}
-	if v, ok := annotations["schedule"]; ok {
-		schedule := strings.Trim(v, `"'`)
-		if schedule != "" {
-			config.Schedule = &schedule
-		}
-	}
-	if _, ok := annotations["disable-logs"]; ok {
-		config.DisableLogs = true
-	}
-
-	return config
 }

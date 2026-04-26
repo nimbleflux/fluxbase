@@ -18,6 +18,8 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
@@ -564,10 +566,7 @@ func (h *SAMLProviderHandler) UpdateSAMLProvider(c fiber.Ctx) error {
 
 	log.Info().Str("id", id).Msg("SAML provider updated")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("SAML provider '%s' updated successfully", displayName),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("SAML provider '%s' updated successfully", displayName))
 }
 
 // DeleteSAMLProvider deletes a SAML provider
@@ -618,10 +617,7 @@ func (h *SAMLProviderHandler) DeleteSAMLProvider(c fiber.Ctx) error {
 
 	log.Info().Str("id", id).Str("provider", displayName).Msg("SAML provider deleted")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("SAML provider '%s' deleted successfully", displayName),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("SAML provider '%s' deleted successfully", displayName))
 }
 
 // ValidateMetadata validates SAML IdP metadata from URL or XML

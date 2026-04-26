@@ -25,6 +25,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/email"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
@@ -370,9 +371,7 @@ func (h *DashboardAuthHandler) ChangePassword(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to change password")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Password changed successfully",
-	})
+	return apperrors.SendSuccess(c, "Password changed successfully")
 }
 
 // DeleteAccount deletes the current user's account
@@ -406,9 +405,7 @@ func (h *DashboardAuthHandler) DeleteAccount(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to delete account")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Account deleted successfully",
-	})
+	return apperrors.SendSuccess(c, "Account deleted successfully")
 }
 
 // SetupTOTP generates a new TOTP secret for 2FA
@@ -510,9 +507,7 @@ func (h *DashboardAuthHandler) DisableTOTP(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to disable 2FA")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "2FA disabled successfully",
-	})
+	return apperrors.SendSuccess(c, "2FA disabled successfully")
 }
 
 // RequestPasswordReset initiates a password reset for a dashboard user
@@ -629,9 +624,7 @@ func (h *DashboardAuthHandler) ConfirmPasswordReset(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to reset password")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Password reset successfully",
-	})
+	return apperrors.SendSuccess(c, "Password reset successfully")
 }
 
 // RequireDashboardAuth is a middleware that requires dashboard authentication

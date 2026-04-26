@@ -12,6 +12,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/email"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 )
 
 type InvitationHandler struct {
@@ -315,7 +316,5 @@ func (h *InvitationHandler) RevokeInvitation(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to revoke invitation")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Invitation revoked successfully",
-	})
+	return apperrors.SendSuccess(c, "Invitation revoked successfully")
 }

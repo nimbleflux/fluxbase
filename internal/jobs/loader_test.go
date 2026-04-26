@@ -72,7 +72,7 @@ func TestParseAnnotations_ProgressTimeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			annotations := parseAnnotations(tt.code)
+			annotations := ParseJobAnnotations(tt.code)
 			if annotations.ProgressTimeoutSeconds != tt.expected {
 				t.Errorf("ProgressTimeoutSeconds = %d, want %d", annotations.ProgressTimeoutSeconds, tt.expected)
 			}
@@ -100,7 +100,7 @@ func TestParseAnnotations_Timeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			annotations := parseAnnotations(tt.code)
+			annotations := ParseJobAnnotations(tt.code)
 			if annotations.TimeoutSeconds != tt.expected {
 				t.Errorf("TimeoutSeconds = %d, want %d", annotations.TimeoutSeconds, tt.expected)
 			}
@@ -128,7 +128,7 @@ func TestParseAnnotations_MaxRetries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			annotations := parseAnnotations(tt.code)
+			annotations := ParseJobAnnotations(tt.code)
 			if annotations.MaxRetries != tt.expected {
 				t.Errorf("MaxRetries = %d, want %d", annotations.MaxRetries, tt.expected)
 			}
@@ -173,7 +173,7 @@ func TestParseAnnotations_Permissions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			annotations := parseAnnotations(tt.code)
+			annotations := ParseJobAnnotations(tt.code)
 			if annotations.AllowNet != tt.allowNet {
 				t.Errorf("AllowNet = %v, want %v", annotations.AllowNet, tt.allowNet)
 			}
@@ -202,7 +202,7 @@ export async function handler(request: Request) {
   // job code
 }`
 
-	annotations := parseAnnotations(code)
+	annotations := ParseJobAnnotations(code)
 
 	if annotations.TimeoutSeconds != 600 {
 		t.Errorf("TimeoutSeconds = %d, want 600", annotations.TimeoutSeconds)
@@ -264,7 +264,7 @@ func TestParseAnnotations_Schedule(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			annotations := parseAnnotations(tt.code)
+			annotations := ParseJobAnnotations(tt.code)
 			if tt.expectSchedule == nil {
 				if annotations.Schedule != nil {
 					t.Errorf("Schedule = %v, want nil", *annotations.Schedule)
@@ -315,7 +315,7 @@ func TestParseAnnotations_RequireRole(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			annotations := parseAnnotations(tt.code)
+			annotations := ParseJobAnnotations(tt.code)
 			if tt.expectRoles == nil {
 				if len(annotations.RequireRoles) != 0 {
 					t.Errorf("RequireRoles = %v, want nil/empty", annotations.RequireRoles)
@@ -360,7 +360,7 @@ func TestParseAnnotations_Enabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			annotations := parseAnnotations(tt.code)
+			annotations := ParseJobAnnotations(tt.code)
 			if annotations.Enabled != tt.enabled {
 				t.Errorf("Enabled = %v, want %v", annotations.Enabled, tt.enabled)
 			}
@@ -398,7 +398,7 @@ func TestParseAnnotations_Memory(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			annotations := parseAnnotations(tt.code)
+			annotations := ParseJobAnnotations(tt.code)
 			if annotations.MemoryLimitMB != tt.expected {
 				t.Errorf("MemoryLimitMB = %d, want %d", annotations.MemoryLimitMB, tt.expected)
 			}
@@ -411,7 +411,7 @@ func TestParseAnnotations_ScheduleWithParams(t *testing.T) {
 // @fluxbase:schedule-params {"type": "daily", "notify": true}
 export function handler() {}`
 
-	annotations := parseAnnotations(code)
+	annotations := ParseJobAnnotations(code)
 
 	if annotations.Schedule == nil {
 		t.Fatal("Schedule should not be nil")

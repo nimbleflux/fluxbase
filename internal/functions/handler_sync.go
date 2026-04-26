@@ -14,6 +14,8 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
+
+	syncframework "github.com/nimbleflux/fluxbase/internal/sync"
 )
 
 // RegisterAdminRoutes registers admin-only routes for functions management
@@ -214,8 +216,6 @@ func (h *Handler) ReloadFunctions(c fiber.Ctx) error {
 	})
 }
 
-// SyncFunctions syncs a list of functions to a specific namespace
-// Admin-only endpoint - requires authentication and admin role
 func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 	var req struct {
 		Namespace string `json:"namespace"`
@@ -223,8 +223,8 @@ func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 			Name                 string  `json:"name"`
 			Description          *string `json:"description"`
 			Code                 string  `json:"code"`
-			OriginalCode         *string `json:"original_code"` // Original code if pre-bundled (for editing)
-			IsBundled            *bool   `json:"is_bundled"`    // If true, skip server-side bundling
+			OriginalCode         *string `json:"original_code"`
+			IsBundled            *bool   `json:"is_bundled"`
 			Enabled              *bool   `json:"enabled"`
 			TimeoutSeconds       *int    `json:"timeout_seconds"`
 			MemoryLimitMB        *int    `json:"memory_limit_mb"`
@@ -246,14 +246,12 @@ func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
-	// Default namespace to "default" if not specified
 	namespace := req.Namespace
 	if namespace == "" {
 		namespace = "default"
 	}
 
 	ctx := middleware.CtxWithTenant(c)
-
 	syncCtx := database.ContextWithTenant(ctx, "")
 
 	var createdBy *uuid.UUID
@@ -267,142 +265,76 @@ func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 	}
 
 	currentTenantID := database.TenantFromContext(ctx)
-	existingFunctions, err := h.storage.ListFunctionsByNamespaceForSync(syncCtx, namespace, currentTenantID)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to list existing functions in namespace",
+
+	items := make([]functionSyncItem, 0, len(req.Functions))
+
+	for _, spec := range req.Functions {
+		items = append(items, functionSyncItem{
+			name:                 spec.Name,
+			description:          spec.Description,
+			code:                 spec.Code,
+			originalCode:         spec.OriginalCode,
+			isBundled:            spec.IsBundled,
+			enabled:              spec.Enabled,
+			timeoutSeconds:       spec.TimeoutSeconds,
+			memoryLimitMB:        spec.MemoryLimitMB,
+			allowNet:             spec.AllowNet,
+			allowEnv:             spec.AllowEnv,
+			allowRead:            spec.AllowRead,
+			allowWrite:           spec.AllowWrite,
+			allowUnauthenticated: spec.AllowUnauthenticated,
+			isPublic:             spec.IsPublic,
+			cronSchedule:         spec.CronSchedule,
 		})
 	}
 
-	// Build set of existing function names
-	existingNames := make(map[string]*EdgeFunctionSummary)
-	for i := range existingFunctions {
-		existingNames[existingFunctions[i].Name] = &existingFunctions[i]
-	}
-
-	// Build set of payload function names
-	payloadNames := make(map[string]bool)
-	for _, spec := range req.Functions {
-		payloadNames[spec.Name] = true
-	}
-
-	// Determine operations
-	toCreate := []string{}
-	toUpdate := []string{}
-	toDelete := []string{}
-
-	for _, spec := range req.Functions {
-		if _, exists := existingNames[spec.Name]; exists {
-			toUpdate = append(toUpdate, spec.Name)
-		} else {
-			toCreate = append(toCreate, spec.Name)
-		}
-	}
-
-	if req.Options.DeleteMissing {
-		for name := range existingNames {
-			if !payloadNames[name] {
-				toDelete = append(toDelete, name)
-			}
-		}
-	}
-
-	// Track results
-	created := []string{}
-	updated := []string{}
-	deleted := []string{}
-	unchanged := []string{}
-	errorList := []fiber.Map{}
-
-	// If dry run, return what would be done without making changes
-	if req.Options.DryRun {
-		return c.JSON(fiber.Map{
-			"message":   "Dry run - no changes made",
-			"namespace": namespace,
-			"summary": fiber.Map{
-				"created":   len(toCreate),
-				"updated":   len(toUpdate),
-				"deleted":   len(toDelete),
-				"unchanged": 0,
-			},
-			"details": fiber.Map{
-				"created":   toCreate,
-				"updated":   toUpdate,
-				"deleted":   toDelete,
-				"unchanged": []string{},
-			},
-			"errors":  []string{},
-			"dry_run": true,
-		})
-	}
-
-	// Bundle and create/update functions in parallel
-	type bundleResult struct {
-		Name         string
-		BundledCode  string
-		OriginalCode string
-		IsBundled    bool
-		BundleError  *string
-		Err          error
-	}
-
-	// Use semaphore to limit concurrent bundling to 10
 	sem := make(chan struct{}, 10)
 	var wg sync.WaitGroup
-	resultsChan := make(chan bundleResult, len(req.Functions))
+	resultsChan := make(chan *bundleResult, len(req.Functions))
 
-	// Load shared modules once (used by all bundles)
 	sharedModules, _ := h.storage.ListSharedModules(ctx)
 	sharedModulesMap := make(map[string]string)
 	for _, module := range sharedModules {
 		sharedModulesMap[module.ModulePath] = module.Content
 	}
 
-	// Bundle all functions in parallel
 	for i := range req.Functions {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			sem <- struct{}{}        // Acquire semaphore
-			defer func() { <-sem }() // Release semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
 			spec := req.Functions[i]
-
 			bundledCode := spec.Code
 			originalCode := spec.Code
 			isBundled := false
 			var bundleError *string
 
-			// If client sent pre-bundled code, skip server-side bundling
 			if spec.IsBundled != nil && *spec.IsBundled {
-				// Code is already bundled by the client
 				isBundled = true
-				// Use original_code if provided (for editing), otherwise use code as both
 				if spec.OriginalCode != nil && *spec.OriginalCode != "" {
 					originalCode = *spec.OriginalCode
 				}
-				resultsChan <- bundleResult{
-					Name:         spec.Name,
-					BundledCode:  bundledCode,
-					OriginalCode: originalCode,
-					IsBundled:    isBundled,
-					BundleError:  bundleError,
-					Err:          nil,
+				resultsChan <- &bundleResult{
+					name:         spec.Name,
+					bundledCode:  bundledCode,
+					originalCode: originalCode,
+					isBundled:    isBundled,
+					bundleError:  bundleError,
 				}
 				return
 			}
 
-			// Bundle the function code server-side
 			bundler, err := h.createBundler()
 			if err != nil {
-				resultsChan <- bundleResult{
-					Name: spec.Name,
-					Err:  fmt.Errorf("failed to create bundler: %w", err),
+				resultsChan <- &bundleResult{
+					name: spec.Name,
+					err:  fmt.Errorf("failed to create bundler: %w", err),
 				}
 				return
 			}
 
-			// Check if code imports from _shared/ modules
 			hasSharedImports := strings.Contains(spec.Code, "from \"_shared/") ||
 				strings.Contains(spec.Code, "from '_shared/")
 
@@ -417,9 +349,9 @@ func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 			}
 
 			if bundleErr != nil {
-				resultsChan <- bundleResult{
-					Name: spec.Name,
-					Err:  fmt.Errorf("bundle error: %w", bundleErr),
+				resultsChan <- &bundleResult{
+					name: spec.Name,
+					err:  fmt.Errorf("bundle error: %w", bundleErr),
 				}
 				return
 			}
@@ -432,175 +364,46 @@ func (h *Handler) SyncFunctions(c fiber.Ctx) error {
 				}
 			}
 
-			resultsChan <- bundleResult{
-				Name:         spec.Name,
-				BundledCode:  bundledCode,
-				OriginalCode: originalCode,
-				IsBundled:    isBundled,
-				BundleError:  bundleError,
-				Err:          nil,
+			resultsChan <- &bundleResult{
+				name:         spec.Name,
+				bundledCode:  bundledCode,
+				originalCode: originalCode,
+				isBundled:    isBundled,
+				bundleError:  bundleError,
 			}
 		}(i)
 	}
 
-	// Wait for all bundling to complete
 	wg.Wait()
 	close(resultsChan)
 
-	// Collect bundling results
-	bundleResults := make(map[string]bundleResult)
+	bundleRes := make(map[string]*bundleResult)
 	for result := range resultsChan {
-		bundleResults[result.Name] = result
-		if result.Err != nil {
-			errorList = append(errorList, fiber.Map{
-				"function": result.Name,
-				"error":    result.Err.Error(),
-				"action":   "bundle",
-			})
-		}
+		bundleRes[result.name] = result
 	}
 
-	// Create/Update functions
-	for _, spec := range req.Functions {
-		result, ok := bundleResults[spec.Name]
-		if !ok || result.Err != nil {
-			// Skip if bundling failed
-			continue
-		}
-
-		// Parse configuration from code comments
-		config := ParseFunctionConfig(spec.Code)
-
-		// Determine values (request takes precedence over config)
-		allowUnauthenticated := config.AllowUnauthenticated
-		if spec.AllowUnauthenticated != nil {
-			allowUnauthenticated = *spec.AllowUnauthenticated
-		}
-
-		isPublic := config.IsPublic
-		if spec.IsPublic != nil {
-			isPublic = *spec.IsPublic
-		}
-
-		if _, exists := existingNames[spec.Name]; exists {
-			// Update existing function
-			updates := map[string]interface{}{
-				"code":                  result.BundledCode,
-				"original_code":         result.OriginalCode,
-				"is_bundled":            result.IsBundled,
-				"bundle_error":          result.BundleError,
-				"allow_unauthenticated": allowUnauthenticated,
-				"is_public":             isPublic,
-			}
-
-			if spec.Description != nil {
-				updates["description"] = spec.Description
-			}
-			if spec.Enabled != nil {
-				updates["enabled"] = *spec.Enabled
-			}
-			if spec.TimeoutSeconds != nil {
-				updates["timeout_seconds"] = *spec.TimeoutSeconds
-			}
-			if spec.MemoryLimitMB != nil {
-				updates["memory_limit_mb"] = *spec.MemoryLimitMB
-			}
-			if spec.AllowNet != nil {
-				updates["allow_net"] = *spec.AllowNet
-			}
-			if spec.AllowEnv != nil {
-				updates["allow_env"] = *spec.AllowEnv
-			}
-			if spec.AllowRead != nil {
-				updates["allow_read"] = *spec.AllowRead
-			}
-			if spec.AllowWrite != nil {
-				updates["allow_write"] = *spec.AllowWrite
-			}
-			if spec.CronSchedule != nil {
-				updates["cron_schedule"] = *spec.CronSchedule
-			}
-
-			if err := h.storage.UpdateFunctionByNamespaceForSync(syncCtx, spec.Name, namespace, currentTenantID, updates); err != nil {
-				errorList = append(errorList, fiber.Map{
-					"function": spec.Name,
-					"error":    err.Error(),
-					"action":   "update",
-				})
-				continue
-			}
-
-			updated = append(updated, spec.Name)
-		} else {
-			// Create new function
-			fn := &EdgeFunction{
-				Name:                 spec.Name,
-				Namespace:            namespace,
-				Description:          spec.Description,
-				Code:                 result.BundledCode,
-				OriginalCode:         &result.OriginalCode,
-				IsBundled:            result.IsBundled,
-				BundleError:          result.BundleError,
-				Enabled:              valueOr(spec.Enabled, true),
-				TimeoutSeconds:       valueOr(spec.TimeoutSeconds, 30),
-				MemoryLimitMB:        valueOr(spec.MemoryLimitMB, 128),
-				AllowNet:             valueOr(spec.AllowNet, true),
-				AllowEnv:             valueOr(spec.AllowEnv, true),
-				AllowRead:            valueOr(spec.AllowRead, false),
-				AllowWrite:           valueOr(spec.AllowWrite, false),
-				AllowUnauthenticated: allowUnauthenticated,
-				IsPublic:             isPublic,
-				CronSchedule:         spec.CronSchedule,
-				CreatedBy:            createdBy,
-			}
-
-			if err := h.storage.CreateFunction(ctx, fn); err != nil {
-				errorList = append(errorList, fiber.Map{
-					"function": spec.Name,
-					"error":    err.Error(),
-					"action":   "create",
-				})
-				continue
-			}
-
-			created = append(created, spec.Name)
-		}
+	syncer := &functionSyncer{
+		handler:       h,
+		syncCtx:       syncCtx,
+		namespace:     namespace,
+		tenantID:      currentTenantID,
+		createdBy:     createdBy,
+		bundleResults: bundleRes,
 	}
 
-	// Delete removed functions (after successful creates/updates for safety)
-	if req.Options.DeleteMissing {
-		for _, name := range toDelete {
-			if err := h.storage.DeleteFunctionForSync(syncCtx, name, namespace, currentTenantID); err != nil {
-				errorList = append(errorList, fiber.Map{
-					"function": name,
-					"error":    err.Error(),
-					"action":   "delete",
-				})
-				continue
-			}
-			deleted = append(deleted, name)
-		}
+	opts := syncframework.Options{
+		Namespace:     namespace,
+		DeleteMissing: req.Options.DeleteMissing,
+		DryRun:        req.Options.DryRun,
+		TenantID:      currentTenantID,
 	}
 
-	return c.JSON(fiber.Map{
-		"message":   "Functions synced successfully",
-		"namespace": namespace,
-		"summary": fiber.Map{
-			"created":   len(created),
-			"updated":   len(updated),
-			"deleted":   len(deleted),
-			"unchanged": len(unchanged),
-			"errors":    len(errorList),
-		},
-		"details": fiber.Map{
-			"created":   created,
-			"updated":   updated,
-			"deleted":   deleted,
-			"unchanged": unchanged,
-		},
-		"errors":  errorList,
-		"dry_run": false,
-	})
+	result, err := syncframework.Execute[functionSyncItem](ctx, syncer, items, opts)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(result)
 }
 
 // LoadFromFilesystem loads functions from filesystem at boot time

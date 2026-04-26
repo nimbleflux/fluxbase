@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
@@ -455,9 +456,7 @@ func (h *SAMLHandler) handleIdPInitiatedLogout(c fiber.Ctx, samlRequest, relaySt
 	idpSloURL := provider.IdPSloURL
 	if idpSloURL == "" {
 		// No SLO URL, just return success
-		return c.JSON(fiber.Map{
-			"message": "logout successful",
-		})
+		return apperrors.SendSuccess(c, "logout successful")
 	}
 
 	// Generate signed LogoutResponse

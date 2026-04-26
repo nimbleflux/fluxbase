@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/webhook"
 )
@@ -183,9 +184,7 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to update webhook")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Webhook updated successfully",
-	})
+	return apperrors.SendSuccess(c, "Webhook updated successfully")
 }
 
 // DeleteWebhook deletes a webhook
@@ -204,9 +203,7 @@ func (h *WebhookHandler) DeleteWebhook(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to delete webhook")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Webhook deleted successfully",
-	})
+	return apperrors.SendSuccess(c, "Webhook deleted successfully")
 }
 
 // TestWebhook sends a test webhook
@@ -239,9 +236,7 @@ func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to send test webhook")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Test webhook sent successfully",
-	})
+	return apperrors.SendSuccess(c, "Test webhook sent successfully")
 }
 
 // ListDeliveries lists webhook deliveries

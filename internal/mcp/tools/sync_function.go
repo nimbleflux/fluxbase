@@ -6,14 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/functions"
-	"github.com/nimbleflux/fluxbase/internal/loader"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
@@ -113,8 +111,7 @@ func (t *SyncFunctionTool) Execute(ctx context.Context, args map[string]any, aut
 		}, nil
 	}
 
-	// Parse annotations from code
-	config := parseFluxbaseAnnotations(code)
+	config := functions.ParseFunctionConfig(code)
 
 	log.Debug().
 		Str("name", name).
@@ -139,7 +136,6 @@ func (t *SyncFunctionTool) Execute(ctx context.Context, args map[string]any, aut
 	var result map[string]any
 
 	if isNew {
-		// Create new function
 		fn := &functions.EdgeFunction{
 			Name:                 name,
 			Namespace:            namespace,
@@ -156,24 +152,23 @@ func (t *SyncFunctionTool) Execute(ctx context.Context, args map[string]any, aut
 			AllowWrite:           false,
 			AllowUnauthenticated: config.AllowUnauthenticated,
 			IsPublic:             config.IsPublic,
-			DisableExecutionLogs: config.DisableLogs,
+			DisableExecutionLogs: config.DisableExecutionLogs,
 		}
 
-		// Set optional fields
 		if config.Description != "" {
 			fn.Description = &config.Description
 		}
-		if config.CorsOrigins != "" {
-			fn.CorsOrigins = &config.CorsOrigins
+		if config.CorsOrigins != nil {
+			fn.CorsOrigins = config.CorsOrigins
 		}
-		if config.RateLimitPerMinute > 0 {
-			fn.RateLimitPerMinute = &config.RateLimitPerMinute
+		if config.RateLimitPerMinute != nil {
+			fn.RateLimitPerMinute = config.RateLimitPerMinute
 		}
-		if config.RateLimitPerHour > 0 {
-			fn.RateLimitPerHour = &config.RateLimitPerHour
+		if config.RateLimitPerHour != nil {
+			fn.RateLimitPerHour = config.RateLimitPerHour
 		}
-		if config.RateLimitPerDay > 0 {
-			fn.RateLimitPerDay = &config.RateLimitPerDay
+		if config.RateLimitPerDay != nil {
+			fn.RateLimitPerDay = config.RateLimitPerDay
 		}
 
 		// Note: fn.CreatedBy requires uuid.UUID but authCtx.UserID is *string
@@ -201,7 +196,6 @@ func (t *SyncFunctionTool) Execute(ctx context.Context, args map[string]any, aut
 			Msg("MCP: sync_function - created new function")
 
 	} else {
-		// Update existing function
 		updates := map[string]interface{}{
 			"code":                   code,
 			"original_code":          code,
@@ -212,25 +206,24 @@ func (t *SyncFunctionTool) Execute(ctx context.Context, args map[string]any, aut
 			"allow_env":              config.AllowEnv,
 			"allow_unauthenticated":  config.AllowUnauthenticated,
 			"is_public":              config.IsPublic,
-			"disable_execution_logs": config.DisableLogs,
+			"disable_execution_logs": config.DisableExecutionLogs,
 			"source":                 "mcp",
 		}
 
-		// Handle optional fields - set to nil if empty to clear them
 		if config.Description != "" {
 			updates["description"] = config.Description
 		}
-		if config.CorsOrigins != "" {
-			updates["cors_origins"] = config.CorsOrigins
+		if config.CorsOrigins != nil {
+			updates["cors_origins"] = *config.CorsOrigins
 		}
-		if config.RateLimitPerMinute > 0 {
-			updates["rate_limit_per_minute"] = config.RateLimitPerMinute
+		if config.RateLimitPerMinute != nil {
+			updates["rate_limit_per_minute"] = *config.RateLimitPerMinute
 		}
-		if config.RateLimitPerHour > 0 {
-			updates["rate_limit_per_hour"] = config.RateLimitPerHour
+		if config.RateLimitPerHour != nil {
+			updates["rate_limit_per_hour"] = *config.RateLimitPerHour
 		}
-		if config.RateLimitPerDay > 0 {
-			updates["rate_limit_per_day"] = config.RateLimitPerDay
+		if config.RateLimitPerDay != nil {
+			updates["rate_limit_per_day"] = *config.RateLimitPerDay
 		}
 
 		if err := t.storage.UpdateFunctionByNamespace(ctx, name, namespace, updates); err != nil {
@@ -270,104 +263,10 @@ func (t *SyncFunctionTool) Execute(ctx context.Context, args map[string]any, aut
 	}, nil
 }
 
-// FunctionConfig holds parsed @fluxbase annotations
-type FunctionConfig struct {
-	Description          string
-	IsPublic             bool
-	AllowUnauthenticated bool
-	Timeout              int
-	Memory               int
-	AllowNet             bool
-	AllowEnv             bool
-	DisableLogs          bool
-	CorsOrigins          string
-	RateLimitPerMinute   int
-	RateLimitPerHour     int
-	RateLimitPerDay      int
-}
-
-func parseFluxbaseAnnotations(code string) FunctionConfig {
-	annotations := loader.ParseAnnotations(code, []string{"//"})
-	config := FunctionConfig{
-		Timeout:  30,
-		Memory:   128,
-		AllowNet: true,
-		AllowEnv: true,
-	}
-
-	if _, ok := annotations["public"]; ok {
-		config.IsPublic = true
-	}
-	if _, ok := annotations["allow-unauthenticated"]; ok {
-		config.AllowUnauthenticated = true
-	}
-	if v, ok := annotations["description"]; ok {
-		config.Description = v
-	}
-	if v, ok := annotations["timeout"]; ok {
-		if t, err := strconv.Atoi(v); err == nil && t > 0 {
-			config.Timeout = t
-		}
-	}
-	if v, ok := annotations["memory"]; ok {
-		if m, err := strconv.Atoi(v); err == nil && m > 0 {
-			config.Memory = m
-		}
-	}
-	if v, ok := annotations["rate-limit"]; ok {
-		parseRateLimit(v, &config)
-	}
-	if v, ok := annotations["cors-origins"]; ok {
-		config.CorsOrigins = v
-	}
-	if _, ok := annotations["allow-net"]; ok {
-		config.AllowNet = true
-	}
-	if _, ok := annotations["deny-net"]; ok {
-		config.AllowNet = false
-	}
-	if _, ok := annotations["allow-env"]; ok {
-		config.AllowEnv = true
-	}
-	if _, ok := annotations["deny-env"]; ok {
-		config.AllowEnv = false
-	}
-	if _, ok := annotations["disable-logs"]; ok {
-		config.DisableLogs = true
-	}
-
-	return config
-}
-
-// parseRateLimit parses rate limit strings like "100/min", "1000/hour", "10000/day"
-func parseRateLimit(value string, config *FunctionConfig) {
-	parts := strings.Split(value, "/")
-	if len(parts) != 2 {
-		return
-	}
-
-	count, err := strconv.Atoi(strings.TrimSpace(parts[0]))
-	if err != nil || count <= 0 {
-		return
-	}
-
-	period := strings.ToLower(strings.TrimSpace(parts[1]))
-	switch period {
-	case "min", "minute":
-		config.RateLimitPerMinute = count
-	case "hour", "hr":
-		config.RateLimitPerHour = count
-	case "day":
-		config.RateLimitPerDay = count
-	}
-}
-
-// isValidFunctionName validates function name format
 func isValidFunctionName(name string) bool {
 	if len(name) == 0 || len(name) > 63 {
 		return false
 	}
-	// Allow alphanumeric, hyphens, underscores; must start with letter or underscore
 	match, _ := regexp.MatchString(`^[a-zA-Z_][a-zA-Z0-9_-]*$`, name)
 	return match
 }

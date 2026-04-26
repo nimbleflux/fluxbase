@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 )
 
 type ClientKeyHandler struct {
@@ -166,10 +167,7 @@ func (h *ClientKeyHandler) UpdateClientKey(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to update client key")
 	}
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Client key updated successfully",
-	})
+	return apperrors.SendSuccess(c, "Client key updated successfully")
 }
 
 func (h *ClientKeyHandler) RevokeClientKey(c fiber.Ctx) error {
@@ -188,10 +186,7 @@ func (h *ClientKeyHandler) RevokeClientKey(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to revoke client key")
 	}
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Client key revoked successfully",
-	})
+	return apperrors.SendSuccess(c, "Client key revoked successfully")
 }
 
 func (h *ClientKeyHandler) DeleteClientKey(c fiber.Ctx) error {

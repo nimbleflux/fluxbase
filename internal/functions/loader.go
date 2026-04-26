@@ -445,16 +445,19 @@ type FunctionConfig struct {
 	AllowUnauthenticated bool
 	IsPublic             bool
 	DisableExecutionLogs bool
-	// CORS configuration (nil means use global defaults)
-	CorsOrigins     *string
-	CorsMethods     *string
-	CorsHeaders     *string
-	CorsCredentials *bool
-	CorsMaxAge      *int
-	// Rate limiting configuration (nil means unlimited)
-	RateLimitPerMinute *int
-	RateLimitPerHour   *int
-	RateLimitPerDay    *int
+	Description          string
+	Timeout              int
+	Memory               int
+	AllowNet             bool
+	AllowEnv             bool
+	CorsOrigins          *string
+	CorsMethods          *string
+	CorsHeaders          *string
+	CorsCredentials      *bool
+	CorsMaxAge           *int
+	RateLimitPerMinute   *int
+	RateLimitPerHour     *int
+	RateLimitPerDay      *int
 }
 
 // ParseFunctionConfig parses special @fluxbase directives from function code comments
@@ -474,6 +477,10 @@ func ParseFunctionConfig(code string) FunctionConfig {
 		AllowUnauthenticated: false,
 		IsPublic:             true,
 		DisableExecutionLogs: false,
+		Timeout:              30,
+		Memory:               128,
+		AllowNet:             true,
+		AllowEnv:             true,
 	}
 
 	if _, ok := annotations["allow-unauthenticated"]; ok {
@@ -496,6 +503,40 @@ func ParseFunctionConfig(code string) FunctionConfig {
 			config.DisableExecutionLogs = true
 			log.Debug().Msg("Found @fluxbase:disable-execution-logs directive in function code")
 		}
+	}
+	if _, ok := annotations["disable-logs"]; ok {
+		config.DisableExecutionLogs = true
+		log.Debug().Msg("Found @fluxbase:disable-logs directive in function code")
+	}
+
+	if v, ok := annotations["description"]; ok {
+		config.Description = v
+	}
+	if v, ok := annotations["timeout"]; ok {
+		if t, err := strconv.Atoi(v); err == nil && t > 0 {
+			config.Timeout = t
+		}
+	}
+	if v, ok := annotations["memory"]; ok {
+		if m, err := strconv.Atoi(v); err == nil && m > 0 {
+			config.Memory = m
+		}
+	}
+	if v, ok := annotations["allow-net"]; ok {
+		if v == "false" {
+			config.AllowNet = false
+		}
+	}
+	if _, ok := annotations["deny-net"]; ok {
+		config.AllowNet = false
+	}
+	if v, ok := annotations["allow-env"]; ok {
+		if v == "false" {
+			config.AllowEnv = false
+		}
+	}
+	if _, ok := annotations["deny-env"]; ok {
+		config.AllowEnv = false
 	}
 
 	if v, ok := annotations["cors-origins"]; ok {
