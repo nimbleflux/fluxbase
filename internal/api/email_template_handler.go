@@ -14,6 +14,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/email"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 )
 
 type EmailTemplateHandler struct {
@@ -400,10 +401,7 @@ func (h *EmailTemplateHandler) TestTemplate(c fiber.Ctx) error {
 		Str("recipient", req.RecipientEmail).
 		Msg("Test email sent successfully")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Test email sent successfully",
-	})
+	return apperrors.SendSuccess(c, "Test email sent successfully")
 }
 
 func renderTemplateString(templateStr string, data map[string]string) string {

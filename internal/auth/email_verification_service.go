@@ -10,7 +10,7 @@ type EmailVerificationService struct {
 	repo                    *EmailVerificationRepository
 	userRepo                *UserRepository
 	settingsCache           *SettingsCache
-	emailService            RealEmailService
+	emailService            EmailService
 	baseURL                 string
 	emailVerificationExpiry time.Duration
 }
@@ -19,7 +19,7 @@ func NewEmailVerificationService(
 	repo *EmailVerificationRepository,
 	userRepo *UserRepository,
 	settingsCache *SettingsCache,
-	emailService RealEmailService,
+	emailService EmailService,
 	baseURL string,
 	emailVerificationExpiry time.Duration,
 ) *EmailVerificationService {

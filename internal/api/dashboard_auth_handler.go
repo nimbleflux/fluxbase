@@ -25,6 +25,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/crypto"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/email"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
@@ -284,7 +285,7 @@ func (h *DashboardAuthHandler) VerifyTOTP(c fiber.Ctx) error {
 
 // GetCurrentUser returns the currently authenticated dashboard user
 func (h *DashboardAuthHandler) GetCurrentUser(c fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	userID, _ := uuid.Parse(middleware.GetUserID(c))
 
 	user, err := h.authService.GetUserByID(c.RequestCtx(), userID)
 	if err != nil {
@@ -299,7 +300,7 @@ func (h *DashboardAuthHandler) GetCurrentUser(c fiber.Ctx) error {
 
 // UpdateProfile updates the current user's profile
 func (h *DashboardAuthHandler) UpdateProfile(c fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	userID, _ := uuid.Parse(middleware.GetUserID(c))
 
 	var req struct {
 		FullName  string  `json:"full_name"`
@@ -335,7 +336,7 @@ func (h *DashboardAuthHandler) UpdateProfile(c fiber.Ctx) error {
 
 // ChangePassword changes the current user's password
 func (h *DashboardAuthHandler) ChangePassword(c fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	userID, _ := uuid.Parse(middleware.GetUserID(c))
 
 	var req struct {
 		CurrentPassword string `json:"current_password"`
@@ -370,14 +371,12 @@ func (h *DashboardAuthHandler) ChangePassword(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to change password")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Password changed successfully",
-	})
+	return apperrors.SendSuccess(c, "Password changed successfully")
 }
 
 // DeleteAccount deletes the current user's account
 func (h *DashboardAuthHandler) DeleteAccount(c fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	userID, _ := uuid.Parse(middleware.GetUserID(c))
 
 	var req struct {
 		Password string `json:"password"`
@@ -406,14 +405,12 @@ func (h *DashboardAuthHandler) DeleteAccount(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to delete account")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Account deleted successfully",
-	})
+	return apperrors.SendSuccess(c, "Account deleted successfully")
 }
 
 // SetupTOTP generates a new TOTP secret for 2FA
 func (h *DashboardAuthHandler) SetupTOTP(c fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	userID, _ := uuid.Parse(middleware.GetUserID(c))
 
 	if err := h.requireAuthService(c); err != nil {
 		return err
@@ -444,7 +441,7 @@ func (h *DashboardAuthHandler) SetupTOTP(c fiber.Ctx) error {
 
 // EnableTOTP enables 2FA after verifying the TOTP code
 func (h *DashboardAuthHandler) EnableTOTP(c fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	userID, _ := uuid.Parse(middleware.GetUserID(c))
 
 	var req struct {
 		Code string `json:"code"`
@@ -481,7 +478,7 @@ func (h *DashboardAuthHandler) EnableTOTP(c fiber.Ctx) error {
 
 // DisableTOTP disables 2FA for the current user
 func (h *DashboardAuthHandler) DisableTOTP(c fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	userID, _ := uuid.Parse(middleware.GetUserID(c))
 
 	var req struct {
 		Password string `json:"password"`
@@ -510,9 +507,7 @@ func (h *DashboardAuthHandler) DisableTOTP(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to disable 2FA")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "2FA disabled successfully",
-	})
+	return apperrors.SendSuccess(c, "2FA disabled successfully")
 }
 
 // RequestPasswordReset initiates a password reset for a dashboard user
@@ -629,9 +624,7 @@ func (h *DashboardAuthHandler) ConfirmPasswordReset(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to reset password")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Password reset successfully",
-	})
+	return apperrors.SendSuccess(c, "Password reset successfully")
 }
 
 // RequireDashboardAuth is a middleware that requires dashboard authentication
@@ -673,7 +666,7 @@ func (h *DashboardAuthHandler) RequireDashboardAuth(c fiber.Ctx) error {
 
 	// Set user ID and role in locals
 	// Using "user_role" to match RLS middleware expectations
-	c.Locals("user_id", userID)
+	c.Locals("user_id", userID.String())
 	c.Locals("user_role", claims.Role)
 
 	return c.Next()

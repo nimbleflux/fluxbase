@@ -7,6 +7,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 type UserManagementHandler struct {
@@ -38,7 +40,7 @@ func (h *UserManagementHandler) ListUsers(c fiber.Ctx) error {
 	offset := fiber.Query[int](c, "offset", 0)
 	userType := c.Query("type", "app")
 
-	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantID := middleware.GetTenantID(c)
 	tenantSource, _ := c.Locals("tenant_source").(string)
 	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
 
@@ -137,7 +139,7 @@ func (h *UserManagementHandler) InviteUser(c fiber.Ctx) error {
 	userType := c.Query("type", "app")
 
 	if req.TenantID == "" {
-		tenantID, _ := c.Locals("tenant_id").(string)
+		tenantID := middleware.GetTenantID(c)
 		req.TenantID = tenantID
 	}
 
@@ -257,9 +259,7 @@ func (h *UserManagementHandler) LockUser(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to lock user")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "User account locked successfully",
-	})
+	return apperrors.SendSuccess(c, "User account locked successfully")
 }
 
 func (h *UserManagementHandler) UnlockUser(c fiber.Ctx) error {
@@ -278,9 +278,7 @@ func (h *UserManagementHandler) UnlockUser(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to unlock user")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "User account unlocked successfully",
-	})
+	return apperrors.SendSuccess(c, "User account unlocked successfully")
 }
 
 // fiber:context-methods migrated

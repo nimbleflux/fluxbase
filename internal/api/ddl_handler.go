@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -14,6 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/logutil"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
@@ -44,10 +44,6 @@ func (h *DDLHandler) SetSchemaCache(cache *database.SchemaCache) {
 
 // Validation patterns
 var (
-	// identifierPattern matches valid PostgreSQL identifiers (schema/table/column names)
-	// Must start with letter or underscore, followed by letters, numbers, underscores
-	identifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-
 	// Reserved PostgreSQL keywords that should not be used as identifiers
 	reservedKeywords = map[string]bool{
 		"user": true, "table": true, "column": true, "index": true,
@@ -278,10 +274,7 @@ func (h *DDLHandler) DeleteTable(c fiber.Ctx) error {
 
 	h.invalidateCache(ctx)
 	log.Info().Str("table", schema+"."+table).Msg("Table dropped successfully")
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("Table '%s.%s' deleted successfully", schema, table),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("Table '%s.%s' deleted successfully", schema, table))
 }
 
 // AddColumnRequest represents a request to add a column to a table
@@ -437,10 +430,7 @@ func (h *DDLHandler) DropColumn(c fiber.Ctx) error {
 
 	h.invalidateCache(ctx)
 	log.Info().Str("table", schema+"."+table).Str("column", column).Msg("Column dropped successfully")
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("Column '%s' dropped from table '%s.%s'", column, schema, table),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("Column '%s' dropped from table '%s.%s'", column, schema, table))
 }
 
 // RenameTableRequest represents a request to rename a table
@@ -513,10 +503,7 @@ func (h *DDLHandler) RenameTable(c fiber.Ctx) error {
 
 	h.invalidateCache(ctx)
 	log.Info().Str("table", schema+"."+table).Str("newName", req.NewName).Msg("Table renamed successfully")
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("Table '%s.%s' renamed to '%s.%s'", schema, table, schema, req.NewName),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("Table '%s.%s' renamed to '%s.%s'", schema, table, schema, req.NewName))
 }
 
 // Helper functions
@@ -531,7 +518,7 @@ func validateIdentifier(name, entityType string) error {
 		return fmt.Errorf("%s name cannot exceed 63 characters", entityType)
 	}
 
-	if !identifierPattern.MatchString(name) {
+	if !validIdentifierRegex.MatchString(name) {
 		return fmt.Errorf("%s name must start with a letter or underscore and contain only letters, numbers, and underscores", entityType)
 	}
 

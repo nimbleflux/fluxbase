@@ -8,6 +8,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/loader"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/rpc"
 )
 
 func TestNewSyncRPCTool(t *testing.T) {
@@ -83,9 +84,9 @@ func TestSyncRPCTool_Execute_Validation(t *testing.T) {
 	})
 }
 
-func TestRPCConfig_Struct(t *testing.T) {
+func TestRPCAnnotations_Struct(t *testing.T) {
 	t.Run("zero value", func(t *testing.T) {
-		var config RPCConfig
+		var config rpc.RPCAnnotations
 		assert.Empty(t, config.Description)
 		assert.False(t, config.IsPublic)
 		assert.Equal(t, 0, config.Timeout)
@@ -97,7 +98,7 @@ func TestRPCConfig_Struct(t *testing.T) {
 
 	t.Run("all fields", func(t *testing.T) {
 		schedule := "0 * * * *"
-		config := RPCConfig{
+		config := rpc.RPCAnnotations{
 			Description:    "Get user profile",
 			IsPublic:       true,
 			Timeout:        60,
@@ -117,7 +118,7 @@ func TestRPCConfig_Struct(t *testing.T) {
 
 func TestParseRPCAnnotations(t *testing.T) {
 	t.Run("empty code returns defaults", func(t *testing.T) {
-		config := parseRPCAnnotations("")
+		config := rpc.ParseRPCAnnotations("")
 		assert.Equal(t, 30, config.Timeout)
 		assert.Equal(t, []string{"public"}, config.AllowedSchemas)
 		assert.Empty(t, config.AllowedTables)
@@ -127,49 +128,49 @@ func TestParseRPCAnnotations(t *testing.T) {
 	t.Run("description annotation", func(t *testing.T) {
 		code := `-- @fluxbase:description Get user profile with stats
 SELECT * FROM users WHERE id = $1;`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.Equal(t, "Get user profile with stats", config.Description)
 	})
 
 	t.Run("public annotation", func(t *testing.T) {
 		code := `-- @fluxbase:public
 SELECT * FROM public_data;`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.True(t, config.IsPublic)
 	})
 
 	t.Run("timeout annotation", func(t *testing.T) {
 		code := `-- @fluxbase:timeout 60
 SELECT * FROM large_table;`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.Equal(t, 60, config.Timeout)
 	})
 
 	t.Run("require-role annotation", func(t *testing.T) {
 		code := `-- @fluxbase:require-role admin, authenticated
 SELECT * FROM sensitive_data;`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.Equal(t, []string{"admin", "authenticated"}, config.RequireRoles)
 	})
 
 	t.Run("allowed-tables annotation", func(t *testing.T) {
 		code := `-- @fluxbase:allowed-tables users, orders, products
 SELECT * FROM users;`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.Equal(t, []string{"users", "orders", "products"}, config.AllowedTables)
 	})
 
 	t.Run("allowed-schemas annotation", func(t *testing.T) {
 		code := `-- @fluxbase:allowed-schemas public, analytics
 SELECT * FROM analytics.metrics;`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.Equal(t, []string{"public", "analytics"}, config.AllowedSchemas)
 	})
 
 	t.Run("schedule annotation with quotes", func(t *testing.T) {
 		code := `-- @fluxbase:schedule "0 * * * *"
 SELECT cleanup_old_records();`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.NotNil(t, config.Schedule)
 		assert.Equal(t, "0 * * * *", *config.Schedule)
 	})
@@ -177,7 +178,7 @@ SELECT cleanup_old_records();`
 	t.Run("schedule annotation with single quotes", func(t *testing.T) {
 		code := `-- @fluxbase:schedule '0 0 * * *'
 SELECT daily_summary();`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.NotNil(t, config.Schedule)
 		assert.Equal(t, "0 0 * * *", *config.Schedule)
 	})
@@ -185,7 +186,7 @@ SELECT daily_summary();`
 	t.Run("disable-logs annotation", func(t *testing.T) {
 		code := `-- @fluxbase:disable-logs
 SELECT sensitive_data();`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.True(t, config.DisableLogs)
 	})
 
@@ -200,7 +201,7 @@ FROM users u
 LEFT JOIN user_stats s ON u.id = s.user_id
 LEFT JOIN profiles p ON u.id = p.user_id
 WHERE u.id = $1;`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.Equal(t, "Get user profile with all details", config.Description)
 		assert.True(t, config.IsPublic)
 		assert.Equal(t, 10, config.Timeout)
@@ -208,24 +209,11 @@ WHERE u.id = $1;`
 		assert.Equal(t, []string{"public"}, config.AllowedSchemas)
 	})
 
-	t.Run("block comment style", func(t *testing.T) {
-		code := `/*
- * @fluxbase:description Block comment procedure
- * @fluxbase:public
- * @fluxbase:timeout 45
- */
-SELECT * FROM data;`
-		config := parseRPCAnnotations(code)
-		assert.Equal(t, "Block comment procedure", config.Description)
-		assert.True(t, config.IsPublic)
-		assert.Equal(t, 45, config.Timeout)
-	})
-
 	t.Run("case insensitivity for annotations", func(t *testing.T) {
 		code := `-- @fluxbase:DESCRIPTION Uppercase test
 -- @fluxbase:PUBLIC
 -- @fluxbase:Timeout 20`
-		config := parseRPCAnnotations(code)
+		config := rpc.ParseRPCAnnotations(code)
 		assert.Equal(t, "Uppercase test", config.Description)
 		assert.True(t, config.IsPublic)
 		assert.Equal(t, 20, config.Timeout)

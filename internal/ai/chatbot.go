@@ -765,12 +765,6 @@ const (
 	AccessLevelTiered AccessLevel = "tiered"
 )
 
-// TraceIDGenerator generates trace IDs for observability
-type TraceIDGenerator interface {
-	GenerateTraceID() string
-	GenerateSpanID() string
-}
-
 // DefaultTraceIDGenerator implements trace ID generation
 type DefaultTraceIDGenerator struct{}
 

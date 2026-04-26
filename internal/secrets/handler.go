@@ -333,15 +333,15 @@ func getNamespaceFromQuery(c fiber.Ctx) *string {
 
 // getUserIDFromContext extracts user ID from fiber context
 func getUserIDFromContext(c fiber.Ctx) *uuid.UUID {
-	if uid, ok := c.Locals("user_id").(uuid.UUID); ok {
-		return &uid
+	uidStr := middleware.GetUserID(c)
+	if uidStr == "" {
+		return nil
 	}
-	if uidStr, ok := c.Locals("user_id").(string); ok && uidStr != "" {
-		if uid, err := uuid.Parse(uidStr); err == nil {
-			return &uid
-		}
+	uid, err := uuid.Parse(uidStr)
+	if err != nil {
+		return nil
 	}
-	return nil
+	return &uid
 }
 
 // GetSecretByName retrieves a secret by name (metadata only)

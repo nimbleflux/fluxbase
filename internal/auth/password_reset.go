@@ -261,16 +261,11 @@ func GeneratePasswordResetToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
-// PasswordResetEmailSender defines the interface for sending password reset emails
-type PasswordResetEmailSender interface {
-	SendPasswordReset(ctx context.Context, to, token, link string) error
-}
-
 // PasswordResetService provides password reset functionality
 type PasswordResetService struct {
 	repo        PasswordResetRepositoryInterface
 	userRepo    UserRepositoryInterface
-	emailSender PasswordResetEmailSender
+	emailSender EmailService
 	tokenExpiry time.Duration
 	baseURL     string
 }
@@ -279,7 +274,7 @@ type PasswordResetService struct {
 func NewPasswordResetService(
 	repo PasswordResetRepositoryInterface,
 	userRepo UserRepositoryInterface,
-	emailSender PasswordResetEmailSender,
+	emailSender EmailService,
 	tokenExpiry time.Duration,
 	baseURL string,
 ) *PasswordResetService {

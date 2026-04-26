@@ -8,8 +8,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/jobs"
 	"github.com/nimbleflux/fluxbase/internal/logging"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
@@ -19,7 +19,7 @@ import (
 
 // MonitoringHandler handles system monitoring and health check endpoints
 type MonitoringHandler struct {
-	db              *pgxpool.Pool
+	db              *database.Connection
 	realtimeHandler *realtime.RealtimeHandler
 	storageProvider storage.Provider
 	loggingService  *logging.Service // Optional - may be nil if logging not configured
@@ -27,7 +27,7 @@ type MonitoringHandler struct {
 }
 
 // NewMonitoringHandler creates a new monitoring handler
-func NewMonitoringHandler(db *pgxpool.Pool, realtimeHandler *realtime.RealtimeHandler, storageProvider storage.Provider) *MonitoringHandler {
+func NewMonitoringHandler(db *database.Connection, realtimeHandler *realtime.RealtimeHandler, storageProvider storage.Provider) *MonitoringHandler {
 	return &MonitoringHandler{
 		db:              db,
 		realtimeHandler: realtimeHandler,
@@ -136,7 +136,7 @@ func (h *MonitoringHandler) GetMetrics(c fiber.Ctx) error {
 	runtime.ReadMemStats(&m)
 
 	// Database stats
-	dbStats := h.db.Stat()
+	dbStats := h.db.Stats()
 	dbAcquireDuration := dbStats.AcquireDuration()
 
 	// Realtime stats
@@ -207,7 +207,7 @@ func (h *MonitoringHandler) getStorageStats(c fiber.Ctx) (*StorageStats, error) 
 
 	// Get user role for RLS
 	role, _ := c.Locals("user_role").(string)
-	userID, _ := c.Locals("user_id").(string)
+	userID := middleware.GetUserID(c)
 
 	// Determine DB role for RLS
 	dbRole := "authenticated"
@@ -215,7 +215,7 @@ func (h *MonitoringHandler) getStorageStats(c fiber.Ctx) (*StorageStats, error) 
 		dbRole = "anon"
 	}
 
-	conn, err := h.db.Acquire(ctx)
+	conn, err := h.db.Pool().Acquire(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire connection: %w", err)
 	}
@@ -289,7 +289,7 @@ func (h *MonitoringHandler) GetHealth(c fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := h.db.Ping(ctx)
+	err := h.db.Pool().Ping(ctx)
 	dbLatency := time.Since(dbStart).Milliseconds()
 
 	if err != nil {

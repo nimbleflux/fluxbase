@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -14,7 +13,6 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/jobs"
-	"github.com/nimbleflux/fluxbase/internal/loader"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 )
 
@@ -115,21 +113,18 @@ func (t *SyncJobTool) Execute(ctx context.Context, args map[string]any, authCtx 
 		}, nil
 	}
 
-	// Parse annotations from code
-	config := parseJobAnnotations(code)
+	config := jobs.ParseJobAnnotations(code)
 
-	// Schedule is required for jobs
-	if config.Schedule == "" {
+	if config.Schedule == nil || *config.Schedule == "" {
 		return &mcp.ToolResult{
 			Content: []mcp.Content{mcp.ErrorContent("@fluxbase:schedule annotation is required for jobs. Example: // @fluxbase:schedule \"0 */5 * * *\"")},
 			IsError: true,
 		}, nil
 	}
 
-	// Validate cron expression (basic validation)
-	if !isValidCronExpression(config.Schedule) {
+	if !isValidCronExpression(*config.Schedule) {
 		return &mcp.ToolResult{
-			Content: []mcp.Content{mcp.ErrorContent(fmt.Sprintf("Invalid cron expression: %s", config.Schedule))},
+			Content: []mcp.Content{mcp.ErrorContent(fmt.Sprintf("Invalid cron expression: %s", *config.Schedule))},
 			IsError: true,
 		}, nil
 	}
@@ -137,11 +132,10 @@ func (t *SyncJobTool) Execute(ctx context.Context, args map[string]any, authCtx 
 	log.Debug().
 		Str("name", name).
 		Str("namespace", namespace).
-		Str("schedule", config.Schedule).
+		Str("schedule", *config.Schedule).
 		Interface("config", config).
 		Msg("MCP: sync_job - parsed annotations")
 
-	// Create job function struct
 	fn := &jobs.JobFunction{
 		ID:                     uuid.New(),
 		Name:                   name,
@@ -150,20 +144,19 @@ func (t *SyncJobTool) Execute(ctx context.Context, args map[string]any, authCtx 
 		OriginalCode:           &code,
 		IsBundled:              false,
 		Enabled:                true,
-		Schedule:               &config.Schedule,
+		Schedule:               config.Schedule,
 		Source:                 "mcp",
-		TimeoutSeconds:         config.Timeout,
-		MemoryLimitMB:          config.Memory,
+		TimeoutSeconds:         config.TimeoutSeconds,
+		MemoryLimitMB:          config.MemoryLimitMB,
 		MaxRetries:             config.MaxRetries,
-		ProgressTimeoutSeconds: 60, // Default progress timeout
+		ProgressTimeoutSeconds: 60,
 		AllowNet:               config.AllowNet,
 		AllowEnv:               config.AllowEnv,
 		AllowRead:              true,
 		AllowWrite:             false,
-		DisableExecutionLogs:   config.DisableLogs,
+		DisableExecutionLogs:   config.DisableExecutionLogs,
 	}
 
-	// Set optional fields
 	if config.Description != "" {
 		fn.Description = &config.Description
 	}
@@ -217,7 +210,7 @@ func (t *SyncJobTool) Execute(ctx context.Context, args map[string]any, authCtx 
 		"name":      fn.Name,
 		"namespace": fn.Namespace,
 		"version":   fn.Version,
-		"schedule":  config.Schedule,
+		"schedule":  *config.Schedule,
 	}
 
 	// Serialize result
@@ -234,84 +227,12 @@ func (t *SyncJobTool) Execute(ctx context.Context, args map[string]any, authCtx 
 	}, nil
 }
 
-// JobConfig holds parsed @fluxbase annotations for jobs
-type JobConfig struct {
-	Description  string
-	Schedule     string
-	Timeout      int
-	Memory       int
-	MaxRetries   int
-	RequireRoles []string
-	AllowNet     bool
-	AllowEnv     bool
-	DisableLogs  bool
-}
-
-func parseJobAnnotations(code string) JobConfig {
-	annotations := loader.ParseAnnotations(code, []string{"//"})
-	config := JobConfig{
-		Timeout:    300,
-		Memory:     256,
-		MaxRetries: 3,
-		AllowNet:   true,
-		AllowEnv:   true,
-	}
-
-	if v, ok := annotations["schedule"]; ok {
-		config.Schedule = strings.Trim(v, `"'`)
-	}
-	if v, ok := annotations["description"]; ok {
-		config.Description = v
-	}
-	if v, ok := annotations["timeout"]; ok {
-		if t, err := strconv.Atoi(v); err == nil && t > 0 {
-			config.Timeout = t
-		}
-	}
-	if v, ok := annotations["memory"]; ok {
-		if m, err := strconv.Atoi(v); err == nil && m > 0 {
-			config.Memory = m
-		}
-	}
-	if v, ok := annotations["max-retries"]; ok {
-		if r, err := strconv.Atoi(v); err == nil && r >= 0 {
-			config.MaxRetries = r
-		}
-	}
-	if v, ok := annotations["require-role"]; ok {
-		roles := loader.ParseRoleList(v)
-		if len(roles) > 0 {
-			config.RequireRoles = roles
-		}
-	}
-	if _, ok := annotations["allow-net"]; ok {
-		config.AllowNet = true
-	}
-	if _, ok := annotations["deny-net"]; ok {
-		config.AllowNet = false
-	}
-	if _, ok := annotations["allow-env"]; ok {
-		config.AllowEnv = true
-	}
-	if _, ok := annotations["deny-env"]; ok {
-		config.AllowEnv = false
-	}
-	if _, ok := annotations["disable-logs"]; ok {
-		config.DisableLogs = true
-	}
-
-	return config
-}
-
-// isValidCronExpression performs basic validation of cron expressions
 func isValidCronExpression(expr string) bool {
-	// Basic validation: should have 5 or 6 space-separated fields
 	fields := strings.Fields(expr)
 	if len(fields) < 5 || len(fields) > 6 {
 		return false
 	}
 
-	// Each field should contain valid cron characters
 	validChars := regexp.MustCompile(`^[\d\*\/\-\,\?LW#]+$`)
 	for _, field := range fields {
 		if !validChars.MatchString(field) {

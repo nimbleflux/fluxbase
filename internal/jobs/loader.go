@@ -163,7 +163,7 @@ func (l *Loader) LoadFromFilesystem(ctx context.Context, namespace string) error
 		}
 
 		// Parse annotations from code
-		annotations := parseAnnotations(code)
+		annotations := ParseJobAnnotations(code)
 
 		// If job doesn't have its own deno.json but we have a global one, use it
 		if _, hasLocalDenoJSON := supportingFiles["deno.json"]; !hasLocalDenoJSON {
@@ -327,7 +327,7 @@ func (l *Loader) LoadBuiltinJobs(ctx context.Context, namespace string) error {
 		codeStr := string(code)
 
 		// Parse annotations from code
-		annotations := parseAnnotations(codeStr)
+		annotations := ParseJobAnnotations(codeStr)
 
 		// Bundle the job code
 		bundledCode, bundleErr := l.bundleJob(ctx, codeStr, nil, nil)
@@ -539,7 +539,7 @@ func (l *Loader) BundleCode(ctx context.Context, code string) (string, error) {
 
 // ParseAnnotations parses @fluxbase: annotations from job code (public wrapper)
 func (l *Loader) ParseAnnotations(code string) JobAnnotations {
-	return parseAnnotations(code)
+	return ParseJobAnnotations(code)
 }
 
 // bundleJob bundles a job's code with its dependencies
@@ -563,10 +563,9 @@ func (l *Loader) bundleJob(
 	return result.BundledCode, nil
 }
 
-// JobAnnotations represents parsed annotations from job code
 type JobAnnotations struct {
 	Schedule               *string
-	ScheduleParams         map[string]interface{} // Parameters to pass when scheduled
+	ScheduleParams         map[string]interface{}
 	TimeoutSeconds         int
 	MemoryLimitMB          int
 	MaxRetries             int
@@ -578,10 +577,10 @@ type JobAnnotations struct {
 	AllowWrite             bool
 	RequireRoles           []string
 	DisableExecutionLogs   bool
+	Description            string
 }
 
-// parseAnnotations parses @fluxbase: annotations from job code
-func parseAnnotations(code string) JobAnnotations {
+func ParseJobAnnotations(code string) JobAnnotations {
 	annotations := loader.ParseAnnotations(code, []string{"//", "/*"})
 	result := JobAnnotations{
 		TimeoutSeconds:         300,
@@ -597,7 +596,7 @@ func parseAnnotations(code string) JobAnnotations {
 	}
 
 	if v, ok := annotations["schedule"]; ok {
-		schedule := strings.TrimSpace(v)
+		schedule := strings.Trim(v, "\"'")
 		if schedule != "" {
 			result.Schedule = &schedule
 		}
@@ -660,10 +659,16 @@ func parseAnnotations(code string) JobAnnotations {
 			result.AllowNet = false
 		}
 	}
+	if _, ok := annotations["deny-net"]; ok {
+		result.AllowNet = false
+	}
 	if v, ok := annotations["allow-env"]; ok {
 		if v == "false" {
 			result.AllowEnv = false
 		}
+	}
+	if _, ok := annotations["deny-env"]; ok {
+		result.AllowEnv = false
 	}
 	if v, ok := annotations["require-role"]; ok {
 		roles := loader.ParseRoleList(v)
@@ -673,6 +678,12 @@ func parseAnnotations(code string) JobAnnotations {
 	}
 	if _, ok := annotations["disable-execution-logs"]; ok {
 		result.DisableExecutionLogs = true
+	}
+	if _, ok := annotations["disable-logs"]; ok {
+		result.DisableExecutionLogs = true
+	}
+	if v, ok := annotations["description"]; ok {
+		result.Description = v
 	}
 
 	return result

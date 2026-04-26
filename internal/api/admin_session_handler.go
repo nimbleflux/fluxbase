@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 )
 
 // AdminSessionHandler handles admin session management
@@ -102,9 +103,7 @@ func (h *AdminSessionHandler) RevokeSession(c fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Session revoked successfully",
-	})
+	return apperrors.SendSuccess(c, "Session revoked successfully")
 }
 
 // RevokeUserSessions revokes all sessions for a specific user
@@ -130,9 +129,7 @@ func (h *AdminSessionHandler) RevokeUserSessions(c fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "All user sessions revoked successfully",
-	})
+	return apperrors.SendSuccess(c, "All user sessions revoked successfully")
 }
 
 // fiber:context-methods migrated

@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
@@ -455,9 +456,7 @@ func (h *SAMLHandler) handleIdPInitiatedLogout(c fiber.Ctx, samlRequest, relaySt
 	idpSloURL := provider.IdPSloURL
 	if idpSloURL == "" {
 		// No SLO URL, just return success
-		return c.JSON(fiber.Map{
-			"message": "logout successful",
-		})
+		return apperrors.SendSuccess(c, "logout successful")
 	}
 
 	// Generate signed LogoutResponse
@@ -540,8 +539,8 @@ func (h *SAMLHandler) InitiateSAMLLogout(c fiber.Ctx) error {
 	}
 
 	// Get the current user from the JWT token
-	userID, ok := c.Locals("user_id").(string)
-	if !ok || userID == "" {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "authentication required",
 		})

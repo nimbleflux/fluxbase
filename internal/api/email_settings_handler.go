@@ -11,6 +11,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/email"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/settings"
 )
 
@@ -431,10 +432,7 @@ func (h *EmailSettingsHandler) TestSettings(c fiber.Ctx) error {
 
 	log.Info().Str("recipient", req.RecipientEmail).Msg("Test email sent successfully")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Test email sent successfully",
-	})
+	return apperrors.SendSuccess(c, "Test email sent successfully")
 }
 
 // TenantEmailSettingsResponse extends EmailSettingsResponse with source information per field.
@@ -774,8 +772,5 @@ func (h *EmailSettingsHandler) TestSettingsForTenant(c fiber.Ctx) error {
 
 	log.Info().Str("recipient", req.RecipientEmail).Str("tenant_id", tenantID).Msg("Tenant test email sent successfully")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Test email sent successfully",
-	})
+	return apperrors.SendSuccess(c, "Test email sent successfully")
 }

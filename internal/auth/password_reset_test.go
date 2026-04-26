@@ -336,7 +336,7 @@ func TestPasswordResetService_RequestPasswordReset_InvalidRedirectURL(t *testing
 	}
 }
 
-// mockPasswordResetEmailSender implements PasswordResetEmailSender for testing
+// mockPasswordResetEmailSender implements EmailService for testing
 type mockPasswordResetEmailSender struct {
 	sentTo    string
 	sentToken string
@@ -351,9 +351,29 @@ func (m *mockPasswordResetEmailSender) SendPasswordReset(ctx context.Context, to
 	return m.sendError
 }
 
+func (m *mockPasswordResetEmailSender) SendMagicLink(ctx context.Context, to, token, link string) error {
+	return m.sendError
+}
+
+func (m *mockPasswordResetEmailSender) SendVerificationEmail(ctx context.Context, to, token, link string) error {
+	return m.sendError
+}
+
+func (m *mockPasswordResetEmailSender) SendInvitationEmail(ctx context.Context, to, inviterName, inviteLink string) error {
+	return m.sendError
+}
+
+func (m *mockPasswordResetEmailSender) Send(ctx context.Context, to, subject, body string) error {
+	return m.sendError
+}
+
+func (m *mockPasswordResetEmailSender) IsConfigured() bool {
+	return true
+}
+
 func TestPasswordResetEmailSenderInterface(t *testing.T) {
 	t.Run("mock implements interface", func(t *testing.T) {
-		var sender PasswordResetEmailSender = &mockPasswordResetEmailSender{}
+		var sender EmailService = &mockPasswordResetEmailSender{}
 		assert.NotNil(t, sender)
 	})
 

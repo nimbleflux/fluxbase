@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
+
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 // =============================================================================
@@ -701,55 +703,55 @@ func TestIsAdminRole(t *testing.T) {
 func TestValueOr(t *testing.T) {
 	t.Run("returns value when pointer is non-nil (int)", func(t *testing.T) {
 		val := 42
-		result := valueOr(&val, 0)
+		result := util.ValueOr(&val, 0)
 		assert.Equal(t, 42, result)
 	})
 
 	t.Run("returns default when pointer is nil (int)", func(t *testing.T) {
 		var ptr *int
-		result := valueOr(ptr, 100)
+		result := util.ValueOr(ptr, 100)
 		assert.Equal(t, 100, result)
 	})
 
 	t.Run("returns value when pointer is non-nil (string)", func(t *testing.T) {
 		val := "hello"
-		result := valueOr(&val, "default")
+		result := util.ValueOr(&val, "default")
 		assert.Equal(t, "hello", result)
 	})
 
 	t.Run("returns default when pointer is nil (string)", func(t *testing.T) {
 		var ptr *string
-		result := valueOr(ptr, "default")
+		result := util.ValueOr(ptr, "default")
 		assert.Equal(t, "default", result)
 	})
 
 	t.Run("returns value when pointer is non-nil (bool)", func(t *testing.T) {
 		val := true
-		result := valueOr(&val, false)
+		result := util.ValueOr(&val, false)
 		assert.True(t, result)
 	})
 
 	t.Run("returns default when pointer is nil (bool)", func(t *testing.T) {
 		var ptr *bool
-		result := valueOr(ptr, true)
+		result := util.ValueOr(ptr, true)
 		assert.True(t, result)
 	})
 
 	t.Run("returns zero value when set", func(t *testing.T) {
 		val := 0
-		result := valueOr(&val, 42)
+		result := util.ValueOr(&val, 42)
 		assert.Equal(t, 0, result)
 	})
 
 	t.Run("returns empty string when set", func(t *testing.T) {
 		val := ""
-		result := valueOr(&val, "default")
+		result := util.ValueOr(&val, "default")
 		assert.Equal(t, "", result)
 	})
 
 	t.Run("returns false when set to false", func(t *testing.T) {
 		val := false
-		result := valueOr(&val, true)
+		result := util.ValueOr(&val, true)
 		assert.False(t, result)
 	})
 }
@@ -760,44 +762,44 @@ func TestValueOr(t *testing.T) {
 
 func TestTruncateString(t *testing.T) {
 	t.Run("returns string unchanged if shorter than maxLen", func(t *testing.T) {
-		result := truncateString("hello", 10)
+		result := util.TruncateString("hello", 10)
 		assert.Equal(t, "hello", result)
 	})
 
 	t.Run("returns string unchanged if equal to maxLen", func(t *testing.T) {
-		result := truncateString("hello", 5)
+		result := util.TruncateString("hello", 5)
 		assert.Equal(t, "hello", result)
 	})
 
 	t.Run("truncates string if longer than maxLen", func(t *testing.T) {
-		result := truncateString("hello world", 5)
+		result := util.TruncateString("hello world", 5)
 		assert.Equal(t, "hello...", result)
 	})
 
 	t.Run("handles empty string", func(t *testing.T) {
-		result := truncateString("", 10)
+		result := util.TruncateString("", 10)
 		assert.Equal(t, "", result)
 	})
 
 	t.Run("handles maxLen of 0", func(t *testing.T) {
-		result := truncateString("hello", 0)
+		result := util.TruncateString("hello", 0)
 		assert.Equal(t, "...", result)
 	})
 
 	t.Run("handles maxLen of 1", func(t *testing.T) {
-		result := truncateString("hello", 1)
+		result := util.TruncateString("hello", 1)
 		assert.Equal(t, "h...", result)
 	})
 
 	t.Run("handles very long string", func(t *testing.T) {
 		longStr := "This is a very long string that should be truncated"
-		result := truncateString(longStr, 10)
+		result := util.TruncateString(longStr, 10)
 		assert.Equal(t, "This is a ...", result)
 		assert.Len(t, result, 13) // 10 + "..."
 	})
 
 	t.Run("handles unicode strings", func(t *testing.T) {
-		result := truncateString("hello 世界", 8)
+		result := util.TruncateString("hello 世界", 8)
 		// Note: truncateString works on byte length, not rune count
 		assert.Contains(t, result, "...")
 	})
@@ -809,39 +811,39 @@ func TestTruncateString(t *testing.T) {
 
 func TestToString(t *testing.T) {
 	t.Run("returns empty string for nil interface", func(t *testing.T) {
-		result := toString(nil)
+		result := util.ToString(nil)
 		assert.Equal(t, "", result)
 	})
 
 	t.Run("returns string as-is", func(t *testing.T) {
-		result := toString("hello")
+		result := util.ToString("hello")
 		assert.Equal(t, "hello", result)
 	})
 
 	t.Run("returns empty string for nil uuid pointer", func(t *testing.T) {
 		var uid *uuid.UUID
-		result := toString(uid)
+		result := util.ToString(uid)
 		assert.Equal(t, "", result)
 	})
 
 	t.Run("returns uuid string for non-nil uuid pointer", func(t *testing.T) {
 		uid := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
-		result := toString(&uid)
+		result := util.ToString(&uid)
 		assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000", result)
 	})
 
 	t.Run("converts int to string", func(t *testing.T) {
-		result := toString(42)
+		result := util.ToString(42)
 		assert.Equal(t, "42", result)
 	})
 
 	t.Run("converts float to string", func(t *testing.T) {
-		result := toString(3.14)
+		result := util.ToString(3.14)
 		assert.Equal(t, "3.14", result)
 	})
 
 	t.Run("converts bool to string", func(t *testing.T) {
-		result := toString(true)
+		result := util.ToString(true)
 		assert.Equal(t, "true", result)
 	})
 
@@ -849,7 +851,7 @@ func TestToString(t *testing.T) {
 		type testStruct struct {
 			Name string
 		}
-		result := toString(testStruct{Name: "test"})
+		result := util.ToString(testStruct{Name: "test"})
 		assert.Contains(t, result, "test")
 	})
 }

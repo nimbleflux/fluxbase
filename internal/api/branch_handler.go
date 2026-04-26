@@ -10,6 +10,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/branching"
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // BranchHandler handles branch management API endpoints
@@ -53,7 +54,7 @@ func getTenantFilter(c fiber.Ctx) *uuid.UUID {
 	if authType == "service_key" {
 		return nil
 	}
-	if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
+	if tid := middleware.GetTenantID(c); tid != "" {
 		if id, err := uuid.Parse(tid); err == nil {
 			return &id
 		}
@@ -91,7 +92,7 @@ func (h *BranchHandler) CreateBranch(c fiber.Ctx) error {
 
 	// Get user ID from context
 	var userID *uuid.UUID
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		if id, err := uuid.Parse(uid); err == nil {
 			userID = &id
 		}
@@ -99,7 +100,7 @@ func (h *BranchHandler) CreateBranch(c fiber.Ctx) error {
 
 	// Get tenant ID from context (set by tenant middleware)
 	var tenantID *uuid.UUID
-	if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
+	if tid := middleware.GetTenantID(c); tid != "" {
 		if id, err := uuid.Parse(tid); err == nil {
 			tenantID = &id
 		}
@@ -199,7 +200,7 @@ func (h *BranchHandler) ListBranches(c fiber.Ctx) error {
 
 	// Get user ID for filtering their branches
 	if c.Query("mine") == "true" {
-		if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+		if uid := middleware.GetUserID(c); uid != "" {
 			if id, err := uuid.Parse(uid); err == nil {
 				filter.CreatedBy = &id
 			}
@@ -209,7 +210,7 @@ func (h *BranchHandler) ListBranches(c fiber.Ctx) error {
 	// Auto-filter by tenant for non-instance-admins
 	userRole, _ := c.Locals("user_role").(string)
 	if userRole != "instance_admin" && userRole != "admin" && userRole != "tenant_service" {
-		if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
+		if tid := middleware.GetTenantID(c); tid != "" {
 			if id, err := uuid.Parse(tid); err == nil {
 				filter.TenantID = &id
 			}
@@ -309,7 +310,7 @@ func (h *BranchHandler) DeleteBranch(c fiber.Ctx) error {
 
 	// Get user ID from context
 	var userID *uuid.UUID
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		if id, err := uuid.Parse(uid); err == nil {
 			userID = &id
 		}
@@ -385,7 +386,7 @@ func (h *BranchHandler) ResetBranch(c fiber.Ctx) error {
 
 	// Get user ID from context
 	var userID *uuid.UUID
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		if id, err := uuid.Parse(uid); err == nil {
 			userID = &id
 		}
@@ -582,7 +583,7 @@ func (h *BranchHandler) ResetActiveBranch(c fiber.Ctx) error {
 func (h *BranchHandler) ListGitHubConfigs(c fiber.Ctx) error {
 	// Get tenant ID from context (set by tenant middleware)
 	var tenantID *uuid.UUID
-	if tid, ok := c.Locals("tenant_id").(string); ok && tid != "" {
+	if tid := middleware.GetTenantID(c); tid != "" {
 		if id, err := uuid.Parse(tid); err == nil {
 			tenantID = &id
 		}
@@ -712,7 +713,7 @@ func (h *BranchHandler) ListBranchAccess(c fiber.Ctx) error {
 
 	// Check authorization
 	var userID *uuid.UUID
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		if id, err := uuid.Parse(uid); err == nil {
 			userID = &id
 		}
@@ -798,7 +799,7 @@ func (h *BranchHandler) GrantBranchAccess(c fiber.Ctx) error {
 
 	// Check authorization
 	var grantedBy *uuid.UUID
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		if id, err := uuid.Parse(uid); err == nil {
 			grantedBy = &id
 		}
@@ -883,7 +884,7 @@ func (h *BranchHandler) RevokeBranchAccess(c fiber.Ctx) error {
 
 	// Check authorization
 	var currentUserID *uuid.UUID
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		if id, err := uuid.Parse(uid); err == nil {
 			currentUserID = &id
 		}

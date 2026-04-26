@@ -8,7 +8,6 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
@@ -36,7 +35,7 @@ type Service struct {
 	nonceRepo                *NonceRepository
 	oidcVerifier             *OIDCVerifier
 	config                   *config.AuthConfig
-	emailService             RealEmailService
+	emailService             EmailService
 	baseURL                  string
 	emailVerificationExpiry  time.Duration
 	metrics                  *observability.Metrics
@@ -78,13 +77,6 @@ func (s *Service) recordAuthToken(tokenType string) {
 	}
 }
 
-// FullEmailService is a complete email service interface
-// that includes both the basic EmailSender methods and a generic Send method
-type FullEmailService interface {
-	EmailSender
-	Send(ctx context.Context, to, subject, body string) error
-}
-
 // NewService creates a new authentication service
 func NewService(
 	db *database.Connection,
@@ -103,9 +95,7 @@ func NewService(
 	passwordHasher := NewPasswordHasherWithConfig(PasswordHasherConfig{MinLength: cfg.PasswordMinLen, Cost: cfg.BcryptCost})
 	oauthManager := NewOAuthManager()
 
-	// Cast email service to appropriate interfaces
-	emailSender, _ := emailService.(EmailSender)
-	realEmailService, _ := emailService.(RealEmailService)
+	emailSvc, _ := emailService.(EmailService)
 
 	// Use configured expiry times with sensible fallbacks
 	magicLinkExpiry := cfg.MagicLinkExpiry
@@ -116,7 +106,7 @@ func NewService(
 	magicLinkService := NewMagicLinkService(
 		magicLinkRepo,
 		userRepo,
-		emailSender,
+		emailSvc,
 		magicLinkExpiry,
 		baseURL,
 	)
@@ -130,7 +120,7 @@ func NewService(
 	passwordResetService := NewPasswordResetService(
 		passwordResetRepo,
 		userRepo,
-		emailSender,
+		emailSvc,
 		passwordResetExpiry,
 		baseURL,
 	)
@@ -151,8 +141,8 @@ func NewService(
 	// Create OTP sender that uses the email service
 	// If email service doesn't support Send method, use NoOpOTPSender
 	var otpSender OTPSender
-	if realEmailService != nil {
-		otpSender = NewDefaultOTPSender(realEmailService, "", "")
+	if emailSvc != nil {
+		otpSender = NewDefaultOTPSender(emailSvc, "", "")
 	} else {
 		otpSender = &NoOpOTPSender{}
 	}
@@ -205,7 +195,7 @@ func NewService(
 		emailVerificationRepo,
 		userRepo,
 		settingsCache,
-		realEmailService,
+		emailSvc,
 		baseURL,
 		emailVerificationExpiry,
 	)
@@ -232,7 +222,7 @@ func NewService(
 		nonceRepo:                nonceRepo,
 		oidcVerifier:             oidcVerifier,
 		config:                   cfg,
-		emailService:             realEmailService,
+		emailService:             emailSvc,
 		baseURL:                  baseURL,
 		emailVerificationExpiry:  emailVerificationExpiry,
 		mfaService:               mfaService,
@@ -646,262 +636,21 @@ func (s *Service) RefreshToken(ctx context.Context, req RefreshTokenRequest) (*R
 	}, nil
 }
 
-// GetUser retrieves the current user by access token
-func (s *Service) GetUser(ctx context.Context, accessToken string) (*User, error) {
-	// Validate token
-	claims, err := s.jwtManager.ValidateToken(accessToken)
-	if err != nil {
-		return nil, fmt.Errorf("invalid token: %w", err)
-	}
-
-	// Verify session still exists (not signed out)
-	_, err = s.sessionRepo.GetByAccessToken(ctx, accessToken)
-	if err != nil {
-		if errors.Is(err, ErrSessionNotFound) {
-			return nil, fmt.Errorf("session not found or expired")
-		}
-		return nil, fmt.Errorf("failed to verify session: %w", err)
-	}
-
-	// Get user
-	user, err := s.userRepo.GetByID(ctx, claims.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user: %w", err)
-	}
-
-	return user, nil
+// IsSignupEnabled returns whether user signup is enabled
+func (s *Service) IsSignupEnabled() bool {
+	// Use background context for health check endpoint
+	ctx := context.Background()
+	return s.settingsCache.GetBool(ctx, "app.auth.signup_enabled", s.config.SignupEnabled)
 }
 
-// UpdateUser updates user information
-func (s *Service) UpdateUser(ctx context.Context, userID string, req UpdateUserRequest) (*User, error) {
-	// Validate email if provided
-	if req.Email != nil {
-		if err := ValidateEmail(*req.Email); err != nil {
-			return nil, fmt.Errorf("invalid email: %w", err)
-		}
-	}
-	return s.userRepo.Update(ctx, userID, req)
+// GetSettingsCache returns the settings cache
+func (s *Service) GetSettingsCache() *SettingsCache {
+	return s.settingsCache
 }
 
-// SendMagicLink sends a magic link to the specified email
-func (s *Service) SendMagicLink(ctx context.Context, email string) error {
-	// Check if magic link is enabled from database settings (with fallback to config)
-	enableMagicLink := s.settingsCache.GetBool(ctx, "app.auth.magic_link_enabled", s.config.MagicLinkEnabled)
-	if !enableMagicLink {
-		return fmt.Errorf("magic link authentication is disabled")
-	}
-
-	return s.magicLinkService.SendMagicLink(ctx, email)
-}
-
-// VerifyMagicLink verifies a magic link and returns tokens
-func (s *Service) VerifyMagicLink(ctx context.Context, token string) (*SignInResponse, error) {
-	// Check if magic link is enabled from database settings (with fallback to config)
-	enableMagicLink := s.settingsCache.GetBool(ctx, "app.auth.magic_link_enabled", s.config.MagicLinkEnabled)
-	if !enableMagicLink {
-		return nil, fmt.Errorf("magic link authentication is disabled")
-	}
-
-	// Verify the magic link
-	email, err := s.magicLinkService.VerifyMagicLink(ctx, token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify magic link: %w", err)
-	}
-
-	// Get existing user - auto-creation is disabled for security
-	// Users must register via signup endpoint first
-	user, err := s.userRepo.GetByEmail(ctx, email)
-	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
-			return nil, fmt.Errorf("no account found for this email - please sign up first")
-		}
-		return nil, fmt.Errorf("failed to get user: %w", err)
-	}
-
-	// Generate tokens with metadata
-	accessToken, refreshToken, _, err := s.jwtManager.GenerateTokenPair(
-		user.ID,
-		user.Email,
-		user.Role,
-		user.UserMetadata,
-		user.AppMetadata,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate tokens: %w", err)
-	}
-
-	// Create session
-	expiresAt := time.Now().Add(s.config.RefreshExpiry)
-	_, err = s.sessionRepo.Create(ctx, user.ID, accessToken, refreshToken, expiresAt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
-	}
-
-	return &SignInResponse{
-		User:         user,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    int64(s.config.JWTExpiry.Seconds()),
-	}, nil
-}
-
-// ValidateToken validates an access token and returns the claims
-func (s *Service) ValidateToken(token string) (*TokenClaims, error) {
-	return s.jwtManager.ValidateToken(token)
-}
-
-// ValidateTokenWithSecret validates an access token using a specific secret key
-// This is used for multi-tenant scenarios where each tenant may have a different JWT secret
-func (s *Service) ValidateTokenWithSecret(token, secretKey string) (*TokenClaims, error) {
-	return s.jwtManager.ValidateTokenWithSecret(token, secretKey)
-}
-
-// ValidateServiceRoleToken validates a JWT containing a role claim (anon, service_role, authenticated)
-// This is used for Supabase-compatible client keys which are JWTs with role claims.
-// Unlike user tokens, these don't require user lookup or revocation checks.
-func (s *Service) ValidateServiceRoleToken(token string) (*TokenClaims, error) {
-	return s.jwtManager.ValidateServiceRoleToken(token)
-}
-
-// GetOAuthManager returns the OAuth manager for configuring providers
-func (s *Service) GetOAuthManager() *OAuthManager {
-	return s.oauthManager
-}
-
-// RequestPasswordReset sends a password reset email
-// If redirectTo is provided, the email link will point to that URL instead of the default.
-func (s *Service) RequestPasswordReset(ctx context.Context, email string, redirectTo string) error {
-	return s.passwordResetService.RequestPasswordReset(ctx, email, redirectTo)
-}
-
-// ResetPassword resets a user's password using a valid reset token
-func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) (string, error) {
-	return s.passwordResetService.ResetPassword(ctx, token, newPassword)
-}
-
-// VerifyPasswordResetToken verifies if a password reset token is valid
-func (s *Service) VerifyPasswordResetToken(ctx context.Context, token string) error {
-	return s.passwordResetService.VerifyPasswordResetToken(ctx, token)
-}
-
-// RevokeToken revokes a specific JWT token
-func (s *Service) RevokeToken(ctx context.Context, token, reason string) error {
-	return s.tokenBlacklistService.RevokeToken(ctx, token, reason)
-}
-
-// IsTokenRevoked checks if a JWT token has been revoked
-// This is a convenience wrapper that only checks exact JTI revocation
-// For full revocation checking including user-wide revocation, use IsTokenRevokedWithClaims
-func (s *Service) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
-	return s.tokenBlacklistService.IsTokenRevoked(ctx, jti, "", time.Time{})
-}
-
-// IsTokenRevokedWithClaims checks if a JWT token has been revoked
-// It checks both exact JTI revocation and user-wide revocation
-// This is the preferred method for token revocation checking
-func (s *Service) IsTokenRevokedWithClaims(ctx context.Context, jti string, userID string, tokenIssuedAt time.Time) (bool, error) {
-	return s.tokenBlacklistService.IsTokenRevoked(ctx, jti, userID, tokenIssuedAt)
-}
-
-// RevokeAllUserTokens revokes all tokens for a specific user
-func (s *Service) RevokeAllUserTokens(ctx context.Context, userID, reason string) error {
-	return s.tokenBlacklistService.RevokeAllUserTokens(ctx, userID, reason)
-}
-
-// IsServiceRoleTokenRevoked checks if a service_role token has been emergency revoked
-// This provides a mechanism to revoke compromised service_role tokens immediately
-// without waiting for token expiry
-func (s *Service) IsServiceRoleTokenRevoked(ctx context.Context, jti string) (bool, error) {
-	// First check if there's a global revocation (all service_role tokens revoked)
-	var globalRevocation bool
-	err := database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `
-			SELECT EXISTS(
-				SELECT 1 FROM auth.emergency_revocation
-				WHERE revokes_all = TRUE AND expires_at > NOW()
-			)
-		`).Scan(&globalRevocation)
-	})
-	if err != nil {
-		return false, fmt.Errorf("failed to check global revocation status: %w", err)
-	}
-
-	if globalRevocation {
-		return true, nil
-	}
-
-	// Check if this specific token (JTI) has been revoked
-	var tokenRevoked bool
-	err = database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `
-			SELECT EXISTS(
-				SELECT 1 FROM auth.emergency_revocation
-				WHERE revoked_jti = $1 AND expires_at > NOW()
-			)
-		`, jti).Scan(&tokenRevoked)
-	})
-	if err != nil {
-		return false, fmt.Errorf("failed to check token revocation status: %w", err)
-	}
-
-	return tokenRevoked, nil
-}
-
-// EmergencyRevokeAllServiceRoleTokens revokes ALL service_role tokens globally
-// This should be used in security emergencies when service_role keys may be compromised
-// Returns the ID of the revocation record for audit purposes
-func (s *Service) EmergencyRevokeAllServiceRoleTokens(ctx context.Context, revokedBy, reason string) (int64, error) {
-	var id int64
-	err := database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `
-			INSERT INTO auth.emergency_revocation (revokes_all, revoked_by, reason, expires_at)
-			VALUES (TRUE, $1, $2, NOW() + INTERVAL '7 days')
-			RETURNING id
-		`, revokedBy, reason).Scan(&id)
-	})
-	if err != nil {
-		return 0, fmt.Errorf("failed to create emergency revocation: %w", err)
-	}
-
-	// Log security event
-	LogSecurityWarning(ctx, SecurityEvent{
-		Type:   "emergency_revocation",
-		UserID: revokedBy,
-		Details: map[string]interface{}{
-			"revokes_all": true,
-			"reason":      reason,
-		},
-	})
-
-	return id, nil
-}
-
-// EmergencyRevokeServiceRoleToken revokes a specific service_role token by JTI
-// This allows selective revocation of individual compromised tokens
-func (s *Service) EmergencyRevokeServiceRoleToken(ctx context.Context, jti, revokedBy, reason string) error {
-	err := database.WrapWithServiceRole(ctx, s.userRepo.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO auth.emergency_revocation (revoked_jti, revoked_by, reason, expires_at)
-			VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')
-			ON CONFLICT (revoked_jti) DO NOTHING
-		`, jti, revokedBy, reason)
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create emergency revocation: %w", err)
-	}
-
-	// Log security event
-	LogSecurityWarning(ctx, SecurityEvent{
-		Type:   "emergency_revocation",
-		UserID: revokedBy,
-		Details: map[string]interface{}{
-			"revoked_jti": jti,
-			"reason":      reason,
-		},
-	})
-
-	return nil
+// GetAccessTokenExpirySeconds returns the configured JWT access token expiry in seconds
+func (s *Service) GetAccessTokenExpirySeconds() int64 {
+	return int64(s.config.JWTExpiry.Seconds())
 }
 
 // SignInAnonymousResponse represents an anonymous user sign-in response
@@ -937,391 +686,4 @@ func (s *Service) SignInAnonymous(ctx context.Context) (*SignInAnonymousResponse
 		ExpiresIn:    int64(s.config.JWTExpiry.Seconds()),
 		IsAnonymous:  true,
 	}, nil
-}
-
-// Impersonation wrapper methods
-
-// StartImpersonation starts an admin impersonation session
-func (s *Service) StartImpersonation(ctx context.Context, adminUserID string, tenantID string, req StartImpersonationRequest) (*StartImpersonationResponse, error) {
-	return s.impersonationService.StartImpersonation(ctx, adminUserID, tenantID, req)
-}
-
-// StopImpersonation stops the active impersonation session for an admin
-func (s *Service) StopImpersonation(ctx context.Context, adminUserID string) error {
-	return s.impersonationService.StopImpersonation(ctx, adminUserID)
-}
-
-// GetActiveImpersonation gets the active impersonation session for an admin
-func (s *Service) GetActiveImpersonation(ctx context.Context, adminUserID string) (*ImpersonationSession, error) {
-	return s.impersonationService.GetActiveSession(ctx, adminUserID)
-}
-
-// ListImpersonationSessions lists impersonation sessions for audit purposes
-func (s *Service) ListImpersonationSessions(ctx context.Context, adminUserID string, limit, offset int) ([]*ImpersonationSession, error) {
-	return s.impersonationService.ListSessions(ctx, adminUserID, limit, offset)
-}
-
-// StartAnonImpersonation starts an impersonation session as anonymous user
-func (s *Service) StartAnonImpersonation(ctx context.Context, adminUserID string, tenantID string, reason string, ipAddress string, userAgent string) (*StartImpersonationResponse, error) {
-	return s.impersonationService.StartAnonImpersonation(ctx, adminUserID, tenantID, reason, ipAddress, userAgent)
-}
-
-// StartServiceImpersonation starts an impersonation session with service role
-func (s *Service) StartServiceImpersonation(ctx context.Context, adminUserID string, tenantID string, reason string, ipAddress string, userAgent string) (*StartImpersonationResponse, error) {
-	return s.impersonationService.StartServiceImpersonation(ctx, adminUserID, tenantID, reason, ipAddress, userAgent)
-}
-
-// IsSignupEnabled returns whether user signup is enabled
-func (s *Service) IsSignupEnabled() bool {
-	// Use background context for health check endpoint
-	ctx := context.Background()
-	return s.settingsCache.GetBool(ctx, "app.auth.signup_enabled", s.config.SignupEnabled)
-}
-
-// GetSettingsCache returns the settings cache
-func (s *Service) GetSettingsCache() *SettingsCache {
-	return s.settingsCache
-}
-
-// GetAccessTokenExpirySeconds returns the configured JWT access token expiry in seconds
-func (s *Service) GetAccessTokenExpirySeconds() int64 {
-	return int64(s.config.JWTExpiry.Seconds())
-}
-
-// SetupTOTP generates a new TOTP secret for 2FA setup
-func (s *Service) SetupTOTP(ctx context.Context, userID string, issuer string) (*TOTPSetupResponse, error) {
-	return s.mfaService.SetupTOTP(ctx, userID, issuer)
-}
-
-// EnableTOTP enables 2FA after verifying the TOTP code
-func (s *Service) EnableTOTP(ctx context.Context, userID, code string) ([]string, error) {
-	return s.mfaService.EnableTOTP(ctx, userID, code)
-}
-
-// VerifyTOTP verifies a TOTP code during login
-func (s *Service) VerifyTOTP(ctx context.Context, userID, code string) error {
-	return s.mfaService.VerifyTOTP(ctx, userID, code)
-}
-
-// VerifyTOTPWithContext verifies a TOTP code with IP address and user agent for rate limiting
-func (s *Service) VerifyTOTPWithContext(ctx context.Context, userID, code, ipAddress, userAgent string) error {
-	return s.mfaService.VerifyTOTPWithContext(ctx, userID, code, ipAddress, userAgent)
-}
-
-// DisableTOTP disables 2FA for a user
-func (s *Service) DisableTOTP(ctx context.Context, userID, password string) error {
-	return s.mfaService.DisableTOTP(ctx, userID, password)
-}
-
-// IsTOTPEnabled checks if 2FA is enabled for a user
-func (s *Service) IsTOTPEnabled(ctx context.Context, userID string) (bool, error) {
-	return s.mfaService.IsTOTPEnabled(ctx, userID)
-}
-
-// GenerateTokensForUser generates JWT tokens for a user after successful 2FA verification
-func (s *Service) GenerateTokensForUser(ctx context.Context, userID string) (*SignInResponse, error) {
-	return s.mfaService.GenerateTokensForUser(ctx, userID)
-}
-
-func (s *Service) Reauthenticate(ctx context.Context, userID string) (string, error) {
-	return s.nonceService.Reauthenticate(ctx, userID)
-}
-
-func (s *Service) VerifyNonce(ctx context.Context, nonce, userID string) bool {
-	return s.nonceService.VerifyNonce(ctx, nonce, userID)
-}
-
-func (s *Service) CleanupExpiredNonces(ctx context.Context) (int64, error) {
-	return s.nonceService.CleanupExpiredNonces(ctx)
-}
-
-// SignInWithIDToken signs in a user with an OAuth ID token (Google, Apple, Microsoft, or custom OIDC)
-func (s *Service) SignInWithIDToken(ctx context.Context, provider, idToken, nonce string) (*SignInResponse, error) {
-	// Check if the provider is configured
-	if !s.oidcVerifier.IsProviderConfigured(provider) {
-		return nil, fmt.Errorf("OIDC provider not configured: %s", provider)
-	}
-
-	// Verify the ID token and extract claims
-	claims, err := s.oidcVerifier.Verify(ctx, provider, idToken, nonce)
-	if err != nil {
-		return nil, fmt.Errorf("invalid ID token: %w", err)
-	}
-
-	// Require email for user lookup/creation
-	if claims.Email == "" {
-		return nil, fmt.Errorf("ID token does not contain email claim")
-	}
-
-	// Look up existing user by email
-	user, err := s.userRepo.GetByEmail(ctx, claims.Email)
-	if err != nil && !errors.Is(err, ErrUserNotFound) {
-		return nil, fmt.Errorf("failed to lookup user: %w", err)
-	}
-
-	if user == nil {
-		// Create new user from OIDC claims
-		user, err = s.createOIDCUser(ctx, provider, claims)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create user: %w", err)
-		}
-	} else {
-		// Update user info from OIDC claims if changed
-		if err := s.updateUserFromOIDCClaims(ctx, user, claims); err != nil {
-			// Log but don't fail the sign-in
-			fmt.Printf("warning: failed to update user from OIDC claims: %v\n", err)
-		}
-	}
-
-	// Generate JWT tokens
-	accessToken, refreshToken, _, err := s.jwtManager.GenerateTokenPair(
-		user.ID,
-		user.Email,
-		user.Role,
-		user.UserMetadata,
-		user.AppMetadata,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate tokens: %w", err)
-	}
-
-	return &SignInResponse{
-		User:         user,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    int64(s.config.JWTExpiry.Seconds()),
-	}, nil
-}
-
-// createOIDCUser creates a new user from OIDC claims
-func (s *Service) createOIDCUser(ctx context.Context, provider string, claims *IDTokenClaims) (*User, error) {
-	req := CreateUserRequest{
-		Email:    claims.Email,
-		Password: "", // No password for OIDC users
-		Role:     "authenticated",
-		UserMetadata: map[string]interface{}{
-			"name":    claims.Name,
-			"picture": claims.Picture,
-		},
-		AppMetadata: map[string]interface{}{
-			"provider":         provider,
-			"provider_user_id": claims.Subject,
-		},
-	}
-
-	// Create user with empty password hash (OIDC users don't have passwords)
-	user, err := s.userRepo.Create(ctx, req, "")
-	if err != nil {
-		return nil, err
-	}
-
-	// Update email_verified if the OIDC provider verified it
-	if claims.EmailVerified {
-		emailVerified := true
-		_, err = s.userRepo.Update(ctx, user.ID, UpdateUserRequest{
-			EmailVerified: &emailVerified,
-		})
-		if err != nil {
-			// Log but don't fail - user was created
-			fmt.Printf("warning: failed to update email_verified: %v\n", err)
-		}
-		user.EmailVerified = true
-	}
-
-	return user, nil
-}
-
-// updateUserFromOIDCClaims updates user info from OIDC claims if changed
-func (s *Service) updateUserFromOIDCClaims(ctx context.Context, user *User, claims *IDTokenClaims) error {
-	updateReq := UpdateUserRequest{}
-	needsUpdate := false
-
-	// Update email verification status if changed
-	if claims.EmailVerified && !user.EmailVerified {
-		emailVerified := true
-		updateReq.EmailVerified = &emailVerified
-		needsUpdate = true
-	}
-
-	// Update user metadata if name or picture changed
-	currentMetadata, _ := user.UserMetadata.(map[string]interface{})
-	if currentMetadata == nil {
-		currentMetadata = make(map[string]interface{})
-	}
-
-	newMetadata := make(map[string]interface{})
-	for k, v := range currentMetadata {
-		newMetadata[k] = v
-	}
-
-	if claims.Name != "" {
-		if currentName, _ := currentMetadata["name"].(string); currentName != claims.Name {
-			newMetadata["name"] = claims.Name
-			needsUpdate = true
-		}
-	}
-
-	if claims.Picture != "" {
-		if currentPic, _ := currentMetadata["picture"].(string); currentPic != claims.Picture {
-			newMetadata["picture"] = claims.Picture
-			needsUpdate = true
-		}
-	}
-
-	if needsUpdate {
-		updateReq.UserMetadata = newMetadata
-		_, err := s.userRepo.Update(ctx, user.ID, updateReq)
-		return err
-	}
-
-	return nil
-}
-
-// SendOTP sends an OTP code via email
-func (s *Service) SendOTP(ctx context.Context, email, purpose string) error {
-	if s.otpService == nil {
-		return fmt.Errorf("OTP service not initialized")
-	}
-	return s.otpService.SendEmailOTP(ctx, email, purpose)
-}
-
-// VerifyOTP verifies an OTP code sent via email
-func (s *Service) VerifyOTP(ctx context.Context, email, code string) (*OTPCode, error) {
-	return s.otpService.VerifyEmailOTP(ctx, email, code)
-}
-
-// ResendOTP resends an OTP code to an email
-func (s *Service) ResendOTP(ctx context.Context, email, purpose string) error {
-	return s.otpService.ResendEmailOTP(ctx, email, purpose)
-}
-
-// GetUserIdentities retrieves all OAuth identities linked to a user
-func (s *Service) GetUserIdentities(ctx context.Context, userID string) ([]UserIdentity, error) {
-	return s.identityService.GetUserIdentities(ctx, userID)
-}
-
-// LinkIdentity initiates OAuth flow to link a new provider
-func (s *Service) LinkIdentity(ctx context.Context, userID, provider string) (string, string, error) {
-	return s.identityService.LinkIdentityProvider(ctx, userID, provider)
-}
-
-// UnlinkIdentity removes an OAuth identity from a user
-func (s *Service) UnlinkIdentity(ctx context.Context, userID, identityID string) error {
-	return s.identityService.UnlinkIdentity(ctx, userID, identityID)
-}
-
-// GetUserByEmail retrieves a user by email
-func (s *Service) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	return s.userRepo.GetByEmail(ctx, email)
-}
-
-// CreateUser creates a new user with email and optional password
-func (s *Service) CreateUser(ctx context.Context, email, password string) (*User, error) {
-	// Validate email format and length
-	if err := ValidateEmail(email); err != nil {
-		return nil, fmt.Errorf("invalid email: %w", err)
-	}
-
-	// If password is empty, create user without password (for OTP/OAuth flows)
-	hashedPassword := ""
-	if password != "" {
-		hash, err := s.passwordHasher.HashPassword(password)
-		if err != nil {
-			return nil, fmt.Errorf("failed to hash password: %w", err)
-		}
-		hashedPassword = hash
-	}
-
-	req := CreateUserRequest{
-		Email:    email,
-		Password: password,
-		Role:     "user",
-	}
-	return s.userRepo.Create(ctx, req, hashedPassword)
-}
-
-// IsEmailVerificationRequired checks if email verification is required based on settings and email configuration
-func (s *Service) IsEmailVerificationRequired(ctx context.Context) bool {
-	return s.emailVerificationService.IsEmailVerificationRequired(ctx)
-}
-
-// SendEmailVerification sends a verification email to the user
-func (s *Service) SendEmailVerification(ctx context.Context, userID, email string) error {
-	return s.emailVerificationService.SendEmailVerification(ctx, userID, email)
-}
-
-// VerifyEmailToken validates the verification token and marks the user's email as verified
-func (s *Service) VerifyEmailToken(ctx context.Context, token string) (*User, error) {
-	return s.emailVerificationService.VerifyEmailToken(ctx, token)
-}
-
-// =============================================================================
-// SAML SSO Methods
-// =============================================================================
-
-// CreateSAMLUser creates a new user from a SAML assertion
-func (s *Service) CreateSAMLUser(ctx context.Context, email, name, provider, nameID string, attrs map[string][]string) (*User, error) {
-	// Validate email format
-	if err := ValidateEmail(email); err != nil {
-		return nil, fmt.Errorf("invalid email: %w", err)
-	}
-
-	// Build user metadata with name if provided
-	userMetadata := make(map[string]interface{})
-	if name != "" {
-		userMetadata["full_name"] = name
-	}
-
-	// Create user without password (SAML users authenticate via IdP)
-	req := CreateUserRequest{
-		Email:        email,
-		Password:     "",
-		Role:         "authenticated",
-		UserMetadata: userMetadata,
-	}
-
-	user, err := s.userRepo.Create(ctx, req, "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-
-	// Link SAML identity using identity service
-	if err := s.LinkSAMLIdentity(ctx, user.ID, provider, nameID, attrs); err != nil {
-		// Log warning but don't fail - user was created successfully
-		_ = err // Ignore error, user is still valid
-	}
-
-	// Refresh user to get updated data
-	user, err = s.userRepo.GetByID(ctx, user.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get created user: %w", err)
-	}
-
-	return user, nil
-}
-
-// LinkSAMLIdentity links or updates a SAML identity for a user
-func (s *Service) LinkSAMLIdentity(ctx context.Context, userID, provider, nameID string, attrs map[string][]string) error {
-	// Create identity data that includes SAML-specific fields
-	identityData := map[string]interface{}{
-		"saml_name_id":    nameID,
-		"saml_attributes": attrs,
-	}
-
-	// Extract email from SAML attributes if present
-	var email *string
-	if emails, ok := attrs["email"]; ok && len(emails) > 0 {
-		email = &emails[0]
-	}
-
-	// Use the identity service to link the SAML identity
-	// Provider format: "saml:{provider_name}"
-	_, err := s.identityService.LinkIdentity(ctx, userID, "saml:"+provider, nameID, email, identityData)
-	return err
-}
-
-// GenerateTokensForSAMLUser generates tokens for a SAML-authenticated user
-// This is a wrapper around GenerateTokensForUser that takes a User object
-func (s *Service) GenerateTokensForSAMLUser(ctx context.Context, user *User) (*SignInResponse, error) {
-	return s.GenerateTokensForUser(ctx, user.ID)
 }

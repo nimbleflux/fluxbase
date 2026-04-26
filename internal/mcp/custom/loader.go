@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/loader"
 )
 
 // Loader handles loading custom MCP tools from the filesystem.
@@ -139,50 +141,27 @@ func (l *Loader) loadTool(filename string) (*LoadedTool, error) {
 func parseAnnotations(code, filename string) (name string, annotations map[string]interface{}) {
 	annotations = make(map[string]interface{})
 
-	// Default name from filename
 	name = strings.TrimSuffix(filename, ".ts")
 	name = strings.TrimSuffix(name, ".js")
 	name = strings.ReplaceAll(name, "-", "_")
 
-	lines := strings.Split(code, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "//") {
+	raw := loader.ParseAnnotations(code, []string{"//"})
+
+	for key, value := range raw {
+		if key == "name" {
+			name = value
 			continue
 		}
-
-		line = strings.TrimPrefix(line, "//")
-		line = strings.TrimSpace(line)
-
-		// Support @fluxbase: annotations
-		if !strings.HasPrefix(line, "@fluxbase:") {
-			continue
-		}
-
-		line = strings.TrimPrefix(line, "@fluxbase:")
-		parts := strings.SplitN(line, " ", 2)
-
-		key := parts[0]
-		var value interface{} = true
-		if len(parts) > 1 {
-			valueStr := strings.TrimSpace(parts[1])
-			// Try to parse as int for timeout/memory
-			if key == "timeout" || key == "memory" {
-				if intVal, err := strconv.Atoi(valueStr); err == nil {
-					value = intVal
-				} else {
-					value = valueStr
-				}
-			} else {
-				value = valueStr
+		if (key == "timeout" || key == "memory") && value != "" {
+			if intVal, err := strconv.Atoi(value); err == nil {
+				annotations[key] = intVal
+				continue
 			}
 		}
-
-		annotations[key] = value
-
-		// Override name if specified
-		if key == "name" {
-			name = value.(string)
+		if value == "" {
+			annotations[key] = true
+		} else {
+			annotations[key] = value
 		}
 	}
 

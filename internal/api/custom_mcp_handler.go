@@ -132,8 +132,8 @@ func (h *CustomMCPHandler) CreateTool(c fiber.Ctx) error {
 
 	// Get user ID from context
 	var createdBy *uuid.UUID
-	if userID, ok := c.Locals("user_id").(uuid.UUID); ok {
-		createdBy = &userID
+	if uid, err := uuid.Parse(middleware.GetUserID(c)); err == nil {
+		createdBy = &uid
 	}
 
 	if err := h.requireStorage(c); err != nil {
@@ -261,8 +261,8 @@ func (h *CustomMCPHandler) SyncTool(c fiber.Ctx) error {
 
 	// Get user ID from context
 	var createdBy *uuid.UUID
-	if userID, ok := c.Locals("user_id").(uuid.UUID); ok {
-		createdBy = &userID
+	if uid, err := uuid.Parse(middleware.GetUserID(c)); err == nil {
+		createdBy = &uid
 	}
 
 	if err := h.requireStorage(c); err != nil {
@@ -406,8 +406,8 @@ func (h *CustomMCPHandler) CreateResource(c fiber.Ctx) error {
 
 	// Get user ID from context
 	var createdBy *uuid.UUID
-	if userID, ok := c.Locals("user_id").(uuid.UUID); ok {
-		createdBy = &userID
+	if uid, err := uuid.Parse(middleware.GetUserID(c)); err == nil {
+		createdBy = &uid
 	}
 
 	if err := h.requireStorage(c); err != nil {
@@ -537,8 +537,8 @@ func (h *CustomMCPHandler) SyncResource(c fiber.Ctx) error {
 
 	// Get user ID from context
 	var createdBy *uuid.UUID
-	if userID, ok := c.Locals("user_id").(uuid.UUID); ok {
-		createdBy = &userID
+	if uid, err := uuid.Parse(middleware.GetUserID(c)); err == nil {
+		createdBy = &uid
 	}
 
 	if err := h.requireStorage(c); err != nil {

@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
+
+	mw "github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // =============================================================================
@@ -34,9 +36,8 @@ func TestGetUserID(t *testing.T) {
 			app.ReleaseCtx(ctx)
 		}()
 
-		userID, ok := GetUserID(ctx)
+		userID := mw.GetUserID(ctx)
 
-		assert.False(t, ok)
 		assert.Empty(t, userID)
 	})
 
@@ -49,9 +50,8 @@ func TestGetUserID(t *testing.T) {
 
 		ctx.Locals("user_id", "user-123-abc")
 
-		userID, ok := GetUserID(ctx)
+		userID := mw.GetUserID(ctx)
 
-		assert.True(t, ok)
 		assert.Equal(t, "user-123-abc", userID)
 	})
 
@@ -62,11 +62,10 @@ func TestGetUserID(t *testing.T) {
 			app.ReleaseCtx(ctx)
 		}()
 
-		ctx.Locals("user_id", 12345) // Wrong type (int instead of string)
+		ctx.Locals("user_id", 12345)
 
-		userID, ok := GetUserID(ctx)
+		userID := mw.GetUserID(ctx)
 
-		assert.False(t, ok)
 		assert.Empty(t, userID)
 	})
 }
@@ -278,8 +277,7 @@ func TestContextLocalKeys(t *testing.T) {
 		ctx.Locals("session_id", "session-123")
 
 		// Verify they can all be retrieved
-		userID, ok := GetUserID(ctx)
-		assert.True(t, ok)
+		userID := mw.GetUserID(ctx)
 		assert.Equal(t, "test-user-id", userID)
 
 		email, ok := GetUserEmail(ctx)
@@ -531,7 +529,7 @@ func BenchmarkGetUserID(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = GetUserID(ctx)
+		_ = mw.GetUserID(ctx)
 	}
 }
 

@@ -8,7 +8,6 @@ import (
 
 	"github.com/graphql-go/graphql"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
@@ -16,12 +15,12 @@ import (
 
 // GraphQLResolverFactory creates resolvers for GraphQL queries and mutations
 type GraphQLResolverFactory struct {
-	db          *pgxpool.Pool
+	db          *database.Connection
 	schemaCache *database.SchemaCache
 }
 
 // NewGraphQLResolverFactory creates a new resolver factory
-func NewGraphQLResolverFactory(db *pgxpool.Pool, schemaCache *database.SchemaCache) *GraphQLResolverFactory {
+func NewGraphQLResolverFactory(db *database.Connection, schemaCache *database.SchemaCache) *GraphQLResolverFactory {
 	return &GraphQLResolverFactory{
 		db:          db,
 		schemaCache: schemaCache,
@@ -70,13 +69,13 @@ func (g *GraphQLSchemaGenerator) queryWithRLS(ctx context.Context, query string,
 	rlsCtx, ok := ctx.Value(GraphQLRLSContextKey).(*RLSContext)
 
 	// Start a transaction to set RLS context
-	tx, err := db.Begin(ctx)
+	tx, err := db.BeginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Set RLS context if present, otherwise set anon role
+	// Set RLS context if present, otherwise set anon role explicitly (same as mutations)
 	if ok && rlsCtx != nil {
 		if err := setGraphQLRLSContext(ctx, tx, rlsCtx); err != nil {
 			return nil, err
@@ -120,7 +119,7 @@ func (g *GraphQLSchemaGenerator) execWithRLS(ctx context.Context, query string, 
 	rlsCtx, ok := ctx.Value(GraphQLRLSContextKey).(*RLSContext)
 
 	// Start a transaction
-	tx, err := db.Begin(ctx)
+	tx, err := db.BeginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -330,7 +329,7 @@ func (g *GraphQLSchemaGenerator) makeInsertManyResolver(table database.TableInfo
 		rlsCtx, hasRLS := ctx.Value(GraphQLRLSContextKey).(*RLSContext)
 
 		// Start a transaction for all inserts
-		tx, err := db.Begin(ctx)
+		tx, err := db.BeginTx(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to begin transaction: %w", err)
 		}
@@ -519,7 +518,7 @@ func (g *GraphQLSchemaGenerator) makeDeleteManyResolver(table database.TableInfo
 		rlsCtx, hasRLS := ctx.Value(GraphQLRLSContextKey).(*RLSContext)
 
 		// Start a transaction for count + delete
-		tx, err := db.Begin(ctx)
+		tx, err := db.BeginTx(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to begin transaction: %w", err)
 		}
@@ -859,7 +858,7 @@ func (g *GraphQLSchemaGenerator) graphqlToDBColumnNames(table database.TableInfo
 }
 
 // getDBFromContext gets the database connection from context
-func (g *GraphQLSchemaGenerator) getDBFromContext(ctx context.Context) *pgxpool.Pool {
+func (g *GraphQLSchemaGenerator) getDBFromContext(ctx context.Context) *database.Connection {
 	if g.resolverFactory != nil {
 		return g.resolverFactory.db
 	}

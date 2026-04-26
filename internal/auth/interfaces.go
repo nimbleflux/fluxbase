@@ -5,6 +5,19 @@ import (
 	"time"
 )
 
+// EmailService defines the unified interface for email operations.
+// All email-related interfaces (FullEmailService, RealEmailService, EmailSender,
+// PasswordResetEmailSender) have been consolidated into this single interface.
+// The email.Manager / email.Service types satisfy this interface.
+type EmailService interface {
+	SendMagicLink(ctx context.Context, to, token, link string) error
+	SendVerificationEmail(ctx context.Context, to, token, link string) error
+	SendPasswordReset(ctx context.Context, to, token, link string) error
+	SendInvitationEmail(ctx context.Context, to, inviterName, inviteLink string) error
+	Send(ctx context.Context, to, subject, body string) error
+	IsConfigured() bool
+}
+
 // NOTE ON INTERFACE SIZE:
 // These repository interfaces have more than 3 methods, which exceeds the typical
 // Go guideline of "keep interfaces small". However, this is acceptable here because:

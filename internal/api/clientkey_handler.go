@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 type ClientKeyHandler struct {
@@ -55,11 +57,7 @@ func (h *ClientKeyHandler) CreateClientKey(c fiber.Ctx) error {
 		return err
 	}
 
-	userID, ok := c.Locals("user_id").(uuid.UUID)
 	var userIDPtr *uuid.UUID
-	if ok {
-		userIDPtr = &userID
-	}
 
 	clientKey, err := h.clientKeyService.GenerateClientKey(
 		c.RequestCtx(),
@@ -78,7 +76,7 @@ func (h *ClientKeyHandler) CreateClientKey(c fiber.Ctx) error {
 }
 
 func (h *ClientKeyHandler) ListClientKeys(c fiber.Ctx) error {
-	currentUserID, _ := c.Locals("user_id").(string)
+	currentUserID := middleware.GetUserID(c)
 	role, _ := c.Locals("user_role").(string)
 	isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
@@ -120,7 +118,7 @@ func (h *ClientKeyHandler) GetClientKey(c fiber.Ctx) error {
 		return SendInvalidID(c, "client key ID")
 	}
 
-	currentUserID, _ := c.Locals("user_id").(string)
+	currentUserID := middleware.GetUserID(c)
 	role, _ := c.Locals("user_role").(string)
 	isAdmin := role == "admin" || role == "instance_admin" || role == "service_role"
 
@@ -166,10 +164,7 @@ func (h *ClientKeyHandler) UpdateClientKey(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to update client key")
 	}
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Client key updated successfully",
-	})
+	return apperrors.SendSuccess(c, "Client key updated successfully")
 }
 
 func (h *ClientKeyHandler) RevokeClientKey(c fiber.Ctx) error {
@@ -188,10 +183,7 @@ func (h *ClientKeyHandler) RevokeClientKey(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to revoke client key")
 	}
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Client key revoked successfully",
-	})
+	return apperrors.SendSuccess(c, "Client key revoked successfully")
 }
 
 func (h *ClientKeyHandler) DeleteClientKey(c fiber.Ctx) error {

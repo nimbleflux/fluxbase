@@ -12,17 +12,19 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/crypto"
+	"github.com/nimbleflux/fluxbase/internal/database"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // OAuthProviderHandler handles OAuth provider configuration management
 type OAuthProviderHandler struct {
-	db              *pgxpool.Pool
+	db              *database.Connection
 	settingsCache   *auth.SettingsCache
 	encryptionKey   string
 	configProviders []config.OAuthProviderConfig
@@ -30,7 +32,7 @@ type OAuthProviderHandler struct {
 }
 
 // NewOAuthProviderHandler creates a new OAuth provider handler
-func NewOAuthProviderHandler(db *pgxpool.Pool, settingsCache *auth.SettingsCache, encryptionKey, baseURL string, configProviders []config.OAuthProviderConfig) *OAuthProviderHandler {
+func NewOAuthProviderHandler(db *database.Connection, settingsCache *auth.SettingsCache, encryptionKey, baseURL string, configProviders []config.OAuthProviderConfig) *OAuthProviderHandler {
 	return &OAuthProviderHandler{
 		db:              db,
 		settingsCache:   settingsCache,
@@ -613,10 +615,7 @@ func (h *OAuthProviderHandler) UpdateOAuthProvider(c fiber.Ctx) error {
 
 	log.Info().Str("id", id).Msg("OAuth provider updated")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("OAuth provider '%s' updated successfully", displayName),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("OAuth provider '%s' updated successfully", displayName))
 }
 
 // DeleteOAuthProvider deletes an OAuth provider
@@ -648,10 +647,7 @@ func (h *OAuthProviderHandler) DeleteOAuthProvider(c fiber.Ctx) error {
 
 	log.Info().Str("id", id).Str("provider", displayName).Msg("OAuth provider deleted")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("OAuth provider '%s' deleted successfully", displayName),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("OAuth provider '%s' deleted successfully", displayName))
 }
 
 // GetAuthSettings retrieves authentication settings
@@ -844,10 +840,7 @@ func (h *OAuthProviderHandler) UpdateAuthSettings(c fiber.Ctx) error {
 
 	log.Info().Msg("Auth settings updated successfully")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Authentication settings updated successfully",
-	})
+	return apperrors.SendSuccess(c, "Authentication settings updated successfully")
 }
 
 // hasDashboardSSOProviders checks if any SSO providers are configured for dashboard login
@@ -908,9 +901,8 @@ func (h *OAuthProviderHandler) hasAppSSOProviders(ctx context.Context) (bool, er
 
 // Helper function to get user ID from context (set by auth middleware)
 func getUserIDFromContext(c fiber.Ctx) *uuid.UUID {
-	// Try to get from dashboard auth (set by middleware)
-	if userIDStr := c.Locals("user_id"); userIDStr != nil {
-		if uid, err := uuid.Parse(userIDStr.(string)); err == nil {
+	if uidStr := middleware.GetUserID(c); uidStr != "" {
+		if uid, err := uuid.Parse(uidStr); err == nil {
 			return &uid
 		}
 	}

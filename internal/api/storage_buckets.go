@@ -7,6 +7,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
+
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 )
 
 func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
@@ -181,9 +183,7 @@ func (h *StorageHandler) UpdateBucketSettings(c fiber.Ctx) error {
 		Interface("updates", req).
 		Msg("Bucket settings updated")
 
-	return c.JSON(fiber.Map{
-		"message": "bucket settings updated successfully",
-	})
+	return apperrors.SendSuccess(c, "bucket settings updated successfully")
 }
 
 func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {

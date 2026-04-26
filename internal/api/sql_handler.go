@@ -15,15 +15,17 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 type SQLHandler struct {
-	db          *pgxpool.Pool
+	db          *database.Connection
 	authService *auth.Service
 }
 
-func NewSQLHandler(db *pgxpool.Pool, authService *auth.Service) *SQLHandler {
+func NewSQLHandler(db *database.Connection, authService *auth.Service) *SQLHandler {
 	return &SQLHandler{
 		db:          db,
 		authService: authService,
@@ -63,7 +65,7 @@ func (h *SQLHandler) ExecuteSQL(c fiber.Ctx) error {
 		return SendBadRequest(c, "Query cannot be empty", ErrCodeInvalidInput)
 	}
 
-	userID, _ := GetUserID(c)
+	userID := middleware.GetUserID(c)
 	userEmail, _ := GetUserEmail(c)
 
 	statements := splitSQLStatements(req.Query)
@@ -86,7 +88,7 @@ func (h *SQLHandler) ExecuteSQL(c fiber.Ctx) error {
 		Str("tenant_role", tenantRole).
 		Str("tenant_source", tenantSource).
 		Bool("has_impersonation_token", impersonationToken != "").
-		Str("query_preview", truncateString(req.Query, 100)).
+		Str("query_preview", util.TruncateString(req.Query, 100)).
 		Msg("SQL query execution attempt")
 
 	if impersonationToken != "" {
@@ -153,7 +155,7 @@ func (h *SQLHandler) getPoolForQuery(c fiber.Ctx, query string) *pgxpool.Pool {
 	}
 
 	log.Debug().Msg("Using main pool for SQL execution")
-	return h.db
+	return h.db.Pool()
 }
 
 func (h *SQLHandler) executeWithRLSContext(c fiber.Ctx, pool *pgxpool.Pool, statements []string, claims *auth.TokenClaims, tenantID string, auditUserID string) error {
@@ -239,13 +241,13 @@ func (h *SQLHandler) executeWithRLSContext(c fiber.Ctx, pool *pgxpool.Pool, stat
 		if result.Error != nil {
 			log.Warn().
 				Str("audit_user_id", auditUserID).
-				Str("statement", truncateString(stmt, 100)).
+				Str("statement", util.TruncateString(stmt, 100)).
 				Str("error", *result.Error).
 				Msg("SQL query execution failed (impersonation RLS)")
 		} else {
 			log.Info().
 				Str("audit_user_id", auditUserID).
-				Str("statement", truncateString(stmt, 100)).
+				Str("statement", util.TruncateString(stmt, 100)).
 				Int("row_count", result.RowCount).
 				Msg("SQL query executed successfully (impersonation RLS)")
 		}
@@ -300,13 +302,13 @@ func (h *SQLHandler) executeAsInstanceAdmin(c fiber.Ctx, pool *pgxpool.Pool, sta
 		if result.Error != nil {
 			log.Warn().
 				Str("audit_user_id", auditUserID).
-				Str("statement", truncateString(stmt, 100)).
+				Str("statement", util.TruncateString(stmt, 100)).
 				Str("error", *result.Error).
 				Msg("SQL query execution failed (instance admin)")
 		} else {
 			log.Info().
 				Str("audit_user_id", auditUserID).
-				Str("statement", truncateString(stmt, 100)).
+				Str("statement", util.TruncateString(stmt, 100)).
 				Int("row_count", result.RowCount).
 				Msg("SQL query executed successfully (instance admin)")
 		}
@@ -404,14 +406,14 @@ func (h *SQLHandler) executeWithTenantRLS(c fiber.Ctx, pool *pgxpool.Pool, state
 			log.Warn().
 				Str("audit_user_id", auditUserID).
 				Str("tenant_id", tenantID).
-				Str("statement", truncateString(stmt, 100)).
+				Str("statement", util.TruncateString(stmt, 100)).
 				Str("error", *result.Error).
 				Msg("SQL query execution failed (tenant RLS)")
 		} else {
 			log.Info().
 				Str("audit_user_id", auditUserID).
 				Str("tenant_id", tenantID).
-				Str("statement", truncateString(stmt, 100)).
+				Str("statement", util.TruncateString(stmt, 100)).
 				Int("row_count", result.RowCount).
 				Msg("SQL query executed successfully (tenant RLS)")
 		}
@@ -517,13 +519,6 @@ func splitSQLStatements(query string) []string {
 	}
 
 	return stmts
-}
-
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }
 
 func convertValue(v any) any {

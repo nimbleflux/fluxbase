@@ -5,9 +5,11 @@ package auth_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -15,8 +17,11 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/email"
 	"github.com/nimbleflux/fluxbase/internal/testutil"
-	"github.com/nimbleflux/fluxbase/test"
 )
+
+func randomTestEmail() string {
+	return fmt.Sprintf("test-%s@example.com", uuid.New().String()[:8])
+}
 
 // =============================================================================
 // Signup & Signin Integration Tests
@@ -31,7 +36,7 @@ func TestAuthService_Signup_Success_Integration(t *testing.T) {
 	service := createAuthService(t, tc)
 
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up new user
@@ -67,7 +72,7 @@ func TestAuthService_Signup_DuplicateEmail_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Create first user
@@ -110,7 +115,7 @@ func TestAuthService_Signup_WeakPassword_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 
 	// Test with weak password
 	_, err := service.SignUp(ctx, auth.SignUpRequest{
@@ -128,7 +133,7 @@ func TestAuthService_Signin_ValidCredentials_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// First, sign up
@@ -157,7 +162,7 @@ func TestAuthService_Signin_InvalidPassword_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// First, sign up
@@ -204,7 +209,7 @@ func TestAuthService_RefreshToken_Valid_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up to get initial tokens
@@ -246,7 +251,7 @@ func TestAuthService_SignOut_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up
@@ -292,7 +297,7 @@ func TestAuthService_RequestPasswordReset_Integration(t *testing.T) {
 
 	service := createAuthServiceWithMailHog(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Clear MailHog messages before test
@@ -330,7 +335,7 @@ func TestAuthService_ResetPassword_ValidToken_Integration(t *testing.T) {
 
 	service := createAuthServiceWithMailHog(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Clear MailHog messages before test
@@ -394,7 +399,7 @@ func TestAuthService_ResetPassword_ExpiredToken_Integration(t *testing.T) {
 
 	service := createAuthServiceWithMailHog(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Clear MailHog messages before test
@@ -454,7 +459,7 @@ func TestAuthService_GetUser_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up
@@ -491,8 +496,8 @@ func TestAuthService_UpdateUser_Email_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
-	newEmail := test.RandomEmail()
+	email := randomTestEmail()
+	newEmail := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up
@@ -522,7 +527,7 @@ func TestAuthService_UpdateUser_UserMetadata_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up
@@ -562,7 +567,7 @@ func TestAuthService_SetupTOTP_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up
@@ -587,7 +592,7 @@ func TestAuthService_EnableTOTP_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up
@@ -618,7 +623,7 @@ func TestAuthService_IsTOTPEnabled_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up
@@ -641,7 +646,7 @@ func TestAuthService_DisableTOTP_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up
@@ -672,7 +677,7 @@ func TestAuthService_ValidateToken_Valid_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up
@@ -709,7 +714,7 @@ func TestAuthService_ValidateToken_Revoked_Integration(t *testing.T) {
 
 	service := createAuthService(t, tc)
 	ctx := context.Background()
-	email := test.RandomEmail()
+	email := randomTestEmail()
 	password := "TestPassword123!"
 
 	// Sign up

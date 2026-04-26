@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/logging"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/storage"
@@ -238,9 +239,7 @@ func (h *LoggingHandler) FlushLogs(c fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Logs flushed successfully",
-	})
+	return apperrors.SendSuccess(c, "Logs flushed successfully")
 }
 
 // GenerateTestLogs handles POST /admin/logs/test

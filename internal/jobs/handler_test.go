@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 func TestRoleSatisfiesRequirement(t *testing.T) {
@@ -164,50 +166,50 @@ func TestRoleSatisfiesRequirements_MultipleRoles(t *testing.T) {
 func TestValueOr(t *testing.T) {
 	t.Run("returns value when pointer is non-nil", func(t *testing.T) {
 		val := 42
-		result := valueOr(&val, 0)
+		result := util.ValueOr(&val, 0)
 		assert.Equal(t, 42, result)
 	})
 
 	t.Run("returns default when pointer is nil", func(t *testing.T) {
 		var ptr *int
-		result := valueOr(ptr, 99)
+		result := util.ValueOr(ptr, 99)
 		assert.Equal(t, 99, result)
 	})
 
 	t.Run("works with string", func(t *testing.T) {
 		val := "hello"
-		assert.Equal(t, "hello", valueOr(&val, "default"))
+		assert.Equal(t, "hello", util.ValueOr(&val, "default"))
 
 		var nilStr *string
-		assert.Equal(t, "default", valueOr(nilStr, "default"))
+		assert.Equal(t, "default", util.ValueOr(nilStr, "default"))
 	})
 
 	t.Run("works with bool", func(t *testing.T) {
 		val := true
-		assert.True(t, valueOr(&val, false))
+		assert.True(t, util.ValueOr(&val, false))
 
 		var nilBool *bool
-		assert.False(t, valueOr(nilBool, false))
+		assert.False(t, util.ValueOr(nilBool, false))
 	})
 
 	t.Run("works with time.Time", func(t *testing.T) {
 		now := time.Now()
 		zero := time.Time{}
 
-		assert.Equal(t, now, valueOr(&now, zero))
+		assert.Equal(t, now, util.ValueOr(&now, zero))
 
 		var nilTime *time.Time
-		assert.Equal(t, zero, valueOr(nilTime, zero))
+		assert.Equal(t, zero, util.ValueOr(nilTime, zero))
 	})
 
 	t.Run("works with uuid.UUID", func(t *testing.T) {
 		id := uuid.New()
 		zero := uuid.UUID{}
 
-		assert.Equal(t, id, valueOr(&id, zero))
+		assert.Equal(t, id, util.ValueOr(&id, zero))
 
 		var nilUUID *uuid.UUID
-		assert.Equal(t, zero, valueOr(nilUUID, zero))
+		assert.Equal(t, zero, util.ValueOr(nilUUID, zero))
 	})
 }
 
@@ -217,38 +219,38 @@ func TestValueOr(t *testing.T) {
 
 func TestToString(t *testing.T) {
 	t.Run("returns empty string for nil", func(t *testing.T) {
-		assert.Equal(t, "", toString(nil))
+		assert.Equal(t, "", util.ToString(nil))
 	})
 
 	t.Run("returns string as is", func(t *testing.T) {
-		assert.Equal(t, "hello", toString("hello"))
-		assert.Equal(t, "", toString(""))
+		assert.Equal(t, "hello", util.ToString("hello"))
+		assert.Equal(t, "", util.ToString(""))
 	})
 
 	t.Run("converts uuid.UUID pointer", func(t *testing.T) {
 		id := uuid.MustParse("12345678-1234-1234-1234-123456789abc")
-		result := toString(&id)
+		result := util.ToString(&id)
 		assert.Equal(t, "12345678-1234-1234-1234-123456789abc", result)
 	})
 
 	t.Run("returns empty for nil uuid pointer", func(t *testing.T) {
 		var nilUUID *uuid.UUID
-		assert.Equal(t, "", toString(nilUUID))
+		assert.Equal(t, "", util.ToString(nilUUID))
 	})
 
 	t.Run("converts int to string", func(t *testing.T) {
-		assert.Equal(t, "42", toString(42))
-		assert.Equal(t, "0", toString(0))
-		assert.Equal(t, "-1", toString(-1))
+		assert.Equal(t, "42", util.ToString(42))
+		assert.Equal(t, "0", util.ToString(0))
+		assert.Equal(t, "-1", util.ToString(-1))
 	})
 
 	t.Run("converts float to string", func(t *testing.T) {
-		assert.Equal(t, "3.14", toString(3.14))
+		assert.Equal(t, "3.14", util.ToString(3.14))
 	})
 
 	t.Run("converts bool to string", func(t *testing.T) {
-		assert.Equal(t, "true", toString(true))
-		assert.Equal(t, "false", toString(false))
+		assert.Equal(t, "true", util.ToString(true))
+		assert.Equal(t, "false", util.ToString(false))
 	})
 }
 
@@ -510,7 +512,7 @@ func BenchmarkValueOr_NonNil(b *testing.B) {
 	val := 42
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		valueOr(&val, 0)
+		util.ValueOr(&val, 0)
 	}
 }
 
@@ -518,14 +520,14 @@ func BenchmarkValueOr_Nil(b *testing.B) {
 	var ptr *int
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		valueOr(ptr, 99)
+		util.ValueOr(ptr, 99)
 	}
 }
 
 func BenchmarkToString_String(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		toString("test")
+		util.ToString("test")
 	}
 }
 
@@ -533,7 +535,7 @@ func BenchmarkToString_UUID(b *testing.B) {
 	id := uuid.New()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		toString(&id)
+		util.ToString(&id)
 	}
 }
 

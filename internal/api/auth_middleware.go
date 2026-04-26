@@ -6,11 +6,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // getTenantJWTSecret extracts the tenant-specific JWT secret from context if available
@@ -216,16 +216,6 @@ func RequireRole(allowedRoles ...string) fiber.Handler {
 	}
 }
 
-// GetUserID is a helper to extract user ID from context
-func GetUserID(c fiber.Ctx) (string, bool) {
-	userID := c.Locals("user_id")
-	if userID == nil {
-		return "", false
-	}
-	id, ok := userID.(string)
-	return id, ok
-}
-
 // GetUserEmail is a helper to extract user email from context
 func GetUserEmail(c fiber.Ctx) (string, bool) {
 	email := c.Locals("user_email")
@@ -250,7 +240,7 @@ func GetUserRole(c fiber.Ctx) (string, bool) {
 // This allows both application users with admin role AND dashboard admins to access admin endpoints.
 // The db parameter is used to check the actual role from auth.users when JWT role is "authenticated",
 // allowing role changes to take effect immediately without requiring re-login.
-func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManager, db *pgxpool.Pool) fiber.Handler {
+func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManager, db *database.Connection) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Try to get token from cookie first (httpOnly cookie)
 		token := c.Cookies(AccessTokenCookieName)
@@ -364,7 +354,7 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 // getUserRoleFromDB fetches user's role from auth.users table.
 // Also checks app_metadata.role as fallback.
 // This allows role changes to take effect immediately without re-login.
-func getUserRoleFromDB(ctx context.Context, db *pgxpool.Pool, userID string) (string, error) {
+func getUserRoleFromDB(ctx context.Context, db *database.Connection, userID string) (string, error) {
 	var role string
 	var appMetadata []byte
 

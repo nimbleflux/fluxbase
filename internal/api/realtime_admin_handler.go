@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
@@ -260,10 +261,7 @@ func (h *RealtimeAdminHandler) HandleDisableRealtime(c fiber.Ctx) error {
 
 	log.Info().Str("schema", schema).Str("table", table).Msg("Realtime disabled on table")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("Realtime disabled on table '%s.%s'", schema, table),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("Realtime disabled on table '%s.%s'", schema, table))
 }
 
 // HandleListRealtimeTables lists all realtime-enabled tables
@@ -473,10 +471,7 @@ func (h *RealtimeAdminHandler) HandleUpdateRealtimeConfig(c fiber.Ctx) error {
 
 	log.Info().Str("schema", schema).Str("table", table).Msg("Realtime config updated")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("Realtime configuration updated for '%s.%s'", schema, table),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("Realtime configuration updated for '%s.%s'", schema, table))
 }
 
 // queryPool returns the tenant pool if available, otherwise the main pool.

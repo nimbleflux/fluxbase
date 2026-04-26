@@ -64,13 +64,13 @@ func TestIdentifierPattern(t *testing.T) {
 
 	for _, id := range validIdentifiers {
 		t.Run("valid: "+id, func(t *testing.T) {
-			assert.True(t, identifierPattern.MatchString(id), "Expected %q to be valid", id)
+			assert.True(t, validIdentifierRegex.MatchString(id), "Expected %q to be valid", id)
 		})
 	}
 
 	for _, id := range invalidIdentifiers {
 		t.Run("invalid: "+id, func(t *testing.T) {
-			assert.False(t, identifierPattern.MatchString(id), "Expected %q to be invalid", id)
+			assert.False(t, validIdentifierRegex.MatchString(id), "Expected %q to be invalid", id)
 		})
 	}
 }

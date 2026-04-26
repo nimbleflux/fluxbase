@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
@@ -13,6 +12,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/logging"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/observability"
+	syncframework "github.com/nimbleflux/fluxbase/internal/sync"
 )
 
 // Handler handles RPC-related HTTP endpoints
@@ -277,7 +277,6 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 
 	var req SyncRequest
 	if err := c.Bind().Body(&req); err != nil {
-		// Body is optional, continue with defaults
 		req = SyncRequest{}
 	}
 
@@ -286,24 +285,14 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 		namespace = "default"
 	}
 
-	result := &SyncResult{
-		Namespace: namespace,
-		DryRun:    req.Options.DryRun,
-		Summary:   SyncSummary{},
-		Details: SyncDetails{
-			Created:   []string{},
-			Updated:   []string{},
-			Deleted:   []string{},
-			Unchanged: []string{},
-		},
-		Errors: []SyncError{},
+	source := "sdk"
+	if len(req.Procedures) == 0 {
+		source = "filesystem"
 	}
 
-	var specsToSync []*LoadedProcedure
+	var items []procedureSyncItem
 
-	// Determine source: filesystem or SDK payload
 	if len(req.Procedures) == 0 {
-		// Load from filesystem
 		loaded, err := h.loader.LoadProcedures()
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to load procedures from filesystem")
@@ -311,145 +300,71 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 				"error": "Failed to load procedures from filesystem",
 			})
 		}
-		specsToSync = loaded
-		result.Message = "Synced from filesystem"
+		for _, lp := range loaded {
+			items = append(items, procedureSyncItem{loaded: lp})
+		}
 	} else {
-		// Use SDK payload
 		for _, spec := range req.Procedures {
 			annotations, sqlQuery, err := ParseAnnotations(spec.Code)
 			if err != nil {
-				result.Errors = append(result.Errors, SyncError{
-					Procedure: spec.Name,
-					Error:     err.Error(),
-				})
-				result.Summary.Errors++
+				items = append(items, procedureSyncItem{loaded: &LoadedProcedure{
+					Name: spec.Name, Code: spec.Code, Namespace: namespace,
+				}})
 				continue
 			}
-
-			loaded := &LoadedProcedure{
-				Name:        spec.Name,
-				Namespace:   namespace,
-				Code:        spec.Code,
-				SQLQuery:    sqlQuery,
-				Annotations: annotations,
-			}
-			specsToSync = append(specsToSync, loaded)
+			items = append(items, procedureSyncItem{loaded: &LoadedProcedure{
+				Name: spec.Name, Namespace: namespace,
+				Code: spec.Code, SQLQuery: sqlQuery, Annotations: annotations,
+			}})
 		}
-		result.Message = "Synced from SDK payload"
 	}
 
-	// Get existing procedures in namespace (syncCtx to find NULL-tenant records)
-	existing, err := h.storage.ListProceduresForSync(syncCtx, namespace, currentTenantID)
+	syncer := newRPCSyncer(h, syncCtx, currentTenantID, source)
+	opts := syncframework.Options{
+		Namespace:     namespace,
+		DeleteMissing: req.Options.DeleteMissing,
+		DryRun:        req.Options.DryRun,
+		TenantID:      currentTenantID,
+	}
+
+	syncResult, err := syncframework.Execute(ctx, syncer, items, opts)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to list existing procedures")
+		log.Error().Err(err).Msg("Sync failed")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to list existing procedures",
+			"error": err.Error(),
 		})
 	}
 
-	existingMap := make(map[string]*Procedure)
-	for _, p := range existing {
-		existingMap[p.Name] = p
+	result := &SyncResult{
+		Message:   syncResult.Message,
+		Namespace: syncResult.Namespace,
+		DryRun:    syncResult.DryRun,
+		Summary: SyncSummary{
+			Created:   syncResult.Summary.Created,
+			Updated:   syncResult.Summary.Updated,
+			Deleted:   syncResult.Summary.Deleted,
+			Unchanged: syncResult.Summary.Unchanged,
+			Errors:    syncResult.Summary.Errors,
+		},
+		Details: SyncDetails{
+			Created:   syncResult.Details.Created,
+			Updated:   syncResult.Details.Updated,
+			Deleted:   syncResult.Details.Deleted,
+			Unchanged: syncResult.Details.Unchanged,
+		},
+		Errors: make([]SyncError, len(syncResult.Errors)),
 	}
-
-	// Track which procedures are in the sync
-	syncedNames := make(map[string]bool)
-
-	// Process each procedure
-	for _, spec := range specsToSync {
-		syncedNames[spec.Name] = true
-
-		proc := spec.ToProcedure()
-		proc.Namespace = namespace
-		proc.Source = "sdk"
-		if len(req.Procedures) == 0 {
-			proc.Source = "filesystem"
-		}
-
-		// Validate SQL before creating/updating
-		validationResult := h.validator.ValidateSQL(proc.SQLQuery, proc.AllowedTables, proc.AllowedSchemas)
-		if !validationResult.Valid {
-			result.Errors = append(result.Errors, SyncError{
-				Procedure: spec.Name,
-				Error:     fmt.Sprintf("SQL validation failed: %v", validationResult.Errors),
-			})
-			result.Summary.Errors++
-			continue
-		}
-
-		existingProc, exists := existingMap[spec.Name]
-
-		if !exists {
-			// Create new procedure
-			if !req.Options.DryRun {
-				if err := h.storage.CreateProcedure(ctx, proc); err != nil {
-					result.Errors = append(result.Errors, SyncError{
-						Procedure: spec.Name,
-						Error:     err.Error(),
-					})
-					result.Summary.Errors++
-					continue
-				}
-				// Schedule if procedure has a schedule
-				if h.scheduler != nil && proc.Schedule != nil && *proc.Schedule != "" {
-					if err := h.scheduler.ScheduleProcedure(proc); err != nil {
-						log.Warn().Err(err).Str("procedure", proc.Name).Msg("Failed to schedule new procedure")
-					}
-				}
-			}
-			result.Details.Created = append(result.Details.Created, spec.Name)
-			result.Summary.Created++
-		} else {
-			// Check if update is needed
-			if h.needsUpdate(existingProc, proc) {
-				proc.ID = existingProc.ID
-				if !req.Options.DryRun {
-					if err := h.storage.UpdateProcedureForSync(syncCtx, currentTenantID, proc); err != nil {
-						result.Errors = append(result.Errors, SyncError{
-							Procedure: spec.Name,
-							Error:     err.Error(),
-						})
-						result.Summary.Errors++
-						continue
-					}
-					// Reschedule if scheduler is available
-					if h.scheduler != nil {
-						if err := h.scheduler.RescheduleProcedure(proc); err != nil {
-							log.Warn().Err(err).Str("procedure", proc.Name).Msg("Failed to reschedule procedure")
-						}
-					}
-				}
-				result.Details.Updated = append(result.Details.Updated, spec.Name)
-				result.Summary.Updated++
-			} else {
-				result.Details.Unchanged = append(result.Details.Unchanged, spec.Name)
-				result.Summary.Unchanged++
-			}
+	for i, e := range syncResult.Errors {
+		result.Errors[i] = SyncError{
+			Procedure: e.Name,
+			Error:     e.Error,
 		}
 	}
 
-	// Handle deletion of missing procedures
-	if req.Options.DeleteMissing {
-		for name, proc := range existingMap {
-			if !syncedNames[name] && proc.Source != "api" {
-				if !req.Options.DryRun {
-					// Unschedule before deletion
-					if h.scheduler != nil {
-						h.scheduler.UnscheduleProcedure(proc.Namespace, name)
-					}
-					if err := h.storage.DeleteProcedureForSync(syncCtx, currentTenantID, proc.ID); err != nil {
-						result.Errors = append(result.Errors, SyncError{
-							Procedure: name,
-							Error:     err.Error(),
-						})
-						result.Summary.Errors++
-						continue
-					}
-				}
-				result.Details.Deleted = append(result.Details.Deleted, name)
-				result.Summary.Deleted++
-			}
-		}
+	if source == "filesystem" && result.Message == "" {
+		result.Message = "Synced from filesystem"
+	} else if source == "sdk" && result.Message == "" {
+		result.Message = "Synced from SDK payload"
 	}
 
 	return c.JSON(result)
@@ -740,11 +655,11 @@ func (h *Handler) Invoke(c fiber.Ctx) error {
 	var claims *auth.TokenClaims
 	isAuthenticated := false
 
-	if uid, ok := c.Locals("user_id").(string); ok && uid != "" {
+	if uid := middleware.GetUserID(c); uid != "" {
 		userID = uid
 		isAuthenticated = true
 	}
-	if role, ok := c.Locals("user_role").(string); ok && role != "" {
+	if role := middleware.GetUserRole(c); role != "" {
 		userRole = role
 	}
 	// Check both "email" and "user_email" for compatibility
@@ -835,11 +750,7 @@ func (h *Handler) GetPublicExecution(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
-	// Get user context
-	userID := ""
-	if uid, ok := c.Locals("user_id").(string); ok {
-		userID = uid
-	}
+	userID := middleware.GetUserID(c)
 
 	execution, err := h.storage.GetExecution(ctx, id)
 	if err != nil {
@@ -856,7 +767,7 @@ func (h *Handler) GetPublicExecution(c fiber.Ctx) error {
 	}
 
 	// Check ownership (unless service role)
-	role, _ := c.Locals("user_role").(string)
+	role := middleware.GetUserRole(c)
 	if role != "service_role" && role != "instance_admin" && role != "tenant_service" {
 		if execution.UserID == nil || *execution.UserID != userID {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -874,11 +785,7 @@ func (h *Handler) GetPublicExecutionLogs(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 	id := c.Params("id")
 
-	// Get user context
-	userID := ""
-	if uid, ok := c.Locals("user_id").(string); ok {
-		userID = uid
-	}
+	userID := middleware.GetUserID(c)
 
 	// Check execution exists and belongs to user
 	execution, err := h.storage.GetExecution(ctx, id)
@@ -896,7 +803,7 @@ func (h *Handler) GetPublicExecutionLogs(c fiber.Ctx) error {
 	}
 
 	// Check ownership (unless service_role or instance_admin)
-	role, _ := c.Locals("user_role").(string)
+	role := middleware.GetUserRole(c)
 	if role != "service_role" && role != "instance_admin" && role != "tenant_service" {
 		if execution.UserID == nil || *execution.UserID != userID {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{

@@ -15,21 +15,23 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // SAMLProviderHandler handles SAML provider configuration management
 type SAMLProviderHandler struct {
-	db          *pgxpool.Pool
+	db          *database.Connection
 	samlService *auth.SAMLService
 	httpClient  *http.Client
 }
 
 // NewSAMLProviderHandler creates a new SAML provider handler
-func NewSAMLProviderHandler(db *pgxpool.Pool, samlService *auth.SAMLService) *SAMLProviderHandler {
+func NewSAMLProviderHandler(db *database.Connection, samlService *auth.SAMLService) *SAMLProviderHandler {
 	return &SAMLProviderHandler{
 		db:          db,
 		samlService: samlService,
@@ -564,10 +566,7 @@ func (h *SAMLProviderHandler) UpdateSAMLProvider(c fiber.Ctx) error {
 
 	log.Info().Str("id", id).Msg("SAML provider updated")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("SAML provider '%s' updated successfully", displayName),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("SAML provider '%s' updated successfully", displayName))
 }
 
 // DeleteSAMLProvider deletes a SAML provider
@@ -618,10 +617,7 @@ func (h *SAMLProviderHandler) DeleteSAMLProvider(c fiber.Ctx) error {
 
 	log.Info().Str("id", id).Str("provider", displayName).Msg("SAML provider deleted")
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": fmt.Sprintf("SAML provider '%s' deleted successfully", displayName),
-	})
+	return apperrors.SendSuccess(c, fmt.Sprintf("SAML provider '%s' deleted successfully", displayName))
 }
 
 // ValidateMetadata validates SAML IdP metadata from URL or XML

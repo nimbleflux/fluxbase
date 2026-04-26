@@ -13,19 +13,19 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/crypto"
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // OAuthHandler handles OAuth authentication flow
 type OAuthHandler struct {
-	db              *pgxpool.Pool
+	db              *database.Connection
 	authSvc         *auth.Service
 	jwtManager      *auth.JWTManager
 	stateStore      *auth.StateStore
@@ -38,7 +38,7 @@ type OAuthHandler struct {
 }
 
 // NewOAuthHandler creates a new OAuth handler
-func NewOAuthHandler(db *pgxpool.Pool, authSvc *auth.Service, jwtManager *auth.JWTManager, baseURL, encryptionKey string, configProviders []config.OAuthProviderConfig) *OAuthHandler {
+func NewOAuthHandler(db *database.Connection, authSvc *auth.Service, jwtManager *auth.JWTManager, baseURL, encryptionKey string, configProviders []config.OAuthProviderConfig) *OAuthHandler {
 	stateStore := auth.NewStateStore()
 
 	// SECURITY: Validate encryption key for OAuth token storage
@@ -623,7 +623,7 @@ func (h *OAuthHandler) createOrLinkOAuthUser(
 	userInfo map[string]interface{},
 	token *oauth2.Token,
 ) (*auth.User, bool, error) {
-	tx, err := h.db.Begin(ctx)
+	tx, err := h.db.Pool().Begin(ctx)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -752,13 +752,12 @@ func (h *OAuthHandler) Logout(c fiber.Ctx) error {
 	providerName := c.Params("provider")
 
 	// Get user ID from JWT
-	userID := c.Locals("user_id")
-	if userID == nil || userID.(string) == "" {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Authentication required",
 		})
 	}
-	userIDStr := userID.(string)
 
 	// Parse optional redirect URL from request body
 	var reqBody struct {
@@ -990,13 +989,12 @@ func (h *OAuthHandler) GetProviderToken(c fiber.Ctx) error {
 	ctx := c.RequestCtx()
 	providerName := c.Params("provider")
 
-	userID := c.Locals("user_id")
-	if userID == nil || userID.(string) == "" {
+	userIDStr := middleware.GetUserID(c)
+	if userIDStr == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Authentication required",
 		})
 	}
-	userIDStr := userID.(string)
 
 	if err := h.requireDB(c); err != nil {
 		return err

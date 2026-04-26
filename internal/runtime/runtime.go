@@ -16,6 +16,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"github.com/shirou/gopsutil/v4/mem"
+
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 // embeddedSDK contains the JavaScript SDK for runtime execution
@@ -656,7 +658,7 @@ func (r *DenoRuntime) parseJobResult(resultLine, stdout, stderr string, lines []
 
 	// Fallback to legacy parsing - log warning since __RESULT__:: prefix was not found
 	log.Warn().
-		Str("stdout_preview", truncateString(stdout, 200)).
+		Str("stdout_preview", util.TruncateString(stdout, 200)).
 		Msg("Job result not found with __RESULT__:: prefix - handler may have exited early or returned non-serializable value")
 
 	var resultLines []string
@@ -710,14 +712,6 @@ func (r *DenoRuntime) parseJobResult(resultLine, stdout, stderr string, lines []
 	}
 
 	return result, nil
-}
-
-// truncateString truncates a string to maxLen characters, adding "..." if truncated
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
 }
 
 // classifyStderrLine determines the appropriate log level for a stderr line.

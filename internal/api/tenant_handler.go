@@ -18,6 +18,8 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/email"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/tenantdb"
 )
 
@@ -134,7 +136,7 @@ func (h *TenantHandler) ListTenants(c fiber.Ctx) error {
 
 func (h *TenantHandler) ListMyTenants(c fiber.Ctx) error {
 	ctx := c.Context()
-	userID, _ := c.Locals("user_id").(string)
+	userID := middleware.GetUserID(c)
 
 	if userID == "" {
 		return SendUnauthorized(c, "Authentication required", ErrCodeAuthRequired)
@@ -165,7 +167,7 @@ func (h *TenantHandler) ListMyTenants(c fiber.Ctx) error {
 func (h *TenantHandler) GetTenant(c fiber.Ctx) error {
 	ctx := c.Context()
 	tenantID := c.Params("id")
-	userID, _ := c.Locals("user_id").(string)
+	userID := middleware.GetUserID(c)
 	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
 
 	if !isInstanceAdmin {
@@ -228,7 +230,7 @@ func (h *TenantHandler) CreateTenant(c fiber.Ctx) error {
 	log.Info().Str("tenant_id", t.ID).Str("slug", t.Slug).Msg("Tenant created")
 
 	// Get the user ID for audit trail
-	userIDStr, _ := c.Locals("user_id").(string)
+	userIDStr := middleware.GetUserID(c)
 	var createdBy *uuid.UUID
 	if userIDStr != "" {
 		uid, err := uuid.Parse(userIDStr)
@@ -408,7 +410,7 @@ func (h *TenantHandler) MigrateTenant(c fiber.Ctx) error {
 func (h *TenantHandler) ListAdmins(c fiber.Ctx) error {
 	ctx := c.Context()
 	tenantID := c.Params("id")
-	userID, _ := c.Locals("user_id").(string)
+	userID := middleware.GetUserID(c)
 	isInstanceAdmin, _ := c.Locals("is_instance_admin").(bool)
 
 	if !isInstanceAdmin {
@@ -1042,5 +1044,5 @@ func (h *TenantHandler) RepairTenant(c fiber.Ctx) error {
 	}
 
 	log.Info().Str("tenant_id", tenantID).Msg("Tenant repaired successfully")
-	return c.JSON(fiber.Map{"message": "Tenant repaired successfully"})
+	return apperrors.SendSuccess(c, "Tenant repaired successfully")
 }

@@ -14,6 +14,8 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // AdminAuthHandler handles admin-specific authentication
@@ -341,17 +343,15 @@ func (h *AdminAuthHandler) AdminLogout(c fiber.Ctx) error {
 		return SendOperationFailed(c, "logout")
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Logged out successfully",
-	})
+	return apperrors.SendSuccess(c, "Logged out successfully")
 }
 
 // GetCurrentAdmin returns the currently authenticated admin user
 // GET /api/v1/admin/me
 func (h *AdminAuthHandler) GetCurrentAdmin(c fiber.Ctx) error {
 	// Get user info from context (set by auth middleware)
-	userID, ok := c.Locals("user_id").(string)
-	if !ok {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
 		return SendUnauthorized(c, "User not authenticated", ErrCodeAuthRequired)
 	}
 

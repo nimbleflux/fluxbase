@@ -2801,7 +2801,7 @@ func (tc *TestContext) CreateClientKey(name string, scopes []string) string {
 	require.NoError(tc.T, healthErr, "Database connection health check failed after %d attempts", maxRetries)
 
 	// Create client key service (nil settings cache for tests - allows all user keys)
-	clientKeyService := auth.NewClientKeyService(tc.DB.Pool(), nil)
+	clientKeyService := auth.NewClientKeyService(tc.DB, nil)
 
 	// Generate client key with provided scopes
 	// Use default scopes if none provided (read/write for tables, storage, functions)

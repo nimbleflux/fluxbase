@@ -13,6 +13,8 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
+	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
 type TenantPoolProvider interface {
@@ -185,7 +187,7 @@ func (h *Handler) ApplyMigration(c fiber.Ctx) error {
 	}
 
 	isTenantMigration, _ := c.Locals("is_tenant_migration").(bool)
-	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantID := middleware.GetTenantID(c)
 
 	var err error
 	if isTenantMigration && h.tenantPoolProvider != nil && tenantID != "" {
@@ -230,7 +232,7 @@ func (h *Handler) RollbackMigration(c fiber.Ctx) error {
 	}
 
 	isTenantMigration, _ := c.Locals("is_tenant_migration").(bool)
-	tenantID, _ := c.Locals("tenant_id").(string)
+	tenantID := middleware.GetTenantID(c)
 
 	var err error
 	if isTenantMigration && h.tenantPoolProvider != nil && tenantID != "" {
@@ -409,7 +411,7 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 			continue
 		}
 
-		contentHash := calculateHash(reqMig.UpSQL + valueOrEmpty(reqMig.DownSQL))
+		contentHash := calculateHash(reqMig.UpSQL + util.ValueOr(reqMig.DownSQL, ""))
 
 		existingMig, exists := existingMap[reqMig.Name]
 
@@ -446,7 +448,7 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 			continue
 		}
 
-		existingHash := calculateHash(existingMig.UpSQL + valueOrEmpty(existingMig.DownSQL))
+		existingHash := calculateHash(existingMig.UpSQL + util.ValueOr(existingMig.DownSQL, ""))
 
 		if existingHash == contentHash {
 			if (existingMig.Status == "pending" || existingMig.Status == "failed") && req.Options.AutoApply && !req.Options.DryRun {
@@ -570,11 +572,4 @@ func (h *Handler) SyncMigrations(c fiber.Ctx) error {
 func calculateHash(content string) string {
 	hash := sha256.Sum256([]byte(content))
 	return hex.EncodeToString(hash[:])
-}
-
-func valueOrEmpty(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
