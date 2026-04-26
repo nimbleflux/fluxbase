@@ -9,6 +9,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
+	syncframework "github.com/nimbleflux/fluxbase/internal/sync"
 )
 
 // SyncJobs syncs job functions to a namespace
@@ -107,274 +108,43 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 		})
 	}
 
-	// Get all existing job functions in this namespace
-	existingFunctions, err := h.storage.ListJobFunctionsForSync(syncCtx, namespace, currentTenantID)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to list existing job functions in namespace",
-		})
-	}
-
-	// Build set of existing function names
-	existingNames := make(map[string]*JobFunctionSummary)
-	for i := range existingFunctions {
-		existingNames[existingFunctions[i].Name] = existingFunctions[i]
-	}
-
-	// Build set of payload function names
-	payloadNames := make(map[string]bool)
-	for _, spec := range req.Jobs {
-		payloadNames[spec.Name] = true
-	}
-
-	// Determine operations
-	toCreate := []string{}
-	toUpdate := []string{}
-	toDelete := []string{}
-
-	for _, spec := range req.Jobs {
-		if _, exists := existingNames[spec.Name]; exists {
-			toUpdate = append(toUpdate, spec.Name)
-		} else {
-			toCreate = append(toCreate, spec.Name)
+	items := make([]jobSyncItem, len(req.Jobs))
+	for i, spec := range req.Jobs {
+		items[i] = jobSyncItem{
+			Name:                   spec.Name,
+			Code:                   spec.Code,
+			Description:            spec.Description,
+			Enabled:                spec.Enabled,
+			Schedule:               spec.Schedule,
+			TimeoutSeconds:         spec.TimeoutSeconds,
+			MemoryLimitMB:          spec.MemoryLimitMB,
+			MaxRetries:             spec.MaxRetries,
+			ProgressTimeoutSeconds: spec.ProgressTimeoutSeconds,
+			AllowNet:               spec.AllowNet,
+			AllowEnv:               spec.AllowEnv,
+			AllowRead:              spec.AllowRead,
+			AllowWrite:             spec.AllowWrite,
+			RequireRoles:           spec.RequireRoles,
+			IsBundled:              spec.IsBundled,
+			OriginalCode:           spec.OriginalCode,
 		}
 	}
 
-	if req.Options.DeleteMissing {
-		for name := range existingNames {
-			if !payloadNames[name] {
-				toDelete = append(toDelete, name)
-			}
-		}
-	}
-
-	// Track results
-	created := []string{}
-	updated := []string{}
-	deleted := []string{}
-	unchanged := []string{}
-	errorList := []fiber.Map{}
-
-	// If dry run, return what would be done without making changes
-	if req.Options.DryRun {
-		return c.JSON(fiber.Map{
-			"message":   "Dry run - no changes made",
-			"namespace": namespace,
-			"summary": fiber.Map{
-				"created":   len(toCreate),
-				"updated":   len(toUpdate),
-				"deleted":   len(toDelete),
-				"unchanged": 0,
-				"errors":    0,
-			},
-			"details": fiber.Map{
-				"created":   toCreate,
-				"updated":   toUpdate,
-				"deleted":   toDelete,
-				"unchanged": []string{},
-			},
-			"errors":  []fiber.Map{},
-			"dry_run": true,
-		})
-	}
-
-	// Process each job function
-	for _, spec := range req.Jobs {
-		code := spec.Code
-		originalCode := spec.Code
-		isBundled := false
-		var bundleError *string
-
-		// If original_code provided, use it
-		if spec.OriginalCode != nil {
-			originalCode = *spec.OriginalCode
-		}
-
-		// If client sent pre-bundled code, skip server-side bundling
-		if spec.IsBundled != nil && *spec.IsBundled {
-			isBundled = true
-		} else {
-			// Bundle server-side
-			bundledCode, bundleErr := h.loader.BundleCode(ctx, spec.Code)
-			if bundleErr != nil {
-				errMsg := bundleErr.Error()
-				bundleError = &errMsg
-				// Continue with unbundled code
-			} else {
-				code = bundledCode
-				isBundled = true
-			}
-		}
-
-		// Parse annotations from original code
-		annotations := h.loader.ParseAnnotations(originalCode)
-
-		// Create or update job function
-		if existing, exists := existingNames[spec.Name]; exists {
-			// Update existing function - build JobFunction with updated values
-			updatedFn := &JobFunction{
-				ID:                     existing.ID,
-				Name:                   existing.Name,
-				Namespace:              existing.Namespace,
-				Code:                   &code,
-				OriginalCode:           &originalCode,
-				IsBundled:              isBundled,
-				BundleError:            bundleError,
-				Description:            existing.Description,
-				Enabled:                existing.Enabled,
-				Schedule:               existing.Schedule,
-				TimeoutSeconds:         existing.TimeoutSeconds,
-				MemoryLimitMB:          existing.MemoryLimitMB,
-				MaxRetries:             existing.MaxRetries,
-				ProgressTimeoutSeconds: existing.ProgressTimeoutSeconds,
-				AllowNet:               existing.AllowNet,
-				AllowEnv:               existing.AllowEnv,
-				AllowRead:              existing.AllowRead,
-				AllowWrite:             existing.AllowWrite,
-				RequireRoles:           existing.RequireRoles,
-				Source:                 existing.Source, // Preserve original source
-			}
-
-			// Apply request values (take precedence over annotations)
-			if spec.Description != nil {
-				updatedFn.Description = spec.Description
-			}
-			if spec.Enabled != nil {
-				updatedFn.Enabled = *spec.Enabled
-			}
-			if spec.Schedule != nil {
-				updatedFn.Schedule = spec.Schedule
-			}
-			if spec.TimeoutSeconds != nil {
-				updatedFn.TimeoutSeconds = *spec.TimeoutSeconds
-			} else if annotations.TimeoutSeconds > 0 {
-				updatedFn.TimeoutSeconds = annotations.TimeoutSeconds
-			}
-			if spec.MemoryLimitMB != nil {
-				updatedFn.MemoryLimitMB = *spec.MemoryLimitMB
-			} else if annotations.MemoryLimitMB > 0 {
-				updatedFn.MemoryLimitMB = annotations.MemoryLimitMB
-			}
-			if spec.MaxRetries != nil {
-				updatedFn.MaxRetries = *spec.MaxRetries
-			} else if annotations.MaxRetries > 0 {
-				updatedFn.MaxRetries = annotations.MaxRetries
-			}
-			if spec.ProgressTimeoutSeconds != nil {
-				updatedFn.ProgressTimeoutSeconds = *spec.ProgressTimeoutSeconds
-			} else if annotations.ProgressTimeoutSeconds > 0 {
-				updatedFn.ProgressTimeoutSeconds = annotations.ProgressTimeoutSeconds
-			}
-			if spec.AllowNet != nil {
-				updatedFn.AllowNet = *spec.AllowNet
-			}
-			if spec.AllowEnv != nil {
-				updatedFn.AllowEnv = *spec.AllowEnv
-			}
-			if spec.AllowRead != nil {
-				updatedFn.AllowRead = *spec.AllowRead
-			}
-			if spec.AllowWrite != nil {
-				updatedFn.AllowWrite = *spec.AllowWrite
-			}
-			if len(spec.RequireRoles) > 0 {
-				updatedFn.RequireRoles = spec.RequireRoles
-			}
-
-			if err := h.storage.UpdateJobFunctionForSync(syncCtx, currentTenantID, updatedFn); err != nil {
-				errorList = append(errorList, fiber.Map{
-					"job":    spec.Name,
-					"error":  err.Error(),
-					"action": "update",
-				})
-				continue
-			}
-			updated = append(updated, spec.Name)
-		} else {
-			// Create new function
-			fn := &JobFunction{
-				ID:                     uuid.New(),
-				Name:                   spec.Name,
-				Namespace:              namespace,
-				Description:            spec.Description,
-				Code:                   &code,
-				OriginalCode:           &originalCode,
-				IsBundled:              isBundled,
-				BundleError:            bundleError,
-				Enabled:                valueOr(spec.Enabled, true),
-				Schedule:               spec.Schedule,
-				TimeoutSeconds:         valueOr(spec.TimeoutSeconds, valueOr(&annotations.TimeoutSeconds, 300)),
-				MemoryLimitMB:          valueOr(spec.MemoryLimitMB, valueOr(&annotations.MemoryLimitMB, 256)),
-				MaxRetries:             valueOr(spec.MaxRetries, annotations.MaxRetries),
-				ProgressTimeoutSeconds: valueOr(spec.ProgressTimeoutSeconds, valueOr(&annotations.ProgressTimeoutSeconds, 60)),
-				AllowNet:               valueOr(spec.AllowNet, true),
-				AllowEnv:               valueOr(spec.AllowEnv, true),
-				AllowRead:              valueOr(spec.AllowRead, false),
-				AllowWrite:             valueOr(spec.AllowWrite, false),
-				RequireRoles:           spec.RequireRoles,
-				Version:                1,
-				CreatedBy:              createdBy,
-				Source:                 "api",
-			}
-
-			if err := h.storage.CreateJobFunction(ctx, fn); err != nil {
-				errorList = append(errorList, fiber.Map{
-					"job":    spec.Name,
-					"error":  err.Error(),
-					"action": "create",
-				})
-				continue
-			}
-			created = append(created, spec.Name)
-		}
-	}
-
-	// Delete removed job functions (after successful creates/updates for safety)
-	if req.Options.DeleteMissing {
-		for _, name := range toDelete {
-			if err := h.storage.DeleteJobFunctionForSync(syncCtx, currentTenantID, namespace, name); err != nil {
-				errorList = append(errorList, fiber.Map{
-					"job":    name,
-					"error":  err.Error(),
-					"action": "delete",
-				})
-				continue
-			}
-			deleted = append(deleted, name)
-		}
-	}
-
-	log.Info().
-		Str("namespace", namespace).
-		Int("created", len(created)).
-		Int("updated", len(updated)).
-		Int("deleted", len(deleted)).
-		Int("unchanged", len(unchanged)).
-		Int("errors", len(errorList)).
-		Msg("Jobs synced successfully")
-
-	// Reschedule jobs after sync
-	h.rescheduleJobsFromNamespace(ctx, namespace)
-
-	return c.JSON(fiber.Map{
-		"message":   "Jobs synced successfully",
-		"namespace": namespace,
-		"summary": fiber.Map{
-			"created":   len(created),
-			"updated":   len(updated),
-			"deleted":   len(deleted),
-			"unchanged": len(unchanged),
-			"errors":    len(errorList),
-		},
-		"details": fiber.Map{
-			"created":   created,
-			"updated":   updated,
-			"deleted":   deleted,
-			"unchanged": unchanged,
-		},
-		"errors":  errorList,
-		"dry_run": false,
+	syncer := newJobSyncer(h, syncCtx, namespace, currentTenantID, createdBy)
+	result, syncErr := syncframework.Execute[jobSyncItem](ctx, syncer, items, syncframework.Options{
+		Namespace:     namespace,
+		DeleteMissing: req.Options.DeleteMissing,
+		DryRun:        req.Options.DryRun,
+		TenantID:      currentTenantID,
+		CreatedBy:     createdBy.String(),
 	})
+	if syncErr != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": syncErr.Error(),
+		})
+	}
+
+	return c.JSON(result)
 }
 
 // ListNamespaces lists all unique namespaces that have job functions (Admin only)

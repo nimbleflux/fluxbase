@@ -15,21 +15,21 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // SAMLProviderHandler handles SAML provider configuration management
 type SAMLProviderHandler struct {
-	db          *pgxpool.Pool
+	db          *database.Connection
 	samlService *auth.SAMLService
 	httpClient  *http.Client
 }
 
 // NewSAMLProviderHandler creates a new SAML provider handler
-func NewSAMLProviderHandler(db *pgxpool.Pool, samlService *auth.SAMLService) *SAMLProviderHandler {
+func NewSAMLProviderHandler(db *database.Connection, samlService *auth.SAMLService) *SAMLProviderHandler {
 	return &SAMLProviderHandler{
 		db:          db,
 		samlService: samlService,

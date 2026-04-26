@@ -5,6 +5,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/middleware"
+	syncframework "github.com/nimbleflux/fluxbase/internal/sync"
 )
 
 // SyncChatbotsRequest represents the request body for syncing chatbots
@@ -199,170 +200,24 @@ func (h *Handler) syncFromPayload(c fiber.Ctx, namespace string, chatbots []stru
 ) error {
 	ctx := middleware.CtxWithTenant(c)
 
-	// Get existing chatbots in this namespace
-	dbChatbots, err := h.storage.ListChatbotsByNamespace(ctx, namespace)
+	items := make([]chatbotSyncItem, len(chatbots))
+	for i, spec := range chatbots {
+		items[i] = chatbotSyncItem{name: spec.Name, code: spec.Code}
+	}
+
+	opts := syncframework.Options{
+		Namespace:     namespace,
+		DeleteMissing: deleteMissing,
+		DryRun:        dryRun,
+	}
+
+	syncer := newChatbotSyncer(h, namespace)
+	result, err := syncframework.Execute[chatbotSyncItem](ctx, syncer, items, opts)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to list existing chatbots",
+			"error": err.Error(),
 		})
 	}
 
-	// Build map of existing chatbots by name
-	existingMap := make(map[string]*Chatbot)
-	for _, cb := range dbChatbots {
-		existingMap[cb.Name] = cb
-	}
-
-	// Build set of payload chatbot names
-	payloadNames := make(map[string]bool)
-	for _, spec := range chatbots {
-		payloadNames[spec.Name] = true
-	}
-
-	// Track results
-	created := []string{}
-	updated := []string{}
-	deleted := []string{}
-	errorList := []fiber.Map{}
-
-	// If dry run, calculate what would be done
-	if dryRun {
-		for _, spec := range chatbots {
-			if _, exists := existingMap[spec.Name]; exists {
-				updated = append(updated, spec.Name)
-			} else {
-				created = append(created, spec.Name)
-			}
-		}
-
-		if deleteMissing {
-			for name := range existingMap {
-				if !payloadNames[name] {
-					deleted = append(deleted, name)
-				}
-			}
-		}
-
-		return c.JSON(fiber.Map{
-			"summary": fiber.Map{
-				"created": len(created),
-				"updated": len(updated),
-				"deleted": len(deleted),
-				"errors":  0,
-			},
-			"details": fiber.Map{
-				"created": created,
-				"updated": updated,
-				"deleted": deleted,
-			},
-			"dry_run": true,
-		})
-	}
-
-	// Process chatbots
-	for _, spec := range chatbots {
-		existing, exists := existingMap[spec.Name]
-
-		// Parse and compile the chatbot code
-		chatbot, err := h.loader.ParseChatbotFromCode(spec.Code, namespace)
-		if err != nil {
-			log.Error().Err(err).Str("name", spec.Name).Msg("Failed to parse chatbot")
-			errorList = append(errorList, fiber.Map{
-				"name":  spec.Name,
-				"error": "Failed to parse chatbot: " + err.Error(),
-			})
-			continue
-		}
-
-		// Set the name and code
-		chatbot.Name = spec.Name
-		chatbot.Code = spec.Code
-		chatbot.Source = "sdk"
-
-		if exists {
-			// Update existing chatbot
-			chatbot.ID = existing.ID
-			chatbot.CreatedAt = existing.CreatedAt
-			chatbot.CreatedBy = existing.CreatedBy
-			chatbot.Version = existing.Version
-
-			if err := h.storage.UpdateChatbot(ctx, chatbot); err != nil {
-				log.Error().Err(err).Str("name", spec.Name).Msg("Failed to update chatbot")
-				errorList = append(errorList, fiber.Map{
-					"name":  spec.Name,
-					"error": "Failed to update: " + err.Error(),
-				})
-				continue
-			}
-			updated = append(updated, spec.Name)
-		} else {
-			// Create new chatbot
-			if err := h.storage.CreateChatbot(ctx, chatbot); err != nil {
-				log.Error().Err(err).Str("name", spec.Name).Msg("Failed to create chatbot")
-				errorList = append(errorList, fiber.Map{
-					"name":  spec.Name,
-					"error": "Failed to create: " + err.Error(),
-				})
-				continue
-			}
-			created = append(created, spec.Name)
-		}
-
-		// Sync knowledge base links for this chatbot (if KB storage is available)
-		if h.knowledgeBaseStorage != nil && len(chatbot.KnowledgeBases) > 0 {
-			maxChunks := 5
-			if chatbot.RAGMaxChunks > 0 {
-				maxChunks = chatbot.RAGMaxChunks
-			}
-			similarityThreshold := 0.7
-			if chatbot.RAGSimilarityThreshold > 0 {
-				similarityThreshold = chatbot.RAGSimilarityThreshold
-			}
-
-			if err := h.knowledgeBaseStorage.SyncChatbotKnowledgeBaseLinks(ctx, chatbot.ID, chatbot.KnowledgeBases, maxChunks, similarityThreshold); err != nil {
-				log.Warn().Err(err).Str("chatbot", chatbot.Name).Msg("Failed to sync knowledge base links")
-			}
-		}
-	}
-
-	// Delete missing chatbots if requested
-	if deleteMissing {
-		for name, chatbot := range existingMap {
-			if !payloadNames[name] && chatbot.Source == "sdk" {
-				if err := h.storage.DeleteChatbot(ctx, chatbot.ID); err != nil {
-					log.Error().Err(err).Str("name", name).Msg("Failed to delete chatbot")
-					errorList = append(errorList, fiber.Map{
-						"name":  name,
-						"error": "Failed to delete: " + err.Error(),
-					})
-					continue
-				}
-				deleted = append(deleted, name)
-			}
-		}
-	}
-
-	log.Info().
-		Int("created", len(created)).
-		Int("updated", len(updated)).
-		Int("deleted", len(deleted)).
-		Int("errors", len(errorList)).
-		Str("namespace", namespace).
-		Msg("Synced chatbots from SDK payload")
-
-	return c.JSON(fiber.Map{
-		"summary": fiber.Map{
-			"created": len(created),
-			"updated": len(updated),
-			"deleted": len(deleted),
-			"errors":  len(errorList),
-		},
-		"details": fiber.Map{
-			"created": created,
-			"updated": updated,
-			"deleted": deleted,
-		},
-		"errors":  errorList,
-		"dry_run": false,
-	})
+	return c.JSON(result)
 }

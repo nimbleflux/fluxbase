@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
@@ -413,7 +414,7 @@ func (h *RESTHandler) makeBatchDeleteHandler(table database.TableInfo) fiber.Han
 		case strings.Contains(prefer, "return=minimal"):
 			return c.Status(200).Send(nil)
 		case strings.Contains(prefer, "return=headers-only"):
-			return c.Status(200).JSON(fiber.Map{"affected": affectedCount})
+			return apperrors.SendAffected(c, affectedCount)
 		default:
 			// return=representation or no preference - return deleted records with count
 			return c.Status(200).JSON(fiber.Map{

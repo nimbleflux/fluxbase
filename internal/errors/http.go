@@ -176,6 +176,53 @@ func SendFeatureDisabled(c fiber.Ctx, feature string) error {
 	return SendErrorWithCode(c, 403, fmt.Sprintf("%s is currently disabled", feature), ErrCodeFeatureDisabled)
 }
 
+func SendSuccess(c fiber.Ctx, message string) error {
+	return c.JSON(fiber.Map{
+		"success": true,
+		"message": message,
+	})
+}
+
+func SendData(c fiber.Ctx, key string, data interface{}) error {
+	return c.JSON(fiber.Map{
+		key: data,
+	})
+}
+
+func SendDataWithCount(c fiber.Ctx, key string, data interface{}, count int) error {
+	return c.JSON(fiber.Map{
+		key:     data,
+		"count": count,
+	})
+}
+
+func SendPaginated(c fiber.Ctx, key string, data interface{}, total, limit, offset int) error {
+	return c.JSON(fiber.Map{
+		key:      data,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+func SendAffected(c fiber.Ctx, affected int) error {
+	return c.JSON(fiber.Map{
+		"affected": affected,
+	})
+}
+
+func SendStatusMessage(c fiber.Ctx, status string, extra fiber.Map) error {
+	result := fiber.Map{"status": status}
+	for k, v := range extra {
+		result[k] = v
+	}
+	return c.JSON(result)
+}
+
+func SendSyncResult(c fiber.Ctx, result interface{}) error {
+	return c.JSON(result)
+}
+
 func ValueOr[T any](ptr *T, defaultVal T) T {
 	if ptr != nil {
 		return *ptr

@@ -12,17 +12,17 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/crypto"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // OAuthProviderHandler handles OAuth provider configuration management
 type OAuthProviderHandler struct {
-	db              *pgxpool.Pool
+	db              *database.Connection
 	settingsCache   *auth.SettingsCache
 	encryptionKey   string
 	configProviders []config.OAuthProviderConfig
@@ -30,7 +30,7 @@ type OAuthProviderHandler struct {
 }
 
 // NewOAuthProviderHandler creates a new OAuth provider handler
-func NewOAuthProviderHandler(db *pgxpool.Pool, settingsCache *auth.SettingsCache, encryptionKey, baseURL string, configProviders []config.OAuthProviderConfig) *OAuthProviderHandler {
+func NewOAuthProviderHandler(db *database.Connection, settingsCache *auth.SettingsCache, encryptionKey, baseURL string, configProviders []config.OAuthProviderConfig) *OAuthProviderHandler {
 	return &OAuthProviderHandler{
 		db:              db,
 		settingsCache:   settingsCache,

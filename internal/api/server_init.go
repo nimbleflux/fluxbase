@@ -157,7 +157,7 @@ func (s *Server) initAuth() {
 	s.invitationService = invitationService
 	invitationHandler := NewInvitationHandler(invitationService, dashboardAuthService, s.emailService, cfg.GetPublicBaseURL())
 
-	oauthProviderHandler := NewOAuthProviderHandler(db.Pool(), authService.GetSettingsCache(), cfg.EncryptionKey, cfg.GetPublicBaseURL(), cfg.Auth.OAuthProviders)
+	oauthProviderHandler := NewOAuthProviderHandler(db, authService.GetSettingsCache(), cfg.EncryptionKey, cfg.GetPublicBaseURL(), cfg.Auth.OAuthProviders)
 	jwtManager, err := auth.NewJWTManager(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiry, cfg.Auth.RefreshExpiry)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create JWT manager")
@@ -173,7 +173,7 @@ func (s *Server) initAuth() {
 			log.Warn().Err(err).Msg("Failed to load SAML providers from database")
 		}
 	}
-	samlProviderHandler := NewSAMLProviderHandler(db.Pool(), samlService)
+	samlProviderHandler := NewSAMLProviderHandler(db, samlService)
 
 	var samlHandler *SAMLHandler
 	if samlService != nil {
@@ -788,7 +788,7 @@ func (s *Server) initRealtime() {
 	s.Realtime.Handler = realtimeHandler
 	s.Realtime.Listener = realtimeListener
 
-	monitoringHandler := NewMonitoringHandler(db.Pool(), realtimeHandler, storageService.Provider)
+	monitoringHandler := NewMonitoringHandler(db, realtimeHandler, storageService.Provider)
 	if loggingService != nil {
 		monitoringHandler.SetLoggingService(loggingService)
 	}

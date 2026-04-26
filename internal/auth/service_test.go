@@ -13,6 +13,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/crypto"
+	"github.com/nimbleflux/fluxbase/internal/testutil"
 )
 
 // TestableService wraps the auth service components for unit testing
@@ -23,25 +24,10 @@ type TestableService struct {
 	tokenBlacklistRepo    TokenBlacklistRepositoryInterface
 	jwtManager            *JWTManager
 	passwordHasher        *PasswordHasher
-	settingsCache         *MockSettingsCache
+	settingsCache         *testutil.MockSettingsCache
 	config                *config.AuthConfig
 	emailVerificationRepo *MockEmailVerificationRepository
 	oauthManager          *OAuthManager
-}
-
-// MockSettingsCache implements a simple settings cache for testing
-type MockSettingsCache struct {
-	boolSettings   map[string]bool
-	stringSettings map[string]string
-	intSettings    map[string]int
-}
-
-func NewMockSettingsCache() *MockSettingsCache {
-	return &MockSettingsCache{
-		boolSettings:   make(map[string]bool),
-		stringSettings: make(map[string]string),
-		intSettings:    make(map[string]int),
-	}
 }
 
 func mustNewJWTManager(secret string, accessTTL, refreshTTL time.Duration) *JWTManager {
@@ -58,31 +44,6 @@ func mustNewJWTManagerWithConfig(secret string, accessTTL, refreshTTL, serviceRo
 		panic(err)
 	}
 	return m
-}
-
-func (m *MockSettingsCache) GetBool(ctx context.Context, key string, defaultValue bool) bool {
-	if val, ok := m.boolSettings[key]; ok {
-		return val
-	}
-	return defaultValue
-}
-
-func (m *MockSettingsCache) GetString(ctx context.Context, key string, defaultValue string) string {
-	if val, ok := m.stringSettings[key]; ok {
-		return val
-	}
-	return defaultValue
-}
-
-func (m *MockSettingsCache) GetInt(ctx context.Context, key string, defaultValue int) int {
-	if val, ok := m.intSettings[key]; ok {
-		return val
-	}
-	return defaultValue
-}
-
-func (m *MockSettingsCache) SetBool(key string, value bool) {
-	m.boolSettings[key] = value
 }
 
 // MockEmailVerificationRepository for testing email verification
@@ -143,7 +104,7 @@ func NewTestableService() *TestableService {
 		tokenBlacklistRepo:    NewMockTokenBlacklistRepository(),
 		jwtManager:            mustNewJWTManager(cfg.JWTSecret, cfg.JWTExpiry, cfg.RefreshExpiry),
 		passwordHasher:        NewPasswordHasherWithConfig(PasswordHasherConfig{MinLength: cfg.PasswordMinLen, Cost: cfg.BcryptCost}),
-		settingsCache:         NewMockSettingsCache(),
+		settingsCache:         testutil.NewMockSettingsCache(),
 		config:                cfg,
 		emailVerificationRepo: NewMockEmailVerificationRepository(),
 		oauthManager:          NewOAuthManager(),
