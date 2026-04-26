@@ -22,7 +22,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/graphql-go/graphql v0.8.1
-	github.com/jackc/pgx/v5 v5.9.1
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/joho/godotenv v1.5.1
 	github.com/kapmahc/epub v0.1.1
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
