@@ -85,8 +85,9 @@ export async function selectTenantByIndex(page: Page, index: number) {
   await openTenantSelector(page);
   const allOptions = page.getByRole("option");
   const count = await allOptions.count();
-  const instanceOffset = count > 0 && (await allOptions.nth(0).innerText()).then(t => t.includes("Instance")).catch(() => false) ? 1 : 0;
-  const actualIndex = index + (instanceOffset ? 1 : 0);
+  const firstText = count > 0 ? await allOptions.nth(0).innerText().catch(() => "") : "";
+  const instanceOffset = firstText.includes("Instance") ? 1 : 0;
+  const actualIndex = index + instanceOffset;
   if (actualIndex >= count) {
     throw new Error(
       `Tenant option index ${index} out of range (found ${count} options, offset ${instanceOffset})`,
