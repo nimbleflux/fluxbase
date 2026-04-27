@@ -4,8 +4,7 @@ import {
   rawDeleteFunction,
   rawInvokeFunction,
 } from "./helpers/api";
-import { selectTenantByIndex } from "./helpers/selectors";
-import { isNoTenantSelected } from "./helpers/selectors";
+import { selectTenantByIndex, isNoTenantSelected } from "./helpers/selectors";
 
 test.describe("Edge Functions Execution", () => {
   let adminToken: string;
