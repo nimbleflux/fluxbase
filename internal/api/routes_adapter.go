@@ -862,10 +862,10 @@ func (s *Server) buildAdminRouteDeps() *routes.AdminDeps {
 			UpdateOverridableSettings: s.Settings.Instance.UpdateOverridableSettings,
 		},
 		Extensions: &routes.ExtensionsAdminDeps{
-			ListExtensions:   s.Extensions.Handler.ListExtensions,
-			GetExtension:     s.Extensions.Handler.GetExtensionStatus,
-			EnableExtension:  s.Extensions.Handler.EnableExtension,
-			DisableExtension: s.Extensions.Handler.DisableExtension,
+			ListExtensions:   s.Extensions.Handler.ListExtensionsForTenant,
+			GetExtension:     s.Extensions.Handler.GetExtensionStatusForTenant,
+			EnableExtension:  s.Extensions.Handler.EnableExtensionForTenant,
+			DisableExtension: s.Extensions.Handler.DisableExtensionForTenant,
 			SyncExtensions:   s.Extensions.Handler.SyncExtensions,
 		},
 		ExtensionsTenant: &routes.ExtensionsTenantDeps{

@@ -218,26 +218,21 @@ test.describe("Tenant Switching & Header Propagation", () => {
   });
 
   test("instance admin can clear tenant context", async ({ adminPage }) => {
-    // First ensure a tenant is selected
     const selector = adminPage.getByRole("combobox", { name: "Select tenant" });
     await expect(selector).toBeVisible({ timeout: 10_000 });
 
-    // Open selector
     await selector.click();
     await expect(adminPage.getByRole("listbox")).toBeVisible({
       timeout: 5_000,
     });
 
-    // Look for "Clear tenant context" option
-    const clearOption = adminPage.getByText("Clear tenant context");
-    if (await clearOption.isVisible()) {
-      await clearOption.click();
-      // Wait for selector to update
+    const instanceOption = adminPage.getByText("Instance", { exact: false }).first();
+    if (await instanceOption.isVisible()) {
+      await instanceOption.click();
       await adminPage.waitForTimeout(500);
 
-      // Selector should now show "Select tenant..."
       const text = await selector.textContent();
-      expect(text).toContain("Select tenant");
+      expect(text).toContain("Instance");
     }
   });
 });

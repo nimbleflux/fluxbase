@@ -1,4 +1,4 @@
-import { Building2, Check, ChevronsUpDown, Shield, Lock } from "lucide-react";
+import { Building2, Check, ChevronsUpDown, Globe, Shield, Lock } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTenantStore, type Tenant } from "@/stores/tenant-store";
@@ -12,7 +12,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from "@/components/ui/command";
 import {
   Popover,
@@ -153,10 +152,12 @@ export function TenantSelector() {
             <Lock className="mr-2 h-4 w-4" />
           ) : actingAsTenantAdmin ? (
             <Shield className="mr-2 h-4 w-4" />
+          ) : !currentTenant ? (
+            <Globe className="mr-2 h-4 w-4" />
           ) : (
             <Building2 className="mr-2 h-4 w-4" />
           )}
-          {currentTenant ? currentTenant.name : "Select tenant..."}
+          {currentTenant ? currentTenant.name : "Instance"}
           {!tenantLocked && (
             <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 opacity-50" />
           )}
@@ -168,6 +169,28 @@ export function TenantSelector() {
           <CommandList>
             <CommandEmpty>No tenants found.</CommandEmpty>
             <CommandGroup>
+              {storeIsInstanceAdmin && (
+                <CommandItem
+                  onSelect={handleClearTenant}
+                  className={cn(
+                    !currentTenant && "bg-accent",
+                  )}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      !currentTenant ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <Globe className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <div className="flex flex-col">
+                    <span>Instance</span>
+                    <span className="text-xs text-muted-foreground">
+                      Platform-wide management
+                    </span>
+                  </div>
+                </CommandItem>
+              )}
               {tenants.map((tenant) => (
                 <CommandItem
                   key={tenant.id}
@@ -203,20 +226,6 @@ export function TenantSelector() {
                 </CommandItem>
               ))}
             </CommandGroup>
-            {storeIsInstanceAdmin && currentTenant && (
-              <>
-                <CommandSeparator />
-                <CommandGroup>
-                  <CommandItem
-                    onSelect={handleClearTenant}
-                    className="text-muted-foreground"
-                  >
-                    <Building2 className="mr-2 h-4 w-4" />
-                    Clear tenant context
-                  </CommandItem>
-                </CommandGroup>
-              </>
-            )}
           </CommandList>
         </Command>
       </PopoverContent>

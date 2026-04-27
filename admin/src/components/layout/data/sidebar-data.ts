@@ -197,6 +197,7 @@ export const sidebarData: SidebarDataWithVisibility = {
           url: "/authentication",
           icon: Shield,
           visibility: "all",
+          requiresTenant: false,
         },
       ],
     },
@@ -363,7 +364,8 @@ export const sidebarData: SidebarDataWithVisibility = {
           title: "Extensions",
           url: "/extensions",
           icon: Puzzle,
-          visibility: "instance-only",
+          visibility: "all",
+          requiresTenant: false,
         },
         {
           title: "Database Config",

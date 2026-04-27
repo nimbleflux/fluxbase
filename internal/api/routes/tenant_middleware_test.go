@@ -101,8 +101,7 @@ func TestTenantMiddleware_AdminSubgroupsInherit(t *testing.T) {
 		"rpc_admin",
 		"logs_admin",
 		"settings_admin",
-		"extensions_admin",
-		"extensions_tenant",
+		"extensions",
 	}
 
 	foundSubgroups := make(map[string]*RouteGroup)

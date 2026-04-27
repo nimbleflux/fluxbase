@@ -4,11 +4,13 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-// ExtensionsAdminDeps contains dependencies for extensions admin routes.
-// Auth middleware is inherited from the parent admin route group.
+// ExtensionsAdminDeps contains dependencies for extensions routes.
+// These routes allow both instance admins and tenant admins to manage
+// extensions for their respective context.
 //
 // Role Access:
-//   - instance_admin: Full access to all extension management operations
+//   - instance_admin: Full access, manages extensions on main or any tenant DB
+//   - tenant_admin: Manage extensions for their own tenant database
 type ExtensionsAdminDeps struct {
 	ListExtensions   fiber.Handler
 	GetExtension     fiber.Handler
@@ -17,16 +19,16 @@ type ExtensionsAdminDeps struct {
 	SyncExtensions   fiber.Handler
 }
 
-// BuildExtensionsAdminRoutes creates the extensions admin route group.
+// BuildExtensionsAdminRoutes creates the extensions route group.
 func BuildExtensionsAdminRoutes(deps *ExtensionsAdminDeps) *RouteGroup {
 	if deps == nil {
 		return nil
 	}
 
 	return &RouteGroup{
-		Name:         "extensions_admin",
+		Name:         "extensions",
 		DefaultAuth:  AuthRequired,
-		DefaultRoles: []string{"admin", "instance_admin"},
+		DefaultRoles: []string{"admin", "instance_admin", "tenant_admin"},
 		Routes: []Route{
 			{Method: "GET", Path: "/extensions", Handler: deps.ListExtensions, Summary: "List extensions"},
 			{Method: "GET", Path: "/extensions/:name", Handler: deps.GetExtension, Summary: "Get extension status"},
@@ -37,34 +39,12 @@ func BuildExtensionsAdminRoutes(deps *ExtensionsAdminDeps) *RouteGroup {
 	}
 }
 
-// ExtensionsTenantDeps contains dependencies for tenant-scoped extension routes.
-// These routes allow tenant_admin users to manage extensions for their own tenant database.
-//
-// Role Access:
-//   - tenant_admin: Manage extensions for their own tenant
-//   - instance_admin: Manage extensions for any tenant
-type ExtensionsTenantDeps struct {
-	ListExtensions   fiber.Handler
-	GetExtension     fiber.Handler
-	EnableExtension  fiber.Handler
-	DisableExtension fiber.Handler
-}
+// ExtensionsTenantDeps is an alias kept for backward compatibility with wiring code.
+// The tenant routes are now merged into ExtensionsAdminDeps.
+type ExtensionsTenantDeps = ExtensionsAdminDeps
 
-// BuildExtensionsTenantRoutes creates the tenant-scoped extensions route group.
-func BuildExtensionsTenantRoutes(deps *ExtensionsTenantDeps) *RouteGroup {
-	if deps == nil {
-		return nil
-	}
-
-	return &RouteGroup{
-		Name:         "extensions_tenant",
-		DefaultAuth:  AuthRequired,
-		DefaultRoles: []string{"admin", "instance_admin", "tenant_admin"},
-		Routes: []Route{
-			{Method: "GET", Path: "/extensions", Handler: deps.ListExtensions, Summary: "List extensions for tenant"},
-			{Method: "GET", Path: "/extensions/:name", Handler: deps.GetExtension, Summary: "Get extension status for tenant"},
-			{Method: "POST", Path: "/extensions/:name/enable", Handler: deps.EnableExtension, Summary: "Enable extension for tenant"},
-			{Method: "POST", Path: "/extensions/:name/disable", Handler: deps.DisableExtension, Summary: "Disable extension for tenant"},
-		},
-	}
+// BuildExtensionsTenantRoutes is kept for backward compatibility.
+// It returns nil so the merged route group (from BuildExtensionsAdminRoutes) is used instead.
+func BuildExtensionsTenantRoutes(_ *ExtensionsTenantDeps) *RouteGroup {
+	return nil
 }
