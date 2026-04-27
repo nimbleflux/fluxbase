@@ -4,7 +4,7 @@ import {
   rawDeleteFunction,
   rawInvokeFunction,
 } from "./helpers/api";
-import { selectTenantByIndex } from "./helpers/selectors";
+import { selectTenantByIndex, isNoTenantSelected } from "./helpers/selectors";
 
 test.describe("Edge Functions Execution", () => {
   let adminToken: string;
@@ -21,8 +21,7 @@ test.describe("Edge Functions Execution", () => {
   test.beforeEach(async ({ adminPage }) => {
     const selector = adminPage.getByRole("combobox", { name: "Select tenant" });
     if (await selector.isVisible().catch(() => false)) {
-      const text = await selector.textContent();
-      if (text?.includes("Select tenant")) {
+      if (await isNoTenantSelected(adminPage)) {
         await selectTenantByIndex(adminPage, 0);
       }
     }

@@ -356,6 +356,11 @@ export function SAMLProvidersTab() {
                               Config File
                             </Badge>
                           )}
+                          {provider.tenant_id ? (
+                            <Badge variant="outline">Tenant</Badge>
+                          ) : (
+                            <Badge variant="secondary">Instance</Badge>
+                          )}
                           {provider.allow_dashboard_login && (
                             <Badge variant="outline">Dashboard Login</Badge>
                           )}

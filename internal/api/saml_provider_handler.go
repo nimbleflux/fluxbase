@@ -15,12 +15,14 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // SAMLProviderHandler handles SAML provider configuration management
@@ -79,6 +81,7 @@ type SAMLProviderConfig struct {
 	DeniedGroups         []string          `json:"denied_groups,omitempty"`
 	GroupAttribute       string            `json:"group_attribute,omitempty"`
 	Source               string            `json:"source"` // "database" or "config"
+	TenantID             *string           `json:"tenant_id,omitempty"`
 	CreatedAt            time.Time         `json:"created_at"`
 	UpdatedAt            time.Time         `json:"updated_at"`
 }
@@ -155,7 +158,7 @@ func (h *SAMLProviderHandler) ListSAMLProviders(c fiber.Ctx) error {
 		       COALESCE(allow_idp_initiated, false), COALESCE(allowed_redirect_hosts, ARRAY[]::TEXT[]),
 		       COALESCE(required_groups, ARRAY[]::TEXT[]), COALESCE(required_groups_all, ARRAY[]::TEXT[]),
 		       COALESCE(denied_groups, ARRAY[]::TEXT[]), COALESCE(group_attribute, 'groups'),
-		       COALESCE(source, 'database'), created_at, updated_at
+		       COALESCE(source, 'database'), created_at, updated_at, tenant_id
 		FROM auth.saml_providers
 		ORDER BY name
 	`
@@ -180,7 +183,7 @@ func (h *SAMLProviderHandler) ListSAMLProviders(c fiber.Ctx) error {
 			&p.DefaultRole, &p.AllowDashboardLogin, &p.AllowAppLogin,
 			&p.AllowIDPInitiated, &p.AllowedRedirectHosts,
 			&p.RequiredGroups, &p.RequiredGroupsAll, &p.DeniedGroups, &p.GroupAttribute,
-			&p.Source, &p.CreatedAt, &p.UpdatedAt,
+			&p.Source, &p.CreatedAt, &p.UpdatedAt, &p.TenantID,
 		)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to scan SAML provider")
@@ -357,6 +360,12 @@ func (h *SAMLProviderHandler) CreateSAMLProvider(c fiber.Ctx) error {
 	entityID := fmt.Sprintf("%s/api/v1/auth/saml/metadata/%s", baseURL, req.Name)
 	acsURL := fmt.Sprintf("%s/api/v1/auth/saml/acs", baseURL)
 
+	// Instance-level providers (default tenant) get tenant_id = NULL so they
+	// serve as fallback for all tenants. We must use WrapWithServiceRole which
+	// does NOT set app.current_tenant_id, otherwise the set_tenant_id_from_context()
+	// trigger overrides our NULL with the session tenant UUID.
+	isInstanceLevel := middleware.IsDefaultTenantFromContext(c)
+
 	query := `
 		INSERT INTO auth.saml_providers (
 			name, display_name, enabled, entity_id, acs_url, idp_metadata_url,
@@ -371,14 +380,26 @@ func (h *SAMLProviderHandler) CreateSAMLProvider(c fiber.Ctx) error {
 	var id uuid.UUID
 	var createdAt, updatedAt time.Time
 
-	err = h.db.QueryRow(
-		ctx, query,
-		req.Name, displayName, req.Enabled, entityID, acsURL,
-		req.IdPMetadataURL, req.IdPMetadataXML, metadataInfo.CachedXML,
-		attrMapping, autoCreateUsers, defaultRole,
-		allowDashboardLogin, allowAppLogin, allowIDPInitiated,
-		req.AllowedRedirectHosts, req.RequiredGroups, req.RequiredGroupsAll, req.DeniedGroups, groupAttribute,
-	).Scan(&id, &createdAt, &updatedAt)
+	if isInstanceLevel {
+		err = database.WrapWithServiceRole(ctx, h.db, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, query,
+				req.Name, displayName, req.Enabled, entityID, acsURL,
+				req.IdPMetadataURL, req.IdPMetadataXML, metadataInfo.CachedXML,
+				attrMapping, autoCreateUsers, defaultRole,
+				allowDashboardLogin, allowAppLogin, allowIDPInitiated,
+				req.AllowedRedirectHosts, req.RequiredGroups, req.RequiredGroupsAll, req.DeniedGroups, groupAttribute,
+			).Scan(&id, &createdAt, &updatedAt)
+		})
+	} else {
+		err = h.db.QueryRow(
+			ctx, query,
+			req.Name, displayName, req.Enabled, entityID, acsURL,
+			req.IdPMetadataURL, req.IdPMetadataXML, metadataInfo.CachedXML,
+			attrMapping, autoCreateUsers, defaultRole,
+			allowDashboardLogin, allowAppLogin, allowIDPInitiated,
+			req.AllowedRedirectHosts, req.RequiredGroups, req.RequiredGroupsAll, req.DeniedGroups, groupAttribute,
+		).Scan(&id, &createdAt, &updatedAt)
+	}
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			return SendConflict(c, fmt.Sprintf("SAML provider '%s' already exists", req.Name), ErrCodeDuplicateKey)

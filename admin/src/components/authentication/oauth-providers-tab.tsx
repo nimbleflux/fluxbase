@@ -343,6 +343,15 @@ export function OAuthProvidersTab({ onProviderTest }: OAuthProvidersTabProps) {
                               Config
                             </Badge>
                           )}
+                          {provider.tenant_id ? (
+                            <Badge variant="outline" className="text-xs">
+                              Tenant
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">
+                              Instance
+                            </Badge>
+                          )}
                         </div>
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>

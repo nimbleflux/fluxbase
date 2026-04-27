@@ -12,6 +12,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
@@ -139,6 +140,7 @@ type OAuthProvider struct {
 	RequiredClaims      map[string][]string `json:"required_claims,omitempty"`
 	DeniedClaims        map[string][]string `json:"denied_claims,omitempty"`
 	Source              string              `json:"source,omitempty"` // "database" or "config"
+	TenantID            *string             `json:"tenant_id,omitempty"`
 	CreatedAt           time.Time           `json:"created_at"`
 	UpdatedAt           time.Time           `json:"updated_at"`
 }
@@ -223,7 +225,8 @@ func (h *OAuthProviderHandler) ListOAuthProviders(c fiber.Ctx) error {
 		       COALESCE(allow_dashboard_login, false), COALESCE(allow_app_login, true),
 		       required_claims, denied_claims,
 		       created_at, updated_at,
-		       (client_secret IS NOT NULL AND client_secret != '') AS has_secret
+		       (client_secret IS NOT NULL AND client_secret != '') AS has_secret,
+		       tenant_id
 		FROM platform.oauth_providers
 		ORDER BY display_name
 	`
@@ -245,7 +248,7 @@ func (h *OAuthProviderHandler) ListOAuthProviders(c fiber.Ctx) error {
 			&p.TokenURL, &p.UserInfoURL, &p.RevocationEndpoint, &p.EndSessionEndpoint,
 			&p.AllowDashboardLogin, &p.AllowAppLogin,
 			&requiredClaimsJSON, &deniedClaimsJSON,
-			&p.CreatedAt, &p.UpdatedAt, &p.HasSecret,
+			&p.CreatedAt, &p.UpdatedAt, &p.HasSecret, &p.TenantID,
 		)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to scan OAuth provider")
@@ -431,6 +434,12 @@ func (h *OAuthProviderHandler) CreateOAuthProvider(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to encrypt client secret")
 	}
 
+	// Instance-level providers (default tenant) get tenant_id = NULL so they
+	// serve as fallback for all tenants. We must use WrapWithServiceRole which
+	// does NOT set app.current_tenant_id, otherwise the set_tenant_id_from_context()
+	// trigger overrides our NULL with the session tenant UUID.
+	isInstanceLevel := middleware.IsDefaultTenantFromContext(c)
+
 	query := `
 		INSERT INTO platform.oauth_providers (
 			provider_name, display_name, enabled, client_id, client_secret,
@@ -444,13 +453,25 @@ func (h *OAuthProviderHandler) CreateOAuthProvider(c fiber.Ctx) error {
 
 	var id uuid.UUID
 	var createdAt, updatedAt time.Time
-	err = h.db.QueryRow(
-		ctx, query,
-		req.ProviderName, req.DisplayName, req.Enabled, req.ClientID, encryptedSecret,
-		req.RedirectURL, req.Scopes, req.IsCustom, req.AuthorizationURL, req.TokenURL,
-		req.UserInfoURL, req.RevocationEndpoint, req.EndSessionEndpoint,
-		allowDashboardLogin, allowAppLogin, requiredClaimsJSON, deniedClaimsJSON, userID,
-	).Scan(&id, &createdAt, &updatedAt)
+
+	if isInstanceLevel {
+		err = database.WrapWithServiceRole(ctx, h.db, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, query,
+				req.ProviderName, req.DisplayName, req.Enabled, req.ClientID, encryptedSecret,
+				req.RedirectURL, req.Scopes, req.IsCustom, req.AuthorizationURL, req.TokenURL,
+				req.UserInfoURL, req.RevocationEndpoint, req.EndSessionEndpoint,
+				allowDashboardLogin, allowAppLogin, requiredClaimsJSON, deniedClaimsJSON, userID,
+			).Scan(&id, &createdAt, &updatedAt)
+		})
+	} else {
+		err = h.db.QueryRow(
+			ctx, query,
+			req.ProviderName, req.DisplayName, req.Enabled, req.ClientID, encryptedSecret,
+			req.RedirectURL, req.Scopes, req.IsCustom, req.AuthorizationURL, req.TokenURL,
+			req.UserInfoURL, req.RevocationEndpoint, req.EndSessionEndpoint,
+			allowDashboardLogin, allowAppLogin, requiredClaimsJSON, deniedClaimsJSON, userID,
+		).Scan(&id, &createdAt, &updatedAt)
+	}
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
 			return SendConflict(c, fmt.Sprintf("OAuth provider '%s' already exists", req.ProviderName), ErrCodeDuplicateKey)

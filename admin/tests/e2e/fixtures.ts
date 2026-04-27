@@ -90,17 +90,21 @@ async function browserLogin(
 
   // Select the default tenant so tenant-scoped pages work.
   // Only instance admins see the tenant selector — tenant admins don't.
+  // When no tenant is selected, the button shows "Instance".
   try {
     const tenantCombo = page.getByRole("combobox", { name: /select tenant/i });
     if (await tenantCombo.isVisible({ timeout: 500 }).catch(() => false)) {
       const comboText = await tenantCombo.innerText().catch(() => "");
-      if (comboText.includes("Select tenant")) {
+      if (comboText.includes("Instance")) {
         await tenantCombo.click();
         const listbox = page.getByRole("listbox");
         await expect(listbox).toBeVisible({ timeout: 2_000 });
-        const firstOption = page.getByRole("option").first();
-        await firstOption.click();
-        await page.waitForTimeout(200);
+        const options = page.getByRole("option");
+        const firstTenant = options.nth(1);
+        if (await firstTenant.isVisible().catch(() => false)) {
+          await firstTenant.click();
+          await page.waitForTimeout(200);
+        }
       }
     }
   } catch {

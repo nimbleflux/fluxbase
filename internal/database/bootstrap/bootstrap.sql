@@ -416,7 +416,11 @@ CREATE TABLE IF NOT EXISTS platform.bootstrap_state (
 
 -- Grant permissions on platform migration tables to service_role
 GRANT SELECT, INSERT, UPDATE ON TABLE platform.declarative_state TO service_role;
-GRANT USAGE, SELECT ON SEQUENCE platform.declarative_state_id_seq TO service_role;
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_sequences WHERE schemaname = 'platform' AND sequencename = 'declarative_state_id_seq') THEN
+        GRANT USAGE, SELECT ON SEQUENCE platform.declarative_state_id_seq TO service_role;
+    END IF;
+END $$;
 GRANT SELECT, INSERT ON TABLE platform.bootstrap_state TO service_role;
 
 -- Record bootstrap completion (idempotent)
@@ -442,7 +446,7 @@ BEGIN
         WHERE table_schema = 'dashboard' AND table_type = 'BASE TABLE'
     LOOP
         -- Skip if table already exists in platform schema (platform is authoritative)
-        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'platform' AND table_name = tbl.table_name) THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'platform' AND table_name = tbl.table_name AND table_type = 'BASE TABLE') THEN
             EXECUTE format('ALTER TABLE dashboard.%I SET SCHEMA platform', tbl.table_name);
             RAISE NOTICE 'Migrated dashboard.% to platform.%', tbl.table_name, tbl.table_name;
         ELSE
@@ -452,7 +456,7 @@ BEGIN
     END LOOP;
 
     -- Drop the now-empty dashboard schema
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'dashboard') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'dashboard' AND table_type = 'BASE TABLE') THEN
         EXECUTE 'DROP SCHEMA IF EXISTS dashboard CASCADE';
         RAISE NOTICE 'Dropped empty dashboard schema';
     END IF;
@@ -470,6 +474,7 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'platform' AND table_name = 'tenants'
+              AND table_type = 'BASE TABLE'
     ) THEN
         RAISE NOTICE 'platform.tenants does not exist yet, skipping storage tenant_id backfill';
         RETURN;
@@ -503,6 +508,7 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'platform' AND table_name = 'users'
+              AND table_type = 'BASE TABLE'
     ) THEN
         RAISE NOTICE 'platform.users does not exist yet, skipping dashboard_admin migration';
         RETURN;
@@ -553,7 +559,7 @@ BEGIN
         END CASE;
 
         -- Skip if target table already exists in platform schema (platform is authoritative)
-        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'platform' AND table_name = v_new_name) THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'platform' AND table_name = v_new_name AND table_type = 'BASE TABLE') THEN
             EXECUTE format('ALTER TABLE %I.%I SET SCHEMA platform', rec.old_schema, rec.table_name);
             IF v_new_name != rec.table_name THEN
                 EXECUTE format('ALTER TABLE platform.%I RENAME TO %I', rec.table_name, v_new_name);
@@ -612,19 +618,19 @@ BEGIN
 
     -- Drop the now-empty old schemas
     IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'system')
-       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'system') THEN
+       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'system' AND table_type = 'BASE TABLE') THEN
         EXECUTE 'DROP SCHEMA IF EXISTS system CASCADE';
         RAISE NOTICE 'Dropped empty system schema';
     END IF;
 
     IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'api')
-       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'api') THEN
+       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'api' AND table_type = 'BASE TABLE') THEN
         EXECUTE 'DROP SCHEMA IF EXISTS api CASCADE';
         RAISE NOTICE 'Dropped empty api schema';
     END IF;
 
     IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'migrations')
-       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'migrations') THEN
+       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'migrations' AND table_type = 'BASE TABLE') THEN
         EXECUTE 'DROP SCHEMA IF EXISTS migrations CASCADE';
         RAISE NOTICE 'Dropped empty migrations schema';
     END IF;

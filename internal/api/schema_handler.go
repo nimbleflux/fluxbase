@@ -1,7 +1,12 @@
 package api
 
 import (
+	"context"
+	"fmt"
+	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,8 +26,7 @@ type SchemaRelationship struct {
 	ConstraintName string `json:"constraint_name"`
 	OnDelete       string `json:"on_delete"`
 	OnUpdate       string `json:"on_update"`
-	// Cardinality info: "one-to-one", "one-to-many", "many-to-one"
-	Cardinality string `json:"cardinality"`
+	Cardinality    string `json:"cardinality"`
 }
 
 // SchemaNode represents a table for ERD visualization
@@ -46,7 +50,7 @@ type SchemaNodeColumn struct {
 	Nullable     bool    `json:"nullable"`
 	IsPrimaryKey bool    `json:"is_primary_key"`
 	IsForeignKey bool    `json:"is_foreign_key"`
-	FKTarget     *string `json:"fk_target,omitempty"` // "schema.table.column"
+	FKTarget     *string `json:"fk_target,omitempty"`
 	DefaultValue *string `json:"default_value,omitempty"`
 	IsUnique     bool    `json:"is_unique"`
 	IsIndexed    bool    `json:"is_indexed"`
@@ -60,10 +64,60 @@ type SchemaGraphResponse struct {
 	Schemas []string             `json:"schemas"`
 }
 
-// GetSchemaGraph returns all tables and relationships for ERD visualization
+type schemaGraphCacheEntry struct {
+	response SchemaGraphResponse
+	expiry   time.Time
+}
+
+type schemaGraphCache struct {
+	mu      sync.RWMutex
+	entries map[string]*schemaGraphCacheEntry
+	ttl     time.Duration
+}
+
+func newSchemaGraphCache(ttl time.Duration) *schemaGraphCache {
+	return &schemaGraphCache{
+		entries: make(map[string]*schemaGraphCacheEntry),
+		ttl:     ttl,
+	}
+}
+
+func (c *schemaGraphCache) Get(key string) (*SchemaGraphResponse, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	entry, ok := c.entries[key]
+	if !ok || time.Now().After(entry.expiry) {
+		return nil, false
+	}
+	return &entry.response, true
+}
+
+func (c *schemaGraphCache) Set(key string, resp SchemaGraphResponse) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries[key] = &schemaGraphCacheEntry{
+		response: resp,
+		expiry:   time.Now().Add(c.ttl),
+	}
+}
+
+func (c *schemaGraphCache) Invalidate() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = make(map[string]*schemaGraphCacheEntry)
+}
+
+func schemaGraphCacheKey(tenantID string, schemas []string) string {
+	sorted := make([]string, len(schemas))
+	copy(sorted, schemas)
+	sort.Strings(sorted)
+	return tenantID + ":" + strings.Join(sorted, ",")
+}
+
+// GetSchemaGraph returns all tables and relationships for ERD visualization.
+// Results are cached for 2 minutes per (tenant, schema list) combination.
 // GET /api/v1/admin/schema/graph
 func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
-	// Check if database connection is available
 	if s.db == nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
@@ -73,152 +127,210 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 	ctx := middleware.CtxWithTenant(c)
 	schemasParam := c.Query("schemas", "public")
 	schemaList := strings.Split(schemasParam, ",")
-
-	// Trim whitespace from schema names
 	for i, schema := range schemaList {
 		schemaList[i] = strings.TrimSpace(schema)
 	}
 
+	tenantID := middleware.GetTenantID(c)
+	cacheKey := schemaGraphCacheKey(tenantID, schemaList)
+
+	if cached, ok := s.graphCache.Get(cacheKey); ok {
+		return c.JSON(cached)
+	}
+
 	pool := s.schemaPool(c)
 
-	// Query all tables with their columns, primary keys, RLS status, indexes, unique constraints, and comments
-	// Excludes extension-owned tables (like PostGIS spatial_ref_sys) via pg_depend check
-	tablesQuery := `
-		WITH table_info AS (
-			SELECT
-				t.table_schema,
-				t.table_name,
-				c.relrowsecurity as rls_enabled,
-				c.relforcerowsecurity as force_rls,
-				c.reltuples::bigint as row_estimate,
-				obj_description(c.oid, 'pg_class') as table_comment
-			FROM information_schema.tables t
-			JOIN pg_class c ON c.relname = t.table_name
-			JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = t.table_schema
-			LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
-			WHERE t.table_schema = ANY($1)
-			AND t.table_type IN ('BASE TABLE', 'FOREIGN TABLE')
-			AND d.objid IS NULL
-		),
-		columns_info AS (
-			SELECT
-				c.table_schema,
-				c.table_name,
-				c.column_name,
-				c.data_type,
-				c.is_nullable = 'YES' as is_nullable,
-				c.column_default,
-				c.ordinal_position,
-				col_description(
-					(SELECT c2.oid FROM pg_class c2
-					 JOIN pg_namespace n ON n.oid = c2.relnamespace
-					 WHERE c2.relname = c.table_name AND n.nspname = c.table_schema),
-					c.ordinal_position
-				) as column_comment
-			FROM information_schema.columns c
-			WHERE c.table_schema = ANY($1)
-		),
-		pk_info AS (
-			SELECT
-				tc.table_schema,
-				tc.table_name,
-				kcu.column_name
-			FROM information_schema.table_constraints tc
-			JOIN information_schema.key_column_usage kcu
-				ON tc.constraint_name = kcu.constraint_name
-				AND tc.table_schema = kcu.table_schema
-			WHERE tc.constraint_type = 'PRIMARY KEY'
-			AND tc.table_schema = ANY($1)
-		),
-		unique_info AS (
-			SELECT DISTINCT
-				tc.table_schema,
-				tc.table_name,
-				kcu.column_name
-			FROM information_schema.table_constraints tc
-			JOIN information_schema.key_column_usage kcu
-				ON tc.constraint_name = kcu.constraint_name
-				AND tc.table_schema = kcu.table_schema
-			WHERE tc.constraint_type = 'UNIQUE'
-			AND tc.table_schema = ANY($1)
-		),
-		index_info AS (
-			SELECT DISTINCT
-				schemaname as table_schema,
-				tablename as table_name,
-				unnest(string_to_array(
-					regexp_replace(indexdef, '.*\((.*)\).*', '\1'),
-					','
-				)) as column_name
-			FROM pg_indexes
-			WHERE schemaname = ANY($1)
-		),
-		fk_columns AS (
-			SELECT DISTINCT ON (tc.table_schema, tc.table_name, kcu.column_name)
-				tc.table_schema,
-				tc.table_name,
-				kcu.column_name,
-				ccu.table_schema as ref_schema,
-				ccu.table_name as ref_table,
-				ccu.column_name as ref_column
-			FROM information_schema.table_constraints tc
-			JOIN information_schema.key_column_usage kcu
-				ON tc.constraint_name = kcu.constraint_name
-				AND tc.table_schema = kcu.table_schema
-			JOIN information_schema.constraint_column_usage ccu
-				ON ccu.constraint_name = tc.constraint_name
-				AND ccu.table_schema = tc.table_schema
-			WHERE tc.constraint_type = 'FOREIGN KEY'
-			AND tc.table_schema = ANY($1)
-		)
-		SELECT
-			ti.table_schema,
-			ti.table_name,
-			ti.rls_enabled,
-			ti.force_rls,
-			ti.row_estimate,
-			ti.table_comment,
-			ci.column_name,
-			ci.data_type,
-			ci.is_nullable,
-			ci.column_default,
-			ci.ordinal_position,
-			ci.column_comment,
-			pk.column_name IS NOT NULL as is_primary_key,
-			fk.column_name IS NOT NULL as is_foreign_key,
-			uq.column_name IS NOT NULL as is_unique,
-			idx.column_name IS NOT NULL as is_indexed,
-			CASE WHEN fk.column_name IS NOT NULL
-				THEN fk.ref_schema || '.' || fk.ref_table || '.' || fk.ref_column
-				ELSE NULL
-			END as fk_target
-		FROM table_info ti
-		JOIN columns_info ci ON ti.table_schema = ci.table_schema AND ti.table_name = ci.table_name
-		LEFT JOIN pk_info pk ON ci.table_schema = pk.table_schema
-			AND ci.table_name = pk.table_name
-			AND ci.column_name = pk.column_name
-		LEFT JOIN unique_info uq ON ci.table_schema = uq.table_schema
-			AND ci.table_name = uq.table_name
-			AND ci.column_name = uq.column_name
-		LEFT JOIN index_info idx ON ci.table_schema = idx.table_schema
-			AND ci.table_name = idx.table_name
-			AND trim(idx.column_name) = ci.column_name
-		LEFT JOIN fk_columns fk ON ci.table_schema = fk.table_schema
-			AND ci.table_name = fk.table_name
-			AND ci.column_name = fk.column_name
-		ORDER BY ti.table_schema, ti.table_name, ci.ordinal_position
-	`
-
-	rows, err := pool.Query(ctx, tablesQuery, schemaList)
+	nodes, err := s.querySchemaNodes(ctx, pool, schemaList)
 	if err != nil {
 		return SendError(c, fiber.StatusInternalServerError, err.Error())
 	}
+
+	edges, err := s.querySchemaEdges(ctx, pool, schemaList)
+	if err != nil {
+		return SendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	for i := range edges {
+		srcKey := edges[i].SourceSchema + "." + edges[i].SourceTable
+		tgtKey := edges[i].TargetSchema + "." + edges[i].TargetTable
+		if node, ok := nodes[srcKey]; ok {
+			node.OutgoingRelCount++
+		}
+		if node, ok := nodes[tgtKey]; ok {
+			node.IncomingRelCount++
+		}
+	}
+
+	nodesSlice := make([]SchemaNode, 0, len(nodes))
+	for _, node := range nodes {
+		nodesSlice = append(nodesSlice, *node)
+	}
+	sort.Slice(nodesSlice, func(i, j int) bool {
+		if nodesSlice[i].Schema != nodesSlice[j].Schema {
+			return nodesSlice[i].Schema < nodesSlice[j].Schema
+		}
+		return nodesSlice[i].Name < nodesSlice[j].Name
+	})
+
+	resp := SchemaGraphResponse{
+		Nodes:   nodesSlice,
+		Edges:   edges,
+		Schemas: schemaList,
+	}
+
+	s.graphCache.Set(cacheKey, resp)
+
+	return c.JSON(resp)
+}
+
+// querySchemaNodes fetches all tables with columns, PKs, indexes, FKs, RLS, and comments
+// using direct pg_catalog queries for optimal performance.
+func (s *Server) querySchemaNodes(ctx context.Context, pool *pgxpool.Pool, schemaList []string) (map[string]*SchemaNode, error) {
+	query := `
+		WITH tables AS (
+			SELECT
+				n.nspname AS table_schema,
+				c.relname AS table_name,
+				c.relrowsecurity AS rls_enabled,
+				c.relforcerowsecurity AS force_rls,
+				c.reltuples::bigint AS row_estimate,
+				obj_description(c.oid, 'pg_class') AS table_comment,
+				c.oid
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype = 'e'
+			WHERE n.nspname = ANY($1)
+			  AND c.relkind IN ('r', 'f')
+			  AND d.objid IS NULL
+		),
+		cols AS (
+			SELECT
+				t.table_schema,
+				t.table_name,
+				a.attname AS column_name,
+				format_type(a.atttypid, a.atttypmod) AS data_type,
+				NOT a.attnotnull AS is_nullable,
+				pg_get_expr(d.adbin, d.adrelid) AS column_default,
+				a.attnum AS ordinal_position,
+				col_description(t.oid, a.attnum) AS column_comment
+			FROM tables t
+			JOIN pg_attribute a ON a.attrelid = t.oid
+				AND a.attnum > 0
+				AND NOT a.attisdropped
+			LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid
+				AND d.adnum = a.attnum
+		),
+		pk_cols AS (
+			SELECT
+				n.nspname AS table_schema,
+				cl.relname AS table_name,
+				a.attname AS column_name
+			FROM pg_constraint con
+			JOIN pg_class cl ON con.conrelid = cl.oid
+			JOIN pg_namespace n ON cl.relnamespace = n.oid
+			CROSS JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS u(attnum, ord)
+			JOIN pg_attribute a ON a.attrelid = cl.oid AND a.attnum = u.attnum
+			WHERE con.contype = 'p'
+			  AND n.nspname = ANY($1)
+		),
+		uq_cols AS (
+			SELECT
+				n.nspname AS table_schema,
+				cl.relname AS table_name,
+				a.attname AS column_name
+			FROM pg_constraint con
+			JOIN pg_class cl ON con.conrelid = cl.oid
+			JOIN pg_namespace n ON cl.relnamespace = n.oid
+			CROSS JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS u(attnum, ord)
+			JOIN pg_attribute a ON a.attrelid = cl.oid AND a.attnum = u.attnum
+			WHERE con.contype = 'u'
+			  AND n.nspname = ANY($1)
+		),
+		idx_cols AS (
+			SELECT DISTINCT
+				n.nspname AS table_schema,
+				cl.relname AS table_name,
+				a.attname AS column_name
+			FROM pg_index i
+			JOIN pg_class cl ON i.indrelid = cl.oid
+			JOIN pg_namespace n ON cl.relnamespace = n.oid
+			CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS u(attnum, ord)
+			JOIN pg_attribute a ON a.attrelid = cl.oid AND a.attnum = u.attnum
+			WHERE n.nspname = ANY($1)
+			  AND NOT i.indisprimary
+		),
+		fk_cols AS (
+			SELECT DISTINCT
+				ns_src.nspname AS table_schema,
+				cl_src.relname AS table_name,
+				a_src.attname AS column_name,
+				ns_tgt.nspname AS ref_schema,
+				cl_tgt.relname AS ref_table,
+				a_tgt.attname AS ref_column
+			FROM pg_constraint con
+			JOIN pg_class cl_src ON con.conrelid = cl_src.oid
+			JOIN pg_namespace ns_src ON cl_src.relnamespace = ns_src.oid
+			JOIN pg_class cl_tgt ON con.confrelid = cl_tgt.oid
+			JOIN pg_namespace ns_tgt ON cl_tgt.relnamespace = ns_tgt.oid
+			CROSS JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS u(src_attnum, tgt_attnum, ord)
+			JOIN pg_attribute a_src ON a_src.attrelid = cl_src.oid AND a_src.attnum = u.src_attnum
+			JOIN pg_attribute a_tgt ON a_tgt.attrelid = cl_tgt.oid AND a_tgt.attnum = u.tgt_attnum
+			WHERE con.contype = 'f'
+			  AND ns_src.nspname = ANY($1)
+		)
+		SELECT
+			t.table_schema,
+			t.table_name,
+			t.rls_enabled,
+			t.force_rls,
+			t.row_estimate,
+			t.table_comment,
+			co.column_name,
+			co.data_type,
+			co.is_nullable,
+			co.column_default,
+			co.ordinal_position,
+			co.column_comment,
+			pk.column_name IS NOT NULL AS is_primary_key,
+			fk.column_name IS NOT NULL AS is_foreign_key,
+			uq.column_name IS NOT NULL AS is_unique,
+			ix.column_name IS NOT NULL AS is_indexed,
+			CASE WHEN fk.column_name IS NOT NULL
+				THEN fk.ref_schema || '.' || fk.ref_table || '.' || fk.ref_column
+				ELSE NULL
+			END AS fk_target
+		FROM tables t
+		JOIN cols co
+			ON t.table_schema = co.table_schema
+			AND t.table_name = co.table_name
+		LEFT JOIN pk_cols pk
+			ON co.table_schema = pk.table_schema
+			AND co.table_name = pk.table_name
+			AND co.column_name = pk.column_name
+		LEFT JOIN uq_cols uq
+			ON co.table_schema = uq.table_schema
+			AND co.table_name = uq.table_name
+			AND co.column_name = uq.column_name
+		LEFT JOIN idx_cols ix
+			ON co.table_schema = ix.table_schema
+			AND co.table_name = ix.table_name
+			AND co.column_name = ix.column_name
+		LEFT JOIN fk_cols fk
+			ON co.table_schema = fk.table_schema
+			AND co.table_name = fk.table_name
+			AND co.column_name = fk.column_name
+		ORDER BY t.table_schema, t.table_name, co.ordinal_position
+	`
+
+	rows, err := pool.Query(ctx, query, schemaList)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query schema nodes: %w", err)
+	}
 	defer rows.Close()
 
-	// Build nodes map (keyed by schema.table)
 	nodesMap := make(map[string]*SchemaNode)
-	pkMap := make(map[string][]string)    // schema.table -> primary key columns
-	seenCols := make(map[string]struct{}) // schema.table.column -> exists (for deduplication)
+	pkMap := make(map[string][]string)
+	seenCols := make(map[string]struct{})
 
 	for rows.Next() {
 		var (
@@ -241,18 +353,16 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 			fkTarget      *string
 		)
 
-		err := rows.Scan(
+		if err := rows.Scan(
 			&tableSchema, &tableName, &rlsEnabled, &forceRLS, &rowEstimate, &tableComment,
 			&columnName, &dataType, &isNullable, &defaultValue, &ordinalPos, &columnComment,
 			&isPrimaryKey, &isForeignKey, &isUnique, &isIndexed, &fkTarget,
-		)
-		if err != nil {
-			return SendError(c, fiber.StatusInternalServerError, err.Error())
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan schema node row: %w", err)
 		}
 
 		key := tableSchema + "." + tableName
 
-		// Create or update node
 		if _, exists := nodesMap[key]; !exists {
 			nodesMap[key] = &SchemaNode{
 				Schema:      tableSchema,
@@ -266,7 +376,6 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 			}
 		}
 
-		// Add column (deduplicate by schema.table.column)
 		colKey := key + "." + columnName
 		if _, seen := seenCols[colKey]; !seen {
 			seenCols[colKey] = struct{}{}
@@ -284,42 +393,37 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 			})
 		}
 
-		// Track primary keys
 		if isPrimaryKey {
 			pkMap[key] = append(pkMap[key], columnName)
 		}
 	}
 
 	if err := rows.Err(); err != nil {
-		return SendError(c, fiber.StatusInternalServerError, err.Error())
+		return nil, fmt.Errorf("error iterating schema node rows: %w", err)
 	}
 
-	// Set primary keys on nodes
 	for key, pks := range pkMap {
-		if node, exists := nodesMap[key]; exists {
+		if node, ok := nodesMap[key]; ok {
 			node.PrimaryKey = pks
 		}
 	}
 
-	// Convert map to slice
-	nodes := make([]SchemaNode, 0, len(nodesMap))
-	for _, node := range nodesMap {
-		nodes = append(nodes, *node)
-	}
+	return nodesMap, nil
+}
 
-	// Query all foreign key relationships with cardinality info using pg_catalog
-	// pg_catalog is more reliable than information_schema for FK queries
-	relationsQuery := `
+// querySchemaEdges fetches all foreign key relationships with cardinality.
+func (s *Server) querySchemaEdges(ctx context.Context, pool *pgxpool.Pool, schemaList []string) ([]SchemaRelationship, error) {
+	query := `
 		WITH fk_info AS (
 			SELECT
-				c.conname || '_' || a_src.attname as id,
-				ns_src.nspname as source_schema,
-				cl_src.relname as source_table,
-				a_src.attname as source_column,
-				ns_tgt.nspname as target_schema,
-				cl_tgt.relname as target_table,
-				a_tgt.attname as target_column,
-				c.conname as constraint_name,
+				c.conname || '_' || a_src.attname AS id,
+				ns_src.nspname AS source_schema,
+				cl_src.relname AS source_table,
+				a_src.attname AS source_column,
+				ns_tgt.nspname AS target_schema,
+				cl_tgt.relname AS target_table,
+				a_tgt.attname AS target_column,
+				c.conname AS constraint_name,
 				CASE c.confdeltype
 					WHEN 'a' THEN 'NO ACTION'
 					WHEN 'r' THEN 'RESTRICT'
@@ -327,7 +431,7 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 					WHEN 'n' THEN 'SET NULL'
 					WHEN 'd' THEN 'SET DEFAULT'
 					ELSE 'NO ACTION'
-				END as on_delete,
+				END AS on_delete,
 				CASE c.confupdtype
 					WHEN 'a' THEN 'NO ACTION'
 					WHEN 'r' THEN 'RESTRICT'
@@ -335,7 +439,7 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 					WHEN 'n' THEN 'SET NULL'
 					WHEN 'd' THEN 'SET DEFAULT'
 					ELSE 'NO ACTION'
-				END as on_update
+				END AS on_update
 			FROM pg_constraint c
 			JOIN pg_class cl_src ON c.conrelid = cl_src.oid
 			JOIN pg_namespace ns_src ON cl_src.relnamespace = ns_src.oid
@@ -345,19 +449,20 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 			JOIN pg_attribute a_src ON a_src.attrelid = cl_src.oid AND a_src.attnum = cols.src_attnum
 			JOIN pg_attribute a_tgt ON a_tgt.attrelid = cl_tgt.oid AND a_tgt.attnum = cols.tgt_attnum
 			WHERE c.contype = 'f'
-			AND ns_src.nspname = ANY($1)
+			  AND ns_src.nspname = ANY($1)
 		),
 		source_unique AS (
 			SELECT DISTINCT
-				ns.nspname as table_schema,
-				cl.relname as table_name,
-				a.attname as column_name
+				ns.nspname AS table_schema,
+				cl.relname AS table_name,
+				a.attname AS column_name
 			FROM pg_constraint c
 			JOIN pg_class cl ON c.conrelid = cl.oid
 			JOIN pg_namespace ns ON cl.relnamespace = ns.oid
 			CROSS JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS cols(attnum, ord)
 			JOIN pg_attribute a ON a.attrelid = cl.oid AND a.attnum = cols.attnum
 			WHERE c.contype IN ('u', 'p')
+			  AND ns.nspname = ANY($1)
 		)
 		SELECT
 			fk.id,
@@ -373,7 +478,7 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 			CASE
 				WHEN su.column_name IS NOT NULL THEN 'one-to-one'
 				ELSE 'many-to-one'
-			END as cardinality
+			END AS cardinality
 		FROM fk_info fk
 		LEFT JOIN source_unique su
 			ON fk.source_schema = su.table_schema
@@ -382,47 +487,30 @@ func (s *Server) GetSchemaGraph(c fiber.Ctx) error {
 		ORDER BY fk.source_schema, fk.source_table, fk.constraint_name
 	`
 
-	relRows, err := pool.Query(ctx, relationsQuery, schemaList)
+	rows, err := pool.Query(ctx, query, schemaList)
 	if err != nil {
-		return SendError(c, fiber.StatusInternalServerError, err.Error())
+		return nil, fmt.Errorf("failed to query schema edges: %w", err)
 	}
-	defer relRows.Close()
+	defer rows.Close()
 
-	edges := []SchemaRelationship{}
-	for relRows.Next() {
+	var edges []SchemaRelationship
+	for rows.Next() {
 		var rel SchemaRelationship
-		err := relRows.Scan(
+		if err := rows.Scan(
 			&rel.ID, &rel.SourceSchema, &rel.SourceTable, &rel.SourceColumn,
 			&rel.TargetSchema, &rel.TargetTable, &rel.TargetColumn,
 			&rel.ConstraintName, &rel.OnDelete, &rel.OnUpdate, &rel.Cardinality,
-		)
-		if err != nil {
-			return SendError(c, fiber.StatusInternalServerError, err.Error())
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan schema edge row: %w", err)
 		}
 		edges = append(edges, rel)
 	}
 
-	if err := relRows.Err(); err != nil {
-		return SendError(c, fiber.StatusInternalServerError, err.Error())
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating schema edge rows: %w", err)
 	}
 
-	// Count relationships per table
-	for i := range edges {
-		sourceKey := edges[i].SourceSchema + "." + edges[i].SourceTable
-		targetKey := edges[i].TargetSchema + "." + edges[i].TargetTable
-		if node, exists := nodesMap[sourceKey]; exists {
-			node.OutgoingRelCount++
-		}
-		if node, exists := nodesMap[targetKey]; exists {
-			node.IncomingRelCount++
-		}
-	}
-
-	return c.JSON(SchemaGraphResponse{
-		Nodes:   nodes,
-		Edges:   edges,
-		Schemas: schemaList,
-	})
+	return edges, nil
 }
 
 // GetTableRelationships returns relationships for a specific table
@@ -436,7 +524,6 @@ func (s *Server) GetTableRelationships(c fiber.Ctx) error {
 		return SendBadRequest(c, "schema and table are required", "MISSING_PARAMS")
 	}
 
-	// Check if database connection is available
 	if s.db == nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Database connection not initialized",
@@ -516,12 +603,11 @@ func (s *Server) GetTableRelationships(c fiber.Ctx) error {
 
 	for rows.Next() {
 		var rel RelationshipDetail
-		err := rows.Scan(
+		if err := rows.Scan(
 			&rel.Direction, &rel.ConstraintName, &rel.LocalColumn,
 			&rel.ForeignSchema, &rel.ForeignTable, &rel.ForeignColumn,
 			&rel.DeleteRule, &rel.UpdateRule,
-		)
-		if err != nil {
+		); err != nil {
 			return SendError(c, fiber.StatusInternalServerError, err.Error())
 		}
 
@@ -547,5 +633,3 @@ func (s *Server) schemaPool(c fiber.Ctx) *pgxpool.Pool {
 	}
 	return s.db.Pool()
 }
-
-// fiber:context-methods migrated

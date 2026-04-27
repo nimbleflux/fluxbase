@@ -60,6 +60,15 @@ export async function openTenantSelector(page: Page) {
 }
 
 /**
+ * Check if no tenant is currently selected (shows "Instance").
+ */
+export async function isNoTenantSelected(page: Page): Promise<boolean> {
+  const selector = page.getByRole("combobox", { name: "Select tenant" });
+  const text = await selector.innerText().catch(() => "");
+  return text.includes("Instance");
+}
+
+/**
  * Select a specific tenant by name from the tenant selector.
  */
 export async function selectTenant(page: Page, tenantName: string) {
@@ -70,17 +79,28 @@ export async function selectTenant(page: Page, tenantName: string) {
 
 /**
  * Select the Nth tenant option from the tenant selector (0-indexed).
+ * Skips the "Instance" pseudo-item — index 0 is the first real tenant.
  */
 export async function selectTenantByIndex(page: Page, index: number) {
   await openTenantSelector(page);
-  const options = page.getByRole("option");
-  const count = await options.count();
-  if (index >= count) {
+  const allOptions = page.getByRole("option");
+  const count = await allOptions.count();
+  const firstText = count > 0 ? await allOptions.nth(0).innerText().catch(() => "") : "";
+  const instanceOffset = firstText.includes("Instance") ? 1 : 0;
+  const actualIndex = index + instanceOffset;
+  if (actualIndex >= count) {
     throw new Error(
-      `Tenant option index ${index} out of range (found ${count} options)`,
+      `Tenant option index ${index} out of range (found ${count} options, offset ${instanceOffset})`,
     );
   }
-  await options.nth(index).click();
+  await allOptions.nth(actualIndex).click();
+}
+
+/**
+ * Select the default tenant (first real tenant after "Instance").
+ */
+export async function selectDefaultTenant(page: Page) {
+  await selectTenantByIndex(page, 0);
 }
 
 /**

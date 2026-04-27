@@ -1,27 +1,21 @@
-import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
   Building2,
-  Users,
-  Key,
-  Shield,
-  Settings,
+  Calendar,
+  Database,
+  Fingerprint,
+  Hash,
   RefreshCw,
+  Users,
 } from 'lucide-react'
-import { toast } from 'sonner'
-import {
-  tenantsApi,
-  type AddMemberRequest,
-  type UpdateMemberRequest,
-  userManagementApi,
-} from '@/lib/api'
+import { format } from 'date-fns'
+import { tenantsApi } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { TenantSettingsTab } from './-TenantSettingsTab'
-import { TenantMembersTab, TenantOAuthProvidersTab, TenantSAMLProvidersTab } from '@/components/tenant-detail'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 
 export const Route = createFileRoute('/_authenticated/tenants/$tenantId')({
   component: TenantDetailPage,
@@ -30,71 +24,16 @@ export const Route = createFileRoute('/_authenticated/tenants/$tenantId')({
 function TenantDetailPage() {
   const { tenantId } = Route.useParams()
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState('members')
 
   const { data: tenant, isLoading: tenantLoading } = useQuery({
     queryKey: ['tenant', tenantId],
     queryFn: () => tenantsApi.get(tenantId),
   })
 
-  const { data: members, isLoading: membersLoading } = useQuery({
+  const { data: members } = useQuery({
     queryKey: ['tenant-members', tenantId],
     queryFn: () => tenantsApi.listMembers(tenantId),
   })
-
-  const { data: usersResponse } = useQuery({
-    queryKey: ['users', 'dashboard'],
-    queryFn: () => userManagementApi.listUsers('dashboard'),
-  })
-
-  const users = usersResponse?.users || []
-
-  const addMemberMutation = useMutation({
-    mutationFn: (data: AddMemberRequest) => tenantsApi.addMember(tenantId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenant-members', tenantId] })
-      toast.success('Member added successfully')
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to add member: ${error.message}`)
-    },
-  })
-
-  const updateMemberMutation = useMutation({
-    mutationFn: ({ userId, data }: { userId: string; data: UpdateMemberRequest }) =>
-      tenantsApi.updateMemberRole(tenantId, userId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenant-members', tenantId] })
-      toast.success('Member role updated')
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to update member: ${error.message}`)
-    },
-  })
-
-  const removeMemberMutation = useMutation({
-    mutationFn: (userId: string) => tenantsApi.removeMember(tenantId, userId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenant-members', tenantId] })
-        toast.success('Member removed')
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to remove member: ${error.message}`)
-    },
-  })
-
-  const handleAddMember = (data: AddMemberRequest) => {
-    addMemberMutation.mutate(data)
-  }
-
-  const handleUpdateMemberRole = (userId: string, data: UpdateMemberRequest) => {
-    updateMemberMutation.mutate({ userId, data })
-  }
-
-  const handleRemoveMember = (userId: string) => {
-    removeMemberMutation.mutate(userId)
-  }
 
   if (tenantLoading) {
     return (
@@ -146,51 +85,95 @@ function TenantDetailPage() {
       </div>
 
       <div className='flex-1 overflow-auto p-6'>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className='w-full'>
-          <TabsList className='grid w-full max-w-lg grid-cols-4'>
-            <TabsTrigger value='members'>
-              <Users className='mr-2 h-4 w-4' />
-              Members
-            </TabsTrigger>
-            <TabsTrigger value='oauth'>
-              <Key className='mr-2 h-4 w-4' />
-              OAuth
-            </TabsTrigger>
-            <TabsTrigger value='saml'>
-              <Shield className='mr-2 h-4 w-4' />
-              SAML
-            </TabsTrigger>
-            <TabsTrigger value='settings'>
-              <Settings className='mr-2 h-4 w-4' />
-              Settings
-            </TabsTrigger>
-          </TabsList>
+        <div className='grid gap-6 md:grid-cols-2'>
+          <Card>
+            <CardHeader>
+              <CardTitle>Tenant Information</CardTitle>
+              <CardDescription>Basic details about this tenant</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='space-y-4'>
+                <div className='flex items-center gap-3'>
+                  <Hash className='text-muted-foreground h-4 w-4' />
+                  <div>
+                    <p className='text-muted-foreground text-xs'>Tenant ID</p>
+                    <p className='font-mono text-sm'>{tenant.id}</p>
+                  </div>
+                </div>
+                <Separator />
+                <div className='flex items-center gap-3'>
+                  <Fingerprint className='text-muted-foreground h-4 w-4' />
+                  <div>
+                    <p className='text-muted-foreground text-xs'>Slug</p>
+                    <p className='font-mono text-sm'>{tenant.slug}</p>
+                  </div>
+                </div>
+                <Separator />
+                <div className='flex items-center gap-3'>
+                  <Database className='text-muted-foreground h-4 w-4' />
+                  <div>
+                    <p className='text-muted-foreground text-xs'>Type</p>
+                    <p className='text-sm'>
+                      {tenant.is_default ? 'Default (shared database)' : 'Named tenant'}
+                    </p>
+                  </div>
+                </div>
+                <Separator />
+                <div className='flex items-center gap-3'>
+                  <Calendar className='text-muted-foreground h-4 w-4' />
+                  <div>
+                    <p className='text-muted-foreground text-xs'>Created</p>
+                    <p className='text-sm'>
+                      {format(new Date(tenant.created_at), 'PPPpp')}
+                    </p>
+                  </div>
+                </div>
+                {tenant.updated_at && (
+                  <>
+                    <Separator />
+                    <div className='flex items-center gap-3'>
+                      <Calendar className='text-muted-foreground h-4 w-4' />
+                      <div>
+                        <p className='text-muted-foreground text-xs'>Last Updated</p>
+                        <p className='text-sm'>
+                          {format(new Date(tenant.updated_at), 'PPPpp')}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-          <TabsContent value='members' className='mt-6 space-y-6'>
-            <TenantMembersTab
-              tenant={tenant}
-              members={members}
-              membersLoading={membersLoading}
-              users={users}
-              onAddMember={handleAddMember}
-              onUpdateMemberRole={handleUpdateMemberRole}
-              onRemoveMember={handleRemoveMember}
-              isAddingMember={addMemberMutation.isPending}
-            />
-          </TabsContent>
-
-          <TabsContent value='oauth' className='mt-6'>
-            <TenantOAuthProvidersTab tenantId={tenantId} />
-          </TabsContent>
-
-          <TabsContent value='saml' className='mt-6'>
-            <TenantSAMLProvidersTab tenantId={tenantId} />
-          </TabsContent>
-
-          <TabsContent value='settings' className='mt-6'>
-            <TenantSettingsTab tenantId={tenantId} />
-          </TabsContent>
-        </Tabs>
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Stats</CardTitle>
+              <CardDescription>Summary of tenant resources</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='space-y-4'>
+                <div className='flex items-center gap-3'>
+                  <Users className='text-muted-foreground h-4 w-4' />
+                  <div>
+                    <p className='text-muted-foreground text-xs'>Members</p>
+                    <p className='text-sm'>{members?.length ?? 0} members</p>
+                  </div>
+                </div>
+                <Separator />
+                <div className='flex items-center gap-3'>
+                  <Building2 className='text-muted-foreground h-4 w-4' />
+                  <div>
+                    <p className='text-muted-foreground text-xs'>Status</p>
+                    <Badge variant={tenant.deleted_at ? 'destructive' : 'default'}>
+                      {tenant.deleted_at ? 'Deleted' : 'Active'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )

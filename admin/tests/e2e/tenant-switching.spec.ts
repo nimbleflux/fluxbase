@@ -40,23 +40,19 @@ test.describe("Tenant Switching & Header Propagation", () => {
   });
 
   test("instance admin sees all tenants in selector", async ({ adminPage }) => {
-    // The tenant selector should be visible
     const selector = adminPage.getByRole("combobox", { name: "Select tenant" });
     await expect(selector).toBeVisible({ timeout: 10_000 });
 
-    // Click to open
     await selector.click();
 
-    // Should see tenant items in the dropdown
     const dropdown = adminPage.getByRole("listbox");
     await expect(dropdown).toBeVisible({ timeout: 5_000 });
 
-    // Should have at least 2 tenant options (default + second)
+    // Should have Instance + at least 2 tenant options
     const items = dropdown.getByRole("option");
     const count = await items.count();
-    expect(count).toBeGreaterThanOrEqual(2);
+    expect(count).toBeGreaterThanOrEqual(3);
 
-    // Close dropdown
     await adminPage.keyboard.press("Escape");
   });
 
@@ -75,18 +71,17 @@ test.describe("Tenant Switching & Header Propagation", () => {
     // Open tenant selector and switch to second tenant
     await openTenantSelector(adminPage);
 
-    // Click the second option (not the first which may be selected)
+    // Options: Instance (0), default tenant (1), second tenant (2)
     const options = adminPage.getByRole("option");
     const optionsCount = await options.count();
 
-    if (optionsCount > 1) {
-      // Wait for an API request with a tenant header after clicking
+    if (optionsCount > 2) {
       const tenantRequest = adminPage
         .waitForRequest((req) => req.headers()["x-fb-tenant"] !== undefined, {
           timeout: 5_000,
         })
         .catch(() => {});
-      await options.nth(1).click();
+      await options.nth(2).click();
       await tenantRequest;
     }
 
@@ -136,12 +131,11 @@ test.describe("Tenant Switching & Header Propagation", () => {
     // Switch to second tenant in UI
     await openTenantSelector(adminPage);
 
-    // Select second tenant (index 1)
+    // Options: Instance (0), default tenant (1), second tenant (2)
     const options = adminPage.getByRole("option");
     const count = await options.count();
-    if (count > 1) {
-      await options.nth(1).click();
-      // Wait for tenant context to update
+    if (count > 2) {
+      await options.nth(2).click();
       await adminPage
         .waitForRequest(
           (req) => req.headers()["x-fb-tenant"] === secondTenantId,
@@ -164,8 +158,9 @@ test.describe("Tenant Switching & Header Propagation", () => {
 
     const newOptions = adminPage.getByRole("option");
     const newCount = await newOptions.count();
-    if (newCount > 0) {
-      await newOptions.first().click();
+    if (newCount > 1) {
+      // Skip Instance (index 0), select default tenant (index 1)
+      await newOptions.nth(1).click();
       await adminPage
         .waitForRequest(
           (req) => req.headers()["x-fb-tenant"] === defaultTenantId,
@@ -206,9 +201,8 @@ test.describe("Tenant Switching & Header Propagation", () => {
 
     const options = adminPage.getByRole("option");
     const count = await options.count();
-    if (count > 1) {
-      await options.nth(1).click();
-      // Brief wait for any navigation to settle
+    if (count > 2) {
+      await options.nth(2).click();
       await adminPage.waitForTimeout(500);
     }
 
@@ -218,26 +212,20 @@ test.describe("Tenant Switching & Header Propagation", () => {
   });
 
   test("instance admin can clear tenant context", async ({ adminPage }) => {
-    // First ensure a tenant is selected
     const selector = adminPage.getByRole("combobox", { name: "Select tenant" });
     await expect(selector).toBeVisible({ timeout: 10_000 });
 
-    // Open selector
     await selector.click();
-    await expect(adminPage.getByRole("listbox")).toBeVisible({
-      timeout: 5_000,
-    });
+    const listbox = adminPage.getByRole("listbox");
+    await expect(listbox).toBeVisible({ timeout: 5_000 });
 
-    // Look for "Clear tenant context" option
-    const clearOption = adminPage.getByText("Clear tenant context");
-    if (await clearOption.isVisible()) {
-      await clearOption.click();
-      // Wait for selector to update
+    const instanceOption = listbox.getByRole("option").filter({ hasText: /^Instance/ });
+    if (await instanceOption.isVisible()) {
+      await instanceOption.click();
       await adminPage.waitForTimeout(500);
 
-      // Selector should now show "Select tenant..."
       const text = await selector.textContent();
-      expect(text).toContain("Select tenant");
+      expect(text).toContain("Instance");
     }
   });
 });

@@ -21,6 +21,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database/bootstrap"
+	dbschema "github.com/nimbleflux/fluxbase/internal/database/schema"
 )
 
 // DeclarativeService manages Fluxbase internal schema using pgschema
@@ -594,7 +595,7 @@ func (s *DeclarativeService) applySchemaDirectFallback(ctx context.Context, sche
 		return fmt.Errorf("failed to set search_path: %w", err)
 	}
 
-	idempotentSQL := makeSQLIdempotent(contentStr)
+	idempotentSQL := dbschema.MakeSQLIdempotent(contentStr)
 	_, err = pool.Exec(ctx, idempotentSQL)
 	if err != nil {
 		return fmt.Errorf("failed to execute schema: %w", err)
@@ -803,7 +804,7 @@ func (s *DeclarativeService) applyPostSchemaPolicies(ctx context.Context) error 
 	}
 
 	// Execute with idempotent transforms
-	idempotentSQL := makeSQLIdempotent(string(content))
+	idempotentSQL := dbschema.MakeSQLIdempotent(string(content))
 	_, err = pool.Exec(ctx, idempotentSQL)
 	if err != nil {
 		return fmt.Errorf("failed to apply post-schema.sql: %w", err)
@@ -1152,134 +1153,6 @@ func changePriority(c Change) int {
 	default:
 		return 2 // Functions, triggers, comments, GRANTs, etc.
 	}
-}
-
-// - Other CREATE statements are left as-is since they typically use IF NOT EXISTS
-//
-// This function uses pgparser to parse SQL and identify statements that need transformation,
-// then inserts DROP statements at the correct positions in the original SQL.
-func makeSQLIdempotent(sql string) string {
-	// Parse the SQL using pgparser
-	stmts, err := parser.Parse(sql)
-	if err != nil {
-		// If parsing fails, return original SQL unchanged
-		log.Warn().Err(err).Msg("Failed to parse SQL for idempotency transformation, using original")
-		return sql
-	}
-
-	// If no statements, return original
-	if stmts == nil || len(stmts.Items) == 0 {
-		return sql
-	}
-
-	// Collect DROP statements with their target positions in the original SQL
-	// We use position-based insertion to preserve statement order
-	type dropInfo struct {
-		pattern  string // Pattern to search for in original SQL
-		dropSQL  string // DROP statement to insert
-		foundPos int    // Position where pattern was found (-1 if not found)
-	}
-	var drops []dropInfo
-
-	for _, item := range stmts.Items {
-		switch stmt := item.(type) {
-		case *nodes.CreatePolicyStmt:
-			if stmt.Table != nil {
-				tableName := formatRangeVar(stmt.Table)
-				dropSQL := fmt.Sprintf("DROP POLICY IF EXISTS %s ON %s CASCADE;\n", quoteIdent(stmt.PolicyName), tableName)
-				// Try quoted pattern first (for policy names with special characters)
-				// Then try unquoted pattern
-				patternQuoted := "CREATE POLICY \"" + stmt.PolicyName + "\""
-				patternUnquoted := "CREATE POLICY " + stmt.PolicyName
-				// Add both patterns - we'll use whichever is found
-				drops = append(drops, dropInfo{pattern: patternQuoted, dropSQL: dropSQL, foundPos: -1})
-				drops = append(drops, dropInfo{pattern: patternUnquoted, dropSQL: dropSQL, foundPos: -1})
-			}
-
-		case *nodes.AlterTableStmt:
-			if stmt.Cmds != nil && stmt.Relation != nil {
-				for _, cmd := range stmt.Cmds.Items {
-					alterCmd, ok := cmd.(*nodes.AlterTableCmd)
-					if !ok {
-						continue
-					}
-					// AT_AddConstraint subtype is 17
-					// AT_AttachPartition subtype is 60 - skip these
-					if alterCmd.Subtype == 17 && alterCmd.Def != nil {
-						if constraint, ok := alterCmd.Def.(*nodes.Constraint); ok && constraint.Conname != "" {
-							tableName := formatRangeVar(stmt.Relation)
-							dropSQL := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s;\n", tableName, quoteIdent(constraint.Conname))
-							// Search pattern: "ALTER TABLE <table>"
-							// We'll find this position and insert the DROP before it
-							pattern := "ALTER TABLE " + stmt.Relation.Relname
-							drops = append(drops, dropInfo{pattern: pattern, dropSQL: dropSQL, foundPos: -1})
-							break // Only one drop per ALTER TABLE statement
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// If no transformations needed, return original SQL
-	if len(drops) == 0 {
-		return sql
-	}
-
-	// Find positions of each pattern in the original SQL
-	// We search case-insensitively and track the last found position for each pattern
-	// to handle multiple occurrences of the same pattern (e.g., multiple ALTER TABLE on same table)
-	upperSQL := strings.ToUpper(sql)
-	lastFoundPos := make(map[string]int) // pattern -> last found position
-
-	for i := range drops {
-		upperPattern := strings.ToUpper(drops[i].pattern)
-		// Search from after the last found position for this pattern
-		searchStart := lastFoundPos[upperPattern]
-		idx := strings.Index(upperSQL[searchStart:], upperPattern)
-		if idx != -1 {
-			drops[i].foundPos = searchStart + idx
-			lastFoundPos[upperPattern] = drops[i].foundPos + len(upperPattern)
-		}
-	}
-
-	// Sort drops by position (descending) so we can insert without affecting earlier positions
-	// Using a simple bubble sort since the list is small
-	for i := 0; i < len(drops)-1; i++ {
-		for j := i + 1; j < len(drops); j++ {
-			if drops[i].foundPos < drops[j].foundPos {
-				drops[i], drops[j] = drops[j], drops[i]
-			}
-		}
-	}
-
-	// Insert DROP statements at their positions
-	result := sql
-	for _, drop := range drops {
-		if drop.foundPos >= 0 {
-			result = result[:drop.foundPos] + drop.dropSQL + result[drop.foundPos:]
-		}
-	}
-
-	return result
-}
-
-// formatRangeVar formats a RangeVar as schema.table or just table if no schema
-func formatRangeVar(rv *nodes.RangeVar) string {
-	if rv.Schemaname != "" {
-		return fmt.Sprintf("%s.%s", quoteIdent(rv.Schemaname), quoteIdent(rv.Relname))
-	}
-	return quoteIdent(rv.Relname)
-}
-
-// quoteIdent quotes an identifier if needed
-func quoteIdent(name string) string {
-	// If already quoted, return as-is
-	if strings.HasPrefix(name, `"`) && strings.HasSuffix(name, `"`) {
-		return name
-	}
-	// Quote the identifier to handle reserved words and special characters
-	return fmt.Sprintf(`"%s"`, strings.ReplaceAll(name, `"`, `""`))
 }
 
 // GetSchemaStatus returns information about the current schema state

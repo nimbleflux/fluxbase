@@ -347,6 +347,17 @@ func importSchemaFDW(ctx context.Context, tenantPool *pgxpool.Pool, schema strin
 		))
 	}
 
+	// Drop stale foreign tables for excluded names. These may exist from earlier
+	// versions that imported them before they were added to fdwExcludeTables.
+	// Without this, CREATE TABLE IF NOT EXISTS in bootstrap finds the foreign
+	// table and skips, leaving associated sequences uncreated.
+	for _, ex := range excluded {
+		_, _ = tenantPool.Exec(ctx, fmt.Sprintf(
+			`DROP FOREIGN TABLE IF EXISTS %s.%s CASCADE`,
+			quoteIdent(schema), quoteIdent(ex),
+		))
+	}
+
 	// Build IMPORT FOREIGN SCHEMA statement
 	importSQL := fmt.Sprintf(
 		`IMPORT FOREIGN SCHEMA %s FROM SERVER %s INTO %s`,

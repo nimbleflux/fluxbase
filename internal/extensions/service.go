@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,6 +30,10 @@ func quoteIdentifier(identifier string) string {
 func isValidIdentifier(s string) bool {
 	return validIdentifierRegex.MatchString(s)
 }
+
+// requiredExtRegex matches PostgreSQL errors like:
+// "required extension \"cube\" is not installed"
+var requiredExtRegex = regexp.MustCompile(`required extension "([a-zA-Z_][a-zA-Z0-9_]*)" is not installed`)
 
 // Service handles extension management operations
 type Service struct {
@@ -215,6 +220,13 @@ func (s *Service) ListExtensionsForTenant(ctx context.Context, tenantID *string,
 		categoryCount[category]++
 	}
 
+	sort.Slice(extensions, func(i, j int) bool {
+		if extensions[i].Category != extensions[j].Category {
+			return extensions[i].Category < extensions[j].Category
+		}
+		return extensions[i].DisplayName < extensions[j].DisplayName
+	})
+
 	// Build categories list
 	var categories []Category
 	for id, count := range categoryCount {
@@ -228,6 +240,10 @@ func (s *Service) ListExtensionsForTenant(ctx context.Context, tenantID *string,
 			Count: count,
 		})
 	}
+
+	sort.Slice(categories, func(i, j int) bool {
+		return categories[i].ID < categories[j].ID
+	})
 
 	return &ListExtensionsResponse{
 		Extensions: extensions,
@@ -322,6 +338,17 @@ func (s *Service) EnableExtension(ctx context.Context, name string, userID *stri
 // EnableExtensionForTenant enables a PostgreSQL extension for a specific tenant.
 // tenantDBName is the database name for separate-DB tenants (empty for default tenant).
 func (s *Service) EnableExtensionForTenant(ctx context.Context, name string, userID *string, schema string, tenantID *string, tenantDBName string) (*EnableExtensionResponse, error) {
+	return s.enableExtensionRecursive(ctx, name, userID, schema, tenantID, tenantDBName, 0)
+}
+
+// enableExtensionRecursive enables an extension, automatically resolving dependencies.
+// maxDepth prevents infinite recursion for circular dependencies.
+func (s *Service) enableExtensionRecursive(ctx context.Context, name string, userID *string, schema string, tenantID *string, tenantDBName string, depth int) (*EnableExtensionResponse, error) {
+	const maxDepth = 10
+	if depth > maxDepth {
+		return nil, fmt.Errorf("extension dependency chain too deep (>%d), possible circular dependency", maxDepth)
+	}
+
 	// Validate extension exists in catalog
 	available, err := s.getAvailableExtension(ctx, name)
 	if err != nil {
@@ -341,7 +368,6 @@ func (s *Service) EnableExtensionForTenant(ctx context.Context, name string, use
 		return nil, err
 	}
 	if status.IsInstalled {
-		// Extension is already installed in PostgreSQL, but ensure it's tracked
 		err = database.WrapWithTenantAwareRole(ctx, s.db, tenantIDStr(tenantID), func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, `
 				INSERT INTO platform.enabled_extensions (extension_name, tenant_id, enabled_by, is_active)
@@ -363,7 +389,6 @@ func (s *Service) EnableExtensionForTenant(ctx context.Context, name string, use
 		}, nil
 	}
 
-	// Validate extension name is a safe identifier (defense in depth)
 	if !isValidIdentifier(name) {
 		return &EnableExtensionResponse{
 			Name:    name,
@@ -372,7 +397,6 @@ func (s *Service) EnableExtensionForTenant(ctx context.Context, name string, use
 		}, nil
 	}
 
-	// Validate schema if provided
 	if schema != "" && schema != "public" && !isValidIdentifier(schema) {
 		return &EnableExtensionResponse{
 			Name:    name,
@@ -381,40 +405,68 @@ func (s *Service) EnableExtensionForTenant(ctx context.Context, name string, use
 		}, nil
 	}
 
-	// Build CREATE EXTENSION statement
 	sql := fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", quoteIdentifier(name))
 	if schema != "" && schema != "public" {
 		sql += fmt.Sprintf(" SCHEMA %s", quoteIdentifier(schema))
 	}
 
-	// Execute on the appropriate database
 	if tenantDBName != "" {
-		// Separate-DB tenant: run on tenant database
 		err = s.db.ExecuteWithAdminRoleForDB(ctx, tenantDBName, func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, sql)
 			return err
 		})
 	} else {
-		// Default tenant: run on main database
 		err = s.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, sql)
 			return err
 		})
 	}
 	if err != nil {
-		log.Error().Err(err).Str("extension", name).Msg("Failed to create extension")
-		s.recordExtensionErrorForTenant(ctx, name, userID, err.Error(), tenantID)
-		return &EnableExtensionResponse{
-			Name:    name,
-			Success: false,
-			Message: fmt.Sprintf("Failed to enable extension: %v", err),
-		}, nil
+		// Check if the error is a missing dependency
+		errMsg := err.Error()
+		if matches := requiredExtRegex.FindStringSubmatch(errMsg); len(matches) == 2 {
+			depName := matches[1]
+			log.Info().Str("extension", name).Str("dependency", depName).Msg("Auto-resolving extension dependency")
+
+			depResp, depErr := s.enableExtensionRecursive(ctx, depName, userID, "", tenantID, tenantDBName, depth+1)
+			if depErr != nil {
+				return nil, fmt.Errorf("failed to enable dependency %q: %w", depName, depErr)
+			}
+			if !depResp.Success {
+				return &EnableExtensionResponse{
+					Name:    name,
+					Success: false,
+					Message: fmt.Sprintf("Failed to enable dependency %q: %s", depName, depResp.Message),
+				}, nil
+			}
+
+			// Retry enabling the original extension
+			if tenantDBName != "" {
+				err = s.db.ExecuteWithAdminRoleForDB(ctx, tenantDBName, func(tx pgx.Tx) error {
+					_, err := tx.Exec(ctx, sql)
+					return err
+				})
+			} else {
+				err = s.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
+					_, err := tx.Exec(ctx, sql)
+					return err
+				})
+			}
+		}
+
+		if err != nil {
+			log.Error().Err(err).Str("extension", name).Msg("Failed to create extension")
+			s.recordExtensionErrorForTenant(ctx, name, userID, err.Error(), tenantID)
+			return &EnableExtensionResponse{
+				Name:    name,
+				Success: false,
+				Message: fmt.Sprintf("Failed to enable extension: %v", err),
+			}, nil
+		}
 	}
 
-	// Get the installed version
 	_, version := s.checkExtensionInstalledForPool(ctx, name, nil)
 
-	// Record in enabled_extensions table
 	err = database.WrapWithTenantAwareRole(ctx, s.db, tenantIDStr(tenantID), func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO platform.enabled_extensions (extension_name, tenant_id, enabled_by, is_active)
