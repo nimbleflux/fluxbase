@@ -16,6 +16,7 @@ import {
   Mail,
   Key,
   Database,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -415,7 +416,11 @@ function TenantsPage() {
                                     size="sm"
                                     disabled={repairMutation.isPending}
                                   >
-                                    <Wrench className="h-4 w-4" />
+                                    {repairMutation.isPending ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Wrench className="h-4 w-4" />
+                                    )}
                                   </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
@@ -435,11 +440,15 @@ function TenantsPage() {
                                       Cancel
                                     </AlertDialogCancel>
                                     <AlertDialogAction
+                                      disabled={repairMutation.isPending}
                                       onClick={() =>
                                         repairMutation.mutate(tenant.id)
                                       }
                                     >
-                                      Repair
+                                      {repairMutation.isPending && (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                      )}
+                                      {repairMutation.isPending ? "Repairing..." : "Repair"}
                                     </AlertDialogAction>
                                   </AlertDialogFooter>
                                 </AlertDialogContent>

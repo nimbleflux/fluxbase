@@ -287,10 +287,12 @@ func (s *UnifiedService) getTenantSetting(ctx context.Context, tenantID, path st
 	return getNestedValue(settings, path), nil
 }
 
-// getInstanceSetting gets an instance-level setting value
+// getInstanceSetting gets an instance-level setting value.
+// Uses WrapWithServiceRole to bypass RLS and avoid tenant context interfering
+// with the WHERE tenant_id IS NULL query.
 func (s *UnifiedService) getInstanceSetting(ctx context.Context, path string) (any, error) {
 	var settingsJSON []byte
-	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT settings FROM platform.instance_settings
 			WHERE tenant_id IS NULL
@@ -508,7 +510,7 @@ func (s *UnifiedService) SetInstanceSetting(ctx context.Context, path string, va
 		return fmt.Errorf("failed to marshal settings: %w", err)
 	}
 
-	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
+	err = database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			UPDATE platform.instance_settings
 			SET settings = $1, updated_at = NOW()
@@ -527,20 +529,21 @@ func (s *UnifiedService) SetInstanceSetting(ctx context.Context, path string, va
 	return nil
 }
 
-// getOrCreateInstanceSettingsMap gets instance settings or creates empty map
+// getOrCreateInstanceSettingsMap gets instance settings or creates empty map.
+// Uses WrapWithServiceRole (not WithTenant) to avoid the set_tenant_id_from_context()
+// trigger overriding tenant_id=NULL with the session tenant UUID.
 func (s *UnifiedService) getOrCreateInstanceSettingsMap(ctx context.Context) (map[string]any, error) {
 	var settingsJSON []byte
-	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT settings FROM platform.instance_settings WHERE tenant_id IS NULL LIMIT 1
 		`).Scan(&settingsJSON)
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// Create new instance settings row
 			settings := make(map[string]any)
 			settingsJSON, _ := json.Marshal(settings)
-			err = s.WithTenant(ctx, func(tx pgx.Tx) error {
+			err = database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 				_, err := tx.Exec(ctx, `
 					INSERT INTO platform.instance_settings (tenant_id, settings, created_at, updated_at)
 					VALUES (NULL, $1, NOW(), NOW())
@@ -738,7 +741,7 @@ func (s *UnifiedService) GetInstanceSettings(ctx context.Context) (*InstanceSett
 	var overridableJSON []byte
 	var createdAt, updatedAt time.Time
 
-	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT settings, overridable_settings, created_at, updated_at
 			FROM platform.instance_settings
@@ -839,7 +842,7 @@ func (s *UnifiedService) IsSettingOverridable(ctx context.Context, path string) 
 
 	// Get overridable settings list from database
 	var overridableJSON []byte
-	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+	err := database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT overridable_settings FROM platform.instance_settings WHERE tenant_id IS NULL LIMIT 1
 		`).Scan(&overridableJSON)
@@ -887,7 +890,7 @@ func (s *UnifiedService) SetOverridableSettings(ctx context.Context, paths []str
 		return fmt.Errorf("failed to marshal overridable settings: %w", err)
 	}
 
-	err = s.WithTenant(ctx, func(tx pgx.Tx) error {
+	err = database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			UPDATE platform.instance_settings
 			SET overridable_settings = $1, updated_at = NOW()

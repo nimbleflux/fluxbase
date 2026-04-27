@@ -446,7 +446,7 @@ func (m *Manager) runSystemMigrationsForDB(ctx context.Context, dbName string) e
 // applyInternalSchemas applies Fluxbase internal schema SQL files (storage.sql,
 // auth.sql, etc.) to a tenant database. These create the tables, indexes,
 // functions, and policies needed for all features to work in tenant databases.
-// Schema files use CREATE IF NOT EXISTS so they are idempotent.
+// The SQL is transformed with MakeSQLIdempotent so re-application is safe.
 func (m *Manager) applyInternalSchemas(ctx context.Context, dbName string, fdwEnabled bool) error {
 	// Extract embedded schemas to a temp directory
 	schemaDir, err := schema.ExtractSchemas()
@@ -498,6 +498,8 @@ func (m *Manager) applyInternalSchemas(ctx context.Context, dbName string, fdwEn
 			}
 		}
 
+		sql = schema.MakeSQLIdempotent(sql)
+
 		if _, err := pool.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("failed to apply schema %s to tenant database %s: %w", schemaName, dbName, err)
 		}
@@ -524,6 +526,7 @@ func (m *Manager) applyInternalSchemas(ctx context.Context, dbName string, fdwEn
 				return fmt.Errorf("invalid app user for %s: %w", extraFile, subErr)
 			}
 		}
+		sql = schema.MakeSQLIdempotent(sql)
 		if _, err := pool.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("failed to apply %s to tenant database %s: %w", extraFile, dbName, err)
 		}
@@ -542,13 +545,27 @@ func (m *Manager) RepairTenant(ctx context.Context, tenant *Tenant) error {
 	dbName := *tenant.DBName
 	log.Info().Str("tenant_id", tenant.ID).Str("slug", tenant.Slug).Str("db", dbName).Msg("Repairing tenant database")
 
-	// Re-run bootstrap
+	// Teardown existing FDW before bootstrap to prevent stale foreign tables
+	// from triggering broken FDW connections during bootstrap DO blocks.
 	bootstrapBaseURL := m.adminDBURL
 	if bootstrapBaseURL == "" {
 		bootstrapBaseURL = m.dbURL
 	}
 	tenantDBURL := replaceDBName(bootstrapBaseURL, dbName)
 	appUser := extractDBUser(bootstrapBaseURL)
+
+	if m.fdwConfig != nil {
+		fdwURL := replaceDBName(bootstrapBaseURL, dbName)
+		cleanupPool, poolErr := pgxpool.New(ctx, fdwURL)
+		if poolErr == nil {
+			if teardownErr := TeardownFDW(ctx, cleanupPool); teardownErr != nil {
+				log.Warn().Err(teardownErr).Str("tenant", tenant.Slug).Msg("Failed to teardown FDW before repair bootstrap")
+			}
+			cleanupPool.Close()
+		}
+	}
+
+	// Re-run bootstrap
 	if err := bootstrap.RunBootstrapOnDB(ctx, tenantDBURL, appUser); err != nil {
 		return fmt.Errorf("failed to bootstrap tenant database: %w", err)
 	}

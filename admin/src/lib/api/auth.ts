@@ -442,6 +442,7 @@ export interface OAuthProviderConfig {
   required_claims?: Record<string, string[]>;
   denied_claims?: Record<string, string[]>;
   source?: "database" | "config";
+  tenant_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -571,6 +572,7 @@ export interface SAMLProviderConfig {
   denied_groups?: string[];
   group_attribute?: string;
   source: "database" | "config";
+  tenant_id?: string | null;
   created_at: string;
   updated_at: string;
 }

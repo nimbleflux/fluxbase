@@ -132,13 +132,18 @@ func (h *Handler) SyncJobs(c fiber.Ctx) error {
 		}
 	}
 
+	var createdByStr string
+	if createdBy != nil {
+		createdByStr = createdBy.String()
+	}
+
 	syncer := newJobSyncer(h, syncCtx, namespace, currentTenantID, createdBy)
 	result, syncErr := syncframework.Execute[jobSyncItem](ctx, syncer, items, syncframework.Options{
 		Namespace:     namespace,
 		DeleteMissing: req.Options.DeleteMissing,
 		DryRun:        req.Options.DryRun,
 		TenantID:      currentTenantID,
-		CreatedBy:     createdBy.String(),
+		CreatedBy:     createdByStr,
 	})
 	if syncErr != nil {
 		return c.Status(500).JSON(fiber.Map{

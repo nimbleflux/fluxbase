@@ -8,6 +8,7 @@ import {
   AuthSettingsTab,
   ActiveSessionsTab,
 } from "@/components/authentication";
+import { useTenantStore } from "@/stores/tenant-store";
 
 const authenticationSearchSchema = z.object({
   tab: z.string().optional().catch("providers"),
@@ -18,6 +19,8 @@ const route = getRouteApi("/_authenticated/authentication/");
 const AuthenticationPage = () => {
   const search = route.useSearch();
   const navigate = route.useNavigate();
+  const currentTenant = useTenantStore((s) => s.currentTenant);
+  const isInstanceLevel = !currentTenant?.id || currentTenant.is_default;
 
   return (
     <div className="flex h-full flex-col">
@@ -29,7 +32,9 @@ const AuthenticationPage = () => {
           <div>
             <h1 className="text-xl font-semibold">Authentication</h1>
             <p className="text-muted-foreground text-sm">
-              Manage OAuth providers, auth settings, and user sessions
+              {isInstanceLevel
+                ? "Configuring instance-level providers (available to all tenants)"
+                : `Configuring providers for "${currentTenant.name}"`}
             </p>
           </div>
         </div>

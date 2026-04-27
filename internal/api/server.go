@@ -81,6 +81,9 @@ type Server struct {
 	// Tenant configuration loader for multi-tenant config overrides
 	tenantConfigLoader *config.TenantConfigLoader
 
+	// Schema graph cache (per-tenant, TTL-based)
+	graphCache *schemaGraphCache
+
 	// Cross-init method dependencies
 	authService           *auth.Service
 	emailManager          *email.Manager
@@ -101,6 +104,7 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 		config:     cfg,
 		db:         db,
 		version:    version,
+		graphCache: newSchemaGraphCache(2 * time.Minute),
 		Auth:       &AuthHandlers{},
 		Storage:    &StorageHandlers{},
 		AI:         &AIHandlers{},
@@ -432,6 +436,7 @@ func (s *Server) InvalidateSchemaCache(ctx context.Context) error {
 	}
 
 	schemaCache.InvalidateAll(ctx)
+	s.graphCache.Invalidate()
 	log.Debug().Msg("Schema cache invalidated and refresh triggered")
 
 	return nil
@@ -455,6 +460,8 @@ func (s *Server) handleRefreshSchema(c fiber.Ctx) error {
 			"details": err.Error(),
 		})
 	}
+
+	s.graphCache.Invalidate()
 
 	log.Info().
 		Int("tables", schemaCache.TableCount()).
