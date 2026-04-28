@@ -352,9 +352,6 @@ type SecurityConfig struct {
 	ServiceRoleRateLimit  int           `mapstructure:"service_role_rate_limit"`  // Max requests for service_role tokens (0 = unlimited)
 	ServiceRoleRateWindow time.Duration `mapstructure:"service_role_rate_window"` // Time window for service_role rate limit
 
-	// Per-user rate limiting (track by user ID instead of IP for authenticated users)
-	EnablePerUserRateLimit bool `mapstructure:"enable_per_user_rate_limit"` // Enable per-user rate limiting (instead of per-IP)
-
 	// CAPTCHA configuration for bot protection
 	Captcha CaptchaConfig `mapstructure:"captcha"`
 }
@@ -461,17 +458,10 @@ type RealtimeConfig struct {
 	MaxConnections         int           `mapstructure:"max_connections"`
 	MaxConnectionsPerUser  int           `mapstructure:"max_connections_per_user"` // Max connections per authenticated user (0 = unlimited)
 	MaxConnectionsPerIP    int           `mapstructure:"max_connections_per_ip"`   // Max connections per IP for anonymous connections (0 = unlimited)
-	PingInterval           time.Duration `mapstructure:"ping_interval"`
-	PongTimeout            time.Duration `mapstructure:"pong_timeout"`
-	WriteBufferSize        int           `mapstructure:"write_buffer_size"`
-	ReadBufferSize         int           `mapstructure:"read_buffer_size"`
-	MessageSizeLimit       int64         `mapstructure:"message_size_limit"`
-	ChannelBufferSize      int           `mapstructure:"channel_buffer_size"`
 	RLSCacheSize           int           `mapstructure:"rls_cache_size"`            // Maximum entries in RLS cache (default: 100000)
 	RLSCacheTTL            time.Duration `mapstructure:"rls_cache_ttl"`             // TTL for RLS cache entries (default: 30s)
 	ListenerPoolSize       int           `mapstructure:"listener_pool_size"`        // Number of LISTEN connections for redundancy (default: 2)
 	NotificationWorkers    int           `mapstructure:"notification_workers"`      // Number of workers for parallel notification processing (default: 4)
-	NotificationQueueSize  int           `mapstructure:"notification_queue_size"`   // Size of notification queue per worker (default: 1000)
 	ClientMessageQueueSize int           `mapstructure:"client_message_queue_size"` // Size of per-client message queue for async sending (default: 256)
 	SlowClientThreshold    int           `mapstructure:"slow_client_threshold"`     // Queue length threshold for slow client detection (default: 100)
 	SlowClientTimeout      time.Duration `mapstructure:"slow_client_timeout"`       // Duration before disconnecting slow clients (default: 30s)
@@ -547,17 +537,13 @@ type JobsConfig struct {
 	WorkerHeartbeatInterval    time.Duration `mapstructure:"worker_heartbeat_interval"`     // Worker heartbeat interval
 	WorkerTimeout              time.Duration `mapstructure:"worker_timeout"`                // Worker considered dead after this
 	SyncAllowedIPRanges        []string      `mapstructure:"sync_allowed_ip_ranges"`        // IP CIDR ranges allowed to sync jobs
-	FunctionsLogsRetentionDays int           `mapstructure:"functions_logs_retention_days"` // Retention period for functions execution logs (days)
-	RPCLogsRetentionDays       int           `mapstructure:"rpc_logs_retention_days"`       // Retention period for RPC execution logs (days)
-	JobsLogsRetentionDays      int           `mapstructure:"jobs_logs_retention_days"`      // Retention period for jobs execution logs (days)
 	GracefulShutdownTimeout    time.Duration `mapstructure:"graceful_shutdown_timeout"`     // Time to wait for running jobs during shutdown (default: 5m)
 }
 
 // MigrationsConfig contains migrations API security settings
 type MigrationsConfig struct {
-	Enabled           bool     `mapstructure:"enabled"`             // Enable migrations API (enabled by default)
-	AllowedIPRanges   []string `mapstructure:"allowed_ip_ranges"`   // IP CIDR ranges allowed to access migrations API
-	RequireServiceKey bool     `mapstructure:"require_service_key"` // Require service key authentication (always true for security)
+	Enabled         bool     `mapstructure:"enabled"`           // Enable migrations API (enabled by default)
+	AllowedIPRanges []string `mapstructure:"allowed_ip_ranges"` // IP CIDR ranges allowed to access migrations API
 }
 
 // AIConfig contains AI chatbot settings
@@ -613,13 +599,11 @@ type AIConfig struct {
 
 // RPCConfig contains RPC (Remote Procedure Call) configuration
 type RPCConfig struct {
-	Enabled                 bool          `mapstructure:"enabled"`                    // Enable RPC functionality
-	ProceduresDir           string        `mapstructure:"procedures_dir"`             // Directory for RPC procedure definitions
-	AutoLoadOnBoot          bool          `mapstructure:"auto_load_on_boot"`          // Load procedures from filesystem at boot
-	DefaultMaxExecutionTime time.Duration `mapstructure:"default_max_execution_time"` // Default max execution time
-	MaxMaxExecutionTime     time.Duration `mapstructure:"max_max_execution_time"`     // Maximum allowed execution time
-	DefaultMaxRows          int           `mapstructure:"default_max_rows"`           // Default max rows returned
-	SyncAllowedIPRanges     []string      `mapstructure:"sync_allowed_ip_ranges"`     // IP CIDR ranges allowed to sync procedures
+	Enabled             bool     `mapstructure:"enabled"`                    // Enable RPC functionality
+	ProceduresDir       string   `mapstructure:"procedures_dir"`             // Directory for RPC procedure definitions
+	AutoLoadOnBoot      bool     `mapstructure:"auto_load_on_boot"`          // Load procedures from filesystem at boot
+	DefaultMaxRows      int      `mapstructure:"default_max_rows"`           // Default max rows returned
+	SyncAllowedIPRanges []string `mapstructure:"sync_allowed_ip_ranges"`     // IP CIDR ranges allowed to sync procedures
 }
 
 // LoggingConfig contains central logging configuration

@@ -503,7 +503,7 @@ func (s *Server) initFunctions() {
 	}
 	functionsHandler := functions.NewHandler(db, cfg.Functions.FunctionsDir, cfg.CORS, cfg.Auth.JWTSecret, functionsInternalURL, cfg.Deno.NpmRegistry, cfg.Deno.JsrRegistry, s.authService, s.loggingService, s.secretsStorage, cfg)
 	functionsHandler.SetSettingsSecretsService(s.Settings.Service)
-	functionsScheduler := functions.NewScheduler(db, cfg.Auth.JWTSecret, functionsInternalURL, s.secretsStorage)
+	functionsScheduler := functions.NewScheduler(db, cfg.Auth.JWTSecret, functionsInternalURL, s.secretsStorage, cfg)
 	functionsHandler.SetScheduler(functionsScheduler)
 
 	s.Functions.Handler = functionsHandler
@@ -756,6 +756,8 @@ func (s *Server) initRealtime() {
 		MaxConnectionsPerUser:  cfg.Realtime.MaxConnectionsPerUser,
 		MaxConnectionsPerIP:    cfg.Realtime.MaxConnectionsPerIP,
 		ClientMessageQueueSize: cfg.Realtime.ClientMessageQueueSize,
+		SlowClientThreshold:    cfg.Realtime.SlowClientThreshold,
+		SlowClientTimeout:      cfg.Realtime.SlowClientTimeout,
 	})
 	realtimeManager.SetBaseConfig(cfg)
 
@@ -780,7 +782,7 @@ func (s *Server) initRealtime() {
 		realtime.ListenerPoolConfig{
 			PoolSize:    cfg.Realtime.ListenerPoolSize,
 			WorkerCount: cfg.Realtime.NotificationWorkers,
-			QueueSize:   cfg.Realtime.NotificationQueueSize,
+			QueueSize:   1000,
 		},
 	)
 

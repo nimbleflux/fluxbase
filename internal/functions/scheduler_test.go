@@ -17,7 +17,7 @@ import (
 
 func TestNewScheduler(t *testing.T) {
 	t.Run("creates scheduler with nil dependencies", func(t *testing.T) {
-		s := NewScheduler(nil, "jwt-secret", "http://localhost", nil)
+		s := NewScheduler(nil, "jwt-secret", "http://localhost", nil, nil)
 		require.NotNil(t, s)
 		assert.NotNil(t, s.inner)
 		assert.Equal(t, 10, s.inner.Guard.MaxConcurrent)
@@ -26,12 +26,12 @@ func TestNewScheduler(t *testing.T) {
 	})
 
 	t.Run("initializes empty entries", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		assert.Equal(t, 0, s.inner.EntryCount())
 	})
 
 	t.Run("creates context via inner", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		assert.NotNil(t, s.inner.Context())
 	})
 }
@@ -42,14 +42,14 @@ func TestNewScheduler(t *testing.T) {
 
 func TestScheduler_handleLogMessage(t *testing.T) {
 	t.Run("handles log without counter", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		execID := uuid.New()
 
 		s.handleLogMessage(execID, "info", "test message")
 	})
 
 	t.Run("increments counter when exists", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		execID := uuid.New()
 
 		counter := 0
@@ -66,7 +66,7 @@ func TestScheduler_handleLogMessage(t *testing.T) {
 	})
 
 	t.Run("handles invalid counter type gracefully", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		execID := uuid.New()
 
 		s.logCounters.Store(execID, "not a pointer")
@@ -75,7 +75,7 @@ func TestScheduler_handleLogMessage(t *testing.T) {
 	})
 
 	t.Run("handles different log levels", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		execID := uuid.New()
 
 		levels := []string{"debug", "info", "warn", "error"}
@@ -240,12 +240,12 @@ func TestScheduleCalculation(t *testing.T) {
 
 func TestConcurrentExecutionLimits(t *testing.T) {
 	t.Run("default max concurrent is 10", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		assert.Equal(t, 10, s.inner.Guard.MaxConcurrent)
 	})
 
 	t.Run("guard allows acquire when idle", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		assert.True(t, s.inner.Guard.Acquire("test"))
 		s.inner.Guard.Release()
 	})
@@ -257,12 +257,12 @@ func TestConcurrentExecutionLimits(t *testing.T) {
 
 func TestEntryTracking(t *testing.T) {
 	t.Run("empty on initialization", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		assert.Equal(t, 0, s.inner.EntryCount())
 	})
 
 	t.Run("can schedule and check via IsScheduled", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 
 		sched := "*/5 * * * *"
 		fn := EdgeFunctionSummary{
@@ -279,7 +279,7 @@ func TestEntryTracking(t *testing.T) {
 	})
 
 	t.Run("can remove scheduled function", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 
 		sched := "*/5 * * * *"
 		fn := EdgeFunctionSummary{
@@ -303,7 +303,7 @@ func TestEntryTracking(t *testing.T) {
 
 func TestScheduler_Stop(t *testing.T) {
 	t.Run("stop cancels inner context", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 
 		s.Start()
 		time.Sleep(50 * time.Millisecond)
@@ -368,7 +368,7 @@ func TestEdgeFunctionForScheduling(t *testing.T) {
 
 func TestScheduleFunction_Validation(t *testing.T) {
 	t.Run("valid schedule", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		schedule := "*/5 * * * *"
 		fn := EdgeFunctionSummary{
 			ID:           uuid.New(),
@@ -382,7 +382,7 @@ func TestScheduleFunction_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid schedule expression", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		invalidSchedule := "invalid cron"
 		fn := EdgeFunctionSummary{
 			ID:           uuid.New(),
@@ -397,7 +397,7 @@ func TestScheduleFunction_Validation(t *testing.T) {
 	})
 
 	t.Run("nil schedule", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		fn := EdgeFunctionSummary{
 			ID:      uuid.New(),
 			Name:    "no-schedule",
@@ -409,7 +409,7 @@ func TestScheduleFunction_Validation(t *testing.T) {
 	})
 
 	t.Run("empty schedule string", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		emptySchedule := ""
 		fn := EdgeFunctionSummary{
 			ID:           uuid.New(),
@@ -429,7 +429,7 @@ func TestScheduleFunction_Validation(t *testing.T) {
 
 func TestUnscheduleFunction(t *testing.T) {
 	t.Run("unschedule existing function", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 
 		schedule := "*/5 * * * *"
 		fn := EdgeFunctionSummary{
@@ -448,7 +448,7 @@ func TestUnscheduleFunction(t *testing.T) {
 	})
 
 	t.Run("unschedule non-existent function", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 
 		s.UnscheduleFunction("non-existent")
 	})
@@ -460,7 +460,7 @@ func TestUnscheduleFunction(t *testing.T) {
 
 func TestIsScheduled(t *testing.T) {
 	t.Run("returns true for scheduled function", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 
 		schedule := "*/5 * * * *"
 		fn := EdgeFunctionSummary{
@@ -477,7 +477,7 @@ func TestIsScheduled(t *testing.T) {
 	})
 
 	t.Run("returns false for unscheduled function", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		assert.False(t, s.IsScheduled("not-scheduled"))
 	})
 }
@@ -488,13 +488,13 @@ func TestIsScheduled(t *testing.T) {
 
 func TestGetScheduledFunctions(t *testing.T) {
 	t.Run("returns empty list initially", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 		functions := s.GetScheduledFunctions()
 		assert.Empty(t, functions)
 	})
 
 	t.Run("returns scheduled function names", func(t *testing.T) {
-		s := NewScheduler(nil, "secret", "http://localhost", nil)
+		s := NewScheduler(nil, "secret", "http://localhost", nil, nil)
 
 		schedules := []struct {
 			name string

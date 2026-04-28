@@ -425,27 +425,11 @@ func (r *TenantConfigResolver) applyRealtimeSettings(settings map[string]any, cf
 	if v, ok := settings["max_connections_per_user"].(float64); ok {
 		cfg.MaxConnectionsPerUser = int(v)
 	}
-	if v, ok := settings["ping_interval"].(string); ok {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.PingInterval = d
-		}
-	}
-	if v, ok := settings["ping_interval"].(float64); ok {
-		cfg.PingInterval = time.Duration(v) * time.Second
-	}
 }
 
 func (r *TenantConfigResolver) applyRPCSettings(settings map[string]any, cfg *config.RPCConfig, source string) {
 	if v, ok := settings["enabled"].(bool); ok {
 		cfg.Enabled = v
-	}
-	if v, ok := settings["default_max_execution_time"].(string); ok {
-		if d, err := time.ParseDuration(v); err == nil {
-			cfg.DefaultMaxExecutionTime = d
-		}
-	}
-	if v, ok := settings["default_max_execution_time"].(float64); ok {
-		cfg.DefaultMaxExecutionTime = time.Duration(v) * time.Second
 	}
 	if v, ok := settings["default_max_rows"].(float64); ok {
 		cfg.DefaultMaxRows = int(v)

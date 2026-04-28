@@ -73,7 +73,6 @@ func setDefaults() {
 	// service_role rate limiting defaults (H-2: enabled by default to prevent abuse)
 	viper.SetDefault("security.service_role_rate_limit", 10000)   // 10000 requests per minute for service_role tokens (H-2)
 	viper.SetDefault("security.service_role_rate_window", "1m")   // per minute
-	viper.SetDefault("security.enable_per_user_rate_limit", true) // Enable per-user rate limiting for authenticated users
 
 	// CAPTCHA defaults
 	viper.SetDefault("security.captcha.enabled", false)       // Disabled by default
@@ -108,7 +107,6 @@ func setDefaults() {
 	viper.SetDefault("admin.enabled", false) // Admin dashboard disabled by default
 
 	// Tenants defaults
-	viper.SetDefault("tenants.enabled", true)
 	viper.SetDefault("tenants.database_prefix", "tenant_")
 	viper.SetDefault("tenants.max_tenants", 100)
 	viper.SetDefault("tenants.pool.max_total_connections", 100)
@@ -173,17 +171,10 @@ func setDefaults() {
 	viper.SetDefault("realtime.max_connections", 1000)
 	viper.SetDefault("realtime.max_connections_per_user", 10) // Limit per authenticated user
 	viper.SetDefault("realtime.max_connections_per_ip", 20)   // Limit per IP for anonymous connections
-	viper.SetDefault("realtime.ping_interval", "30s")
-	viper.SetDefault("realtime.pong_timeout", "60s")
-	viper.SetDefault("realtime.write_buffer_size", 1024)
-	viper.SetDefault("realtime.read_buffer_size", 1024)
-	viper.SetDefault("realtime.message_size_limit", 512*1024) // 512KB
-	viper.SetDefault("realtime.channel_buffer_size", 100)
 	viper.SetDefault("realtime.rls_cache_size", 100000) // 100K entries for high-throughput realtime
 	viper.SetDefault("realtime.rls_cache_ttl", "30s")   // 30 second TTL (balance freshness vs DB load)
 	viper.SetDefault("realtime.listener_pool_size", 2)  // 2 LISTEN connections for redundancy/failover
 	viper.SetDefault("realtime.notification_workers", 4)
-	viper.SetDefault("realtime.notification_queue_size", 1000)
 	viper.SetDefault("realtime.client_message_queue_size", 256) // Per-client message queue for async sending
 	viper.SetDefault("realtime.slow_client_threshold", 100)     // Disconnect clients with 100+ pending messages
 	viper.SetDefault("realtime.slow_client_timeout", "30s")     // After 30s of being slow
@@ -244,7 +235,6 @@ func setDefaults() {
 		"192.168.0.0/16", // Private networks
 		"127.0.0.0/8",    // Loopback (localhost)
 	})
-	viper.SetDefault("migrations.require_service_key", true) // Always require service key for security
 
 	// Jobs defaults
 	viper.SetDefault("jobs.enabled", true) // Enabled by default (controlled by feature flag at runtime)
@@ -266,9 +256,6 @@ func setDefaults() {
 		"192.168.0.0/16", // Private networks
 		"127.0.0.0/8",    // Loopback (localhost)
 	})
-	viper.SetDefault("jobs.functions_logs_retention_days", 30) // 30 days retention for functions execution logs
-	viper.SetDefault("jobs.rpc_logs_retention_days", 30)       // 30 days retention for RPC execution logs
-	viper.SetDefault("jobs.jobs_logs_retention_days", 30)      // 30 days retention for jobs execution logs
 	viper.SetDefault("jobs.graceful_shutdown_timeout", "5m")   // Wait up to 5 minutes for jobs during shutdown
 
 	// Tracing defaults (OpenTelemetry)
@@ -330,8 +317,6 @@ func setDefaults() {
 	viper.SetDefault("rpc.enabled", true)                     // Enabled by default (controlled by feature flag at runtime)
 	viper.SetDefault("rpc.procedures_dir", "./rpc")           // Default procedures directory
 	viper.SetDefault("rpc.auto_load_on_boot", true)           // Auto-load procedures by default
-	viper.SetDefault("rpc.default_max_execution_time", "30s") // 30 second default timeout
-	viper.SetDefault("rpc.max_max_execution_time", "5m")      // 5 minute maximum timeout
 	viper.SetDefault("rpc.default_max_rows", 1000)            // Max 1000 rows per query
 	viper.SetDefault("rpc.sync_allowed_ip_ranges", []string{
 		"172.16.0.0/12",  // Docker default bridge networks
