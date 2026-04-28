@@ -352,8 +352,56 @@ Use all three impersonation modes to thoroughly test:
 - **Anon mode**: Verify public data access
 - **Service mode**: Test admin operations
 
+### 5. Test Tenant-Scoped RLS Policies
+
+When multi-tenancy is enabled, impersonation works within the current tenant context. Use the tenant selector in the admin dashboard to switch to a specific tenant before impersonating. This lets you:
+
+- Verify tenant-scoped RLS policies filter data correctly via `app.current_tenant_id`
+- Test how different users within a tenant see their data
+- Validate that cross-tenant data access is blocked
+
+The `X-FB-Tenant` header is automatically included when impersonating within a tenant context.
+
+## Tenant-Scoped Impersonation
+
+In multi-tenant deployments, impersonation respects the tenant context:
+
+### How Tenant Context Interacts with Impersonation
+
+1. Select the target tenant using the tenant selector in the admin dashboard
+2. Start impersonation — the request includes the `X-FB-Tenant` header
+3. The backend routes to the tenant's database pool
+4. PostgreSQL session variables include both `app.current_tenant_id` and the impersonated user's `app.user_id`
+5. RLS policies that check both `tenant_id` and `user_id` work correctly
+
+### Tenant Service Role
+
+When impersonating as a service role within a tenant context:
+
+- Queries execute as `tenant_service` role (not `service_role`)
+- RLS is enforced using `app.current_tenant_id`
+- Data is scoped to the tenant's database
+- The impersonator can see all data within the tenant (not across tenants)
+
+### Instance Admin vs Tenant Admin
+
+| Admin Type | Can Impersonate | Scope |
+|---|---|---|
+| Instance admin | Any user in any tenant | Must select tenant first |
+| Tenant admin | Users within their tenant only | Tenant context is automatic |
+
+### Testing Cross-Tenant Isolation
+
+To verify that tenant isolation works correctly:
+
+1. Impersonate a user in Tenant A
+2. Query a table with `tenant_id` column — verify only Tenant A's data is visible
+3. Switch to Tenant B and impersonate a user there
+4. Query the same table — verify only Tenant B's data is visible
+
 ## Related Documentation
 
 - [Authentication Guide](/guides/authentication) - Learn about authentication and user roles
+- [Multi-Tenancy Guide](/guides/multi-tenancy) - Tenant isolation architecture
 - [API Cookbook](/api-cookbook) - Examples of common API patterns
 - [Row-Level Security](/guides/row-level-security) - Advanced RLS features and testing

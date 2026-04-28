@@ -88,6 +88,16 @@ JavaScript/TypeScript function execution:
 - Database webhook triggers
 - Deno runtime
 
+### Multi-Tenancy
+
+Built-in multi-tenant support with database-level isolation:
+
+- Database-per-tenant architecture with automatic provisioning
+- Row Level Security enforcement via `app.current_tenant_id`
+- Per-tenant configuration overrides (JWT secrets, storage backends, email providers)
+- Two-tier admin system (instance admin + tenant admin)
+- Tenant-scoped API keys with automatic isolation
+
 ### AI Chatbots
 
 WebSocket-based AI chatbot integration:
@@ -113,6 +123,7 @@ WebSocket-based AI chatbot integration:
 | **Edge Functions**     | ✅ Deno                       | ✅ Deno                                | ✅ Cloud Functions  |
 | **AI Chatbots**        | ✅ Built-in                   | ❌ No                                  | ❌ No               |
 | **Background Jobs**    | ✅ Built-in                   | ✅ pg_cron (ext)                       | ❌ No               |
+| **Multi-Tenancy**      | ✅ Database-per-tenant        | ⚠️ RLS-based only                      | ⚠️ Namespaces       |
 | **Database**           | PostgreSQL 15+                | PostgreSQL 15+                         | Proprietary (NoSQL) |
 | **Row-Level Security** | ✅ Yes                        | ✅ Yes                                 | ⚠️ Rules-based      |
 | **Client SDK**         | TypeScript, React, Go         | JS, Flutter, Python, Swift, Kotlin, C# | TypeScript/JS       |
@@ -210,6 +221,8 @@ graph TB
 ## Next Steps
 
 - [Quick Start](/getting-started/quick-start/) - Get Fluxbase running in 5 minutes
+- [Developer Guide](/guides/developer-guide/) - Understand the codebase architecture
+- [Multi-Tenancy](/guides/multi-tenancy/) - Build multi-tenant SaaS applications
 - [AI Chatbots Guide](/guides/ai-chatbots/) - Build natural language interfaces to your database
 - [Configuration Reference](/reference/configuration/) - Customize Fluxbase for your needs
 - [TypeScript SDK Reference](/api/sdk/) - Learn how to use the TypeScript SDK

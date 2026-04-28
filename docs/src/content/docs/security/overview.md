@@ -70,6 +70,27 @@ Fluxbase implements multiple layers of security to protect your data and applica
 
 [Learn more about RLS →](/guides/row-level-security/)
 
+#### Multi-Tenant Security
+
+Fluxbase uses a database-per-tenant architecture with Foreign Data Wrappers (FDW) for isolation:
+
+- **Separate databases**: Each non-default tenant gets its own PostgreSQL database, providing strong data isolation at the database level
+- **FDW with RLS**: Shared schemas (auth, storage, functions) are accessed via `postgres_fdw`. Each tenant's FDW role has `NOBYPASSRLS` and `app.current_tenant_id` set, ensuring RLS policies filter data even through foreign tables
+- **Tenant service role**: The `tenant_service` PostgreSQL role enforces RLS with `app.current_tenant_id`. Tenant admins map to `authenticated` (own data only), while instance admins map to `service_role` (bypasses RLS)
+- **Per-tenant JWT secrets**: Each tenant can have its own JWT secret for cryptographic isolation
+- **Connection pool isolation**: Each tenant has its own connection pool, preventing cross-tenant pool contamination
+- **Tenant context enforcement**: The `X-FB-Tenant` header and JWT claims are validated against the user's membership before setting tenant context
+
+```sql
+-- RLS policy for tenant isolation (used by tenant_service role)
+CREATE POLICY tenant_isolation ON public.posts
+FOR ALL TO tenant_service
+USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+```
+
+[Learn more about Multi-Tenancy →](/guides/multi-tenancy/)
+
 ---
 
 ### 2. Network Security
@@ -339,6 +360,8 @@ REVOKE ALL ON SCHEMA pg_catalog FROM PUBLIC;
 - [ ] Strong JWT secret generated (min 32 characters)
 - [ ] Database user has minimal required permissions
 - [ ] RLS policies reviewed and tested
+- [ ] Tenant isolation verified (if using multi-tenancy)
+- [ ] Per-tenant JWT secrets configured (if using multi-tenancy)
 - [ ] Rate limiting configured
 - [ ] CORS settings reviewed
 - [ ] Security headers configured
@@ -425,6 +448,7 @@ If you discover a security vulnerability in Fluxbase, please report it responsib
 ### Internal Documentation
 
 - [Authentication Guide](/guides/authentication/)
+- [Multi-Tenancy Guide](/guides/multi-tenancy/)
 - [Row Level Security Guide](/guides/row-level-security/)
 - [Rate Limiting Guide](/guides/rate-limiting/)
 - [CSRF Protection](/security/csrf-protection/)

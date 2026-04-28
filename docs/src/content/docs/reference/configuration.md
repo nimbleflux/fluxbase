@@ -253,7 +253,6 @@ branching:
   default_data_clone_mode: schema_only # schema_only, full_clone, or seed_data
   auto_delete_after: "0" # 0 = never, or duration like "24h"
   database_prefix: branch_
-  admin_database_url: "" # Uses main database URL if empty
   seeds_path: ./seeds
 ```
 
@@ -312,6 +311,7 @@ Environment variables take precedence over configuration file values.
 | `FLUXBASE_DATABASE_ADMIN_USER`           | Admin user for migrations (defaults to USER) | `""`               | `postgres`        |
 | `FLUXBASE_DATABASE_ADMIN_PASSWORD`       | Admin user password (defaults to PASSWORD)   | `""`               | `admin-password`  |
 | `FLUXBASE_DATABASE_USER_MIGRATIONS_PATH` | Path to user-provided migrations             | `/migrations/user` | `/app/migrations` |
+| `FLUXBASE_DATABASE_SLOW_QUERY_THRESHOLD` | Log queries slower than this                 | `1s`               | `500ms`, `5s`     |
 
 **SSL Modes:**
 
@@ -339,6 +339,11 @@ Environment variables take precedence over configuration file values.
 | `FLUXBASE_AUTH_MAGIC_LINK_ENABLED`     | Enable magic link auth                 | `true`          | `true`, `false`           |
 | `FLUXBASE_AUTH_TOTP_ISSUER`            | 2FA TOTP issuer name                   | `Fluxbase`      | `MyApp`                   |
 | `FLUXBASE_AUTH_ALLOW_USER_CLIENT_KEYS` | Allow users to create API client keys  | `false`          | `true`, `false`           |
+| `FLUXBASE_AUTH_OAUTH_STATE_STORAGE`   | OAuth state storage backend            | `memory`         | `memory`, `database`      |
+
+:::note[OAuth State Storage]
+For multi-instance deployments, set `oauth_state_storage` to `database` so OAuth state is shared across instances. The default `memory` mode works for single-instance deployments.
+:::
 
 :::note[JWT Secret Entropy Requirements]
 The JWT secret is validated for entropy (minimum 4.5 bits per character). This means:
@@ -502,6 +507,38 @@ The migrations API requires both IP allowlist and service key authentication. Th
 | `FLUXBASE_TENANTS_MIGRATIONS_ON_ACCESS`               | Run migrations on first access         | `true`    | `true`, `false` |
 | `FLUXBASE_TENANTS_MIGRATIONS_BACKGROUND`              | Run migrations in background           | `true`    | `true`, `false` |
 
+**Tenant Declarative Schemas:**
+
+| Variable                                        | Description                            | Default  | Example         |
+| ----------------------------------------------- | -------------------------------------- | -------- | --------------- |
+| `FLUXBASE_TENANTS_DECLARATIVE_ENABLED`          | Enable declarative schema management   | `false`  | `true`, `false` |
+| `FLUXBASE_TENANTS_DECLARATIVE_SCHEMA_DIR`       | Directory for tenant schema files      | `""`     | `./schemas`     |
+| `FLUXBASE_TENANTS_DECLARATIVE_ON_CREATE`        | Apply schemas on tenant creation       | `false`  | `true`, `false` |
+| `FLUXBASE_TENANTS_DECLARATIVE_ON_STARTUP`       | Apply schemas on server startup        | `false`  | `true`, `false` |
+| `FLUXBASE_TENANTS_DECLARATIVE_ALLOW_DESTRUCTIVE`| Allow DROP/ALTER in tenant schemas     | `false`  | `true`, `false` |
+
+**Tenant Configuration Overrides:**
+
+Per-tenant configuration overrides can be defined in three ways:
+
+1. **Inline in YAML** (`tenants.configs.<slug>`)
+2. **Separate YAML files** (`tenants.config_dir`)
+3. **Environment variables** (`FLUXBASE_TENANTS__<SLUG>__<SECTION>__<KEY>`)
+
+```yaml
+tenants:
+  config_dir: "./tenants"  # Load tenants/*.yaml files
+  configs:
+    acme-corp:
+      auth:
+        jwt_secret: "${ACME_JWT_SECRET}"
+      storage:
+        provider: "s3"
+        s3_bucket: "acme-fluxbase"
+```
+
+Overridable sections: `auth`, `storage`, `email`, `functions`, `jobs`, `ai`, `realtime`, `api`, `graphql`, `rpc`.
+
 :::tip[Loading Keys from Files]
 In production environments, use `anon_key_file` and `service_key_file` to load keys from mounted secrets (Kubernetes Secrets, Docker Secrets, etc.) instead of hardcoding them in configuration.
 :::
@@ -564,9 +601,9 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 
 | Variable                                      | Description                  | Default | Example         |
 | --------------------------------------------- | ---------------------------- | ------- | --------------- |
-| `FLUXBASE_LOGGING_TIMESCALEDB_ENABLED`        | Enable TimescaleDB extension | `true`  | `true`, `false` |
-| `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESSION`       | Enable compression           | `true`  | `true`, `false` |
-| `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESS_AFTER` | Compression delay            | `168h`  | `168h`, `72h`   |
+| `FLUXBASE_LOGGING_TIMESCALEDB_ENABLED`        | Enable TimescaleDB extension | `false` | `true`, `false` |
+| `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESSION`       | Enable compression           | `false` | `true`, `false` |
+| `FLUXBASE_LOGGING_TIMESCALEDB_COMPRESS_AFTER` | Compression delay            | `0` (disabled)  | `168h`, `72h`   |
 
 **Loki Configuration:**
 
@@ -611,6 +648,7 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 | `FLUXBASE_EMAIL_SMTP_USERNAME`    | SMTP username      | `""`             | `user@gmail.com`               |
 | `FLUXBASE_EMAIL_SMTP_PASSWORD`    | SMTP password      | `""`             | `${SMTP_PASSWORD}`             |
 | `FLUXBASE_EMAIL_SMTP_TLS`         | Use TLS            | `true`           | `true`, `false`                |
+| `FLUXBASE_EMAIL_REPLY_TO_ADDRESS` | Reply-to address   | `""`              | `support@example.com`          |
 
 ### Security
 
@@ -624,6 +662,15 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 | `FLUXBASE_SECURITY_AUTH_LOGIN_RATE_WINDOW`   | Time window for auth login rate limit                          | `1m`    | `1m`                      |
 | `FLUXBASE_SECURITY_ADMIN_LOGIN_RATE_LIMIT`   | Max attempts for admin login                                   | `10`    | `10`                      |
 | `FLUXBASE_SECURITY_ADMIN_LOGIN_RATE_WINDOW`  | Time window for admin login rate limit                         | `1m`    | `1m`                      |
+
+**Service Role Protection:**
+
+| Variable                                      | Description                                                    | Default | Example                   |
+| --------------------------------------------- | -------------------------------------------------------------- | ------- | ------------------------- |
+| `FLUXBASE_SECURITY_SERVICE_ROLE_RATE_LIMIT`   | Max requests per minute for service role keys                  | `10000` | `5000`                    |
+| `FLUXBASE_SECURITY_SERVICE_ROLE_RATE_WINDOW`  | Time window for service role rate limit                        | `1m`    | `1m`                      |
+| `FLUXBASE_SECURITY_SERVICE_ROLE_FAIL_OPEN`    | Fail-open when revocation check unavailable (503 if false)     | `false` | `true`, `false`           |
+| `FLUXBASE_SECURITY_ENABLE_PER_USER_RATE_LIMIT`| Enable per-user rate limiting for authenticated users          | `true`  | `true`, `false`           |
 
 :::caution[Required for Admin Dashboard]
 `FLUXBASE_SECURITY_SETUP_TOKEN` must be set to enable the admin dashboard. Generate a secure token with `openssl rand -base64 32`.
@@ -641,7 +688,6 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 | `FLUXBASE_SECURITY_CAPTCHA_ENDPOINTS`         | Endpoints requiring CAPTCHA                      | `["signup", "login", "password_reset", "magic_link"]` | -                                              |
 | `FLUXBASE_SECURITY_CAPTCHA_CAP_SERVER_URL`    | URL for self-hosted Cap server                   | `""`                                                  | `http://cap:3000`                              |
 | `FLUXBASE_SECURITY_CAPTCHA_CAP_API_KEY`       | API key for Cap server                           | `""`                                                  | Your Cap API key                               |
-| `FLUXBASE_SECURITY_CAPTCHA_TEST_BYPASS_TOKEN` | Test token that bypasses verification (dev only) | `""`                                                  | Leave empty in production                      |
 
 **Supported CAPTCHA Providers:**
 
@@ -679,6 +725,7 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 | `FLUXBASE_AI_MAX_ROWS_PER_QUERY`     | Max rows returned per query           | `1000`       | `1000`          |
 | `FLUXBASE_AI_CONVERSATION_CACHE_TTL` | TTL for conversation cache            | `30m`        | `1h`            |
 | `FLUXBASE_AI_MAX_CONVERSATION_TURNS` | Max turns per conversation            | `50`         | `50`            |
+| `FLUXBASE_AI_RAG_GRAPH_BOOST_WEIGHT` | Weight for entity matches vs vector similarity (0.0-1.0) | `0` | `0.5` |
 
 **AI Provider Configuration:**
 
@@ -687,6 +734,7 @@ In production environments, use `anon_key_file` and `service_key_file` to load k
 | `FLUXBASE_AI_PROVIDER_TYPE`    | Provider type                | `""`    | `openai`, `azure`, `ollama` |
 | `FLUXBASE_AI_PROVIDER_NAME`    | Display name for provider    | `""`    | `Default Provider`          |
 | `FLUXBASE_AI_PROVIDER_MODEL`   | Default model                | `""`    | `gpt-4-turbo`               |
+| `FLUXBASE_AI_DEFAULT_MODEL`    | Default AI model for chatbots | `gpt-4-turbo` | `gpt-4-turbo`, `gpt-4o` |
 
 **OpenAI Settings:**
 
@@ -880,6 +928,8 @@ FLUXBASE_SCALING_ENABLE_SCHEDULER_LEADER_ELECTION=true
 | `FLUXBASE_GRAPHQL_MAX_DEPTH`      | Maximum query depth            | `10`    | `15`            |
 | `FLUXBASE_GRAPHQL_MAX_COMPLEXITY` | Maximum query complexity score | `1000`  | `2000`          |
 | `FLUXBASE_GRAPHQL_INTROSPECTION`  | Enable GraphQL introspection   | `true`  | `false`         |
+| `FLUXBASE_GRAPHQL_ALLOW_FRAGMENTS`| Allow GraphQL fragments        | `false` | `true`, `false` |
+| `FLUXBASE_GRAPHQL_MAX_FIELDS_PER_LVL` | Max fields per nesting level | `50`    | `100`           |
 
 ### Prometheus Metrics
 
@@ -928,6 +978,7 @@ MCP OAuth is enabled by default with Dynamic Client Registration (DCR). This all
 | `FLUXBASE_BRANCHING_AUTO_DELETE_AFTER`       | Auto-delete branches after       | `0` (never)   | `24h`, `168h`               |
 | `FLUXBASE_BRANCHING_DATABASE_PREFIX`         | Prefix for branch database names | `branch_`     | `branch_`                   |
 | `FLUXBASE_BRANCHING_SEEDS_PATH`              | Path to seed data files          | `./seeds`     | `./seeds`                   |
+| `FLUXBASE_BRANCHING_MAX_BRANCHES_PER_TENANT` | Max branches per tenant (0=unlimited) | `0`      | `10`                        |
 
 ### TLS/HTTPS
 

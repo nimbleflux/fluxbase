@@ -317,7 +317,7 @@ make setup-dev        # Install dependencies + git hooks
 
 Three-layer system: defaults → `fluxbase.yaml` → `FLUXBASE_*` env vars
 
-Key config sections: server, database, auth, storage, realtime, functions, jobs, email, ai, mcp, branching, graphql, rpc, webhooks, scaling, observability (metrics, tracing), security, cors, api, logging, migrations, tenants
+Key config sections: server, database, auth, storage, realtime, functions, jobs, email, ai, mcp, branching, graphql, rpc, scaling, observability (metrics, tracing), security, cors, api, logging, migrations, tenants
 
 **Database Configuration (relevant to migrations):**
 
@@ -339,11 +339,11 @@ migrations:
 ```yaml
 tenants:
   declarative:
-    enabled: true
-    schema_dir: "schemas"          # Directory: {schema_dir}/{tenant-slug}/public.sql
-    on_create: true                # Apply on tenant creation
-    on_startup: false              # Apply on server startup
-    allow_destructive: false       # Allow DROP/ALTER in tenant schemas
+    enabled: false               # Disabled by default
+    schema_dir: ""               # Directory: {schema_dir}/{tenant-slug}/public.sql
+    on_create: false             # Apply on tenant creation
+    on_startup: false            # Apply on server startup
+    allow_destructive: false     # Allow DROP/ALTER in tenant schemas
 ```
 
 **MCP Configuration:**
@@ -363,12 +363,14 @@ mcp:
 branching:
   enabled: true
   max_branches_per_user: 5
-  max_branches_per_tenant: 20
+  max_branches_per_tenant: 0      # 0 = unlimited
   max_total_branches: 50
   default_data_clone_mode: schema_only
-  auto_delete_after: 24h
+  auto_delete_after: 0            # 0 = never
   database_prefix: branch_
-  admin_database_url: "postgresql://..."
+  default_branch: main
+  max_total_connections: 500
+  pool_eviction_age: 1h
 ```
 
 When multi-tenancy is enabled, branches for tenants with separate databases clone from the tenant's database (not the main DB). The FDW user mapping is automatically repaired after cloning.
@@ -377,9 +379,9 @@ When multi-tenancy is enabled, branches for tenants with separate databases clon
 
 ```yaml
 logging:
-  backend: timescaledb # postgres, timescaledb, s3, local, loki, elasticsearch, clickhouse
+  backend: postgres # postgres, timescaledb, s3, local, loki, elasticsearch, clickhouse
   batch_size: 100
-  flush_interval: 5s
+  flush_interval: 1s
   retention_days: 90
   compression_days: 7 # For TimescaleDB
   s3:

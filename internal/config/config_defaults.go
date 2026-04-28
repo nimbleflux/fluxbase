@@ -123,6 +123,13 @@ func setDefaults() {
 	viper.SetDefault("tenants.default.anon_key_file", "")
 	viper.SetDefault("tenants.default.service_key_file", "")
 
+	// Tenant declarative schema defaults
+	viper.SetDefault("tenants.declarative.enabled", false)
+	viper.SetDefault("tenants.declarative.schema_dir", "")
+	viper.SetDefault("tenants.declarative.on_create", false)
+	viper.SetDefault("tenants.declarative.on_startup", false)
+	viper.SetDefault("tenants.declarative.allow_destructive", false)
+
 	// CORS defaults
 	viper.SetDefault("cors.allowed_origins", "http://localhost:5173,http://localhost:8080")
 	viper.SetDefault("cors.allowed_methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
@@ -370,7 +377,10 @@ func setDefaults() {
 	viper.SetDefault("branching.default_data_clone_mode", "schema_only") // Clone schema only by default
 	viper.SetDefault("branching.auto_delete_after", "0")                 // Never auto-delete (0 = disabled)
 	viper.SetDefault("branching.database_prefix", "branch_")             // Prefix for branch databases
-	viper.SetDefault("branching.admin_database_url", "")                 // Uses main database URL if empty
+	viper.SetDefault("branching.max_branches_per_tenant", 0)             // 0 = unlimited
+	viper.SetDefault("branching.default_branch", "main")                 // Default branch name
+	viper.SetDefault("branching.max_total_connections", 500)             // Global limit for branch pool connections
+	viper.SetDefault("branching.pool_eviction_age", "1h")                // Evict idle branch pools after 1h
 
 	// Scaling defaults (for multi-instance deployments)
 	viper.SetDefault("scaling.worker_only", false)                      // Run full server by default
@@ -401,6 +411,12 @@ func setDefaults() {
 	viper.SetDefault("logging.retention_check_interval", "24h") // Check interval for retention cleanup
 	viper.SetDefault("logging.custom_categories", []string{})   // Custom categories (empty by default)
 	viper.SetDefault("logging.custom_retention_days", 30)       // Custom category retention
+
+	// TimescaleDB logging defaults
+	viper.SetDefault("logging.timescaledb_enabled", false)       // Disabled by default (requires TimescaleDB extension)
+	viper.SetDefault("logging.timescaledb_compression", false)   // Disabled by default
+	viper.SetDefault("logging.timescaledb_compress_after", "0s") // 0 = disabled (must be enabled explicitly)
+	viper.SetDefault("logging.timescaledb_retain_after", "0s")   // 0 = disabled (must be enabled explicitly)
 
 	// General defaults
 	viper.SetDefault("base_url", "http://localhost:8080")
