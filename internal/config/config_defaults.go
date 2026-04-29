@@ -107,6 +107,7 @@ func setDefaults() {
 	viper.SetDefault("admin.enabled", false) // Admin dashboard disabled by default
 
 	// Tenants defaults
+	viper.SetDefault("tenants.enabled", true)
 	viper.SetDefault("tenants.database_prefix", "tenant_")
 	viper.SetDefault("tenants.max_tenants", 100)
 	viper.SetDefault("tenants.pool.max_total_connections", 100)
