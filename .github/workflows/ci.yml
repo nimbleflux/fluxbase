@@ -168,7 +168,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js for embedded SDK generation
         uses: actions/setup-node@v6
@@ -225,7 +225,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -255,7 +255,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -374,7 +374,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js for embedded SDK generation
         uses: actions/setup-node@v6
@@ -390,7 +390,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.7.11
+          deno-version: 2.7.12
 
       - name: Create dist directory with placeholder for embed directive
         run: |
@@ -723,7 +723,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -733,7 +733,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.7.11
+          deno-version: 2.7.12
 
       - name: Install workspace dependencies
         run: bun install --frozen-lockfile
@@ -962,7 +962,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -1075,7 +1075,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js
         uses: actions/setup-node@v6

@@ -675,7 +675,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -765,7 +765,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -797,7 +797,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.1"
+          go-version: "1.26.2"
 
       - name: Install native dependencies
         run: |
@@ -882,7 +882,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.1"
+          go-version: "1.26.2"
 
       - name: Build CLI binary
         env:
@@ -1031,7 +1031,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -1099,7 +1099,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -1142,7 +1142,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.11
+          bun-version: 1.3.12
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -1193,7 +1193,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.1"
+          go-version: "1.26.2"
 
       - name: Publish Go module
         run: |

@@ -19,11 +19,11 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "typedoc": "0.28.18",
+    "typedoc": "0.28.19",
     "typedoc-plugin-markdown": "4.11.0",
     "typescript": "6.0.2"
   },
   "engines": {
-    "node": ">=24.14.1"
+    "node": ">=24.15.0"
   }
 }
