@@ -93,7 +93,7 @@ JavaScript/TypeScript function execution:
 Built-in multi-tenant support with database-level isolation:
 
 - Database-per-tenant architecture with automatic provisioning
-- Row Level Security enforcement via `app.current_tenant_id`
+- Row Level Security enforcement for tenant isolation
 - Per-tenant configuration overrides (JWT secrets, storage backends, email providers)
 - Two-tier admin system (instance admin + tenant admin)
 - Tenant-scoped API keys with automatic isolation

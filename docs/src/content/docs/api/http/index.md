@@ -334,26 +334,4 @@ This specification is generated dynamically based on your database schema and in
 
 ## Error Responses
 
-All errors follow a consistent format:
-
-```json
-{
-  "error": "Error message description"
-}
-```
-
-Common HTTP status codes:
-
-| Code | Description |
-|------|-------------|
-| `200` | Success |
-| `201` | Created |
-| `204` | No content (successful delete) |
-| `400` | Bad request |
-| `401` | Unauthorized |
-| `403` | Forbidden |
-| `404` | Not found |
-| `409` | Conflict |
-| `429` | Too many requests (rate limited) |
-| `500` | Internal server error |
-| `503` | Service unavailable |
+Errors return JSON: `{"error": "description"}`. Standard HTTP status codes apply (400, 401, 403, 404, 409, 429, 500, 503).

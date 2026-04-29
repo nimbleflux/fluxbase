@@ -3,19 +3,9 @@ title: "Multi-Tenancy"
 description: Build multi-tenant SaaS applications with Fluxbase's built-in database-per-tenant isolation using PostgreSQL Foreign Data Wrappers and Row Level Security. Each tenant gets its own database with zero application code changes.
 ---
 
-Fluxbase provides built-in multi-tenancy support using a **database-per-tenant** architecture. Each tenant gets its own PostgreSQL database for complete data isolation, while shared services (authentication, storage, functions, etc.) are accessed via PostgreSQL Foreign Data Wrappers (FDW). Row Level Security (RLS) enforces tenant boundaries at the database level.
+Fluxbase uses a **database-per-tenant** architecture for complete data isolation. Each tenant gets its own PostgreSQL database, while shared services (authentication, storage, functions, etc.) are accessed via `postgres_fdw`. RLS enforces tenant boundaries at the database level.
 
-## Overview
-
-Multi-tenancy in Fluxbase is implemented through:
-
-- **Database Isolation**: Each tenant gets a separate PostgreSQL database (or shares the main database for the default tenant)
-- **Foreign Data Wrappers**: Shared schemas (auth, storage, functions, etc.) are imported from the main database into each tenant database via `postgres_fdw`
-- **Row Level Security**: RLS policies enforce tenant boundaries using the `app.current_tenant_id` session variable
-- **Tenant Service Keys**: Scoped API keys that enforce tenant boundaries automatically
-- **Platform Admin Roles**: Two-tier admin system for instance and tenant management
-
-### Architecture
+## Architecture
 
 ```mermaid
 graph TD
@@ -195,17 +185,9 @@ tenants:
     # Option 2: Load from files (recommended for production)
     anon_key_file: "/secrets/anon-key"
     service_key_file: "/secrets/service-key"
-```
+    ```
 
-### Environment Variables
-
-```bash
-FLUXBASE_TENANTS_DEFAULT_NAME="Default Tenant"
-FLUXBASE_TENANTS_DEFAULT_ANON_KEY="your-anon-key"
-FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY="your-service-key"
-FLUXBASE_TENANTS_DEFAULT_ANON_KEY_FILE="/secrets/anon-key"
-FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY_FILE="/secrets/service-key"
-```
+All settings also have `FLUXBASE_*` environment variable equivalents (e.g., `FLUXBASE_TENANTS_DEFAULT_NAME`, `FLUXBASE_TENANTS_DEFAULT_ANON_KEY`).
 
 ### Tenant Infrastructure
 
@@ -224,18 +206,6 @@ tenants:
     on_create: true             # Run system migrations on tenant creation
     on_access: true             # Lazy migrations on first pool access
     background: true            # Enable background migration worker
-```
-
-```bash
-FLUXBASE_TENANTS_ENABLED=true
-FLUXBASE_TENANTS_DATABASE_PREFIX="tenant_"
-FLUXBASE_TENANTS_MAX_TENANTS=100
-FLUXBASE_TENANTS_POOL_MAX_TOTAL_CONNECTIONS=100
-FLUXBASE_TENANTS_POOL_EVICTION_AGE=30m
-FLUXBASE_TENANTS_MIGRATIONS_CHECK_INTERVAL=5m
-FLUXBASE_TENANTS_MIGRATIONS_ON_CREATE=true
-FLUXBASE_TENANTS_MIGRATIONS_ON_ACCESS=true
-FLUXBASE_TENANTS_MIGRATIONS_BACKGROUND=true
 ```
 
 ## Creating Tenants
@@ -427,103 +397,15 @@ CREATE INDEX idx_your_table_tenant_id ON your_table(tenant_id);
 ALTER TABLE your_table ENABLE ROW LEVEL SECURITY;
 
 -- Tenant service can only see their tenant's data
-CREATE POLICY tenant_select ON your_table
-FOR SELECT TO tenant_service
-USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-
-CREATE POLICY tenant_insert ON your_table
-FOR INSERT TO tenant_service
-WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-
-CREATE POLICY tenant_update ON your_table
-FOR UPDATE TO tenant_service
+CREATE POLICY tenant_isolation ON your_table
+FOR ALL TO tenant_service
 USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
 WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-
-CREATE POLICY tenant_delete ON your_table
-FOR DELETE TO tenant_service
-USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-```
-
-## Database Schema
-
-### platform.tenants
-
-```sql
-CREATE TABLE platform.tenants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    slug TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    is_default BOOLEAN DEFAULT false,
-    status TEXT DEFAULT 'active' NOT NULL,
-    db_name TEXT,
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    deleted_at TIMESTAMPTZ
-);
-```
-
-### platform.service_keys
-
-```sql
-CREATE TABLE platform.service_keys (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    description TEXT,
-    key_type TEXT NOT NULL, -- anon, publishable, tenant_service, global_service
-    tenant_id UUID REFERENCES platform.tenants(id) ON DELETE CASCADE,
-    user_id UUID, -- Owner of publishable keys (no FK constraint)
-    key_hash TEXT NOT NULL,
-    key_prefix TEXT NOT NULL,
-    scopes TEXT[] DEFAULT '{}',
-    allowed_namespaces TEXT[],
-    rate_limit_per_minute INTEGER DEFAULT 60,
-    is_active BOOLEAN DEFAULT true,
-    is_config_managed BOOLEAN DEFAULT false,
-    revoked_at TIMESTAMPTZ,
-    revoked_by UUID,
-    revocation_reason TEXT,
-    deprecated_at TIMESTAMPTZ,
-    grace_period_ends_at TIMESTAMPTZ,
-    replaced_by UUID REFERENCES platform.service_keys(id),
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    created_by UUID,
-    last_used_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ
-);
-```
-
-### platform.tenant_admin_assignments
-
-```sql
-CREATE TABLE platform.tenant_admin_assignments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES platform.users(id) ON DELETE CASCADE,
-    tenant_id UUID NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,
-    assigned_by UUID REFERENCES platform.users(id) ON DELETE SET NULL,
-    assigned_at TIMESTAMPTZ DEFAULT now(),
-    UNIQUE(user_id, tenant_id)
-);
-```
-
-### platform.tenant_memberships
-
-```sql
-CREATE TABLE platform.tenant_memberships (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES platform.users(id) ON DELETE CASCADE,
-    tenant_id UUID NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,
-    role TEXT NOT NULL DEFAULT 'tenant_member',
-    created_at TIMESTAMPTZ DEFAULT now(),
-    UNIQUE(user_id, tenant_id)
-);
 ```
 
 ## Tenant-Specific Configuration
 
-Fluxbase supports per-tenant configuration overrides, allowing each tenant to have customized settings for authentication, storage, email, and other services. This is ideal for SaaS applications where different customers may require different configurations.
+Per-tenant configuration overrides let each tenant have its own settings for authentication, storage, email, and other services. All settings also have `FLUXBASE_*` environment variable equivalents.
 
 ### Configuration Hierarchy
 
@@ -720,16 +602,6 @@ tenants:
     allow_destructive: false # Allow destructive schema changes (DROP, ALTER)
 ```
 
-### Declarative Schema Environment Variables
-
-```bash
-FLUXBASE_TENANTS_DECLARATIVE_ENABLED=true
-FLUXBASE_TENANTS_DECLARATIVE_SCHEMA_DIR=./schemas
-FLUXBASE_TENANTS_DECLARATIVE_ON_CREATE=true
-FLUXBASE_TENANTS_DECLARATIVE_ON_STARTUP=false
-FLUXBASE_TENANTS_DECLARATIVE_ALLOW_DESTRUCTIVE=false
-```
-
 ### Schema File Structure
 
 Tenant schema files are organized by tenant slug:
@@ -803,49 +675,9 @@ curl -X DELETE -H "Authorization: Bearer <service-key>" \
   http://localhost:8080/api/v1/admin/tenants/<tenant-id>/schema/content
 ```
 
-### Declarative Schema Best Practices
-
-1. **Version Control Schema Files**: Store schema files in Git alongside your application code
-2. **Test Schema Changes**: Test schema changes in a development environment before production
-3. **Use Idempotent SQL**: Use `IF NOT EXISTS` and `IF EXISTS` clauses for safe re-application
-4. **Document Changes**: Comment schema files to explain the purpose of tables and policies
-
 ## Tenant-Scoped Branching
 
-When database branching is enabled alongside multi-tenancy, branches can be scoped to individual tenants:
-
-- Each branch record stores a `tenant_id` linking it to a tenant in `platform.tenants`
-- Tenant-scoped branches get their own PostgreSQL database with a naming pattern of `{prefix}{tenant_slug}_{branch_slug}`
-- The `max_branches_per_tenant` config option (default: 0, unlimited) controls how many branches each tenant can create, independent of the global `max_total_branches` limit
-- Deleting a tenant automatically cleans up all associated branches and their databases
-- Connection pool routing priority is: branch pool > tenant pool > main pool, meaning a branch request always routes to the branch database when present
-
-When a tenant has a separate database, branches clone from the **tenant's database** (not the main database). After cloning, the FDW user mapping is automatically repaired so the branch database can still access shared schemas.
-
-This allows each tenant to have isolated development and preview environments without affecting other tenants.
-
-## Best Practices
-
-### Key Management
-
-1. **Never expose global service keys** - Use only in backend services
-2. **Rotate keys regularly** - Use graceful rotation to avoid downtime
-3. **Scope keys minimally** - Grant only needed scopes and namespaces
-4. **Use key files in production** - Avoid hardcoding keys
-
-### Tenant Isolation
-
-1. **Use separate databases for production tenants** - Stronger isolation than RLS alone
-2. **Add tenant_id to all tables** - Every tenant-scoped table needs this column
-3. **Create RLS policies** - Enforce isolation at database level even with separate databases
-4. **Index tenant_id** - Essential for query performance
-5. **Test isolation** - Verify tenants can't access each other's data
-
-### Admin Access
-
-1. **Use tenant admins** - Limit instance admin access
-2. **Audit admin actions** - Log all administrative operations
-3. **Regular access reviews** - Review tenant admin assignments periodically
+When database branching is enabled alongside multi-tenancy, branches clone from the **tenant's database** (not the main database). After cloning, the FDW user mapping is automatically repaired. Each branch gets its own PostgreSQL database, and connection pool routing is: branch pool > tenant pool > main pool. See [Database Branching](/guides/branching/) for full details.
 
 ## Troubleshooting
 
