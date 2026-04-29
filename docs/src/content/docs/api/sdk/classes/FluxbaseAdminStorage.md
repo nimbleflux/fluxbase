@@ -169,9 +169,9 @@ if (blob) {
 
 ### generateSignedUrl()
 
-> **generateSignedUrl**(`bucket`, `key`, `expiresIn`): `Promise`\<[`DataResponse`](/api/sdk/type-aliases/dataresponse/)\<[`SignedUrlResponse`](/api/sdk/interfaces/signedurlresponse/)\>\>
+> **generateSignedUrl**(`bucket`, `key`, `expiresIn`): `Promise`\<[`DataResponse`](/api/sdk/type-aliases/dataresponse/)\<\{ `expires_in`: `number`; `url`: `string`; \}\>\>
 
-Generate a signed URL for temporary access
+Generate a signed URL for a private object
 
 #### Parameters
 
@@ -179,11 +179,11 @@ Generate a signed URL for temporary access
 | ------ | ------ | ------ |
 | `bucket` | `string` | Bucket name |
 | `key` | `string` | Object key (path) |
-| `expiresIn` | `number` | Expiration time in seconds |
+| `expiresIn` | `number` | URL expiration time in seconds |
 
 #### Returns
 
-`Promise`\<[`DataResponse`](/api/sdk/type-aliases/dataresponse/)\<[`SignedUrlResponse`](/api/sdk/interfaces/signedurlresponse/)\>\>
+`Promise`\<[`DataResponse`](/api/sdk/type-aliases/dataresponse/)\<\{ `expires_in`: `number`; `url`: `string`; \}\>\>
 
 Signed URL and expiration info
 
@@ -192,8 +192,7 @@ Signed URL and expiration info
 ```typescript
 const { data } = await admin.storage.generateSignedUrl('my-bucket', 'file.pdf', 3600);
 if (data) {
-  console.log(`Download at: ${data.url}`);
-  console.log(`Expires in: ${data.expires_in} seconds`);
+  window.open(data.url);
 }
 ```
 

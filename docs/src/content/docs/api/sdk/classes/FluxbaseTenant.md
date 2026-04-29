@@ -11,21 +11,21 @@ FluxbaseTenant provides multi-tenant management functionality
 
 ```typescript
 // List tenants I have access to
-const { data } = await client.tenant.listMine();
+const { data } = await client.tenant.listMine()
 
 // Get tenant details
-const { data } = await client.tenant.get("tenant-id");
+const { data } = await client.tenant.get('tenant-id')
 
 // Create a tenant (instance admin only)
 const { data } = await client.tenant.create({
-  slug: "acme-corp",
-  name: "Acme Corporation",
-});
+  slug: 'acme-corp',
+  name: 'Acme Corporation'
+})
 
 // Assign admin to tenant (tenant admin only)
-await client.tenant.assignAdmin("tenant-id", {
-  user_id: "user-id",
-});
+await client.tenant.assignAdmin('tenant-id', {
+  user_id: 'user-id'
+})
 ```
 
 ## Constructors
@@ -36,9 +36,9 @@ await client.tenant.assignAdmin("tenant-id", {
 
 #### Parameters
 
-| Parameter | Type                                               |
-| --------- | -------------------------------------------------- |
-| `fetch`   | [`FluxbaseFetch`](/api/sdk/classes/fluxbasefetch/) |
+| Parameter | Type |
+| ------ | ------ |
+| `fetch` | [`FluxbaseFetch`](/api/sdk/classes/fluxbasefetch/) |
 
 #### Returns
 
@@ -54,10 +54,10 @@ Assign an admin to a tenant (tenant admin only)
 
 #### Parameters
 
-| Parameter  | Type                                                            | Description              |
-| ---------- | --------------------------------------------------------------- | ------------------------ |
-| `tenantId` | `string`                                                        | Tenant ID                |
-| `options`  | [`AssignAdminOptions`](/api/sdk/interfaces/assignadminoptions/) | Admin assignment options |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `tenantId` | `string` | Tenant ID |
+| `options` | [`AssignAdminOptions`](/api/sdk/interfaces/assignadminoptions/) | Admin assignment options |
 
 #### Returns
 
@@ -68,12 +68,12 @@ Promise with created assignment or error
 #### Example
 
 ```typescript
-const { data, error } = await client.tenant.assignAdmin("tenant-id", {
-  user_id: "user-id",
-});
+const { data, error } = await client.tenant.assignAdmin('tenant-id', {
+  user_id: 'user-id'
+})
 ```
 
----
+***
 
 ### create()
 
@@ -85,8 +85,8 @@ This creates a new isolated database for the tenant.
 
 #### Parameters
 
-| Parameter | Type                                                              | Description             |
-| --------- | ----------------------------------------------------------------- | ----------------------- |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
 | `options` | [`CreateTenantOptions`](/api/sdk/interfaces/createtenantoptions/) | Tenant creation options |
 
 #### Returns
@@ -99,13 +99,13 @@ Promise with created tenant or error
 
 ```typescript
 const { data, error } = await client.tenant.create({
-  slug: "acme-corp",
-  name: "Acme Corporation",
-  metadata: { plan: "enterprise" },
-});
+  slug: 'acme-corp',
+  name: 'Acme Corporation',
+  metadata: { plan: 'enterprise' }
+})
 ```
 
----
+***
 
 ### delete()
 
@@ -118,9 +118,9 @@ Cannot delete the default tenant.
 
 #### Parameters
 
-| Parameter | Type     | Description |
-| --------- | -------- | ----------- |
-| `id`      | `string` | Tenant ID   |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Tenant ID |
 
 #### Returns
 
@@ -131,10 +131,10 @@ Promise that resolves when deleted
 #### Example
 
 ```typescript
-const { error } = await client.tenant.delete("tenant-id");
+const { error } = await client.tenant.delete('tenant-id')
 ```
 
----
+***
 
 ### get()
 
@@ -144,9 +144,9 @@ Get a tenant by ID
 
 #### Parameters
 
-| Parameter | Type     | Description |
-| --------- | -------- | ----------- |
-| `id`      | `string` | Tenant ID   |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Tenant ID |
 
 #### Returns
 
@@ -157,10 +157,10 @@ Promise with tenant details or error
 #### Example
 
 ```typescript
-const { data, error } = await client.tenant.get("tenant-id");
+const { data, error } = await client.tenant.get('tenant-id')
 ```
 
----
+***
 
 ### list()
 
@@ -177,10 +177,10 @@ Promise with tenants list or error
 #### Example
 
 ```typescript
-const { data, error } = await client.tenant.list();
+const { data, error } = await client.tenant.list()
 ```
 
----
+***
 
 ### listAdmins()
 
@@ -190,9 +190,9 @@ List admins of a tenant
 
 #### Parameters
 
-| Parameter  | Type     | Description |
-| ---------- | -------- | ----------- |
-| `tenantId` | `string` | Tenant ID   |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `tenantId` | `string` | Tenant ID |
 
 #### Returns
 
@@ -203,11 +203,11 @@ Promise with admin list or error
 #### Example
 
 ```typescript
-const { data, error } = await client.tenant.listAdmins("tenant-id");
+const { data, error } = await client.tenant.listAdmins('tenant-id')
 // data: [{ id: '...', tenant_id: '...', user_id: '...', email: 'admin@example.com' }]
 ```
 
----
+***
 
 ### listMine()
 
@@ -224,11 +224,11 @@ Promise with tenants and user's role in each
 #### Example
 
 ```typescript
-const { data, error } = await client.tenant.listMine();
+const { data, error } = await client.tenant.listMine()
 // data: [{ id: '...', slug: 'acme', name: 'Acme', my_role: 'tenant_admin', status: 'active' }]
 ```
 
----
+***
 
 ### migrate()
 
@@ -238,9 +238,9 @@ Migrate a tenant database to the latest schema (instance admin only)
 
 #### Parameters
 
-| Parameter | Type     | Description |
-| --------- | -------- | ----------- |
-| `id`      | `string` | Tenant ID   |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Tenant ID |
 
 #### Returns
 
@@ -251,11 +251,11 @@ Promise with migration status or error
 #### Example
 
 ```typescript
-const { data, error } = await client.tenant.migrate("tenant-id");
+const { data, error } = await client.tenant.migrate('tenant-id')
 // data: { status: 'migrated' }
 ```
 
----
+***
 
 ### removeAdmin()
 
@@ -265,10 +265,10 @@ Remove an admin from a tenant (tenant admin only)
 
 #### Parameters
 
-| Parameter  | Type     | Description |
-| ---------- | -------- | ----------- |
-| `tenantId` | `string` | Tenant ID   |
-| `userId`   | `string` | User ID     |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `tenantId` | `string` | Tenant ID |
+| `userId` | `string` | User ID |
 
 #### Returns
 
@@ -279,10 +279,10 @@ Promise that resolves when removed
 #### Example
 
 ```typescript
-const { error } = await client.tenant.removeAdmin("tenant-id", "user-id");
+const { error } = await client.tenant.removeAdmin('tenant-id', 'user-id')
 ```
 
----
+***
 
 ### update()
 
@@ -292,9 +292,9 @@ Update a tenant (tenant admin only)
 
 #### Parameters
 
-| Parameter | Type                                                              | Description    |
-| --------- | ----------------------------------------------------------------- | -------------- |
-| `id`      | `string`                                                          | Tenant ID      |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Tenant ID |
 | `options` | [`UpdateTenantOptions`](/api/sdk/interfaces/updatetenantoptions/) | Update options |
 
 #### Returns
@@ -306,7 +306,7 @@ Promise with updated tenant or error
 #### Example
 
 ```typescript
-const { data, error } = await client.tenant.update("tenant-id", {
-  name: "New Name",
-});
+const { data, error } = await client.tenant.update('tenant-id', {
+  name: 'New Name'
+})
 ```

@@ -13,8 +13,8 @@ Provides tenant list and management functions for multi-tenant applications.
 
 ## Parameters
 
-| Parameter | Type                                                                |
-| --------- | ------------------------------------------------------------------- |
+| Parameter | Type |
+| ------ | ------ |
 | `options` | [`UseTenantsOptions`](/api/sdk-react/interfaces/usetenantsoptions/) |
 
 ## Returns
@@ -25,22 +25,21 @@ Provides tenant list and management functions for multi-tenant applications.
 
 ```tsx
 function TenantManager() {
-  const { tenants, isLoading, setCurrentTenant, currentTenantId } =
-    useTenants();
+  const { tenants, isLoading, setCurrentTenant, currentTenantId } = useTenants()
 
-  if (isLoading) return <div>Loading...</div>;
+  if (isLoading) return <div>Loading...</div>
 
   return (
     <select
-      value={currentTenantId || ""}
+      value={currentTenantId || ''}
       onChange={(e) => setCurrentTenant(e.target.value || undefined)}
     >
-      {tenants.map((t) => (
+      {tenants.map(t => (
         <option key={t.id} value={t.id}>
           {t.name} ({t.my_role})
         </option>
       ))}
     </select>
-  );
+  )
 }
 ```

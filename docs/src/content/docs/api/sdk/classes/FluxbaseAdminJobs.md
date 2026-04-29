@@ -54,7 +54,7 @@ const { data, error } = await client.admin.jobs.cancel('550e8400-e29b-41d4-a716-
 
 ### create()
 
-> **create**(`request`): `Promise`\<\{ `data`: `JobFunction` \| `null`; `error`: `Error` \| `null`; \}\>
+> **create**(`params`): `Promise`\<\{ `data`: `JobFunction` \| `null`; `error`: `Error` \| `null`; \}\>
 
 Create a new job function
 
@@ -62,24 +62,18 @@ Create a new job function
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `request` | `CreateJobFunctionRequest` | Job function configuration and code |
+| `params` | \{ `code`: `string`; `enabled?`: `boolean`; `name`: `string`; `namespace?`: `string`; `timeout_seconds?`: `number`; \} | Job function configuration |
+| `params.code` | `string` | - |
+| `params.enabled?` | `boolean` | - |
+| `params.name` | `string` | - |
+| `params.namespace?` | `string` | - |
+| `params.timeout_seconds?` | `number` | - |
 
 #### Returns
 
 `Promise`\<\{ `data`: `JobFunction` \| `null`; `error`: `Error` \| `null`; \}\>
 
-Promise resolving to { data, error } tuple with created job function metadata
-
-#### Example
-
-```typescript
-const { data, error } = await client.admin.jobs.create({
-  name: 'process-data',
-  code: 'export async function handler(req) { return { success: true } }',
-  enabled: true,
-  timeout_seconds: 300
-})
-```
+Promise resolving to { data, error } tuple with created job function
 
 ***
 
@@ -469,22 +463,16 @@ Update an existing job function
 | ------ | ------ | ------ |
 | `namespace` | `string` | Namespace |
 | `name` | `string` | Job function name |
-| `updates` | `UpdateJobFunctionRequest` | Fields to update |
+| `updates` | \{ `code?`: `string`; `enabled?`: `boolean`; `timeout_seconds?`: `number`; \} | Fields to update |
+| `updates.code?` | `string` | - |
+| `updates.enabled?` | `boolean` | - |
+| `updates.timeout_seconds?` | `number` | - |
 
 #### Returns
 
 `Promise`\<\{ `data`: `JobFunction` \| `null`; `error`: `Error` \| `null`; \}\>
 
-Promise resolving to { data, error } tuple with updated job function metadata
-
-#### Example
-
-```typescript
-const { data, error } = await client.admin.jobs.update('default', 'process-data', {
-  enabled: false,
-  timeout_seconds: 600
-})
-```
+Promise resolving to { data, error } tuple with updated job function
 
 ***
 

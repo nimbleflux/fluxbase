@@ -13,7 +13,7 @@ Name-based operations are more convenient for most use cases.
 ## Example
 
 ```typescript
-const client = createClient('http://localhost:8080', 'your-service-role-key')
+const client = createClient({ url: 'http://localhost:8080' })
 await client.auth.login({ email: 'user@example.com', password: 'password' })
 
 // Create a global secret

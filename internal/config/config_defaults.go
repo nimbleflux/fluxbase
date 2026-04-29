@@ -71,8 +71,8 @@ func setDefaults() {
 	viper.SetDefault("security.admin_login_rate_window", "1m")  // per minute
 
 	// service_role rate limiting defaults (H-2: enabled by default to prevent abuse)
-	viper.SetDefault("security.service_role_rate_limit", 10000)   // 10000 requests per minute for service_role tokens (H-2)
-	viper.SetDefault("security.service_role_rate_window", "1m")   // per minute
+	viper.SetDefault("security.service_role_rate_limit", 10000) // 10000 requests per minute for service_role tokens (H-2)
+	viper.SetDefault("security.service_role_rate_window", "1m") // per minute
 
 	// CAPTCHA defaults
 	viper.SetDefault("security.captcha.enabled", false)       // Disabled by default
@@ -171,9 +171,9 @@ func setDefaults() {
 	viper.SetDefault("realtime.max_connections", 1000)
 	viper.SetDefault("realtime.max_connections_per_user", 10) // Limit per authenticated user
 	viper.SetDefault("realtime.max_connections_per_ip", 20)   // Limit per IP for anonymous connections
-	viper.SetDefault("realtime.rls_cache_size", 100000) // 100K entries for high-throughput realtime
-	viper.SetDefault("realtime.rls_cache_ttl", "30s")   // 30 second TTL (balance freshness vs DB load)
-	viper.SetDefault("realtime.listener_pool_size", 2)  // 2 LISTEN connections for redundancy/failover
+	viper.SetDefault("realtime.rls_cache_size", 100000)       // 100K entries for high-throughput realtime
+	viper.SetDefault("realtime.rls_cache_ttl", "30s")         // 30 second TTL (balance freshness vs DB load)
+	viper.SetDefault("realtime.listener_pool_size", 2)        // 2 LISTEN connections for redundancy/failover
 	viper.SetDefault("realtime.notification_workers", 4)
 	viper.SetDefault("realtime.client_message_queue_size", 256) // Per-client message queue for async sending
 	viper.SetDefault("realtime.slow_client_threshold", 100)     // Disconnect clients with 100+ pending messages
@@ -256,7 +256,7 @@ func setDefaults() {
 		"192.168.0.0/16", // Private networks
 		"127.0.0.0/8",    // Loopback (localhost)
 	})
-	viper.SetDefault("jobs.graceful_shutdown_timeout", "5m")   // Wait up to 5 minutes for jobs during shutdown
+	viper.SetDefault("jobs.graceful_shutdown_timeout", "5m") // Wait up to 5 minutes for jobs during shutdown
 
 	// Tracing defaults (OpenTelemetry)
 	viper.SetDefault("tracing.enabled", false)             // Disabled by default
@@ -314,10 +314,10 @@ func setDefaults() {
 	viper.SetDefault("ai.ocr_languages", []string{"eng"}) // Default to English
 
 	// RPC defaults
-	viper.SetDefault("rpc.enabled", true)                     // Enabled by default (controlled by feature flag at runtime)
-	viper.SetDefault("rpc.procedures_dir", "./rpc")           // Default procedures directory
-	viper.SetDefault("rpc.auto_load_on_boot", true)           // Auto-load procedures by default
-	viper.SetDefault("rpc.default_max_rows", 1000)            // Max 1000 rows per query
+	viper.SetDefault("rpc.enabled", true)           // Enabled by default (controlled by feature flag at runtime)
+	viper.SetDefault("rpc.procedures_dir", "./rpc") // Default procedures directory
+	viper.SetDefault("rpc.auto_load_on_boot", true) // Auto-load procedures by default
+	viper.SetDefault("rpc.default_max_rows", 1000)  // Max 1000 rows per query
 	viper.SetDefault("rpc.sync_allowed_ip_ranges", []string{
 		"172.16.0.0/12",  // Docker default bridge networks
 		"10.0.0.0/8",     // Private networks (AWS VPC, etc.)

@@ -456,8 +456,8 @@ type TransformConfig struct {
 type RealtimeConfig struct {
 	Enabled                bool          `mapstructure:"enabled"`
 	MaxConnections         int           `mapstructure:"max_connections"`
-	MaxConnectionsPerUser  int           `mapstructure:"max_connections_per_user"` // Max connections per authenticated user (0 = unlimited)
-	MaxConnectionsPerIP    int           `mapstructure:"max_connections_per_ip"`   // Max connections per IP for anonymous connections (0 = unlimited)
+	MaxConnectionsPerUser  int           `mapstructure:"max_connections_per_user"`  // Max connections per authenticated user (0 = unlimited)
+	MaxConnectionsPerIP    int           `mapstructure:"max_connections_per_ip"`    // Max connections per IP for anonymous connections (0 = unlimited)
 	RLSCacheSize           int           `mapstructure:"rls_cache_size"`            // Maximum entries in RLS cache (default: 100000)
 	RLSCacheTTL            time.Duration `mapstructure:"rls_cache_ttl"`             // TTL for RLS cache entries (default: 30s)
 	ListenerPoolSize       int           `mapstructure:"listener_pool_size"`        // Number of LISTEN connections for redundancy (default: 2)
@@ -523,21 +523,21 @@ type APIConfig struct {
 
 // JobsConfig contains long-running background jobs settings
 type JobsConfig struct {
-	Enabled                    bool          `mapstructure:"enabled"`
-	JobsDir                    string        `mapstructure:"jobs_dir"`
-	AutoLoadOnBoot             bool          `mapstructure:"auto_load_on_boot"`             // Load jobs from filesystem at boot
-	WorkerMode                 string        `mapstructure:"worker_mode"`                   // "embedded", "standalone", "disabled"
-	EmbeddedWorkerCount        int           `mapstructure:"embedded_worker_count"`         // Number of embedded workers
-	MaxConcurrentPerWorker     int           `mapstructure:"max_concurrent_per_worker"`     // Max concurrent jobs per worker
-	MaxConcurrentPerNamespace  int           `mapstructure:"max_concurrent_per_namespace"`  // Max concurrent jobs per namespace
-	DefaultMaxDuration         time.Duration `mapstructure:"default_max_duration"`          // Default job timeout
-	MaxMaxDuration             time.Duration `mapstructure:"max_max_duration"`              // Maximum allowed job timeout
-	DefaultProgressTimeout     time.Duration `mapstructure:"default_progress_timeout"`      // Default progress timeout
-	PollInterval               time.Duration `mapstructure:"poll_interval"`                 // Worker poll interval
-	WorkerHeartbeatInterval    time.Duration `mapstructure:"worker_heartbeat_interval"`     // Worker heartbeat interval
-	WorkerTimeout              time.Duration `mapstructure:"worker_timeout"`                // Worker considered dead after this
-	SyncAllowedIPRanges        []string      `mapstructure:"sync_allowed_ip_ranges"`        // IP CIDR ranges allowed to sync jobs
-	GracefulShutdownTimeout    time.Duration `mapstructure:"graceful_shutdown_timeout"`     // Time to wait for running jobs during shutdown (default: 5m)
+	Enabled                   bool          `mapstructure:"enabled"`
+	JobsDir                   string        `mapstructure:"jobs_dir"`
+	AutoLoadOnBoot            bool          `mapstructure:"auto_load_on_boot"`            // Load jobs from filesystem at boot
+	WorkerMode                string        `mapstructure:"worker_mode"`                  // "embedded", "standalone", "disabled"
+	EmbeddedWorkerCount       int           `mapstructure:"embedded_worker_count"`        // Number of embedded workers
+	MaxConcurrentPerWorker    int           `mapstructure:"max_concurrent_per_worker"`    // Max concurrent jobs per worker
+	MaxConcurrentPerNamespace int           `mapstructure:"max_concurrent_per_namespace"` // Max concurrent jobs per namespace
+	DefaultMaxDuration        time.Duration `mapstructure:"default_max_duration"`         // Default job timeout
+	MaxMaxDuration            time.Duration `mapstructure:"max_max_duration"`             // Maximum allowed job timeout
+	DefaultProgressTimeout    time.Duration `mapstructure:"default_progress_timeout"`     // Default progress timeout
+	PollInterval              time.Duration `mapstructure:"poll_interval"`                // Worker poll interval
+	WorkerHeartbeatInterval   time.Duration `mapstructure:"worker_heartbeat_interval"`    // Worker heartbeat interval
+	WorkerTimeout             time.Duration `mapstructure:"worker_timeout"`               // Worker considered dead after this
+	SyncAllowedIPRanges       []string      `mapstructure:"sync_allowed_ip_ranges"`       // IP CIDR ranges allowed to sync jobs
+	GracefulShutdownTimeout   time.Duration `mapstructure:"graceful_shutdown_timeout"`    // Time to wait for running jobs during shutdown (default: 5m)
 }
 
 // MigrationsConfig contains migrations API security settings
@@ -599,11 +599,11 @@ type AIConfig struct {
 
 // RPCConfig contains RPC (Remote Procedure Call) configuration
 type RPCConfig struct {
-	Enabled             bool     `mapstructure:"enabled"`                    // Enable RPC functionality
-	ProceduresDir       string   `mapstructure:"procedures_dir"`             // Directory for RPC procedure definitions
-	AutoLoadOnBoot      bool     `mapstructure:"auto_load_on_boot"`          // Load procedures from filesystem at boot
-	DefaultMaxRows      int      `mapstructure:"default_max_rows"`           // Default max rows returned
-	SyncAllowedIPRanges []string `mapstructure:"sync_allowed_ip_ranges"`     // IP CIDR ranges allowed to sync procedures
+	Enabled             bool     `mapstructure:"enabled"`                // Enable RPC functionality
+	ProceduresDir       string   `mapstructure:"procedures_dir"`         // Directory for RPC procedure definitions
+	AutoLoadOnBoot      bool     `mapstructure:"auto_load_on_boot"`      // Load procedures from filesystem at boot
+	DefaultMaxRows      int      `mapstructure:"default_max_rows"`       // Default max rows returned
+	SyncAllowedIPRanges []string `mapstructure:"sync_allowed_ip_ranges"` // IP CIDR ranges allowed to sync procedures
 }
 
 // LoggingConfig contains central logging configuration

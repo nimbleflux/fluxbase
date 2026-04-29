@@ -44,9 +44,9 @@ Abort an in-progress resumable upload
 
 ### copy()
 
-> **copy**(`fromPath`, `toPath`): `Promise`\<\{ `data`: \{ `path`: `string`; \} \| `null`; `error`: `Error` \| `null`; \}\>
+> **copy**(`fromPath`, `toPath`): `Promise`\<\{ `data`: `unknown`; `error`: `Error` \| `null`; \}\>
 
-Copy a file to a new location
+Copy a file to a new path
 
 #### Parameters
 
@@ -57,7 +57,9 @@ Copy a file to a new location
 
 #### Returns
 
-`Promise`\<\{ `data`: \{ `path`: `string`; \} \| `null`; `error`: `Error` \| `null`; \}\>
+`Promise`\<\{ `data`: `unknown`; `error`: `Error` \| `null`; \}\>
+
+Promise resolving to { data, error } tuple
 
 ***
 
@@ -363,20 +365,22 @@ List users a file is shared with (RLS)
 
 ### move()
 
-> **move**(`fromPath`, `toPath`): `Promise`\<\{ `data`: \{ `message`: `string`; \} \| `null`; `error`: `Error` \| `null`; \}\>
+> **move**(`fromPath`, `toPath`): `Promise`\<\{ `data`: `unknown`; `error`: `Error` \| `null`; \}\>
 
-Move a file to a new location
+Move a file to a new path
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `fromPath` | `string` | Current file path |
-| `toPath` | `string` | New file path |
+| `fromPath` | `string` | Source file path |
+| `toPath` | `string` | Destination file path |
 
 #### Returns
 
-`Promise`\<\{ `data`: \{ `message`: `string`; \} \| `null`; `error`: `Error` \| `null`; \}\>
+`Promise`\<\{ `data`: `unknown`; `error`: `Error` \| `null`; \}\>
+
+Promise resolving to { data, error } tuple
 
 ***
 

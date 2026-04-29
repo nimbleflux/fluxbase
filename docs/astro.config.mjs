@@ -273,6 +273,7 @@ export default defineConfig({
               collapsed: true,
               autogenerate: { directory: "guides/branching" },
             },
+            { label: "Client Keys", link: "/guides/client-keys/" },
 
             // Advanced Auth
             { label: "OAuth Providers", link: "/guides/oauth-providers/" },
@@ -291,6 +292,7 @@ export default defineConfig({
               autogenerate: { directory: "guides/mcp" },
             },
             { label: "Webhooks", link: "/guides/webhooks/" },
+            { label: "User Settings", link: "/guides/user-settings/" },
 
             // Operations
             { label: "Secrets Management", link: "/guides/secrets-management/" },
@@ -298,6 +300,7 @@ export default defineConfig({
             { label: "Logging", link: "/guides/logging/" },
             { label: "Monitoring", link: "/guides/monitoring-observability/" },
             { label: "Email Services", link: "/guides/email-services/" },
+            { label: "PostgreSQL Extensions", link: "/guides/extensions/" },
             { label: "Image Transformations", link: "/guides/image-transformations/" },
             { label: "Testing", link: "/guides/testing/" },
 

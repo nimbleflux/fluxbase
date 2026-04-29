@@ -8,12 +8,12 @@ title: "InvitationsManager"
 Invitations management client
 
 Provides methods for creating and managing user invitations.
-Invitations allow admins to invite new users to join the dashboard.
+Invitations allow admins to invite new users to join the platform.
 
 ## Example
 
 ```typescript
-const client = createClient('http://localhost:8080', 'your-service-role-key')
+const client = createClient({ url: 'http://localhost:8080' })
 await client.admin.login({ email: 'admin@example.com', password: 'password' })
 
 // Create an invitation

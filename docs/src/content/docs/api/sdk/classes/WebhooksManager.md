@@ -13,8 +13,8 @@ Webhooks allow your application to be notified when events occur in Fluxbase.
 ## Example
 
 ```typescript
-const client = createClient('http://localhost:8080', 'your-anon-key')
-await client.auth.signIn({ email: 'user@example.com', password: 'password' })
+const client = createClient({ url: 'http://localhost:8080' })
+await client.auth.login({ email: 'user@example.com', password: 'password' })
 
 // Create a webhook
 const webhook = await client.management.webhooks.create({

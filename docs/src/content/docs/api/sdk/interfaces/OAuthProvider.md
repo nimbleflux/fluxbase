@@ -12,7 +12,6 @@ OAuth provider configuration
 | Property | Type |
 | ------ | ------ |
 | <a id="authorization_url"></a> `authorization_url?` | `string` |
-| <a id="authorize_url"></a> `authorize_url?` | `string` |
 | <a id="client_id"></a> `client_id` | `string` |
 | <a id="client_secret"></a> `client_secret?` | `string` |
 | <a id="created_at"></a> `created_at` | `string` |
@@ -20,7 +19,6 @@ OAuth provider configuration
 | <a id="enabled"></a> `enabled` | `boolean` |
 | <a id="id"></a> `id` | `string` |
 | <a id="is_custom"></a> `is_custom` | `boolean` |
-| <a id="name"></a> `name` | `string` |
 | <a id="provider_name"></a> `provider_name` | `string` |
 | <a id="redirect_url"></a> `redirect_url` | `string` |
 | <a id="scopes"></a> `scopes` | `string`[] |

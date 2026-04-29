@@ -7,6 +7,6 @@ title: "UseTenantsOptions"
 
 ## Properties
 
-| Property                            | Type      | Description                                                        |
-| ----------------------------------- | --------- | ------------------------------------------------------------------ |
+| Property | Type | Description |
+| ------ | ------ | ------ |
 | <a id="autofetch"></a> `autoFetch?` | `boolean` | Whether to automatically fetch tenants on mount **Default** `true` |
