@@ -13,17 +13,17 @@ Combined auth hook with all auth state and methods
 
 `object`
 
-| Name              | Type                                                                                                                                                                                       | Default value            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
-| `isAuthenticated` | `boolean`                                                                                                                                                                                  | `!!session`              |
-| `isLoading`       | `boolean`                                                                                                                                                                                  | -                        |
-| `isSigningIn`     | `boolean`                                                                                                                                                                                  | `signIn.isPending`       |
-| `isSigningOut`    | `boolean`                                                                                                                                                                                  | `signOut.isPending`      |
-| `isSigningUp`     | `boolean`                                                                                                                                                                                  | `signUp.isPending`       |
-| `isUpdating`      | `boolean`                                                                                                                                                                                  | `updateUser.isPending`   |
-| `session`         | [`AuthSession`](/api/sdk-react/interfaces/authsession/) \| `null` \| `undefined`                                                                                                           | -                        |
-| `signIn`          | `UseMutateAsyncFunction`\<`FluxbaseResponse$1`\<`AuthResponseData` \| `SignInWith2FAResponse`\>, `Error`, [`SignInCredentials`](/api/sdk-react/interfaces/signincredentials/), `unknown`\> | `signIn.mutateAsync`     |
-| `signOut`         | `UseMutateAsyncFunction`\<`void`, `Error`, `void`, `unknown`\>                                                                                                                             | `signOut.mutateAsync`    |
-| `signUp`          | `UseMutateAsyncFunction`\<`FluxbaseAuthResponse`, `Error`, [`SignUpCredentials`](/api/sdk-react/interfaces/signupcredentials/), `unknown`\>                                                | `signUp.mutateAsync`     |
-| `updateUser`      | `UseMutateAsyncFunction`\<`UserResponse`, `Error`, `Partial`\<`Pick`\<[`User`](/api/sdk-react/interfaces/user/), `"email"` \| `"metadata"`\>\>, `unknown`\>                                | `updateUser.mutateAsync` |
-| `user`            | [`User`](/api/sdk-react/interfaces/user/) \| `null` \| `undefined`                                                                                                                         | -                        |
+| Name | Type | Default value |
+| ------ | ------ | ------ |
+| `isAuthenticated` | `boolean` | `!!session` |
+| `isLoading` | `boolean` | - |
+| `isSigningIn` | `boolean` | `signIn.isPending` |
+| `isSigningOut` | `boolean` | `signOut.isPending` |
+| `isSigningUp` | `boolean` | `signUp.isPending` |
+| `isUpdating` | `boolean` | `updateUser.isPending` |
+| `session` | [`AuthSession`](/api/sdk-react/interfaces/authsession/) \| `null` \| `undefined` | - |
+| `signIn` | `UseMutateAsyncFunction`\<`FluxbaseResponse$1`\<`AuthResponseData` \| `SignInWith2FAResponse`\>, `Error`, [`SignInCredentials`](/api/sdk-react/interfaces/signincredentials/), `unknown`\> | `signIn.mutateAsync` |
+| `signOut` | `UseMutateAsyncFunction`\<`void`, `Error`, `void`, `unknown`\> | `signOut.mutateAsync` |
+| `signUp` | `UseMutateAsyncFunction`\<`FluxbaseAuthResponse`, `Error`, [`SignUpCredentials`](/api/sdk-react/interfaces/signupcredentials/), `unknown`\> | `signUp.mutateAsync` |
+| `updateUser` | `UseMutateAsyncFunction`\<`UserResponse`, `Error`, `Partial`\<`Pick`\<[`User`](/api/sdk-react/interfaces/user/), `"email"` \| `"metadata"`\>\>, `unknown`\> | `updateUser.mutateAsync` |
+| `user` | [`User`](/api/sdk-react/interfaces/user/) \| `null` \| `undefined` | - |

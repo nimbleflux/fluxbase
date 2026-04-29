@@ -30,13 +30,13 @@ Provides create, update, delete, sync, and monitoring operations
 
 > **clearEmbeddingProvider**(`id`): `Promise`\<\{ `data`: \{ `use_for_embeddings`: `boolean`; \} \| `null`; `error`: `Error` \| `null`; \}\>
 
-Clear explicit embedding provider preference (revert to default)
+Clear the embedding provider assignment for a provider
 
 #### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `id` | `string` | Provider ID to clear |
+| `id` | `string` | Provider ID |
 
 #### Returns
 
@@ -44,17 +44,11 @@ Clear explicit embedding provider preference (revert to default)
 
 Promise resolving to { data, error } tuple
 
-#### Example
-
-```typescript
-const { data, error } = await client.admin.ai.clearEmbeddingProvider('uuid')
-```
-
 ***
 
 ### createProvider()
 
-> **createProvider**(`request`): `Promise`\<\{ `data`: [`AIProvider`](/api/sdk/interfaces/aiprovider/) \| `null`; `error`: `Error` \| `null`; \}\>
+> **createProvider**(`params`): `Promise`\<\{ `data`: [`AIProvider`](/api/sdk/interfaces/aiprovider/) \| `null`; `error`: `Error` \| `null`; \}\>
 
 Create a new AI provider
 
@@ -62,28 +56,18 @@ Create a new AI provider
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `request` | [`CreateAIProviderRequest`](/api/sdk/interfaces/createaiproviderrequest/) | Provider configuration |
+| `params` | \{ `config?`: `Record`\<`string`, `unknown`\>; `display_name?`: `string`; `is_default?`: `boolean`; `name`: `string`; `provider_type`: `string`; \} | Provider configuration including name, provider_type, and optional config |
+| `params.config?` | `Record`\<`string`, `unknown`\> | - |
+| `params.display_name?` | `string` | - |
+| `params.is_default?` | `boolean` | - |
+| `params.name` | `string` | - |
+| `params.provider_type` | `string` | - |
 
 #### Returns
 
 `Promise`\<\{ `data`: [`AIProvider`](/api/sdk/interfaces/aiprovider/) \| `null`; `error`: `Error` \| `null`; \}\>
 
 Promise resolving to { data, error } tuple with created provider
-
-#### Example
-
-```typescript
-const { data, error } = await client.admin.ai.createProvider({
-  name: 'openai-main',
-  display_name: 'OpenAI (Main)',
-  provider_type: 'openai',
-  is_default: true,
-  config: {
-    api_key: 'sk-...',
-    model: 'gpt-4-turbo',
-  }
-})
-```
 
 ***
 
@@ -117,7 +101,7 @@ const { data, error } = await client.admin.ai.deleteChatbot('uuid')
 
 > **deleteProvider**(`id`): `Promise`\<\{ `data`: `null`; `error`: `Error` \| `null`; \}\>
 
-Delete a provider
+Delete an AI provider
 
 #### Parameters
 
@@ -130,12 +114,6 @@ Delete a provider
 `Promise`\<\{ `data`: `null`; `error`: `Error` \| `null`; \}\>
 
 Promise resolving to { data, error } tuple
-
-#### Example
-
-```typescript
-const { data, error } = await client.admin.ai.deleteProvider('uuid')
-```
 
 ***
 
@@ -172,7 +150,7 @@ if (data) {
 
 > **getProvider**(`id`): `Promise`\<\{ `data`: [`AIProvider`](/api/sdk/interfaces/aiprovider/) \| `null`; `error`: `Error` \| `null`; \}\>
 
-Get details of a specific provider
+Get details of a specific AI provider
 
 #### Parameters
 
@@ -185,15 +163,6 @@ Get details of a specific provider
 `Promise`\<\{ `data`: [`AIProvider`](/api/sdk/interfaces/aiprovider/) \| `null`; `error`: `Error` \| `null`; \}\>
 
 Promise resolving to { data, error } tuple with provider details
-
-#### Example
-
-```typescript
-const { data, error } = await client.admin.ai.getProvider('uuid')
-if (data) {
-  console.log('Provider:', data.display_name)
-}
-```
 
 ***
 
@@ -347,7 +316,7 @@ if (data) {
 
 > **setDefaultProvider**(`id`): `Promise`\<\{ `data`: [`AIProvider`](/api/sdk/interfaces/aiprovider/) \| `null`; `error`: `Error` \| `null`; \}\>
 
-Set a provider as the default
+Set a provider as the default provider
 
 #### Parameters
 
@@ -361,17 +330,11 @@ Set a provider as the default
 
 Promise resolving to { data, error } tuple with updated provider
 
-#### Example
-
-```typescript
-const { data, error } = await client.admin.ai.setDefaultProvider('uuid')
-```
-
 ***
 
 ### setEmbeddingProvider()
 
-> **setEmbeddingProvider**(`id`): `Promise`\<\{ `data`: \{ `id`: `string`; `use_for_embeddings`: `boolean`; \} \| `null`; `error`: `Error` \| `null`; \}\>
+> **setEmbeddingProvider**(`id`): `Promise`\<\{ `data`: \{ `use_for_embeddings`: `boolean`; \} \| `null`; `error`: `Error` \| `null`; \}\>
 
 Set a provider as the embedding provider
 
@@ -383,15 +346,9 @@ Set a provider as the embedding provider
 
 #### Returns
 
-`Promise`\<\{ `data`: \{ `id`: `string`; `use_for_embeddings`: `boolean`; \} \| `null`; `error`: `Error` \| `null`; \}\>
+`Promise`\<\{ `data`: \{ `use_for_embeddings`: `boolean`; \} \| `null`; `error`: `Error` \| `null`; \}\>
 
-Promise resolving to { data, error } tuple
-
-#### Example
-
-```typescript
-const { data, error } = await client.admin.ai.setEmbeddingProvider('uuid')
-```
+Promise resolving to { data, error } tuple with updated provider
 
 ***
 
@@ -542,23 +499,13 @@ Update an existing AI provider
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `id` | `string` | Provider ID |
-| `updates` | [`UpdateAIProviderRequest`](/api/sdk/interfaces/updateaiproviderrequest/) | Fields to update |
+| `updates` | \{ `config?`: `Record`\<`string`, `unknown`\>; `display_name?`: `string`; `enabled?`: `boolean`; \} | Fields to update |
+| `updates.config?` | `Record`\<`string`, `unknown`\> | - |
+| `updates.display_name?` | `string` | - |
+| `updates.enabled?` | `boolean` | - |
 
 #### Returns
 
 `Promise`\<\{ `data`: [`AIProvider`](/api/sdk/interfaces/aiprovider/) \| `null`; `error`: `Error` \| `null`; \}\>
 
 Promise resolving to { data, error } tuple with updated provider
-
-#### Example
-
-```typescript
-const { data, error } = await client.admin.ai.updateProvider('uuid', {
-  display_name: 'Updated Name',
-  config: {
-    api_key: 'new-key',
-    model: 'gpt-4-turbo',
-  },
-  enabled: true,
-})
-```

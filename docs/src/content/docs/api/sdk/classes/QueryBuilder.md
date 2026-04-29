@@ -1183,8 +1183,8 @@ This allows using `await client.from('table').select()` without calling `.execut
 
 | Parameter | Type |
 | ------ | ------ |
-| `onfulfilled?` | (`value`) => `TResult1` \| `PromiseLike`\<`TResult1`\> \| `null` |
-| `onrejected?` | (`reason`) => `TResult2` \| `PromiseLike`\<`TResult2`\> \| `null` |
+| `onfulfilled?` | ((`value`) => `TResult1` \| `PromiseLike`\<`TResult1`\>) \| `null` |
+| `onrejected?` | ((`reason`) => `TResult2` \| `PromiseLike`\<`TResult2`\>) \| `null` |
 
 #### Returns
 

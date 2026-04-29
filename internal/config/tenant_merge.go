@@ -279,9 +279,6 @@ func mergeRealtimeConfig(base RealtimeConfig, override RealtimeConfig) RealtimeC
 	if override.MaxConnectionsPerUser != 0 {
 		merged.MaxConnectionsPerUser = override.MaxConnectionsPerUser
 	}
-	if override.PingInterval != 0 {
-		merged.PingInterval = override.PingInterval
-	}
 
 	return merged
 }
@@ -353,9 +350,6 @@ func mergeRPCConfig(base RPCConfig, override RPCConfig) RPCConfig {
 
 	if override.ProceduresDir != "" {
 		merged.ProceduresDir = override.ProceduresDir
-	}
-	if override.DefaultMaxExecutionTime != 0 {
-		merged.DefaultMaxExecutionTime = override.DefaultMaxExecutionTime
 	}
 	if override.DefaultMaxRows != 0 {
 		merged.DefaultMaxRows = override.DefaultMaxRows

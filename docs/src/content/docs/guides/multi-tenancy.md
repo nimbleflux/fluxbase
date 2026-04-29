@@ -1,42 +1,57 @@
 ---
 title: "Multi-Tenancy"
-description: Build multi-tenant SaaS applications with Fluxbase's built-in tenant isolation using PostgreSQL Row Level Security. Automatic data isolation per tenant with zero application code changes.
+description: Build multi-tenant SaaS applications with Fluxbase's built-in database-per-tenant isolation using PostgreSQL Foreign Data Wrappers and Row Level Security. Each tenant gets its own database with zero application code changes.
 ---
 
-Fluxbase provides built-in multi-tenancy support using PostgreSQL Row Level Security (RLS) for automatic tenant isolation. This enables you to build SaaS applications where each tenant's data is completely isolated at the database level.
+Fluxbase uses a **database-per-tenant** architecture for complete data isolation. Each tenant gets its own PostgreSQL database, while shared services (authentication, storage, functions, etc.) are accessed via `postgres_fdw`. RLS enforces tenant boundaries at the database level.
 
-## Overview
-
-Multi-tenancy in Fluxbase is implemented through:
-
-- **Tenant Isolation**: Row-Level Security (RLS) policies automatically filter data by tenant
-- **Tenant Service Keys**: Scoped API keys that enforce tenant boundaries
-- **Platform Admin Roles**: Two-tier admin system for instance and tenant management
-
-### Architecture
+## Architecture
 
 ```mermaid
 graph TD
-    subgraph "Platform Level"
-        A[Instance Admin] --> B[platform.tenants]
-        A --> C[platform.service_keys]
+    subgraph "Main Database"
+        A[auth.* tables]
+        B[storage.* tables]
+        C[functions.* tables]
+        D[jobs.* tables]
+        E[platform.tenants]
+        F[platform.service_keys]
     end
 
-    subgraph "Tenant Level"
-        D[Tenant Admin] --> E[Tenant A]
-        D --> F[Tenant B]
+    subgraph "Tenant A Database"
+        G[public.* - Tenant A data only]
+        H[FDW: auth, storage, functions, jobs...]
     end
 
-    subgraph "Data Isolation"
-        E --> G[RLS Policies]
-        F --> G
-        G --> H[Tenant A Data Only]
-        G --> I[Tenant B Data Only]
+    subgraph "Tenant B Database"
+        I[public.* - Tenant B data only]
+        J[FDW: auth, storage, functions, jobs...]
     end
 
-    B --> E
-    B --> F
+    subgraph "Default Tenant"
+        K[public.* - shared main database]
+    end
+
+    E --> G
+    E --> I
+    E --> K
+
+    G ---|postgres_fdw + RLS| A
+    G ---|postgres_fdw + RLS| B
+    I ---|postgres_fdw + RLS| A
+    I ---|postgres_fdw + RLS| B
+
+    style H fill:#f0f0f0,stroke:#999
+    style J fill:#f0f0f0,stroke:#999
 ```
+
+### How It Works
+
+1. **Default tenant**: Uses the main database directly. No separate database or FDW setup needed.
+2. **Named tenants**: When created, Fluxbase provisions a separate PostgreSQL database (named `{prefix}{slug}`, e.g., `tenant_acme-corp`).
+3. **FDW setup**: A per-tenant FDW role (`fdw_tenant_<uuid8>`) is created with `NOBYPASSRLS` and `app.current_tenant_id` set. Shared schemas are imported as foreign tables so the tenant database can access auth, storage, functions, etc.
+4. **Connection routing**: When a request carries tenant context (via `X-FB-Tenant` header or JWT claims), Fluxbase routes to the tenant's database pool. The pool priority is: **branch pool > tenant pool > main pool**.
+5. **RLS enforcement**: All tenant-scoped tables use RLS with `app.current_tenant_id` to filter data. The FDW role inherits this setting, ensuring tenant-scoped queries only see the tenant's data even for shared tables.
 
 ## Key Types
 
@@ -50,8 +65,8 @@ interface Tenant {
   slug: string;
   name: string;
   is_default: boolean;
-  status: string;
-  db_name?: string | null;
+  status: string; // "creating" | "active" | "deleting" | "error"
+  db_name?: string | null; // null = uses main database (default tenant)
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at?: string;
@@ -59,14 +74,21 @@ interface Tenant {
 }
 ```
 
+The `db_name` field indicates whether a tenant uses a separate database. When `null`, the tenant uses the main database (like the default tenant). When set, it's the name of the tenant's dedicated PostgreSQL database.
+
 ### Service Key Types
 
 Fluxbase supports multiple key types for different use cases:
 
-| Key Type  | Scope       | Use Case                                         |
-| --------- | ----------- | ------------------------------------------------ |
-| `anon`    | Global      | Anonymous/public access, no tenant context       |
-| `service` | Instance    | Backend services, bypasses RLS                   |
+| Key Type          | Prefix        | Scope       | Use Case                                        |
+| ----------------- | ------------- | ----------- | ----------------------------------------------- |
+| `anon`            | `pk_anon_`    | Tenant      | Anonymous/public access                         |
+| `publishable`     | `pk_live_`    | Tenant      | Client-side API access                          |
+| `tenant_service`  | `sk_tenant_`  | Tenant      | Backend services, scoped to one tenant          |
+| `global_service`  | `sk_global_`  | Instance    | Backend services, bypasses RLS, all tenants     |
+| `service`         | `sk_`         | Instance    | Legacy service key, bypasses RLS                |
+
+When creating keys via the API, use `key_type: "anon"` for public access or `key_type: "service"` for backend service access.
 
 ## Tenant Service Keys
 
@@ -122,6 +144,7 @@ Fluxbase uses a two-tier admin system:
 - Can create/delete tenants
 - Can manage global service keys
 - Can assign tenant admins
+- Bypasses RLS (has `BYPASSRLS` PostgreSQL attribute)
 
 ### Tenant Admin (`tenant_admin`)
 
@@ -129,6 +152,7 @@ Fluxbase uses a two-tier admin system:
 - Can manage tenant service keys
 - Can manage users within their tenant
 - Cannot access other tenants
+- Respects RLS (maps to `authenticated` role for user data)
 
 ### Role Assignment
 
@@ -136,8 +160,8 @@ Fluxbase uses a two-tier admin system:
 -- Check if user is instance admin
 SELECT platform.is_instance_admin('user-uuid');
 
--- Get tenants managed by a user
-SELECT * FROM platform.user_managed_tenant_ids('user-uuid');
+-- Get tenant IDs managed by a user (returns uuid[])
+SELECT unnest(platform.user_managed_tenant_ids('user-uuid'));
 
 -- Assign tenant admin
 INSERT INTO platform.tenant_admin_assignments (user_id, tenant_id, assigned_by)
@@ -161,21 +185,227 @@ tenants:
     # Option 2: Load from files (recommended for production)
     anon_key_file: "/secrets/anon-key"
     service_key_file: "/secrets/service-key"
+    ```
+
+All settings also have `FLUXBASE_*` environment variable equivalents (e.g., `FLUXBASE_TENANTS_DEFAULT_NAME`, `FLUXBASE_TENANTS_DEFAULT_ANON_KEY`).
+
+### Tenant Infrastructure
+
+```yaml
+tenants:
+  enabled: true
+  database_prefix: "tenant_"  # Tenant DBs are named tenant_acme-corp
+  max_tenants: 100
+
+  pool:
+    max_total_connections: 100  # Across all tenant pools
+    eviction_age: 30m           # LRU pool eviction threshold
+
+  migrations:
+    check_interval: 5m          # Background migration worker interval
+    on_create: true             # Run system migrations on tenant creation
+    on_access: true             # Lazy migrations on first pool access
+    background: true            # Enable background migration worker
 ```
 
-### Environment Variables
+## Creating Tenants
+
+### Via API
+
+When creating a tenant, Fluxbase can automatically provision a separate database:
+
+```typescript
+import { createClient } from "@nimbleflux/fluxbase-sdk";
+
+const client = createClient("http://localhost:8080", "global-service-key");
+
+// Create a tenant with an auto-provisioned database
+const { data: tenant, error } = await client.tenant.create({
+  slug: "acme-corp",
+  name: "Acme Corporation",
+  metadata: {
+    plan: "enterprise",
+    billing_email: "billing@acme.com",
+  },
+});
+```
+
+### Full Creation Options
+
+```typescript
+const { data: tenant, error } = await client.tenant.create({
+  slug: "acme-corp",             // Required: lowercase, hyphens, starts with letter
+  name: "Acme Corporation",      // Required: display name
+  metadata: { plan: "enterprise" },
+
+  // Database options
+  db_mode: "auto",               // "auto" (new DB) or "existing" (use existing DB)
+  db_name: null,                 // Required when db_mode="existing"
+
+  // Admin assignment
+  admin_email: "admin@acme.com", // Invite by email (creates invitation)
+  admin_user_id: "user-uuid",    // Or assign existing user directly
+
+  // Key generation
+  auto_generate_keys: true,      // Auto-create anon + service keys (default: true)
+  send_keys_to_email: true,      // Include keys in invitation email
+});
+```
+
+### Tenant Lifecycle
+
+The tenant creation flow:
+
+1. A record is inserted in `platform.tenants` with status `creating`
+2. A new PostgreSQL database is created (e.g., `tenant_acme-corp`)
+3. Bootstrap runs: schemas, roles, and privileges are set up
+4. Internal Fluxbase schemas (auth, storage, functions, jobs, etc.) are applied
+5. FDW is configured: a per-tenant role is created, shared schemas are imported as foreign tables
+6. Declarative schema is applied (if configured)
+7. Status is set to `active`
+
+### Tenant CRUD
+
+```typescript
+// List all tenants
+const { data: tenants, error } = await client.tenant.list();
+
+// Update tenant
+await client.tenant.update(tenant.id, {
+  name: "Acme Corp Inc.",
+  metadata: { plan: "pro" },
+});
+
+// Soft delete tenant (sets deleted_at, keeps data)
+await client.tenant.delete(tenant.id);
+
+// Hard delete tenant (destroys database and all data)
+await client.tenant.delete(tenant.id, { hard: true });
+
+// Recover a soft-deleted tenant
+await client.tenant.recover(tenant.id);
+
+// Repair tenant (re-runs bootstrap + FDW setup)
+await client.tenant.repair(tenant.id);
+
+// Migrate tenant to latest schema
+await client.tenant.migrate(tenant.id);
+```
+
+### Service Key Management
+
+```typescript
+// List keys for current tenant context
+const { data: keys, error } = await client.admin.serviceKeys.list();
+
+// Create tenant service key
+const { data: key, error: keyError } = await client.admin.serviceKeys.create({
+  name: "Backend Service",
+  key_type: "service",
+  scopes: ["*"],
+});
+
+// Revoke a key
+await client.admin.serviceKeys.revoke(key.id, { reason: "Security incident" });
+
+// Rotate keys
+const { data: newKey, error: rotateError } = await client.admin.serviceKeys.rotate(oldKeyId);
+```
+
+## Tenant Context in Queries
+
+When using a tenant service key or sending the `X-FB-Tenant` header, all queries are automatically scoped:
+
+```typescript
+// With tenant service key
+const tenantClient = createClient("http://localhost:8080", "tenant-key");
+
+// Only returns data for this tenant (enforced by RLS)
+const users = await tenantClient.from("users").select("*");
+
+// Insert with tenant context
+const { data, error } = await tenantClient
+  .from("posts")
+  .insert({ title: "Hello", content: "World", tenant_id: "tenant-uuid" });
+```
+
+:::caution[Setting tenant_id on Insert]
+For **user tables** in the `public` schema, you must include `tenant_id` in your insert payload. RLS policies validate the value matches the current tenant context, but they do not auto-populate it. Internal Fluxbase tables (auth.users, storage.objects, etc.) have database triggers that auto-set `tenant_id`.
+:::
+
+### Specifying Tenant Context
+
+Tenant context is resolved in this priority order:
+
+1. **`X-FB-Tenant` header** - Explicit tenant override (validated against user's membership)
+2. **JWT claims** - `tenant_id` and `tenant_role` from the auth token
+3. **Default tenant** - Falls back to `platform.tenants WHERE is_default = true`
 
 ```bash
-FLUXBASE_TENANTS_DEFAULT_NAME="Default Tenant"
-FLUXBASE_TENANTS_DEFAULT_ANON_KEY="your-anon-key"
-FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY="your-service-key"
-FLUXBASE_TENANTS_DEFAULT_ANON_KEY_FILE="/secrets/anon-key"
-FLUXBASE_TENANTS_DEFAULT_SERVICE_KEY_FILE="/secrets/service-key"
+# Explicit tenant via header
+curl -H "X-FB-Tenant: acme-corp" \
+     -H "Authorization: Bearer <service-key>" \
+     http://localhost:8080/api/v1/tables/posts
+
+# Or use a tenant-scoped service key (tenant_id is embedded in the key)
+curl -H "Authorization: Bearer <tenant-service-key>" \
+     http://localhost:8080/api/v1/tables/posts
+```
+
+## Row Level Security
+
+Tenant isolation is enforced through PostgreSQL RLS policies using the `app.current_tenant_id` session variable:
+
+### Tenant Service Role
+
+The `tenant_service` role is used for tenant-scoped operations:
+
+```sql
+-- Example RLS policy for tenant isolation
+CREATE POLICY tenant_isolation ON public.posts
+FOR ALL
+TO tenant_service
+USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+```
+
+### Role Mapping for Multi-Tenancy
+
+| Dashboard Role      | PostgreSQL Role    | RLS Behavior                                       |
+| -------------------- | ------------------ | -------------------------------------------------- |
+| `anon`               | `anon`             | Public data only                                   |
+| `authenticated`      | `authenticated`    | Own data only (via `auth.uid()`)                   |
+| `tenant_admin`       | `authenticated`    | Own data + tenant management (scoped via header)   |
+| `tenant_service`     | `tenant_service`   | All data within tenant (via `app.current_tenant_id`) |
+| `instance_admin`     | `service_role`     | All data across all tenants (bypasses RLS)         |
+
+### Adding Tenant Columns
+
+All tenant-scoped tables should have a `tenant_id` column:
+
+```sql
+ALTER TABLE your_table
+ADD COLUMN tenant_id UUID REFERENCES platform.tenants(id) ON DELETE CASCADE;
+
+CREATE INDEX idx_your_table_tenant_id ON your_table(tenant_id);
+```
+
+### RLS Policy Template
+
+```sql
+-- Enable RLS
+ALTER TABLE your_table ENABLE ROW LEVEL SECURITY;
+
+-- Tenant service can only see their tenant's data
+CREATE POLICY tenant_isolation ON your_table
+FOR ALL TO tenant_service
+USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 ```
 
 ## Tenant-Specific Configuration
 
-Fluxbase supports per-tenant configuration overrides, allowing each tenant to have customized settings for authentication, storage, email, and other services. This is ideal for SaaS applications where different customers may require different configurations.
+Per-tenant configuration overrides let each tenant have its own settings for authentication, storage, email, and other services. All settings also have `FLUXBASE_*` environment variable equivalents.
 
 ### Configuration Hierarchy
 
@@ -185,7 +415,7 @@ Values are resolved in this order (highest priority last):
 2. **Base YAML file** - `fluxbase.yaml` configuration
 3. **Tenant YAML files** - `tenants/*.yaml` files
 4. **Base environment variables** - `FLUXBASE_*` variables
-5. **Tenant-specific env vars** - `FLUXBASE_TENANTS__<SLUG>__*` variables
+5. **Tenant-specific env vars** - `FLUXBASE_TENANTS__<SLUG>__<SECTION>__<KEY>` variables
 
 ### Overridable Sections
 
@@ -334,227 +564,6 @@ tenants:
         s3_region: us-east-1
 ```
 
-## API Examples
-
-### Tenant Management
-
-```typescript
-import { createClient } from "@nimbleflux/fluxbase-sdk";
-
-const client = createClient("http://localhost:8080", "global-service-key");
-
-// List all tenants
-const { data: tenants, error } = await client.tenant.list();
-
-// Create a new tenant
-const { data: tenant, error: createError } = await client.tenant.create({
-  slug: "acme-corp",
-  name: "Acme Corporation",
-  metadata: {
-    plan: "enterprise",
-    billing_email: "billing@acme.com",
-  },
-});
-
-// Update tenant
-await client.tenant.update(tenant!.id, {
-  name: "Acme Corp Inc.",
-  metadata: { plan: "pro" },
-});
-
-// Soft delete tenant
-await client.tenant.delete(tenant!.id);
-```
-
-### Service Key Management
-
-```typescript
-// List keys for a tenant
-const { data: keys, error } = await client.admin.serviceKeys.list();
-
-// Create tenant service key
-const { data: key, error: keyError } = await client.admin.serviceKeys.create({
-  name: "Backend Service",
-  key_type: "service",
-  scopes: ["*"],
-});
-
-// Revoke a key
-await client.admin.serviceKeys.revoke(key!.id, { reason: "Security incident" });
-
-// Rotate keys
-const { data: newKey, error: rotateError } = await client.admin.serviceKeys.rotate(oldKeyId);
-```
-
-### Tenant Context in Queries
-
-When using a tenant service key, all queries are automatically scoped:
-
-```typescript
-// With tenant service key
-const tenantClient = createClient("http://localhost:8080", "tenant-key");
-
-// Only returns users for this tenant
-const users = await tenantClient.from("users").select("*");
-
-// Inserts are automatically associated with tenant
-const { data, error } = await tenantClient
-  .from("posts")
-  .insert({ title: "Hello", content: "World" });
-// tenant_id is set automatically via RLS WITH CHECK policy
-```
-
-## Row Level Security
-
-Tenant isolation is enforced through PostgreSQL RLS policies:
-
-### Tenant Service Role
-
-The `tenant_service` role is used for tenant-scoped operations:
-
-```sql
--- Example RLS policy for tenant isolation
-CREATE POLICY tenant_isolation ON public.posts
-FOR ALL
-TO tenant_service
-USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
-WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-```
-
-### Adding Tenant Columns
-
-All tenant-scoped tables should have a `tenant_id` column:
-
-```sql
-ALTER TABLE your_table
-ADD COLUMN tenant_id UUID REFERENCES platform.tenants(id) ON DELETE CASCADE;
-
-CREATE INDEX idx_your_table_tenant_id ON your_table(tenant_id);
-```
-
-### RLS Policy Template
-
-```sql
--- Enable RLS
-ALTER TABLE your_table ENABLE ROW LEVEL SECURITY;
-
--- Tenant service can only see their tenant's data
-CREATE POLICY tenant_select ON your_table
-FOR SELECT TO tenant_service
-USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-
-CREATE POLICY tenant_insert ON your_table
-FOR INSERT TO tenant_service
-WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-
-CREATE POLICY tenant_update ON your_table
-FOR UPDATE TO tenant_service
-USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
-WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-
-CREATE POLICY tenant_delete ON your_table
-FOR DELETE TO tenant_service
-USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-```
-
-## Database Schema
-
-### platform.tenants
-
-```sql
-CREATE TABLE platform.tenants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    slug TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    is_default BOOLEAN DEFAULT false,
-    status TEXT DEFAULT 'active' NOT NULL,
-    db_name TEXT,
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    deleted_at TIMESTAMPTZ
-);
-```
-
-### platform.service_keys
-
-```sql
-CREATE TABLE platform.service_keys (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    description TEXT,
-    key_type TEXT NOT NULL, -- anon, publishable, tenant_service, global_service
-    tenant_id UUID REFERENCES platform.tenants(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    key_hash TEXT NOT NULL,
-    key_prefix TEXT NOT NULL,
-    scopes TEXT[] DEFAULT '{}',
-    allowed_namespaces TEXT[],
-    rate_limit_per_minute INTEGER DEFAULT 60,
-    is_active BOOLEAN DEFAULT true,
-    is_config_managed BOOLEAN DEFAULT false,
-    revoked_at TIMESTAMPTZ,
-    revoked_by UUID,
-    revocation_reason TEXT,
-    deprecated_at TIMESTAMPTZ,
-    grace_period_ends_at TIMESTAMPTZ,
-    replaced_by UUID REFERENCES platform.service_keys(id),
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    created_by UUID,
-    last_used_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ
-);
-```
-
-### platform.tenant_admin_assignments
-
-```sql
-CREATE TABLE platform.tenant_admin_assignments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES platform.users(id) ON DELETE CASCADE,
-    tenant_id UUID NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,
-    assigned_by UUID REFERENCES platform.users(id) ON DELETE SET NULL,
-    assigned_at TIMESTAMPTZ DEFAULT now(),
-    UNIQUE(user_id, tenant_id)
-);
-```
-
-### platform.tenant_memberships
-
-```sql
-CREATE TABLE platform.tenant_memberships (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES platform.users(id) ON DELETE CASCADE,
-    tenant_id UUID NOT NULL REFERENCES platform.tenants(id) ON DELETE CASCADE,
-    role TEXT NOT NULL DEFAULT 'tenant_member',
-    created_at TIMESTAMPTZ DEFAULT now(),
-    UNIQUE(user_id, tenant_id)
-);
-```
-
-## Best Practices
-
-### Key Management
-
-1. **Never expose global service keys** - Use only in backend services
-2. **Rotate keys regularly** - Use graceful rotation to avoid downtime
-3. **Scope keys minimally** - Grant only needed scopes and namespaces
-4. **Use key files in production** - Avoid hardcoding keys
-
-### Tenant Isolation
-
-1. **Add tenant_id to all tables** - Every tenant-scoped table needs this column
-2. **Create RLS policies** - Enforce isolation at database level
-3. **Index tenant_id** - Essential for query performance
-4. **Test isolation** - Verify tenants can't access each other's data
-
-### Admin Access
-
-1. **Use tenant admins** - Limit instance admin access
-2. **Audit admin actions** - Log all administrative operations
-3. **Regular access reviews** - Review tenant admin assignments periodically
-
 ## Instance-Level Settings & Tenant Settings
 
 Instance-level settings are stored in `platform.instance_settings`. Tenant-specific overrides can be managed through the Admin API and dashboard.
@@ -577,7 +586,7 @@ curl -X PATCH -H "Authorization: Bearer <service-key>" \
 
 ## Tenant Declarative Schemas
 
-Fluxbase supports declarative schema management for tenant databases, This allows you to define your tenant's database schema in SQL files that are automatically applied when a tenant is created or on server startup.
+Fluxbase supports declarative schema management for tenant databases. This allows you to define your tenant's database schema in SQL files that are automatically applied when a tenant is created or on server startup.
 
 ### Declarative Schema Configuration
 
@@ -629,26 +638,13 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
-
--- Enable RLS for tenant isolation
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
-
--- Create RLS policies
-CREATE POLICY users_tenant_isolation ON users
-FOR ALL TO tenant_service
-USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
-
-CREATE POLICY posts_tenant_isolation ON posts
-FOR ALL TO tenant_service
-USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 ```
 
 ### How It Works
 
 1. **On Tenant Creation**: When a new tenant with a separate database is created, Fluxbase checks for a schema file in `{schema_dir}/{tenant-slug}/public.sql`
-2. **Schema Application**: If a schema file exists, it's applied to the tenant's database
-3. **Fingerprint Tracking**: Applied schemas are tracked by fingerprint (SHA256 hash) in the `migrations.tenant_declarative_state` table
+2. **Schema Application**: If a schema file exists, it's applied to the tenant's database using diff-based planning (only changes are applied)
+3. **Fingerprint Tracking**: Applied schemas are tracked by fingerprint (SHA256 hash) in the `platform.tenant_declarative_state` table
 4. **Idempotent Application**: Schemas are only re-applied if the fingerprint changes
 
 ### API Endpoints
@@ -660,39 +656,28 @@ Manage tenant schemas via the Admin API:
 curl -H "Authorization: Bearer <service-key>" \
   http://localhost:8080/api/v1/admin/tenants/<tenant-id>/schema
 
-# Apply schema for a specific tenant
+# Apply schema for a specific tenant (from filesystem)
 curl -X POST -H "Authorization: Bearer <service-key>" \
   http://localhost:8080/api/v1/admin/tenants/<tenant-id>/schema/apply
-```
 
-### Declarative Schema Best Practices
+# Upload and apply schema content
+curl -X POST -H "Authorization: Bearer <service-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"schema_sql": "CREATE TABLE ..."}' \
+  http://localhost:8080/api/v1/admin/tenants/<tenant-id>/schema/content/apply
 
-1. **Version Control Schema Files**: Store schema files in Git alongside your application code
-2. **Test Schema Changes**: Test schema changes in a development environment before production
-3. **Use Idempotent SQL**: Use `IF NOT EXISTS` and `IF EXISTS` clauses for safe re-application
-4. **Document Changes**: Comment schema files to explain the purpose of tables and policies
+# Get stored schema content
+curl -H "Authorization: Bearer <service-key>" \
+  http://localhost:8080/api/v1/admin/tenants/<tenant-id>/schema/content
 
-### Declarative Schema Environment Variables
-
-```bash
-FLUXBASE_TENANTS_DECLARATIVE_ENABLED=true
-FLUXBASE_TENANTS_DECLARATIVE_SCHEMA_DIR=./schemas
-FLUXBASE_TENANTS_DECLARATIVE_ON_CREATE=true
-FLUXBASE_TENANTS_DECLARATIVE_ON_STARTUP=false
-FLUXBASE_TENANTS_DECLARATIVE_ALLOW_DESTRUCTIVE=false
+# Delete stored schema content
+curl -X DELETE -H "Authorization: Bearer <service-key>" \
+  http://localhost:8080/api/v1/admin/tenants/<tenant-id>/schema/content
 ```
 
 ## Tenant-Scoped Branching
 
-When database branching is enabled alongside multi-tenancy, branches can be scoped to individual tenants:
-
-- Each branch record stores a `tenant_id` linking it to a tenant in `platform.tenants`
-- Tenant-scoped branches get their own PostgreSQL database with a naming pattern of `{prefix}{tenant_slug}_{branch_slug}`
-- The `max_branches_per_tenant` config option (default: 0, unlimited) controls how many branches each tenant can create, independent of the global `max_total_branches` limit
-- Deleting a tenant automatically cleans up all associated branches and their databases
-- Connection pool routing priority is: branch pool > tenant pool > main pool, meaning a branch request always routes to the branch database when present
-
-This allows each tenant to have isolated development and preview environments without affecting other tenants.
+When database branching is enabled alongside multi-tenancy, branches clone from the **tenant's database** (not the main database). After cloning, the FDW user mapping is automatically repaired. Each branch gets its own PostgreSQL database, and connection pool routing is: branch pool > tenant pool > main pool. See [Database Branching](/guides/branching/) for full details.
 
 ## Troubleshooting
 
@@ -703,14 +688,25 @@ If queries return empty results:
 1. Verify the key is active: `SELECT is_active FROM platform.service_keys WHERE id = 'key-id'`
 2. Check tenant_id column exists on the table
 3. Verify RLS policy exists and uses `app.current_tenant_id` setting
+4. Ensure you're including `tenant_id` in insert payloads for user tables
 
 ### Cross-Tenant Data Access
 
 If a tenant sees another tenant's data:
 
 1. Check RLS is enabled: `SELECT rowsecurity FROM pg_tables WHERE tablename = 'your_table'`
-2. Verify policy uses correct session variable
+2. Verify policy uses correct session variable (`app.current_tenant_id`)
 3. Ensure queries are using tenant service key, not global
+4. Check that the tenant's FDW role has `NOBYPASSRLS` set
+
+### FDW Connection Issues
+
+If a tenant database can't access shared services:
+
+1. Verify the FDW role exists: `SELECT * FROM pg_roles WHERE rolname LIKE 'fdw_tenant_%'`
+2. Check user mappings: `\deu+` in the tenant database
+3. Run tenant repair to re-setup FDW: `POST /api/v1/admin/tenants/<id>/repair`
+4. Check that `app.current_tenant_id` is set on the FDW role: `SELECT rolname, rolconfig FROM pg_roles WHERE rolname LIKE 'fdw_tenant_%'`
 
 ### Key Rotation Issues
 
@@ -723,5 +719,6 @@ If old key still works after grace period:
 ## Related Documentation
 
 - [Row Level Security](/guides/row-level-security) - Detailed RLS implementation
+- [Database Branching](/guides/branching/) - Branching with multi-tenancy
 - [Admin SDK](/sdk/admin) - Admin API reference
-- [Configuration](/reference/configuration) - Configuration options
+- [Configuration](/reference/configuration/) - Configuration options

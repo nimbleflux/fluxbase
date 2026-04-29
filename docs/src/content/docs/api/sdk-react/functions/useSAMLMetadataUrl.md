@@ -14,17 +14,7 @@ Use this URL when configuring your SAML IdP.
 
 ## Returns
 
-> (`provider`): `string`
-
-### Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `provider` | `string` |
-
-### Returns
-
-`string`
+(`provider`) => `string`
 
 ## Example
 

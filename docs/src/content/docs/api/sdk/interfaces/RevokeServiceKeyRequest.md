@@ -9,6 +9,6 @@ Options for revoking a service key
 
 ## Properties
 
-| Property                      | Type     | Description           |
-| ----------------------------- | -------- | --------------------- |
+| Property | Type | Description |
+| ------ | ------ | ------ |
 | <a id="reason"></a> `reason?` | `string` | Reason for revocation |

@@ -70,6 +70,12 @@ Fluxbase implements multiple layers of security to protect your data and applica
 
 [Learn more about RLS →](/guides/row-level-security/)
 
+#### Multi-Tenant Security
+
+Fluxbase uses database-per-tenant isolation with `postgres_fdw` and RLS. Each tenant's FDW role has `NOBYPASSRLS` and `app.current_tenant_id` set, ensuring data isolation even through foreign tables. Per-tenant JWT secrets provide cryptographic isolation.
+
+[Learn more about Multi-Tenancy →](/guides/multi-tenancy/)
+
 ---
 
 ### 2. Network Security
@@ -339,6 +345,8 @@ REVOKE ALL ON SCHEMA pg_catalog FROM PUBLIC;
 - [ ] Strong JWT secret generated (min 32 characters)
 - [ ] Database user has minimal required permissions
 - [ ] RLS policies reviewed and tested
+- [ ] Tenant isolation verified (if using multi-tenancy)
+- [ ] Per-tenant JWT secrets configured (if using multi-tenancy)
 - [ ] Rate limiting configured
 - [ ] CORS settings reviewed
 - [ ] Security headers configured
@@ -425,6 +433,7 @@ If you discover a security vulnerability in Fluxbase, please report it responsib
 ### Internal Documentation
 
 - [Authentication Guide](/guides/authentication/)
+- [Multi-Tenancy Guide](/guides/multi-tenancy/)
 - [Row Level Security Guide](/guides/row-level-security/)
 - [Rate Limiting Guide](/guides/rate-limiting/)
 - [CSRF Protection](/security/csrf-protection/)

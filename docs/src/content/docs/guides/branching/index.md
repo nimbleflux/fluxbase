@@ -160,7 +160,7 @@ When you create a branch, the server:
 3. Copies the schema (and optionally data) from the parent branch
 4. Tracks the branch metadata in the `branching.branches` table
 
-The server never needs separate admin credentials - it uses the same PostgreSQL user it already has.
+The server never needs separate admin credentials — it uses the same PostgreSQL user it already has. For tenants with separate databases, the branch is cloned from the tenant's database instead of the main one (see [Branches and Multi-Tenancy](#branches-and-multi-tenancy)).
 
 ### Branch Creation Process
 
@@ -319,11 +319,12 @@ When multi-tenancy is enabled, branches can be scoped to specific tenants:
 
 - Each branch record has a `tenant_id` foreign key referencing `platform.tenants`
 - Branch slug uniqueness is enforced per tenant via a `(slug, tenant_id)` unique constraint
-- Per-tenant branch limits are controlled by the `max_branches_per_tenant` config option (default: 10)
+- Per-tenant branch limits are controlled by the `max_branches_per_tenant` config option (default: 0, unlimited)
 - Tenant-scoped branches use prefixed database names: `{prefix}{tenant_slug}_{branch_slug}`
 - Connection pool routing follows this priority: branch pool > tenant pool > main pool
 - Instance admins can see and manage all branches across tenants
 - Non-admin users only see branches within their own tenant
+- Deleting a tenant automatically cleans up all associated branches and their databases
 
 To create a tenant-scoped branch, include the `X-FB-Tenant` header or rely on the tenant context from your service key:
 
@@ -333,6 +334,42 @@ curl -X POST http://localhost:8080/api/v1/admin/branches \
   -H "X-FB-Tenant: acme-corp" \
   -H "Content-Type: application/json" \
   -d '{"name": "feature-x", "data_clone_mode": "schema_only"}'
+```
+
+### Clone Source Resolution
+
+When a tenant has a separate database (the `db_name` field is set on `platform.tenants`), branches clone from the **tenant's database** rather than the main database. This means the branch gets the tenant's `public` schema, not the shared one.
+
+```mermaid
+graph TD
+    REQ[Create Branch Request] --> CHECK{Tenant has<br/>separate DB?}
+    CHECK -->|No / Default tenant| MAIN["Clone from<br/>Main Database (fluxbase)"]
+    CHECK -->|Yes| TENANT["Clone from<br/>Tenant Database (tenant_acme-corp)"]
+    MAIN --> BRANCH["Branch Database<br/>(branch_acme-corp_feature-x)"]
+    TENANT --> BRANCH
+    BRANCH --> FDW["Repair FDW<br/>User Mapping"]
+    FDW --> READY[Branch Ready]
+
+    style MAIN fill:#e8f4e8
+    style TENANT fill:#e8e8f4
+    style BRANCH fill:#fff3e0
+    style READY fill:#e8f5e9
+```
+
+For the default tenant (no separate database), branches clone from the main database as usual.
+
+### FDW Repair After Cloning
+
+When a tenant database is cloned to create a branch, the foreign table definitions are copied but the FDW user mappings may point to stale credentials. Fluxbase automatically repairs the FDW mapping after cloning by:
+
+1. Re-creating the user mapping in the branch database using the tenant's FDW role credentials
+2. Ensuring `app.current_tenant_id` is set correctly on the FDW role
+3. Verifying that shared schemas (auth, storage, functions, etc.) remain accessible
+
+This happens transparently during branch creation — no manual intervention is needed. If FDW connections break after a branch operation, use the tenant repair endpoint:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/tenants/<tenant-id>/repair
 ```
 
 ## Access Control

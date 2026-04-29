@@ -716,6 +716,16 @@ config:
   admin:
     enabled: true
 
+  ## Prometheus Metrics configuration
+  ## @param config.metrics.enabled Enable Prometheus metrics endpoint
+  ## @param config.metrics.port Port for Prometheus metrics server
+  ## @param config.metrics.path Path for Prometheus metrics endpoint
+  ##
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+
   ## Model Context Protocol (MCP) configuration
   ## @param config.mcp.enabled Enable MCP server endpoint for AI assistants
   ## @param config.mcp.base_path Base path for MCP endpoints
@@ -761,24 +771,66 @@ config:
   ## Database Branching configuration
   ## @param config.branching.enabled Enable database branching feature
   ## @param config.branching.max_branches_per_user Maximum branches per user
+  ## @param config.branching.max_branches_per_tenant Maximum branches per tenant (0 = unlimited)
   ## @param config.branching.max_total_branches Maximum total branches
   ## @param config.branching.default_data_clone_mode Default data clone mode (schema_only, full_clone, seed_data)
   ## @param config.branching.auto_delete_after Auto-delete branches after duration (0 = never)
   ## @param config.branching.database_prefix Prefix for branch database names
-  ## @param config.branching.admin_database_url Admin database URL (uses main if empty)
+  ## @param config.branching.default_branch Default branch name
+  ## @param config.branching.seeds_path Path to seed data files
   ## @param config.branching.max_total_connections Global limit for total branch pool connections
   ## @param config.branching.pool_eviction_age Age threshold for evicting idle branch pools
   ##
   branching:
     enabled: false
     max_branches_per_user: 5
+    max_branches_per_tenant: 0
     max_total_branches: 50
     default_data_clone_mode: "schema_only"
     auto_delete_after: "0"
     database_prefix: "branch_"
-    admin_database_url: ""
+    default_branch: "main"
+    seeds_path: "./seeds"
     max_total_connections: 500
     pool_eviction_age: "1h"
+
+  ## Multi-Tenancy configuration
+  ## @param config.tenants.enabled Enable multi-tenancy
+  ## @param config.tenants.database_prefix Prefix for tenant database names
+  ## @param config.tenants.max_tenants Maximum number of tenants
+  ## @param config.tenants.pool.max_total_connections Max total connections across all tenant pools
+  ## @param config.tenants.pool.eviction_age LRU pool eviction threshold
+  ## @param config.tenants.migrations.check_interval Background migration worker interval
+  ## @param config.tenants.migrations.on_create Run system migrations on tenant creation
+  ## @param config.tenants.migrations.on_access Lazy migrations on first pool access
+  ## @param config.tenants.migrations.background Enable background migration worker
+  ## @param config.tenants.declarative.enabled Enable declarative schema management
+  ## @param config.tenants.declarative.schema_dir Directory for tenant schema files
+  ## @param config.tenants.declarative.on_create Apply schemas on tenant creation
+  ## @param config.tenants.declarative.on_startup Apply schemas on server startup
+  ## @param config.tenants.declarative.allow_destructive Allow DROP/ALTER in tenant schemas
+  ## @param config.tenants.default.name Default tenant display name
+  ##
+  tenants:
+    enabled: true
+    database_prefix: "tenant_"
+    max_tenants: 100
+    pool:
+      max_total_connections: 100
+      eviction_age: "30m"
+    migrations:
+      check_interval: "5m"
+      on_create: true
+      on_access: true
+      background: true
+    declarative:
+      enabled: false
+      schema_dir: ""
+      on_create: false
+      on_startup: false
+      allow_destructive: false
+    default:
+      name: "default"
 
   ## Encryption configuration (REQUIRED)
   ## @param config.encryption_key REQUIRED: Encryption key for sensitive data at rest

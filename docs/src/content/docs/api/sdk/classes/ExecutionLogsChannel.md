@@ -22,7 +22,7 @@ Provides a cleaner API than the generic RealtimeChannel
 | `executionId` | `string` |
 | `type` | [`ExecutionType`](/api/sdk/type-aliases/executiontype/) |
 | `token` | `string` \| `null` |
-| `tokenRefreshCallback` | () => `Promise`\<`string` \| `null`\> \| `null` |
+| `tokenRefreshCallback` | (() => `Promise`\<`string` \| `null`\>) \| `null` |
 
 #### Returns
 

@@ -377,6 +377,7 @@ The GraphQL API enforces Row Level Security (RLS) policies exactly like the REST
 1. Anonymous users execute queries as the `anon` PostgreSQL role
 2. Authenticated users execute as the `authenticated` role
 3. Service role keys bypass RLS for admin operations
+4. Tenant service keys execute as the `tenant_service` role (tenant-scoped via `app.current_tenant_id`)
 
 Session variables are available in your RLS policies:
 
@@ -385,6 +386,25 @@ CREATE POLICY "Users can view own data" ON users
   FOR SELECT
   USING (id = (current_setting('request.jwt.claims', true)::json->>'sub')::uuid);
 ```
+
+### Multi-Tenancy in GraphQL
+
+For multi-tenant deployments, use the `X-FB-Tenant` header to specify the tenant context:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/graphql \
+  -H "Authorization: Bearer <service-key>" \
+  -H "X-FB-Tenant: acme-corp" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ posts { id title } }"}'
+```
+
+When tenant context is set:
+- Queries are routed to the tenant's database (or main database for the default tenant)
+- RLS policies using `app.current_tenant_id` automatically filter data
+- The `tenant_admin` dashboard role maps to `authenticated` (respects RLS)
+- The `tenant_service` role enforces RLS with tenant context
+- The `instance_admin` role maps to `service_role` (bypasses RLS)
 
 ## Security Best Practices
 

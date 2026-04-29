@@ -1043,8 +1043,6 @@ func GetTestConfig() *config.Config {
 		Realtime: config.RealtimeConfig{
 			Enabled:        false, // Disabled for most tests
 			MaxConnections: 1000,
-			PingInterval:   30 * time.Second,
-			PongTimeout:    10 * time.Second,
 		},
 		Storage: config.StorageConfig{
 			Provider:      "local",
@@ -1118,9 +1116,8 @@ func GetTestConfig() *config.Config {
 			Enabled: true,
 		},
 		Migrations: config.MigrationsConfig{
-			Enabled:           true,
-			RequireServiceKey: true,
-			AllowedIPRanges:   []string{"0.0.0.0/0"}, // Allow all IPs in tests
+			Enabled:         true,
+			AllowedIPRanges: []string{"0.0.0.0/0"}, // Allow all IPs in tests
 		},
 		EncryptionKey: "test-encryption-key-32-bytes!!!!", // Exactly 32 bytes for AES-256
 		Debug:         getTestDebugMode(),

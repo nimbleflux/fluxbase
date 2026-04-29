@@ -44,9 +44,13 @@ type Handler struct {
 
 // NewHandler creates a new edge functions handler
 func NewHandler(db *database.Connection, functionsDir string, corsConfig config.CORSConfig, jwtSecret, publicURL, npmRegistry, jsrRegistry string, authService *auth.Service, loggingService *logging.Service, secretsStorage *secrets.Storage, baseConfig *config.Config) *Handler {
+	opts := []runtime.Option{}
+	if baseConfig != nil && baseConfig.Functions.MaxOutputSize > 0 {
+		opts = append(opts, runtime.WithMaxOutputSize(baseConfig.Functions.MaxOutputSize))
+	}
 	h := &Handler{
 		storage:        NewStorage(db),
-		runtime:        runtime.NewRuntime(runtime.RuntimeTypeFunction, jwtSecret, publicURL),
+		runtime:        runtime.NewRuntime(runtime.RuntimeTypeFunction, jwtSecret, publicURL, opts...),
 		authService:    authService,
 		loggingService: loggingService,
 		secretsStorage: secretsStorage,

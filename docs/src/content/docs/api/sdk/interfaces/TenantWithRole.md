@@ -13,16 +13,16 @@ Tenant with user's role (for "my tenants" endpoint)
 
 ## Properties
 
-| Property                              | Type                                                  | Description                                                                       | Inherited from                                                                                 |
-| ------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| <a id="created_at"></a> `created_at`  | `string`                                              | Creation timestamp                                                                | [`Tenant`](/api/sdk/interfaces/tenant/).[`created_at`](/api/sdk/interfaces/tenant/#created_at) |
-| <a id="db_name"></a> `db_name?`       | `string` \| `null`                                    | Database name (null = uses main database, for backward compatibility)             | [`Tenant`](/api/sdk/interfaces/tenant/).[`db_name`](/api/sdk/interfaces/tenant/#db_name)       |
-| <a id="deleted_at"></a> `deleted_at?` | `string` \| `null`                                    | Soft delete timestamp                                                             | [`Tenant`](/api/sdk/interfaces/tenant/).[`deleted_at`](/api/sdk/interfaces/tenant/#deleted_at) |
-| <a id="id"></a> `id`                  | `string`                                              | Unique identifier for the tenant                                                  | [`Tenant`](/api/sdk/interfaces/tenant/).[`id`](/api/sdk/interfaces/tenant/#id)                 |
-| <a id="is_default"></a> `is_default`  | `boolean`                                             | Whether this is the default tenant                                                | [`Tenant`](/api/sdk/interfaces/tenant/).[`is_default`](/api/sdk/interfaces/tenant/#is_default) |
-| <a id="metadata"></a> `metadata?`     | `Record`\<`string`, `unknown`\>                       | Arbitrary metadata                                                                | [`Tenant`](/api/sdk/interfaces/tenant/).[`metadata`](/api/sdk/interfaces/tenant/#metadata)     |
-| <a id="my_role"></a> `my_role`        | `"tenant_admin"`                                      | Current user's role in this tenant (always tenant_admin with database-per-tenant) | -                                                                                              |
-| <a id="name"></a> `name`              | `string`                                              | Display name                                                                      | [`Tenant`](/api/sdk/interfaces/tenant/).[`name`](/api/sdk/interfaces/tenant/#name)             |
-| <a id="slug"></a> `slug`              | `string`                                              | URL-friendly identifier (e.g., "acme-corp")                                       | [`Tenant`](/api/sdk/interfaces/tenant/).[`slug`](/api/sdk/interfaces/tenant/#slug)             |
-| <a id="status"></a> `status`          | [`TenantStatus`](/api/sdk/type-aliases/tenantstatus/) | Current status of the tenant                                                      | [`Tenant`](/api/sdk/interfaces/tenant/).[`status`](/api/sdk/interfaces/tenant/#status)         |
-| <a id="updated_at"></a> `updated_at?` | `string`                                              | Last update timestamp                                                             | [`Tenant`](/api/sdk/interfaces/tenant/).[`updated_at`](/api/sdk/interfaces/tenant/#updated_at) |
+| Property | Type | Description | Inherited from |
+| ------ | ------ | ------ | ------ |
+| <a id="created_at"></a> `created_at` | `string` | Creation timestamp | [`Tenant`](/api/sdk/interfaces/tenant/).[`created_at`](/api/sdk/interfaces/tenant/#created_at) |
+| <a id="db_name"></a> `db_name?` | `string` \| `null` | Database name (null = uses main database, for backward compatibility) | [`Tenant`](/api/sdk/interfaces/tenant/).[`db_name`](/api/sdk/interfaces/tenant/#db_name) |
+| <a id="deleted_at"></a> `deleted_at?` | `string` \| `null` | Soft delete timestamp | [`Tenant`](/api/sdk/interfaces/tenant/).[`deleted_at`](/api/sdk/interfaces/tenant/#deleted_at) |
+| <a id="id"></a> `id` | `string` | Unique identifier for the tenant | [`Tenant`](/api/sdk/interfaces/tenant/).[`id`](/api/sdk/interfaces/tenant/#id) |
+| <a id="is_default"></a> `is_default` | `boolean` | Whether this is the default tenant | [`Tenant`](/api/sdk/interfaces/tenant/).[`is_default`](/api/sdk/interfaces/tenant/#is_default) |
+| <a id="metadata"></a> `metadata?` | `Record`\<`string`, `unknown`\> | Arbitrary metadata | [`Tenant`](/api/sdk/interfaces/tenant/).[`metadata`](/api/sdk/interfaces/tenant/#metadata) |
+| <a id="my_role"></a> `my_role` | `"tenant_admin"` | Current user's role in this tenant (always tenant_admin with database-per-tenant) | - |
+| <a id="name"></a> `name` | `string` | Display name | [`Tenant`](/api/sdk/interfaces/tenant/).[`name`](/api/sdk/interfaces/tenant/#name) |
+| <a id="slug"></a> `slug` | `string` | URL-friendly identifier (e.g., "acme-corp") | [`Tenant`](/api/sdk/interfaces/tenant/).[`slug`](/api/sdk/interfaces/tenant/#slug) |
+| <a id="status"></a> `status` | [`TenantStatus`](/api/sdk/type-aliases/tenantstatus/) | Current status of the tenant | [`Tenant`](/api/sdk/interfaces/tenant/).[`status`](/api/sdk/interfaces/tenant/#status) |
+| <a id="updated_at"></a> `updated_at?` | `string` | Last update timestamp | [`Tenant`](/api/sdk/interfaces/tenant/).[`updated_at`](/api/sdk/interfaces/tenant/#updated_at) |

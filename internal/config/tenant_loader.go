@@ -406,10 +406,6 @@ func (l *TenantConfigLoader) applyRealtimeEnvOverride(cfg *RealtimeConfig, path 
 		if i, err := parseInt(value); err == nil {
 			cfg.MaxConnectionsPerUser = i
 		}
-	case "ping_interval", "pinginterval":
-		if d, err := parseDuration(value); err == nil {
-			cfg.PingInterval = d
-		}
 	default:
 		return fmt.Errorf("unknown realtime key: %s", key)
 	}
@@ -482,10 +478,6 @@ func (l *TenantConfigLoader) applyRPCEnvOverride(cfg *RPCConfig, path []string, 
 		cfg.Enabled = parseBool(value)
 	case "procedures_dir", "proceduresdir":
 		cfg.ProceduresDir = value
-	case "default_max_execution_time", "defaultmaxexecutiontime":
-		if d, err := parseDuration(value); err == nil {
-			cfg.DefaultMaxExecutionTime = d
-		}
 	case "default_max_rows", "defaultmaxrows", "max_rows", "maxrows":
 		if i, err := parseInt(value); err == nil {
 			cfg.DefaultMaxRows = i

@@ -26,9 +26,6 @@ const updated = await settings.update({
     password_min_length: 12
   }
 })
-
-// Reset to defaults
-await settings.reset()
 ```
 
 ## Constructors
@@ -507,22 +504,13 @@ settings.forEach(s => console.log(s.key, s.value))
 
 > **reset**(): `Promise`\<[`AppSettings`](/api/sdk/interfaces/appsettings/)\>
 
-Reset all application settings to defaults
-
-This will delete all custom settings and return to default values.
+Reset all application settings to their default values
 
 #### Returns
 
 `Promise`\<[`AppSettings`](/api/sdk/interfaces/appsettings/)\>
 
-Promise resolving to AppSettings - Default settings
-
-#### Example
-
-```typescript
-const defaults = await client.admin.settings.app.reset()
-console.log('Settings reset to defaults:', defaults)
-```
+Promise resolving to the default app settings
 
 ***
 

@@ -882,6 +882,320 @@ spec:
             {{- end }}
 
             # ===========================================
+            # Branching Configuration
+            # ===========================================
+            {{- if .Values.config.branching }}
+            - name: FLUXBASE_BRANCHING_ENABLED
+              value: {{ .Values.config.branching.enabled | quote }}
+            {{- if .Values.config.branching.enabled }}
+            - name: FLUXBASE_BRANCHING_MAX_BRANCHES_PER_USER
+              value: {{ .Values.config.branching.max_branches_per_user | quote }}
+            {{- if .Values.config.branching.max_branches_per_tenant }}
+            - name: FLUXBASE_BRANCHING_MAX_BRANCHES_PER_TENANT
+              value: {{ .Values.config.branching.max_branches_per_tenant | quote }}
+            {{- end }}
+            - name: FLUXBASE_BRANCHING_MAX_TOTAL_BRANCHES
+              value: {{ .Values.config.branching.max_total_branches | quote }}
+            - name: FLUXBASE_BRANCHING_DEFAULT_DATA_CLONE_MODE
+              value: {{ .Values.config.branching.default_data_clone_mode | quote }}
+            - name: FLUXBASE_BRANCHING_AUTO_DELETE_AFTER
+              value: {{ .Values.config.branching.auto_delete_after | quote }}
+            - name: FLUXBASE_BRANCHING_DATABASE_PREFIX
+              value: {{ .Values.config.branching.database_prefix | quote }}
+            {{- if .Values.config.branching.default_branch }}
+            - name: FLUXBASE_BRANCHING_DEFAULT_BRANCH
+              value: {{ .Values.config.branching.default_branch | quote }}
+            {{- end }}
+            {{- if .Values.config.branching.seeds_path }}
+            - name: FLUXBASE_BRANCHING_SEEDS_PATH
+              value: {{ .Values.config.branching.seeds_path | quote }}
+            {{- end }}
+            - name: FLUXBASE_BRANCHING_MAX_TOTAL_CONNECTIONS
+              value: {{ .Values.config.branching.max_total_connections | quote }}
+            - name: FLUXBASE_BRANCHING_POOL_EVICTION_AGE
+              value: {{ .Values.config.branching.pool_eviction_age | quote }}
+            {{- end }}
+            {{- end }}
+
+            # ===========================================
+            # Multi-Tenancy Configuration
+            # ===========================================
+            {{- if .Values.config.tenants }}
+            - name: FLUXBASE_TENANTS_ENABLED
+              value: {{ .Values.config.tenants.enabled | quote }}
+            {{- if .Values.config.tenants.enabled }}
+            - name: FLUXBASE_TENANTS_DATABASE_PREFIX
+              value: {{ .Values.config.tenants.database_prefix | quote }}
+            - name: FLUXBASE_TENANTS_MAX_TENANTS
+              value: {{ .Values.config.tenants.max_tenants | quote }}
+            {{- if .Values.config.tenants.pool }}
+            - name: FLUXBASE_TENANTS_POOL_MAX_TOTAL_CONNECTIONS
+              value: {{ .Values.config.tenants.pool.max_total_connections | quote }}
+            - name: FLUXBASE_TENANTS_POOL_EVICTION_AGE
+              value: {{ .Values.config.tenants.pool.eviction_age | quote }}
+            {{- end }}
+            {{- if .Values.config.tenants.migrations }}
+            - name: FLUXBASE_TENANTS_MIGRATIONS_CHECK_INTERVAL
+              value: {{ .Values.config.tenants.migrations.check_interval | quote }}
+            - name: FLUXBASE_TENANTS_MIGRATIONS_ON_CREATE
+              value: {{ .Values.config.tenants.migrations.on_create | quote }}
+            - name: FLUXBASE_TENANTS_MIGRATIONS_ON_ACCESS
+              value: {{ .Values.config.tenants.migrations.on_access | quote }}
+            - name: FLUXBASE_TENANTS_MIGRATIONS_BACKGROUND
+              value: {{ .Values.config.tenants.migrations.background | quote }}
+            {{- end }}
+            {{- if .Values.config.tenants.declarative }}
+            - name: FLUXBASE_TENANTS_DECLARATIVE_ENABLED
+              value: {{ .Values.config.tenants.declarative.enabled | quote }}
+            {{- if .Values.config.tenants.declarative.schema_dir }}
+            - name: FLUXBASE_TENANTS_DECLARATIVE_SCHEMA_DIR
+              value: {{ .Values.config.tenants.declarative.schema_dir | quote }}
+            {{- end }}
+            - name: FLUXBASE_TENANTS_DECLARATIVE_ON_CREATE
+              value: {{ .Values.config.tenants.declarative.on_create | quote }}
+            - name: FLUXBASE_TENANTS_DECLARATIVE_ON_STARTUP
+              value: {{ .Values.config.tenants.declarative.on_startup | quote }}
+            - name: FLUXBASE_TENANTS_DECLARATIVE_ALLOW_DESTRUCTIVE
+              value: {{ .Values.config.tenants.declarative.allow_destructive | quote }}
+            {{- end }}
+            {{- if .Values.config.tenants.default }}
+            - name: FLUXBASE_TENANTS_DEFAULT_NAME
+              value: {{ .Values.config.tenants.default.name | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+
+            # ===========================================
+            # MCP OAuth Configuration
+            # ===========================================
+            {{- if and .Values.config.mcp.enabled .Values.config.mcp.oauth }}
+            - name: FLUXBASE_MCP_OAUTH_ENABLED
+              value: {{ .Values.config.mcp.oauth.enabled | quote }}
+            {{- if .Values.config.mcp.oauth.dcr_enabled }}
+            - name: FLUXBASE_MCP_OAUTH_DCR_ENABLED
+              value: {{ .Values.config.mcp.oauth.dcr_enabled | quote }}
+            {{- end }}
+            {{- if .Values.config.mcp.oauth.token_expiry }}
+            - name: FLUXBASE_MCP_OAUTH_TOKEN_EXPIRY
+              value: {{ .Values.config.mcp.oauth.token_expiry | quote }}
+            {{- end }}
+            {{- if .Values.config.mcp.oauth.refresh_token_expiry }}
+            - name: FLUXBASE_MCP_OAUTH_REFRESH_TOKEN_EXPIRY
+              value: {{ .Values.config.mcp.oauth.refresh_token_expiry | quote }}
+            {{- end }}
+            {{- if .Values.config.mcp.oauth.allowed_redirect_uris }}
+            - name: FLUXBASE_MCP_OAUTH_ALLOWED_REDIRECT_URIS
+              value: {{ .Values.config.mcp.oauth.allowed_redirect_uris | join "," | quote }}
+            {{- end }}
+            {{- end }}
+
+            # ===========================================
+            # Logging Advanced Backends
+            # ===========================================
+            {{- if eq .Values.config.logging.backend "s3" }}
+            {{- if .Values.config.logging.s3_bucket }}
+            - name: FLUXBASE_LOGGING_S3_BUCKET
+              value: {{ .Values.config.logging.s3_bucket | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.s3_prefix }}
+            - name: FLUXBASE_LOGGING_S3_PREFIX
+              value: {{ .Values.config.logging.s3_prefix | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.config.logging.local_path }}
+            - name: FLUXBASE_LOGGING_LOCAL_PATH
+              value: {{ .Values.config.logging.local_path | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.timescaledb_enabled }}
+            - name: FLUXBASE_LOGGING_TIMESCALEDB_ENABLED
+              value: {{ .Values.config.logging.timescaledb_enabled | quote }}
+            - name: FLUXBASE_LOGGING_TIMESCALEDB_COMPRESSION
+              value: {{ .Values.config.logging.timescaledb_compression | quote }}
+            {{- if .Values.config.logging.timescaledb_compress_after }}
+            - name: FLUXBASE_LOGGING_TIMESCALEDB_COMPRESS_AFTER
+              value: {{ .Values.config.logging.timescaledb_compress_after | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.timescaledb_retain_after }}
+            - name: FLUXBASE_LOGGING_TIMESCALEDB_RETAIN_AFTER
+              value: {{ .Values.config.logging.timescaledb_retain_after | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.config.logging.loki_url }}
+            - name: FLUXBASE_LOGGING_LOKI_URL
+              value: {{ .Values.config.logging.loki_url | quote }}
+            {{- if .Values.config.logging.loki_username }}
+            - name: FLUXBASE_LOGGING_LOKI_USERNAME
+              value: {{ .Values.config.logging.loki_username | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.loki_password }}
+            - name: FLUXBASE_LOGGING_LOKI_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fluxbase.secretName" . }}
+                  key: loki-password
+                  optional: true
+            {{- end }}
+            {{- if .Values.config.logging.loki_tenant_id }}
+            - name: FLUXBASE_LOGGING_LOKI_TENANT_ID
+              value: {{ .Values.config.logging.loki_tenant_id | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.loki_labels }}
+            - name: FLUXBASE_LOGGING_LOKI_LABELS
+              value: {{ .Values.config.logging.loki_labels | join "," | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.config.logging.elasticsearch_urls }}
+            - name: FLUXBASE_LOGGING_ELASTICSEARCH_URLS
+              value: {{ .Values.config.logging.elasticsearch_urls | join "," | quote }}
+            {{- if .Values.config.logging.elasticsearch_username }}
+            - name: FLUXBASE_LOGGING_ELASTICSEARCH_USERNAME
+              value: {{ .Values.config.logging.elasticsearch_username | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.elasticsearch_password }}
+            - name: FLUXBASE_LOGGING_ELASTICSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fluxbase.secretName" . }}
+                  key: elasticsearch-password
+                  optional: true
+            {{- end }}
+            {{- if .Values.config.logging.elasticsearch_index }}
+            - name: FLUXBASE_LOGGING_ELASTICSEARCH_INDEX
+              value: {{ .Values.config.logging.elasticsearch_index | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.elasticsearch_version }}
+            - name: FLUXBASE_LOGGING_ELASTICSEARCH_VERSION
+              value: {{ .Values.config.logging.elasticsearch_version | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.config.logging.opensearch_urls }}
+            - name: FLUXBASE_LOGGING_OPENSEARCH_URLS
+              value: {{ .Values.config.logging.opensearch_urls | join "," | quote }}
+            {{- if .Values.config.logging.opensearch_username }}
+            - name: FLUXBASE_LOGGING_OPENSEARCH_USERNAME
+              value: {{ .Values.config.logging.opensearch_username | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.opensearch_password }}
+            - name: FLUXBASE_LOGGING_OPENSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fluxbase.secretName" . }}
+                  key: opensearch-password
+                  optional: true
+            {{- end }}
+            {{- if .Values.config.logging.opensearch_index }}
+            - name: FLUXBASE_LOGGING_OPENSEARCH_INDEX
+              value: {{ .Values.config.logging.opensearch_index | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.opensearch_version }}
+            - name: FLUXBASE_LOGGING_OPENSEARCH_VERSION
+              value: {{ .Values.config.logging.opensearch_version | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.config.logging.clickhouse_addresses }}
+            - name: FLUXBASE_LOGGING_CLICKHOUSE_ADDRESSES
+              value: {{ .Values.config.logging.clickhouse_addresses | join "," | quote }}
+            {{- if .Values.config.logging.clickhouse_username }}
+            - name: FLUXBASE_LOGGING_CLICKHOUSE_USERNAME
+              value: {{ .Values.config.logging.clickhouse_username | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.clickhouse_password }}
+            - name: FLUXBASE_LOGGING_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fluxbase.secretName" . }}
+                  key: clickhouse-password
+                  optional: true
+            {{- end }}
+            {{- if .Values.config.logging.clickhouse_database }}
+            - name: FLUXBASE_LOGGING_CLICKHOUSE_DATABASE
+              value: {{ .Values.config.logging.clickhouse_database | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.clickhouse_table }}
+            - name: FLUXBASE_LOGGING_CLICKHOUSE_TABLE
+              value: {{ .Values.config.logging.clickhouse_table | quote }}
+            {{- end }}
+            {{- if .Values.config.logging.clickhouse_ttl_days }}
+            - name: FLUXBASE_LOGGING_CLICKHOUSE_TTL_DAYS
+              value: {{ .Values.config.logging.clickhouse_ttl_days | quote }}
+            {{- end }}
+            {{- end }}
+
+            # ===========================================
+            # Security Service Role Configuration
+            # ===========================================
+            {{- if .Values.config.security.service_role_rate_limit }}
+            - name: FLUXBASE_SECURITY_SERVICE_ROLE_RATE_LIMIT
+              value: {{ .Values.config.security.service_role_rate_limit | quote }}
+            {{- end }}
+            {{- if .Values.config.security.service_role_rate_window }}
+            - name: FLUXBASE_SECURITY_SERVICE_ROLE_RATE_WINDOW
+              value: {{ .Values.config.security.service_role_rate_window | quote }}
+            {{- end }}
+            {{- if .Values.config.security.enable_per_user_rate_limit }}
+            - name: FLUXBASE_SECURITY_ENABLE_PER_USER_RATE_LIMIT
+              value: {{ .Values.config.security.enable_per_user_rate_limit | quote }}
+            {{- end }}
+
+            # ===========================================
+            # GraphQL Advanced Configuration
+            # ===========================================
+            {{- if .Values.config.graphql.allow_fragments }}
+            - name: FLUXBASE_GRAPHQL_ALLOW_FRAGMENTS
+              value: {{ .Values.config.graphql.allow_fragments | quote }}
+            {{- end }}
+            {{- if .Values.config.graphql.max_fields_per_lvl }}
+            - name: FLUXBASE_GRAPHQL_MAX_FIELDS_PER_LVL
+              value: {{ .Values.config.graphql.max_fields_per_lvl | quote }}
+            {{- end }}
+
+            # ===========================================
+            # API Batch Configuration
+            # ===========================================
+            {{- if .Values.config.api.max_batch_size }}
+            - name: FLUXBASE_API_MAX_BATCH_SIZE
+              value: {{ .Values.config.api.max_batch_size | quote }}
+            {{- end }}
+
+            # ===========================================
+            # Jobs Advanced Configuration
+            # ===========================================
+            {{- if .Values.config.jobs.functions_logs_retention_days }}
+            - name: FLUXBASE_JOBS_FUNCTIONS_LOGS_RETENTION_DAYS
+              value: {{ .Values.config.jobs.functions_logs_retention_days | quote }}
+            {{- end }}
+            {{- if .Values.config.jobs.rpc_logs_retention_days }}
+            - name: FLUXBASE_JOBS_RPC_LOGS_RETENTION_DAYS
+              value: {{ .Values.config.jobs.rpc_logs_retention_days | quote }}
+            {{- end }}
+            {{- if .Values.config.jobs.jobs_logs_retention_days }}
+            - name: FLUXBASE_JOBS_JOBS_LOGS_RETENTION_DAYS
+              value: {{ .Values.config.jobs.jobs_logs_retention_days | quote }}
+            {{- end }}
+
+            # ===========================================
+            # Migrations Advanced Configuration
+            # ===========================================
+            {{- if .Values.config.migrations.allowed_ip_ranges }}
+            - name: FLUXBASE_MIGRATIONS_ALLOWED_IP_RANGES
+              value: {{ .Values.config.migrations.allowed_ip_ranges | join "," | quote }}
+            {{- end }}
+
+            # ===========================================
+            # Metrics Configuration
+            # ===========================================
+            {{- if .Values.config.metrics }}
+            - name: FLUXBASE_METRICS_ENABLED
+              value: {{ .Values.config.metrics.enabled | quote }}
+            {{- if .Values.config.metrics.enabled }}
+            - name: FLUXBASE_METRICS_PORT
+              value: {{ .Values.config.metrics.port | quote }}
+            - name: FLUXBASE_METRICS_PATH
+              value: {{ .Values.config.metrics.path | quote }}
+            {{- end }}
+            {{- end }}
+
+            # ===========================================
             # General Configuration
             # ===========================================
             {{- if .Values.config.base_url }}

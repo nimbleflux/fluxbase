@@ -11,8 +11,8 @@ Hook for managing a single tenant
 
 ## Parameters
 
-| Parameter | Type                                                              |
-| --------- | ----------------------------------------------------------------- |
+| Parameter | Type |
+| ------ | ------ |
 | `options` | [`UseTenantOptions`](/api/sdk-react/interfaces/usetenantoptions/) |
 
 ## Returns
@@ -23,16 +23,18 @@ Hook for managing a single tenant
 
 ```tsx
 function TenantDetails({ tenantId }: { tenantId: string }) {
-  const { tenant, isLoading, update } = useTenant({ tenantId });
+  const { tenant, isLoading, update } = useTenant({ tenantId })
 
-  if (isLoading) return <div>Loading...</div>;
-  if (!tenant) return <div>Tenant not found</div>;
+  if (isLoading) return <div>Loading...</div>
+  if (!tenant) return <div>Tenant not found</div>
 
   return (
     <div>
       <h1>{tenant.name}</h1>
-      <button onClick={() => update({ name: "New Name" })}>Rename</button>
+      <button onClick={() => update({ name: 'New Name' })}>
+        Rename
+      </button>
     </div>
-  );
+  )
 }
 ```

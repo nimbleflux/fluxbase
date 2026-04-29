@@ -10,6 +10,10 @@ Email provider settings response from /api/v1/admin/email/settings
 This is the flat structure returned by the admin API, which differs from
 the nested EmailSettings structure used in AppSettings.
 
+## Extended by
+
+- [`TenantEmailProviderSettings`](/api/sdk/interfaces/tenantemailprovidersettings/)
+
 ## Properties
 
 | Property | Type | Description |

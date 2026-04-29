@@ -14,17 +14,17 @@ Each tenant has their own auth.service_keys table.
 
 ```typescript
 // List all service keys
-const { data, error } = await client.admin.serviceKeys.list();
+const { data, error } = await client.admin.serviceKeys.list()
 
 // Create a new service key
 const { data, error } = await client.admin.serviceKeys.create({
-  name: "Production API Key",
-  key_type: "service",
-  scopes: ["*"],
-});
+  name: 'Production API Key',
+  key_type: 'service',
+  scopes: ['*']
+})
 
 // Rotate a key
-const { data, error } = await client.admin.serviceKeys.rotate("key-id");
+const { data, error } = await client.admin.serviceKeys.rotate('key-id')
 ```
 
 ## Constructors
@@ -35,9 +35,9 @@ const { data, error } = await client.admin.serviceKeys.rotate("key-id");
 
 #### Parameters
 
-| Parameter | Type                                               |
-| --------- | -------------------------------------------------- |
-| `fetch`   | [`FluxbaseFetch`](/api/sdk/classes/fluxbasefetch/) |
+| Parameter | Type |
+| ------ | ------ |
+| `fetch` | [`FluxbaseFetch`](/api/sdk/classes/fluxbasefetch/) |
 
 #### Returns
 
@@ -55,8 +55,8 @@ The full key value is only returned once - store it securely!
 
 #### Parameters
 
-| Parameter | Type                                                                      | Description          |
-| --------- | ------------------------------------------------------------------------- | -------------------- |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
 | `request` | [`CreateServiceKeyRequest`](/api/sdk/interfaces/createservicekeyrequest/) | Key creation options |
 
 #### Returns
@@ -69,19 +69,19 @@ Created key with full key value
 
 ```typescript
 const { data, error } = await client.admin.serviceKeys.create({
-  name: "Production API Key",
-  key_type: "service",
-  scopes: ["*"],
-  rate_limit_per_minute: 1000,
-});
+  name: 'Production API Key',
+  key_type: 'service',
+  scopes: ['*'],
+  rate_limit_per_minute: 1000
+})
 
 if (data) {
   // Store data.key securely - it won't be shown again!
-  console.log("Key created:", data.key);
+  console.log('Key created:', data.key)
 }
 ```
 
----
+***
 
 ### delete()
 
@@ -91,9 +91,9 @@ Delete a service key permanently
 
 #### Parameters
 
-| Parameter | Type     | Description    |
-| --------- | -------- | -------------- |
-| `id`      | `string` | Service key ID |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Service key ID |
 
 #### Returns
 
@@ -104,10 +104,10 @@ Success or error
 #### Example
 
 ```typescript
-const { error } = await client.admin.serviceKeys.delete("key-id");
+const { error } = await client.admin.serviceKeys.delete('key-id')
 ```
 
----
+***
 
 ### deprecate()
 
@@ -119,9 +119,9 @@ Marks the key for removal but keeps it active during grace period.
 
 #### Parameters
 
-| Parameter  | Type                                                                            | Description         |
-| ---------- | ------------------------------------------------------------------------------- | ------------------- |
-| `id`       | `string`                                                                        | Service key ID      |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Service key ID |
 | `request?` | [`DeprecateServiceKeyRequest`](/api/sdk/interfaces/deprecateservicekeyrequest/) | Deprecation options |
 
 #### Returns
@@ -133,13 +133,13 @@ Deprecation details
 #### Example
 
 ```typescript
-const { data, error } = await client.admin.serviceKeys.deprecate("key-id", {
-  reason: "Rotating to new key",
-  grace_period_hours: 48,
-});
+const { data, error } = await client.admin.serviceKeys.deprecate('key-id', {
+  reason: 'Rotating to new key',
+  grace_period_hours: 48
+})
 ```
 
----
+***
 
 ### disable()
 
@@ -149,9 +149,9 @@ Disable a service key (temporarily)
 
 #### Parameters
 
-| Parameter | Type     | Description    |
-| --------- | -------- | -------------- |
-| `id`      | `string` | Service key ID |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Service key ID |
 
 #### Returns
 
@@ -162,10 +162,10 @@ Success or error
 #### Example
 
 ```typescript
-const { error } = await client.admin.serviceKeys.disable("key-id");
+const { error } = await client.admin.serviceKeys.disable('key-id')
 ```
 
----
+***
 
 ### enable()
 
@@ -175,9 +175,9 @@ Enable a disabled service key
 
 #### Parameters
 
-| Parameter | Type     | Description    |
-| --------- | -------- | -------------- |
-| `id`      | `string` | Service key ID |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Service key ID |
 
 #### Returns
 
@@ -188,10 +188,10 @@ Success or error
 #### Example
 
 ```typescript
-const { error } = await client.admin.serviceKeys.enable("key-id");
+const { error } = await client.admin.serviceKeys.enable('key-id')
 ```
 
----
+***
 
 ### get()
 
@@ -201,9 +201,9 @@ Get a service key by ID
 
 #### Parameters
 
-| Parameter | Type     | Description    |
-| --------- | -------- | -------------- |
-| `id`      | `string` | Service key ID |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Service key ID |
 
 #### Returns
 
@@ -214,10 +214,10 @@ Service key details
 #### Example
 
 ```typescript
-const { data, error } = await client.admin.serviceKeys.get("key-id");
+const { data, error } = await client.admin.serviceKeys.get('key-id')
 ```
 
----
+***
 
 ### getRevocationHistory()
 
@@ -227,9 +227,9 @@ Get revocation history for a service key
 
 #### Parameters
 
-| Parameter | Type     | Description    |
-| --------- | -------- | -------------- |
-| `id`      | `string` | Service key ID |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Service key ID |
 
 #### Returns
 
@@ -240,11 +240,10 @@ Revocation history
 #### Example
 
 ```typescript
-const { data, error } =
-  await client.admin.serviceKeys.getRevocationHistory("key-id");
+const { data, error } = await client.admin.serviceKeys.getRevocationHistory('key-id')
 ```
 
----
+***
 
 ### list()
 
@@ -261,10 +260,10 @@ List of service keys
 #### Example
 
 ```typescript
-const { data, error } = await client.admin.serviceKeys.list();
+const { data, error } = await client.admin.serviceKeys.list()
 ```
 
----
+***
 
 ### revoke()
 
@@ -276,9 +275,9 @@ Use for immediate revocation when a key is compromised.
 
 #### Parameters
 
-| Parameter  | Type                                                                      | Description        |
-| ---------- | ------------------------------------------------------------------------- | ------------------ |
-| `id`       | `string`                                                                  | Service key ID     |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Service key ID |
 | `request?` | [`RevokeServiceKeyRequest`](/api/sdk/interfaces/revokeservicekeyrequest/) | Revocation options |
 
 #### Returns
@@ -290,12 +289,12 @@ Success or error
 #### Example
 
 ```typescript
-const { error } = await client.admin.serviceKeys.revoke("key-id", {
-  reason: "Key was compromised",
-});
+const { error } = await client.admin.serviceKeys.revoke('key-id', {
+  reason: 'Key was compromised'
+})
 ```
 
----
+***
 
 ### rotate()
 
@@ -308,9 +307,9 @@ The new key is returned with its full value.
 
 #### Parameters
 
-| Parameter | Type     | Description              |
-| --------- | -------- | ------------------------ |
-| `id`      | `string` | Service key ID to rotate |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Service key ID to rotate |
 
 #### Returns
 
@@ -321,15 +320,15 @@ New key with full key value
 #### Example
 
 ```typescript
-const { data, error } = await client.admin.serviceKeys.rotate("old-key-id");
+const { data, error } = await client.admin.serviceKeys.rotate('old-key-id')
 
 if (data) {
-  console.log("New key:", data.key);
-  console.log("Old key deprecated at:", data.deprecated_at);
+  console.log('New key:', data.key)
+  console.log('Old key deprecated at:', data.deprecated_at)
 }
 ```
 
----
+***
 
 ### update()
 
@@ -339,9 +338,9 @@ Update a service key
 
 #### Parameters
 
-| Parameter | Type                                                                      | Description    |
-| --------- | ------------------------------------------------------------------------- | -------------- |
-| `id`      | `string`                                                                  | Service key ID |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` | Service key ID |
 | `request` | [`UpdateServiceKeyRequest`](/api/sdk/interfaces/updateservicekeyrequest/) | Update options |
 
 #### Returns
@@ -353,8 +352,8 @@ Updated key
 #### Example
 
 ```typescript
-const { data, error } = await client.admin.serviceKeys.update("key-id", {
-  name: "New Name",
-  rate_limit_per_minute: 2000,
-});
+const { data, error } = await client.admin.serviceKeys.update('key-id', {
+  name: 'New Name',
+  rate_limit_per_minute: 2000
+})
 ```

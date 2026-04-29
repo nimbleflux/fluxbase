@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/runtime"
 	"github.com/nimbleflux/fluxbase/internal/scheduler"
@@ -25,11 +26,15 @@ type Scheduler struct {
 	logCounters    sync.Map
 }
 
-func NewScheduler(db *database.Connection, jwtSecret, publicURL string, secretsStorage *secrets.Storage) *Scheduler {
+func NewScheduler(db *database.Connection, jwtSecret, publicURL string, secretsStorage *secrets.Storage, baseConfig *config.Config) *Scheduler {
+	opts := []runtime.Option{}
+	if baseConfig != nil && baseConfig.Functions.MaxOutputSize > 0 {
+		opts = append(opts, runtime.WithMaxOutputSize(baseConfig.Functions.MaxOutputSize))
+	}
 	s := &Scheduler{
 		inner:          scheduler.NewCronScheduler(10),
 		storage:        NewStorage(db),
-		runtime:        runtime.NewRuntime(runtime.RuntimeTypeFunction, jwtSecret, publicURL),
+		runtime:        runtime.NewRuntime(runtime.RuntimeTypeFunction, jwtSecret, publicURL, opts...),
 		secretsStorage: secretsStorage,
 		jwtSecret:      jwtSecret,
 		publicURL:      publicURL,

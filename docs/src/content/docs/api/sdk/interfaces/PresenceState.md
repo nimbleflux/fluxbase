@@ -9,4 +9,4 @@ Presence state for a user
 
 ## Indexable
 
-\[`key`: `string`\]: `unknown`
+> \[`key`: `string`\]: `unknown`

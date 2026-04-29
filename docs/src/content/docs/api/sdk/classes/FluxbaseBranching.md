@@ -18,9 +18,9 @@ for development, testing, and preview environments.
 
 #### Parameters
 
-| Parameter | Type                                               |
-| --------- | -------------------------------------------------- |
-| `fetch`   | [`FluxbaseFetch`](/api/sdk/classes/fluxbasefetch/) |
+| Parameter | Type |
+| ------ | ------ |
+| `fetch` | [`FluxbaseFetch`](/api/sdk/classes/fluxbasefetch/) |
 
 #### Returns
 
@@ -36,10 +36,10 @@ Create a new database branch
 
 #### Parameters
 
-| Parameter  | Type                  | Description                               |
-| ---------- | --------------------- | ----------------------------------------- |
-| `name`     | `string`              | Branch name (will be converted to a slug) |
-| `options?` | `CreateBranchOptions` | Branch creation options                   |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `name` | `string` | Branch name (will be converted to a slug) |
+| `options?` | `CreateBranchOptions` | Branch creation options |
 
 #### Returns
 
@@ -51,30 +51,30 @@ Promise resolving to { data, error } tuple with created branch
 
 ```typescript
 // Create a simple branch
-const { data, error } = await client.branching.create("feature/add-auth");
+const { data, error } = await client.branching.create('feature/add-auth')
 
 // Create with options
-const { data } = await client.branching.create("feature/add-auth", {
-  dataCloneMode: "schema_only", // Don't clone data
-  expiresIn: "7d", // Auto-delete after 7 days
-  type: "persistent", // Won't auto-delete on PR merge
-});
+const { data } = await client.branching.create('feature/add-auth', {
+  dataCloneMode: 'schema_only',  // Don't clone data
+  expiresIn: '7d',               // Auto-delete after 7 days
+  type: 'persistent'             // Won't auto-delete on PR merge
+})
 
 // Create a PR preview branch
-const { data } = await client.branching.create("pr-123", {
-  type: "preview",
+const { data } = await client.branching.create('pr-123', {
+  type: 'preview',
   githubPRNumber: 123,
-  githubRepo: "owner/repo",
-  expiresIn: "7d",
-});
+  githubRepo: 'owner/repo',
+  expiresIn: '7d'
+})
 
 // Clone with full data (for debugging)
-const { data } = await client.branching.create("debug-issue-456", {
-  dataCloneMode: "full_clone",
-});
+const { data } = await client.branching.create('debug-issue-456', {
+  dataCloneMode: 'full_clone'
+})
 ```
 
----
+***
 
 ### delete()
 
@@ -87,8 +87,8 @@ Cannot delete the main branch.
 
 #### Parameters
 
-| Parameter  | Type     | Description              |
-| ---------- | -------- | ------------------------ |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
 | `idOrSlug` | `string` | Branch ID (UUID) or slug |
 
 #### Returns
@@ -101,14 +101,14 @@ Promise resolving to { error } (null on success)
 
 ```typescript
 // Delete a branch
-const { error } = await client.branching.delete("feature/add-auth");
+const { error } = await client.branching.delete('feature/add-auth')
 
 if (error) {
-  console.error("Failed to delete branch:", error.message);
+  console.error('Failed to delete branch:', error.message)
 }
 ```
 
----
+***
 
 ### exists()
 
@@ -118,8 +118,8 @@ Check if a branch exists
 
 #### Parameters
 
-| Parameter  | Type     | Description              |
-| ---------- | -------- | ------------------------ |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
 | `idOrSlug` | `string` | Branch ID (UUID) or slug |
 
 #### Returns
@@ -131,14 +131,14 @@ Promise resolving to true if branch exists, false otherwise
 #### Example
 
 ```typescript
-const exists = await client.branching.exists("feature/add-auth");
+const exists = await client.branching.exists('feature/add-auth')
 
 if (!exists) {
-  await client.branching.create("feature/add-auth");
+  await client.branching.create('feature/add-auth')
 }
 ```
 
----
+***
 
 ### get()
 
@@ -148,8 +148,8 @@ Get a specific branch by ID or slug
 
 #### Parameters
 
-| Parameter  | Type     | Description              |
-| ---------- | -------- | ------------------------ |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
 | `idOrSlug` | `string` | Branch ID (UUID) or slug |
 
 #### Returns
@@ -162,15 +162,13 @@ Promise resolving to { data, error } tuple with branch details
 
 ```typescript
 // Get by slug
-const { data, error } = await client.branching.get("feature/add-auth");
+const { data, error } = await client.branching.get('feature/add-auth')
 
 // Get by ID
-const { data } = await client.branching.get(
-  "123e4567-e89b-12d3-a456-426614174000",
-);
+const { data } = await client.branching.get('123e4567-e89b-12d3-a456-426614174000')
 ```
 
----
+***
 
 ### getActivity()
 
@@ -180,10 +178,10 @@ Get activity log for a branch
 
 #### Parameters
 
-| Parameter  | Type     | Default value | Description                                                 |
-| ---------- | -------- | ------------- | ----------------------------------------------------------- |
-| `idOrSlug` | `string` | `undefined`   | Branch ID (UUID) or slug                                    |
-| `limit`    | `number` | `50`          | Maximum number of entries to return (default: 50, max: 100) |
+| Parameter | Type | Default value | Description |
+| ------ | ------ | ------ | ------ |
+| `idOrSlug` | `string` | `undefined` | Branch ID (UUID) or slug |
+| `limit` | `number` | `50` | Maximum number of entries to return (default: 50, max: 100) |
 
 #### Returns
 
@@ -195,19 +193,19 @@ Promise resolving to { data, error } tuple with activity entries
 
 ```typescript
 // Get recent activity
-const { data, error } = await client.branching.getActivity("feature/add-auth");
+const { data, error } = await client.branching.getActivity('feature/add-auth')
 
 if (data) {
   for (const entry of data) {
-    console.log(`${entry.action}: ${entry.status}`);
+    console.log(`${entry.action}: ${entry.status}`)
   }
 }
 
 // Get more entries
-const { data } = await client.branching.getActivity("feature/add-auth", 100);
+const { data } = await client.branching.getActivity('feature/add-auth', 100)
 ```
 
----
+***
 
 ### getPoolStats()
 
@@ -226,16 +224,16 @@ Promise resolving to { data, error } tuple with pool stats
 #### Example
 
 ```typescript
-const { data, error } = await client.branching.getPoolStats();
+const { data, error } = await client.branching.getPoolStats()
 
 if (data) {
   for (const pool of data) {
-    console.log(`${pool.slug}: ${pool.active_connections} active`);
+    console.log(`${pool.slug}: ${pool.active_connections} active`)
   }
 }
 ```
 
----
+***
 
 ### list()
 
@@ -245,8 +243,8 @@ List all database branches
 
 #### Parameters
 
-| Parameter  | Type                  | Description                   |
-| ---------- | --------------------- | ----------------------------- |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
 | `options?` | `ListBranchesOptions` | Filter and pagination options |
 
 #### Returns
@@ -259,22 +257,22 @@ Promise resolving to { data, error } tuple with branches list
 
 ```typescript
 // List all branches
-const { data, error } = await client.branching.list();
+const { data, error } = await client.branching.list()
 
 // Filter by status
-const { data } = await client.branching.list({ status: "ready" });
+const { data } = await client.branching.list({ status: 'ready' })
 
 // Filter by type
-const { data } = await client.branching.list({ type: "preview" });
+const { data } = await client.branching.list({ type: 'preview' })
 
 // Only show my branches
-const { data } = await client.branching.list({ mine: true });
+const { data } = await client.branching.list({ mine: true })
 
 // Pagination
-const { data } = await client.branching.list({ limit: 10, offset: 20 });
+const { data } = await client.branching.list({ limit: 10, offset: 20 })
 ```
 
----
+***
 
 ### reset()
 
@@ -287,8 +285,8 @@ to match the parent branch. Cannot reset the main branch.
 
 #### Parameters
 
-| Parameter  | Type     | Description              |
-| ---------- | -------- | ------------------------ |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
 | `idOrSlug` | `string` | Branch ID (UUID) or slug |
 
 #### Returns
@@ -301,14 +299,14 @@ Promise resolving to { data, error } tuple with reset branch
 
 ```typescript
 // Reset a branch
-const { data, error } = await client.branching.reset("feature/add-auth");
+const { data, error } = await client.branching.reset('feature/add-auth')
 
 if (data) {
-  console.log("Branch reset, status:", data.status);
+  console.log('Branch reset, status:', data.status)
 }
 ```
 
----
+***
 
 ### waitForReady()
 
@@ -320,12 +318,12 @@ Polls the branch status until it reaches 'ready' or an error state.
 
 #### Parameters
 
-| Parameter               | Type                                                   | Description                                   |
-| ----------------------- | ------------------------------------------------------ | --------------------------------------------- |
-| `idOrSlug`              | `string`                                               | Branch ID (UUID) or slug                      |
-| `options?`              | \{ `pollInterval?`: `number`; `timeout?`: `number`; \} | Polling options                               |
-| `options.pollInterval?` | `number`                                               | Poll interval in milliseconds (default: 1000) |
-| `options.timeout?`      | `number`                                               | Timeout in milliseconds (default: 30000)      |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `idOrSlug` | `string` | Branch ID (UUID) or slug |
+| `options?` | \{ `pollInterval?`: `number`; `timeout?`: `number`; \} | Polling options |
+| `options.pollInterval?` | `number` | Poll interval in milliseconds (default: 1000) |
+| `options.timeout?` | `number` | Timeout in milliseconds (default: 30000) |
 
 #### Returns
 
@@ -337,17 +335,14 @@ Promise resolving to { data, error } tuple with ready branch
 
 ```typescript
 // Create branch and wait for it to be ready
-const { data: branch } = await client.branching.create("feature/add-auth");
+const { data: branch } = await client.branching.create('feature/add-auth')
 
-const { data: ready, error } = await client.branching.waitForReady(
-  branch!.slug,
-  {
-    timeout: 60000, // 60 seconds
-    pollInterval: 1000, // Check every second
-  },
-);
+const { data: ready, error } = await client.branching.waitForReady(branch!.slug, {
+  timeout: 60000,     // 60 seconds
+  pollInterval: 1000  // Check every second
+})
 
 if (ready) {
-  console.log("Branch is ready!");
+  console.log('Branch is ready!')
 }
 ```

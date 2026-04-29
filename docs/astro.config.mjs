@@ -233,6 +233,7 @@ export default defineConfig({
           items: [
             { label: "Introduction", link: "/intro/" },
             { label: "Quick Start", link: "/getting-started/quick-start/" },
+            { label: "Developer Guide", link: "/guides/developer-guide/" },
           ],
         },
         {
@@ -264,6 +265,7 @@ export default defineConfig({
             { label: "RPC", link: "/guides/rpc/" },
 
             // Database
+            { label: "Multi-Tenancy", link: "/guides/multi-tenancy/" },
             { label: "Row-Level Security", link: "/guides/row-level-security/" },
             { label: "Database Migrations", link: "/guides/database-migrations/" },
             {
@@ -271,6 +273,7 @@ export default defineConfig({
               collapsed: true,
               autogenerate: { directory: "guides/branching" },
             },
+            { label: "Client Keys", link: "/guides/client-keys/" },
 
             // Advanced Auth
             { label: "OAuth Providers", link: "/guides/oauth-providers/" },
@@ -289,6 +292,7 @@ export default defineConfig({
               autogenerate: { directory: "guides/mcp" },
             },
             { label: "Webhooks", link: "/guides/webhooks/" },
+            { label: "User Settings", link: "/guides/user-settings/" },
 
             // Operations
             { label: "Secrets Management", link: "/guides/secrets-management/" },
@@ -296,8 +300,16 @@ export default defineConfig({
             { label: "Logging", link: "/guides/logging/" },
             { label: "Monitoring", link: "/guides/monitoring-observability/" },
             { label: "Email Services", link: "/guides/email-services/" },
+            { label: "PostgreSQL Extensions", link: "/guides/extensions/" },
             { label: "Image Transformations", link: "/guides/image-transformations/" },
             { label: "Testing", link: "/guides/testing/" },
+
+            // Operations (advanced)
+            { label: "Backup & Restore", link: "/guides/backup-restore/" },
+            { label: "Automation", link: "/guides/automation/" },
+            { label: "Distributed Tracing", link: "/guides/distributed-tracing/" },
+            { label: "Operational Runbook", link: "/guides/operational-runbook/" },
+            { label: "App Settings", link: "/settings/app-settings-guide/" },
 
             // Admin
             {
@@ -390,6 +402,7 @@ export default defineConfig({
               autogenerate: { directory: "api/sdk-react" },
             },
             { label: "HTTP API", link: "/api/http/" },
+            { label: "GraphQL API", link: "/api/http/graphql/" },
           ],
         },
         {
