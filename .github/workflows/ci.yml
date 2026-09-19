@@ -398,7 +398,7 @@ jobs:
           - 8025:8025 # Web UI
 
       minio:
-        image: minio/minio:edge-cicd
+        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
@@ -763,7 +763,7 @@ jobs:
           - 8025:8025
 
       minio:
-        image: minio/minio:edge-cicd
+        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
