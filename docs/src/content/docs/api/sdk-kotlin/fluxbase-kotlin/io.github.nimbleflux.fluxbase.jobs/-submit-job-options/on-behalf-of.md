@@ -10,4 +10,4 @@ prev: false
 # onBehalfOf
 
 [jvm]\
-val [onBehalfOf](./): [OnBehalfOf](../../-on-behalf-of/)? = null
+val [onBehalfOf](./): [OnBehalfOf](../../-on-behalf-of/)?

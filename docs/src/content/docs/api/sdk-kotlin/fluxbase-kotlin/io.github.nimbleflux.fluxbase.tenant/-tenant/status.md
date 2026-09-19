@@ -10,4 +10,4 @@ prev: false
 # status
 
 [jvm]\
-val [status](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [status](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

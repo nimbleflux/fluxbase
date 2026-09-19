@@ -10,4 +10,4 @@ prev: false
 # session
 
 [jvm]\
-val [session](./): [AuthSession](../../-auth-session/)? = null
+val [session](./): [AuthSession](../../-auth-session/)?

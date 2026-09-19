@@ -10,6 +10,6 @@ prev: false
 # reset
 
 [jvm]\
-suspend fun [reset](./)(idOrSlug: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[Branch](../../-branch/)&gt;
+suspend fun [reset](./)(idOrSlug: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[Branch](../../-branch/)&gt;
 
 Reset a branch to its parent state. POSTs `.../reset`.

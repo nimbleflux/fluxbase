@@ -10,6 +10,6 @@ prev: false
 # disable2FA
 
 [jvm]\
-suspend fun [disable2FA](./)(password: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[TwoFactorDisableResponse](../../-two-factor-disable-response/)&gt;
+suspend fun [disable2FA](./)(password: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[TwoFactorDisableResponse](../../-two-factor-disable-response/)&gt;
 
 POST `/api/v1/auth/2fa/disable` with `{password}` → disables 2FA.

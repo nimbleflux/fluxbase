@@ -10,7 +10,7 @@ prev: false
 # KtorHttpTransport
 
 [jvm]\
-class [KtorHttpTransport](./)(baseUrl: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), json: Json = FluxbaseHttpClient.defaultJson, timeoutMillis: [Long](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-long/index.html)) : [HttpTransport](../-http-transport/)
+class [KtorHttpTransport](./)(baseUrl: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), json: Json = FluxbaseHttpClient.defaultJson, timeoutMillis: [Long](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html), trustAllCertificates: [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) = false) : [HttpTransport](../-http-transport/)
 
 Ktor-backed [HttpTransport](../-http-transport/) — the production HTTP implementation for JVM/Android.
 
@@ -26,7 +26,7 @@ Two response paths:
 Request bodies:
 
 - 
-   [ByteArray](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-byte-array/index.html) bodies are sent raw (binary-safe, used by storage upload).
+   [ByteArray](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-byte-array/index.html) bodies are sent raw (binary-safe, used by storage upload).
 - 
    Anything else is JSON-encoded via encodeToJsonElement, matching how the     TS SDK passes plain JS objects through `JSON.stringify`.
 
@@ -36,11 +36,11 @@ The full port (S1) will add: 30s timeout, 401 auto-refresh+retry (single shared 
 
 | | |
 |---|---|
-| [KtorHttpTransport](-ktor-http-transport/) | [jvm]<br>constructor(baseUrl: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), json: Json = FluxbaseHttpClient.defaultJson, timeoutMillis: [Long](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-long/index.html)) |
+| [KtorHttpTransport](-ktor-http-transport/) | [jvm]<br>constructor(baseUrl: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), json: Json = FluxbaseHttpClient.defaultJson, timeoutMillis: [Long](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html), trustAllCertificates: [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) = false) |
 
 ## Functions
 
 | Name | Summary |
 |---|---|
-| [request](request/) | [jvm]<br>open suspend override fun [request](request/)(method: [HttpMethod](../-http-method/), path: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), body: [Any](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-any/index.html)?, headers: [Map](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-map/index.html)&lt;[String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)&gt;): [HttpResponse](../-http-response/)<br>Perform an HTTP [method](request/) request to [path](request/) (relative to the base URL). [body](request/) is a pre-serialized value (will be JSON-encoded by the transport) or null for GET/DELETE/HEAD. [headers](request/) are per-request overrides merged on top of the client defaults. Returns the raw response body as text. |
-| [requestBytes](request-bytes/) | [jvm]<br>open suspend override fun [requestBytes](request-bytes/)(method: [HttpMethod](../-http-method/), path: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), headers: [Map](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-map/index.html)&lt;[String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)&gt;): [ByteArray](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-byte-array/index.html)<br>Perform an HTTP [method](request-bytes/) request and return the response body as raw bytes — the binary-safe path used by [FluxbaseHttpClient.getBytes](../-fluxbase-http-client/get-bytes/) (e.g. storage downloads). Unlike [request](request/), the body never passes through a text/charset decode, so non-UTF-8 bytes (images, archives) survive intact. Mirrors the TS SDK's `getBlob` in `sdk/src/fetch.ts`. |
+| [request](request/) | [jvm]<br>open suspend override fun [request](request/)(method: [HttpMethod](../-http-method/), path: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), body: [Any](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html)?, headers: [Map](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-map/index.html)&lt;[String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)&gt;): [HttpResponse](../-http-response/)<br>Perform an HTTP [method](../-http-transport/request/) request to [path](../-http-transport/request/) (relative to the base URL). [body](../-http-transport/request/) is a pre-serialized value (will be JSON-encoded by the transport) or null for GET/DELETE/HEAD. [headers](../-http-transport/request/) are per-request overrides merged on top of the client defaults. Returns the raw response body as text. |
+| [requestBytes](request-bytes/) | [jvm]<br>open suspend override fun [requestBytes](request-bytes/)(method: [HttpMethod](../-http-method/), path: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), headers: [Map](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-map/index.html)&lt;[String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)&gt;): [ByteArray](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-byte-array/index.html)<br>Perform an HTTP [method](../-http-transport/request-bytes/) request and return the response body as raw bytes — the binary-safe path used by [FluxbaseHttpClient.getBytes](../-fluxbase-http-client/get-bytes/) (e.g. storage downloads). Unlike [request](../-http-transport/request/), the body never passes through a text/charset decode, so non-UTF-8 bytes (images, archives) survive intact. Mirrors the TS SDK's `getBlob` in `sdk/src/fetch.ts`. |

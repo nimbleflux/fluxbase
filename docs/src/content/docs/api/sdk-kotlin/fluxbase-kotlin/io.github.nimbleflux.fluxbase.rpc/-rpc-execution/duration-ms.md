@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;duration_ms&quot;)
 
-val [durationMs](./): [Long](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-long/index.html)? = null
+val [durationMs](./): [Long](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html)?

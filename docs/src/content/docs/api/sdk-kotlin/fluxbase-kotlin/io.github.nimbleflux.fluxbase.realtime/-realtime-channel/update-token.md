@@ -10,7 +10,7 @@ prev: false
 # updateToken
 
 [jvm]\
-suspend fun [updateToken](./)(newToken: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html))
+suspend fun [updateToken](./)(newToken: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html))
 
 Update the auth token (e.g. after a JWT refresh). If the socket is open, pushes an `access_token` message so the server refreshes auth context without a reconnect; otherwise the new token is used on the next connect.
 

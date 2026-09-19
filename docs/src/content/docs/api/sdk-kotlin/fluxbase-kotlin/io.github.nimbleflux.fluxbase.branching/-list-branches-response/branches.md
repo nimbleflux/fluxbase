@@ -10,4 +10,4 @@ prev: false
 # branches
 
 [jvm]\
-val [branches](./): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Branch](../../-branch/)&gt;
+val [branches](./): [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Branch](../../-branch/)&gt;

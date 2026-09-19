@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;rate_limit_per_minute&quot;)
 
-val [rateLimitPerMinute](./): [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html) = 0
+val [rateLimitPerMinute](./): [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)

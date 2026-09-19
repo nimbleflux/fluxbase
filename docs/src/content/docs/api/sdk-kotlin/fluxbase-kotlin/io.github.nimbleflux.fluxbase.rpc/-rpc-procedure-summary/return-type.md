@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;return_type&quot;)
 
-val [returnType](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [returnType](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

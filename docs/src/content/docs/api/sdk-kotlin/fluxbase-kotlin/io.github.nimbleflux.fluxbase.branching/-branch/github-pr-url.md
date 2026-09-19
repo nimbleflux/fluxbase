@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;github_pr_url&quot;)
 
-val [githubPrUrl](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [githubPrUrl](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

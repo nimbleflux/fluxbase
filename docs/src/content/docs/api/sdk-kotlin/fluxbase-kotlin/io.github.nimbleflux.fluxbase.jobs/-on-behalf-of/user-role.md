@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;user_role&quot;)
 
-val [userRole](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [userRole](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

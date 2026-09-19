@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;password_login_enabled&quot;)
 
-val [passwordLoginEnabled](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = true
+val [passwordLoginEnabled](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)

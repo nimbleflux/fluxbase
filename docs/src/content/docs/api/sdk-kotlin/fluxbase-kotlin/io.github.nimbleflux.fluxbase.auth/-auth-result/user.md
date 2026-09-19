@@ -10,4 +10,4 @@ prev: false
 # user
 
 [jvm]\
-val [user](./): [User](../../-user/)? = null
+val [user](./): [User](../../-user/)?

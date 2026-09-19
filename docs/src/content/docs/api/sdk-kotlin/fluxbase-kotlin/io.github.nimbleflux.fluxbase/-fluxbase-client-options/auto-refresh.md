@@ -10,7 +10,7 @@ prev: false
 # autoRefresh
 
 [jvm]\
-val [autoRefresh](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = true
+val [autoRefresh](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)
 
 #### Parameters
 

@@ -12,17 +12,17 @@ prev: false
 [jvm]\
 @Serializable
 
-data class [GraphQLErrorLocation](./)(val line: [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html), val column: [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html))
+data class [GraphQLErrorLocation](./)(val line: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html), val column: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html))
 
 ## Constructors
 
 | | |
 |---|---|
-| [GraphQLErrorLocation](-graph-q-l-error-location/) | [jvm]<br>constructor(line: [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html), column: [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html)) |
+| [GraphQLErrorLocation](-graph-q-l-error-location/) | [jvm]<br>constructor(line: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html), column: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)) |
 
 ## Properties
 
 | Name | Summary |
 |---|---|
-| [column](column/) | [jvm]<br>val [column](column/): [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html) |
-| [line](line/) | [jvm]<br>val [line](line/): [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html) |
+| [column](column/) | [jvm]<br>val [column](column/): [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html) |
+| [line](line/) | [jvm]<br>val [line](line/): [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html) |

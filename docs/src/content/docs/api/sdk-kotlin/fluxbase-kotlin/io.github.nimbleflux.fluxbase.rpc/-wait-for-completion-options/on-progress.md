@@ -10,4 +10,4 @@ prev: false
 # onProgress
 
 [jvm]\
-val [onProgress](./): ([RpcExecution](../../-rpc-execution/)) -&gt; [Unit](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-unit/index.html)? = null
+val [onProgress](./): ([RpcExecution](../../-rpc-execution/)) -&gt; [Unit](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html)?

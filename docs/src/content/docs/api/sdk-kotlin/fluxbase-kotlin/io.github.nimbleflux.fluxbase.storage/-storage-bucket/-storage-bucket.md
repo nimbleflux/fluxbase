@@ -10,4 +10,4 @@ prev: false
 # StorageBucket
 
 [jvm]\
-constructor(http: [FluxbaseHttpClient](../../../iogithubnimblefluxfluxbasecore/-fluxbase-http-client/), bucket: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html))
+constructor(http: [FluxbaseHttpClient](../../../iogithubnimblefluxfluxbasecore/-fluxbase-http-client/), bucket: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html))

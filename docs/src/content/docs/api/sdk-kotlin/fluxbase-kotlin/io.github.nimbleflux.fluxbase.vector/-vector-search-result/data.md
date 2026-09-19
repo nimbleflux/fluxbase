@@ -10,4 +10,4 @@ prev: false
 # data
 
 [jvm]\
-val [data](./): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;JsonElement&gt;
+val [data](./): [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;JsonElement&gt;

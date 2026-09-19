@@ -10,7 +10,7 @@ prev: false
 # FluxbaseAuth
 
 [jvm]\
-constructor(http: [FluxbaseHttpClient](../../../iogithubnimblefluxfluxbasecore/-fluxbase-http-client/), autoRefresh: [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = true, storage: [StorageAdapter](../../-storage-adapter/) = MemoryStorage())
+constructor(http: [FluxbaseHttpClient](../../../iogithubnimblefluxfluxbasecore/-fluxbase-http-client/), autoRefresh: [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) = true, storage: [StorageAdapter](../../-storage-adapter/) = MemoryStorage())
 
 #### Parameters
 

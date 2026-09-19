@@ -12,4 +12,4 @@ prev: false
 [jvm]\
 val [new](./): JsonElement?
 
-Convenience accessor — the TS SDK exposes `new` and `old`; in Kotlin those are keywords, so we use [newRecord](../new-record/) / [oldRecord](../old-record/).
+Convenience accessor — the TS SDK exposes `new` and `old`; in Kotlin those are keywords, so we use newRecord / oldRecord.

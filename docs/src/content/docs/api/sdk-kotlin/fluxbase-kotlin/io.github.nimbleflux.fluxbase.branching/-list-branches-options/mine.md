@@ -10,4 +10,4 @@ prev: false
 # mine
 
 [jvm]\
-val [mine](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html)? = null
+val [mine](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)?

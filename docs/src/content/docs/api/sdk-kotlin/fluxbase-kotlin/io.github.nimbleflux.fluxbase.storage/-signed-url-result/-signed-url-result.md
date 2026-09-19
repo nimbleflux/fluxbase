@@ -10,4 +10,4 @@ prev: false
 # SignedUrlResult
 
 [jvm]\
-constructor(signedUrl: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html))
+constructor(signedUrl: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html))

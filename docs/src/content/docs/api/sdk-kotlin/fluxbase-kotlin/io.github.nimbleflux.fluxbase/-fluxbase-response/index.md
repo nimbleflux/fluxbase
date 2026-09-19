@@ -33,7 +33,7 @@ This matches the TS pattern `const { data, error } = await client.auth.signIn(..
 
 | Name | Summary |
 |---|---|
-| [Error](-error/) | [jvm]<br>data class [Error](-error/)(val error: [FluxbaseError](../-fluxbase-error/)) : [FluxbaseResponse](./)&lt;[Nothing](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-nothing/index.html)&gt; <br>Failed result. |
+| [Error](-error/) | [jvm]<br>class [Error](-error/)(val error: [FluxbaseError](../-fluxbase-error/)) : [FluxbaseResponse](./)&lt;[Nothing](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-nothing/index.html)&gt; <br>Failed result. Not a `data class`: Kotlin 2.2+ forbids the generated `component1(): FluxbaseError` from clashing with the inherited `component1(): Nothing?` — destructuring still works via the interface operators above. |
 | [Success](-success/) | [jvm]<br>data class [Success](-success/)&lt;[T](-success/)&gt;(val data: [T](-success/)) : [FluxbaseResponse](./)&lt;[T](-success/)&gt; <br>Successful result. |
 
 ## Properties

@@ -10,4 +10,4 @@ prev: false
 # maxWaitMs
 
 [jvm]\
-val [maxWaitMs](./): [Long](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-long/index.html)
+val [maxWaitMs](./): [Long](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html)

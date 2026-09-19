@@ -10,6 +10,6 @@ prev: false
 # baseUrl
 
 [jvm]\
-val [baseUrl](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [baseUrl](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)
 
 The base URL with any trailing slash removed.

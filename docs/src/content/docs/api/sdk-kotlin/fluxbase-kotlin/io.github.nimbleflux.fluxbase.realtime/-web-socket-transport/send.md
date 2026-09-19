@@ -10,6 +10,6 @@ prev: false
 # send
 
 [jvm]\
-abstract suspend fun [send](./)(text: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html))
+abstract suspend fun [send](./)(text: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html))
 
 Send a text message.

@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;password_require_number&quot;)
 
-val [passwordRequireNumber](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = false
+val [passwordRequireNumber](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)

@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;is_active&quot;)
 
-val [isActive](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = true
+val [isActive](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)

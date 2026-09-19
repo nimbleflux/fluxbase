@@ -24,6 +24,6 @@ In-memory [StorageAdapter](../-storage-adapter/) — the default for JVM. Sessio
 
 | Name | Summary |
 |---|---|
-| [getItem](get-item/) | [jvm]<br>open override fun [getItem](get-item/)(key: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? |
-| [removeItem](remove-item/) | [jvm]<br>open override fun [removeItem](remove-item/)(key: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)) |
-| [setItem](set-item/) | [jvm]<br>open override fun [setItem](set-item/)(key: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), value: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)) |
+| [getItem](get-item/) | [jvm]<br>open override fun [getItem](get-item/)(key: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)? |
+| [removeItem](remove-item/) | [jvm]<br>open override fun [removeItem](remove-item/)(key: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)) |
+| [setItem](set-item/) | [jvm]<br>open override fun [setItem](set-item/)(key: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), value: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)) |

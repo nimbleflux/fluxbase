@@ -10,4 +10,4 @@ prev: false
 # TwoFactorSetupResponse
 
 [jvm]\
-constructor(id: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), type: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html) = &quot;totp&quot;, totp: [TotpSetup](../../-totp-setup/))
+constructor(id: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), type: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html) = &quot;totp&quot;, totp: [TotpSetup](../../-totp-setup/))

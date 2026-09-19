@@ -10,4 +10,4 @@ prev: false
 # total
 
 [jvm]\
-val [total](./): [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html) = 0
+val [total](./): [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)

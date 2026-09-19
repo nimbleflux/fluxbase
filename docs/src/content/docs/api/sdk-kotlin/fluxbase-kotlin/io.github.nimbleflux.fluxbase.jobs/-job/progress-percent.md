@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;progress_percent&quot;)
 
-val [progressPercent](./): [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html)? = null
+val [progressPercent](./): [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)?

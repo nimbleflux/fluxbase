@@ -10,4 +10,4 @@ prev: false
 # priority
 
 [jvm]\
-val [priority](./): [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html) = 5
+val [priority](./): [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)

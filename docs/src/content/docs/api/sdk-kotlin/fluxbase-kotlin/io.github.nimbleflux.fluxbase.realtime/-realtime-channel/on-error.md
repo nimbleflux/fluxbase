@@ -10,6 +10,6 @@ prev: false
 # onError
 
 [jvm]\
-var [onError](./): (JsonObject) -&gt; [Unit](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-unit/index.html)?
+var [onError](./): (JsonObject) -&gt; [Unit](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html)?
 
 Optional callback invoked when the server sends an `error` message. Set this to surface subscription/server errors to application code.

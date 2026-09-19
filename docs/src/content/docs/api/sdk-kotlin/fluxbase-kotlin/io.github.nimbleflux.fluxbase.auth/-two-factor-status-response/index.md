@@ -12,17 +12,17 @@ prev: false
 [jvm]\
 @Serializable
 
-data class [TwoFactorStatusResponse](./)(val all: [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; = emptyList(), val totp: [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; = emptyList())
+data class [TwoFactorStatusResponse](./)(val all: [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; = emptyList(), val totp: [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; = emptyList())
 
 ## Constructors
 
 | | |
 |---|---|
-| [TwoFactorStatusResponse](-two-factor-status-response/) | [jvm]<br>constructor(all: [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; = emptyList(), totp: [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; = emptyList()) |
+| [TwoFactorStatusResponse](-two-factor-status-response/) | [jvm]<br>constructor(all: [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; = emptyList(), totp: [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; = emptyList()) |
 
 ## Properties
 
 | Name | Summary |
 |---|---|
-| [all](all/) | [jvm]<br>val [all](all/): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; |
-| [totp](totp/) | [jvm]<br>val [totp](totp/): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; |
+| [all](all/) | [jvm]<br>val [all](all/): [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; |
+| [totp](totp/) | [jvm]<br>val [totp](totp/): [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../-factor/)&gt; |

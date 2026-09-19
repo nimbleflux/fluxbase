@@ -10,4 +10,4 @@ prev: false
 # select
 
 [jvm]\
-fun [select](./)(columns: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html) = &quot;*&quot;): [QueryBuilder](../)&lt;[T](../)&gt;
+fun [select](./)(columns: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html) = &quot;*&quot;): [QueryBuilder](../)&lt;[T](../)&gt;

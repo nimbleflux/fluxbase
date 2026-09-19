@@ -10,4 +10,4 @@ prev: false
 # metadata
 
 [jvm]\
-val [metadata](./): JsonElement? = null
+val [metadata](./): JsonElement?

@@ -10,7 +10,7 @@ prev: false
 # waitForCompletion
 
 [jvm]\
-suspend fun [waitForCompletion](./)(executionId: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), options: [WaitForCompletionOptions](../../-wait-for-completion-options/) = WaitForCompletionOptions()): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[RpcExecution](../../-rpc-execution/)&gt;
+suspend fun [waitForCompletion](./)(executionId: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), options: [WaitForCompletionOptions](../../-wait-for-completion-options/) = WaitForCompletionOptions()): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[RpcExecution](../../-rpc-execution/)&gt;
 
 Poll for execution completion with exponential backoff. Port of `waitForCompletion()` in `rpc.ts:212`.
 

@@ -10,6 +10,6 @@ prev: false
 # BroadcastCallback
 
 [jvm]\
-typealias [BroadcastCallback](./) = (JsonElement) -&gt; [Unit](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-unit/index.html)
+typealias [BroadcastCallback](./) = (JsonElement) -&gt; [Unit](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html)
 
 Callback type for broadcast events.

@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;current_version&quot;)
 
-val [currentVersion](./): [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html) = 1
+val [currentVersion](./): [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)

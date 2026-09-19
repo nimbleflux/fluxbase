@@ -10,7 +10,7 @@ prev: false
 # KtorWebSocketTransport
 
 [jvm]\
-class [KtorWebSocketTransport](./) : [WebSocketTransport](../-web-socket-transport/)
+class [KtorWebSocketTransport](./)(trustAllCertificates: [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) = false) : [WebSocketTransport](../-web-socket-transport/)
 
 Ktor-backed [WebSocketTransport](../-web-socket-transport/) — the production WebSocket implementation for JVM/Android.
 
@@ -22,18 +22,18 @@ The protocol itself (subscribe/heartbeat/postgres_changes/broadcast) lives in [R
 
 | | |
 |---|---|
-| [KtorWebSocketTransport](-ktor-web-socket-transport/) | [jvm]<br>constructor() |
+| [KtorWebSocketTransport](-ktor-web-socket-transport/) | [jvm]<br>constructor(trustAllCertificates: [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) = false) |
 
 ## Properties
 
 | Name | Summary |
 |---|---|
-| [isConnected](is-connected/) | [jvm]<br>@[Volatile](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.jvm/-volatile/index.html)<br>open override var [isConnected](is-connected/): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html)<br>Whether the transport is currently connected. |
+| [isConnected](is-connected/) | [jvm]<br>@[Volatile](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-volatile/index.html)<br>open override var [isConnected](is-connected/): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)<br>Whether the transport is currently connected. |
 
 ## Functions
 
 | Name | Summary |
 |---|---|
 | [close](close/) | [jvm]<br>open override fun [close](close/)()<br>Close the connection. |
-| [connect](connect/) | [jvm]<br>open override fun [connect](connect/)(url: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): Flow&lt;[String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)&gt;<br>Connect to the given URL and return a flow of incoming JSON text messages. |
-| [send](send/) | [jvm]<br>open suspend override fun [send](send/)(text: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html))<br>Send a text message. |
+| [connect](connect/) | [jvm]<br>open override fun [connect](connect/)(url: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): Flow&lt;[String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)&gt;<br>Connect to the given URL and return a flow of incoming JSON text messages. |
+| [send](send/) | [jvm]<br>open suspend override fun [send](send/)(text: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html))<br>Send a text message. |

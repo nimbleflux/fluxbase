@@ -10,6 +10,6 @@ prev: false
 # get
 
 [jvm]\
-suspend fun [get](./)(key: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;JsonElement&gt;
+suspend fun [get](./)(key: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;JsonElement&gt;
 
 Get a single setting value by key. GETs `/api/v1/settings/{key}`.

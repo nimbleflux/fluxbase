@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;retry_count&quot;)
 
-val [retryCount](./): [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html) = 0
+val [retryCount](./): [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)

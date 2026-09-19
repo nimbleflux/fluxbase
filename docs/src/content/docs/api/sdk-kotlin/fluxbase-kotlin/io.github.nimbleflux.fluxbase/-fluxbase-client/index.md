@@ -14,7 +14,7 @@ class [FluxbaseClient](./)
 
 The top-level Fluxbase client — port of `FluxbaseClient` from `sdk/src/client.ts`.
 
-Wires together the HTTP layer ([http](http/)) and all sub-modules ([auth](auth/), and later postgrest, realtime, storage, functions, jobs, etc.). Construct via the companion [create](-companion/create/) factory (or the top-level [createFluxbaseClient](../create-fluxbase-client/) function), which resolves the URL and key from arguments or environment variables.
+Wires together the HTTP layer (http) and all sub-modules (auth, and later postgrest, realtime, storage, functions, jobs, etc.). Construct via the companion [create](-companion/create/) factory (or the top-level [createFluxbaseClient](../create-fluxbase-client/) function), which resolves the URL and key from arguments or environment variables.
 
 Usage:
 
@@ -51,6 +51,6 @@ val (session, error) = client.auth.signInWithPassword("user@example.com", "pw")
 
 | Name | Summary |
 |---|---|
-| [channel](channel/) | [jvm]<br>fun [channel](channel/)(name: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), transport: [WebSocketTransport](../../iogithubnimblefluxfluxbaserealtime/-web-socket-transport/)? = null): [RealtimeChannel](../../iogithubnimblefluxfluxbaserealtime/-realtime-channel/)<br>Create a realtime channel for postgres_changes/broadcast/presence subscriptions. Port of `channel()` in `client.ts:654-674`. |
-| [from](../from/) | [jvm]<br>inline fun &lt;[T](../from/)&gt; [FluxbaseClient](./).[from](../from/)(table: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), schema: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null): [QueryBuilder](../../iogithubnimblefluxfluxbasepostgrest/-query-builder/)&lt;[T](../from/)&gt;<br>Start a PostgREST query against [table](../from/). Uses a reified type parameter so the kotlinx.serialization serializer is resolved at compile time. |
-| [setTenant](set-tenant/) | [jvm]<br>fun [setTenant](set-tenant/)(tenantId: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html))<br>Set the active tenant for multi-tenancy. Sets the `X-FB-Tenant` header. Port of `setTenant()` in `client.ts:567-574`. |
+| [channel](channel/) | [jvm]<br>fun [channel](channel/)(name: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), transport: [WebSocketTransport](../../iogithubnimblefluxfluxbaserealtime/-web-socket-transport/)? = null): [RealtimeChannel](../../iogithubnimblefluxfluxbaserealtime/-realtime-channel/)<br>Create a realtime channel for postgres_changes/broadcast/presence subscriptions. Port of `channel()` in `client.ts:654-674`. |
+| [from](../from/) | [jvm]<br>inline fun &lt;[T](../from/)&gt; [FluxbaseClient](./).[from](../from/)(table: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), schema: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)? = null): [QueryBuilder](../../iogithubnimblefluxfluxbasepostgrest/-query-builder/)&lt;[T](../from/)&gt;<br>Start a PostgREST query against [table](../from/). Uses a reified type parameter so the kotlinx.serialization serializer is resolved at compile time. |
+| [setTenant](set-tenant/) | [jvm]<br>fun [setTenant](set-tenant/)(tenantId: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html))<br>Set the active tenant for multi-tenancy. Sets the `X-FB-Tenant` header. Port of `setTenant()` in `client.ts:567-574`. |

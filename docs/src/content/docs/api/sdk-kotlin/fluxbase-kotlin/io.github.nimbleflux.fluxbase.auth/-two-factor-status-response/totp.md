@@ -10,4 +10,4 @@ prev: false
 # totp
 
 [jvm]\
-val [totp](./): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../../-factor/)&gt;
+val [totp](./): [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Factor](../../-factor/)&gt;

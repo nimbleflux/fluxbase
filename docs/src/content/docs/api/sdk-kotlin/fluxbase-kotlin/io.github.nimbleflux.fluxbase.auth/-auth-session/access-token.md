@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;access_token&quot;)
 
-val [accessToken](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [accessToken](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

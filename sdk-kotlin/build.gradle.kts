@@ -107,9 +107,7 @@ detekt {
 //
 // Regenerate with:  ./gradlew dokkaGfm
 // Then commit the changed files under docs/src/content/docs/api/sdk-kotlin/.
-tasks.withType<org.jetbrains.dokka.gradle.DokkaTask>().configureEach {
-    // In Dokka 1.9.x, dokkaHtml / dokkaGfm / dokkaJavadoc are all DokkaTask instances.
-}
+// (gradle.properties enables Dokka V1 mode — V2 dropped the GFM format.)
 
 /**
  * Slug a Dokka path segment the way Starlight slugifies content-collection

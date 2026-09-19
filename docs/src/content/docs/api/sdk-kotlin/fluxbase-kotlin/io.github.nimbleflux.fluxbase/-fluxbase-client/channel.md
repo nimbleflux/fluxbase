@@ -10,7 +10,7 @@ prev: false
 # channel
 
 [jvm]\
-fun [channel](./)(name: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), transport: [WebSocketTransport](../../../iogithubnimblefluxfluxbaserealtime/-web-socket-transport/)? = null): [RealtimeChannel](../../../iogithubnimblefluxfluxbaserealtime/-realtime-channel/)
+fun [channel](./)(name: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), transport: [WebSocketTransport](../../../iogithubnimblefluxfluxbaserealtime/-web-socket-transport/)? = null): [RealtimeChannel](../../../iogithubnimblefluxfluxbaserealtime/-realtime-channel/)
 
 Create a realtime channel for postgres_changes/broadcast/presence subscriptions. Port of `channel()` in `client.ts:654-674`.
 

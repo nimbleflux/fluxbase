@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;client_keys&quot;)
 
-val [clientKeys](./): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[ClientKey](../../-client-key/)&gt;
+val [clientKeys](./): [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[ClientKey](../../-client-key/)&gt;

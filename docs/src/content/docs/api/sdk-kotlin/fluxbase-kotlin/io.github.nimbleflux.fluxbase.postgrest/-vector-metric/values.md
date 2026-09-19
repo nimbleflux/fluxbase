@@ -10,8 +10,4 @@ prev: false
 # values
 
 [jvm]\
-fun [values](./)(): [Array](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-array/index.html)&lt;[VectorMetric](../)&gt;
-
-Returns an array containing the constants of this enum type, in the order they're declared.
-
-This method may be used to iterate over the constants.
+fun [values](./)(): [Array](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-array/index.html)&lt;[VectorMetric](../)&gt;

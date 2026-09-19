@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;expires_in&quot;)
 
-val [expiresIn](./): [Long](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-long/index.html)? = null
+val [expiresIn](./): [Long](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html)?

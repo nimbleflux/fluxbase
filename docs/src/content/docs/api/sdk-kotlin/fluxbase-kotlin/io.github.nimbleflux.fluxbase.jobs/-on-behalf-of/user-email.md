@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;user_email&quot;)
 
-val [userEmail](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [userEmail](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

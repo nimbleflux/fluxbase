@@ -10,4 +10,4 @@ prev: false
 # order
 
 [jvm]\
-fun [order](./)(column: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), ascending: [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = true): [QueryBuilder](../)&lt;[T](../)&gt;
+fun [order](./)(column: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), ascending: [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) = true): [QueryBuilder](../)&lt;[T](../)&gt;

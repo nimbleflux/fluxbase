@@ -10,4 +10,4 @@ prev: false
 # ListClientKeysResponse
 
 [jvm]\
-constructor(clientKeys: [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[ClientKey](../../-client-key/)&gt; = emptyList(), total: [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html) = 0)
+constructor(clientKeys: [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[ClientKey](../../-client-key/)&gt; = emptyList(), total: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html) = 0)

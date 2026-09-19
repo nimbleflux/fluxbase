@@ -10,7 +10,7 @@ prev: false
 # persist
 
 [jvm]\
-val [persist](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = true
+val [persist](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)
 
 #### Parameters
 
@@ -18,4 +18,4 @@ jvm
 
 | | |
 |---|---|
-| persist | whether to persist the session to the [storage](../storage/) adapter (default true). |
+| persist | whether to persist the session to the storage adapter (default true). |

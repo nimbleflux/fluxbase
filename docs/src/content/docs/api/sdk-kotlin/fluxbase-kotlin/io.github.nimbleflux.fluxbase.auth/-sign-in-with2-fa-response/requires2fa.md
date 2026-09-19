@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;requires_2fa&quot;)
 
-val [requires2fa](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html)
+val [requires2fa](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)

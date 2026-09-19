@@ -10,4 +10,4 @@ prev: false
 # GraphQLErrorLocation
 
 [jvm]\
-constructor(line: [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html), column: [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html))
+constructor(line: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html), column: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html))

@@ -10,4 +10,4 @@ prev: false
 # invitation
 
 [jvm]\
-val [invitation](./): [Invitation](../../-invitation/)? = null
+val [invitation](./): [Invitation](../../-invitation/)?

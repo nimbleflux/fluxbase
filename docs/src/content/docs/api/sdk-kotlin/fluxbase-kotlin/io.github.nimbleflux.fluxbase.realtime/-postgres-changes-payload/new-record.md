@@ -10,4 +10,4 @@ prev: false
 # newRecord
 
 [jvm]\
-val [newRecord](./): JsonElement? = null
+val [newRecord](./): JsonElement?
