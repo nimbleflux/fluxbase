@@ -40,7 +40,7 @@ FROM denoland/deno:bin-2.6.4 AS deno-bin
 # ------------------------------------------------------------------------------
 # Stage 1: Build SDKs and Admin UI
 # ------------------------------------------------------------------------------
-FROM oven/bun:1.4.1-debian AS admin-builder
+FROM oven/bun:1.4.2-debian AS admin-builder
 
 WORKDIR /build
 

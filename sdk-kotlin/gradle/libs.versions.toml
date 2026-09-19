@@ -7,7 +7,7 @@ ktor = "3.5.2"
 kover = "0.9.9"
 detekt = "1.23.8"
 dokka = "2.2.0"
-mavenPublish = "0.30.0"
+mavenPublish = "0.37.0"
 
 [libraries]
 kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlin" }
