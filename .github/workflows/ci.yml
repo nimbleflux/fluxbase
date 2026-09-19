@@ -495,8 +495,11 @@ jobs:
           # Wait for MinIO to be ready
           timeout 30 bash -c 'until curl -f http://localhost:9000/minio/health/live; do sleep 1; done'
 
-          # Install mc (MinIO client)
-          wget https://dl.min.io/client/mc/release/linux-amd64/mc
+          # Install mc (MinIO client) — dl.min.io downloads are gone (410),
+          # so extract the binary from the container image instead.
+          docker create --name mc-extract quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z > /dev/null
+          docker cp mc-extract:/usr/bin/mc ./mc
+          docker rm mc-extract
           chmod +x mc
 
           # Configure mc
@@ -880,7 +883,9 @@ jobs:
       - name: Setup MinIO bucket
         run: |
           timeout 30 bash -c 'until curl -f http://localhost:9000/minio/health/live; do sleep 1; done'
-          wget -q https://dl.min.io/client/mc/release/linux-amd64/mc
+          docker create --name mc-extract quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z > /dev/null
+          docker cp mc-extract:/usr/bin/mc ./mc
+          docker rm mc-extract
           chmod +x mc
           ./mc alias set minio http://localhost:9000 minioadmin minioadmin
           ./mc mb minio/fluxbase-test || true
