@@ -397,19 +397,6 @@ jobs:
           - 1025:1025 # SMTP
           - 8025:8025 # Web UI
 
-      minio:
-        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl --silent --fail http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - uses: actions/checkout@v7
 
@@ -490,6 +477,18 @@ jobs:
 
           # Enable pgvector extension for AI/RAG features
           psql -h localhost -U postgres -d fluxbase_go_e2e -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Start MinIO
+        run: |
+          # Current MinIO images default to `minio` (no args), which exits —
+          # GitHub Actions service containers cannot override CMD, so run the
+          # container from a step with explicit `server /data` args instead.
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z \
+            server /data
 
       - name: Setup MinIO bucket
         run: |
@@ -762,19 +761,6 @@ jobs:
           - 1025:1025
           - 8025:8025
 
-      minio:
-        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl --silent --fail http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - uses: actions/checkout@v7
 
@@ -878,6 +864,18 @@ jobs:
           done
           psql -h localhost -U postgres -d fluxbase_test -v ON_ERROR_STOP=1 -f "${SCHEMA_DIR}/post-schema-fks.sql"
           psql -h localhost -U postgres -d fluxbase_test -v ON_ERROR_STOP=1 -f "${SCHEMA_DIR}/post-schema.sql"
+
+      - name: Start MinIO
+        run: |
+          # Current MinIO images default to `minio` (no args), which exits —
+          # GitHub Actions service containers cannot override CMD, so run the
+          # container from a step with explicit `server /data` args instead.
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z \
+            server /data
 
       - name: Setup MinIO bucket
         run: |
