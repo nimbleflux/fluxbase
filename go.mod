@@ -1,6 +1,6 @@
 module github.com/nimbleflux/fluxbase
 
-go 1.26.1
+go 1.26.8
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.48.0
