@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;commit_timestamp&quot;)
 
-val [commitTimestamp](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [commitTimestamp](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

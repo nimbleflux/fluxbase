@@ -10,4 +10,4 @@ prev: false
 # message
 
 [jvm]\
-open override val [message](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+open override val [message](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

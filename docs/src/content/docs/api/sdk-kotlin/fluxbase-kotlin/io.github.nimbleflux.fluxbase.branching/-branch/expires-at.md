@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;expires_at&quot;)
 
-val [expiresAt](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [expiresAt](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

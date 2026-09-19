@@ -10,4 +10,4 @@ prev: false
 # timestamp
 
 [jvm]\
-val [timestamp](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [timestamp](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

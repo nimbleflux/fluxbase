@@ -10,4 +10,4 @@ prev: false
 # eventType
 
 [jvm]\
-val [eventType](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [eventType](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

@@ -10,6 +10,6 @@ prev: false
 # removeHeader
 
 [jvm]\
-fun [removeHeader](./)(name: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html))
+fun [removeHeader](./)(name: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html))
 
 Remove a custom header.

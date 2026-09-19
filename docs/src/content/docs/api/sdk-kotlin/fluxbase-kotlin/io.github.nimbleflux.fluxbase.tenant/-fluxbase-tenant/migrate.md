@@ -10,6 +10,6 @@ prev: false
 # migrate
 
 [jvm]\
-suspend fun [migrate](./)(id: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;JsonElement&gt;
+suspend fun [migrate](./)(id: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;JsonElement&gt;
 
 Run pending migrations for a tenant. POSTs `.../migrate`.

@@ -10,7 +10,7 @@ prev: false
 # setAuthToken
 
 [jvm]\
-fun [setAuthToken](./)(token: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)?)
+fun [setAuthToken](./)(token: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?)
 
 Update the authorization token.
 

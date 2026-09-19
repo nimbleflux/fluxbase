@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;data_clone_mode&quot;)
 
-val [dataCloneMode](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [dataCloneMode](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

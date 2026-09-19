@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;signup_enabled&quot;)
 
-val [signupEnabled](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = true
+val [signupEnabled](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)

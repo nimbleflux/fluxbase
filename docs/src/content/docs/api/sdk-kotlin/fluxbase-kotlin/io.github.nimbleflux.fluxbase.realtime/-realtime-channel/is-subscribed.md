@@ -10,6 +10,6 @@ prev: false
 # isSubscribed
 
 [jvm]\
-val [isSubscribed](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html)
+val [isSubscribed](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)
 
 Whether this channel is actively subscribed.

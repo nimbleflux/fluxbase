@@ -10,6 +10,6 @@ prev: false
 # execute
 
 [jvm]\
-suspend fun [execute](./)(): [PostgrestResponse](../../-postgrest-response/)&lt;[List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[T](../)&gt;&gt;
+suspend fun [execute](./)(): [PostgrestResponse](../../-postgrest-response/)&lt;[List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[T](../)&gt;&gt;
 
 Execute a SELECT query and return the list of rows (with count if requested).

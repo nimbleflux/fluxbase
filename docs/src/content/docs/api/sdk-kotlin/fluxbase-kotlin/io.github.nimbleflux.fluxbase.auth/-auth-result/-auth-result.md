@@ -10,4 +10,4 @@ prev: false
 # AuthResult
 
 [jvm]\
-constructor(user: [User](../../-user/)? = null, session: [AuthSession](../../-auth-session/)? = null, is2faRequired: [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = false, userId2fa: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null)
+constructor(user: [User](../../-user/)? = null, session: [AuthSession](../../-auth-session/)? = null, is2faRequired: [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) = false, userId2fa: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)? = null)

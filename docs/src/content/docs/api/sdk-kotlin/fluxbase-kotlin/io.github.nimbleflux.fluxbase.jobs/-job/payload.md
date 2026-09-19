@@ -10,4 +10,4 @@ prev: false
 # payload
 
 [jvm]\
-val [payload](./): JsonElement? = null
+val [payload](./): JsonElement?

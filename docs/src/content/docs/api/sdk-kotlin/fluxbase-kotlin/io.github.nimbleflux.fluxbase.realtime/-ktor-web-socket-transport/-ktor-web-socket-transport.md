@@ -10,4 +10,4 @@ prev: false
 # KtorWebSocketTransport
 
 [jvm]\
-constructor()
+constructor(trustAllCertificates: [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) = false)

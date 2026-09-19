@@ -10,7 +10,7 @@ prev: false
 # onAuthStateChange
 
 [jvm]\
-fun [onAuthStateChange](./)(callback: ([AuthState](../../-auth-state/)) -&gt; [Unit](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-unit/index.html)): () -&gt; [Unit](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-unit/index.html)
+fun [onAuthStateChange](./)(callback: ([AuthState](../../-auth-state/)) -&gt; [Unit](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html)): () -&gt; [Unit](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-unit/index.html)
 
 Register a callback for auth state changes. Returns a function to unsubscribe.
 

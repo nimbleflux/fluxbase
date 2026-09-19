@@ -10,7 +10,7 @@ prev: false
 # RealtimeChannel
 
 [jvm]\
-constructor(baseUrl: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), channelName: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), token: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)?, transport: [WebSocketTransport](../../-web-socket-transport/), coroutineDispatcher: [CoroutineContext](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.coroutines/-coroutine-context/index.html) = Dispatchers.IO)
+constructor(baseUrl: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), channelName: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), token: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?, transport: [WebSocketTransport](../../-web-socket-transport/), coroutineDispatcher: [CoroutineContext](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.coroutines/-coroutine-context/index.html) = Dispatchers.IO)
 
 #### Parameters
 

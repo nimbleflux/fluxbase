@@ -10,4 +10,4 @@ prev: false
 # line
 
 [jvm]\
-val [line](./): [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html)
+val [line](./): [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)

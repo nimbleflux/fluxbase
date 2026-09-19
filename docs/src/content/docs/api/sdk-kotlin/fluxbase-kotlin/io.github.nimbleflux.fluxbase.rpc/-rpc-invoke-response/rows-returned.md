@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;rows_returned&quot;)
 
-val [rowsReturned](./): [Long](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-long/index.html)? = null
+val [rowsReturned](./): [Long](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html)?

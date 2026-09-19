@@ -10,6 +10,6 @@ prev: false
 # setAnonKey
 
 [jvm]\
-fun [setAnonKey](./)(key: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html))
+fun [setAnonKey](./)(key: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html))
 
 Set the anon key used as the Authorization fallback on sign-out.

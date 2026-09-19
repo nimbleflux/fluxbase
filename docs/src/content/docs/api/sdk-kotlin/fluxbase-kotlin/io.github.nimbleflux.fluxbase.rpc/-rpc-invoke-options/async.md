@@ -10,4 +10,4 @@ prev: false
 # async
 
 [jvm]\
-val [async](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = false
+val [async](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)

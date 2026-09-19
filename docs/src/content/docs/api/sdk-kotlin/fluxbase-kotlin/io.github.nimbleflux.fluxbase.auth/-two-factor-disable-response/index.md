@@ -12,16 +12,16 @@ prev: false
 [jvm]\
 @Serializable
 
-data class [TwoFactorDisableResponse](./)(val id: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html))
+data class [TwoFactorDisableResponse](./)(val id: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html))
 
 ## Constructors
 
 | | |
 |---|---|
-| [TwoFactorDisableResponse](-two-factor-disable-response/) | [jvm]<br>constructor(id: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)) |
+| [TwoFactorDisableResponse](-two-factor-disable-response/) | [jvm]<br>constructor(id: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)) |
 
 ## Properties
 
 | Name | Summary |
 |---|---|
-| [id](id/) | [jvm]<br>val [id](id/): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html) |
+| [id](id/) | [jvm]<br>val [id](id/): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html) |

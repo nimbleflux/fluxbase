@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;job_name&quot;)
 
-val [jobName](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [jobName](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

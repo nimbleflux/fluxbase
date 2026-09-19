@@ -10,6 +10,6 @@ prev: false
 # AUTH_STORAGE_KEY
 
 [jvm]\
-const val [AUTH_STORAGE_KEY](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+const val [AUTH_STORAGE_KEY](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)
 
 The storage key under which the session JSON is persisted.

@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;qr_code&quot;)
 
-val [qrCode](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [qrCode](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

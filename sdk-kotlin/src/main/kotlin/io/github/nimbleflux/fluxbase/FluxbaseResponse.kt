@@ -40,8 +40,13 @@ sealed interface FluxbaseResponse<out T> {
         override val error: FluxbaseError? get() = null
     }
 
-    /** Failed result. */
-    data class Error(override val error: FluxbaseError) : FluxbaseResponse<Nothing> {
+    /**
+     * Failed result. Not a `data class`: Kotlin 2.2+ forbids the generated
+     * `component1(): FluxbaseError` from clashing with the inherited
+     * `component1(): Nothing?` — destructuring still works via the interface
+     * operators above.
+     */
+    class Error(override val error: FluxbaseError) : FluxbaseResponse<Nothing> {
         override val data: Nothing? get() = null
     }
 }

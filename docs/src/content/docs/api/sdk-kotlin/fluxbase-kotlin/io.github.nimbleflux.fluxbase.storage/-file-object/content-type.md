@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;content_type&quot;)
 
-val [contentType](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [contentType](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

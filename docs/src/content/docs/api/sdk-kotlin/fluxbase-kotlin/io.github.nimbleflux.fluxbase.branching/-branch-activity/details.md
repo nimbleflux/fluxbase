@@ -10,4 +10,4 @@ prev: false
 # details
 
 [jvm]\
-val [details](./): JsonElement? = null
+val [details](./): JsonElement?

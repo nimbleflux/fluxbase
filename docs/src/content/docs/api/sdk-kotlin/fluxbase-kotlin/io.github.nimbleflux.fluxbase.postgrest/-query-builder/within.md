@@ -10,6 +10,6 @@ prev: false
 # within
 
 [jvm]\
-fun [within](./)(column: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), geojson: [Any](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-any/index.html)?): [QueryBuilder](../)&lt;[T](../)&gt;
+fun [within](./)(column: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), geojson: [Any](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html)?): [QueryBuilder](../)&lt;[T](../)&gt;
 
 PostGIS ST_Within — filter geometries within [geojson](./).

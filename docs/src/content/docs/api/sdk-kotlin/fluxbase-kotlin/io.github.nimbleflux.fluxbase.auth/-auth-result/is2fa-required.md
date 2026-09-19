@@ -10,4 +10,4 @@ prev: false
 # is2faRequired
 
 [jvm]\
-val [is2faRequired](./): [Boolean](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-boolean/index.html) = false
+val [is2faRequired](./): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html)

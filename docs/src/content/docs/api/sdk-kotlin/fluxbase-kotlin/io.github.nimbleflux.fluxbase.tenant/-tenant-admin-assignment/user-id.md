@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;user_id&quot;)
 
-val [userId](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [userId](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

@@ -10,4 +10,4 @@ prev: false
 # userId2fa
 
 [jvm]\
-val [userId2fa](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [userId2fa](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

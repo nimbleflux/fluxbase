@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;error_message&quot;)
 
-val [errorMessage](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [errorMessage](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

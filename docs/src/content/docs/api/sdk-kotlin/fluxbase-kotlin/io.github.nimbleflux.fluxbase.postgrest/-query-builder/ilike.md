@@ -10,4 +10,4 @@ prev: false
 # ilike
 
 [jvm]\
-fun [ilike](./)(column: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), value: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [QueryBuilder](../)&lt;[T](../)&gt;
+fun [ilike](./)(column: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), value: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [QueryBuilder](../)&lt;[T](../)&gt;

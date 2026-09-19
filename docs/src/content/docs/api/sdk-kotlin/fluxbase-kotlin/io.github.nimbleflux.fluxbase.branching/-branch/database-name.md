@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;database_name&quot;)
 
-val [databaseName](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [databaseName](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

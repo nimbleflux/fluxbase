@@ -10,4 +10,4 @@ prev: false
 # message
 
 [jvm]\
-val [message](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [message](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

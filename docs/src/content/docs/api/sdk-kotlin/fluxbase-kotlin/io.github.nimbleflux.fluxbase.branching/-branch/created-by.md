@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;created_by&quot;)
 
-val [createdBy](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [createdBy](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

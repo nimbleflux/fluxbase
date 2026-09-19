@@ -36,4 +36,4 @@ NOTE: The TS SDK's chunked/resumable upload (custom init/upload/complete protoco
 
 | Name | Summary |
 |---|---|
-| [from](from/) | [jvm]<br>fun [from](from/)(bucket: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [StorageBucket](../-storage-bucket/)<br>Start operating on a bucket. Port of `from(bucket)` in `storage.ts`. |
+| [from](from/) | [jvm]<br>fun [from](from/)(bucket: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [StorageBucket](../-storage-bucket/)<br>Start operating on a bucket. Port of `from(bucket)` in `storage.ts`. |

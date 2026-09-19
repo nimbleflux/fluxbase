@@ -10,6 +10,6 @@ prev: false
 # update
 
 [jvm]\
-suspend fun [update](./)(id: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), options: [UpdateTenantOptions](../../-update-tenant-options/)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[Tenant](../../-tenant/)&gt;
+suspend fun [update](./)(id: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), options: [UpdateTenantOptions](../../-update-tenant-options/)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[Tenant](../../-tenant/)&gt;
 
 Update a tenant. PATCHes `/api/v1/admin/tenants/{id}`.

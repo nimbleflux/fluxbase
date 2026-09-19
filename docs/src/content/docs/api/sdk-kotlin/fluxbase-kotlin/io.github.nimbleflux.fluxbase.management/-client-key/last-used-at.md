@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;last_used_at&quot;)
 
-val [lastUsedAt](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [lastUsedAt](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

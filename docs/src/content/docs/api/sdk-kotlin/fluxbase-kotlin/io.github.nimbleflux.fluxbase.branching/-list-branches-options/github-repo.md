@@ -10,4 +10,4 @@ prev: false
 # githubRepo
 
 [jvm]\
-val [githubRepo](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [githubRepo](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

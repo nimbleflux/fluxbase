@@ -10,6 +10,6 @@ prev: false
 # get
 
 [jvm]\
-suspend fun [get](./)(jobId: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[Job](../../-job/)&gt;
+suspend fun [get](./)(jobId: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[Job](../../-job/)&gt;
 
 Get a job by ID. GETs `/api/v1/jobs/{id}`.

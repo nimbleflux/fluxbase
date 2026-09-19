@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;key_prefix&quot;)
 
-val [keyPrefix](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+val [keyPrefix](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)

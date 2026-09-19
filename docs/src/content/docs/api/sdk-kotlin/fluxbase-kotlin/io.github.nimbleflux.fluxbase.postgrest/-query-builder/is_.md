@@ -10,4 +10,4 @@ prev: false
 # is_
 
 [jvm]\
-fun [is_](./)(column: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), value: [Any](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-any/index.html)?): [QueryBuilder](../)&lt;[T](../)&gt;
+fun [is_](./)(column: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), value: [Any](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html)?): [QueryBuilder](../)&lt;[T](../)&gt;

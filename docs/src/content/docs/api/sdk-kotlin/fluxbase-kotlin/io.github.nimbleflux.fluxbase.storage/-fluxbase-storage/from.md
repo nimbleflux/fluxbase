@@ -10,6 +10,6 @@ prev: false
 # from
 
 [jvm]\
-fun [from](./)(bucket: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [StorageBucket](../../-storage-bucket/)
+fun [from](./)(bucket: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [StorageBucket](../../-storage-bucket/)
 
 Start operating on a bucket. Port of `from(bucket)` in `storage.ts`.

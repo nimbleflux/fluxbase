@@ -10,4 +10,4 @@ prev: false
 # initialIntervalMs
 
 [jvm]\
-val [initialIntervalMs](./): [Long](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-long/index.html) = 500
+val [initialIntervalMs](./): [Long](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html)

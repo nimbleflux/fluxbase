@@ -10,4 +10,4 @@ prev: false
 # locations
 
 [jvm]\
-val [locations](./): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[GraphQLErrorLocation](../../-graph-q-l-error-location/)&gt;? = null
+val [locations](./): [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[GraphQLErrorLocation](../../-graph-q-l-error-location/)&gt;?

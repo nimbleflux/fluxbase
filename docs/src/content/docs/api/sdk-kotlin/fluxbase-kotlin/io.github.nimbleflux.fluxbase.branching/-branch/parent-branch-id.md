@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;parent_branch_id&quot;)
 
-val [parentBranchId](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [parentBranchId](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

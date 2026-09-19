@@ -10,4 +10,4 @@ prev: false
 # offset
 
 [jvm]\
-fun [offset](./)(offset: [Int](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-int/index.html)): [QueryBuilder](../)&lt;[T](../)&gt;
+fun [offset](./)(offset: [Int](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html)): [QueryBuilder](../)&lt;[T](../)&gt;

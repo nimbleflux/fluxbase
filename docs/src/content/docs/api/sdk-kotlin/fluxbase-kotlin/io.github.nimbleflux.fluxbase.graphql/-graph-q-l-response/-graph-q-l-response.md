@@ -10,4 +10,4 @@ prev: false
 # GraphQLResponse
 
 [jvm]\
-constructor(data: [T](../)? = null, errors: [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[GraphQLError](../../-graph-q-l-error/)&gt;? = null)
+constructor(data: [T](../)? = null, errors: [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[GraphQLError](../../-graph-q-l-error/)&gt;? = null)

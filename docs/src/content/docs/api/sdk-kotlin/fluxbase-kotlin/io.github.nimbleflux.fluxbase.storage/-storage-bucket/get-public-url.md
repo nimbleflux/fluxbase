@@ -10,6 +10,6 @@ prev: false
 # getPublicUrl
 
 [jvm]\
-fun [getPublicUrl](./)(path: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)
+fun [getPublicUrl](./)(path: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)
 
 Get the public URL for a file (if the bucket is public). Port of `getPublicUrl()` in `storage.ts`.

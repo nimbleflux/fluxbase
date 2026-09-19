@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;token_type&quot;)
 
-val [tokenType](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [tokenType](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

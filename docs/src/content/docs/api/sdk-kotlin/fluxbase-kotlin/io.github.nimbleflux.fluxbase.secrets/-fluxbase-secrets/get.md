@@ -10,6 +10,6 @@ prev: false
 # get
 
 [jvm]\
-suspend fun [get](./)(name: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), namespace: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[SecretSummary](../../-secret-summary/)&gt;
+suspend fun [get](./)(name: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), namespace: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)? = null): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[SecretSummary](../../-secret-summary/)&gt;
 
 Get a secret's metadata by name. GETs `/api/v1/secrets/by-name/{name}`.

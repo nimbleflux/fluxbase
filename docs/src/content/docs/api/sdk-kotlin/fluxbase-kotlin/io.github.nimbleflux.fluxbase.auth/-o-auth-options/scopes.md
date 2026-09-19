@@ -1,0 +1,13 @@
+---
+title: "scopes"
+editUrl: false
+next: false
+prev: false
+---
+
+//[fluxbase-kotlin](../../../../)/[io.github.nimbleflux.fluxbase.auth](../../)/[OAuthOptions](../)/[scopes](./)
+
+# scopes
+
+[jvm]\
+val [scopes](./): [List](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)&gt;

@@ -10,7 +10,7 @@ prev: false
 # create
 
 [jvm]\
-fun [create](./)(url: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null, key: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null, options: [FluxbaseClientOptions](../../../-fluxbase-client-options/) = FluxbaseClientOptions(), transport: [HttpTransport](../../../../iogithubnimblefluxfluxbasecore/-http-transport/)? = null): [FluxbaseClient](../../)
+fun [create](./)(url: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)? = null, key: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)? = null, options: [FluxbaseClientOptions](../../../-fluxbase-client-options/) = FluxbaseClientOptions(), transport: [HttpTransport](../../../../iogithubnimblefluxfluxbasecore/-http-transport/)? = null): [FluxbaseClient](../../)
 
 Create a [FluxbaseClient](../../). Port of `createClient()` in `client.ts:770-823`.
 

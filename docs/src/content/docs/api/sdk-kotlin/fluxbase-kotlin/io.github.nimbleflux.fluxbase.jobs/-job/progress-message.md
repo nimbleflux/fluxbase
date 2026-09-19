@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;progress_message&quot;)
 
-val [progressMessage](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [progressMessage](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

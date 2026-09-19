@@ -10,6 +10,6 @@ prev: false
 # validate
 
 [jvm]\
-suspend fun [validate](./)(token: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[ValidateInvitationResponse](../../-validate-invitation-response/)&gt;
+suspend fun [validate](./)(token: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)): [FluxbaseResponse](../../../iogithubnimblefluxfluxbase/-fluxbase-response/)&lt;[ValidateInvitationResponse](../../-validate-invitation-response/)&gt;
 
 Validate an invitation token (public). GETs `/api/v1/invitations/{token}/validate`.

@@ -10,4 +10,4 @@ prev: false
 # details
 
 [jvm]\
-val [details](./): [Any](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-any/index.html)? = null
+val [details](./): [Any](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html)?

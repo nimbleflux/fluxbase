@@ -10,6 +10,6 @@ prev: false
 # between
 
 [jvm]\
-fun [between](./)(column: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html), min: [Any](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-any/index.html)?, max: [Any](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-any/index.html)?): [QueryBuilder](../)&lt;[T](../)&gt;
+fun [between](./)(column: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), min: [Any](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html)?, max: [Any](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html)?): [QueryBuilder](../)&lt;[T](../)&gt;
 
 Filter values between [min](./) and [max](./) (inclusive). Adds gte + lte filters.

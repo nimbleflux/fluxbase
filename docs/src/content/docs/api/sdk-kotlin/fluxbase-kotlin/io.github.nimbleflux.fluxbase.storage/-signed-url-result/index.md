@@ -12,7 +12,7 @@ prev: false
 [jvm]\
 @Serializable
 
-data class [SignedUrlResult](./)(val signedUrl: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html))
+data class [SignedUrlResult](./)(val signedUrl: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html))
 
 Signed URL result.
 
@@ -20,10 +20,10 @@ Signed URL result.
 
 | | |
 |---|---|
-| [SignedUrlResult](-signed-url-result/) | [jvm]<br>constructor(signedUrl: [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)) |
+| [SignedUrlResult](-signed-url-result/) | [jvm]<br>constructor(signedUrl: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)) |
 
 ## Properties
 
 | Name | Summary |
 |---|---|
-| [signedUrl](signed-url/) | [jvm]<br>@SerialName(value = &quot;signed_url&quot;)<br>val [signedUrl](signed-url/): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html) |
+| [signedUrl](signed-url/) | [jvm]<br>@SerialName(value = &quot;signed_url&quot;)<br>val [signedUrl](signed-url/): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html) |

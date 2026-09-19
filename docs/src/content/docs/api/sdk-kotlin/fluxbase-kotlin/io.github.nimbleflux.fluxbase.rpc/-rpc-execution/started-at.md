@@ -13,4 +13,4 @@ prev: false
 
 @SerialName(value = &quot;started_at&quot;)
 
-val [startedAt](./): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)? = null
+val [startedAt](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

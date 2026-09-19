@@ -13,6 +13,6 @@ prev: false
 
 @SerialName(value = &quot;expires_at&quot;)
 
-val [expiresAt](./): [Long](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-long/index.html)? = null
+val [expiresAt](./): [Long](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html)?
 
 Milliseconds since epoch. Computed client-side on sign-in/refresh.

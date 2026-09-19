@@ -12,7 +12,7 @@ prev: false
 [jvm]\
 data class [AuthState](./)(val event: [AuthChangeEvent](../-auth-change-event/), val session: [AuthSession](../-auth-session/)?)
 
-A single auth state change event: the [event](event/) type plus the current session (null after SIGNED_OUT).
+A single auth state change event: the event type plus the current session (null after SIGNED_OUT).
 
 ## Constructors
 

@@ -10,4 +10,4 @@ prev: false
 # data
 
 [jvm]\
-val [data](./): [T](../)? = null
+val [data](./): [T](../)?
