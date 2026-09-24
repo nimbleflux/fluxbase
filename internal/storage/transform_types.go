@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -16,11 +17,18 @@ var (
 	ErrTooManyPixels      = errors.New("total pixel count exceeds maximum")
 )
 
-// MaxTransformDimension is the maximum allowed dimension for transformed images
-const MaxTransformDimension = 8192
+// MaxTransformDimension is the maximum allowed dimension for transformed
+// images. It matches the documented default (4096, see
+// docs/src/content/docs/guides/image-transformations.md).
+const MaxTransformDimension = 4096
 
 // DefaultMaxTotalPixels is the default maximum total pixel count (16 megapixels)
 const DefaultMaxTotalPixels = 16_000_000
+
+// DefaultMaxSourceBytes is the default cap on the number of source bytes read
+// for a single transform. It bounds decoder input independently of the
+// declared dimensions (decompression-bomb defense in depth).
+const DefaultMaxSourceBytes = 100 << 20 // 100 MiB
 
 // DefaultBucketSize is the default dimension bucketing size (50px)
 const DefaultBucketSize = 50
@@ -61,6 +69,9 @@ type TransformerOptions struct {
 	MaxHeight      int
 	MaxTotalPixels int
 	BucketSize     int
+	// MaxSourceBytes caps how many source bytes a transform will read before
+	// decoding. <= 0 selects DefaultMaxSourceBytes.
+	MaxSourceBytes int64
 }
 
 // FitMode defines how the image should be fit within the target dimensions
@@ -99,6 +110,7 @@ type ImageTransformer struct {
 	maxHeight      int
 	maxTotalPixels int
 	bucketSize     int
+	maxSourceBytes int64
 }
 
 // TransformInterface defines the interface for image transformation operations
@@ -110,6 +122,34 @@ type TransformInterface interface {
 
 // Ensure ImageTransformer implements the interface
 var _ TransformInterface = (*ImageTransformer)(nil)
+
+// checkOneDimensionPixels guards single-axis requests (only width OR only
+// height). The other dimension is derived from the source aspect ratio at
+// transform time and is unbounded by the request itself, so the static worst
+// case pairs the provided dimension with the maximum allowed other dimension;
+// the exact check against the decoded source runs in Transform.
+func (t *ImageTransformer) checkOneDimensionPixels(opts *TransformOptions) error {
+	if opts.Width > 0 && opts.Height > 0 {
+		return nil // both known; the direct total-pixel check applies
+	}
+	if opts.Width > 0 && int64(opts.Width)*int64(t.maxHeight) > int64(t.maxTotalPixels) {
+		return fmt.Errorf("%w: width %d (worst-case height %d) exceeds maximum of %d pixels",
+			ErrTooManyPixels, opts.Width, t.maxHeight, t.maxTotalPixels)
+	}
+	if opts.Height > 0 && int64(opts.Height)*int64(t.maxWidth) > int64(t.maxTotalPixels) {
+		return fmt.Errorf("%w: height %d (worst-case width %d) exceeds maximum of %d pixels",
+			ErrTooManyPixels, opts.Height, t.maxWidth, t.maxTotalPixels)
+	}
+	return nil
+}
+
+// sourceByteLimit returns the effective source byte cap for this transformer.
+func (t *ImageTransformer) sourceByteLimit() int64 {
+	if t.maxSourceBytes > 0 {
+		return t.maxSourceBytes
+	}
+	return DefaultMaxSourceBytes
+}
 
 // CanTransform checks if the given content type can be transformed
 func CanTransform(contentType string) bool {

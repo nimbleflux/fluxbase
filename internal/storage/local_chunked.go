@@ -33,6 +33,28 @@ func (l *limitedReadCloser) Close() error {
 // uploadIDRegex validates that an upload ID is a 32-character hex string
 var uploadIDRegex = regexp.MustCompile(`^[a-f0-9]{32}$`)
 
+// chunkSizeSlack is the tolerance applied to per-chunk size checks to absorb
+// framing differences between the declared size and the bytes written.
+const chunkSizeSlack int64 = 64 * 1024
+
+// SessionMaxChunkSize returns the maximum number of bytes allowed for the
+// given chunk index of a session. Non-final chunks are capped at
+// session.ChunkSize; the final chunk is capped at the declared remainder so
+// the assembled object can never exceed session.TotalSize.
+func SessionMaxChunkSize(session *ChunkedUploadSession, chunkIndex int) int64 {
+	if session == nil || session.ChunkSize <= 0 || chunkIndex < 0 || chunkIndex >= session.TotalChunks {
+		return 0
+	}
+	if chunkIndex < session.TotalChunks-1 {
+		return session.ChunkSize
+	}
+	remaining := session.TotalSize - int64(session.TotalChunks-1)*session.ChunkSize
+	if remaining <= 0 || remaining > session.ChunkSize {
+		return session.ChunkSize
+	}
+	return remaining
+}
+
 // getChunkedUploadDir returns the path to the chunked upload directory for a session
 func (ls *LocalStorage) getChunkedUploadDir(uploadID string) (string, error) {
 	if !uploadIDRegex.MatchString(uploadID) {
@@ -127,6 +149,14 @@ func (ls *LocalStorage) UploadChunk(ctx context.Context, session *ChunkedUploadS
 		return nil, fmt.Errorf("invalid chunk index: %d (total chunks: %d)", chunkIndex, session.TotalChunks)
 	}
 
+	// Enforce the per-chunk size cap: non-final chunks hold at most
+	// session.ChunkSize bytes, the final chunk at most the declared remainder,
+	// so accumulated chunks can never exceed the declared total size.
+	maxChunk := SessionMaxChunkSize(session, chunkIndex)
+	if size > maxChunk+chunkSizeSlack {
+		return nil, fmt.Errorf("chunk size %d exceeds the maximum of %d bytes for chunk %d", size, maxChunk, chunkIndex)
+	}
+
 	// Verify session directory exists
 	chunkDir, err := ls.getChunkedUploadDir(session.UploadID)
 	if err != nil {
@@ -156,6 +186,10 @@ func (ls *LocalStorage) UploadChunk(ctx context.Context, session *ChunkedUploadS
 	if err != nil {
 		_ = os.Remove(chunkPath)
 		return nil, fmt.Errorf("failed to write chunk: %w", err)
+	}
+	if written > maxChunk+chunkSizeSlack {
+		_ = os.Remove(chunkPath)
+		return nil, fmt.Errorf("chunk size %d exceeds the maximum of %d bytes for chunk %d", written, maxChunk, chunkIndex)
 	}
 
 	etag := hex.EncodeToString(hash.Sum(nil))
@@ -240,6 +274,15 @@ func (ls *LocalStorage) CompleteChunkedUpload(ctx context.Context, session *Chun
 			return nil, fmt.Errorf("failed to copy chunk %d: %w", i, err)
 		}
 		totalWritten += written
+	}
+
+	// The assembled object must match the declared total size exactly; a
+	// mismatch means corrupted or tampered chunks — reject and remove the
+	// assembled bytes rather than storing an object of the wrong size.
+	if totalWritten != session.TotalSize {
+		_ = destFile.Close()
+		_ = os.Remove(destPath)
+		return nil, fmt.Errorf("assembled size %d does not match declared total %d", totalWritten, session.TotalSize)
 	}
 
 	etag := hex.EncodeToString(hash.Sum(nil))

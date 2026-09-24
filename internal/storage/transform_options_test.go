@@ -513,7 +513,7 @@ func TestValidateOptions_DimensionBucketing(t *testing.T) {
 
 	opts := &TransformOptions{
 		Width:  1234,
-		Height: 5678,
+		Height: 3456,
 	}
 
 	err := transformer.ValidateOptions(opts)
@@ -521,7 +521,7 @@ func TestValidateOptions_DimensionBucketing(t *testing.T) {
 
 	// Dimensions should be bucketed
 	assert.Equal(t, 1200, opts.Width)
-	assert.Equal(t, 5700, opts.Height)
+	assert.Equal(t, 3500, opts.Height)
 }
 
 // TestCanTransform tests content type transformation support detection
@@ -781,7 +781,7 @@ func TestValidateOptions_MissingFitModeDefaultsToCover(t *testing.T) {
 
 // TestTransformOptions_Constants tests constant values
 func TestTransformOptions_Constants(t *testing.T) {
-	assert.Equal(t, 8192, MaxTransformDimension, "MaxTransformDimension should be 8192")
+	assert.Equal(t, 4096, MaxTransformDimension, "MaxTransformDimension should be 4096")
 	assert.Equal(t, 16_000_000, DefaultMaxTotalPixels, "DefaultMaxTotalPixels should be 16 million")
 	assert.Equal(t, 50, DefaultBucketSize, "DefaultBucketSize should be 50")
 }

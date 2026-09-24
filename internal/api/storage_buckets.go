@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
+
+	"github.com/nimbleflux/fluxbase/internal/storage"
 
 	apperrors "github.com/nimbleflux/fluxbase/internal/errors"
 )
@@ -198,15 +201,76 @@ func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
 		return SendInternalError(c, "Failed to get storage service")
 	}
 
-	if err := svc.Provider.DeleteBucket(c.RequestCtx(), bucket); err != nil {
+	if h.db == nil {
+		return SendInternalError(c, "Database connection not initialized")
+	}
+
+	ctx := c.RequestCtx()
+
+	// Check the provider bucket is empty BEFORE touching the database so a
+	// rejected delete cannot leave the bucket row gone while the provider
+	// bucket (and its objects) still exists.
+	empty, err := providerBucketEmpty(ctx, svc.Provider, bucket)
+	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return SendNotFound(c, "bucket not found")
 		}
-		if strings.Contains(err.Error(), "not empty") {
-			return SendConflict(c, "bucket is not empty", ErrCodeConflict)
-		}
-		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to delete bucket")
+		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to inspect provider bucket")
 		return SendInternalError(c, "Failed to delete bucket")
+	}
+	if !empty {
+		return SendConflict(c, "bucket is not empty", ErrCodeConflict)
+	}
+
+	// Authorization gate: RLS-gated delete of the bucket row. Row level
+	// security decides whether the caller may delete this bucket; the FK
+	// cascade from storage.objects/permissions takes care of the metadata
+	// rows in the same transaction.
+	tx, err := h.getPool(c).Begin(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to start transaction for bucket deletion")
+		return SendInternalError(c, "Failed to delete bucket")
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := h.setRLSContext(ctx, tx, c); err != nil {
+		log.Error().Err(err).Msg("Failed to set RLS context")
+		return SendInternalError(c, "Failed to delete bucket")
+	}
+
+	result, err := tx.Exec(ctx, `DELETE FROM storage.buckets WHERE id = $1`, bucket)
+	if err != nil {
+		if strings.Contains(err.Error(), "permission denied") || strings.Contains(err.Error(), "policy") {
+			return SendForbidden(c, "insufficient permissions to delete bucket", ErrCodeAccessDenied)
+		}
+		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to delete bucket from database")
+		return SendInternalError(c, "Failed to delete bucket")
+	}
+
+	if result.RowsAffected() == 0 {
+		// Distinguish 404 (bucket absent) from 403 (RLS blocked the delete).
+		// The SECURITY DEFINER helper bypasses RLS for the existence check.
+		var bucketExists bool
+		err := h.getPool(c).QueryRow(ctx, `SELECT storage.bucket_exists($1::text, $2::uuid)`, bucket, getTenantIDArg(c)).Scan(&bucketExists)
+		if err == nil && bucketExists {
+			return SendForbidden(c, "insufficient permissions to delete bucket", ErrCodeAccessDenied)
+		}
+		return SendNotFound(c, "bucket not found or insufficient permissions")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to commit bucket deletion")
+		return SendInternalError(c, "Failed to delete bucket")
+	}
+
+	// Provider delete runs after the authorization gate. If it fails the
+	// bucket row is already gone — acceptable and logged.
+	if err := svc.Provider.DeleteBucket(ctx, bucket); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return SendNotFound(c, "bucket not found")
+		}
+		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to delete bucket in provider (bucket row already deleted)")
+		return SendInternalError(c, "Failed to delete bucket in storage provider")
 	}
 
 	log.Info().
@@ -215,6 +279,16 @@ func (h *StorageHandler) DeleteBucket(c fiber.Ctx) error {
 		Msg("Bucket deleted")
 
 	return c.Status(fiber.StatusNoContent).Send(nil)
+}
+
+// providerBucketEmpty reports whether the provider-side bucket holds no
+// objects.
+func providerBucketEmpty(ctx context.Context, provider storage.Provider, bucket string) (bool, error) {
+	result, err := provider.List(ctx, bucket, &storage.ListOptions{MaxKeys: 1})
+	if err != nil {
+		return false, err
+	}
+	return len(result.Objects) == 0, nil
 }
 
 func (h *StorageHandler) ListBuckets(c fiber.Ctx) error {

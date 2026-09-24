@@ -26,6 +26,11 @@ type rateLimitEntry struct {
 	windowEnd time.Time
 }
 
+// maxSignedURLExpiry caps the lifetime of signed URLs issued by this API.
+// It stays below the S3 presigned maximum of 7 days and matches the 24h
+// lifetime used for chunked upload sessions.
+const maxSignedURLExpiry = 24 * time.Hour
+
 func (r *ipRateLimiter) allow(ip string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -48,6 +53,20 @@ func (r *ipRateLimiter) allow(ip string) bool {
 
 	entry.count++
 	return true
+}
+
+// sweep removes entries whose window has ended so the map stays bounded even
+// when many distinct client IPs are seen over time.
+func (r *ipRateLimiter) sweep() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now()
+	for ip, entry := range r.requests {
+		if now.After(entry.windowEnd) {
+			delete(r.requests, ip)
+		}
+	}
 }
 
 // GenerateSignedURL generates a presigned URL for temporary access
@@ -89,6 +108,36 @@ func (h *StorageHandler) GenerateSignedURL(c fiber.Ctx) error {
 	}
 	if req.Method == "" {
 		req.Method = "GET"
+	}
+	req.Method = strings.ToUpper(req.Method)
+
+	switch req.Method {
+	case "GET", "PUT", "DELETE":
+		// supported
+	default:
+		return SendBadRequest(c, "unsupported method: must be GET, PUT or DELETE", ErrCodeInvalidInput)
+	}
+
+	if req.ExpiresIn < 0 {
+		return SendBadRequest(c, "expires_in must be non-negative", ErrCodeInvalidInput)
+	}
+	// Cap the requested lifetime. The storage:write scope already gates this
+	// endpoint; the object-level permission probe below re-checks the caller's
+	// access under RLS before anything is signed.
+	if time.Duration(req.ExpiresIn)*time.Second > maxSignedURLExpiry {
+		return SendBadRequest(c,
+			fmt.Sprintf("expires_in %d exceeds the maximum of %d seconds", req.ExpiresIn, int(maxSignedURLExpiry/time.Second)),
+			ErrCodeInvalidInput)
+	}
+
+	// Object-level authorization: run the same RLS visibility probe the
+	// download path uses before handing out a URL.
+	//   - GET/DELETE: the caller must be able to see the object row.
+	//   - PUT: the object may not exist yet (the signed URL is meant to create
+	//     it), so a visible row must additionally be writable (no-op UPDATE)
+	//     and a missing row falls back to a visibility check on the bucket.
+	if perr := h.authorizeSignedAccess(c, bucket, key, req.Method); perr != nil {
+		return perr.send(c)
 	}
 
 	// Generate signed URL

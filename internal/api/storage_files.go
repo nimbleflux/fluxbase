@@ -39,22 +39,6 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 		return SendBadRequest(c, "invalid filename after sanitization", ErrCodeInvalidInput)
 	}
 
-	// H-19: Check if bucket exists before upload
-	// Use SECURITY DEFINER function to bypass RLS when checking bucket existence
-	var bucketExists bool
-	err = h.getPool(c).QueryRow(
-		c.RequestCtx(),
-		`SELECT storage.bucket_exists($1::text, $2::uuid)`,
-		bucket, getTenantIDArg(c),
-	).Scan(&bucketExists)
-	if err != nil {
-		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to check bucket existence")
-		return SendInternalError(c, "failed to validate bucket")
-	}
-	if !bucketExists {
-		return SendNotFound(c, fmt.Sprintf("bucket '%s' does not exist", bucket))
-	}
-
 	// Get file from form data
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -66,51 +50,17 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 		return SendErrorWithCode(c, fiber.StatusRequestEntityTooLarge, err.Error(), ErrCodeInvalidInput)
 	}
 
-	// Get bucket settings for additional validation
-	// Use SECURITY DEFINER function to bypass RLS when fetching bucket settings
-	var bucketMaxFileSize *int64
-	var bucketAllowedMimeTypes []string
-	err = h.getPool(c).QueryRow(
-		c.RequestCtx(),
-		`SELECT max_file_size, allowed_mime_types FROM storage.get_bucket_settings($1::text, $2::uuid)`,
-		bucket, getTenantIDArg(c),
-	).Scan(&bucketMaxFileSize, &bucketAllowedMimeTypes)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		log.Error().Err(err).Str("bucket", bucket).Msg("Failed to get bucket settings")
-		return SendInternalError(c, "failed to validate bucket settings")
-	}
-
-	// Validate file size against bucket-specific limit
-	if bucketMaxFileSize != nil && *bucketMaxFileSize > 0 && file.Size > *bucketMaxFileSize {
-		return SendErrorWithCode(c, fiber.StatusRequestEntityTooLarge, fmt.Sprintf("file size %d exceeds bucket maximum of %d bytes", file.Size, *bucketMaxFileSize), ErrCodeInvalidInput)
-	}
-
 	// Detect content type early for MIME validation
 	contentType := file.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = detectContentType(file.Filename)
 	}
 
-	// Validate MIME type against bucket-specific allowed types
-	if len(bucketAllowedMimeTypes) > 0 {
-		mimeAllowed := false
-		for _, allowedType := range bucketAllowedMimeTypes {
-			if allowedType == contentType || allowedType == "*/*" {
-				mimeAllowed = true
-				break
-			}
-			// Support wildcard matching (e.g., "image/*")
-			if strings.HasSuffix(allowedType, "/*") {
-				prefix := strings.TrimSuffix(allowedType, "/*")
-				if strings.HasPrefix(contentType, prefix+"/") {
-					mimeAllowed = true
-					break
-				}
-			}
-		}
-		if !mimeAllowed {
-			return SendErrorWithCode(c, fiber.StatusUnsupportedMediaType, fmt.Sprintf("file type %s is not allowed for this bucket", contentType), ErrCodeInvalidFormat)
-		}
+	// H-19/C-3: validate the bucket exists and the declared size/content type
+	// respect the bucket's max_file_size / allowed_mime_types settings.
+	// Existence and settings use SECURITY DEFINER helpers (bypass RLS).
+	if perr := h.validateBucketForUpload(c, bucket, file.Size, contentType); perr != nil {
+		return perr.send(c)
 	}
 
 	// Open the uploaded file
@@ -138,31 +88,13 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 
 	ctx := c.RequestCtx()
 
-	// Upload the file to storage provider first
-	object, err := svc.Provider.Upload(ctx, bucket, key, src, file.Size, opts)
-	if err != nil {
-		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to upload file")
-		return SendInternalError(c, "failed to upload file")
-	}
-
-	// Start database transaction to store metadata
-	tx, err := h.getPool(c).Begin(ctx)
-	if err != nil {
-		// Delete from provider since DB insert failed
-		_ = svc.Provider.Delete(ctx, bucket, key)
-		log.Error().Err(err).Msg("Failed to start transaction for file upload")
-		return SendInternalError(c, "failed to save file metadata")
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	// Set RLS context
-	if err := h.setRLSContext(ctx, tx, c); err != nil {
-		_ = svc.Provider.Delete(ctx, bucket, key)
-		log.Error().Err(err).Msg("Failed to set RLS context")
-		return SendInternalError(c, "failed to save file metadata")
-	}
-
-	// Convert metadata map to JSONB
+	// Authorization runs BEFORE any bytes are written to the provider: either
+	// the caller can overwrite an existing object row (no-op UPDATE under RLS)
+	// or a size=0 placeholder row is inserted under RLS to validate insert
+	// permission and reserve the path. If createdPlaceholder is true we must
+	// clean up the row (and bytes) if anything below fails; if it is false the
+	// row belongs to a pre-existing object and provider bytes are never deleted
+	// on failure.
 	var metadataJSON map[string]interface{}
 	if len(metadata) > 0 {
 		metadataJSON = make(map[string]interface{})
@@ -171,18 +103,53 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 		}
 	}
 
-	// Insert object metadata into database (RLS will check permissions)
-	_, err = tx.Exec(ctx, `
-		INSERT INTO storage.objects (bucket_id, path, mime_type, size, metadata, owner_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (bucket_id, path)
-		DO UPDATE SET mime_type = $3, size = $4, metadata = $5, owner_id = $6, updated_at = NOW()
-	`, bucket, key, contentType, file.Size, metadataJSON, ownerUUID)
-	if err != nil {
-		// Delete from provider since DB insert failed
-		_ = svc.Provider.Delete(ctx, bucket, key)
+	probe, perr := h.AuthorizeUploadWrite(c, bucket, key, contentType, metadataJSON, ownerUUID)
+	if perr != nil {
+		return perr.send(c)
+	}
+	createdPlaceholder := probe.createdPlaceholder
 
-		// Log the full error for debugging
+	// Metadata upsert shared by the final write below.
+	upsertMetadata := func() error {
+		tx, err := h.getPool(c).Begin(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		if err := h.setRLSContext(ctx, tx, c); err != nil {
+			return err
+		}
+
+		// Insert object metadata into database (RLS will check permissions)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO storage.objects (bucket_id, path, mime_type, size, metadata, owner_id)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (bucket_id, path)
+			DO UPDATE SET mime_type = $3, size = $4, metadata = $5, owner_id = $6, updated_at = NOW()
+		`, bucket, key, contentType, file.Size, metadataJSON, ownerUUID); err != nil {
+			return err
+		}
+
+		return tx.Commit(ctx)
+	}
+
+	// Upload the file to storage provider
+	object, err := svc.Provider.Upload(ctx, bucket, key, src, file.Size, opts)
+	if err != nil {
+		if createdPlaceholder {
+			h.CleanupUploadPlaceholder(c, svc, bucket, key)
+		}
+		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to upload file")
+		return SendInternalError(c, "failed to upload file")
+	}
+
+	// Persist the final metadata (size, mime, metadata, owner)
+	if err := upsertMetadata(); err != nil {
+		if createdPlaceholder {
+			h.CleanupUploadPlaceholder(c, svc, bucket, key)
+		}
+
 		errMsg := err.Error()
 		log.Error().
 			Err(err).
@@ -196,13 +163,6 @@ func (h *StorageHandler) UploadFile(c fiber.Ctx) error {
 			log.Debug().Str("detail", errMsg).Msg("Upload blocked by RLS policy")
 			return SendForbidden(c, "insufficient permissions to upload file", ErrCodeAccessDenied)
 		}
-		return SendInternalError(c, "failed to save file metadata")
-	}
-
-	// Commit transaction
-	if err := tx.Commit(ctx); err != nil {
-		_ = svc.Provider.Delete(ctx, bucket, key)
-		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to commit file upload")
 		return SendInternalError(c, "failed to save file metadata")
 	}
 

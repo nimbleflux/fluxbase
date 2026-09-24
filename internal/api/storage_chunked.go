@@ -84,6 +84,12 @@ func (h *StorageHandler) InitChunkedUpload(c fiber.Ctx) error {
 		return SendBadRequest(c, "total_size must be greater than 0", ErrCodeInvalidInput)
 	}
 
+	// H-20: sanitize the target path like regular uploads do
+	key := sanitizeFilename(req.Path)
+	if key == "" {
+		return SendBadRequest(c, "invalid path after sanitization", ErrCodeInvalidInput)
+	}
+
 	// Default chunk size to 5MB if not specified
 	chunkSize := req.ChunkSize
 	if chunkSize <= 0 {
@@ -100,17 +106,36 @@ func (h *StorageHandler) InitChunkedUpload(c fiber.Ctx) error {
 		return SendErrorWithCode(c, fiber.StatusRequestEntityTooLarge, "File size exceeds upload limit", ErrCodeInvalidInput)
 	}
 
+	// F3: apply the same bucket validation as regular uploads (existence,
+	// max_file_size, allowed_mime_types) so chunked uploads cannot bypass
+	// bucket limits. The effective limit is min(declared total, bucket max).
+	contentType := req.ContentType
+	if perr := h.validateBucketForUpload(c, bucket, req.TotalSize, contentType); perr != nil {
+		return perr.send(c)
+	}
+
 	// Get owner ID from authenticated user
 	ownerID := getUserID(c)
-
-	// Prepare upload options
-	opts := &storage.UploadOptions{
-		ContentType:  req.ContentType,
-		Metadata:     req.Metadata,
-		CacheControl: req.CacheControl,
+	var ownerUUID *string
+	if ownerID != "" && ownerID != "anonymous" {
+		ownerUUID = &ownerID
 	}
 
 	ctx := c.RequestCtx()
+
+	// F2: verify BEFORE any bytes are written (chunk files included) that the
+	// caller may create or overwrite the destination object. This probe is
+	// read-only — no reservation is persisted; Complete re-probes and reserves.
+	if perr := h.authorizeUploadIntent(c, bucket, key, contentType, ownerUUID); perr != nil {
+		return perr.send(c)
+	}
+
+	// Prepare upload options
+	opts := &storage.UploadOptions{
+		ContentType:  contentType,
+		Metadata:     req.Metadata,
+		CacheControl: req.CacheControl,
+	}
 
 	// Initialize chunked upload with the storage provider
 	var session *storage.ChunkedUploadSession
@@ -119,15 +144,15 @@ func (h *StorageHandler) InitChunkedUpload(c fiber.Ctx) error {
 	// Check provider type and call appropriate method
 	switch provider := svc.Provider.(type) {
 	case *storage.LocalStorage:
-		session, err = provider.InitChunkedUpload(ctx, bucket, req.Path, req.TotalSize, chunkSize, opts)
+		session, err = provider.InitChunkedUpload(ctx, bucket, key, req.TotalSize, chunkSize, opts)
 	case *storage.S3Storage:
-		session, err = provider.InitChunkedUpload(ctx, bucket, req.Path, req.TotalSize, chunkSize, opts)
+		session, err = provider.InitChunkedUpload(ctx, bucket, key, req.TotalSize, chunkSize, opts)
 	default:
 		return SendInternalError(c, "Storage provider does not support chunked uploads")
 	}
 
 	if err != nil {
-		log.Error().Err(err).Str("bucket", bucket).Str("path", req.Path).Msg("Failed to initialize chunked upload")
+		log.Error().Err(err).Str("bucket", bucket).Str("path", key).Msg("Failed to initialize chunked upload")
 		return SendInternalError(c, "Failed to initialize chunked upload")
 	}
 
@@ -222,6 +247,19 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 		return SendErrorWithCode(c, fiber.StatusGone, "Upload session has expired", "SESSION_EXPIRED")
 	}
 
+	// F3: enforce the per-chunk size cap. Non-final chunks may hold at most
+	// session.ChunkSize bytes; the final chunk holds at most the declared
+	// remainder, so the assembled object can never exceed the declared total.
+	maxChunk := maxChunkSizeFor(session, chunkIndex)
+	if maxChunk <= 0 {
+		return SendErrorWithCode(c, fiber.StatusBadRequest, "Chunk size exceeds the declared upload total", ErrCodeInvalidInput)
+	}
+	if size > maxChunk+chunkSizeSlack {
+		return SendErrorWithCode(c, fiber.StatusBadRequest,
+			fmt.Sprintf("Chunk size %d exceeds the maximum of %d bytes for chunk %d", size, maxChunk, chunkIndex),
+			ErrCodeInvalidInput)
+	}
+
 	// Get the request body as a stream reader
 	// Try streaming first, fall back to buffered body
 	var body io.Reader
@@ -251,6 +289,14 @@ func (h *StorageHandler) UploadChunk(c fiber.Ctx) error {
 	if err != nil {
 		log.Error().Err(err).Str("uploadID", uploadID).Int("chunkIndex", chunkIndex).Msg("Failed to upload chunk")
 		return SendInternalError(c, "Failed to upload chunk")
+	}
+
+	// F3: the written chunk must respect the same cap (Content-Length can be
+	// missing or wrong with chunked transfer encoding).
+	if result.Size > maxChunk+chunkSizeSlack {
+		return SendErrorWithCode(c, fiber.StatusBadRequest,
+			fmt.Sprintf("Chunk size %d exceeds the maximum of %d bytes for chunk %d", result.Size, maxChunk, chunkIndex),
+			ErrCodeInvalidInput)
 	}
 
 	// Update session with the completed chunk
@@ -340,6 +386,21 @@ func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
 			})
 	}
 
+	// F2: authorize and reserve the destination object BEFORE the assembled
+	// bytes overwrite anything in the provider. If a row already exists a
+	// no-op UPDATE validates overwrite permission; otherwise a size=0
+	// placeholder row is inserted (createdPlaceholder=true) and must be
+	// removed if completion fails below.
+	var ownerUUID *string
+	if ownerID := getUserID(c); ownerID != "" && ownerID != "anonymous" {
+		ownerUUID = &ownerID
+	}
+	probe, perr := h.AuthorizeUploadWrite(c, bucket, session.Key, session.ContentType, nil, ownerUUID)
+	if perr != nil {
+		return perr.send(c)
+	}
+	createdPlaceholder := probe.createdPlaceholder
+
 	// Mark session as completing
 	session.Status = "completing"
 	_ = h.updateChunkedUploadSessionInProvider(ctx, c, svc.Provider, session)
@@ -359,13 +420,44 @@ func (h *StorageHandler) CompleteChunkedUpload(c fiber.Ctx) error {
 	if err != nil {
 		session.Status = "active" // Revert status on failure
 		_ = h.updateChunkedUploadSessionInProvider(ctx, c, svc.Provider, session)
+		if createdPlaceholder {
+			// No destination bytes were written; just remove the reservation.
+			h.CleanupUploadPlaceholder(c, svc, bucket, session.Key)
+		}
 		log.Error().Err(err).Str("uploadID", uploadID).Msg("Failed to complete chunked upload")
 		return SendInternalError(c, "Failed to complete chunked upload")
 	}
 
+	// F3: the assembled object must match the declared total size exactly.
+	if object.Size != session.TotalSize {
+		if createdPlaceholder {
+			h.CleanupUploadPlaceholder(c, svc, bucket, session.Key)
+		} else {
+			log.Error().Str("uploadID", uploadID).Int64("expected", session.TotalSize).Int64("actual", object.Size).Msg("Assembled chunked object size mismatch; provider bytes left in place (pre-existing object row intact)")
+		}
+		session.Status = "active"
+		_ = h.updateChunkedUploadSessionInProvider(ctx, c, svc.Provider, session)
+		return SendErrorWithCode(c, fiber.StatusBadRequest,
+			fmt.Sprintf("Assembled object size %d does not match declared total %d", object.Size, session.TotalSize),
+			ErrCodeInvalidInput)
+	}
+
 	// Store object record in database
 	if err := h.storeUploadedObject(c, session, object); err != nil {
+		if createdPlaceholder {
+			// We created the placeholder row: remove both the assembled bytes
+			// and the reservation — nothing pre-existing is destroyed.
+			h.CleanupUploadPlaceholder(c, svc, bucket, session.Key)
+		} else {
+			// A pre-existing (caller-writable) object row survives; never
+			// delete provider bytes in that case — the row must keep pointing
+			// at readable data.
+			log.Error().Err(err).Str("uploadID", uploadID).Msg("Failed to store object in database; assembled bytes kept for pre-existing object row")
+		}
+		session.Status = "active"
+		_ = h.updateChunkedUploadSessionInProvider(ctx, c, svc.Provider, session)
 		log.Warn().Err(err).Str("uploadID", uploadID).Msg("Failed to store object in database")
+		return SendInternalError(c, "Failed to store object metadata")
 	}
 
 	// Mark session as completed and clean up
@@ -501,6 +593,29 @@ func (h *StorageHandler) AbortChunkedUpload(c fiber.Ctx) error {
 
 // Helper functions for session management
 
+// chunkSizeSlack is the tolerance applied to per-chunk size checks to absorb
+// framing overhead differences between the declared Content-Length and the
+// actual bytes written.
+const chunkSizeSlack int64 = 64 * 1024
+
+// maxChunkSizeFor returns the maximum number of bytes allowed for the given
+// chunk index. Non-final chunks are capped at session.ChunkSize; the final
+// chunk is capped at the declared remainder so the assembled object can never
+// exceed session.TotalSize.
+func maxChunkSizeFor(session *storage.ChunkedUploadSession, chunkIndex int) int64 {
+	if session == nil || session.ChunkSize <= 0 || chunkIndex < 0 || chunkIndex >= session.TotalChunks {
+		return 0
+	}
+	if chunkIndex < session.TotalChunks-1 {
+		return session.ChunkSize
+	}
+	remaining := session.TotalSize - int64(session.TotalChunks-1)*session.ChunkSize
+	if remaining <= 0 || remaining > session.ChunkSize {
+		return session.ChunkSize
+	}
+	return remaining
+}
+
 func (h *StorageHandler) getChunkedUploadSessionFromProvider(ctx context.Context, c fiber.Ctx, provider storage.Provider, uploadID string) (*storage.ChunkedUploadSession, error) {
 	// Try to get session from storage provider
 	switch p := provider.(type) {
@@ -552,7 +667,7 @@ func (h *StorageHandler) storeUploadedObject(fiberCtx interface{}, session *stor
 	ctx := c.RequestCtx()
 
 	// Start a transaction to set RLS context
-	tx, err := h.db.Pool().Begin(ctx)
+	tx, err := h.getPool(c).Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}

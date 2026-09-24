@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"mime/multipart"
@@ -160,13 +161,6 @@ func (h *StorageHandler) uploadMultipartFile(c fiber.Ctx, svc *storage.Service, 
 
 	ctx := c.RequestCtx()
 
-	// Upload the file to the storage provider first
-	object, err := svc.Provider.Upload(ctx, bucket, key, src, file.Size, opts)
-	if err != nil {
-		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to upload multipart file")
-		return fmt.Errorf("failed to upload file")
-	}
-
 	// Get owner ID from authenticated user (same source as the regular upload path)
 	ownerID := getUserID(c)
 	var ownerUUID *string
@@ -174,29 +168,33 @@ func (h *StorageHandler) uploadMultipartFile(c fiber.Ctx, svc *storage.Service, 
 		ownerUUID = &ownerID
 	}
 
-	// Store object metadata in the database under RLS
-	tx, err := h.getPool(c).Begin(ctx)
-	if err != nil {
-		_ = svc.Provider.Delete(ctx, bucket, key)
-		log.Error().Err(err).Msg("Failed to start transaction for multipart file upload")
-		return fmt.Errorf("failed to save file metadata")
+	// Authorization runs BEFORE any bytes are written to the provider: either
+	// the caller can overwrite an existing object row (no-op UPDATE under RLS)
+	// or a size=0 placeholder row is inserted under RLS to validate insert
+	// permission and reserve the path. On any post-probe failure we only delete
+	// provider bytes when we created the placeholder.
+	probe, perr := h.AuthorizeUploadWrite(c, bucket, key, contentType, nil, ownerUUID)
+	if perr != nil {
+		return perr.send(c)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	createdPlaceholder := probe.createdPlaceholder
 
-	if err := h.setRLSContext(ctx, tx, c); err != nil {
-		_ = svc.Provider.Delete(ctx, bucket, key)
-		log.Error().Err(err).Msg("Failed to set RLS context for multipart file upload")
-		return fmt.Errorf("failed to save file metadata")
+	failUpload := func(err error, message string) error {
+		if createdPlaceholder {
+			h.CleanupUploadPlaceholder(c, svc, bucket, key)
+		}
+		return fmt.Errorf("%s", message)
 	}
 
-	_, err = tx.Exec(ctx, `
-		INSERT INTO storage.objects (bucket_id, path, mime_type, size, metadata, owner_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (bucket_id, path)
-		DO UPDATE SET mime_type = $3, size = $4, owner_id = $6, updated_at = NOW()
-	`, bucket, key, contentType, object.Size, nil, ownerUUID)
+	// Upload the file to the storage provider
+	object, err := svc.Provider.Upload(ctx, bucket, key, src, file.Size, opts)
 	if err != nil {
-		_ = svc.Provider.Delete(ctx, bucket, key)
+		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to upload multipart file")
+		return failUpload(err, "failed to upload file")
+	}
+
+	// Persist the final metadata (size, mime, owner) under RLS
+	if err := h.upsertMultipartMetadata(ctx, c, bucket, key, contentType, object.Size, ownerUUID); err != nil {
 		errMsg := err.Error()
 		log.Error().
 			Err(err).
@@ -205,15 +203,12 @@ func (h *StorageHandler) uploadMultipartFile(c fiber.Ctx, svc *storage.Service, 
 			Str("error_message", errMsg).
 			Msg("Failed to insert multipart file metadata into database")
 		if strings.Contains(errMsg, "permission denied") || strings.Contains(errMsg, "policy") {
+			if createdPlaceholder {
+				h.CleanupUploadPlaceholder(c, svc, bucket, key)
+			}
 			return fmt.Errorf("insufficient permissions to upload file")
 		}
-		return fmt.Errorf("failed to save file metadata")
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		_ = svc.Provider.Delete(ctx, bucket, key)
-		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to commit multipart file upload")
-		return fmt.Errorf("failed to save file metadata")
+		return failUpload(err, "failed to save file metadata")
 	}
 
 	log.Info().
@@ -223,6 +218,34 @@ func (h *StorageHandler) uploadMultipartFile(c fiber.Ctx, svc *storage.Service, 
 		Str("user_id", ownerID).
 		Msg("Multipart file uploaded")
 
+	return nil
+}
+
+// upsertMultipartMetadata writes the final object row for a multipart upload
+// under RLS (INSERT .. ON CONFLICT DO UPDATE).
+func (h *StorageHandler) upsertMultipartMetadata(ctx context.Context, c fiber.Ctx, bucket, key, contentType string, size int64, ownerUUID *string) error {
+	tx, err := h.getPool(c).Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := h.setRLSContext(ctx, tx, c); err != nil {
+		return fmt.Errorf("failed to set RLS context: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO storage.objects (bucket_id, path, mime_type, size, metadata, owner_id)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (bucket_id, path)
+		DO UPDATE SET mime_type = $3, size = $4, owner_id = $6, updated_at = NOW()
+	`, bucket, key, contentType, size, nil, ownerUUID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
 	return nil
 }
 

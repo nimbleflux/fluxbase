@@ -30,6 +30,8 @@ type StorageDeps struct {
 	UploadFile             fiber.Handler
 	DownloadFile           fiber.Handler
 	DeleteFile             fiber.Handler
+	CopyObjectHandler      fiber.Handler
+	MoveObjectHandler      fiber.Handler
 
 	// Middleware for tenant context
 	TenantMiddleware   fiber.Handler
@@ -199,10 +201,26 @@ func BuildStorageRoutes(deps *StorageDeps) *RouteGroup {
 				Scopes:  []string{"storage:read"},
 			},
 			{
-				Method:  "DELETE",
+				Method:  "POST",
 				Path:    "/:bucket/chunked/:uploadId",
 				Handler: deps.AbortChunkedUpload,
 				Summary: "Abort chunked upload",
+				Auth:    AuthRequired,
+				Scopes:  []string{"storage:write"},
+			},
+			{
+				Method:  "POST",
+				Path:    "/:bucket/copy",
+				Handler: deps.CopyObjectHandler,
+				Summary: "Copy an object (SDK: storage.from(bucket).copy)",
+				Auth:    AuthRequired,
+				Scopes:  []string{"storage:write"},
+			},
+			{
+				Method:  "POST",
+				Path:    "/:bucket/move",
+				Handler: deps.MoveObjectHandler,
+				Summary: "Move an object (SDK: storage.from(bucket).move)",
 				Auth:    AuthRequired,
 				Scopes:  []string{"storage:write"},
 			},

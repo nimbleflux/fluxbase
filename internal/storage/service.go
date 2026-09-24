@@ -2,6 +2,9 @@ package storage
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
@@ -66,14 +69,15 @@ func (s *Service) Delete(ctx context.Context, bucket, key string) error {
 
 // NewService creates a new storage service based on configuration
 // baseURL is used for generating signed URLs (e.g., "http://localhost:8080")
-// signingSecret is used for signing local storage URLs (typically the JWT secret)
+// signingSecret is the JWT secret; local storage URL signing derives a
+// purpose-specific key from it (see deriveStorageSigningSecret).
 func NewService(cfg *config.StorageConfig, baseURL, signingSecret string, metrics *observability.Metrics) (*Service, error) {
 	var provider Provider
 	var err error
 
 	switch strings.ToLower(cfg.Provider) {
 	case "local":
-		provider, err = NewLocalStorage(cfg.LocalPath, baseURL, signingSecret)
+		provider, err = NewLocalStorage(cfg.LocalPath, baseURL, deriveStorageSigningSecret(signingSecret))
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize local storage: %w", err)
 		}
@@ -118,6 +122,23 @@ func NewService(cfg *config.StorageConfig, baseURL, signingSecret string, metric
 		config:   cfg,
 		metrics:  metrics,
 	}, nil
+}
+
+// storageSigningKeyDomain is the derivation domain string for the local
+// storage signed-URL key. Deriving a purpose-specific key prevents a
+// signature computed for one purpose (JWT auth) from being valid for another
+// (storage URL signing) and vice versa.
+const storageSigningKeyDomain = "storage-signed-urls"
+
+// deriveStorageSigningSecret derives the HMAC key used to sign local storage
+// URLs: HMAC-SHA256(jwtSecret, "storage-signed-urls"), hex encoded.
+//
+// Note: tokens issued before this derivation existed are invalidated by the
+// change — outstanding local signed URLs must be re-issued after upgrading.
+func deriveStorageSigningSecret(jwtSecret string) string {
+	mac := hmac.New(sha256.New, []byte(jwtSecret))
+	mac.Write([]byte(storageSigningKeyDomain))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // MaxUploadSize returns the maximum allowed upload size
