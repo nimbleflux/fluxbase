@@ -220,6 +220,12 @@ func (c *Connection) getAppliedMigrations(ctx context.Context, conn *pgx.Conn) (
 	return applied, rows.Err()
 }
 
+// userMigrationsLockID mirrors migrationLockID in internal/migrations/executor.go
+// (0x466C7578_00000004) so filesystem migrations and API-driven imperative
+// migrations serialize against each other on the main database. The constant is
+// duplicated here because internal/database cannot import internal/migrations.
+const userMigrationsLockID int64 = 0x466C7578_00000004
+
 // applyFilesystemMigration applies a single filesystem migration
 func (c *Connection) applyFilesystemMigration(ctx context.Context, conn *pgx.Conn, m migrationFile) error {
 	tx, err := conn.Begin(ctx)
@@ -227,6 +233,16 @@ func (c *Connection) applyFilesystemMigration(ctx context.Context, conn *pgx.Con
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Serialize with other migration runners (API-driven migrations use the same
+	// lock ID) so concurrent startup or apply requests cannot race.
+	var acquired bool
+	if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", userMigrationsLockID).Scan(&acquired); err != nil {
+		return fmt.Errorf("failed to acquire advisory lock: %w", err)
+	}
+	if !acquired {
+		return fmt.Errorf("another migration is already in progress")
+	}
 
 	// Insert migration record
 	_, err = tx.Exec(ctx, `

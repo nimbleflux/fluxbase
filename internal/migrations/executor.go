@@ -65,6 +65,9 @@ func (e *Executor) ApplyMigration(ctx context.Context, namespace, name string, e
 
 	// Execute migration in transaction with admin credentials
 	// Migrations require DDL privileges (CREATE TABLE, ALTER, etc.)
+	// The applied-status write happens in the SAME transaction as the migration
+	// SQL: if the status update failed separately after the SQL commit, the next
+	// apply would re-execute an already-committed migration.
 	err = e.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
 		var acquired bool
 		if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", migrationLockID).Scan(&acquired); err != nil {
@@ -74,8 +77,10 @@ func (e *Executor) ApplyMigration(ctx context.Context, namespace, name string, e
 			return fmt.Errorf("another migration is already in progress")
 		}
 
-		_, err := tx.Exec(ctx, migration.UpSQL)
-		return err
+		if _, err := tx.Exec(ctx, migration.UpSQL); err != nil {
+			return err
+		}
+		return updateMigrationStatusTx(ctx, tx, migration.ID, "applied", executedBy)
 	})
 
 	durationMs := int(time.Since(startTime).Milliseconds())
@@ -128,11 +133,7 @@ func (e *Executor) ApplyMigration(ctx context.Context, namespace, name string, e
 		log.Warn().Err(err).Msg("Failed to log migration execution")
 	}
 
-	// Update migration status to applied
-	if err := e.storage.UpdateMigrationStatus(ctx, migration.ID, "applied", executedBy); err != nil {
-		return fmt.Errorf("failed to update migration status: %w", err)
-	}
-
+	// Status was already updated atomically inside the admin transaction above.
 	return nil
 }
 
@@ -167,6 +168,8 @@ func (e *Executor) RollbackMigration(ctx context.Context, namespace, name string
 
 	// Execute rollback in transaction with admin credentials
 	// Rollbacks may require DDL privileges (DROP TABLE, ALTER, etc.)
+	// The rolled_back-status write happens in the SAME transaction as the
+	// rollback SQL so both commit atomically.
 	err = e.db.ExecuteWithAdminRole(ctx, func(tx pgx.Tx) error {
 		var acquired bool
 		if err := tx.QueryRow(ctx, "SELECT pg_try_advisory_xact_lock($1)", migrationLockID).Scan(&acquired); err != nil {
@@ -176,8 +179,10 @@ func (e *Executor) RollbackMigration(ctx context.Context, namespace, name string
 			return fmt.Errorf("another migration is already in progress")
 		}
 
-		_, err := tx.Exec(ctx, *migration.DownSQL)
-		return err
+		if _, err := tx.Exec(ctx, *migration.DownSQL); err != nil {
+			return err
+		}
+		return updateMigrationStatusTx(ctx, tx, migration.ID, "rolled_back", executedBy)
 	})
 
 	durationMs := int(time.Since(startTime).Milliseconds())
@@ -227,11 +232,7 @@ func (e *Executor) RollbackMigration(ctx context.Context, namespace, name string
 		log.Warn().Err(err).Msg("Failed to log migration execution")
 	}
 
-	// Update migration status to rolled_back
-	if err := e.storage.UpdateMigrationStatus(ctx, migration.ID, "rolled_back", executedBy); err != nil {
-		return fmt.Errorf("failed to update migration status: %w", err)
-	}
-
+	// Status was already updated atomically inside the admin transaction above.
 	return nil
 }
 

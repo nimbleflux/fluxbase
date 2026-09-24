@@ -286,6 +286,16 @@ func main() {
 		log.Warn().Err(err).Msg("Failed to recreate connection pool, continuing with existing pool")
 	}
 
+	// Run user migrations (documented startup step 3) when a user migrations
+	// path is configured. Applies filesystem migrations (.up.sql/.down.sql) from
+	// the configured directory and grants Fluxbase roles to the runtime user.
+	if cfg.Database.UserMigrationsPath != "" {
+		runStartupStep("user migrations", dbRetryConfig(cfg.Database), nil, func() error {
+			return db.Migrate()
+		})
+		log.Info().Str("path", cfg.Database.UserMigrationsPath).Msg("User migrations applied successfully")
+	}
+
 	// Sync the extension catalog from pg_available_extensions so that
 	// `fluxbase extensions enable <name>` works out-of-the-box. Must run AFTER
 	// the declarative schema apply (which creates platform.available_extensions).

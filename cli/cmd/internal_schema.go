@@ -178,6 +178,12 @@ func runInternalSchemaDump(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Schema dumped successfully.\n")
+	if file, ok := result["file"].(string); ok && file != "" {
+		fmt.Printf("File: %s\n", file)
+	}
+	if dir, ok := result["dir"].(string); ok && dir != "" {
+		fmt.Printf("Directory: %s (one <schema>.sql per schema)\n", dir)
+	}
 	if sql, ok := result["sql"].(string); ok && len(sql) > 0 {
 		fmt.Printf("Output: %d bytes\n", len(sql))
 	}
@@ -328,6 +334,12 @@ func runInternalSchemaStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Declarative State:     %v\n", result["has_declarative_state"])
 	if fp, ok := result["schema_fingerprint"].(string); ok && len(fp) > 16 {
 		fmt.Printf("  Schema Fingerprint:    %s...\n", fp[:16])
+	}
+	if engine, ok := result["engine"].(string); ok && engine != "" {
+		fmt.Printf("  Engine:                %s\n", engine)
+		if engine == "direct-fallback" {
+			fmt.Println("  Warning: pgschema is unavailable or failing; schema changes are applied via the limited idempotent direct fallback. Install pgschema (see the Fluxbase Dockerfile) to restore full schema diffing.")
+		}
 	}
 	fmt.Println()
 

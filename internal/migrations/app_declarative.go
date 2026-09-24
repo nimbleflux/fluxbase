@@ -343,10 +343,12 @@ func (s *AppDeclarativeService) planFromContent(ctx context.Context, schemaName,
 // Mirrors DeclarativeService.applySchemaDirectFallback. The content is made
 // idempotent via MakeSQLIdempotent, so re-applying a matching schema is a no-op.
 //
-// Returns an ApplyResult with Fallback=true. When !allowDestructive, destructive
-// statements in the content (DROP TABLE/COLUMN/INDEX, TRUNCATE) are blocked —
-// the plan-path blocking doesn't cover the fallback, so it is enforced here.
-func (s *AppDeclarativeService) applyDirectFallback(ctx context.Context, schemaName, schemaContent string) (*ApplyResult, error) {
+// Returns an ApplyResult with Fallback=true. When allowDestructive is false,
+// destructive statements in the content (DROP TABLE/COLUMN/INDEX, TRUNCATE) are
+// blocked — the plan-path blocking doesn't cover the fallback, so it is enforced
+// here. allowDestructive is passed explicitly (per-request overrides win over the
+// service default) instead of reading s.allowDestructive.
+func (s *AppDeclarativeService) applyDirectFallback(ctx context.Context, schemaName, schemaContent string, allowDestructive bool) (*ApplyResult, error) {
 	content, err := s.substituteAppUserForContent(schemaContent)
 	if err != nil {
 		return nil, fmt.Errorf("invalid app user placeholder: %w", err)
@@ -358,7 +360,7 @@ func (s *AppDeclarativeService) applyDirectFallback(ctx context.Context, schemaN
 	// MakeSQLIdempotent's own DROP-prepends (for POLICY/TRIGGER/INDEX/CONSTRAINT)
 	// are safe re-creation aids, not destructive user intent — they are emitted
 	// by the transform, not present in the source content.
-	if !s.allowDestructive {
+	if !allowDestructive {
 		if destructive := countDestructiveStatements(content); destructive > 0 {
 			return &ApplyResult{
 				Applied:  []Change{},
@@ -548,8 +550,20 @@ func stripLeadingComma(s string) string {
 // correct model for a Fluxbase app. pgschema's plan remains available for
 // plan/validate (drift detection) via the Plan() method.
 func (s *AppDeclarativeService) ApplyFromContent(ctx context.Context, namespace, schemaName, schemaContent, ignoreContent string) (*ApplyResult, error) {
+	return s.ApplyFromContentOpts(ctx, namespace, schemaName, schemaContent, ignoreContent, nil)
+}
+
+// ApplyFromContentOpts is ApplyFromContent with a per-request allow-destructive
+// override. When allowDestructive is non-nil it wins over the service default
+// (from database.declarative_app_schema.allow_destructive); nil keeps the default.
+func (s *AppDeclarativeService) ApplyFromContentOpts(ctx context.Context, namespace, schemaName, schemaContent, ignoreContent string, allowDestructive *bool) (*ApplyResult, error) {
 	if schemaName == "" {
 		schemaName = "public"
+	}
+
+	effectiveAllowDestructive := s.allowDestructive
+	if allowDestructive != nil {
+		effectiveAllowDestructive = *allowDestructive
 	}
 
 	// Store first (also computes fingerprint + ensures tables exist).
@@ -564,7 +578,13 @@ func (s *AppDeclarativeService) ApplyFromContent(ctx context.Context, namespace,
 		Str("fingerprint", fingerprint[:12]).
 		Msg("Applying declarative app schema")
 
-	res, err := s.applyDirectFallback(ctx, schemaName, schemaContent)
+	// Serialize the apply with other declarative applies (startup, internal schema).
+	var res *ApplyResult
+	err = WithSchemaApplyLock(ctx, s.pool, defaultSchemaApplyLockTimeoutSecs, func() error {
+		var applyErr error
+		res, applyErr = s.applyDirectFallback(ctx, schemaName, schemaContent, effectiveAllowDestructive)
+		return applyErr
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply app schema for namespace=%s schema=%s: %w", namespace, schemaName, err)
 	}
@@ -585,6 +605,12 @@ func (s *AppDeclarativeService) ApplyFromContent(ctx context.Context, namespace,
 
 // ApplyStored applies the already-stored content for a (namespace, schema).
 func (s *AppDeclarativeService) ApplyStored(ctx context.Context, namespace, schemaName string) (*ApplyResult, error) {
+	return s.ApplyStoredOpts(ctx, namespace, schemaName, nil)
+}
+
+// ApplyStoredOpts is ApplyStored with a per-request allow-destructive override
+// (see ApplyFromContentOpts).
+func (s *AppDeclarativeService) ApplyStoredOpts(ctx context.Context, namespace, schemaName string, allowDestructive *bool) (*ApplyResult, error) {
 	content, _, _, err := s.GetStoredSchemaContent(ctx, namespace, schemaName)
 	if err != nil {
 		return nil, fmt.Errorf("no stored schema for namespace=%s schema=%s: %w", namespace, schemaName, err)
@@ -593,7 +619,7 @@ func (s *AppDeclarativeService) ApplyStored(ctx context.Context, namespace, sche
 		return &ApplyResult{Applied: []Change{}}, nil
 	}
 	ignore, _ := s.GetStoredIgnoreContent(ctx, namespace, schemaName)
-	return s.ApplyFromContent(ctx, namespace, schemaName, content, ignore)
+	return s.ApplyFromContentOpts(ctx, namespace, schemaName, content, ignore, allowDestructive)
 }
 
 // ApplyAllPending applies stored content for all enabled (namespace, schema) pairs,
@@ -754,30 +780,39 @@ func (s *AppDeclarativeService) WarnIfImperativeCoexists(ctx context.Context, na
 }
 
 // countDestructiveStatements counts top-level destructive SQL statements in
-// content (DROP TABLE, DROP COLUMN, DROP INDEX not part of MakeSQLIdempotent's
-// re-creation aids, DROP TYPE, DROP FUNCTION/PROCEDURE, DROP VIEW, TRUNCATE).
-// Used by the fallback path to enforce allowDestructive=false. Parsing is
-// best-effort; on parse failure it conservatively scans keywords.
+// content (DROP TABLE, DROP COLUMN, DROP INDEX/TRIGGER/POLICY not part of
+// MakeSQLIdempotent's re-creation aids, DROP TYPE, DROP FUNCTION/PROCEDURE,
+// DROP VIEW, DROP SCHEMA, TRUNCATE). Used by the fallback path to enforce
+// allowDestructive=false. Parsing is best-effort: dollar-quoted bodies (function
+// definitions, string literals) and `--` comment lines are ignored, everything
+// else is scanned conservatively by keyword.
 func countDestructiveStatements(content string) int {
 	count := 0
-	upper := strings.ToUpper(content)
+	upper := strings.ToUpper(stripDollarQuotedBlocks(content))
 	for _, line := range strings.Split(upper, "\n") {
 		trimmed := strings.TrimSpace(line)
-		// Skip MakeSQLIdempotent-generated DROPs (safe re-creation aids) and
-		// comment lines. These prefixes are emitted by MakeSQLIdempotent.
+		// Skip comment lines outright.
+		if strings.HasPrefix(trimmed, "--") {
+			continue
+		}
+		// Skip MakeSQLIdempotent-generated DROPs (safe re-creation aids). These
+		// prefixes are emitted by MakeSQLIdempotent.
 		if strings.HasPrefix(trimmed, "DROP POLICY IF EXISTS") ||
 			strings.HasPrefix(trimmed, "DROP TRIGGER IF EXISTS") ||
 			strings.HasPrefix(trimmed, "DROP CONSTRAINT IF EXISTS") ||
-			strings.HasPrefix(trimmed, "ALTER TABLE") && strings.Contains(trimmed, "DROP CONSTRAINT IF EXISTS") ||
 			strings.HasPrefix(trimmed, "DROP INDEX IF EXISTS") ||
 			strings.HasPrefix(trimmed, "DROP FUNCTION IF EXISTS") ||
-			strings.HasPrefix(trimmed, "DROP PROCEDURE IF EXISTS") {
+			strings.HasPrefix(trimmed, "DROP PROCEDURE IF EXISTS") ||
+			strings.HasPrefix(trimmed, "ALTER TABLE") && strings.Contains(trimmed, "DROP CONSTRAINT IF EXISTS") {
 			continue
 		}
 		if strings.HasPrefix(trimmed, "DROP TABLE") ||
 			strings.HasPrefix(trimmed, "DROP COLUMN") ||
 			strings.Contains(trimmed, " DROP COLUMN ") ||
 			strings.HasPrefix(trimmed, "DROP TYPE") ||
+			strings.HasPrefix(trimmed, "DROP INDEX") ||
+			strings.HasPrefix(trimmed, "DROP TRIGGER") ||
+			strings.HasPrefix(trimmed, "DROP POLICY") ||
 			strings.HasPrefix(trimmed, "DROP FUNCTION") ||
 			strings.HasPrefix(trimmed, "DROP PROCEDURE") ||
 			strings.HasPrefix(trimmed, "DROP VIEW") ||
@@ -787,6 +822,48 @@ func countDestructiveStatements(content string) int {
 		}
 	}
 	return count
+}
+
+// stripDollarQuotedBlocks replaces dollar-quoted string bodies ($$...$$ and
+// $tag$...$tag$) with spaces (newlines preserved) so the destructive-statement
+// scanner does not count DROP/TRUNCATE keywords inside function bodies or string
+// literals. Unterminated blocks are left untouched (conservative).
+func stripDollarQuotedBlocks(content string) string {
+	var b strings.Builder
+	b.Grow(len(content))
+	i := 0
+	for i < len(content) {
+		if content[i] == '$' {
+			// Read the tag: $[tag]$ where tag matches [A-Za-z_0-9]* (possibly empty).
+			j := i + 1
+			for j < len(content) && content[j] != '$' && isDollarTagChar(content[j]) {
+				j++
+			}
+			if j < len(content) && content[j] == '$' {
+				tag := content[i : j+1]
+				if end := strings.Index(content[j+1:], tag); end >= 0 {
+					blockEnd := j + 1 + end + len(tag)
+					for k := i; k < blockEnd; k++ {
+						if content[k] == '\n' {
+							b.WriteByte('\n')
+						} else {
+							b.WriteByte(' ')
+						}
+					}
+					i = blockEnd
+					continue
+				}
+			}
+		}
+		b.WriteByte(content[i])
+		i++
+	}
+	return b.String()
+}
+
+// isDollarTagChar reports whether c may appear in a dollar-quote tag.
+func isDollarTagChar(c byte) bool {
+	return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 // countStatements returns the number of top-level SQL statements in content,
@@ -824,41 +901,3 @@ func writeSchemaWorkDir(schemaContent, ignoreContent string) (dir, schemaFile st
 	return dir, schemaFile, nil
 }
 
-// writeContentToTemp writes content to a temp file and returns its path. The
-// {{APP_USER}} placeholder is NOT substituted here (pgschema needs the raw file);
-// substitution happens for the idempotent fallback path only.
-func writeContentToTemp(pattern, content string) (string, error) {
-	tmpFile, err := os.CreateTemp("", pattern)
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp file: %w", err)
-	}
-	if _, err := tmpFile.WriteString(content); err != nil {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("failed to write temp file: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		return "", fmt.Errorf("failed to close temp file: %w", err)
-	}
-	return tmpFile.Name(), nil
-}
-
-// writePlanToTempFile marshals a plan to JSON in a temp file and returns its path.
-func writePlanToTempFile(plan *Plan) (string, error) {
-	tmpFile, err := os.CreateTemp("", "pgschema-app-plan-*.json")
-	if err != nil {
-		return "", fmt.Errorf("failed to create plan temp file: %w", err)
-	}
-	defer func() { _ = tmpFile.Close() }()
-
-	planJSON, err := json.Marshal(plan)
-	if err != nil {
-		_ = os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("failed to marshal plan: %w", err)
-	}
-	if _, err := tmpFile.Write(planJSON); err != nil {
-		_ = os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("failed to write plan temp file: %w", err)
-	}
-	return tmpFile.Name(), nil
-}

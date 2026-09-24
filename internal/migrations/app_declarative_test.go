@@ -2,9 +2,9 @@ package migrations
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,69 +37,6 @@ func TestAppDeclarativeService_Setters(t *testing.T) {
 
 	assert.True(t, svc.allowDestructive)
 	assert.Equal(t, "wayli_user", svc.appUser)
-}
-
-func TestWriteContentToTemp(t *testing.T) {
-	t.Run("writes content to a readable file", func(t *testing.T) {
-		content := "CREATE TABLE foo (id int);"
-		path, err := writeContentToTemp("app-schema-*.sql", content)
-		require.NoError(t, err)
-		defer func() { _ = os.Remove(path) }()
-
-		assert.FileExists(t, path)
-		data, err := os.ReadFile(path)
-		require.NoError(t, err)
-		assert.Equal(t, content, string(data))
-	})
-
-	t.Run("rejects empty content", func(t *testing.T) {
-		// writeContentToTemp writes whatever is passed; callers guard empties.
-		// Verify it still writes (no panic) and the file is empty.
-		path, err := writeContentToTemp("app-schema-*.sql", "")
-		require.NoError(t, err)
-		defer func() { _ = os.Remove(path) }()
-		data, _ := os.ReadFile(path)
-		assert.Empty(t, data)
-	})
-}
-
-func TestWritePlanToTempFile(t *testing.T) {
-	t.Run("round-trips a plan as JSON", func(t *testing.T) {
-		plan := &Plan{
-			Changes: []Change{
-				{Type: ChangeCreate, ObjectType: "table", Schema: "public", Name: "widgets", SQL: "CREATE TABLE widgets (id int)"},
-				{Type: ChangeDrop, ObjectType: "table", Schema: "public", Name: "legacy", SQL: "DROP TABLE legacy", Destructive: true},
-			},
-			DDL: "CREATE TABLE widgets (id int);",
-		}
-
-		path, err := writePlanToTempFile(plan)
-		require.NoError(t, err)
-		defer func() { _ = os.Remove(path) }()
-
-		assert.FileExists(t, path)
-		data, err := os.ReadFile(path)
-		require.NoError(t, err)
-
-		var readPlan Plan
-		require.NoError(t, json.Unmarshal(data, &readPlan))
-		require.Len(t, readPlan.Changes, 2)
-		assert.Equal(t, ChangeCreate, readPlan.Changes[0].Type)
-		assert.Equal(t, ChangeDrop, readPlan.Changes[1].Type)
-		assert.True(t, readPlan.Changes[1].Destructive)
-	})
-
-	t.Run("round-trips an empty plan", func(t *testing.T) {
-		path, err := writePlanToTempFile(&Plan{})
-		require.NoError(t, err)
-		defer func() { _ = os.Remove(path) }()
-
-		data, err := os.ReadFile(path)
-		require.NoError(t, err)
-		var readPlan Plan
-		require.NoError(t, json.Unmarshal(data, &readPlan))
-		assert.Empty(t, readPlan.Changes)
-	})
 }
 
 // TestStoreSchemaContent_ValidationGuard verifies the input validation that runs
@@ -150,18 +87,50 @@ func TestCountDestructiveStatements(t *testing.T) {
 		{"truncate", "TRUNCATE staging;", 1},
 		{"drop view", "DROP VIEW old_view;", 1},
 		{"drop function", "DROP FUNCTION old_fn();", 1},
+		// Unqualified DROP INDEX/TRIGGER/POLICY (no IF EXISTS) are destructive too.
+		{"drop index without if exists", "DROP INDEX idx_old;", 1},
+		{"drop trigger without if exists", "DROP TRIGGER trg_old ON t;", 1},
+		{"drop policy without if exists", `DROP POLICY "p_old" ON t;`, 1},
+		{"drop schema", "DROP SCHEMA legacy_schema;", 1},
 		{"multiple destructive", "DROP TABLE a;\nDROP TABLE b;\nTRUNCATE c;", 3},
 		// MakeSQLIdempotent-generated DROPs (re-creation aids) must NOT count:
 		{"drop policy if exists (idempotent aid)", `DROP POLICY IF EXISTS "p" ON t CASCADE;`, 0},
 		{"drop trigger if exists (idempotent aid)", `DROP TRIGGER IF EXISTS "trg" ON t CASCADE;`, 0},
 		{"drop index if exists (idempotent aid)", `DROP INDEX IF EXISTS idx;`, 0},
+		{"drop function if exists (idempotent aid)", "DROP FUNCTION IF EXISTS fn();", 0},
 		{"alter table drop constraint if exists (idempotent aid)", `ALTER TABLE t DROP CONSTRAINT IF EXISTS "c";`, 0},
+		// Comments and function bodies must not be counted.
 		{"comment lines ignored", "-- DROP TABLE commented_out;", 0},
+		{"drop inside dollar-quoted body ignored", "CREATE FUNCTION f() RETURNS void AS $$ BEGIN DROP TABLE secret; END $$ LANGUAGE plpgsql;", 0},
+		{"drop after dollar-quoted block still counted", "CREATE FUNCTION f() AS $$ DROP TABLE x; $$;\nDROP TABLE real_drop;", 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := countDestructiveStatements(tt.sql)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestStripDollarQuotedBlocks verifies dollar-quoted bodies are blanked (with
+// newlines preserved) so keyword scanning skips function bodies and literals.
+func TestStripDollarQuotedBlocks(t *testing.T) {
+	spaces := func(s string) string { return strings.Repeat(" ", len(s)) }
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"no dollar quotes", "DROP TABLE a;", "DROP TABLE a;"},
+		{"empty tag", "A $$hidden$$ B", "A " + spaces("$$hidden$$") + " B"},
+		{"named tag", "A $fn$hidden $1 inner$fn$ B", "A " + spaces("$fn$hidden $1 inner$fn$") + " B"},
+		{"preserves newlines", "line1\n$$drop\ntable$$\nline3", "line1\n" + spaces("$$drop") + "\n" + spaces("table$$") + "\nline3"},
+		{"unterminated left as-is", "A $$ never closed", "A $$ never closed"},
+		{"lone dollar untouched", "cost $5 and $ more", "cost $5 and $ more"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, stripDollarQuotedBlocks(tt.input))
 		})
 	}
 }
@@ -173,7 +142,7 @@ func TestApplyDirectFallback_DestructiveBlocked(t *testing.T) {
 	svc := newTestAppService(t, false) // allowDestructive=false, no pool
 
 	t.Run("blocks DROP TABLE", func(t *testing.T) {
-		res, err := svc.applyDirectFallback(ctx, "public", "DROP TABLE old_data;")
+		res, err := svc.applyDirectFallback(ctx, "public", "DROP TABLE old_data;", false)
 		require.NoError(t, err) // blocked, not an error
 		require.NotNil(t, res)
 		assert.True(t, res.Fallback, "result must indicate fallback path")
@@ -182,11 +151,20 @@ func TestApplyDirectFallback_DestructiveBlocked(t *testing.T) {
 	})
 
 	t.Run("blocks DROP COLUMN", func(t *testing.T) {
-		res, err := svc.applyDirectFallback(ctx, "public", "ALTER TABLE t DROP COLUMN obsolete;")
+		res, err := svc.applyDirectFallback(ctx, "public", "ALTER TABLE t DROP COLUMN obsolete;", false)
 		require.NoError(t, err)
 		require.NotNil(t, res)
 		require.Error(t, res.Error)
 		assert.Contains(t, res.Error.Error(), "destructive")
+	})
+	t.Run("allowDestructive override permits DROP TABLE", func(t *testing.T) {
+		// With allowDestructive=true the destructive scan must not block; the
+		// apply then proceeds to DB access and fails there (no pool), proving the
+		// block was bypassed.
+		res, err := svc.applyDirectFallback(ctx, "public", "DROP TABLE old_data;", true)
+		require.Error(t, err)
+		assert.Nil(t, res)
+		assert.NotContains(t, err.Error(), "destructive", "must not be blocked when allowDestructive=true")
 	})
 }
 
@@ -195,8 +173,8 @@ func TestApplyDirectFallback_DestructiveBlocked(t *testing.T) {
 // access, which is expected without a pool).
 func TestApplyDirectFallback_NondestructivePassesContentScan(t *testing.T) {
 	ctx := context.Background()
-	svc := newTestAppService(t, false)
-	res, err := svc.applyDirectFallback(ctx, "public", "CREATE TABLE IF NOT EXISTS t (id int);")
+	svc := newTestAppService(t, false) // allowDestructive=false, no pool
+	res, err := svc.applyDirectFallback(ctx, "public", "CREATE TABLE IF NOT EXISTS t (id int);", false)
 	// No pool set → fails at connection, NOT at the destructive check.
 	require.Error(t, err)
 	assert.Nil(t, res)

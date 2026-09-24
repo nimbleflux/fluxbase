@@ -114,6 +114,9 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Tenant: middleware.TenantMiddleware(middleware.TenantConfig{
 				DB: db,
 			}),
+			EnsureTenantAccess: middleware.EnsureTenantAccess(middleware.TenantConfig{
+				DB: db,
+			}),
 		},
 	}
 

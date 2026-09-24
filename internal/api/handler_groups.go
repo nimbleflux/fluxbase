@@ -237,7 +237,8 @@ type QuotaHandlers struct {
 
 // MiddlewareComponents groups middleware-related components.
 type MiddlewareComponents struct {
-	Tenant      fiber.Handler
-	TenantDB    fiber.Handler
-	Idempotency *middleware.IdempotencyMiddleware
+	Tenant             fiber.Handler
+	TenantDB           fiber.Handler
+	EnsureTenantAccess fiber.Handler
+	Idempotency        *middleware.IdempotencyMiddleware
 }
