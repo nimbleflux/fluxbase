@@ -417,12 +417,28 @@ func (s *KnowledgeBaseStorage) UpdateChatbotKnowledgeBaseLink(ctx context.Contex
 	return existingLink, nil
 }
 
-// LinkChatbotKnowledgeBaseSimple is a convenience method for linking
-func (s *KnowledgeBaseStorage) LinkChatbotKnowledgeBaseSimple(ctx context.Context, chatbotID, kbID string, priority, maxChunks int, similarityThreshold float64) (*ChatbotKnowledgeBase, error) {
+// normalizeAccessLevel resolves the access level for a new chatbot→KB link:
+// empty or unrecognized values fall back to "filtered" (per-user scoping);
+// "full" (all chunks visible to the chatbot) remains an explicit opt-in.
+func normalizeAccessLevel(accessLevel string) string {
+	switch accessLevel {
+	case string(AccessLevelFull), string(AccessLevelFiltered), string(AccessLevelTiered):
+		return accessLevel
+	default:
+		return string(AccessLevelFiltered)
+	}
+}
+
+// LinkChatbotKnowledgeBaseSimple is a convenience method for linking.
+// accessLevel defaults to "filtered" (per-user scoping) when empty or
+// unrecognized; "full" (all chunks visible to the chatbot) remains an
+// explicit opt-in. Existing link rows are untouched — only new links pick
+// up the new default.
+func (s *KnowledgeBaseStorage) LinkChatbotKnowledgeBaseSimple(ctx context.Context, chatbotID, kbID string, accessLevel string, priority, maxChunks int, similarityThreshold float64) (*ChatbotKnowledgeBase, error) {
 	link := &ChatbotKnowledgeBase{
 		ChatbotID:           chatbotID,
 		KnowledgeBaseID:     kbID,
-		AccessLevel:         "full",
+		AccessLevel:         normalizeAccessLevel(accessLevel),
 		Enabled:             true,
 		Priority:            priority,
 		MaxChunks:           &maxChunks,

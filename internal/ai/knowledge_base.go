@@ -351,6 +351,7 @@ type CreateDocumentRequest struct {
 // LinkKnowledgeBaseRequest is the request to link a knowledge base to a chatbot
 type LinkKnowledgeBaseRequest struct {
 	KnowledgeBaseID     string   `json:"knowledge_base_id"`
+	AccessLevel         *string  `json:"access_level,omitempty"` // full, filtered (default), tiered
 	MaxChunks           *int     `json:"max_chunks,omitempty"`
 	SimilarityThreshold *float64 `json:"similarity_threshold,omitempty"`
 	Priority            *int     `json:"priority,omitempty"`

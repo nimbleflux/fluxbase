@@ -33,10 +33,7 @@ func (h *ChatHandler) handleMessage(ctx context.Context, chatCtx *ChatContext, m
 	}
 
 	// Determine user identifier for rate limiting
-	userIdentifier := "anonymous"
-	if chatCtx.UserID != nil {
-		userIdentifier = *chatCtx.UserID
-	}
+	userIdentifier := rateLimitIdentifier(chatCtx)
 
 	// Check per-minute rate limit
 	if !h.limiter.CheckRateLimit(chatbot.ID, userIdentifier, chatbot.RateLimitPerMinute) {
@@ -171,21 +168,28 @@ func (h *ChatHandler) handleMessage(ctx context.Context, chatCtx *ChatContext, m
 	// breaks the chatbot entirely.
 	if chatbot.ReasoningMode == "supervisor" && h.canRunSupervisor(chatbot) {
 		supervisorRan, supervisorErr := h.runSupervisorTurn(ctx, chatCtx, chatbot, msg, userID, provider)
-		if supervisorRan {
-			if supervisorErr != nil {
-				// Supervisor completed but reported an error (e.g., a node
-				// failed mid-graph). Surface as a soft warning and continue
-				// to the legacy loop as a safety net.
-				log.Warn().Err(supervisorErr).
-					Str("chatbot", chatbot.Name).
-					Str("conversation_id", msg.ConversationID).
-					Msg("Supervisor turn reported an error; falling back to ReAct loop")
-			} else {
-				return
-			}
+		if supervisorRan && supervisorErr == nil {
+			return
 		}
-		// supervisorRan == false means we couldn't build a graph for this
-		// chatbot (e.g., no provider). Fall through to legacy path.
+		if supervisorRan {
+			// Supervisor completed but reported an error (e.g., a node
+			// failed mid-graph). Surface as a soft warning and continue
+			// to the legacy loop as a safety net.
+			log.Warn().Err(supervisorErr).
+				Str("chatbot", chatbot.Name).
+				Str("conversation_id", msg.ConversationID).
+				Msg("Supervisor turn reported an error; falling back to ReAct loop")
+		} else {
+			log.Info().
+				Str("chatbot", chatbot.Name).
+				Str("conversation_id", msg.ConversationID).
+				Msg("Supervisor could not start; falling back to ReAct loop")
+		}
+		// Make the mode switch visible to the client. Without this the
+		// client sees supervisor events abruptly followed by different
+		// (ReAct) behavior. Uses the existing progress event shape with a
+		// dedicated step marker so clients can render it.
+		h.sendProgress(chatCtx, msg.ConversationID, "fallback", "Switching to fallback reasoning mode")
 	}
 
 	// Tool calling loop - continue until AI generates content without tool calls
@@ -517,10 +521,6 @@ func (h *ChatHandler) handleMessage(ctx context.Context, chatCtx *ChatContext, m
 
 	// Track token usage for daily budget enforcement
 	if chatbot.DailyTokenBudget > 0 {
-		userIdentifier := "anonymous"
-		if chatCtx.UserID != nil {
-			userIdentifier = *chatCtx.UserID
-		}
 		// ponytail: cached input tokens are billed at 0x (free) toward the
 		// daily budget — they cost the provider ~0.1x (Anthropic) to ~0.5x
 		// (OpenAI), so the user shouldn't foot the full bill. Effective spend

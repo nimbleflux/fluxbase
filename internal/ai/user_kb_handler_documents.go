@@ -142,9 +142,7 @@ func (h *UserKnowledgeBaseHandler) AddMyDocument(c fiber.Ctx) error {
 	doc, err := h.processor.AddDocument(ctx, kbID, docReq, &userID)
 	if err != nil {
 		log.Error().Err(err).Str("kb_id", kbID).Msg("Failed to add document")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to add document",
-		})
+		return documentAddErrorResponse(c, err)
 	}
 
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
@@ -257,9 +255,7 @@ func (h *UserKnowledgeBaseHandler) UploadMyDocument(c fiber.Ctx) error {
 	doc, err := h.processor.AddDocument(ctx, kbID, docReq, &userID)
 	if err != nil {
 		log.Error().Err(err).Str("kb_id", kbID).Msg("Failed to add document from upload")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to add document",
-		})
+		return documentAddErrorResponse(c, err)
 	}
 
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
@@ -414,6 +410,11 @@ func (h *UserKnowledgeBaseHandler) DeleteMyDocumentsByFilter(c fiber.Ctx) error 
 	filter := &MetadataFilter{
 		Tags:     req.Tags,
 		Metadata: req.Metadata,
+		// Strict user scoping: an editor may only bulk-delete documents they
+		// own (metadata user_id). Without this the filter-less delete would
+		// remove global and other users' documents too.
+		UserID:        &userID,
+		IncludeGlobal: false,
 	}
 
 	// ponytail: bulk delete does not clean up orphaned entities (single-doc

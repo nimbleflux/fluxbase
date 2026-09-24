@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -19,7 +20,14 @@ type DocumentProcessor struct {
 	embeddingService *EmbeddingService
 	entityExtractor  EntityExtractor
 	knowledgeGraph   *KnowledgeGraph
+	quotaService     *QuotaService
 }
+
+// maxDocumentProcessingAttempts caps automatic retries of a failing document
+// (recovery sweep + pending sweep). Beyond this the document fails
+// terminally so poison documents don't loop forever. Explicit admin
+// reprocessing (ReprocessDocument) bypasses the guard.
+const maxDocumentProcessingAttempts = 3
 
 // NewDocumentProcessor creates a new document processor
 func NewDocumentProcessor(
@@ -50,6 +58,13 @@ func (p *DocumentProcessor) ProcessDocument(ctx context.Context, doc *Document, 
 	// Update status to processing
 	if err := p.storage.UpdateDocumentStatus(ctx, doc.ID, DocumentStatusProcessing, ""); err != nil {
 		return fmt.Errorf("failed to update document status: %w", err)
+	}
+
+	// Record the attempt on the document so the recovery sweep can fail
+	// terminally after too many tries. Best-effort — a failed counter write
+	// must not abort processing.
+	if _, err := p.storage.IncrementDocumentProcessingAttempts(ctx, doc.ID); err != nil {
+		log.Warn().Err(err).Str("doc_id", doc.ID).Msg("Failed to record processing attempt (continuing)")
 	}
 
 	// Delete existing chunks if reprocessing
@@ -354,7 +369,7 @@ func (p *DocumentProcessor) generateEmbeddings(ctx context.Context, texts []stri
 		}
 
 		batch := texts[i:end]
-		resp, err := p.embeddingService.Embed(ctx, batch, "")
+		resp, err := p.embedBatchWithRetry(ctx, batch)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate embeddings for batch %d: %w", i/batchSize, err)
 		}
@@ -363,6 +378,47 @@ func (p *DocumentProcessor) generateEmbeddings(ctx context.Context, texts []stri
 	}
 
 	return allEmbeddings, nil
+}
+
+// embedBatchWithRetry runs one embedding batch with a single automatic retry
+// for transient provider failures (429 / 5xx / rate limits). One retry with a
+// small fixed delay — enough to ride out provider throttling without a
+// backoff dependency.
+func (p *DocumentProcessor) embedBatchWithRetry(ctx context.Context, batch []string) (*EmbeddingResponse, error) {
+	resp, err := p.embeddingService.Embed(ctx, batch, "")
+	if err == nil || !isTransientEmbeddingError(err) {
+		return resp, err
+	}
+
+	log.Warn().Err(err).Int("batch_size", len(batch)).Msg("Transient embedding failure, retrying once")
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(2 * time.Second):
+	}
+	return p.embeddingService.Embed(ctx, batch, "")
+}
+
+// isTransientEmbeddingError reports whether an embedding provider error looks
+// retryable (rate limiting, throttling, server-side or connection failures).
+// Provider errors carry the HTTP status in their message, so detection is
+// substring-based.
+func isTransientEmbeddingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"429", "status 5", "rate limit", "rate_limit", "quota",
+		"overloaded", "timeout", "temporarily", "unavailable",
+		"connection reset", "connection refused", "broken pipe", "eof",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // splitSentences splits text into sentences
@@ -432,6 +488,27 @@ func hashContent(content string) string {
 	return hex.EncodeToString(hash[:])
 }
 
+// processingAttemptsFromMetadata reads the metadata.processing_attempts
+// counter written by IncrementDocumentProcessingAttempts. Pure function.
+func processingAttemptsFromMetadata(metadata []byte) int {
+	if len(metadata) == 0 {
+		return 0
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(metadata, &m); err != nil {
+		return 0
+	}
+	switch v := m["processing_attempts"].(type) {
+	case float64:
+		return int(v)
+	case string:
+		n, _ := strconv.Atoi(v)
+		return n
+	default:
+		return 0
+	}
+}
+
 // ProcessPendingDocuments processes all pending documents
 func (p *DocumentProcessor) ProcessPendingDocuments(ctx context.Context, batchSize int) (int, error) {
 	docs, err := p.storage.GetPendingDocuments(ctx, batchSize)
@@ -441,6 +518,20 @@ func (p *DocumentProcessor) ProcessPendingDocuments(ctx context.Context, batchSi
 
 	processed := 0
 	for _, doc := range docs {
+		// Max-attempts guard: automatically retried documents that keep
+		// failing are failed terminally so poison documents don't loop
+		// forever through the recovery sweep. Explicit reprocessing via
+		// ReprocessDocument bypasses this guard.
+		if processingAttemptsFromMetadata(doc.Metadata) >= maxDocumentProcessingAttempts {
+			log.Warn().
+				Str("doc_id", doc.ID).
+				Int("attempts", maxDocumentProcessingAttempts).
+				Msg("Document exceeded max processing attempts; failing terminally")
+			_ = p.storage.UpdateDocumentStatus(ctx, doc.ID, DocumentStatusFailed,
+				fmt.Sprintf("processing failed after %d attempts", maxDocumentProcessingAttempts))
+			continue
+		}
+
 		// Get knowledge base for config
 		kb, err := p.storage.GetKnowledgeBase(ctx, doc.KnowledgeBaseID)
 		if err != nil || kb == nil {
@@ -464,6 +555,65 @@ func (p *DocumentProcessor) ProcessPendingDocuments(ctx context.Context, batchSi
 	}
 
 	return processed, nil
+}
+
+// StartProcessingSweeper launches the document-processing recovery loop:
+// on each tick it resets stale 'processing' documents (crashed mid-process)
+// back to 'pending' and then processes pending documents. This closes the
+// recovery gap where a crash left documents stuck in 'processing' forever.
+// It runs until ctx is cancelled; call with a background context at module
+// start.
+func (p *DocumentProcessor) StartProcessingSweeper(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Error().Interface("panic", rec).Msg("Panic in document processing sweeper - recovered")
+			}
+		}()
+
+		// Initial sweep shortly after startup so documents orphaned by a
+		// previous process are recovered without waiting a full interval.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(30 * time.Second):
+		}
+		p.runProcessingSweep(ctx)
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				p.runProcessingSweep(ctx)
+			}
+		}
+	}()
+}
+
+// runProcessingSweep executes one recovery pass: requeue stale 'processing'
+// rows, then drain pending documents.
+func (p *DocumentProcessor) runProcessingSweep(ctx context.Context) {
+	sweepCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	reset, err := p.storage.ResetStaleProcessingDocuments(sweepCtx, 5*time.Minute)
+	if err != nil {
+		log.Error().Err(err).Msg("Document recovery sweep failed to reset stale processing documents")
+	} else if reset > 0 {
+		log.Info().Int("reset", reset).Msg("Recovery sweep requeued stale processing documents")
+	}
+
+	if processed, err := p.ProcessPendingDocuments(sweepCtx, 50); err != nil {
+		log.Error().Err(err).Msg("Document recovery sweep failed to process pending documents")
+	} else if processed > 0 {
+		log.Info().Int("processed", processed).Msg("Recovery sweep processed pending documents")
+	}
 }
 
 // ReprocessDocument reprocesses a document (deletes chunks and regenerates)
@@ -490,6 +640,12 @@ func (p *DocumentProcessor) ReprocessDocument(ctx context.Context, documentID st
 	return p.ProcessDocument(ctx, doc, opts)
 }
 
+// SetQuotaService wires KB quota enforcement into the document add path.
+// nil (the default) disables enforcement.
+func (p *DocumentProcessor) SetQuotaService(qs *QuotaService) {
+	p.quotaService = qs
+}
+
 // AddDocument adds a document to a knowledge base and processes it
 func (p *DocumentProcessor) AddDocument(ctx context.Context, kbID string, req CreateDocumentRequest, userID *string) (*Document, error) {
 	// Get knowledge base config
@@ -499,6 +655,16 @@ func (p *DocumentProcessor) AddDocument(ctx context.Context, kbID string, req Cr
 	}
 	if kb == nil {
 		return nil, fmt.Errorf("knowledge base not found")
+	}
+
+	// KB quota enforcement — the chokepoint shared by admin and user
+	// add/upload paths. Returns *QuotaError, which handlers map to 4xx.
+	// Storage sub-check skipped: per-KB storage usage isn't tracked yet
+	// (see QuotaService.CheckKBQuota).
+	if p.quotaService != nil {
+		if err := p.quotaService.CheckKBQuota(ctx, kbID, 1, 0, int64(len(req.Content))); err != nil {
+			return nil, err
+		}
 	}
 
 	// Set defaults

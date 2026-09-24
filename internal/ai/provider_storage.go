@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,12 +12,74 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rs/zerolog/log"
 
+	"github.com/nimbleflux/fluxbase/internal/ai/integrations"
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // ============================================================================
 // PROVIDER OPERATIONS
 // ============================================================================
+
+// isSecretConfigKey reports whether a provider config field holds a secret
+// (api_key, client_secret, refresh_token, ...). Small heuristic: any field
+// whose name mentions key, secret, or token.
+func isSecretConfigKey(key string) bool {
+	k := strings.ToLower(key)
+	return strings.Contains(k, "key") || strings.Contains(k, "secret") || strings.Contains(k, "token")
+}
+
+// encryptProviderConfig returns a copy of cfg with secret values encrypted
+// using the storage master key. The input map is not mutated. When no key is
+// configured the map is copied unchanged (plaintext, legacy behavior).
+// A misconfigured key length fails the write rather than silently storing
+// plaintext.
+func (s *Storage) encryptProviderConfig(cfg map[string]string) (map[string]string, error) {
+	if len(cfg) == 0 {
+		return cfg, nil
+	}
+	out := make(map[string]string, len(cfg))
+	for k, v := range cfg {
+		out[k] = v
+	}
+	if len(s.encryptionKey) == 0 {
+		return out, nil
+	}
+	for k, v := range out {
+		if v == "" || !isSecretConfigKey(k) || integrations.IsEncrypted(v) {
+			continue
+		}
+		enc, err := integrations.EncryptSecret(v, s.encryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt provider config field %q: %w", k, err)
+		}
+		out[k] = enc
+	}
+	return out, nil
+}
+
+// decryptProviderConfig returns a copy of cfg with encrypted secret values
+// decrypted. Values without the "enc:" prefix (legacy plaintext rows) pass
+// through unchanged, so reading pre-encryption data stays backward compatible.
+func (s *Storage) decryptProviderConfig(cfg map[string]string) map[string]string {
+	if len(cfg) == 0 || len(s.encryptionKey) == 0 {
+		return cfg
+	}
+	out := make(map[string]string, len(cfg))
+	for k, v := range cfg {
+		if isSecretConfigKey(k) && integrations.IsEncrypted(v) {
+			plain, err := integrations.DecryptIfEncrypted(v, s.encryptionKey)
+			if err != nil {
+				// Fall through with the stored value (matches the
+				// integrations helper's fail-open semantic) and log.
+				log.Warn().Err(err).Str("field", k).Msg("Failed to decrypt provider config field")
+			}
+			out[k] = plain
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
 
 // ProviderRecord represents a provider in the database
 type ProviderRecord struct {
@@ -60,11 +123,17 @@ func (s *Storage) CreateProviderWithTenant(ctx context.Context, tenantID string,
 	}
 	provider.UpdatedAt = time.Now()
 
+	// Encrypt secret config fields at rest (caller's map is not mutated).
+	configToStore, encErr := s.encryptProviderConfig(provider.Config)
+	if encErr != nil {
+		return encErr
+	}
+
 	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(
 			ctx, query,
 			provider.ID, provider.Name, provider.DisplayName, provider.ProviderType,
-			provider.IsDefault, provider.UseForEmbeddings, provider.EmbeddingModel, provider.Config, provider.Enabled, provider.CreatedBy,
+			provider.IsDefault, provider.UseForEmbeddings, provider.EmbeddingModel, configToStore, provider.Enabled, provider.CreatedBy,
 			provider.CreatedAt, provider.UpdatedAt,
 		)
 		return err
@@ -105,6 +174,12 @@ func (s *Storage) UpdateProviderWithTenant(ctx context.Context, tenantID string,
 
 	provider.UpdatedAt = time.Now()
 
+	// Encrypt secret config fields at rest (caller's map is not mutated).
+	configToStore, encErr := s.encryptProviderConfig(provider.Config)
+	if encErr != nil {
+		return encErr
+	}
+
 	var result pgconn.CommandTag
 	err := database.WrapWithTenantAwareRole(ctx, s.db, tenantID, func(tx pgx.Tx) error {
 		var execErr error
@@ -112,7 +187,7 @@ func (s *Storage) UpdateProviderWithTenant(ctx context.Context, tenantID string,
 			ctx, query,
 			provider.ID,
 			provider.DisplayName,
-			provider.Config,
+			configToStore,
 			provider.Enabled,
 			provider.UseForEmbeddings,
 			provider.EmbeddingModel,
@@ -154,6 +229,8 @@ func (s *Storage) GetProvider(ctx context.Context, id string) (*ProviderRecord, 
 		)
 	})
 
+	provider.Config = s.decryptProviderConfig(provider.Config)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -189,6 +266,8 @@ func (s *Storage) GetProviderByName(ctx context.Context, name string) (*Provider
 		)
 	})
 
+	provider.Config = s.decryptProviderConfig(provider.Config)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("provider not found: %s", name)
 	}
@@ -216,6 +295,8 @@ func (s *Storage) GetDefaultProvider(ctx context.Context) (*ProviderRecord, erro
 			&provider.CreatedAt, &provider.UpdatedAt,
 		)
 	})
+
+	provider.Config = s.decryptProviderConfig(provider.Config)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -422,6 +503,7 @@ func (s *Storage) ListProviders(ctx context.Context, enabledOnly bool) ([]*Provi
 			}
 			// Set ReadOnly to false for database providers
 			provider.ReadOnly = false
+			provider.Config = s.decryptProviderConfig(provider.Config)
 			providers = append(providers, provider)
 		}
 
@@ -508,6 +590,8 @@ func (s *Storage) GetEmbeddingProviderPreference(ctx context.Context) (*Provider
 			&provider.CreatedAt, &provider.UpdatedAt,
 		)
 	})
+
+	provider.Config = s.decryptProviderConfig(provider.Config)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		// No explicit preference set - return nil without error (auto mode)

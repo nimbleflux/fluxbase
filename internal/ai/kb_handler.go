@@ -294,7 +294,13 @@ func (h *KnowledgeBaseHandler) LinkKnowledgeBase(c fiber.Ctx) error {
 		similarityThreshold = *req.SimilarityThreshold
 	}
 
-	link, err := h.storage.LinkChatbotKnowledgeBaseSimple(ctx, chatbotID, req.KnowledgeBaseID, priority, maxChunks, similarityThreshold)
+	// Default access level (filtered) is applied by the storage helper when
+	// the request omits it — "full" is an explicit opt-in.
+	reqAccessLevel := ""
+	if req.AccessLevel != nil {
+		reqAccessLevel = *req.AccessLevel
+	}
+	link, err := h.storage.LinkChatbotKnowledgeBaseSimple(ctx, chatbotID, req.KnowledgeBaseID, reqAccessLevel, priority, maxChunks, similarityThreshold)
 	if err != nil {
 		log.Error().Err(err).
 			Str("chatbot_id", chatbotID).

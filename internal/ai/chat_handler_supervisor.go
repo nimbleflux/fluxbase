@@ -119,10 +119,7 @@ func (h *ChatHandler) runSupervisorTurn(ctx context.Context, chatCtx *ChatContex
 
 	// Track token usage for daily budget enforcement
 	if chatbot.DailyTokenBudget > 0 {
-		userIdentifier := "anonymous"
-		if chatCtx.UserID != nil {
-			userIdentifier = *chatCtx.UserID
-		}
+		userIdentifier := rateLimitIdentifier(chatCtx)
 		effective := totalUsage.PromptTokens - totalUsage.CachedTokens + totalUsage.CompletionTokens
 		if effective < 0 {
 			effective = 0
@@ -133,10 +130,7 @@ func (h *ChatHandler) runSupervisorTurn(ctx context.Context, chatCtx *ChatContex
 	// Build per-user daily quota snapshot for the done event
 	var dailyQuota *DailyQuotaSnapshot
 	if chatbot.DailyRequestLimit > 0 || chatbot.DailyTokenBudget > 0 {
-		userIdentifier := "anonymous"
-		if chatCtx.UserID != nil {
-			userIdentifier = *chatCtx.UserID
-		}
+		userIdentifier := rateLimitIdentifier(chatCtx)
 		usage := h.limiter.GetDailyUsage(chatbot.ID, userIdentifier, chatbot.DailyRequestLimit, chatbot.DailyTokenBudget)
 		dailyQuota = &DailyQuotaSnapshot{
 			Requests: Quota{Used: usage.RequestsUsed, Limit: usage.RequestsLimit},

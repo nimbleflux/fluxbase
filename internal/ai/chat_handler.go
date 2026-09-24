@@ -269,9 +269,14 @@ func (h *ChatHandler) handleConnection(c *websocket.Conn) {
 		ctx = database.ContextWithTenant(ctx, tenantID)
 	}
 
-	// Extract auth context from locals (set by auth middleware)
+	// Extract auth context from locals (set by auth middleware).
+	// rls_role is only present for client-key/service-key requests; JWT
+	// requests (OptionalAuth) carry user_role + jwt_claims instead, so the
+	// database role is derived from those with the same mapping the REST
+	// path uses. Without this, JWT-authenticated chat users executed SQL
+	// as the anon database role.
 	userID := extractString(c.Locals("user_id"))
-	role := extractStringDefault(c.Locals("rls_role"), "anon")
+	role := ResolveDatabaseRole(c.Locals("rls_role"), c.Locals("user_role"))
 	claims, _ := c.Locals("jwt_claims").(*auth.TokenClaims)
 
 	chatCtx := &ChatContext{
@@ -362,8 +367,11 @@ func (h *ChatHandler) handleStartChat(ctx context.Context, chatCtx *ChatContext,
 
 	// Handle admin impersonation
 	if msg.ImpersonateUserID != "" {
-		// Only instance_admin can impersonate
-		if chatCtx.Role != "instance_admin" {
+		// Only instance admins can impersonate. The gate accepts the role
+		// from either the resolved database role (service-key paths) or the
+		// raw JWT claims (dashboard instance_admin JWTs, whose role maps to
+		// service_role at the database level).
+		if !isInstanceAdminPrincipal(chatCtx) {
 			h.sendError(chatCtx, "", "FORBIDDEN", "Only admins can impersonate users")
 			return
 		}
@@ -386,10 +394,20 @@ func (h *ChatHandler) handleStartChat(ctx context.Context, chatCtx *ChatContext,
 			adminID = *chatCtx.UserID
 		}
 
-		// Override context with impersonated user
+		// Swap the context wholesale to the impersonated user so downstream
+		// role checks (RequireRoles, RLS claims) evaluate the target user,
+		// not the admin.
 		impersonatedID := msg.ImpersonateUserID
 		chatCtx.UserID = &impersonatedID
 		chatCtx.Role = "authenticated" // Impersonated users run as authenticated, not admin
+		if chatCtx.Claims != nil {
+			swapped := *chatCtx.Claims
+			swapped.UserID = impersonatedID
+			swapped.Role = "authenticated"
+			swapped.SessionID = ""
+			swapped.ImpersonatedBy = adminID
+			chatCtx.Claims = &swapped
+		}
 
 		log.Info().
 			Str("admin_id", adminID).
@@ -412,10 +430,7 @@ func (h *ChatHandler) handleStartChat(ctx context.Context, chatCtx *ChatContext,
 	}
 
 	// Determine user identifier for rate limiting
-	userIdentifier := "anonymous"
-	if chatCtx.UserID != nil {
-		userIdentifier = *chatCtx.UserID
-	}
+	userIdentifier := rateLimitIdentifier(chatCtx)
 
 	// Check per-minute rate limit
 	if !h.limiter.CheckRateLimit(chatbot.ID, userIdentifier, chatbot.RateLimitPerMinute) {
@@ -435,6 +450,15 @@ func (h *ChatHandler) handleStartChat(ctx context.Context, chatCtx *ChatContext,
 		state, err = h.conversations.GetConversation(ctx, msg.ConversationID)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to get conversation")
+		}
+		// Ownership check: a caller may only resume their own conversation
+		// (both sides empty = anonymous chatbot + anonymous caller, allowed).
+		if state != nil && !conversationOwnedBy(state, chatCtx.UserID) {
+			log.Warn().
+				Str("conversation_id", msg.ConversationID).
+				Msg("Conversation resume rejected: caller does not own conversation")
+			h.sendError(chatCtx, "", "FORBIDDEN", "Conversation not found")
+			return
 		}
 	}
 
@@ -626,6 +650,91 @@ func extractStringDefault(v interface{}, defaultVal string) string {
 		return s
 	}
 	return defaultVal
+}
+
+// ResolveDatabaseRole derives the PostgreSQL role for a WebSocket connection
+// from the auth middleware locals. Client-key and service-key authentication
+// set rls_role directly (already a database role); JWT authentication
+// (OptionalAuth) only sets user_role + jwt_claims, so the role is mapped with
+// the same semantics as the REST path's middleware mapper. Falls back to
+// "anon" only when no identity is present at all.
+func ResolveDatabaseRole(rlsRole, userRole interface{}) string {
+	if s, ok := rlsRole.(string); ok && s != "" {
+		return s
+	}
+	if s, ok := userRole.(string); ok && s != "" {
+		return mapAppRoleToDatabaseRole(s)
+	}
+	return "anon"
+}
+
+// mapAppRoleToDatabaseRole mirrors internal/middleware's application-role to
+// database-role mapping (kept local because the middleware mapper is
+// unexported and internal/middleware must not gain an ai dependency).
+func mapAppRoleToDatabaseRole(appRole string) string {
+	switch appRole {
+	case "service_role", "instance_admin":
+		// Instance admins are Fluxbase platform admins and get full data access
+		return "service_role"
+	case "tenant_service":
+		return "tenant_service"
+	case "tenant_admin":
+		// Tenant admins respect RLS with tenant context from the JWT claims
+		return "authenticated"
+	case "anon", "":
+		return "anon"
+	default:
+		// admin, user, authenticated, moderator, etc.
+		return "authenticated"
+	}
+}
+
+// isInstanceAdminPrincipal reports whether the connection is authenticated as
+// an instance admin. Checks both the resolved database role (service-key
+// paths where rls_role carries the app role) and the raw JWT claims
+// (dashboard instance_admin JWTs, which map to service_role at the DB level).
+func isInstanceAdminPrincipal(chatCtx *ChatContext) bool {
+	if chatCtx == nil {
+		return false
+	}
+	if chatCtx.Role == "instance_admin" {
+		return true
+	}
+	return chatCtx.Claims != nil && chatCtx.Claims.Role == "instance_admin"
+}
+
+// conversationOwnedBy reports whether the caller may resume the conversation.
+// Ownership matches when the conversation's user ID equals the caller's;
+// both empty (anonymous chatbot, anonymous caller) is allowed.
+func conversationOwnedBy(state *ConversationState, callerUserID *string) bool {
+	if state == nil {
+		return false
+	}
+	stateID := ""
+	if state.UserID != nil {
+		stateID = *state.UserID
+	}
+	callerID := ""
+	if callerUserID != nil {
+		callerID = *callerUserID
+	}
+	return stateID == callerID
+}
+
+// rateLimitIdentifier returns the bucket key for per-user rate limiting:
+// the authenticated user ID, or the client IP for anonymous callers so they
+// don't all share a single "anonymous" bucket.
+func rateLimitIdentifier(chatCtx *ChatContext) string {
+	if chatCtx == nil {
+		return "anonymous"
+	}
+	if chatCtx.UserID != nil && *chatCtx.UserID != "" {
+		return *chatCtx.UserID
+	}
+	if chatCtx.IPAddress != "" {
+		return "ip:" + chatCtx.IPAddress
+	}
+	return "anonymous"
 }
 
 // hasRequiredRole checks if the user's JWT claims contain any of the required roles (OR semantics).
