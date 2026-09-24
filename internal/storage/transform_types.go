@@ -144,6 +144,8 @@ func (t *ImageTransformer) checkOneDimensionPixels(opts *TransformOptions) error
 }
 
 // sourceByteLimit returns the effective source byte cap for this transformer.
+//
+//nolint:unused // used by transform.go, which is behind the vips build tag that lint does not compile
 func (t *ImageTransformer) sourceByteLimit() int64 {
 	if t.maxSourceBytes > 0 {
 		return t.maxSourceBytes

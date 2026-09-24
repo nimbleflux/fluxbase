@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // TestRecoverStaleJobsQuery_ScopesToDeadWorkers is a focused SQL-string test:

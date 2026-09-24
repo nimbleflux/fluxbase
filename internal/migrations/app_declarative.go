@@ -900,4 +900,3 @@ func writeSchemaWorkDir(schemaContent, ignoreContent string) (dir, schemaFile st
 	}
 	return dir, schemaFile, nil
 }
-

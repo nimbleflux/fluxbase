@@ -218,8 +218,8 @@ func (h *InternalSchemaHandler) ApplySchema(c fiber.Ctx) error {
 	ctx := c.Context()
 
 	var req struct {
-		Schema           string `json:"schema"` // Optional: apply a specific schema
-		AutoApprove      bool   `json:"auto_approve"`             // Accepted for compatibility; ApplyFiltered does not prompt
+		Schema           string `json:"schema"`       // Optional: apply a specific schema
+		AutoApprove      bool   `json:"auto_approve"` // Accepted for compatibility; ApplyFiltered does not prompt
 		AllowDestructive bool   `json:"allow_destructive"`
 	}
 	if err := c.Bind().Body(&req); err != nil && err != fiber.ErrUnprocessableEntity {

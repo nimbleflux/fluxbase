@@ -26,6 +26,8 @@ const defaultSchemaApplyLockTimeoutSecs = 30
 // returns. lockTimeoutSecs bounds how long acquisition may block (<=0 waits
 // indefinitely, bounded by ctx); the connection's lock_timeout is reset on release.
 // If pool is nil (service constructed without a pool) fn runs without locking.
+// Locking is a serialization optimization: if the lock cannot be taken, fn runs
+// without it (warn + continue) rather than failing the apply.
 func WithSchemaApplyLock(ctx context.Context, pool *pgxpool.Pool, lockTimeoutSecs int, fn func() error) error {
 	if pool == nil {
 		return fn()
@@ -33,26 +35,28 @@ func WithSchemaApplyLock(ctx context.Context, pool *pgxpool.Pool, lockTimeoutSec
 
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to acquire connection for schema apply lock: %w", err)
+		log.Warn().Err(err).Msg("Schema apply lock unavailable: could not acquire a connection; continuing without the lock")
+		return fn()
 	}
 	defer conn.Release()
 
 	if lockTimeoutSecs > 0 {
 		if _, err := conn.Exec(ctx, fmt.Sprintf("SET lock_timeout TO '%ds'", lockTimeoutSecs)); err != nil {
-			log.Warn().Err(err).Msg("Failed to set lock_timeout for schema apply lock")
-		} else {
-			// SET persists for the session; reset so the pooled connection does not
-			// leak the timeout to other work.
-			defer func() {
-				_, _ = conn.Exec(context.Background(), "RESET lock_timeout")
-			}()
+			log.Warn().Err(err).Msg("Failed to set lock_timeout for schema apply lock; continuing without the lock")
+			return fn()
 		}
+		// SET persists for the session; reset so the pooled connection does not
+		// leak the timeout to other work.
+		defer func() {
+			_, _ = conn.Exec(context.Background(), "RESET lock_timeout")
+		}()
 	}
 
 	// pg_advisory_lock blocks until the lock is free (bounded by lock_timeout set
 	// above and by ctx) and returns void, so Exec rather than QueryRow.
 	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", schemaApplyLockID); err != nil {
-		return fmt.Errorf("failed to acquire schema apply advisory lock: %w", err)
+		log.Warn().Err(err).Msg("Failed to acquire schema apply advisory lock; continuing without the lock")
+		return fn()
 	}
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

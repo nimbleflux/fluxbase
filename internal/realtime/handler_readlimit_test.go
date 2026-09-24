@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // TestRealtimeHandler_MaxMessageSize verifies the inbound WebSocket read limit
