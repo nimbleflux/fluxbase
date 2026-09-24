@@ -481,29 +481,22 @@ jobs:
           # Enable pgvector extension for AI/RAG features
           psql -h localhost -U postgres -d fluxbase_go_e2e -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
-      - name: Start MinIO
+      - name: Start S3 test server (SeaweedFS)
         run: |
-          # Current MinIO images default to `minio` (no args), which exits —
-          # GitHub Actions service containers cannot override CMD, so run the
-          # container from a step with explicit `server /data` args instead.
-          # quay.io anonymous pulls are intermittently rejected; retry.
-          for attempt in 1 2 3 4 5; do
-            if docker pull quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z; then
-              break
-            fi
-            if [ "$attempt" = "5" ]; then
-              echo "::error::Failed to pull MinIO image after $attempt attempts"
-              exit 1
-            fi
-            echo "Pull failed (attempt $attempt) — retrying in 20s"
-            sleep 20
-          done
+          # MinIO no longer publishes pullable images (quay.io/Docker Hub both
+          # reject anonymous access), so tests run against SeaweedFS in S3
+          # mode. The identity config matches the minioadmin credentials the
+          # tests were written with.
+          mkdir -p /tmp/seaweed-ci
+          cat > /tmp/seaweed-ci/s3.json <<'EOF'
+          {"identities":[{"name":"minioadmin","credentials":[{"accessKey":"minioadmin","secretKey":"minioadmin"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
+          EOF
           docker run -d --name minio \
             -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin \
-            -e MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z \
-            server /data
+            -v /tmp/seaweed-ci/s3.json:/etc/seaweedfs/s3.json:ro \
+            chrislusf/seaweedfs:dev \
+            server -dir=/data -s3 -s3.port=9000 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=1024
+          timeout 60 bash -c 'until curl -s http://localhost:9000/ > /dev/null 2>&1; do sleep 1; done'
 
       - name: Setup MinIO bucket
         run: |
@@ -988,40 +981,28 @@ jobs:
           psql -h localhost -U postgres -d fluxbase_test -v ON_ERROR_STOP=1 -f "${SCHEMA_DIR}/post-schema-fks.sql"
           psql -h localhost -U postgres -d fluxbase_test -v ON_ERROR_STOP=1 -f "${SCHEMA_DIR}/post-schema.sql"
 
-      - name: Start MinIO
+      - name: Start S3 test server (SeaweedFS)
         run: |
-          # Current MinIO images default to `minio` (no args), which exits —
-          # GitHub Actions service containers cannot override CMD, so run the
-          # container from a step with explicit `server /data` args instead.
-          # quay.io anonymous pulls are intermittently rejected; retry.
-          for attempt in 1 2 3 4 5; do
-            if docker pull quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z; then
-              break
-            fi
-            if [ "$attempt" = "5" ]; then
-              echo "::error::Failed to pull MinIO image after $attempt attempts"
-              exit 1
-            fi
-            echo "Pull failed (attempt $attempt) — retrying in 20s"
-            sleep 20
-          done
+          # MinIO no longer publishes pullable images (quay.io/Docker Hub both
+          # reject anonymous access), so tests run against SeaweedFS in S3
+          # mode. The identity config matches the minioadmin credentials the
+          # tests were written with.
+          mkdir -p /tmp/seaweed-ci
+          cat > /tmp/seaweed-ci/s3.json <<'EOF'
+          {"identities":[{"name":"minioadmin","credentials":[{"accessKey":"minioadmin","secretKey":"minioadmin"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
+          EOF
           docker run -d --name minio \
             -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin \
-            -e MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z \
-            server /data
+            -v /tmp/seaweed-ci/s3.json:/etc/seaweedfs/s3.json:ro \
+            chrislusf/seaweedfs:dev \
+            server -dir=/data -s3 -s3.port=9000 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=1024
+          timeout 60 bash -c 'until curl -s http://localhost:9000/ > /dev/null 2>&1; do sleep 1; done'
 
       - name: Setup MinIO bucket
         run: |
-          timeout 30 bash -c 'until curl -f http://localhost:9000/minio/health/live; do sleep 1; done'
-          docker create --name mc-extract quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z > /dev/null
-          docker cp mc-extract:/usr/bin/mc ./mc
-          docker rm mc-extract
-          chmod +x mc
-          ./mc alias set minio http://localhost:9000 minioadmin minioadmin
-          ./mc mb minio/fluxbase-test || true
-          ./mc anonymous set public minio/fluxbase-test
+          # Pre-create the default test bucket via the SeaweedFS shell
+          # (individual tests create their own buckets as well).
+          docker exec minio sh -c 'echo "s3.bucket.create -name fluxbase-test" | weed shell -master=localhost:9333' || true
 
       - name: Start Dex OIDC provider
         run: |
