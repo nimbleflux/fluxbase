@@ -227,7 +227,7 @@ func (h *OpenAPIHandler) addAdminEndpoints(spec *OpenAPISpec) {
 		},
 	}
 
-	spec.Paths["/api/v1/admin/invitations/{token}"] = OpenAPIPath{
+	spec.Paths["/api/v1/admin/invitations/{id}"] = OpenAPIPath{
 		"delete": OpenAPIOperation{
 			Summary:     "Revoke invitation",
 			Description: "Revoke an invitation",
@@ -237,7 +237,7 @@ func (h *OpenAPIHandler) addAdminEndpoints(spec *OpenAPISpec) {
 				{"bearerAuth": {}},
 			},
 			Parameters: []OpenAPIParameter{
-				{Name: "token", In: "path", Required: true, Schema: map[string]string{"type": "string"}},
+				{Name: "id", In: "path", Required: true, Schema: map[string]string{"type": "string"}},
 			},
 			Responses: map[string]OpenAPIResponse{
 				"204": {

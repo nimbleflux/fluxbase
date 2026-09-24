@@ -374,11 +374,11 @@ func (h *OpenAPIHandler) addStorageEndpoints(spec *OpenAPISpec) {
 		},
 	}
 
-	// POST /api/v1/storage/:bucket/:key/signed-url - Generate signed URL
-	spec.Paths["/api/v1/storage/{bucket}/{key}/signed-url"] = OpenAPIPath{
+	// POST /api/v1/storage/:bucket/sign/* - Generate signed URL
+	spec.Paths["/api/v1/storage/{bucket}/sign/{key}"] = OpenAPIPath{
 		"post": OpenAPIOperation{
 			Summary:     "Generate signed URL",
-			Description: "Generate a presigned URL for temporary file access (not supported for local storage)",
+			Description: "Generate a presigned URL for temporary file access. The caller must have RLS visibility of the object; lifetimes are capped at 24 hours.",
 			OperationID: "generate_signed_url",
 			Tags:        []string{"Storage"},
 			Parameters: []OpenAPIParameter{
@@ -426,15 +426,32 @@ func (h *OpenAPIHandler) addStorageEndpoints(spec *OpenAPISpec) {
 							Schema: map[string]interface{}{
 								"type": "object",
 								"properties": map[string]interface{}{
-									"url":        map[string]string{"type": "string"},
-									"expires_at": map[string]string{"type": "string", "format": "date-time"},
+									"signed_url": map[string]string{"type": "string"},
+									"expires_in": map[string]string{"type": "integer"},
+									"method":     map[string]string{"type": "string"},
 								},
 							},
 						},
 					},
 				},
-				"501": {
-					Description: "Not supported for local storage",
+				"403": {
+					Description: "Caller lacks RLS visibility of the object",
+					Content: map[string]OpenAPIMedia{
+						"application/json": {
+							Schema: map[string]string{"$ref": "#/components/schemas/Error"},
+						},
+					},
+				},
+				"404": {
+					Description: "Object not found or not visible",
+					Content: map[string]OpenAPIMedia{
+						"application/json": {
+							Schema: map[string]string{"$ref": "#/components/schemas/Error"},
+						},
+					},
+				},
+				"400": {
+					Description: "expires_in exceeds the 24h maximum or unsupported method",
 					Content: map[string]OpenAPIMedia{
 						"application/json": {
 							Schema: map[string]string{"$ref": "#/components/schemas/Error"},
