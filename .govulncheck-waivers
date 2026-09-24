@@ -1,0 +1,5 @@
+# Vulnerabilities accepted as known risks. Each entry needs a documented
+# reason and must be re-reviewed when a new upstream release is available.
+# GO-2026-6452: github.com/xuri/excelize/v2 — upstream has not published a
+# fix (Fixed in: N/A). Used by the AI text extractor for xlsx documents.
+GO-2026-6452

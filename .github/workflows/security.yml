@@ -102,5 +102,14 @@ jobs:
       - name: Run govulncheck (text format, gates the job)
         # No continue-on-error: vulnerabilities reachable from this code
         # (govulncheck exits 3) fail the job, matching the Trivy
-        # exit-code policy above.
-        run: govulncheck ./...
+        # exit-code policy above. IDs in .govulncheck-waivers are accepted
+        # risks (upstream fix unavailable) and do not gate — re-review them
+        # periodically.
+        run: |
+          govulncheck ./... > govulncheck.out 2>&1 || true
+          if grep "Vulnerability #" govulncheck.out | grep -vFf .govulncheck-waivers >/dev/null; then
+            cat govulncheck.out
+            echo "::error::Reachable vulnerabilities without a waiver were found"
+            exit 1
+          fi
+          cat govulncheck.out
