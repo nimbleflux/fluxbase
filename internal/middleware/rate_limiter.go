@@ -189,6 +189,30 @@ func Auth2FALimiterWithConfig(max int, expiration time.Duration, storage ...fibe
 	return NewRateLimiter(cfg)
 }
 
+// AuthAccountDeleteLimiter limits self-service account deletion attempts per IP
+func AuthAccountDeleteLimiter(storage ...fiber.Storage) fiber.Handler {
+	return AuthAccountDeleteLimiterWithConfig(5, 15*time.Minute, storage...)
+}
+
+// AuthAccountDeleteLimiterWithConfig creates an auth account deletion rate limiter
+// with custom limits. Strict (same defaults as password reset) because the
+// endpoint verifies a password and destroys data.
+func AuthAccountDeleteLimiterWithConfig(max int, expiration time.Duration, storage ...fiber.Storage) fiber.Handler {
+	cfg := RateLimiterConfig{
+		Name:       "auth_account_delete",
+		Max:        max,
+		Expiration: expiration,
+		KeyFunc: func(c fiber.Ctx) string {
+			return "account_delete:" + c.IP()
+		},
+		Message: fmt.Sprintf("Too many account deletion attempts. Please try again in %d minutes.", int(expiration.Minutes())),
+	}
+	if len(storage) > 0 && storage[0] != nil {
+		cfg.Storage = storage[0]
+	}
+	return NewRateLimiter(cfg)
+}
+
 // AuthRefreshLimiter limits token refresh attempts per token
 func AuthRefreshLimiter(storage ...fiber.Storage) fiber.Handler {
 	return AuthRefreshLimiterWithConfig(10, 1*time.Minute, storage...)

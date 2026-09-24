@@ -20,16 +20,25 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/settings"
 )
 
+// clientKeyHeader returns the client key from the X-Client-Key header,
+// accepting the Supabase-compatible `apikey` header as a fallback.
+// Query parameters are not accepted (removed for security).
+func clientKeyHeader(c fiber.Ctx) string {
+	if key := c.Get("X-Client-Key"); key != "" {
+		return key
+	}
+	return c.Get("apikey")
+}
+
 // ClientKeyAuth creates middleware that authenticates requests using client keys
-// Client key must be provided via X-Client-Key header (query parameter removed for security)
+// Client key must be provided via X-Client-Key (or apikey) header (query parameter removed for security)
 func ClientKeyAuth(clientKeyService *auth.ClientKeyService) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// Get client key from X-Client-Key header only (query parameter removed for security)
-		clientKey := c.Get("X-Client-Key")
+		clientKey := clientKeyHeader(c)
 
 		// If no client key provided, return unauthorized
 		if clientKey == "" {
-			return apperrors.SendErrorWithCode(c, 401, "Missing client key. Provide via X-Client-Key header", apperrors.ErrCodeMissingClientKey)
+			return apperrors.SendErrorWithCode(c, 401, "Missing client key. Provide via X-Client-Key or apikey header", apperrors.ErrCodeMissingClientKey)
 		}
 
 		// Validate the client key
@@ -133,7 +142,7 @@ func OptionalClientKeyAuth(authService *auth.Service, clientKeyService *auth.Cli
 		}
 
 		// Try client key authentication (header only, query parameter removed for security)
-		clientKey := c.Get("X-Client-Key")
+		clientKey := clientKeyHeader(c)
 
 		if clientKey != "" {
 			validatedKey, err := clientKeyService.ValidateClientKey(c.RequestCtx(), clientKey)
@@ -198,7 +207,7 @@ func RequireEitherAuth(authService *auth.Service, clientKeyService *auth.ClientK
 		}
 
 		// Try client key authentication (header only, query parameter removed for security)
-		clientKey := c.Get("X-Client-Key")
+		clientKey := clientKeyHeader(c)
 
 		if clientKey != "" {
 			validatedKey, err := clientKeyService.ValidateClientKey(c.RequestCtx(), clientKey)

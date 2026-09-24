@@ -52,14 +52,21 @@ const STORAGE_KEYS = {
   TENANT_ID: 'fluxbase_impersonation_tenant_id',
 }
 
+// Impersonation tokens are persisted in sessionStorage (not localStorage) so
+// they never outlive the browser tab; see also auth-store (admin tokens).
+const storage = sessionStorage
+
 const loadFromStorage = () => {
   try {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
-    const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
-    const userStr = localStorage.getItem(STORAGE_KEYS.USER)
-    const sessionStr = localStorage.getItem(STORAGE_KEYS.SESSION)
-    const typeStr = localStorage.getItem(STORAGE_KEYS.TYPE)
-    const tenantId = localStorage.getItem(STORAGE_KEYS.TENANT_ID)
+    // Remove leftovers from previous versions that used localStorage
+    Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key))
+
+    const token = storage.getItem(STORAGE_KEYS.TOKEN)
+    const refreshToken = storage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+    const userStr = storage.getItem(STORAGE_KEYS.USER)
+    const sessionStr = storage.getItem(STORAGE_KEYS.SESSION)
+    const typeStr = storage.getItem(STORAGE_KEYS.TYPE)
+    const tenantId = storage.getItem(STORAGE_KEYS.TENANT_ID)
 
     if (token && userStr && sessionStr && typeStr) {
       return {
@@ -91,17 +98,17 @@ export const useImpersonationStore = create<ImpersonationState>((set) => ({
   ...loadFromStorage(),
 
   startImpersonation: (token, refreshToken, user, session, type) => {
-    localStorage.setItem(STORAGE_KEYS.TOKEN, token)
+    storage.setItem(STORAGE_KEYS.TOKEN, token)
     if (refreshToken) {
-      localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
+      storage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken)
     }
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
-    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session))
-    localStorage.setItem(STORAGE_KEYS.TYPE, type)
+    storage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
+    storage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session))
+    storage.setItem(STORAGE_KEYS.TYPE, type)
 
     const tenantId = session?.tenant_id || null
     if (tenantId) {
-      localStorage.setItem(STORAGE_KEYS.TENANT_ID, tenantId)
+      storage.setItem(STORAGE_KEYS.TENANT_ID, tenantId)
     }
 
     set({
@@ -116,12 +123,12 @@ export const useImpersonationStore = create<ImpersonationState>((set) => ({
   },
 
   stopImpersonation: () => {
-    localStorage.removeItem(STORAGE_KEYS.TOKEN)
-    localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
-    localStorage.removeItem(STORAGE_KEYS.USER)
-    localStorage.removeItem(STORAGE_KEYS.SESSION)
-    localStorage.removeItem(STORAGE_KEYS.TYPE)
-    localStorage.removeItem(STORAGE_KEYS.TENANT_ID)
+    storage.removeItem(STORAGE_KEYS.TOKEN)
+    storage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
+    storage.removeItem(STORAGE_KEYS.USER)
+    storage.removeItem(STORAGE_KEYS.SESSION)
+    storage.removeItem(STORAGE_KEYS.TYPE)
+    storage.removeItem(STORAGE_KEYS.TENANT_ID)
 
     set({
       isImpersonating: false,
@@ -135,7 +142,7 @@ export const useImpersonationStore = create<ImpersonationState>((set) => ({
   },
 
   updateSession: (session) => {
-    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session))
+    storage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session))
     set({ session })
   },
 }))

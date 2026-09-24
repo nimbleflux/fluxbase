@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
+	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
@@ -27,6 +28,7 @@ type AuthHandler struct {
 	captchaService      *auth.CaptchaService
 	captchaTrustService *auth.CaptchaTrustService
 	samlService         *auth.SAMLService
+	kbStorage           *ai.KnowledgeBaseStorage // used by self-service account deletion cleanup; nil when AI is disabled
 	baseURL             string
 	secureCookie        bool   // Whether to set Secure flag on cookies (true in production)
 	anonKey             string // Publishable anon key (safe to expose to clients); empty when unconfigured

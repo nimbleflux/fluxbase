@@ -113,12 +113,15 @@ export function useAuth() {
       await client.auth.signOut();
     },
     onSuccess: () => {
+      // End any active impersonation session on sign-out
+      useImpersonationStore.getState().stopImpersonation();
       auth.reset();
       queryClient.clear();
       navigate({ to: "/login", replace: true });
       toast.success("Signed out successfully");
     },
     onError: (error: Error) => {
+      useImpersonationStore.getState().stopImpersonation();
       auth.reset();
       queryClient.clear();
       navigate({ to: "/login", replace: true });

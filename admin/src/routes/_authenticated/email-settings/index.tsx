@@ -233,7 +233,10 @@ function EmailSettingsPage() {
       if (showTenantLevel) {
         return fluxbaseClient.admin.settings.email.testForTenant(email);
       }
-      return fluxbaseClient.admin.settings.email.test(email);
+      return fluxbaseClient.admin.settings.email.test(
+        settings?.provider || "smtp",
+        email
+      );
     },
     onSuccess: () => {
       toast.success("Test email sent successfully");

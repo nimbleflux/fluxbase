@@ -180,20 +180,16 @@ test.describe("SSO Login", () => {
       )
       .toBe(accessToken);
 
-    // Verify refresh token is also stored in cookie
+    // Verify refresh token is stored in session storage (the server also
+    // sets an HttpOnly cookie that JavaScript cannot read)
     const storedRefresh = await page.evaluate(() => {
-      const prefix = "fluxbase_admin_refresh_token=";
-      const parts = document.cookie.split("; ");
-      for (const part of parts) {
-        if (part.startsWith(prefix)) {
-          try {
-            return JSON.parse(part.substring(prefix.length));
-          } catch {
-            return part.substring(prefix.length);
-          }
-        }
+      const raw = sessionStorage.getItem("fluxbase_admin_refresh_token");
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return raw;
       }
-      return null;
     });
     expect(storedRefresh).toBe(refreshToken);
   });

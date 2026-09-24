@@ -33,6 +33,7 @@ type AuthDeps struct {
 	SignOut                   fiber.Handler
 	GetUser                   fiber.Handler
 	UpdateUser                fiber.Handler
+	DeleteAccount             fiber.Handler
 	StartImpersonation        fiber.Handler
 	StartAnonImpersonation    fiber.Handler
 	StartServiceImpersonation fiber.Handler
@@ -87,6 +88,7 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 	// Authenticated routes - auth middleware is auto-injected based on Auth: AuthRequired
 	r = append(r, []Route{
 		{Method: "POST", Path: "/signout", Handler: deps.SignOut, Summary: "Sign out", Auth: AuthRequired},
+		{Method: "DELETE", Path: "/account", Handler: deps.DeleteAccount, Summary: "Delete own account", Auth: AuthRequired, Middlewares: limiter(deps, "account_delete")},
 		{Method: "GET", Path: "/user", Handler: deps.GetUser, Summary: "Get user", Auth: AuthRequired},
 		{Method: "PATCH", Path: "/user", Handler: deps.UpdateUser, Summary: "Update user", Auth: AuthRequired},
 		{Method: "POST", Path: "/impersonate", Handler: deps.StartImpersonation, Summary: "Start impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},

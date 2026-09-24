@@ -7,6 +7,7 @@ import axios, {
 import { useAuthStore } from "@/stores/auth-store";
 import { useTenantStore } from "@/stores/tenant-store";
 import { useBranchStore } from "@/stores/branch-store";
+import { useImpersonationStore } from "@/stores/impersonation-store";
 
 export const API_BASE_URL =
   window.__FLUXBASE_CONFIG__?.publicBaseURL ||
@@ -47,40 +48,16 @@ const processQueue = (error: Error | null, token: string | null = null) => {
   failedQueue = [];
 };
 
-const isNotLoggedInResponse = (data: unknown): boolean => {
-  if (!data || typeof data !== "object") return false;
-  const obj = data as Record<string, unknown>;
-  const errorFields = [obj.error, obj.message, obj.msg, obj.detail];
-  for (const field of errorFields) {
-    if (typeof field === "string") {
-      const lower = field.toLowerCase();
-      if (
-        lower.includes("not logged in") ||
-        lower.includes("not authenticated") ||
-        lower.includes("unauthorized") ||
-        lower.includes("invalid token") ||
-        lower.includes("token expired") ||
-        lower.includes("session expired") ||
-        lower.includes("authentication required")
-      ) {
-        return true;
-      }
-    }
-  }
-  return false;
-};
-
-const SKIP_REFRESH_PATHS = ["/api/v1/admin/branches"];
-
 async function refreshTokens(): Promise<string> {
   const { refreshToken } = useAuthStore.getState().auth;
-  if (!refreshToken) {
-    throw new Error("No refresh token available");
-  }
 
-  const response = await axios.post(`${API_BASE_URL}/api/v1/admin/refresh`, {
-    refresh_token: refreshToken,
-  });
+  // The server prefers the HttpOnly refresh cookie (`fluxbase_admin_refresh`);
+  // the body value is a fallback for sessions that predate the cookie handoff.
+  const response = await axios.post(
+    `${API_BASE_URL}/api/v1/admin/refresh`,
+    refreshToken ? { refresh_token: refreshToken } : {},
+    { withCredentials: true },
+  );
 
   const {
     access_token,
@@ -105,6 +82,7 @@ async function refreshTokens(): Promise<string> {
 
 function forceLogout(): Promise<never> {
   useAuthStore.getState().auth.reset();
+  useImpersonationStore.getState().stopImpersonation();
   window.location.href = "/admin/login";
   return new Promise(() => {});
 }
@@ -180,31 +158,15 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => {
-    if (isNotLoggedInResponse(response.data)) {
-      return refreshAndRetry(response.config);
-    }
+    // Refresh is triggered by HTTP status only (401); response bodies are
+    // never sniffed — successful payloads containing words like
+    // "unauthorized" (e.g. log rows) must not cause token churn.
     return response;
   },
   async (error: AxiosError) => {
     const originalConfig = error.config;
-    const url = originalConfig?.url || "";
-    const shouldSkipRefresh = SKIP_REFRESH_PATHS.some((path) =>
-      url.startsWith(path),
-    );
-
-    if (shouldSkipRefresh) {
-      return Promise.reject(error);
-    }
 
     if (error.response?.status === 401 && originalConfig) {
-      return refreshAndRetry(originalConfig);
-    }
-
-    if (
-      error.response?.data &&
-      isNotLoggedInResponse(error.response.data) &&
-      originalConfig
-    ) {
       return refreshAndRetry(originalConfig);
     }
 

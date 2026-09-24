@@ -212,6 +212,13 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	s.AI = aiMod.Handlers
 	s.Quota = aiMod.Quota
 
+	// Self-service account deletion cleans up the user's KB documents; the AI
+	// module initializes after auth, so wire the storage in post-init. Nil when
+	// AI is disabled (cleanup pass is skipped).
+	if s.AI != nil && s.AI.KBStorage != nil && s.Auth != nil && s.Auth.Handler != nil {
+		s.Auth.Handler.SetKnowledgeBaseStorage(s.AI.KBStorage)
+	}
+
 	s.Realtime = realtimeMod.Handlers
 	s.Monitoring = realtimeMod.Monitoring
 

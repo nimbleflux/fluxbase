@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth-store";
 import type { DashboardUser } from "@/lib/auth";
 import { decodeJWT } from "@/lib/jwt";
+import { safeRelativePath } from "@/lib/safe-redirect";
 
 export const Route = createFileRoute("/login/callback")({
   component: SSOCallbackPage,
@@ -86,8 +87,10 @@ function SSOCallbackPage() {
 
         // Redirect to the intended destination or dashboard
         const destination =
-          redirect_to && redirect_to !== "/" ? redirect_to : "/admin";
-        window.location.href = destination;
+          redirect_to && redirect_to !== "/"
+            ? safeRelativePath(redirect_to)
+            : null;
+        window.location.href = destination || "/admin";
       } catch (_error) {
         toast.error("SSO Login Failed", {
           description: "Failed to complete authentication",

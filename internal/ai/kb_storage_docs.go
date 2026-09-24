@@ -227,6 +227,34 @@ func (s *KnowledgeBaseStorage) DeleteDocumentsByFilter(
 	return int(rowsAffected), nil
 }
 
+// DeleteUserDocuments deletes every document scoped to a user via the
+// metadata "user_id" key, across ALL knowledge bases. Strict scoping
+// (userIsolationCondition with includeGlobal=false) means global content and
+// other users' documents are never matched — same predicate as the per-KB
+// DeleteDocumentsByFilter path.
+//
+// Used by self-service account deletion (DELETE /api/v1/auth/account): chunks,
+// entities and document permissions cascade via FK from ai.documents.
+func (s *KnowledgeBaseStorage) DeleteUserDocuments(ctx context.Context, userID string) (int, error) {
+	var rowsAffected int64
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		query := fmt.Sprintf(`DELETE FROM ai.documents WHERE %s`, userIsolationCondition("metadata", 1, false))
+
+		result, err := tx.Exec(ctx, query, userID)
+		if err != nil {
+			return fmt.Errorf("failed to delete user documents: %w", err)
+		}
+
+		rowsAffected = result.RowsAffected()
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return int(rowsAffected), nil
+}
+
 // UpdateDocumentMetadata updates a document's title, metadata, and tags
 func (s *KnowledgeBaseStorage) UpdateDocumentMetadata(ctx context.Context, id string, title *string, metadata map[string]string, tags []string) (*Document, error) {
 	// Build the metadata JSON

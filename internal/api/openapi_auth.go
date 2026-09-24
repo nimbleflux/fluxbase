@@ -54,6 +54,17 @@ func (h *OpenAPIHandler) addAuthEndpoints(spec *OpenAPISpec) {
 		},
 	}
 
+	// Delete account request schema (self-service account deletion)
+	spec.Components.Schemas["DeleteAccountRequest"] = map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"password": map[string]string{
+				"type":        "string",
+				"description": "Required when the account has a password credential; omit for OAuth-only accounts",
+			},
+		},
+	}
+
 	// Magic link request schema
 	spec.Components.Schemas["MagicLinkRequest"] = map[string]interface{}{
 		"type":     "object",
@@ -159,6 +170,56 @@ func (h *OpenAPIHandler) addAuthEndpoints(spec *OpenAPISpec) {
 				},
 				"401": {
 					Description: "Unauthorized",
+					Content: map[string]OpenAPIMedia{
+						"application/json": {
+							Schema: map[string]string{"$ref": "#/components/schemas/Error"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// DELETE /api/v1/auth/account
+	spec.Paths["/api/v1/auth/account"] = OpenAPIPath{
+		"delete": OpenAPIOperation{
+			Summary:     "Delete own account",
+			Description: "Permanently delete the authenticated user's account with all sessions and tokens, owned knowledge-base documents and storage object metadata. Requires the account password when the user has one; OAuth-only users may omit the body.",
+			OperationID: "auth_delete_account",
+			Tags:        []string{"Authentication"},
+			Security: []map[string][]string{
+				{"bearerAuth": {}},
+			},
+			RequestBody: &OpenAPIRequestBody{
+				Required: false,
+				Content: map[string]OpenAPIMedia{
+					"application/json": {
+						Schema: map[string]string{"$ref": "#/components/schemas/DeleteAccountRequest"},
+					},
+				},
+			},
+			Responses: map[string]OpenAPIResponse{
+				"204": {
+					Description: "Account deleted",
+				},
+				"401": {
+					Description: "Unauthorized",
+					Content: map[string]OpenAPIMedia{
+						"application/json": {
+							Schema: map[string]string{"$ref": "#/components/schemas/Error"},
+						},
+					},
+				},
+				"403": {
+					Description: "Password missing or incorrect",
+					Content: map[string]OpenAPIMedia{
+						"application/json": {
+							Schema: map[string]string{"$ref": "#/components/schemas/Error"},
+						},
+					},
+				},
+				"404": {
+					Description: "User not found",
 					Content: map[string]OpenAPIMedia{
 						"application/json": {
 							Schema: map[string]string{"$ref": "#/components/schemas/Error"},

@@ -5,6 +5,7 @@ import { KeyRound, Shield } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { dashboardAuthAPI, type SSOProvider } from '@/lib/api'
+import { safeRelativePath } from '@/lib/safe-redirect'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -59,8 +60,8 @@ function LoginPage() {
   useEffect(() => {
     if (auth.accessToken && auth.user) {
       const params = new URLSearchParams(window.location.search)
-      const returnTo = params.get('return_to')
-      const redirect = params.get('redirect') || '/'
+      const returnTo = safeRelativePath(params.get('return_to'))
+      const redirect = safeRelativePath(params.get('redirect')) || '/'
 
       if (returnTo) {
         window.location.href = returnTo
@@ -267,9 +268,9 @@ function LoginPage() {
 
       // Redirect to return_to URL (e.g., MCP OAuth flow) or dashboard
       const urlParams = new URLSearchParams(window.location.search)
-      const returnTo = urlParams.get('return_to')
+      const returnTo = safeRelativePath(urlParams.get('return_to'))
       if (returnTo) {
-        // External URL (like MCP OAuth authorize) - use window.location
+        // Same-origin URL (like MCP OAuth authorize) - use window.location
         window.location.href = returnTo
       } else {
         navigate({ to: '/' })
