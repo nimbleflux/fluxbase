@@ -182,8 +182,8 @@ func TestQuoteSelectColumn(t *testing.T) {
 	})
 
 	t.Run("renders JSONB paths", func(t *testing.T) {
-		assert.Equal(t, `"metadata"->>'author'`, quoteSelectColumn("metadata.author"))
-		assert.Equal(t, `"metadata"->'tags'->>'name'`, quoteSelectColumn("metadata.tags.name"))
+		assert.Equal(t, `"metadata" ->> 'author'`, quoteSelectColumn("metadata.author"))
+		assert.Equal(t, `"metadata" -> 'tags' ->> 'name'`, quoteSelectColumn("metadata.tags.name"))
 	})
 
 	t.Run("rejects invalid JSONB path segments", func(t *testing.T) {

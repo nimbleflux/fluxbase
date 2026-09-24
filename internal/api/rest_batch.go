@@ -250,12 +250,6 @@ func (h *RESTHandler) makeBatchPatchHandler(table database.TableInfo) fiber.Hand
 			return SendBadRequest(c, fmt.Sprintf("Invalid query parameters: %v", err), ErrCodeInvalidInput)
 		}
 
-		// Require at least one filter for safety, consistent with batch delete;
-		// an unfiltered PATCH would update every row in the table
-		if len(params.Filters) == 0 {
-			return SendBadRequest(c, "Batch update requires at least one filter. Use PATCH /:id for single record updates", ErrCodeInvalidInput)
-		}
-
 		// Build SET clause
 		setClauses := make([]string, 0, len(data))
 		values := make([]interface{}, 0, len(data))
@@ -281,6 +275,12 @@ func (h *RESTHandler) makeBatchPatchHandler(table database.TableInfo) fiber.Hand
 				values = append(values, val)
 			}
 			argCounter++
+		}
+
+		// Require at least one filter for safety, consistent with batch delete;
+		// an unfiltered PATCH would update every row in the table
+		if len(params.Filters) == 0 {
+			return SendBadRequest(c, "Batch update requires at least one filter. Use PATCH /:id for single record updates", ErrCodeInvalidInput)
 		}
 
 		// Build WHERE clause from filters

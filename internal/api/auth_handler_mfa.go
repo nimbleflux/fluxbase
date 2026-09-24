@@ -84,6 +84,9 @@ func (h *AuthHandler) VerifyTOTP(c fiber.Ctx) error {
 	if req.Code == "" {
 		return SendMissingField(c, "Code")
 	}
+	if h.authService == nil {
+		return SendErrorWithCode(c, fiber.StatusServiceUnavailable, "Authentication service unavailable", ErrCodeFeatureDisabled)
+	}
 
 	// Validate the signed 2FA challenge token bound to the password-verified
 	// sign-in attempt. The user is taken from its claims; the request body

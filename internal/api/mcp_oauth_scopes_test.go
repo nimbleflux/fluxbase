@@ -29,11 +29,11 @@ func TestResolveRequestedScopes(t *testing.T) {
 		assert.Contains(t, err.Error(), "unsupported scope")
 	})
 
-	t.Run("filters stale unsupported scopes from old registrations", func(t *testing.T) {
+	t.Run("rejects stale unsupported scopes from old registrations", func(t *testing.T) {
 		client := &mcpOAuthClient{Scopes: []string{"tables:read", "legacy:scope"}}
-		scopes, err := resolveRequestedScopes(client, "")
-		require.NoError(t, err)
-		assert.Equal(t, []string{"tables:read"}, scopes)
+		_, err := resolveRequestedScopes(client, "")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported scope")
 	})
 }
 

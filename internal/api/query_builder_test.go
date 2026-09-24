@@ -813,31 +813,33 @@ func TestQueryBuilder_EdgeCases(t *testing.T) {
 		assert.NotContains(t, sql, "invalid-col")
 	})
 
-	t.Run("query with invalid column in filter", func(t *testing.T) {
+	t.Run("query with invalid column in filter errors", func(t *testing.T) {
 		qb := NewQueryBuilder("public", "users").
 			WithFilters([]Filter{
 				{Column: "valid", Operator: OpEqual, Value: 1},
 				{Column: "invalid-col", Operator: OpEqual, Value: 2},
 			})
 
-		sql, args, _ := qb.BuildSelect()
+		// Invalid filter columns must fail loudly, never silently produce
+		// an unfiltered query.
+		sql, args, err := qb.BuildSelect()
 
-		assert.Contains(t, sql, `"valid" =`)
-		assert.NotContains(t, sql, "invalid-col")
-		assert.Equal(t, 1, len(args))
+		assert.Error(t, err)
+		assert.Empty(t, sql)
+		assert.Empty(t, args)
 	})
 
-	t.Run("query with invalid column in order", func(t *testing.T) {
+	t.Run("query with invalid column in order errors", func(t *testing.T) {
 		qb := NewQueryBuilder("public", "users").
 			WithOrder([]OrderBy{
 				{Column: "valid_col", Desc: true},
 				{Column: "invalid-col", Desc: false},
 			})
 
-		sql, _, _ := qb.BuildSelect()
+		sql, _, err := qb.BuildSelect()
 
-		assert.Contains(t, sql, `"valid_col" DESC`)
-		assert.NotContains(t, sql, "invalid-col")
+		assert.Error(t, err)
+		assert.Empty(t, sql)
 	})
 
 	t.Run("insert with all types of values", func(t *testing.T) {

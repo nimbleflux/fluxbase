@@ -206,6 +206,10 @@ func (h *GitHubWebhookHandler) HandleWebhook(c fiber.Ctx) error {
 // unsigned under the explicit allow_unsigned_webhooks opt-in. An error means
 // the delivery must be rejected.
 func (h *GitHubWebhookHandler) verifySignature(ctx context.Context, rawBody []byte, signature string) (string, error) {
+	if h.manager == nil {
+		return "", fmt.Errorf("GitHub webhook integration is not configured")
+	}
+
 	configs, err := h.manager.GetStorage().ListGitHubConfigs(ctx, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to list GitHub configs: %w", err)

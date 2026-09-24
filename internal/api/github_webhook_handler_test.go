@@ -361,6 +361,8 @@ func TestHandleWebhook_InvalidPayload(t *testing.T) {
 
 	app.Post("/webhooks/github", handler.HandleWebhook)
 
+	// Signature verification runs before payload parsing: an unsigned
+	// delivery to an unconfigured handler is rejected as unauthorized.
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-GitHub-Event", "pull_request")
@@ -369,7 +371,7 @@ func TestHandleWebhook_InvalidPayload(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 
 	respBody, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
@@ -378,7 +380,7 @@ func TestHandleWebhook_InvalidPayload(t *testing.T) {
 	err = json.Unmarshal(respBody, &result)
 	require.NoError(t, err)
 
-	assert.Equal(t, "INVALID_PAYLOAD", result["code"])
+	assert.Equal(t, "INVALID_SIGNATURE", result["code"])
 }
 
 func TestHandleWebhook_MissingRepository(t *testing.T) {
@@ -388,7 +390,8 @@ func TestHandleWebhook_MissingRepository(t *testing.T) {
 
 	app.Post("/webhooks/github", handler.HandleWebhook)
 
-	// Payload without repository
+	// Payload without repository — signature verification (which needs the
+	// payload's repository) runs first and rejects unsigned deliveries.
 	payload := `{"action":"opened"}`
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", bytes.NewReader([]byte(payload)))
 	req.Header.Set("Content-Type", "application/json")
@@ -398,7 +401,7 @@ func TestHandleWebhook_MissingRepository(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 
 	respBody, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
@@ -407,7 +410,7 @@ func TestHandleWebhook_MissingRepository(t *testing.T) {
 	err = json.Unmarshal(respBody, &result)
 	require.NoError(t, err)
 
-	assert.Equal(t, "MISSING_REPOSITORY", result["code"])
+	assert.Equal(t, "INVALID_SIGNATURE", result["code"])
 }
 
 // =============================================================================

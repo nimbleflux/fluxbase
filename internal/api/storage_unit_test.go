@@ -50,7 +50,7 @@ func TestGenerateSignedURL_ExpiryCap(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(fiber.MethodPost, "/api/v1/storage/bkt/some/key/sign", bytes.NewBufferString(tc.body))
+			req := httptest.NewRequest(fiber.MethodPost, "/api/v1/storage/bkt/sign/some/key", bytes.NewBufferString(tc.body))
 			req.Header.Set("Content-Type", "application/json")
 			resp, err := app.Test(req)
 			require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestGenerateSignedURL_MethodWhitelist(t *testing.T) {
 	app := newTestApp(t)
 	app.Post("/api/v1/storage/:bucket/sign/*", h.GenerateSignedURL)
 
-	req := httptest.NewRequest(fiber.MethodPost, "/api/v1/storage/bkt/some/key/sign", bytes.NewBufferString(`{"method": "POST"}`))
+	req := httptest.NewRequest(fiber.MethodPost, "/api/v1/storage/bkt/sign/some/key", bytes.NewBufferString(`{"method": "POST"}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 	require.NoError(t, err)
