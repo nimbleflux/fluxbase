@@ -130,9 +130,10 @@ services:
       # ==========================================================================
       # Authentication Configuration
       # ==========================================================================
-      # CRITICAL: Generate secrets with: openssl rand -base64 32
-      # Or use: scripts/generate-keys.sh
-      FLUXBASE_AUTH_JWT_SECRET: ${FLUXBASE_AUTH_JWT_SECRET:-haEae1GZfKa/lzMHyNFIR5iL0FZFIMMxMN3pb2jqCRc=}
+      # CRITICAL: Required — no default is provided. Generate with:
+      #   deploy/generate-keys.sh   (or: openssl rand -base64 32)
+      # and set FLUXBASE_AUTH_JWT_SECRET in your .env file.
+      FLUXBASE_AUTH_JWT_SECRET: ${FLUXBASE_AUTH_JWT_SECRET}
       FLUXBASE_AUTH_JWT_EXPIRY: ${FLUXBASE_AUTH_JWT_EXPIRY:-1h}
       # FLUXBASE_AUTH_REFRESH_EXPIRY: "168h"
       # FLUXBASE_AUTH_MAGIC_LINK_EXPIRY: "15m"
@@ -208,8 +209,10 @@ services:
       # ==========================================================================
       # Security Configuration
       # ==========================================================================
-      # CRITICAL: Generate with: openssl rand -base64 32
-      FLUXBASE_SECURITY_SETUP_TOKEN: ${FLUXBASE_SECURITY_SETUP_TOKEN:-your-secret-setup-token-change-in-production}
+      # CRITICAL: Required — no default is provided. Generate with:
+      #   deploy/generate-keys.sh   (or: openssl rand -base64 32)
+      # and set FLUXBASE_SECURITY_SETUP_TOKEN in your .env file.
+      FLUXBASE_SECURITY_SETUP_TOKEN: ${FLUXBASE_SECURITY_SETUP_TOKEN}
       FLUXBASE_SECURITY_ENABLE_GLOBAL_RATE_LIMIT: "true"
       # FLUXBASE_SECURITY_ENABLE_PER_USER_RATE_LIMIT: "true"  # Enable per-user rate limiting for authenticated users (default: true)
       # FLUXBASE_SECURITY_SERVICE_ROLE_RATE_LIMIT: "0"  # 0 = unlimited (default), set to e.g., 1000 to rate limit service_role
@@ -460,8 +463,10 @@ services:
       # REQUIRED: Encryption key for sensitive data at rest (secrets, OAuth tokens, client keys)
       # Fluxbase will not start without this key set.
       # Must be exactly 32 characters for AES-256-GCM encryption.
-      # Generate with: openssl rand -base64 32 | head -c 32
-      FLUXBASE_ENCRYPTION_KEY: ${FLUXBASE_ENCRYPTION_KEY:-your-32-character-encryption-key}
+      # Required — no default is provided. Generate with:
+      #   deploy/generate-keys.sh   (or: openssl rand -base64 32 | head -c 32)
+      # and set FLUXBASE_ENCRYPTION_KEY in your .env file.
+      FLUXBASE_ENCRYPTION_KEY: ${FLUXBASE_ENCRYPTION_KEY}
 
       # ==========================================================================
       # General Configuration
@@ -525,6 +530,8 @@ services:
       # minio:
       #   condition: service_healthy
     healthcheck:
+      # Liveness-only endpoint (/livez): does not touch the database, so the
+      # container is not flagged unhealthy during a Postgres outage.
       test:
         [
           "CMD",
@@ -532,7 +539,7 @@ services:
           "--no-verbose",
           "--tries=1",
           "--spider",
-          "http://0.0.0.0:8080/health",
+          "http://0.0.0.0:8080/livez",
         ]
       interval: 30s
       timeout: 10s

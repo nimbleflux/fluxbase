@@ -22,7 +22,7 @@ services:
   # Image variants: use the default (full) tag, or set FLUXBASE_VERSION to
   # <version>-lite for the smaller distroless image (no OCR/ffmpeg/transforms).
   fluxbase:
-    image: ghcr.io/nimbleflux/fluxbase:${FLUXBASE_VERSION:-2026.6.1}
+    image: ghcr.io/nimbleflux/fluxbase:${FLUXBASE_VERSION:-2026.9.2}
     container_name: fluxbase
     ports:
       - "8080:8080"
@@ -60,7 +60,9 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://0.0.0.0:8080/health"]
+      # /livez is process-only (no database check), so the container is not
+      # flagged unhealthy during a Postgres outage.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://0.0.0.0:8080/livez"]
       interval: 30s
       timeout: 10s
       retries: 3

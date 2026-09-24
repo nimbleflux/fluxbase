@@ -13,9 +13,6 @@ on:
         default: "18"
         type: string
 
-env:
-  GO_VERSION: "1.26.1"
-
 jobs:
   changes:
     name: Detect Changes
@@ -179,7 +176,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Get dependencies
@@ -214,6 +211,12 @@ jobs:
 
       - name: Run golangci-lint
         run: golangci-lint run --timeout 10m ./internal/... ./cmd/... ./cli/...
+
+      - name: Run golangci-lint (integration-tagged test tree)
+        # Lint ./test/... with the `integration` build tag so type errors in
+        # the tag-gated e2e tree surface here instead of only in release-time
+        # test runs. Same golangci-lint install as above.
+        run: golangci-lint run --build-tags integration --timeout 10m ./test/...
 
       - name: Install gofumpt
         run: go install mvdan.cc/gofumpt@latest
@@ -403,7 +406,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Get dependencies
@@ -430,7 +433,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.9.6
+          deno-version: 2.6.4
 
       - name: Create dist directory with placeholder for embed directive
         run: |
@@ -730,6 +733,93 @@ jobs:
             coverage.out
             coverage.html
 
+  # ===========================================================================
+  # Non-short tests for the DB-backed packages. `test-go` runs the full tree
+  # with `-short`; tests gated behind testing.Short() only execute here.
+  # Same Postgres service pattern as test-go; no -race to keep it light.
+  # ===========================================================================
+  test-go-db:
+    name: Test Go (DB-backed, non-short)
+    needs: changes
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.go == 'true' ||
+      needs.changes.outputs.ci-config == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: ghcr.io/nimbleflux/fluxbase-postgres:${{ inputs.postgres_tag || '18' }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fluxbase_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Get dependencies
+        run: |
+          go mod download
+          go mod verify
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.1
+
+      - name: Set up Node.js for embedded SDK generation
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.20.0"
+
+      - name: Generate embedded SDK for Jobs runtime
+        run: |
+          cd sdk
+          bun install --frozen-lockfile
+          bun run generate:embedded-sdk
+
+      - name: Create dist directory with placeholder for embed directive
+        run: |
+          mkdir -p internal/adminui/dist
+          echo '<!DOCTYPE html><html><head><title>Placeholder</title></head><body></body></html>' > internal/adminui/dist/index.html
+
+      - name: Create test database and users
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -c "CREATE DATABASE fluxbase_go_e2e;"
+          psql -h localhost -U postgres -d fluxbase_go_e2e -c "CREATE USER fluxbase_app WITH PASSWORD 'fluxbase_app_password' LOGIN BYPASSRLS CREATEDB CREATEROLE;"
+          psql -h localhost -U postgres -d fluxbase_go_e2e -c "GRANT ALL PRIVILEGES ON DATABASE fluxbase_go_e2e TO fluxbase_app;"
+          psql -h localhost -U postgres -d fluxbase_go_e2e -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Run DB-backed package tests (non-short)
+        timeout-minutes: 20
+        env:
+          FLUXBASE_DATABASE_HOST: localhost
+          FLUXBASE_DATABASE_PORT: 5432
+          FLUXBASE_DATABASE_USER: fluxbase_app
+          FLUXBASE_DATABASE_PASSWORD: fluxbase_app_password
+          FLUXBASE_DATABASE_ADMIN_USER: postgres
+          FLUXBASE_DATABASE_ADMIN_PASSWORD: postgres
+          FLUXBASE_DATABASE_DATABASE: fluxbase_go_e2e
+          SKIP_MIGRATIONS: "true"
+        run: |
+          go test -v -timeout=15m ./internal/middleware/... ./internal/api/...
+
   test-e2e-ui:
     name: Test E2E UI
     needs: changes
@@ -770,7 +860,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Get dependencies
@@ -791,7 +881,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.9.6
+          deno-version: 2.6.4
 
       - name: Install workspace dependencies
         run: bun install --frozen-lockfile
@@ -1069,7 +1159,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Build server binary

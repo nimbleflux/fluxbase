@@ -2,11 +2,11 @@
 # https://github.com/nimbleflux/fluxbase
 #
 # Build args:
-#   POSTGRES_VERSION - Full version (e.g., 18.1)
+#   POSTGRES_VERSION - Full version (e.g., 18.4)
 #   POSTGRES_MAJOR   - Major version (e.g., 18)
 #
 # Usage:
-#   docker build --build-arg POSTGRES_VERSION=18.1 --build-arg POSTGRES_MAJOR=18 -t fluxbase-postgres:18.1 .
+#   docker build --build-arg POSTGRES_VERSION=18.4 --build-arg POSTGRES_MAJOR=18 -t fluxbase-postgres:18.4 .
 
 ARG POSTGRES_VERSION=18.4
 FROM postgres:${POSTGRES_VERSION}

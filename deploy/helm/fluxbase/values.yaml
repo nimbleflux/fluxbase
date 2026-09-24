@@ -824,12 +824,14 @@ config:
       name: "default"
 
   ## Encryption configuration (REQUIRED)
-  ## @param config.encryption_key REQUIRED: Encryption key for sensitive data at rest
+  ## @param config.encryption_key Encryption key for sensitive data at rest
   ## @descriptionStart
-  ## REQUIRED: Fluxbase will not start without this key set.
   ## Used to encrypt secrets, OAuth tokens, client keys, and other sensitive data at rest.
   ## Must be exactly 32 characters for AES-256-GCM. Generate with: openssl rand -base64 32 | head -c 32
-  ## Use existingSecret in production.
+  ## If empty, the chart generates a 32-character key at install time so fresh
+  ## installs work. CAUTION: the generated key is recreated on every upgrade,
+  ## which makes previously encrypted data unreadable — set this value
+  ## explicitly or use existingSecret in production.
   ## @descriptionEnd
   ##
   encryption_key: ""
@@ -1099,8 +1101,10 @@ podSecurityContext:
 containerSecurityContext:
   enabled: true
   seLinuxOptions: null
-  runAsUser: 1001
-  runAsGroup: 1001
+  # The default (full) image runs as uid/gid 1000 (debian user "fluxbase").
+  # For the -lite image (distroless, uid/gid 65532) override both to 65532.
+  runAsUser: 1000
+  runAsGroup: 1000
   runAsNonRoot: true
   privileged: false
   readOnlyRootFilesystem: false
@@ -1690,6 +1694,8 @@ serviceAccount:
 ## Scaling configuration
 ## @param scaling.backend Backend for distributed state. Options: 'local' (single instance), 'postgres', 'redis'
 ## @param scaling.enableLeaderElection Enable scheduler leader election using PostgreSQL advisory locks
+## @param scaling.workerOnly Run in worker-only mode: disables the API server, runs job workers only (for dedicated worker containers)
+## @param scaling.disableScheduler Prevent cron schedulers from running on this instance (avoid duplicate scheduled jobs across replicas)
 ##
 scaling:
   ## Backend for distributed state (rate limiting, pub/sub)
@@ -1697,6 +1703,15 @@ scaling:
   ## - postgres: PostgreSQL-backed (multi-instance without extra dependencies)
   ## - redis: Redis-compatible backend (Dragonfly recommended for high scale)
   backend: local
+
+  ## Run this release as dedicated job workers (no API server).
+  ## Use a separate release with workerOnly=true alongside API-only replicas.
+  workerOnly: false
+
+  ## Disable cron schedulers on this instance. Recommended for replicas that
+  ## are not the designated scheduler (or when leader election is enabled
+  ## elsewhere) to prevent duplicate scheduled jobs.
+  disableScheduler: false
 
   ## Enable scheduler leader election
   ## When enabled, only one instance will run cron schedulers

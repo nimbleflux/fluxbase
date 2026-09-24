@@ -6,6 +6,9 @@ name: Release
 #   1. Manual workflow_dispatch - Create a new release by specifying bump type
 #   2. GitHub release published - Automatically publish when a release is created via UI
 #   3. Tag push (v*) - Automatically publish when a version tag is pushed
+#   Note: Version file updates (VERSION, Chart.yaml, compose defaults, SDK
+#   package.json) are committed back to the source branch on workflow_dispatch
+#   only; tag-push/release triggers publish artifacts without editing files.
 #
 # How to create a release:
 #   1. Go to Actions → Release → Run workflow
@@ -388,7 +391,11 @@ jobs:
     name: Generate Changelog
     needs: get-version
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    # Runs for ALL trigger types (workflow_dispatch, tag push, release
+    # published): create-release and the publish jobs below require its
+    # outputs, so gating it on dispatch alone silently skipped binaries on
+    # tag-push/release triggers. Idempotent for release-published events:
+    # create-release skips tag/release creation when they already exist.
     outputs:
       changelog: ${{ steps.changelog.outputs.changelog }}
       ai_summary: ${{ steps.ai_summary.outputs.summary }}
@@ -706,8 +713,10 @@ jobs:
     name: Update version in config files
     needs: get-version
     runs-on: ubuntu-latest
-    # Run on workflow dispatch OR when a tag is pushed (but not on release publish to avoid double-run)
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    # workflow_dispatch ONLY: this job edits and pushes version files. On tag
+    # pushes it used to check out the tag and `git push origin HEAD:<tag>`,
+    # creating a stray branch named after the tag. Version bumps belong on the
+    # source branch, which workflow_dispatch provides via github.ref_name.
     steps:
       - uses: actions/checkout@v7
         with:
@@ -803,6 +812,8 @@ jobs:
             echo "No version changes to commit"
           else
             git commit -m "chore: Update version to ${{ needs.get-version.outputs.version }} in deployment files"
+            # workflow_dispatch only (see job-level if): github.ref_name is the
+            # source branch the workflow was dispatched on.
             git push origin HEAD:${{ github.ref_name }}
           fi
 
@@ -859,7 +870,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: "1.27.1"
+          go-version-file: go.mod
 
       - name: Install native dependencies
         run: |
@@ -944,7 +955,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: "1.27.1"
+          go-version-file: go.mod
 
       - name: Build CLI binary
         env:
@@ -1455,7 +1466,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: "1.27.1"
+          go-version-file: go.mod
 
       - name: Publish Go module
         run: |

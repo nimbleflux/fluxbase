@@ -101,7 +101,8 @@ Complete this checklist before deploying Fluxbase to production to ensure securi
 - [ ] **Security Scanning**: Images scanned for vulnerabilities
 
   ```bash
-  docker scan ghcr.io/nimbleflux/fluxbase:latest
+  # `docker scan` was retired by Docker; use Trivy (as CI's security.yml does)
+  trivy image ghcr.io/nimbleflux/fluxbase:latest --severity CRITICAL,HIGH --exit-code 1
   ```
 
 - [ ] **Minimal Base Image**: Alpine or distroless
@@ -314,8 +315,8 @@ Complete this checklist before deploying Fluxbase to production to ensure securi
 - [ ] **Automated Backups**: Daily or more frequent
 
   ```bash
-  # Example cron job
-  0 2 * * * /scripts/backup-db.sh
+  # Example cron job (scripts/backup.sh from the repository root)
+  0 2 * * * cd /opt/fluxbase && ./scripts/backup.sh --output /backups --retention 30
   ```
 
 - [ ] **Backup Retention**: Defined policy

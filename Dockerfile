@@ -156,17 +156,25 @@ RUN set -eux; \
 FROM debian:bookworm-slim AS pgschema-fetcher
 
 # Install pgschema for declarative schema management
-# Bumped from 1.7.4 to 1.12.1: fixes plan validation for LANGUAGE sql functions
+# Bumped from 1.7.4 to 1.12.5: fixes plan validation for LANGUAGE sql functions
 # with SET search_path that use extension operators (e.g. pgvector <=>), plus
 # schema-qualified function-body references (pgplex/pgschema#399).
+#
+# Upstream publishes no checksums file, so the sha256 of each release binary
+# is pinned below and verified before install. When bumping PGSCHEMA_VERSION,
+# recompute and update both ARGs:
+#   curl -fsSL "https://github.com/pgplex/pgschema/releases/download/v<ver>/pgschema-<ver>-linux-<arch>" | sha256sum
 ARG PGSCHEMA_VERSION=1.12.5
+ARG PGSCHEMA_SHA256_AMD64=bcef715edb71321c6a27886fcc74a423f923c62d731852668314efcce1402698
+ARG PGSCHEMA_SHA256_ARM64=a347cda5ce428109cd949ff2fcaccda380296016338722efa4488cd8e2f681ec
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* \
     && ARCH=$(dpkg --print-architecture) \
-    && if [ "$ARCH" = "amd64" ]; then PGSCHEMA_ARCH="linux-amd64"; \
-    elif [ "$ARCH" = "arm64" ]; then PGSCHEMA_ARCH="linux-arm64"; \
+    && if [ "$ARCH" = "amd64" ]; then PGSCHEMA_ARCH="linux-amd64"; PGSCHEMA_SHA256="$PGSCHEMA_SHA256_AMD64"; \
+    elif [ "$ARCH" = "arm64" ]; then PGSCHEMA_ARCH="linux-arm64"; PGSCHEMA_SHA256="$PGSCHEMA_SHA256_ARM64"; \
     else echo "Unsupported architecture: $ARCH" && exit 1; fi \
-    && curl -fsSL "https://github.com/pgplex/pgschema/releases/download/v${PGSCHEMA_VERSION}/pgschema-${PGSCHEMA_VERSION}-${PGSCHEMA_ARCH}" -o /usr/local/bin/pgschema \
-    && chmod +x /usr/local/bin/pgschema
+    && curl -fsSL "https://github.com/pgplex/pgschema/releases/download/v${PGSCHEMA_VERSION}/pgschema-${PGSCHEMA_VERSION}-${PGSCHEMA_ARCH}" -o /tmp/pgschema \
+    && echo "${PGSCHEMA_SHA256}  /tmp/pgschema" | sha256sum -c - \
+    && install -m 0755 /tmp/pgschema /usr/local/bin/pgschema
 
 
 # ------------------------------------------------------------------------------
@@ -233,7 +241,8 @@ ENV FLUXBASE_SERVER_ADDRESS=:8080 \
 
 EXPOSE 8080
 # No HEALTHCHECK: distroless has no shell/wget. Rely on external probes
-# (docker compose healthcheck / k8s readiness) hitting GET /health.
+# (docker compose healthcheck / k8s liveness) hitting GET /livez, and k8s
+# readiness hitting GET /health for dependency-aware gating.
 
 USER nonroot:nonroot
 
@@ -301,7 +310,7 @@ USER fluxbase
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://localhost:8080/health || exit 1
+    CMD wget -q --spider http://localhost:8080/livez || exit 1
 
 ENV FLUXBASE_SERVER_ADDRESS=:8080 \
     FLUXBASE_DEBUG=false \
