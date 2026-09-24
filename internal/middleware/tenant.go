@@ -232,6 +232,12 @@ func EnsureTenantAccess(cfg TenantConfig) fiber.Handler {
 			return c.Next()
 		}
 
+		// Dashboard/platform instance admins authenticate with JWTs whose
+		// role claim carries instance_admin; they are not tenant members.
+		if role, _ := c.Locals("user_role").(string); role == "instance_admin" {
+			return c.Next()
+		}
+
 		// The default tenant is always accessible.
 		if IsDefaultTenantFromContext(c) {
 			return c.Next()
