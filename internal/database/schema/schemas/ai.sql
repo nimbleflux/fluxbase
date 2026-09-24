@@ -758,7 +758,7 @@ ALTER TABLE providers ENABLE ROW LEVEL SECURITY;
 -- Name: ai_providers_read; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY ai_providers_read ON providers FOR SELECT TO authenticated USING (enabled = true);
+CREATE POLICY ai_providers_read ON providers FOR SELECT TO authenticated USING ((enabled = true) AND auth.has_tenant_access(tenant_id));
 
 --
 -- Name: chatbots; Type: TABLE; Schema: -; Owner: -
@@ -899,7 +899,7 @@ ALTER TABLE chatbots ENABLE ROW LEVEL SECURITY;
 -- Name: ai_chatbots_read; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY ai_chatbots_read ON chatbots FOR SELECT TO authenticated USING ((enabled = true) AND (is_public = true));
+CREATE POLICY ai_chatbots_read ON chatbots FOR SELECT TO authenticated USING ((enabled = true) AND (is_public = true) AND auth.has_tenant_access(tenant_id));
 
 --
 -- Name: chatbot_knowledge_bases; Type: TABLE; Schema: -; Owner: -
@@ -2168,6 +2168,22 @@ CREATE POLICY ai_query_audit_log_tenant ON query_audit_log TO PUBLIC
 
 CREATE OR REPLACE TRIGGER ai_query_audit_log_set_tenant_id
     BEFORE INSERT ON query_audit_log
+    FOR EACH ROW
+    EXECUTE FUNCTION auth.set_tenant_id_from_context();
+
+-- tool_audit_log
+CREATE INDEX IF NOT EXISTS idx_ai_tool_audit_log_tenant_id ON tool_audit_log (tenant_id);
+
+ALTER TABLE tool_audit_log ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE tool_audit_log FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY ai_tool_audit_log_tenant ON tool_audit_log TO PUBLIC
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+CREATE OR REPLACE TRIGGER ai_tool_audit_log_set_tenant_id
+    BEFORE INSERT ON tool_audit_log
     FOR EACH ROW
     EXECUTE FUNCTION auth.set_tenant_id_from_context();
 

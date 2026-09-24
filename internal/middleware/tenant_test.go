@@ -1234,3 +1234,146 @@ func BenchmarkRequireInstanceAdmin(b *testing.B) {
 		_ = resp.Body.Close()
 	}
 }
+
+// =============================================================================
+// EnsureTenantAccess Tests (post-auth tenant re-validation)
+//
+// The middleware runs after the auth middleware (injected by the route
+// registry), so these tests seed the locals that the auth and tenant
+// middlewares would have set. DB-backed branches (membership lookup) require a
+// live database and are covered by integration tests; the routing/short-circuit
+// logic is covered here without a DB.
+// =============================================================================
+
+func TestEnsureTenantAccess(t *testing.T) {
+	run := func(t *testing.T, setup func(c fiber.Ctx)) (*http.Response, error) {
+		app := fiber.New()
+		app.Use(func(c fiber.Ctx) error {
+			if setup != nil {
+				setup(c)
+			}
+			return c.Next()
+		})
+		app.Use(EnsureTenantAccess(TenantConfig{}))
+		app.Get("/test", func(c fiber.Ctx) error {
+			return c.SendString("OK")
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		return app.Test(req)
+	}
+
+	t.Run("passes through when no tenant resolved", func(t *testing.T) {
+		resp, err := run(t, nil)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("service key with matching tenant passes", func(t *testing.T) {
+		resp, err := run(t, func(c fiber.Ctx) {
+			c.Locals("tenant_id", "tenant-a")
+			c.Locals("tenant_source", "header")
+			c.Locals("auth_type", "service_key")
+			c.Locals("service_key_tenant_id", "tenant-a")
+		})
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("service key with mismatched tenant is rejected", func(t *testing.T) {
+		resp, err := run(t, func(c fiber.Ctx) {
+			c.Locals("tenant_id", "tenant-b")
+			c.Locals("tenant_source", "header")
+			c.Locals("auth_type", "service_key")
+			c.Locals("service_key_tenant_id", "tenant-a")
+		})
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	t.Run("service key without tenant binding passes", func(t *testing.T) {
+		resp, err := run(t, func(c fiber.Ctx) {
+			c.Locals("tenant_id", "tenant-b")
+			c.Locals("tenant_source", "header")
+			c.Locals("auth_type", "service_key")
+		})
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("service role JWT passes", func(t *testing.T) {
+		resp, err := run(t, func(c fiber.Ctx) {
+			c.Locals("tenant_id", "tenant-b")
+			c.Locals("tenant_source", "header")
+			c.Locals("auth_type", "service_role_jwt")
+		})
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("user JWT with default-resolved tenant passes", func(t *testing.T) {
+		resp, err := run(t, func(c fiber.Ctx) {
+			c.Locals("tenant_id", "tenant-b")
+			c.Locals("tenant_source", "default")
+			c.Locals("user_id", "user-1")
+			c.Locals("auth_type", "jwt")
+		})
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("user JWT with jwt-claim tenant passes", func(t *testing.T) {
+		resp, err := run(t, func(c fiber.Ctx) {
+			c.Locals("tenant_id", "tenant-b")
+			c.Locals("tenant_source", "jwt")
+			c.Locals("user_id", "user-1")
+			c.Locals("auth_type", "jwt")
+		})
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("anonymous request with header tenant passes (existence already validated)", func(t *testing.T) {
+		resp, err := run(t, func(c fiber.Ctx) {
+			c.Locals("tenant_id", "tenant-b")
+			c.Locals("tenant_source", "header")
+			c.Locals("auth_type", "jwt")
+		})
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("instance admin with header tenant passes", func(t *testing.T) {
+		resp, err := run(t, func(c fiber.Ctx) {
+			c.Locals("tenant_id", "tenant-b")
+			c.Locals("tenant_source", "header")
+			c.Locals("user_id", "admin-1")
+			c.Locals("auth_type", "jwt")
+			c.Locals("is_instance_admin", true)
+		})
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("default tenant always allowed for user JWT", func(t *testing.T) {
+		resp, err := run(t, func(c fiber.Ctx) {
+			c.Locals("tenant_id", "default-tenant")
+			c.Locals("tenant_source", "header")
+			c.Locals("user_id", "user-1")
+			c.Locals("auth_type", "jwt")
+			c.Locals("is_default_tenant", true)
+		})
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+}

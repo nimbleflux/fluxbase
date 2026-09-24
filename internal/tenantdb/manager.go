@@ -187,34 +187,28 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 	// Set up FDW so tenant can access all tables from the main database.
 	// This replaces the local tables created by applyInternalSchemas with
 	// foreign table imports, providing access to real data with RLS enforcement.
+	//
+	// Fail-safe: FDW setup is mandatory when configured. A tenant whose
+	// per-tenant role/mapping cannot be installed must NOT be activated — the
+	// interim admin-credential user mapping would let tenant queries bypass RLS
+	// on the main database. Roll back the partial provisioning instead.
 	if m.fdwConfig != nil && m.adminDBURL != "" {
-		// Create per-tenant FDW role on main database for RLS enforcement
-		fdwRole, roleErr := CreateFDWRole(ctx, m.adminPool, tenant.ID)
-		if roleErr != nil {
-			log.Warn().Err(roleErr).Str("tenant", req.Slug).Msg("Failed to create FDW role")
-		} else {
-			// Connect to tenant DB with admin privileges for FDW setup
-			fdwURL := replaceDBName(m.adminDBURL, dbName)
-			fdwPool, fdwPoolErr := pgxpool.New(ctx, fdwURL)
-			if fdwPoolErr != nil {
-				log.Warn().Err(fdwPoolErr).Str("tenant", req.Slug).Msg("Failed to create admin pool for FDW setup")
-			} else {
-				defer fdwPool.Close()
+		if fdwErr := m.setupTenantFDW(ctx, tenant.ID, dbName); fdwErr != nil {
+			log.Error().Err(fdwErr).Str("tenant", req.Slug).Msg("FDW setup failed; rolling back tenant database")
 
-				if fdwErr := SetupFDW(ctx, fdwPool, *m.fdwConfig); fdwErr != nil {
-					log.Warn().Err(fdwErr).Str("tenant", req.Slug).Msg("Failed to set up FDW for tenant database")
-				} else {
-					// Create user mapping for the app user with the per-tenant FDW role
-					// so queries via the router pool use the tenant-scoped role
-					appUser := extractDBUser(m.dbURL)
-					if appUser != "" {
-						if mapErr := CreateFDWUserMapping(ctx, fdwPool, appUser, fdwRole); mapErr != nil {
-							log.Warn().Err(mapErr).Str("tenant", req.Slug).Msg("Failed to create app user FDW mapping")
-						}
-					}
-					log.Info().Str("tenant", req.Slug).Msg("Set up FDW for tenant database")
-				}
+			// Best-effort rollback of what was created so a partially
+			// provisioned tenant is not left behind.
+			if req.DBMode != "existing" {
+				_, _ = m.adminPool.Exec(ctx, fmt.Sprintf(
+					"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%s'",
+					escapeSQLString(dbName),
+				))
+				_, _ = m.adminPool.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", quoteIdent(dbName)))
 			}
+			if statusErr := m.storage.UpdateTenantStatus(ctx, tenant.ID, TenantStatusError); statusErr != nil {
+				log.Warn().Err(statusErr).Str("tenant_id", tenant.ID).Msg("Failed to update tenant status to error")
+			}
+			return nil, fmt.Errorf("failed to set up FDW for tenant database: %w", fdwErr)
 		}
 	}
 
@@ -237,6 +231,73 @@ func (m *Manager) CreateTenantDatabase(ctx context.Context, req CreateTenantRequ
 
 	log.Info().Str("tenant_id", tenant.ID).Str("slug", req.Slug).Str("db", dbName).Msg("Tenant database created successfully")
 	return tenant, nil
+}
+
+// setupTenantFDW provisions the per-tenant FDW plumbing: role on the main
+// database, foreign server + imports in the tenant database, and the
+// tenant-scoped user mappings. On success the interim admin-credential mapping
+// (created by SetupFDW as FOR CURRENT_USER) is removed so tenant queries can
+// only reach the main database through the NOBYPASSRLS tenant role. On any
+// failure the created artifacts are cleaned up best-effort and the error is
+// returned so the caller fails tenant creation.
+func (m *Manager) setupTenantFDW(ctx context.Context, tenantID, dbName string) error {
+	cleanup := func(fdwPool *pgxpool.Pool) {
+		if fdwPool != nil {
+			if err := TeardownFDW(ctx, fdwPool); err != nil {
+				log.Warn().Err(err).Str("tenant_id", tenantID).Msg("Failed to tear down FDW during cleanup")
+			}
+		}
+		DropFDWRole(ctx, m.adminPool, tenantID)
+	}
+
+	// Create per-tenant FDW role on main database for RLS enforcement
+	fdwRole, roleErr := CreateFDWRole(ctx, m.adminPool, tenantID)
+	if roleErr != nil {
+		cleanup(nil)
+		return fmt.Errorf("failed to create FDW role: %w", roleErr)
+	}
+
+	// Connect to tenant DB with admin privileges for FDW setup
+	fdwURL := replaceDBName(m.adminDBURL, dbName)
+	fdwPool, poolErr := pgxpool.New(ctx, fdwURL)
+	if poolErr != nil {
+		cleanup(nil)
+		return fmt.Errorf("failed to create admin pool for FDW setup: %w", poolErr)
+	}
+	defer fdwPool.Close()
+
+	if err := SetupFDW(ctx, fdwPool, *m.fdwConfig); err != nil {
+		cleanup(fdwPool)
+		return fmt.Errorf("failed to set up FDW: %w", err)
+	}
+
+	// Create user mappings for the app user, tenant_service, and service_role
+	// with the per-tenant FDW role so queries via the router pool use the
+	// tenant-scoped role.
+	appUser := extractDBUser(m.dbURL)
+	if appUser == "" {
+		cleanup(fdwPool)
+		return fmt.Errorf("cannot install tenant FDW mapping: no user in database URL")
+	}
+	if mapErr := CreateFDWUserMapping(ctx, fdwPool, appUser, fdwRole); mapErr != nil {
+		cleanup(fdwPool)
+		return fmt.Errorf("failed to install tenant FDW user mappings: %w", mapErr)
+	}
+
+	// Remove the interim admin-credential mapping created by SetupFDW
+	// (FOR CURRENT_USER during setup). Only needed when the setup user differs
+	// from the app user whose mapping now carries the tenant-scoped credentials.
+	if setupUser := m.fdwConfig.User; setupUser != "" && setupUser != appUser {
+		if _, err := fdwPool.Exec(ctx, fmt.Sprintf(
+			`DROP USER MAPPING IF EXISTS FOR %s SERVER %s`,
+			quoteIdent(setupUser), quoteIdent(fdwServerName),
+		)); err != nil {
+			log.Warn().Err(err).Str("tenant_id", tenantID).Msg("Failed to remove interim FDW admin mapping")
+		}
+	}
+
+	log.Info().Str("tenant_id", tenantID).Str("db", dbName).Msg("Set up FDW for tenant database")
+	return nil
 }
 
 func (m *Manager) DeleteTenantDatabase(ctx context.Context, tenantID string) error {

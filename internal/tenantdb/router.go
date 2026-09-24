@@ -36,6 +36,7 @@ type poolEntry struct {
 	pool     *pgxpool.Pool
 	dbName   string
 	tenantID string
+	maxConns int32 // configured MaxConns of this pool (capacity accounting)
 	lastUsed time.Time
 	element  *list.Element
 }
@@ -90,28 +91,41 @@ func (r *Router) getOrCreatePool(tenantID, dbName string) (*pgxpool.Pool, error)
 		return entry.pool, nil
 	}
 
-	if r.config.Pool.MaxTotalConnections > 0 && r.totalConns >= r.config.Pool.MaxTotalConnections {
-		if err := r.evictLRU(); err != nil {
-			log.Warn().Err(err).Msg("Failed to evict LRU pool")
-		}
-	}
-
 	pool, err := r.createPool(dbName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pool for %s: %w", dbName, err)
+	}
+
+	// Pools are accounted at their configured MaxConns (not live acquired conns),
+	// otherwise the cap never triggers and pool count grows unbounded.
+	maxConns := int32(0)
+	if poolConfig := pool.Config(); poolConfig != nil {
+		maxConns = poolConfig.MaxConns
+	}
+
+	// Evict LRU pools until the new pool's capacity fits the configured budget.
+	// The new pool is not in the map yet, so eviction cannot select it.
+	if r.config.Pool.MaxTotalConnections > 0 {
+		for r.totalConns+maxConns > r.config.Pool.MaxTotalConnections {
+			if err := r.evictLRU(); err != nil {
+				log.Warn().Err(err).Msg("Failed to evict LRU pool")
+				break
+			}
+		}
 	}
 
 	entry := &poolEntry{
 		pool:     pool,
 		dbName:   dbName,
 		tenantID: tenantID,
+		maxConns: maxConns,
 		lastUsed: time.Now(),
 	}
 	entry.element = r.lruList.PushFront(tenantID)
 	r.pools[tenantID] = entry
 
-	stats := pool.Stat()
-	r.totalConns += int32(stats.AcquiredConns())
+	// Account the pool's full capacity against the global connection budget.
+	r.totalConns += maxConns
 
 	log.Info().Str("tenant_id", tenantID).Str("db", dbName).Msg("Created tenant pool")
 
@@ -176,13 +190,10 @@ func (r *Router) evictLRU() error {
 		return errors.New("oldest pool not yet eligible for eviction")
 	}
 
-	stats := entry.pool.Stat()
-	connCount := int32(stats.AcquiredConns())
-
 	entry.pool.Close()
 	delete(r.pools, tenantID)
 	r.lruList.Remove(entry.element)
-	r.totalConns -= connCount
+	r.totalConns -= entry.maxConns
 
 	log.Info().Str("tenant_id", tenantID).Str("db", entry.dbName).Dur("idle", age).Msg("Evicted idle tenant pool")
 	return nil
@@ -193,13 +204,10 @@ func (r *Router) RemovePool(tenantID string) {
 	defer r.mu.Unlock()
 
 	if entry, ok := r.pools[tenantID]; ok {
-		stats := entry.pool.Stat()
-		connCount := int32(stats.AcquiredConns())
-
 		entry.pool.Close()
 		delete(r.pools, tenantID)
 		r.lruList.Remove(entry.element)
-		r.totalConns -= connCount
+		r.totalConns -= entry.maxConns
 
 		log.Info().Str("tenant_id", tenantID).Str("db", entry.dbName).Msg("Removed tenant pool")
 	}
@@ -211,13 +219,10 @@ func (r *Router) RemovePoolByDBName(dbName string) {
 
 	for tenantID, entry := range r.pools {
 		if entry.dbName == dbName {
-			stats := entry.pool.Stat()
-			connCount := int32(stats.AcquiredConns())
-
 			entry.pool.Close()
 			delete(r.pools, tenantID)
 			r.lruList.Remove(entry.element)
-			r.totalConns -= connCount
+			r.totalConns -= entry.maxConns
 
 			log.Info().Str("tenant_id", tenantID).Str("db", dbName).Msg("Removed tenant pool by db_name")
 			return

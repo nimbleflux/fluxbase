@@ -14,6 +14,10 @@ type Registry struct {
 	groups     []*RouteGroup
 	validators []RouteValidator
 	strict     bool
+	// postAuthMiddlewares run immediately after the auth middleware on routes
+	// that have one injected (e.g. tenant access re-validation, which needs the
+	// authenticated principal that group middlewares run before).
+	postAuthMiddlewares []fiber.Handler
 }
 
 type RegistryOption func(*Registry)
@@ -40,6 +44,18 @@ func WithStrictValidation() RegistryOption {
 
 func WithValidators(validators ...RouteValidator) RegistryOption {
 	return func(r *Registry) { r.validators = append(r.validators, validators...) }
+}
+
+// WithPostAuthMiddleware registers handlers that are injected into every route
+// with an auth middleware, immediately after it. Nil handlers are skipped.
+func WithPostAuthMiddleware(handlers ...fiber.Handler) RegistryOption {
+	return func(r *Registry) {
+		for _, h := range handlers {
+			if h != nil {
+				r.postAuthMiddlewares = append(r.postAuthMiddlewares, h)
+			}
+		}
+	}
 }
 
 func (r *Registry) Register(group *RouteGroup) error {
@@ -158,10 +174,19 @@ func (r *Registry) applyRoute(router fiber.Router, route *Route, middlewares []M
 	}
 
 	// Auto-inject auth middleware based on effective Auth field
+	authInjected := false
 	if authMiddlewares != nil && effectiveAuth != AuthNone && effectiveAuth != "" {
 		if authHandler := authMiddlewares.MiddlewareFor(effectiveAuth); authHandler != nil {
 			handlers = append(handlers, authHandler)
+			authInjected = true
 		}
+	}
+
+	// Post-auth middlewares (e.g. tenant access re-validation) must observe the
+	// authenticated principal, so they run right after the auth middleware and
+	// before role/scope checks.
+	if authInjected {
+		handlers = append(handlers, r.postAuthMiddlewares...)
 	}
 
 	// Determine effective roles: route.Roles overrides defaultRoles (no merge)
@@ -332,6 +357,17 @@ type AllDeps struct {
 	Migrations        *MigrationsDeps
 	KnowledgeBase     *KnowledgeBaseDeps
 	Root              fiber.Handler
+
+	// EnsureTenantAccess is a post-auth middleware that re-validates tenant
+	// membership for requests that override the tenant via X-FB-Tenant.
+	// Runs after the auth middleware on every authenticated route (see
+	// WithPostAuthMiddleware).
+	EnsureTenantAccess fiber.Handler
+
+	// BranchContext is a post-auth middleware that resolves the X-Fluxbase-Branch
+	// header against the branching router with tenant scoping and access checks.
+	// Nil when branching is disabled.
+	BranchContext fiber.Handler
 }
 
 type HealthDeps struct {
@@ -341,7 +377,10 @@ type HealthDeps struct {
 
 // RegisterAllRoutes registers all routes and applies them to the Fiber app.
 func RegisterAllRoutes(app *fiber.App, deps *AllDeps) error {
-	registry := NewRegistry(WithStrictValidation())
+	registry := NewRegistry(
+		WithStrictValidation(),
+		WithPostAuthMiddleware(registerPostAuthMiddlewares(deps)...),
+	)
 	registerAllGroups(registry, deps)
 
 	if err := registry.Apply(app); err != nil {
@@ -492,4 +531,22 @@ func registerAllGroups(registry *Registry, deps *AllDeps) {
 			},
 		})
 	}
+}
+
+// registerPostAuthMiddlewares returns the enabled post-auth handlers from deps.
+// Order matters: tenant access re-validation runs first, then branch context
+// resolution, so branch access is only checked for tenant-authorized requests.
+// Nil (disabled) handlers are dropped.
+func registerPostAuthMiddlewares(deps *AllDeps) []fiber.Handler {
+	handlers := []fiber.Handler{
+		deps.EnsureTenantAccess,
+		deps.BranchContext,
+	}
+	enabled := make([]fiber.Handler, 0, len(handlers))
+	for _, h := range handlers {
+		if h != nil {
+			enabled = append(enabled, h)
+		}
+	}
+	return enabled
 }

@@ -110,12 +110,20 @@ func ensureServiceKey(ctx context.Context, pool *pgxpool.Pool, cfg *config.Confi
 		return fmt.Errorf("unsupported key type: %s", keyType)
 	}
 
+	// Bootstrap keys are fb_-prefixed keys, which the runtime authenticator
+	// looks up in platform.service_keys (auth.service_keys only holds legacy
+	// sk_/pk_ keys). Keys are bound to the default tenant so tenant-scoped
+	// service key checks can enforce the binding.
 	var existingKeyID uuid.UUID
 	var existingKeyHash string
 	err := pool.QueryRow(
 		ctx,
-		"SELECT id, key_hash FROM auth.service_keys WHERE key_type = $1 AND enabled = true AND revoked_at IS NULL",
-		keyType,
+		`SELECT id, key_hash FROM platform.service_keys
+		 WHERE key_type = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+		   AND is_active = true AND revoked_at IS NULL
+		 ORDER BY (tenant_id IS NULL), created_at ASC
+		 LIMIT 1`,
+		keyType, tenantID,
 	).Scan(&existingKeyID, &existingKeyHash)
 	hasExistingKey := err == nil
 
@@ -132,7 +140,7 @@ func ensureServiceKey(ctx context.Context, pool *pgxpool.Pool, cfg *config.Confi
 			}
 			_, err := pool.Exec(
 				ctx,
-				"UPDATE auth.service_keys SET enabled = false WHERE id = $1",
+				"UPDATE platform.service_keys SET is_active = false, updated_at = now() WHERE id = $1",
 				existingKeyID,
 			)
 			if err != nil {
@@ -143,10 +151,10 @@ func ensureServiceKey(ctx context.Context, pool *pgxpool.Pool, cfg *config.Confi
 		keyPrefix := keys.ExtractPrefix(configKey)
 		_, err = pool.Exec(
 			ctx,
-			`INSERT INTO auth.service_keys 
-			(name, key_hash, key_prefix, key_type, enabled, scopes, rate_limit_per_minute)
-			VALUES ($1, $2, $3, $4, true, $5, $6)`,
-			keyName, keyHash, keyPrefix, keyType, defaultScopes(keyType), defaultRateLimit(keyType),
+			`INSERT INTO platform.service_keys
+			(name, key_hash, key_prefix, key_type, tenant_id, is_active, scopes, rate_limit_per_minute)
+			VALUES ($1, $2, $3, $4, $5, true, $6, $7)`,
+			keyName, keyHash, keyPrefix, keyType, tenantID, defaultScopes(keyType), defaultRateLimit(keyType),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to insert config-managed key: %w", err)
@@ -168,10 +176,10 @@ func ensureServiceKey(ctx context.Context, pool *pgxpool.Pool, cfg *config.Confi
 
 	_, err = pool.Exec(
 		ctx,
-		`INSERT INTO auth.service_keys 
-		(name, key_hash, key_prefix, key_type, enabled, scopes, rate_limit_per_minute)
-		VALUES ($1, $2, $3, $4, true, $5, $6)`,
-		keyName, keyHash, keyPrefix, keyType, defaultScopes(keyType), defaultRateLimit(keyType),
+		`INSERT INTO platform.service_keys
+		(name, key_hash, key_prefix, key_type, tenant_id, is_active, scopes, rate_limit_per_minute)
+		VALUES ($1, $2, $3, $4, $5, true, $6, $7)`,
+		keyName, keyHash, keyPrefix, keyType, tenantID, defaultScopes(keyType), defaultRateLimit(keyType),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert generated key: %w", err)
