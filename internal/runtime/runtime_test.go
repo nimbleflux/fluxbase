@@ -43,7 +43,7 @@ func TestBuildEnvForFunction(t *testing.T) {
 		Name:      "test-function",
 		Namespace: "default",
 	}
-	env := buildEnv(req, RuntimeTypeFunction, "http://localhost:8080", "user-token", "service-token", nil, nil)
+	env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "http://localhost:8080", "user-token", "service-token", nil, nil)
 
 	// Convert to map for easier testing
 	envMap := make(map[string]string)
@@ -97,7 +97,7 @@ func TestBuildEnvForFunction(t *testing.T) {
 	t.Setenv("HOME", "/home/user")
 	t.Setenv("RANDOM_VAR", "should-be-excluded")
 
-	env = buildEnv(req, RuntimeTypeFunction, "http://localhost:8080", "user-token", "service-token", nil, nil)
+	env = buildEnv(req, RuntimeTypeFunction, t.TempDir(), "http://localhost:8080", "user-token", "service-token", nil, nil)
 	envMap = make(map[string]string)
 	for _, e := range env {
 		parts := strings.SplitN(e, "=", 2)
@@ -141,7 +141,7 @@ func TestBuildEnvForJob(t *testing.T) {
 		Name:      "test-job",
 		Namespace: "default",
 	}
-	env := buildEnv(req, RuntimeTypeJob, "http://localhost:8080", "job-token", "service-token", nil, nil)
+	env := buildEnv(req, RuntimeTypeJob, t.TempDir(), "http://localhost:8080", "job-token", "service-token", nil, nil)
 
 	// Convert to map for easier testing
 	envMap := make(map[string]string)
@@ -212,7 +212,7 @@ func TestBuildEnvWithSecrets(t *testing.T) {
 			"OAUTH_TOKEN": "oauth-xyz",
 		}
 
-		env := buildEnv(req, RuntimeTypeFunction, "http://localhost:8080", "user-token", "service-token", nil, secrets)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "http://localhost:8080", "user-token", "service-token", nil, secrets)
 
 		envMap := make(map[string]string)
 		for _, e := range env {
@@ -240,7 +240,7 @@ func TestBuildEnvWithSecrets(t *testing.T) {
 			"MixedCase_Key": "value2",
 		}
 
-		env := buildEnv(req, RuntimeTypeFunction, "http://localhost:8080", "user-token", "service-token", nil, secrets)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "http://localhost:8080", "user-token", "service-token", nil, secrets)
 
 		envMap := make(map[string]string)
 		for _, e := range env {
@@ -262,7 +262,7 @@ func TestBuildEnvWithSecrets(t *testing.T) {
 	t.Run("empty secrets map does not add any secret vars", func(t *testing.T) {
 		secrets := map[string]string{}
 
-		env := buildEnv(req, RuntimeTypeFunction, "http://localhost:8080", "user-token", "service-token", nil, secrets)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "http://localhost:8080", "user-token", "service-token", nil, secrets)
 
 		for _, e := range env {
 			if strings.HasPrefix(e, "FLUXBASE_SECRET_") {
@@ -272,7 +272,7 @@ func TestBuildEnvWithSecrets(t *testing.T) {
 	})
 
 	t.Run("nil secrets map does not add any secret vars", func(t *testing.T) {
-		env := buildEnv(req, RuntimeTypeFunction, "http://localhost:8080", "user-token", "service-token", nil, nil)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "http://localhost:8080", "user-token", "service-token", nil, nil)
 
 		for _, e := range env {
 			if strings.HasPrefix(e, "FLUXBASE_SECRET_") {
@@ -291,7 +291,7 @@ func TestBuildEnvWithSecrets(t *testing.T) {
 			"JOB_SECRET": "job-secret-value",
 		}
 
-		env := buildEnv(jobReq, RuntimeTypeJob, "http://localhost:8080", "job-token", "service-token", nil, secrets)
+		env := buildEnv(jobReq, RuntimeTypeJob, t.TempDir(), "http://localhost:8080", "job-token", "service-token", nil, secrets)
 
 		envMap := make(map[string]string)
 		for _, e := range env {
@@ -315,7 +315,7 @@ func TestBuildEnvWithSecrets(t *testing.T) {
 			"UNICODE":     "日本語🔐",
 		}
 
-		env := buildEnv(req, RuntimeTypeFunction, "http://localhost:8080", "user-token", "service-token", nil, secrets)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "http://localhost:8080", "user-token", "service-token", nil, secrets)
 
 		envMap := make(map[string]string)
 		for _, e := range env {
@@ -420,7 +420,7 @@ func TestEncryptionKeyBlocked(t *testing.T) {
 		Namespace: "default",
 	}
 
-	env := buildEnv(req, RuntimeTypeFunction, "http://localhost:8080", "user-token", "service-token", nil, nil)
+	env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "http://localhost:8080", "user-token", "service-token", nil, nil)
 
 	// Check that FLUXBASE_ENCRYPTION_KEY is not in the env
 	for _, e := range env {

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -203,24 +204,42 @@ func (r *DenoRuntime) Execute(
 	// Wrap the user code with our runtime bridge
 	wrappedCode := r.wrapCode(code, req)
 
-	// Ensure Deno cache directory exists (required for Deno to run)
-	if err := os.MkdirAll("/tmp/deno", 0o750); err != nil {
-		log.Warn().Err(err).Msg("Failed to create Deno cache directory")
+	// Create a per-execution directory. All writable state (the script file,
+	// Deno's cache, HOME) lives here and is removed when the execution ends,
+	// so executions never share a temp area with each other.
+	execDir, err := os.MkdirTemp("", fmt.Sprintf("%s-exec-%s-", r.runtimeType.String(), req.ID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create execution directory: %w", err)
 	}
+	defer func() { _ = os.RemoveAll(execDir) }()
 
-	// Write code to temporary file to allow Deno to properly handle TypeScript
-	tmpFile, err := os.CreateTemp("", fmt.Sprintf("%s-exec-%s-*.ts", r.runtimeType.String(), req.ID))
+	// Write code to a temporary file to allow Deno to properly handle TypeScript
+	tmpFile, err := os.CreateTemp(execDir, "main-*.ts")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
 
 	if _, err := tmpFile.WriteString(wrappedCode); err != nil {
 		_ = tmpFile.Close()
 		return nil, fmt.Errorf("failed to write code to temp file: %w", err)
 	}
 	_ = tmpFile.Close()
+
+	// Ensure the Deno cache directory exists (required for Deno to run)
+	if err := os.MkdirAll(filepath.Join(execDir, "deno-cache"), 0o750); err != nil {
+		log.Warn().Err(err).Msg("Failed to create Deno cache directory")
+	}
+
+	// Build the environment first so --allow-env can be scoped to exactly the
+	// variables that are actually passed to the subprocess.
+	env := buildEnv(req, r.runtimeType, execDir, r.publicURL, userToken, serviceToken, cancelSignal, secrets)
+	envVarNames := make([]string, 0, len(env))
+	for _, e := range env {
+		if idx := strings.IndexByte(e, '='); idx > 0 {
+			envVarNames = append(envVarNames, e[:idx])
+		}
+	}
 
 	// Build Deno command
 	argsConfig := denoArgsConfig{
@@ -230,6 +249,8 @@ func (r *DenoRuntime) Execute(
 		MemoryLimitMB: r.memoryLimitMB,
 		UserToken:     userToken,
 		ServiceToken:  serviceToken,
+		ExecDir:       execDir,
+		EnvVarNames:   envVarNames,
 	}
 	args, memoryLimitMB, availableMemoryMB := buildDenoArgs(argsConfig, permissions, secrets, tmpPath)
 
@@ -237,7 +258,7 @@ func (r *DenoRuntime) Execute(
 	cmd := exec.CommandContext(execCtx, r.denoPath, args...)
 
 	// Set environment variables (including secrets)
-	cmd.Env = buildEnv(req, r.runtimeType, r.publicURL, userToken, serviceToken, cancelSignal, secrets)
+	cmd.Env = env
 
 	// Start command and stream output
 	out, cmdErr := startAndStreamOutput(cmd, req.ID, r.maxOutputSize, r.onProgress, r.onLog)
@@ -573,6 +594,45 @@ func buildNetworkAllowList(permissions Permissions, selfURL string) []string {
 	}
 
 	return filtered
+}
+
+// buildNetworkDenyList constructs the deny list for Deno's --deny-net flag.
+// It always includes cloud metadata/link-local entries and loopback so they are
+// blocked even when a caller clears or extends the configured blocklist, plus
+// anything additionally listed in permissions.BlockedDomains. The instance's
+// own host is excluded so SDK callbacks to the configured public URL keep
+// working (it may legitimately be loopback in development).
+func buildNetworkDenyList(permissions Permissions, selfURL string) []string {
+	denied := make([]string, 0, len(permissions.BlockedDomains)+len(DefaultBlockedDomains())+3)
+	seen := make(map[string]bool)
+
+	selfHost := extractHost(selfURL)
+	add := func(domain string) {
+		if domain == "" || domain == selfHost || seen[domain] {
+			return
+		}
+		seen[domain] = true
+		denied = append(denied, domain)
+	}
+
+	// Cloud metadata / link-local endpoints, always denied.
+	add("169.254.169.254")
+	add("169.254.170.2")
+	add("metadata.google.internal")
+	add("metadata")
+	add("instance-data")
+	add("kubernetes.default.svc")
+	add("kubernetes.default")
+	// Loopback, always denied (except when it is the instance's own host).
+	add("localhost")
+	add("127.0.0.1")
+	add("::1")
+
+	for _, d := range permissions.BlockedDomains {
+		add(d)
+	}
+
+	return denied
 }
 
 // extractHost extracts the hostname from a URL, returning empty string if parsing fails

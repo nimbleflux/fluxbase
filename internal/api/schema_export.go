@@ -38,7 +38,7 @@ type TypeScriptExportRequest struct {
 
 // HandleExportTypeScript generates TypeScript type definitions from the database schema
 func (h *SchemaExportHandler) HandleExportTypeScript(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := context.Context(c.RequestCtx())
 
 	// Add auth context for audit logging
 	if userID := middleware.GetUserID(c); userID != "" {

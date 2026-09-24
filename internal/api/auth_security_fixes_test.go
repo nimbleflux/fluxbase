@@ -157,7 +157,6 @@ func TestAuthMiddleware_RejectsRefreshToken(t *testing.T) {
 	_, refreshToken, _, err := service.JWTManager().GenerateTokenPair(user.ID, user.Email, user.Role, nil, nil)
 	require.NoError(t, err)
 
-	handler := NewAuthHandler(db, service, nil, "http://localhost:3000", "")
 	app := newTestApp(t)
 	app.Get("/protected", AuthMiddleware(service), func(c fiber.Ctx) error {
 		return c.SendString("ok:" + middlewareUserID(c))

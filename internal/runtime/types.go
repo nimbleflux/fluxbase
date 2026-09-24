@@ -107,7 +107,7 @@ func DefaultFunctionPermissions() Permissions {
 		AllowRead:      false,
 		AllowWrite:     false,
 		MemoryLimitMB:  512,
-		BlockedDomains: defaultBlockedDomains(),
+		BlockedDomains: DefaultBlockedDomains(),
 	}
 }
 
@@ -119,13 +119,13 @@ func DefaultJobPermissions() Permissions {
 		AllowRead:      false,
 		AllowWrite:     false,
 		MemoryLimitMB:  512,
-		BlockedDomains: defaultBlockedDomains(),
+		BlockedDomains: DefaultBlockedDomains(),
 	}
 }
 
-// defaultBlockedDomains returns the default list of blocked domains for SSRF protection.
+// DefaultBlockedDomains returns the default list of blocked domains for SSRF protection.
 // These are common cloud metadata endpoints and internal services that should be blocked to prevent SSRF attacks.
-func defaultBlockedDomains() []string {
+func DefaultBlockedDomains() []string {
 	return []string{
 		"169.254.169.254", // AWS/GCP/Azure metadata IP
 		"metadata.google.internal",

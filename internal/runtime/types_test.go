@@ -555,7 +555,7 @@ func BenchmarkDefaultJobPermissions(b *testing.B) {
 
 func TestDefaultBlockedDomains(t *testing.T) {
 	t.Run("returns expected blocked domains", func(t *testing.T) {
-		blocked := defaultBlockedDomains()
+		blocked := DefaultBlockedDomains()
 
 		// Verify all critical SSRF targets are blocked
 		blockedMap := make(map[string]bool)
@@ -575,8 +575,8 @@ func TestDefaultBlockedDomains(t *testing.T) {
 	})
 
 	t.Run("returns new instance each call", func(t *testing.T) {
-		blocked1 := defaultBlockedDomains()
-		blocked2 := defaultBlockedDomains()
+		blocked1 := DefaultBlockedDomains()
+		blocked2 := DefaultBlockedDomains()
 
 		// Modify first slice
 		blocked1 = append(blocked1, "test.blocked.com")

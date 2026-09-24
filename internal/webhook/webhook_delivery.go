@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +20,44 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
+
+// ssrfGuardControl is the net.Dialer Control callback: it inspects the exact
+// resolved IP about to be dialed and aborts the connection when it is private,
+// loopback, or link-local. Because it runs at dial time with the address the
+// kernel will connect to, it closes the DNS-rebinding TOCTOU window left by
+// validating the URL only once before the request. Only tcp-family networks
+// carry an IP address; anything else passes through unvalidated.
+func ssrfGuardControl(network, address string, _ syscall.RawConn) error {
+	switch network {
+	case "tcp", "tcp4", "tcp6":
+	default:
+		return nil
+	}
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("invalid dial address %q: %w", address, err)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("dial address %q did not resolve to an IP", address)
+	}
+	if isPrivateIP(ip) {
+		return fmt.Errorf("connection to private or link-local address %s is not allowed", host)
+	}
+	return nil
+}
+
+// newSSRFGuardDialContext returns a DialContext that re-validates the resolved
+// destination against the private/link-local blocklist at dial time. When
+// allowPrivate is true the guard is disabled (test/helper mode).
+func newSSRFGuardDialContext(allowPrivate bool) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	dialer := &net.Dialer{Timeout: 30 * time.Second}
+	if allowPrivate {
+		return dialer.DialContext
+	}
+	dialer.Control = ssrfGuardControl
+	return dialer.DialContext
+}
 
 // Deliver sends a webhook payload to the configured URL
 func (s *WebhookService) Deliver(ctx context.Context, webhook *Webhook, payload *WebhookPayload) error {
@@ -69,9 +109,14 @@ func (s *WebhookService) sendWebhookSync(ctx context.Context, webhook *Webhook, 
 		req.Header.Set("X-Webhook-Signature", legacySignature)
 	}
 
-	// Send request with timeout
+	// Send request with timeout. The transport re-validates every resolved IP
+	// at dial time (single source of truth: isPrivateIP), closing the
+	// DNS-rebinding TOCTOU window between URL validation and the connection.
 	client := &http.Client{
 		Timeout: time.Duration(webhook.TimeoutSeconds) * time.Second,
+		Transport: &http.Transport{
+			DialContext: newSSRFGuardDialContext(s.AllowPrivateIPs()),
+		},
 	}
 
 	resp, err := client.Do(req)

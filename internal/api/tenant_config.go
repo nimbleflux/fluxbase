@@ -1,8 +1,6 @@
 package api
 
 import (
-	"context"
-
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
@@ -31,7 +29,7 @@ func TenantConfigResolverMiddleware(resolver *TenantConfigResolver) fiber.Handle
 
 func GetTenantConfig(c fiber.Ctx, baseConfig *config.Config) *config.Config {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return resolvedToFullConfig(resolved, baseConfig)
 	}
 
@@ -95,7 +93,7 @@ func IsInstanceAdmin(c fiber.Ctx) bool {
 
 func GetStorageConfig(c fiber.Ctx, baseConfig *config.Config) *config.StorageConfig {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return &resolved.Storage
 	}
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
@@ -109,7 +107,7 @@ func GetStorageConfig(c fiber.Ctx, baseConfig *config.Config) *config.StorageCon
 
 func GetAuthConfig(c fiber.Ctx, baseConfig *config.Config) *config.AuthConfig {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return &resolved.Auth
 	}
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
@@ -120,7 +118,7 @@ func GetAuthConfig(c fiber.Ctx, baseConfig *config.Config) *config.AuthConfig {
 
 func GetEmailConfig(c fiber.Ctx, baseConfig *config.Config) *config.EmailConfig {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return &resolved.Email
 	}
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
@@ -131,7 +129,7 @@ func GetEmailConfig(c fiber.Ctx, baseConfig *config.Config) *config.EmailConfig 
 
 func GetFunctionsConfig(c fiber.Ctx, baseConfig *config.Config) *config.FunctionsConfig {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return &resolved.Functions
 	}
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
@@ -142,7 +140,7 @@ func GetFunctionsConfig(c fiber.Ctx, baseConfig *config.Config) *config.Function
 
 func GetJobsConfig(c fiber.Ctx, baseConfig *config.Config) *config.JobsConfig {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return &resolved.Jobs
 	}
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
@@ -153,7 +151,7 @@ func GetJobsConfig(c fiber.Ctx, baseConfig *config.Config) *config.JobsConfig {
 
 func GetAIConfig(c fiber.Ctx, baseConfig *config.Config) *config.AIConfig {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return &resolved.AI
 	}
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
@@ -164,7 +162,7 @@ func GetAIConfig(c fiber.Ctx, baseConfig *config.Config) *config.AIConfig {
 
 func GetRealtimeConfig(c fiber.Ctx, baseConfig *config.Config) *config.RealtimeConfig {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return &resolved.Realtime
 	}
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
@@ -175,7 +173,7 @@ func GetRealtimeConfig(c fiber.Ctx, baseConfig *config.Config) *config.RealtimeC
 
 func GetRPCConfig(c fiber.Ctx, baseConfig *config.Config) *config.RPCConfig {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return &resolved.RPC
 	}
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
@@ -186,7 +184,7 @@ func GetRPCConfig(c fiber.Ctx, baseConfig *config.Config) *config.RPCConfig {
 
 func GetGraphQLConfig(c fiber.Ctx, baseConfig *config.Config) *config.GraphQLConfig {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return &resolved.GraphQL
 	}
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {
@@ -197,7 +195,7 @@ func GetGraphQLConfig(c fiber.Ctx, baseConfig *config.Config) *config.GraphQLCon
 
 func GetAPIConfig(c fiber.Ctx, baseConfig *config.Config) *config.APIConfig {
 	if resolver := getResolverFromContext(c); resolver != nil {
-		resolved := resolver.ResolveForRequest(context.Background(), c)
+		resolved := resolver.ResolveForRequest(c.RequestCtx(), c)
 		return &resolved.API
 	}
 	if tc, ok := c.Locals("tenant_config").(*config.Config); ok && tc != nil {

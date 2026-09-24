@@ -1,6 +1,7 @@
 package functions
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -24,6 +25,15 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
+// defaultMaxConcurrentExecutions is the global cap on simultaneous function
+// executions when MaxConcurrentExecutions is not configured.
+const defaultMaxConcurrentExecutions = 32
+
+// maxExecutionAcquireWait is the longest an invocation waits for a free
+// execution slot before returning 503. It is capped by the function's own
+// timeout so callers never wait longer than the execution could have run.
+const maxExecutionAcquireWait = 30 * time.Second
+
 // Handler manages HTTP endpoints for edge functions
 type Handler struct {
 	storage                *Storage
@@ -41,6 +51,9 @@ type Handler struct {
 	jsrRegistry            string
 	logCounters            sync.Map
 	baseConfig             *config.Config
+	// execSlots bounds the number of concurrently running Deno executions on
+	// this instance across all HTTP invocations.
+	execSlots chan struct{}
 }
 
 // NewHandler creates a new edge functions handler
@@ -49,6 +62,12 @@ func NewHandler(db *database.Connection, functionsDir string, corsConfig config.
 	if baseConfig != nil && baseConfig.Functions.MaxOutputSize > 0 {
 		opts = append(opts, runtime.WithMaxOutputSize(baseConfig.Functions.MaxOutputSize))
 	}
+
+	maxConcurrent := defaultMaxConcurrentExecutions
+	if baseConfig != nil && baseConfig.Functions.MaxConcurrentExecutions > 0 {
+		maxConcurrent = baseConfig.Functions.MaxConcurrentExecutions
+	}
+
 	h := &Handler{
 		storage:        NewStorage(db),
 		runtime:        runtime.NewRuntime(runtime.RuntimeTypeFunction, jwtSecret, publicURL, opts...),
@@ -61,6 +80,7 @@ func NewHandler(db *database.Connection, functionsDir string, corsConfig config.
 		npmRegistry:    npmRegistry,
 		jsrRegistry:    jsrRegistry,
 		baseConfig:     baseConfig,
+		execSlots:      make(chan struct{}, maxConcurrent),
 	}
 
 	// Set up log callback to capture console.log output
@@ -91,6 +111,26 @@ func (h *Handler) GetRuntime() *runtime.DenoRuntime {
 // GetPublicURL returns the public URL configured for this handler
 func (h *Handler) GetPublicURL() string {
 	return h.publicURL
+}
+
+// acquireExecSlot reserves a global execution slot, waiting at most
+// min(function timeout, 30s) for one to free up. ok is false when the slot
+// could not be acquired in time and the request should be rejected with 503.
+func (h *Handler) acquireExecSlot(ctx context.Context, timeoutOverride *time.Duration) (release func(), ok bool) {
+	wait := maxExecutionAcquireWait
+	if timeoutOverride != nil && *timeoutOverride > 0 && *timeoutOverride < wait {
+		wait = *timeoutOverride
+	}
+
+	acquireCtx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+
+	select {
+	case h.execSlots <- struct{}{}:
+		return func() { <-h.execSlots }, true
+	case <-acquireCtx.Done():
+		return nil, false
+	}
 }
 
 // createBundler creates a new bundler with the handler's registry configuration

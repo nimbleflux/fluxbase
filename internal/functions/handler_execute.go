@@ -20,6 +20,34 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/util"
 )
 
+// executionRecordCompleteTimeout bounds the detached execution-record update
+// goroutine so it cannot outlive a shutdown indefinitely.
+const executionRecordCompleteTimeout = 30 * time.Second
+
+// passthroughResponseHeaders is the allowlist of response headers that may be
+// propagated from a function's result to the HTTP client. Everything else is
+// dropped so user code cannot override transport or security headers.
+var passthroughResponseHeaders = map[string]bool{
+	"content-type":        true,
+	"content-disposition": true,
+	"cache-control":       true,
+	"etag":                true,
+	"last-modified":       true,
+	"x-request-id":        true,
+}
+
+// filterPassthroughHeaders returns only the headers allowed to pass through to
+// the client, dropping everything else.
+func filterPassthroughHeaders(headers map[string]string) map[string]string {
+	out := make(map[string]string, len(headers))
+	for key, value := range headers {
+		if passthroughResponseHeaders[strings.ToLower(key)] {
+			out[key] = value
+		}
+	}
+	return out
+}
+
 // InvokeFunction invokes an edge function
 func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 	name := c.Params("name")
@@ -256,6 +284,21 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 		allSecrets[k] = v
 	}
 
+	// Reserve a global execution slot before spawning Deno. Bounded wait so
+	// callers get a fast 503 instead of piling up when the instance is at
+	// capacity.
+	releaseSlots, ok := h.acquireExecSlot(middleware.CtxWithTenant(c), timeoutOverride)
+	if !ok {
+		log.Warn().
+			Str("function_name", name).
+			Str("execution_id", executionID.String()).
+			Str("request_id", reqID).
+			Msg("Execution concurrency limit reached, rejecting invocation")
+		c.Set("Retry-After", "1")
+		return apperrors.SendErrorWithCode(c, fiber.StatusServiceUnavailable, "Server is at execution capacity, please retry", apperrors.ErrCodeRateLimited)
+	}
+	defer releaseSlots()
+
 	// Execute function (nil cancel signal for basic invocation - streaming endpoint will use actual signal)
 	result, err := h.runtime.Execute(middleware.CtxWithTenant(c), fn.Code, req, perms, nil, timeoutOverride, allSecrets)
 
@@ -277,12 +320,20 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 		resultBody = &result.Body
 	}
 
-	// Update execution record asynchronously (don't block response)
+	// Update execution record asynchronously (don't block response).
+	// The goroutine is bounded by a timeout so it cannot linger indefinitely;
+	// a detached context is used because the request context is recycled by
+	// the HTTP server once the handler returns (values read from fiber locals
+	// are captured before the goroutine starts).
 	// Skip if execution logs are disabled for this function
 	if !fn.DisableExecutionLogs {
 		tenantID := middleware.GetTenantIDFromContext(c)
-		completeCtx := database.ContextWithTenant(context.Background(), tenantID)
+		completeCtx, completeCancel := context.WithTimeout(context.Background(), executionRecordCompleteTimeout)
+		if tenantID != "" {
+			completeCtx = database.ContextWithTenant(completeCtx, tenantID)
+		}
 		go func() {
+			defer completeCancel()
 			if updateErr := h.storage.CompleteExecution(completeCtx, executionID, status, &result.Status, &durationMs, resultBody, &result.Logs, errorMessage); updateErr != nil {
 				log.Error().Err(updateErr).Str("execution_id", executionID.String()).Msg("Failed to complete execution record")
 			}
@@ -319,8 +370,10 @@ func (h *Handler) InvokeFunction(c fiber.Ctx) error {
 			Msg("Edge function returned error status")
 	}
 
-	// Set response headers
-	for key, value := range result.Headers {
+	// Set response headers, allowing only a safe passthrough allowlist —
+	// function-controlled headers must not override infrastructure concerns
+	// (auth, cookies, security policy, etc.)
+	for key, value := range filterPassthroughHeaders(result.Headers) {
 		c.Set(key, value)
 	}
 

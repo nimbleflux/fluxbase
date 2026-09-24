@@ -128,7 +128,7 @@ type UpdateAppSettingsRequest struct {
 // GetAppSettings returns all application settings in a structured format
 // GET /api/v1/admin/app/settings
 func (h *AppSettingsHandler) GetAppSettings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	if err := h.requireService(c); err != nil {
 		return err
@@ -149,7 +149,7 @@ func (h *AppSettingsHandler) GetAppSettings(c fiber.Ctx) error {
 // UpdateAppSettings updates application settings
 // PUT /api/v1/admin/app/settings
 func (h *AppSettingsHandler) UpdateAppSettings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	var req UpdateAppSettingsRequest
 	if err := ParseBody(c, &req); err != nil {

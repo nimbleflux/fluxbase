@@ -3,39 +3,59 @@ package runtime
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
 // blockedVars are environment variables that should never be exposed to user code
 var blockedVars = map[string]bool{
-	"FLUXBASE_AUTH_JWT_SECRET":             true,
-	"FLUXBASE_DATABASE_PASSWORD":           true,
-	"FLUXBASE_DATABASE_ADMIN_PASSWORD":     true,
-	"FLUXBASE_DATABASE_URL":                true,
-	"FLUXBASE_DATABASE_ADMIN_URL":          true,
-	"FLUXBASE_STORAGE_S3_SECRET_KEY":       true,
-	"FLUXBASE_STORAGE_S3_ACCESS_KEY":       true,
-	"FLUXBASE_EMAIL_SMTP_PASSWORD":         true,
-	"FLUXBASE_EMAIL_SENDGRID_API_KEY":      true,
-	"FLUXBASE_EMAIL_MAILGUN_API_KEY":       true,
-	"FLUXBASE_EMAIL_SES_SECRET_ACCESS_KEY": true,
-	"FLUXBASE_SECURITY_SETUP_TOKEN":        true,
-	"FLUXBASE_ENCRYPTION_KEY":              true,
-	"FLUXBASE_SERVICE_ROLE_KEY":            true,
-	"FLUXBASE_ANON_KEY":                    true,
+	"FLUXBASE_AUTH_JWT_SECRET":         true,
+	"FLUXBASE_DATABASE_PASSWORD":       true,
+	"FLUXBASE_DATABASE_ADMIN_PASSWORD": true,
+	"FLUXBASE_DATABASE_URL":            true,
+	"FLUXBASE_DATABASE_ADMIN_URL":      true,
+	"FLUXBASE_STORAGE_S3_SECRET_KEY":   true,
+	"FLUXBASE_STORAGE_S3_ACCESS_KEY":   true,
+	"FLUXBASE_EMAIL_SMTP_PASSWORD":     true,
+	"FLUXBASE_SECURITY_SETUP_TOKEN":    true,
+	"FLUXBASE_ENCRYPTION_KEY":          true,
+	"FLUXBASE_SERVICE_ROLE_KEY":        true,
+	"FLUXBASE_ANON_KEY":                true,
+}
+
+// isBlockedEnvVar reports whether an environment variable name must never be
+// passed through to user code. Beyond the explicit list above it blocks
+// name patterns for credential-shaped variables (secrets, passwords, API and
+// private keys) so newly added configuration cannot silently leak into
+// executions. Intentional per-execution injections (FLUXBASE_SERVICE_TOKEN,
+// FLUXBASE_USER_TOKEN, FLUXBASE_SECRET_*, FLUXBASE_USER_*, FLUXBASE_SETTING_*)
+// are appended separately in buildEnv and are not affected by this filter.
+func isBlockedEnvVar(key string) bool {
+	if blockedVars[key] {
+		return true
+	}
+	k := strings.ToUpper(key)
+	return strings.Contains(k, "SECRET") ||
+		strings.Contains(k, "PASSWORD") ||
+		strings.Contains(k, "PRIVATE_KEY") ||
+		strings.Contains(k, "API_KEY")
 }
 
 // buildEnv creates the environment variable list for execution
+// execDir is the per-execution directory used for Deno's cache and HOME
+// publicURL is the public URL for SDK client credentials
+// userToken and serviceToken are per-execution SDK tokens
+// cancelSignal signals cancellation to the function
 // secrets is a map of secret name -> decrypted value that will be injected as FLUXBASE_SECRET_<NAME>
 // Keys starting with "FLUXBASE_" are injected as-is (raw env vars), other keys get the FLUXBASE_SECRET_ prefix
-func buildEnv(req ExecutionRequest, runtimeType RuntimeType, publicURL, userToken, serviceToken string, cancelSignal *CancelSignal, secrets map[string]string) []string {
+func buildEnv(req ExecutionRequest, runtimeType RuntimeType, execDir, publicURL, userToken, serviceToken string, cancelSignal *CancelSignal, secrets map[string]string) []string {
 	env := []string{}
 
 	// Deno requires HOME or DENO_DIR to determine its cache directory.
-	// Set DENO_DIR to a temp directory to avoid permission issues.
-	// Also set HOME as some Deno internals may still look for it.
-	env = append(env, "DENO_DIR=/tmp/deno")
-	env = append(env, "HOME=/tmp")
+	// Point both at the per-execution directory so no state is shared
+	// between executions via a global temp location.
+	env = append(env, "DENO_DIR="+filepath.Join(execDir, "deno-cache"))
+	env = append(env, "HOME="+execDir)
 
 	// Include essential system environment variables for proper subprocess operation
 	// These are needed for DNS resolution, SSL certificates, and basic system functionality
@@ -64,7 +84,7 @@ func buildEnv(req ExecutionRequest, runtimeType RuntimeType, publicURL, userToke
 			parts := strings.SplitN(e, "=", 2)
 			if len(parts) == 2 {
 				key := parts[0]
-				if !blockedVars[key] {
+				if !isBlockedEnvVar(key) {
 					env = append(env, e)
 				}
 			}

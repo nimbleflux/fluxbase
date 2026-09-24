@@ -159,7 +159,7 @@ func (h *SQLHandler) getPoolForQuery(c fiber.Ctx, query string) *pgxpool.Pool {
 }
 
 func (h *SQLHandler) executeWithRLSContext(c fiber.Ctx, pool *pgxpool.Pool, statements []string, claims *auth.TokenClaims, tenantID string, auditUserID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	ctx, cancel := context.WithTimeout(c.RequestCtx(), queryTimeout)
 	defer cancel()
 
 	conn, err := pool.Acquire(ctx)
@@ -263,7 +263,7 @@ func (h *SQLHandler) executeWithRLSContext(c fiber.Ctx, pool *pgxpool.Pool, stat
 }
 
 func (h *SQLHandler) executeAsInstanceAdmin(c fiber.Ctx, pool *pgxpool.Pool, statements []string, auditUserID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	ctx, cancel := context.WithTimeout(c.RequestCtx(), queryTimeout)
 	defer cancel()
 
 	conn, err := pool.Acquire(ctx)
@@ -322,7 +322,7 @@ func (h *SQLHandler) executeAsInstanceAdmin(c fiber.Ctx, pool *pgxpool.Pool, sta
 }
 
 func (h *SQLHandler) executeWithTenantRLS(c fiber.Ctx, pool *pgxpool.Pool, statements []string, claims *auth.TokenClaims, tenantID string, auditUserID string, isInstanceAdmin bool) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	ctx, cancel := context.WithTimeout(c.RequestCtx(), queryTimeout)
 	defer cancel()
 
 	conn, err := pool.Acquire(ctx)

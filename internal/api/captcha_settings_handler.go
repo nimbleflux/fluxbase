@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/gofiber/fiber/v3"
@@ -75,7 +74,7 @@ var validEndpoints = map[string]bool{
 }
 
 func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	response := CaptchaSettingsResponse{
 		Overrides: make(map[string]OverrideInfo),
@@ -156,7 +155,7 @@ func (h *CaptchaSettingsHandler) GetSettings(c fiber.Ctx) error {
 }
 
 func (h *CaptchaSettingsHandler) UpdateSettings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	var req UpdateCaptchaSettingsRequest
 	if err := ParseBody(c, &req); err != nil {

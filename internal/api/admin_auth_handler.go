@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -104,7 +103,7 @@ type AdminLoginResponse struct {
 // GetSetupStatus checks if initial setup is needed
 // GET /api/v1/admin/setup/status
 func (h *AdminAuthHandler) GetSetupStatus(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	if err := h.requireService(c); err != nil {
 		return err
@@ -132,7 +131,7 @@ func (h *AdminAuthHandler) GetSetupStatus(c fiber.Ctx) error {
 func (h *AdminAuthHandler) InitialSetup(c fiber.Ctx) error {
 	log.Debug().Str("path", c.Path()).Str("method", c.Method()).Msg("InitialSetup handler called")
 
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	if err := h.requireService(c); err != nil {
 		return err
@@ -224,7 +223,7 @@ func (h *AdminAuthHandler) InitialSetup(c fiber.Ctx) error {
 // AdminLogin authenticates an admin user
 // POST /api/v1/admin/login
 func (h *AdminAuthHandler) AdminLogin(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	var req AdminLoginRequest
 	if err := ParseBody(c, &req); err != nil {
@@ -273,7 +272,7 @@ func (h *AdminAuthHandler) AdminLogin(c fiber.Ctx) error {
 // AdminRefreshToken refreshes an admin's access token
 // POST /api/v1/admin/refresh
 func (h *AdminAuthHandler) AdminRefreshToken(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
@@ -330,7 +329,7 @@ func (h *AdminAuthHandler) AdminRefreshToken(c fiber.Ctx) error {
 // AdminLogout logs out an admin user
 // POST /api/v1/admin/logout
 func (h *AdminAuthHandler) AdminLogout(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	// Get the access token from the Authorization header
 	authHeader := c.Get("Authorization")

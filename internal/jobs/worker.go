@@ -566,11 +566,12 @@ func (w *Worker) executeJob(ctx context.Context, job *Job) {
 
 	// Build permissions
 	permissions := runtime.Permissions{
-		AllowNet:      jobFunction.AllowNet,
-		AllowEnv:      jobFunction.AllowEnv,
-		AllowRead:     jobFunction.AllowRead,
-		AllowWrite:    jobFunction.AllowWrite,
-		MemoryLimitMB: jobFunction.MemoryLimitMB,
+		AllowNet:       jobFunction.AllowNet,
+		AllowEnv:       jobFunction.AllowEnv,
+		AllowRead:      jobFunction.AllowRead,
+		AllowWrite:     jobFunction.AllowWrite,
+		MemoryLimitMB:  jobFunction.MemoryLimitMB,
+		BlockedDomains: runtime.DefaultBlockedDomains(),
 	}
 
 	// Build execution request from job

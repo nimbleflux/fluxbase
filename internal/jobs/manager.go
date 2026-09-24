@@ -80,21 +80,21 @@ func (m *Manager) Start(ctx context.Context, workerCount int) error {
 		Str("mode", m.Config.WorkerMode).
 		Msg("Starting job worker manager")
 
-	// Recover stale jobs from any previous process. On restart, all
-	// previous workers are dead — their running jobs are orphaned.
-	// Reset them to pending immediately instead of waiting 15-45s for
-	// the staleWorkerCleanupLoop (which only runs from a live worker
-	// and only resets jobs where worker_id IS NULL).
-	recovered, err := m.Storage.RecoverStaleJobs(ctx)
+	// Recover jobs from any previous process whose worker is no longer alive.
+	// Only jobs owned by heartbeat-stale (or stopped) workers are reset, so
+	// live workers on other instances are never disrupted. Jobs of workers
+	// that died very recently stay running until their heartbeat goes stale;
+	// the staleWorkerCleanupLoop reaps those workers and requeues their jobs.
+	recovered, err := m.Storage.RecoverStaleJobs(ctx, m.workerTimeout())
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to recover stale jobs on startup")
 	} else if recovered > 0 {
-		log.Info().Int64("jobs_recovered", recovered).Msg("Recovered stale running jobs from previous process")
+		log.Info().Int64("jobs_recovered", recovered).Msg("Recovered running jobs from dead workers")
 	}
 
-	// Clean up stale worker registrations. timeout=0 means clean ALL rows
-	// (they're all stale — no previous worker is alive on a fresh start).
-	cleaned, err := m.Storage.CleanupStaleWorkers(ctx, 0)
+	// Clean up worker registrations whose heartbeat is already stale. Live
+	// workers (fresh heartbeat) are kept — they may belong to other instances.
+	cleaned, err := m.Storage.CleanupStaleWorkers(ctx, m.workerTimeout())
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to clean up stale workers on startup")
 	} else if cleaned > 0 {
@@ -268,6 +268,16 @@ func (m *Manager) nextRestartBackoff(resetWindow time.Duration) (time.Duration, 
 		backoff = cap
 	}
 	return backoff, recent
+}
+
+// workerTimeout returns the configured worker timeout, defaulting to 45s when
+// unset or non-positive. It is the staleness threshold for deciding whether a
+// worker (and therefore its running jobs) is dead.
+func (m *Manager) workerTimeout() time.Duration {
+	if m.Config == nil || m.Config.WorkerTimeout <= 0 {
+		return 45 * time.Second
+	}
+	return m.Config.WorkerTimeout
 }
 
 // maxRestartBackoff returns the configured restart-backoff cap, defaulting to

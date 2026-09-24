@@ -18,6 +18,10 @@ type BranchingConfig struct {
 	DefaultBranch        string        `mapstructure:"default_branch"`          // Default branch for all requests (default: "main")
 	MaxTotalConnections  int           `mapstructure:"max_total_connections"`   // Global limit for total branch pool connections (default: 500)
 	PoolEvictionAge      time.Duration `mapstructure:"pool_eviction_age"`       // Age threshold for evicting idle branch pools (default: 1h)
+	// AllowUnsignedWebhooks permits GitHub webhook deliveries without a valid
+	// X-Hub-Signature-256 signature for repositories that have no webhook
+	// secret configured. Defaults to false (unsigned deliveries are rejected).
+	AllowUnsignedWebhooks bool `mapstructure:"allow_unsigned_webhooks"`
 }
 
 // DataCloneModes are the valid values for DefaultDataCloneMode
