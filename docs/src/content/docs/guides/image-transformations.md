@@ -420,8 +420,8 @@ Fluxbase implements several security measures to protect against abuse:
 
 ### Resource Protection
 
-- **Dimension limits** - Prevents excessively large output images
-- **Total pixel limit** - Prevents memory exhaustion (default: 16 megapixels)
+- **Dimension limits** - Prevents excessively large output images (default max: 4096px per dimension)
+- **Total pixel limit** - Prevents memory exhaustion (default: 16 megapixels). The cap applies to the source image and to the requested output dimensions, including requests that set only a single dimension (width or height)
 - **Rate limiting** - Limits transforms per user per minute (default: 60)
 - **Concurrency limit** - Limits simultaneous transforms (default: 4)
 

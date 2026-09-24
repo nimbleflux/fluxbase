@@ -57,9 +57,13 @@ CREATE POLICY user_isolation ON public.orders
   USING (user_id = current_setting('request.jwt.claims')::json->>'sub');
 ```
 
-MCP queries execute within the user's security context.
+MCP tool execution runs with the caller's mapped role: requests authenticated with a client key execute under the key's role (user-bound keys run as that user), and MCP-OAuth users execute under their own user role. Client-key scopes are enforced on the MCP path as well — a key with an empty scope list remains allow-all, so always assign explicit scopes.
 
-### 3. Tool Allowlisting
+### 3. OAuth Consent and Scope Validation
+
+MCP OAuth authorization requires an interactive consent page — the authorization code is only issued after the user explicitly approves (denying returns `access_denied`). Requested scopes are validated against the supported list during registration and authorization, and privileged scopes (`admin:*`, `sync:*`, `branch:*`, `github:*`) are only granted to `admin`/`instance_admin` authorizers.
+
+### 4. Tool Allowlisting
 
 Restrict available tools in production:
 
@@ -82,6 +86,18 @@ mcp:
     - "fluxbase://schema/tables"
     - "fluxbase://functions"
     # Exclude sensitive resources
+```
+
+### 5. Audit Log
+
+Tool and resource executions are recorded in the `mcp.audit_log` table (tenant, auth type, user/client-key ID, tool name, arguments, duration, success/error):
+
+```sql
+SELECT tool, success, COUNT(*)
+FROM mcp.audit_log
+WHERE created_at > NOW() - INTERVAL '1 day'
+GROUP BY 1, 2
+ORDER BY 3 DESC;
 ```
 
 ## SQL Injection Prevention

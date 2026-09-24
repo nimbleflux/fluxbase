@@ -88,9 +88,11 @@ The standard OAuth 2.1 Authorization Code flow with PKCE:
 
 1. Client generates `code_verifier` and `code_challenge`
 2. Client redirects user to `/mcp/oauth/authorize`
-3. User logs in and approves permissions
+3. Fluxbase renders an **interactive consent page**; the authorization code is only issued after the user clicks approve (denying redirects back with `access_denied`)
 4. Fluxbase redirects back with authorization code
 5. Client exchanges code for tokens at `/mcp/oauth/token`
+
+Requested scopes are validated against the server's supported scope list during dynamic client registration and at the authorize endpoint — unknown scopes are rejected with `invalid_scope`. Scopes under the privileged prefixes `admin:`, `sync:`, `branch:`, and `github:` can only be granted when the authorizing user holds the `admin` or `instance_admin` role.
 
 ### 4. Token Usage
 
@@ -186,7 +188,7 @@ This limits the window of exposure if a token is compromised.
 
 ### Scopes
 
-OAuth tokens are issued with specific MCP scopes. Users approve these scopes during authorization:
+OAuth tokens are issued with specific MCP scopes. Users approve these scopes during authorization, and requested scopes are validated against the supported list at registration and authorization time:
 
 | Scope               | Permission                     |
 | ------------------- | ------------------------------ |
@@ -199,6 +201,8 @@ OAuth tokens are issued with specific MCP scopes. Users approve these scopes dur
 | `execute:jobs`      | Submit and monitor jobs        |
 | `read:vectors`      | Vector similarity search       |
 | `read:schema`       | Access database schema         |
+
+Additional supported scopes include `execute:sql`, `execute:http`, `read:projects`, `write:projects`, the admin-level `admin:schemas` / `admin:ddl`, `sync:*` (code deployment), `branch:*`, `github:*`, and the custom tool/resource scopes `execute:custom` / `read:custom`. Privileged scopes (`admin:*`, `sync:*`, `branch:*`, `github:*`) require the authorizing user to be an `admin` or `instance_admin`.
 
 ### Revoking Access
 

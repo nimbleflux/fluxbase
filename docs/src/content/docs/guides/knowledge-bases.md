@@ -756,17 +756,28 @@ curl -X POST http://localhost:8080/api/v1/admin/ai/knowledge-bases/KB_ID/documen
 
 ### Configuring Filtered Access
 
-Link a knowledge base with filtered access to enable user-scoped retrieval:
+Link a knowledge base with **filtered** access to enable user-scoped retrieval.
+New chatbot→knowledge-base links default to `filtered`; `full` access (every
+document in the KB is retrievable, including documents without a `user_id`)
+is an explicit opt-in:
 
 ```typescript
 import { createClient } from "@nimbleflux/fluxbase-sdk";
 
 const client = createClient("http://localhost:8080", "service-role-key");
 
+// Filtered per-user retrieval (the default)
 await client.admin.ai.linkKnowledgeBase("chatbot-id", {
   knowledge_base_id: "kb-id",
+  access_level: "filtered",
   max_chunks: 5,
   similarity_threshold: 0.7,
+});
+
+// Unfiltered retrieval of the whole KB — explicit opt-in
+await client.admin.ai.linkKnowledgeBase("chatbot-id", {
+  knowledge_base_id: "kb-id",
+  access_level: "full",
 });
 ```
 
@@ -776,17 +787,38 @@ When a user chats with a RAG-enabled chatbot:
 
 1. The chat handler extracts the user ID from the authentication context
 2. RAG retrieval passes the user ID to the search function
-3. Documents with matching `user_id` in metadata are returned
-4. Documents without `user_id` are excluded unless explicitly allowed
+3. Through a **filtered** link, only documents whose metadata `user_id`
+   matches the chatting user are returned — documents *without* a `user_id`
+   are never surfaced through a filtered link, and an anonymous caller
+   receives no results from that link
+4. Through a **full** link, all documents in the KB are retrievable,
+   including global (un-owned) documents
+
+:::note
+Per-user isolation is enforced per link. Mark a link `full` only when every
+caller is meant to see the entire knowledge base.
+:::
 
 ### Bulk Delete by User
 
 Delete all documents for a user (e.g., account deletion):
 
 ```bash
-curl -X DELETE "http://localhost:8080/api/v1/admin/ai/knowledge-bases/KB_ID/documents?user_id=user-to-delete" \
-  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY"
+curl -X POST "http://localhost:8080/api/v1/admin/ai/knowledge-bases/KB_ID/documents/delete-by-filter" \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "user_id": "user-to-delete" }'
 ```
+
+User-scoped endpoints (`/ai/knowledge-bases/{id}/documents` operations with
+`user_id` filters) only touch documents owned by the calling user.
+
+### Table Export User Scoping
+
+`kb export-table` (and the table-export sync configs) stamp the exported
+documents' metadata with the `user_id` column of the source table when one
+exists, so exported rows participate in per-user scoping. Use the
+`user_id_column` request field to map a differently named column.
 
 ## CLI Commands
 

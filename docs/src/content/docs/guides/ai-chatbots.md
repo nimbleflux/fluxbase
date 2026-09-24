@@ -293,7 +293,7 @@ Available metadata annotations:
 | `@fluxbase:mcp-tools`                | Comma-separated MCP tools to enable (see [MCP Tools](#mcp-tools))  | `""` (legacy execute_sql) |
 | `@fluxbase:use-mcp-schema`           | Fetch schema from MCP resources instead of direct DB introspection | `false`                   |
 | `@fluxbase:model`                    | LLM model override (e.g. `gpt-4o`, `claude-3-5-sonnet`)            | provider default          |
-| `@fluxbase:reasoning-mode`           | `react` (think-before-act), `strict`, or `none`                    | `react`                   |
+| `@fluxbase:reasoning-mode`           | `supervisor` (multi-agent pipeline), `react` (think-before-act), `strict`, or `none` | `supervisor` |
 | `@fluxbase:max-iterations`           | Max tool-call iterations per turn                                  | `5`                       |
 | `@fluxbase:show-reasoning`           | Expose the agent's reasoning steps to the user                     | `false`                   |
 | `@fluxbase:intent-rules`             | JSON array of keyword → required/forbidden table/tool rules        | `[]`                      |
@@ -302,7 +302,8 @@ Available metadata annotations:
 
 The `@fluxbase:reasoning-mode` annotation controls how the chatbot uses tools:
 
-- **`react`** (default) — the chatbot runs the `think` tool to plan before calling data tools (ReAct pattern). Recommended for accuracy.
+- **`supervisor`** (default) — the multi-agent pipeline described in [Multi-Agent Architecture](#multi-agent-architecture). See [ai-agents](/guides/ai-agents/) for the full graph. If the supervisor fails internally mid-turn, the chat falls back to the legacy ReAct loop and emits a `progress` event with step `fallback` first so clients can render the switch.
+- **`react`** — the chatbot runs the `think` tool to plan before calling data tools (ReAct pattern).
 - **`strict`** — stricter planning discipline; the chatbot must produce an explicit plan and stays within it.
 - **`none`** — no `think` step; tools may be called directly. Faster but less reliable for multi-step questions.
 

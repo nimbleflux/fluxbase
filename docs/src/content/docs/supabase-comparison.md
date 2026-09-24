@@ -47,7 +47,7 @@ const { data, error } = await client
   .eq("status", "active");
 ```
 
-All query methods (`.select()`, `.insert()`, `.update()`, `.delete()`, `.eq()`, `.order()`, etc.) work identically.
+All core query methods (`.select()`, `.insert()`, `.update()`, `.delete()`, `.eq()`, `.order()`, etc.) work identically. A few advanced PostgREST features are not supported: embedded resource selects (`select=*,related(*)`), the `Range` header, `Prefer: count=` semantics (use `?count=` instead), and `count=planned|estimated` (exact counts only).
 
 ## Authentication
 

@@ -78,8 +78,8 @@ await client.auth.enable2FA({ code: userEnteredCode });
 
 ```yaml
 auth:
-  jwt_expiry: "15m"
-  refresh_expiry: "7d"
+  jwt_expiry: "15m"      # default is 1h
+  refresh_expiry: "2160h" # default is 90 days; refresh tokens rotate on every refresh (sliding window)
 ```
 
 ### 4. Implement Token Blacklisting

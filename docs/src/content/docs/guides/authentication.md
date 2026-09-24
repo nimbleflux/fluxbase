@@ -21,13 +21,19 @@ Configure authentication in your config file or via environment variables:
 ```yaml
 auth:
   jwt_secret: "your-secret-key"
-  jwt_expiry: 15m
-  refresh_expiry: 168h # 7 days
+  jwt_expiry: 1h
+  refresh_expiry: 2160h # 90 days (sliding — refresh tokens rotate on every refresh)
   password_min_length: 12
   bcrypt_cost: 12
   signup_enabled: true
   magic_link_enabled: false
 ```
+
+:::note
+Access tokens (`jwt_expiry`, default `1h`) are the only credentials accepted as
+`Authorization: Bearer` values on API routes. Refresh tokens are only valid at
+the refresh endpoint — presenting one as a Bearer credential returns `401`.
+:::
 
 ### Password Requirements
 
@@ -195,6 +201,14 @@ against the server base URL); otherwise the request is rejected with
 use the first configured URL.
 :::
 
+:::note[Verified emails required]
+OAuth/OIDC sign-in and account linking require the provider to assert the
+email as verified. When a provider returns an unverified email, Fluxbase will
+not use it to link to (or take over) an existing account with the same email —
+the callback is rejected with `403 EMAIL_NOT_VERIFIED`. Unknown or absent
+`email_verified` claims are treated as unverified.
+:::
+
 **Usage:**
 
 ```typescript
@@ -221,7 +235,7 @@ if (setupError) throw setupError;
 const { id, type, totp } = setupData;
 
 const { error: verifyError } = await client.auth.verify2FA({
-  user_id: "user-id",
+  mfa_token: "mfa-token-from-signin",
   code: "123456",
 });
 if (verifyError) throw verifyError;
@@ -232,8 +246,10 @@ const { data: signInData, error: signInError } = await client.auth.signIn({
 });
 if (signInError) throw signInError;
 if (signInData.requires_2fa) {
+  // The sign-in response carries a short-lived mfa_token (valid 5 minutes)
+  // bound to this password-verified attempt. POST /auth/2fa/verify requires it.
   const { error: codeError } = await client.auth.verify2FA({
-    user_id: signInData.user.id,
+    mfa_token: signInData.mfa_token,
     code: "123456",
   });
   if (codeError) throw codeError;
@@ -241,6 +257,40 @@ if (signInData.requires_2fa) {
 
 await client.auth.disable2FA("current-password");
 ```
+
+:::note[2FA challenge tokens]
+When 2FA is enabled, a successful sign-in returns
+`{ "requires_2fa": true, "mfa_token": "...", ... }` instead of session tokens.
+`POST /api/v1/auth/2fa/verify` requires that `mfa_token` (the legacy `user_id`
+body field is ignored — the user is identified from the signed token). TOTP
+codes have replay protection: once a code is consumed, the same code cannot be
+accepted again within its validity window.
+:::
+
+## Deleting Your Own Account
+
+Authenticated app users can hard-delete their own account:
+
+```
+DELETE /api/v1/auth/account
+Content-Type: application/json
+
+{ "password": "current-password" }
+```
+
+- The JSON body is optional; `password` is **required** when the account has a
+  password credential (OAuth-only users may omit the body entirely).
+- Responses: `204` on success, `401` unauthenticated, `403` wrong/missing
+  password, `500` on failure.
+- The operation revokes all sessions, blacklists every token issued for the
+  user (a user-wide revocation), deletes knowledge-base documents owned via
+  `metadata.user_id` and storage object metadata rows owned by the user, then
+  deletes the `auth.users` row (tenant-schema `ON DELETE CASCADE` foreign keys
+  fire at this point).
+- Not cleaned up automatically: provider-side storage bytes (local disk/S3
+  objects) and tenant tables without a foreign-key cascade to `auth.users` —
+  those remain your responsibility.
+- Rate limited to 5 requests per 15 minutes by default.
 
 ## Session Management
 

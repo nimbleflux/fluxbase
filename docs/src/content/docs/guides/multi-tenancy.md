@@ -358,9 +358,11 @@ For **user tables** in the `public` schema, you must include `tenant_id` in your
 
 Tenant context is resolved in this priority order:
 
-1. **`X-FB-Tenant` header** - Explicit tenant override (validated against user's membership)
+1. **`X-FB-Tenant` header** - Explicit tenant override (validated against the authenticated principal's membership after authentication — requests for a non-default tenant the principal does not belong to are rejected with `403`)
 2. **JWT claims** - `tenant_id` and `tenant_role` from the auth token
 3. **Default tenant** - Falls back to `platform.tenants WHERE is_default = true`
+
+The header validation applies to user JWTs and client keys bound to a user. Tenant-scoped service keys (`fb_tsk_`) keep their embedded tenant binding — a header naming a different tenant is rejected — while other service keys and instance admins retain full access. Requests that resolve to the default tenant (no header) are unaffected.
 
 ```bash
 # Explicit tenant via header

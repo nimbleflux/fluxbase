@@ -1172,7 +1172,16 @@ Control how many requests each user or IP can make to your function within a tim
 | `@fluxbase:disable-logs` / `@fluxbase:disable-execution-logs` | Disable verbose step-by-step execution logging | `false` |
 | `@fluxbase:allowed-domains <csv>` | Domains the function may call (SSRF allowlist) | server default (blocks metadata endpoints) |
 | `@fluxbase:allow-net` / `@fluxbase:deny-net` | Network access flags | net allowed by default |
-| `@fluxbase:allow-env` / `@fluxbase:deny-env` | Environment-variable access flags | env denied by default |
+| `@fluxbase:allow-env` / `@fluxbase:deny-env` | Environment-variable access flags | env allowed by default |
+
+:::note[Sandbox hardening]
+- **Secret pattern blocking**: any `FLUXBASE_*` environment variable whose name contains `SECRET`, `PASSWORD`, `API_KEY`, or `PRIVATE_KEY` (plus an explicit blocklist such as `FLUXBASE_AUTH_JWT_SECRET`, `FLUXBASE_DATABASE_*`, `FLUXBASE_ENCRYPTION_KEY`, `FLUXBASE_SERVICE_ROLE_KEY`) never reaches function code. Intentional per-execution injections (`FLUXBASE_SECRET_*`, `FLUXBASE_USER_TOKEN`, `FLUXBASE_SERVICE_TOKEN`, …) are unaffected.
+- **Scoped `--allow-env`**: when env access is enabled, Deno's `--allow-env` is limited to the explicit variable list passed to the execution — not the full environment.
+- **`--deny-net` SSRF blocklist**: the SSRF blocklist is enforced at the Deno level via `--deny-net` (deny flags take precedence over allow flags). Cloud metadata/link-local endpoints (`169.254.169.254`, `metadata.google.internal`, …) and loopback (`localhost`, `127.0.0.1`, `::1`) are always denied; the instance's own public host is exempt so SDK callbacks keep working. `@fluxbase:deny-net` disables network access entirely.
+- **Per-execution isolation**: every execution runs in its own temporary directory (Deno cache, `HOME`, and any read/write permissions are scoped to it); no state is shared between executions.
+- **Concurrency cap**: `functions.max_concurrent_executions` (default `32`) bounds simultaneous executions instance-wide. Under saturation, new invocations fail fast with `503` and a `Retry-After: 1` header instead of queueing.
+- **Response header allowlist**: only `content-type`, `content-disposition`, `cache-control`, `etag`, `last-modified`, and `x-request-id` are passed through from a function's result to the HTTP client — everything else is dropped so user code cannot override transport or security headers.
+:::
 
 :::note
 `FLUXBASE_SECRET_*` secrets and a curated allowlist of runtime env vars are always injected; sensitive vars (DB URL, JWT secret, email API keys) are blocked. See [Secrets Management](/guides/secrets-management/).

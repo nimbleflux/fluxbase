@@ -11,7 +11,7 @@ Fluxbase provides file storage supporting local filesystem or S3-compatible stor
 - Bucket management
 - File upload, download, delete, list operations
 - Custom metadata support
-- Signed URLs for temporary access (S3 only)
+- Signed URLs for temporary access (local filesystem and S3-compatible backends)
 - Range requests for partial downloads
 - Copy and move operations
 
@@ -346,13 +346,15 @@ const url = client.storage.from("public-images").getPublicUrl("logo.svg");
 await client.storage.createBucket("private-docs");
 ```
 
-## Signed URLs (S3 Only)
+## Signed URLs
 
 ```typescript
 const { data } = await client.storage
   .from("private-docs")
   .createSignedUrl("document.pdf", { expiresIn: 3600 }); // 1 hour expiry
 ```
+
+Signing a URL requires RLS visibility of the object (see [Signed URLs](#signed-urls) under the REST API section) and lifetimes are capped at 24 hours.
 
 ## Metadata
 
@@ -596,13 +598,38 @@ All storage endpoints are under `/api/v1/storage`. Bucket and object operations 
 
 Resumable uploads also expose `GET /storage/{bucket}/chunked/{uploadId}/status` (progress) and `DELETE /storage/{bucket}/chunked/{uploadId}` (abort).
 
+Chunked uploads enforce the same limits as simple uploads at `init` time: the declared `total_size` must pass the server upload limit **and** the bucket's `max_file_size` / `allowed_mime_types` settings (the effective cap is the minimum of the declared total and the bucket maximum). Per-chunk size caps are enforced on every `PUT` — a chunk larger than its maximum is rejected with `400`.
+
+### Copy and Move
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/storage/{bucket}/copy` | Copy an object within the bucket or to another bucket |
+| `POST` | `/storage/{bucket}/move` | Move an object (copy, then delete the source) |
+
+Request body:
+
+```json
+{
+  "from_path": "reports/q1.pdf",
+  "to_path": "archive/q1.pdf",
+  "to_bucket": "archive"
+}
+```
+
+`to_bucket` is optional and defaults to the source bucket. Authorization mirrors uploads/downloads: the source object must be visible to the caller under RLS, and the destination must pass the upload write probe before any bytes are copied. The destination object is owned by the calling user (matching upload semantics). A move whose source delete is rejected leaves the destination copy in place and returns the authorization error.
+
 ### Downloads
 
 `GET` or `HEAD` `/storage/{bucket}/{key}` downloads an object or fetches its metadata. `GET /storage/object` downloads via a signed-URL token (public, no auth header required).
 
 ### Signed URLs
 
-`POST /storage/{bucket}/sign/{key}` generates a time-limited signed URL for a private object, with optional image-transform parameters.
+`POST /storage/{bucket}/sign/{key}` generates a time-limited signed URL for a private object, with optional image-transform parameters. The caller must have RLS visibility of the object: GET/DELETE signatures require the object row to be visible, and PUT signatures (used to create an object) fall back to a bucket visibility check when the row does not exist yet. Callers without visibility get `403`/`404`, and signed URLs are capped at a 24-hour lifetime.
+
+### Bucket Deletion
+
+`DELETE /storage/{bucket}` requires the bucket to be empty **and** the caller to hold delete permission on the bucket row (enforced through RLS). Callers without delete permission receive `403`.
 
 ### File Sharing
 

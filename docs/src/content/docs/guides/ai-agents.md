@@ -90,7 +90,7 @@ The verifier does **not** block the response permanently. It runs once, reports 
 | Single-agent investigative | 3-5 (supervisor + 1-3 SQL iterations + verifier) | SQL Agent runs an internal tool loop |
 | Multi-agent investigative | 5-7 (supervisor + 2 specialists + synthesizer + verifier) | Synthesizer skipped on single-agent routes |
 
-First-token latency is higher than legacy `react` mode because the supervisor runs before any specialist streams. The trade-off is fewer hallucinated answers and consistent language matching.
+Supervisor mode does not stream tokens: after the specialists and (when routed) the synthesizer/verifier finish, the full answer is emitted as **one** `content` event — perceived latency is therefore higher than legacy `react` mode, which streams as it goes. The trade-off is fewer hallucinated answers and consistent language matching. If the supervisor hits an internal error mid-turn, the chat falls back to the ReAct loop and first emits a `progress` event with step `fallback` so clients can render the mode switch.
 
 ## Opting out
 

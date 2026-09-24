@@ -360,6 +360,14 @@ Control who can execute procedures:
 -- @fluxbase:public true
 ```
 
+:::caution[Procedures without a role annotation are callable by any authenticated user]
+If a procedure has **no** `@fluxbase:require-role` annotation, every authenticated user can invoke it (service roles bypass all checks). Always add a `@fluxbase:require-role` annotation to procedures that should be restricted to specific roles, and rely on RLS for row-level restrictions.
+:::
+
+### Single-Statement Scripts
+
+Procedure scripts must contain exactly **one** SQL statement. Multi-statement scripts are rejected with a "Multiple SQL statements not allowed" validation error — both when the procedure is synced/created and when it is executed. Wrap multiple operations in a single `WITH` query, a CTE, or a database function if you need compound behavior.
+
 ### Table Restrictions
 
 Limit which tables a procedure can access:
