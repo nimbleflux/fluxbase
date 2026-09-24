@@ -31,11 +31,29 @@ func NewDynamicToolHandler(tool *CustomTool, executor *Executor) *DynamicToolHan
 // Format: "custom:{namespace}:{name}" for non-default namespaces
 //
 //	"custom:{name}" for default namespace (backwards compatible)
+//
+// Tenant-owned tools get an "@{tenant-prefix}" suffix so two tenants can
+// safely define same-named tools in the shared registry.
 func (h *DynamicToolHandler) Name() string {
+	var name string
 	if h.tool.Namespace == "" || h.tool.Namespace == "default" {
-		return "custom:" + h.tool.Name
+		name = "custom:" + h.tool.Name
+	} else {
+		name = "custom:" + h.tool.Namespace + ":" + h.tool.Name
 	}
-	return "custom:" + h.tool.Namespace + ":" + h.tool.Name
+	if h.tool.TenantID != nil {
+		name += "@" + h.tool.TenantID.String()[:8]
+	}
+	return name
+}
+
+// OwnerTenantID returns the owning tenant, or "" for operator-installed
+// tools registered without a tenant (visible to everyone).
+func (h *DynamicToolHandler) OwnerTenantID() string {
+	if h.tool.TenantID == nil {
+		return ""
+	}
+	return h.tool.TenantID.String()
 }
 
 // Description returns the tool description.
@@ -114,6 +132,15 @@ func (p *DynamicResourceProvider) Description() string {
 // MimeType returns the resource MIME type.
 func (p *DynamicResourceProvider) MimeType() string {
 	return p.resource.MimeType
+}
+
+// OwnerTenantID returns the owning tenant, or "" for operator-installed
+// resources registered without a tenant (visible to everyone).
+func (p *DynamicResourceProvider) OwnerTenantID() string {
+	if p.resource.TenantID == nil {
+		return ""
+	}
+	return p.resource.TenantID.String()
 }
 
 // RequiredScopes returns the scopes required to read this resource.
@@ -234,11 +261,13 @@ func NewManager(
 	}
 }
 
-// LoadAndRegisterAll loads all enabled custom tools and resources from the database
-// and registers them with the MCP registries.
+// LoadAndRegisterAll loads all enabled custom tools and resources from the
+// database (across every tenant) and registers them with the MCP registries.
+// Each registration records its owning tenant; per-tenant visibility is
+// enforced at list/execution time by the registries (see mcp.TenantScoped).
 func (m *Manager) LoadAndRegisterAll(ctx context.Context) error {
 	// Load and register tools
-	tools, err := m.storage.ListTools(ctx, ListToolsFilter{EnabledOnly: true})
+	tools, err := m.storage.ListTools(ctx, ListToolsFilter{EnabledOnly: true, AllTenants: true})
 	if err != nil {
 		return fmt.Errorf("failed to load custom tools: %w", err)
 	}
@@ -250,7 +279,7 @@ func (m *Manager) LoadAndRegisterAll(ctx context.Context) error {
 	}
 
 	// Load and register resources
-	resources, err := m.storage.ListResources(ctx, ListResourcesFilter{EnabledOnly: true})
+	resources, err := m.storage.ListResources(ctx, ListResourcesFilter{EnabledOnly: true, AllTenants: true})
 	if err != nil {
 		return fmt.Errorf("failed to load custom resources: %w", err)
 	}

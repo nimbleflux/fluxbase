@@ -256,13 +256,19 @@ func (s *Server) createMCPAuthMiddleware() fiber.Handler {
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
 			if s.MCP.OAuth != nil {
-				clientID, userID, scopes, err := s.MCP.OAuth.ValidateAccessToken(c, token)
+				clientID, userID, scopes, role, err := s.MCP.OAuth.ValidateAccessToken(c, token)
 				if err == nil {
 					c.Locals("auth_type", "mcp_oauth")
 					c.Locals("client_key_id", clientID)
 					c.Locals("client_key_scopes", scopes)
 					if userID != nil {
 						c.Locals("user_id", *userID)
+					}
+					// Expose the authorizing user's role so MCP tools apply
+					// the same RLS role for OAuth callers as for JWT callers
+					// (without this they silently degrade to "anon").
+					if role != "" {
+						c.Locals("user_role", role)
 					}
 					return c.Next()
 				}

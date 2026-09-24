@@ -56,6 +56,44 @@ func TestDynamicToolHandler_Name(t *testing.T) {
 	}
 }
 
+func TestDynamicToolHandler_TenantScopedNameAndOwner(t *testing.T) {
+	tenant := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+
+	tool := &CustomTool{
+		ID:        uuid.New(),
+		Name:      "weather_forecast",
+		Namespace: "default",
+		Code:      "export function handler() {}",
+		TenantID:  &tenant,
+	}
+
+	handler := NewDynamicToolHandler(tool, nil)
+
+	// Tenant-owned tools carry a tenant suffix so same-named tools from
+	// different tenants cannot collide in the shared registry.
+	assert.Equal(t, "custom:weather_forecast@550e8400", handler.Name())
+	assert.Equal(t, tenant.String(), handler.OwnerTenantID())
+
+	// Operator-installed tools (nil tenant) are global and unsuffixed.
+	global := &CustomTool{ID: uuid.New(), Name: "weather_forecast", Namespace: "default"}
+	globalHandler := NewDynamicToolHandler(global, nil)
+	assert.Equal(t, "custom:weather_forecast", globalHandler.Name())
+	assert.Empty(t, globalHandler.OwnerTenantID())
+}
+
+func TestDynamicResourceProvider_OwnerTenantID(t *testing.T) {
+	tenant := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+
+	resource := &CustomResource{
+		ID:       uuid.New(),
+		URI:      "fluxbase://custom/analytics",
+		Name:     "Analytics",
+		TenantID: &tenant,
+	}
+	provider := NewDynamicResourceProvider(resource, nil)
+	assert.Equal(t, tenant.String(), provider.OwnerTenantID())
+}
+
 func TestDynamicToolHandler_Description(t *testing.T) {
 	tests := []struct {
 		name        string

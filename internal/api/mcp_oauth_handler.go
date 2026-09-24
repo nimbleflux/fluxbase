@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"html"
 	"net/url"
 	"strings"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
+	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
@@ -55,13 +58,7 @@ func (h *MCPOAuthHandler) HandleAuthorizationServerMetadata(c fiber.Ctx) error {
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"token_endpoint_auth_methods_supported": []string{"none"},
 		"code_challenge_methods_supported":      []string{"S256"},
-		"scopes_supported": []string{
-			"tables:read", "tables:write",
-			"functions:execute", "rpc:execute",
-			"storage:read", "storage:write",
-			"execute:jobs", "read:vectors",
-			"read:schema", "admin:ddl",
-		},
+		"scopes_supported":                      mcp.SupportedScopes,
 	}
 
 	if h.config.OAuth.DCREnabled {
@@ -117,7 +114,15 @@ func (h *MCPOAuthHandler) HandleClientRegistration(c fiber.Ctx) error {
 
 	scopes := []string{"tables:read", "read:schema"}
 	if req.Scopes != "" {
-		scopes = strings.Split(req.Scopes, " ")
+		requested := strings.Fields(req.Scopes)
+		supported, unknown := mcp.FilterSupportedScopes(requested)
+		if len(unknown) > 0 {
+			return SendErrorWithCode(c, fiber.StatusBadRequest,
+				fmt.Sprintf("Unsupported scopes: %s", strings.Join(unknown, ", ")), "invalid_scope")
+		}
+		if len(supported) > 0 {
+			scopes = supported
+		}
 	}
 
 	clientID, err := generateSecureToken("mcp_", 32)
@@ -160,91 +165,176 @@ func (h *MCPOAuthHandler) HandleClientRegistration(c fiber.Ctx) error {
 	})
 }
 
-func (h *MCPOAuthHandler) HandleAuthorize(c fiber.Ctx) error {
-	if !h.config.OAuth.Enabled {
-		return SendNotFound(c, "OAuth is not enabled")
-	}
+// authorizeParams carries the original OAuth authorize request parameters.
+type authorizeParams struct {
+	ClientID            string
+	RedirectURI         string
+	ResponseType        string
+	Scope               string
+	State               string
+	CodeChallenge       string
+	CodeChallengeMethod string
+}
 
-	clientID := c.Query("client_id")
-	redirectURI := c.Query("redirect_uri")
-	responseType := c.Query("response_type")
-	scope := c.Query("scope")
-	state := c.Query("state")
-	codeChallenge := c.Query("code_challenge")
-	codeChallengeMethod := c.Query("code_challenge_method")
+// mcpOAuthClient mirrors a row of auth.mcp_oauth_clients.
+type mcpOAuthClient struct {
+	ClientID     string
+	ClientName   string
+	RedirectURIs []string
+	Scopes       []string
+	IsActive     bool
+}
 
-	if clientID == "" {
-		return SendErrorWithCode(c, fiber.StatusBadRequest, "client_id is required", "invalid_request")
-	}
-
-	if responseType != "code" {
-		return SendErrorWithCode(c, fiber.StatusBadRequest, "Only response_type=code is supported", "unsupported_response_type")
-	}
-
-	if codeChallenge == "" {
-		return SendErrorWithCode(c, fiber.StatusBadRequest, "code_challenge is required (PKCE)", "invalid_request")
-	}
-
-	if codeChallengeMethod != "S256" && codeChallengeMethod != "" {
-		return SendErrorWithCode(c, fiber.StatusBadRequest, "code_challenge_method must be S256", "invalid_request")
-	}
-	if codeChallengeMethod == "" {
-		codeChallengeMethod = "S256"
-	}
-
-	var client struct {
-		ClientID     string   `db:"client_id"`
-		ClientName   string   `db:"client_name"`
-		RedirectURIs []string `db:"redirect_uris"`
-		Scopes       []string `db:"scopes"`
-		IsActive     bool     `db:"is_active"`
-	}
-
-	err := database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(c.RequestCtx(), `
+func (h *MCPOAuthHandler) loadClient(ctx context.Context, clientID string) (*mcpOAuthClient, error) {
+	var client mcpOAuthClient
+	err := database.WrapWithServiceRole(ctx, h.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
 			SELECT client_id, client_name, redirect_uris, scopes, is_active
 			FROM auth.mcp_oauth_clients
 			WHERE client_id = $1
 		`, clientID).Scan(&client.ClientID, &client.ClientName, &client.RedirectURIs, &client.Scopes, &client.IsActive)
 	})
 	if err != nil {
-		return SendErrorWithCode(c, fiber.StatusBadRequest, "Client not found", "invalid_client")
+		return nil, err
 	}
+	return &client, nil
+}
 
-	if !client.IsActive {
-		return SendErrorWithCode(c, fiber.StatusBadRequest, "Client is inactive", "invalid_client")
-	}
-
-	if redirectURI == "" && len(client.RedirectURIs) == 1 {
-		redirectURI = client.RedirectURIs[0]
-	}
-
-	if !h.isURIInList(redirectURI, client.RedirectURIs) {
-		return SendErrorWithCode(c, fiber.StatusBadRequest, "Redirect URI not registered for this client", "invalid_redirect_uri")
-	}
-
-	requestedScopes := client.Scopes
-	if scope != "" {
-		requestedScopes = strings.Split(scope, " ")
-		for _, s := range requestedScopes {
-			if !h.contains(client.Scopes, s) {
-				return SendErrorWithCode(c, fiber.StatusBadRequest, fmt.Sprintf("Scope '%s' not allowed for this client", s), "invalid_scope")
+// resolveRequestedScopes validates the requested scopes for an authorize call
+// against both the client's registered scopes and the platform-wide supported
+// scope list. It returns the final granted scope set.
+func resolveRequestedScopes(client *mcpOAuthClient, scopeParam string) ([]string, error) {
+	requested := client.Scopes
+	if scopeParam != "" {
+		requested = strings.Split(scopeParam, " ")
+		for _, s := range requested {
+			if !containsString(client.Scopes, s) {
+				return nil, fmt.Errorf("scope '%s' not allowed for this client", s)
 			}
 		}
 	}
 
-	userID := h.extractUserFromRequest(c)
+	// Defense in depth: even scopes registered by an old DCR record must be
+	// part of the currently supported set.
+	supported, unknown := mcp.FilterSupportedScopes(requested)
+	if len(unknown) > 0 {
+		return nil, fmt.Errorf("unsupported scope: %s", strings.Join(unknown, ", "))
+	}
+	if len(supported) == 0 {
+		return nil, fmt.Errorf("no valid scopes requested")
+	}
+	return supported, nil
+}
 
+func containsString(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+// HandleAuthorize validates the OAuth authorize request. Authenticated users
+// are shown an interactive consent page; the code is only issued when they
+// approve via the consent POST endpoint.
+func (h *MCPOAuthHandler) HandleAuthorize(c fiber.Ctx) error {
+	if !h.config.OAuth.Enabled {
+		return SendNotFound(c, "OAuth is not enabled")
+	}
+
+	params := authorizeParams{
+		ClientID:            c.Query("client_id"),
+		RedirectURI:         c.Query("redirect_uri"),
+		ResponseType:        c.Query("response_type"),
+		Scope:               c.Query("scope"),
+		State:               c.Query("state"),
+		CodeChallenge:       c.Query("code_challenge"),
+		CodeChallengeMethod: c.Query("code_challenge_method"),
+	}
+
+	client, _, err := h.validateAuthorizeRequest(c.RequestCtx(), &params)
+	if err != nil {
+		return SendErrorWithCode(c, fiber.StatusBadRequest, err.Error(), h.authorizeErrorCode(err))
+	}
+
+	userID, role := h.sessionIdentity(c)
 	if userID == nil {
 		authURL := h.getIssuer() + h.config.BasePath + "/oauth/authorize?" + string(c.Request().URI().QueryString())
 		loginURL := h.getIssuer() + "/admin/login?return_to=" + url.QueryEscape(authURL)
 		return c.Redirect().Status(fiber.StatusFound).To(loginURL)
 	}
 
+	// Scope validation happens here (after we know the client and before the
+	// user approves) so the consent page always shows the effective scope set.
+	scopes, scopeErr := resolveRequestedScopes(client, params.Scope)
+	if scopeErr != nil {
+		return SendErrorWithCode(c, fiber.StatusBadRequest, scopeErr.Error(), "invalid_scope")
+	}
+	if mcp.HasPrivilegedScope(scopes) && !isPrivilegedOAuthRole(role) {
+		log.Warn().
+			Str("client_id", client.ClientID).
+			Str("role", role).
+			Msg("MCP OAuth: non-admin user attempted to authorize privileged scopes")
+		return SendErrorWithCode(c, fiber.StatusForbidden,
+			"Privileged scopes require an admin account", "invalid_scope")
+	}
+
+	// Render the interactive consent page; the code is only issued on approval.
+	return h.renderConsentPage(c, client, scopes, &params)
+}
+
+// HandleAuthorizeConsent processes the consent form POST. The code is only
+// issued when the form carries a valid CSRF nonce and the user approved.
+func (h *MCPOAuthHandler) HandleAuthorizeConsent(c fiber.Ctx) error {
+	if !h.config.OAuth.Enabled {
+		return SendNotFound(c, "OAuth is not enabled")
+	}
+
+	params := authorizeParams{
+		ClientID:            c.FormValue("client_id"),
+		RedirectURI:         c.FormValue("redirect_uri"),
+		ResponseType:        c.FormValue("response_type"),
+		Scope:               c.FormValue("scope"),
+		State:               c.FormValue("state"),
+		CodeChallenge:       c.FormValue("code_challenge"),
+		CodeChallengeMethod: c.FormValue("code_challenge_method"),
+	}
+
+	client, redirectURI, err := h.validateAuthorizeRequest(c.RequestCtx(), &params)
+	if err != nil {
+		return SendErrorWithCode(c, fiber.StatusBadRequest, err.Error(), h.authorizeErrorCode(err))
+	}
+
+	// CSRF: double-submit nonce — the hidden form field must match the
+	// HttpOnly cookie set when the consent page was rendered.
+	nonce := c.FormValue("csrf_nonce")
+	if nonce == "" || nonce != c.Cookies(consentCSRFCookieName) {
+		return SendErrorWithCode(c, fiber.StatusForbidden, "Invalid or missing consent token. Please restart the authorization.", "invalid_request")
+	}
+
+	userID, role := h.sessionIdentity(c)
+	if userID == nil {
+		return SendErrorWithCode(c, fiber.StatusUnauthorized, "Session expired. Please restart the authorization.", "invalid_request")
+	}
+
+	// Deny (or any non-approve action) redirects back with access_denied.
+	if c.FormValue("action") != "approve" {
+		return h.redirectWithError(c, redirectURI, "access_denied", "The user denied the authorization request", params.State)
+	}
+
+	scopes, scopeErr := resolveRequestedScopes(client, params.Scope)
+	if scopeErr != nil {
+		return SendErrorWithCode(c, fiber.StatusBadRequest, scopeErr.Error(), "invalid_scope")
+	}
+	if mcp.HasPrivilegedScope(scopes) && !isPrivilegedOAuthRole(role) {
+		return SendErrorWithCode(c, fiber.StatusForbidden, "Privileged scopes require an admin account", "invalid_scope")
+	}
+
 	code, err := generateSecureToken("", 32)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate authorization code")
-		return h.redirectWithError(c, redirectURI, "server_error", "Failed to generate authorization code", state)
+		return h.redirectWithError(c, redirectURI, "server_error", "Failed to generate authorization code", params.State)
 	}
 
 	tenantCtx := middleware.CtxWithTenant(c)
@@ -253,32 +343,89 @@ func (h *MCPOAuthHandler) HandleAuthorize(c fiber.Ctx) error {
 		_, err := tx.Exec(tenantCtx, `
 			INSERT INTO auth.mcp_oauth_codes (code, client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, state)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		`, code, clientID, userID, redirectURI, requestedScopes, codeChallenge, codeChallengeMethod, state)
+		`, hashToken(code), client.ClientID, userID, redirectURI, scopes, params.CodeChallenge, params.CodeChallengeMethod, params.State)
 		return err
 	})
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to store authorization code")
-		return h.redirectWithError(c, redirectURI, "server_error", "Failed to process authorization", state)
+		return h.redirectWithError(c, redirectURI, "server_error", "Failed to process authorization", params.State)
 	}
 
 	log.Debug().
-		Str("client_id", clientID).
+		Str("client_id", client.ClientID).
 		Str("code", code[:8]+"...").
-		Msg("MCP OAuth authorization code issued")
+		Msg("MCP OAuth authorization code issued after user consent")
 
 	redirectURL, _ := url.Parse(redirectURI)
 	q := redirectURL.Query()
 	q.Set("code", code)
-	if state != "" {
-		q.Set("state", state)
+	if params.State != "" {
+		q.Set("state", params.State)
 	}
 	redirectURL.RawQuery = q.Encode()
 
 	return c.Redirect().Status(fiber.StatusFound).To(redirectURL.String())
 }
 
-func (h *MCPOAuthHandler) HandleAuthorizeConsent(c fiber.Ctx) error {
-	return h.HandleAuthorize(c)
+// validateAuthorizeRequest performs the protocol-level checks shared by the
+// authorize GET and the consent POST. It returns the client and the resolved
+// redirect URI.
+func (h *MCPOAuthHandler) validateAuthorizeRequest(ctx context.Context, params *authorizeParams) (*mcpOAuthClient, string, error) {
+	if params.ClientID == "" {
+		return nil, "", fmt.Errorf("client_id is required")
+	}
+	if params.ResponseType != "code" {
+		return nil, "", fmt.Errorf("only response_type=code is supported")
+	}
+	if params.CodeChallenge == "" {
+		return nil, "", fmt.Errorf("code_challenge is required (PKCE)")
+	}
+	if params.CodeChallengeMethod != "S256" && params.CodeChallengeMethod != "" {
+		return nil, "", fmt.Errorf("code_challenge_method must be S256")
+	}
+	if params.CodeChallengeMethod == "" {
+		params.CodeChallengeMethod = "S256"
+	}
+
+	client, err := h.loadClient(ctx, params.ClientID)
+	if err != nil {
+		return nil, "", fmt.Errorf("client not found")
+	}
+	if !client.IsActive {
+		return nil, "", fmt.Errorf("client is inactive")
+	}
+
+	redirectURI := params.RedirectURI
+	if redirectURI == "" && len(client.RedirectURIs) == 1 {
+		redirectURI = client.RedirectURIs[0]
+	}
+	if !h.isURIInList(redirectURI, client.RedirectURIs) {
+		return nil, "", fmt.Errorf("redirect URI not registered for this client")
+	}
+	return client, redirectURI, nil
+}
+
+// authorizeErrorCode maps a validation error to an OAuth error code.
+func (h *MCPOAuthHandler) authorizeErrorCode(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "required"):
+		return "invalid_request"
+	case strings.Contains(msg, "response_type"):
+		return "unsupported_response_type"
+	case strings.Contains(msg, "redirect URI"):
+		return "invalid_redirect_uri"
+	case strings.Contains(msg, "client"):
+		return "invalid_client"
+	default:
+		return "invalid_request"
+	}
+}
+
+// isPrivilegedOAuthRole reports whether the authorizing user's role may grant
+// privileged (admin-level) MCP scopes.
+func isPrivilegedOAuthRole(role string) bool {
+	return role == "admin" || role == "instance_admin"
 }
 
 func (h *MCPOAuthHandler) HandleToken(c fiber.Ctx) error {
@@ -318,12 +465,15 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 		ExpiresAt           time.Time
 	}
 
+	// Codes are stored hashed; claiming is a single atomic DELETE ... RETURNING
+	// so a code can never be redeemed twice (no validate-then-delete race).
+	codeHash := hashToken(code)
 	err := database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(c.RequestCtx(), `
-			SELECT client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, expires_at
-			FROM auth.mcp_oauth_codes
+			DELETE FROM auth.mcp_oauth_codes
 			WHERE code = $1
-		`, code).Scan(
+			RETURNING client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, expires_at
+		`, codeHash).Scan(
 			&authCode.ClientID, &authCode.UserID, &authCode.RedirectURI,
 			&authCode.Scopes, &authCode.CodeChallenge, &authCode.CodeChallengeMethod, &authCode.ExpiresAt,
 		)
@@ -331,11 +481,6 @@ func (h *MCPOAuthHandler) handleAuthorizationCodeGrant(c fiber.Ctx) error {
 	if err != nil {
 		return SendErrorWithCode(c, fiber.StatusBadRequest, "Invalid authorization code", "invalid_grant")
 	}
-
-	_ = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(c.RequestCtx(), `DELETE FROM auth.mcp_oauth_codes WHERE code = $1`, code)
-		return err
-	})
 
 	if time.Now().After(authCode.ExpiresAt) {
 		return SendErrorWithCode(c, fiber.StatusBadRequest, "Authorization code has expired", "invalid_grant")
@@ -442,11 +587,14 @@ func (h *MCPOAuthHandler) handleRefreshTokenGrant(c fiber.Ctx) error {
 		return SendErrorWithCode(c, fiber.StatusBadRequest, "Client ID mismatch", "invalid_grant")
 	}
 
+	// Rotate: revoke the refresh token and every token derived from it
+	// (notably the associated access token), so a rotated refresh token can
+	// no longer be used to keep old access tokens alive.
 	_ = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(c.RequestCtx(), `
 			UPDATE auth.mcp_oauth_tokens
 			SET is_revoked = true, revoked_at = NOW(), revoked_reason = 'rotated'
-			WHERE id = $1
+			WHERE (id = $1 OR parent_token_id = $1) AND NOT is_revoked
 		`, token.ID)
 		return err
 	})
@@ -465,17 +613,17 @@ func (h *MCPOAuthHandler) handleRefreshTokenGrant(c fiber.Ctx) error {
 
 	_ = database.WrapWithServiceRoleAndTenant(tenantCtx, h.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(tenantCtx, `
-			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
-			VALUES ('access', $1, $2, $3, $4, $5)
-		`, accessTokenHash, clientID, token.UserID, token.Scopes, accessTokenExpiry)
+			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, parent_token_id, expires_at)
+			VALUES ('access', $1, $2, $3, $4, $5, $6)
+		`, accessTokenHash, clientID, token.UserID, token.Scopes, token.ID, accessTokenExpiry)
 		return err
 	})
 
 	_ = database.WrapWithServiceRoleAndTenant(tenantCtx, h.db, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(tenantCtx, `
-			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, expires_at)
-			VALUES ('refresh', $1, $2, $3, $4, $5)
-		`, newRefreshTokenHash, clientID, token.UserID, token.Scopes, refreshTokenExpiry)
+			INSERT INTO auth.mcp_oauth_tokens (token_type, token_hash, client_id, user_id, scopes, parent_token_id, expires_at)
+			VALUES ('refresh', $1, $2, $3, $4, $5, $6)
+		`, newRefreshTokenHash, clientID, token.UserID, token.Scopes, token.ID, refreshTokenExpiry)
 		return err
 	})
 
@@ -524,15 +672,19 @@ func (h *MCPOAuthHandler) HandleRevoke(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
-func (h *MCPOAuthHandler) ValidateAccessToken(c fiber.Ctx, token string) (clientID string, userID *string, scopes []string, err error) {
+// ValidateAccessToken validates an MCP OAuth access token and returns the
+// client ID, the authorizing user's ID (when the token represents a user),
+// the granted scopes, and the user's role (empty for anonymous tokens).
+func (h *MCPOAuthHandler) ValidateAccessToken(c fiber.Ctx, token string) (clientID string, userID *string, scopes []string, role string, err error) {
 	tokenHash := hashToken(token)
 
 	err = database.WrapWithServiceRole(c.RequestCtx(), h.db, func(tx pgx.Tx) error {
 		return tx.QueryRow(c.RequestCtx(), `
-			SELECT client_id, user_id, scopes
-			FROM auth.mcp_oauth_tokens
-			WHERE token_hash = $1 AND token_type = 'access' AND NOT is_revoked AND expires_at > NOW()
-		`, tokenHash).Scan(&clientID, &userID, &scopes)
+			SELECT t.client_id, t.user_id, t.scopes, COALESCE(u.role, '')
+			FROM auth.mcp_oauth_tokens t
+			LEFT JOIN platform.users u ON u.id = t.user_id
+			WHERE t.token_hash = $1 AND t.token_type = 'access' AND NOT t.is_revoked AND t.expires_at > NOW()
+		`, tokenHash).Scan(&clientID, &userID, &scopes, &role)
 	})
 
 	return
@@ -602,58 +754,140 @@ func (h *MCPOAuthHandler) isURIInList(uri string, list []string) bool {
 	return false
 }
 
-func (h *MCPOAuthHandler) contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
+// sessionIdentity resolves the signed-in user (via bearer token or session
+// cookies) and returns their user ID together with their role, which gates
+// privileged scope grants.
+func (h *MCPOAuthHandler) sessionIdentity(c fiber.Ctx) (userID *string, role string) {
+	validate := func(token string) (*string, string) {
+		if token == "" || h.authService == nil {
+			return nil, ""
 		}
+		claims, err := h.authService.JWTManager().ValidateToken(token)
+		if err != nil {
+			return nil, ""
+		}
+		isRevoked, err := h.authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, "", time.Time{})
+		if err != nil || isRevoked {
+			return nil, ""
+		}
+		id := claims.UserID
+		return &id, claims.Role
 	}
-	return false
-}
 
-func (h *MCPOAuthHandler) extractUserFromRequest(c fiber.Ctx) *string {
 	authHeader := c.Get("Authorization")
 	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-
-		if !strings.HasPrefix(token, "mcp_at_") && h.authService != nil {
-			claims, err := h.authService.JWTManager().ValidateToken(token)
-			if err == nil {
-				isRevoked, err := h.authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, "", time.Time{})
-				if err == nil && !isRevoked {
-					return &claims.UserID
-				}
+		// MCP access tokens are not session tokens; skip JWT validation for them.
+		if !strings.HasPrefix(token, "mcp_at_") {
+			if id, r := validate(token); id != nil {
+				return id, r
 			}
 		}
 	}
 
-	accessToken := c.Cookies(AccessTokenCookieName)
-	if accessToken != "" && h.authService != nil {
-		claims, err := h.authService.JWTManager().ValidateToken(accessToken)
-		if err == nil {
-			isRevoked, err := h.authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, "", time.Time{})
-			if err == nil && !isRevoked {
-				return &claims.UserID
-			}
-		}
+	if id, r := validate(c.Cookies(AccessTokenCookieName)); id != nil {
+		return id, r
 	}
 
 	adminToken := c.Cookies("fluxbase_admin_token")
-	if adminToken != "" && h.authService != nil {
-		token := adminToken
-		if len(token) >= 2 && token[0] == '"' && token[len(token)-1] == '"' {
-			token = token[1 : len(token)-1]
+	if adminToken != "" {
+		if len(adminToken) >= 2 && adminToken[0] == '"' && adminToken[len(adminToken)-1] == '"' {
+			adminToken = adminToken[1 : len(adminToken)-1]
 		}
-		claims, err := h.authService.JWTManager().ValidateToken(token)
-		if err == nil {
-			isRevoked, err := h.authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, "", time.Time{})
-			if err == nil && !isRevoked {
-				return &claims.UserID
-			}
+		if id, r := validate(adminToken); id != nil {
+			return id, r
 		}
 	}
 
-	return nil
+	return nil, ""
+}
+
+// consentCSRFCookieName is the cookie used for the consent form's
+// double-submit CSRF nonce.
+const consentCSRFCookieName = "mcp_consent_csrf"
+
+// renderConsentPage serves the standalone consent HTML page (server-rendered,
+// no external assets) listing the client and requested scopes with
+// approve/deny buttons. The original authorize parameters travel as hidden
+// fields and the CSRF nonce is stored in both the form and an HttpOnly cookie.
+func (h *MCPOAuthHandler) renderConsentPage(c fiber.Ctx, client *mcpOAuthClient, scopes []string, params *authorizeParams) error {
+	nonce, err := generateSecureToken("", 24)
+	if err != nil {
+		return SendInternalError(c, "Failed to generate consent token")
+	}
+
+	c.Cookie(&fiber.Cookie{
+		Name:     consentCSRFCookieName,
+		Value:    nonce,
+		Path:     h.config.BasePath + "/oauth/",
+		MaxAge:   900, // 15 minutes
+		HTTPOnly: true,
+		SameSite: "Lax",
+	})
+
+	hidden := func(name, value string) string {
+		return fmt.Sprintf(`<input type="hidden" name="%s" value="%s">`, name, html.EscapeString(value))
+	}
+
+	var scopeItems strings.Builder
+	for _, s := range scopes {
+		scopeItems.WriteString(fmt.Sprintf(`<li><code>%s</code></li>`, html.EscapeString(s)))
+	}
+
+	page := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authorize %s — Fluxbase MCP</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f6f8;margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;color:#1a1a2e}
+.card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);max-width:420px;width:90%%;padding:32px}
+h1{font-size:1.15rem;margin:0 0 8px}
+p{font-size:.9rem;line-height:1.5;color:#555;margin:.4rem 0}
+ul{padding-left:1.2rem;font-size:.85rem}
+.buttons{display:flex;gap:12px;margin-top:24px}
+button{flex:1;padding:10px 0;border-radius:8px;border:0;font-size:.95rem;cursor:pointer}
+.approve{background:#2563eb;color:#fff}
+.approve:hover{background:#1d4ed8}
+.deny{background:#e5e7eb;color:#374151}
+.deny:hover{background:#d1d5db}
+code{background:#f0f1f5;padding:1px 5px;border-radius:4px;font-size:.8rem}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Authorize "%s"?</h1>
+<p>The application <strong>%s</strong> is requesting access to your Fluxbase account with the following scopes:</p>
+<ul>%s</ul>
+<p>If you approve, %s will be able to perform the actions listed above.</p>
+<form method="post" action="%s/oauth/authorize/consent">
+%s%s%s%s%s%s%s%s
+<button class="approve" type="submit" name="action" value="approve">Approve</button>
+<button class="deny" type="submit" name="action" value="deny">Deny</button>
+</form>
+</div>
+</body>
+</html>`,
+		html.EscapeString(client.ClientName),
+		html.EscapeString(client.ClientName),
+		html.EscapeString(client.ClientName),
+		scopeItems.String(),
+		html.EscapeString(client.ClientName),
+		html.EscapeString(h.config.BasePath),
+		hidden("client_id", params.ClientID),
+		hidden("redirect_uri", params.RedirectURI),
+		hidden("response_type", params.ResponseType),
+		hidden("scope", params.Scope),
+		hidden("state", params.State),
+		hidden("code_challenge", params.CodeChallenge),
+		hidden("code_challenge_method", params.CodeChallengeMethod),
+		hidden("csrf_nonce", nonce),
+	)
+
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	c.Set("Cache-Control", "no-store")
+	return c.SendString(page)
 }
 
 func (h *MCPOAuthHandler) verifyPKCE(verifier, challenge, method string) bool {

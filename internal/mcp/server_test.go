@@ -18,7 +18,7 @@ import (
 func TestMCPVersion(t *testing.T) {
 	t.Run("version is set", func(t *testing.T) {
 		assert.NotEmpty(t, MCPVersion)
-		assert.Equal(t, "2024-11-05", MCPVersion)
+		assert.Equal(t, "2025-06-18", MCPVersion)
 	})
 }
 
@@ -166,7 +166,7 @@ func TestServer_HandleRequest(t *testing.T) {
 			"id": 1,
 			"method": "initialize",
 			"params": {
-				"protocolVersion": "2024-11-05",
+				"protocolVersion": MCPVersion,
 				"clientInfo": {
 					"name": "TestClient",
 					"version": "1.0.0"
@@ -380,7 +380,7 @@ func TestServer_dispatch(t *testing.T) {
 			ID:      1,
 			Method:  MethodInitialize,
 			Params: json.RawMessage(`{
-				"protocolVersion": "2024-11-05",
+				"protocolVersion": MCPVersion,
 				"clientInfo": {"name": "Test", "version": "1.0"}
 			}`),
 		}
@@ -448,7 +448,7 @@ func BenchmarkServer_HandleRequest_Initialize(b *testing.B) {
 		"id": 1,
 		"method": "initialize",
 		"params": {
-			"protocolVersion": "2024-11-05",
+			"protocolVersion": MCPVersion,
 			"clientInfo": {"name": "Test", "version": "1.0"}
 		}
 	}`)

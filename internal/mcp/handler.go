@@ -100,12 +100,15 @@ type Handler struct {
 
 // NewHandler creates a new MCP HTTP handler
 func NewHandler(cfg *config.MCPConfig, db *database.Connection) *Handler {
-	return &Handler{
+	h := &Handler{
 		server:      NewServer(cfg),
 		config:      cfg,
 		db:          db,
 		rateLimiter: newRateLimiter(cfg.RateLimitPerMin),
 	}
+	// Enable the durable MCP audit trail when a database is available
+	h.server.SetDB(db)
+	return h
 }
 
 // Server returns the underlying MCP server for tool/resource registration

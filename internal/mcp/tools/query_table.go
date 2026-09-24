@@ -3,10 +3,12 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
@@ -264,7 +266,7 @@ func (t *QueryTableTool) Execute(ctx context.Context, args map[string]any, authC
 	if err != nil {
 		log.Error().Err(err).Str("query", sqlQuery).Msg("MCP: query_table execution failed")
 		return &mcp.ToolResult{
-			Content: []mcp.Content{mcp.ErrorContent(fmt.Sprintf("Query failed: %v", err))},
+			Content: []mcp.Content{mcp.ErrorContent(fmt.Sprintf("Query failed: %s", sanitizeDBError(err)))},
 			IsError: true,
 		}, nil
 	}
@@ -293,8 +295,9 @@ func buildSelectQuery(schema, table string, columns []string, filters []query.Fi
 	if len(columns) > 0 {
 		quotedCols := make([]string, 0, len(columns))
 		for _, col := range columns {
-			// Use quoteColumnOrExpression to handle both simple columns and SQL expressions
-			if quoted := quoteColumnOrExpression(col); quoted != "" {
+			// Only validated identifiers and JSONB paths are accepted;
+			// anything else is dropped (never interpolated verbatim).
+			if quoted := quoteSelectColumn(col); quoted != "" {
 				quotedCols = append(quotedCols, quoted)
 			}
 		}
@@ -386,15 +389,29 @@ func filterToSQL(filter query.Filter, quotedCol string, argCounter int) (string,
 	case query.OpILike:
 		return fmt.Sprintf("%s ILIKE %s", quotedCol, placeholder), filter.Value
 	case query.OpIs:
-		if filter.Value == nil || filter.Value == "null" {
+		// Only NULL/TRUE/FALSE are valid; values are whitelisted, never
+		// interpolated verbatim.
+		if filter.Value == nil {
 			return fmt.Sprintf("%s IS NULL", quotedCol), nil
 		}
-		return fmt.Sprintf("%s IS %v", quotedCol, filter.Value), nil
+		if b, ok := filter.Value.(bool); ok {
+			if b {
+				return fmt.Sprintf("%s IS TRUE", quotedCol), nil
+			}
+			return fmt.Sprintf("%s IS FALSE", quotedCol), nil
+		}
+		return "", nil
 	case query.OpIsNot:
-		if filter.Value == nil || filter.Value == "null" {
+		if filter.Value == nil {
 			return fmt.Sprintf("%s IS NOT NULL", quotedCol), nil
 		}
-		return fmt.Sprintf("%s IS NOT %v", quotedCol, filter.Value), nil
+		if b, ok := filter.Value.(bool); ok {
+			if b {
+				return fmt.Sprintf("%s IS NOT TRUE", quotedCol), nil
+			}
+			return fmt.Sprintf("%s IS NOT FALSE", quotedCol), nil
+		}
+		return "", nil
 	case query.OpIn:
 		return fmt.Sprintf("%s = ANY(%s)", quotedCol, placeholder), filter.Value
 	case query.OpNotIn:
@@ -440,7 +457,8 @@ func parseFilterValue(column, valueStr string) (query.Filter, error) {
 	var parsedValue any = value
 	switch operator {
 	case query.OpIs, query.OpIsNot:
-		// is.null, is.true, is.false
+		// Strictly whitelist: is.null, is.true, is.false. Anything else is
+		// rejected instead of being interpolated into the query.
 		switch strings.ToLower(value) {
 		case "null":
 			parsedValue = nil
@@ -448,6 +466,8 @@ func parseFilterValue(column, valueStr string) (query.Filter, error) {
 			parsedValue = true
 		case "false":
 			parsedValue = false
+		default:
+			return query.Filter{}, fmt.Errorf("invalid value for %s operator: must be null, true, or false", operator)
 		}
 	case query.OpIn, query.OpNotIn:
 		// Parse as array: (val1,val2,val3)
@@ -514,44 +534,39 @@ func parseOrder(orderStr string) ([]query.OrderBy, error) {
 	return result, nil
 }
 
-// isSQLExpression checks if a column string is a SQL expression rather than a simple column name.
-// Returns true for things like "sum(x)", "count(*)", "a + b", "col as alias", etc.
-func isSQLExpression(col string) bool {
-	// Check for common SQL expression indicators
-	expressionPatterns := []string{
-		"(", ")", // function calls like sum(), count()
-		" as ",        // aliases (lowercase)
-		" AS ",        // aliases (uppercase)
-		"+", "-", "/", // arithmetic operators (note: * is ambiguous, check separately)
-		"||", // string concatenation
-		"::", // type casting
+// quoteSelectColumn validates a select column and renders it safely.
+// Accepted forms are plain identifiers ("name") and JSONB access paths
+// ("metadata.author.name" -> "metadata"->'author'->>'name'). Anything else
+// (SQL expressions, casts, arithmetic) is rejected and simply omitted —
+// expressions are never passed through verbatim.
+func quoteSelectColumn(col string) string {
+	col = strings.TrimSpace(col)
+	if col == "" {
+		return ""
 	}
-
-	for _, pattern := range expressionPatterns {
-		if strings.Contains(col, pattern) {
-			return true
+	parts := strings.Split(col, ".")
+	for _, part := range parts {
+		if !identifierPattern.MatchString(part) {
+			return ""
 		}
 	}
+	if len(parts) == 1 {
+		return quoteIdentifier(col)
+	}
 
-	// Check for * with surrounding content (like "a * b" but not standalone "*")
-	if strings.Contains(col, "*") && strings.TrimSpace(col) != "*" {
-		// Could be multiplication - check if there's content on both sides
-		idx := strings.Index(col, "*")
-		if idx > 0 && idx < len(col)-1 {
-			return true
+	// JSONB path: the first segment is the column, the rest are object keys.
+	// The final extraction uses ->> so the value comes back as text.
+	var sb strings.Builder
+	sb.WriteString(quoteIdentifier(parts[0]))
+	last := len(parts) - 1
+	for i, key := range parts[1:] {
+		op := "->"
+		if i == last-1 {
+			op = "->>"
 		}
+		sb.WriteString(fmt.Sprintf(" %s '%s'", op, strings.ReplaceAll(key, "'", "''")))
 	}
-
-	return false
-}
-
-// quoteColumnOrExpression returns a properly quoted column name, or passes through SQL expressions unchanged.
-func quoteColumnOrExpression(col string) string {
-	if isSQLExpression(col) {
-		// Pass through SQL expressions unchanged - let the database handle/validate them
-		return col
-	}
-	return quoteIdentifier(col)
+	return sb.String()
 }
 
 // scanRowsToMaps scans pgx rows into a slice of maps
@@ -648,7 +663,7 @@ func (t *QueryTableTool) executeVectorSearch(
 	if err != nil {
 		log.Error().Err(err).Str("query", sqlQuery).Msg("MCP: query_table vector search failed")
 		return &mcp.ToolResult{
-			Content: []mcp.Content{mcp.ErrorContent(fmt.Sprintf("Vector search failed: %v", err))},
+			Content: []mcp.Content{mcp.ErrorContent(fmt.Sprintf("Vector search failed: %s", sanitizeDBError(err)))},
 			IsError: true,
 		}, nil
 	}
@@ -741,6 +756,18 @@ func buildVectorSearchQuery(
 	sqlQuery += fmt.Sprintf(" LIMIT %d", limit)
 
 	return sqlQuery, args
+}
+
+// sanitizeDBError keeps application error messages intact but routes
+// PostgreSQL errors through the shared sanitizer so raw server messages
+// (which can embed SQL fragments or internal details) are never returned
+// to MCP clients.
+func sanitizeDBError(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return database.SanitizeErrorMessage(err)
+	}
+	return err.Error()
 }
 
 // embeddingToString converts a float32 embedding slice to a PostgreSQL vector string

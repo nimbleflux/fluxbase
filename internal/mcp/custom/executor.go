@@ -89,6 +89,14 @@ func (e *Executor) ExecuteTool(
 		Name:      "mcp_tool_" + tool.Name,
 		Namespace: tool.Namespace,
 	}
+	// Tenant context is required for service token generation: prefer the
+	// tool's owning tenant, falling back to the caller's tenant for
+	// operator-installed tools.
+	if tool.TenantID != nil {
+		req.TenantID = tool.TenantID.String()
+	} else if authCtx != nil {
+		req.TenantID = authCtx.TenantID
+	}
 	// Pass user context to execution request for proper token generation
 	if authCtx != nil {
 		if authCtx.UserID != nil {
@@ -167,6 +175,13 @@ func (e *Executor) ExecuteResource(
 		ID:        uuid.New(),
 		Name:      "mcp_resource_" + resource.Name,
 		Namespace: resource.Namespace,
+	}
+	// Tenant context is required for service token generation: prefer the
+	// resource's owning tenant, falling back to the caller's tenant.
+	if resource.TenantID != nil {
+		req.TenantID = resource.TenantID.String()
+	} else if authCtx != nil {
+		req.TenantID = authCtx.TenantID
 	}
 	if authCtx != nil {
 		if authCtx.UserID != nil {

@@ -125,6 +125,27 @@ func (t *ListSchemasTool) Execute(ctx context.Context, args map[string]any, auth
 		includeSystem = is
 	}
 
+	// Only admin-level callers may enumerate system schemas.
+	isAdmin := authCtx != nil && (authCtx.IsServiceRole || authCtx.UserRole == "admin" || authCtx.UserRole == "instance_admin")
+	if includeSystem && !isAdmin {
+		includeSystem = false
+	}
+
+	// Restrict to the caller's allowed schemas when the chatbot/tool config
+	// declares an explicit list. nil = unrestricted (system schemas still
+	// filtered above); an empty list collapses to the public schema.
+	var allowedSchemas []string
+	if authCtx != nil {
+		allowedSchemas = authCtx.GetMetadataStringSlice(mcp.MetadataKeyAllowedSchemas)
+	}
+	if allowedSchemas != nil && len(allowedSchemas) == 0 {
+		allowedSchemas = []string{"public"}
+	}
+	allowedSet := make(map[string]bool, len(allowedSchemas))
+	for _, s := range allowedSchemas {
+		allowedSet[s] = true
+	}
+
 	schemas, err := t.db.Inspector().GetSchemas(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("MCP DDL: Failed to list schemas")
@@ -143,6 +164,9 @@ func (t *ListSchemasTool) Execute(ctx context.Context, args map[string]any, auth
 	for _, schema := range schemas {
 		isSystem := isSystemSchema(schema)
 		if !includeSystem && isSystem {
+			continue
+		}
+		if allowedSchemas != nil && !allowedSet[schema] {
 			continue
 		}
 		result = append(result, schemaInfo{Name: schema, IsSystem: isSystem})

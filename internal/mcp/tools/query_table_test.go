@@ -164,84 +164,32 @@ func TestParseOrder(t *testing.T) {
 	})
 }
 
-func TestIsSQLExpression(t *testing.T) {
-	t.Run("simple column names are not expressions", func(t *testing.T) {
-		simpleNames := []string{
-			"id",
-			"user_id",
-			"created_at",
-			"firstName",
-			"column123",
-		}
-		for _, name := range simpleNames {
-			assert.False(t, isSQLExpression(name), "expected %s to not be an expression", name)
-		}
-	})
-
-	t.Run("SQL functions are expressions", func(t *testing.T) {
-		expressions := []string{
-			"sum(visit_count)",
-			"COUNT(*)",
-			"avg(price)",
-			"MIN(created_at)",
-			"max(id)",
-			"COALESCE(name, 'unknown')",
-		}
-		for _, expr := range expressions {
-			assert.True(t, isSQLExpression(expr), "expected %s to be an expression", expr)
-		}
-	})
-
-	t.Run("aliases are expressions", func(t *testing.T) {
-		expressions := []string{
-			"sum(x) as total",
-			"name AS display_name",
-			"id as identifier",
-		}
-		for _, expr := range expressions {
-			assert.True(t, isSQLExpression(expr), "expected %s to be an expression", expr)
-		}
-	})
-
-	t.Run("arithmetic expressions", func(t *testing.T) {
-		expressions := []string{
-			"price * quantity",
-			"total - discount",
-			"a + b",
-			"count / 100",
-		}
-		for _, expr := range expressions {
-			assert.True(t, isSQLExpression(expr), "expected %s to be an expression", expr)
-		}
-	})
-
-	t.Run("type casting is expression", func(t *testing.T) {
-		expressions := []string{
-			"id::text",
-			"created_at::date",
-		}
-		for _, expr := range expressions {
-			assert.True(t, isSQLExpression(expr), "expected %s to be an expression", expr)
-		}
-	})
-
-	t.Run("standalone * is not expression", func(t *testing.T) {
-		assert.False(t, isSQLExpression("*"))
-	})
-}
-
-func TestQuoteColumnOrExpression(t *testing.T) {
+func TestQuoteSelectColumn(t *testing.T) {
 	t.Run("quotes simple column names", func(t *testing.T) {
-		assert.Equal(t, `"id"`, quoteColumnOrExpression("id"))
-		assert.Equal(t, `"user_id"`, quoteColumnOrExpression("user_id"))
-		assert.Equal(t, `"created_at"`, quoteColumnOrExpression("created_at"))
+		assert.Equal(t, `"id"`, quoteSelectColumn("id"))
+		assert.Equal(t, `"user_id"`, quoteSelectColumn("user_id"))
+		assert.Equal(t, `"created_at"`, quoteSelectColumn("created_at"))
 	})
 
-	t.Run("passes through SQL expressions unchanged", func(t *testing.T) {
-		assert.Equal(t, "sum(visit_count)", quoteColumnOrExpression("sum(visit_count)"))
-		assert.Equal(t, "COUNT(*)", quoteColumnOrExpression("COUNT(*)"))
-		assert.Equal(t, "sum(visit_count) as total_visits", quoteColumnOrExpression("sum(visit_count) as total_visits"))
-		assert.Equal(t, "price * quantity", quoteColumnOrExpression("price * quantity"))
+	t.Run("rejects SQL expressions instead of passing them through", func(t *testing.T) {
+		assert.Empty(t, quoteSelectColumn("sum(visit_count)"))
+		assert.Empty(t, quoteSelectColumn("COUNT(*)"))
+		assert.Empty(t, quoteSelectColumn("sum(visit_count) as total_visits"))
+		assert.Empty(t, quoteSelectColumn("price * quantity"))
+		assert.Empty(t, quoteSelectColumn("id::text"))
+		assert.Empty(t, quoteSelectColumn("a || b"))
+		assert.Empty(t, quoteSelectColumn(`"id"; DROP TABLE users`))
+	})
+
+	t.Run("renders JSONB paths", func(t *testing.T) {
+		assert.Equal(t, `"metadata"->>'author'`, quoteSelectColumn("metadata.author"))
+		assert.Equal(t, `"metadata"->'tags'->>'name'`, quoteSelectColumn("metadata.tags.name"))
+	})
+
+	t.Run("rejects invalid JSONB path segments", func(t *testing.T) {
+		assert.Empty(t, quoteSelectColumn("metadata.a;drop"))
+		assert.Empty(t, quoteSelectColumn("metadata."))
+		assert.Empty(t, quoteSelectColumn("."))
 	})
 }
 
@@ -324,6 +272,13 @@ func TestParseFilterValue(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, query.OpIsNot, filter.Operator)
 		assert.Nil(t, filter.Value)
+	})
+
+	t.Run("is rejects unknown values", func(t *testing.T) {
+		_, err := parseFilterValue("column", "is.(SELECT 1)")
+		assert.Error(t, err)
+		_, err = parseFilterValue("column", "is.distinct")
+		assert.Error(t, err)
 	})
 
 	t.Run("in operator", func(t *testing.T) {

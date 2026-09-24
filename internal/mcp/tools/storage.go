@@ -11,6 +11,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 )
@@ -18,12 +19,14 @@ import (
 // ListObjectsTool implements the list_objects MCP tool
 type ListObjectsTool struct {
 	service *storage.Service
+	db      *database.Connection
 }
 
 // NewListObjectsTool creates a new list_objects tool
-func NewListObjectsTool(service *storage.Service) *ListObjectsTool {
+func NewListObjectsTool(service *storage.Service, db *database.Connection) *ListObjectsTool {
 	return &ListObjectsTool{
 		service: service,
+		db:      db,
 	}
 }
 
@@ -90,6 +93,15 @@ func (t *ListObjectsTool) Execute(ctx context.Context, args map[string]any, auth
 		startAfter = s
 	}
 
+	// Authorization: the bucket must be visible under the caller's RLS
+	// context before any objects are listed.
+	if err := probeBucketVisible(ctx, t.db, authCtx, bucket); err != nil {
+		return &mcp.ToolResult{
+			Content: []mcp.Content{mcp.ErrorContent(fmt.Sprintf("Cannot list objects: %v", err))},
+			IsError: true,
+		}, nil
+	}
+
 	log.Debug().
 		Str("bucket", bucket).
 		Str("prefix", prefix).
@@ -147,12 +159,14 @@ func (t *ListObjectsTool) Execute(ctx context.Context, args map[string]any, auth
 // DownloadObjectTool implements the download_object MCP tool
 type DownloadObjectTool struct {
 	service *storage.Service
+	db      *database.Connection
 }
 
 // NewDownloadObjectTool creates a new download_object tool
-func NewDownloadObjectTool(service *storage.Service) *DownloadObjectTool {
+func NewDownloadObjectTool(service *storage.Service, db *database.Connection) *DownloadObjectTool {
 	return &DownloadObjectTool{
 		service: service,
+		db:      db,
 	}
 }
 
@@ -194,6 +208,15 @@ func (t *DownloadObjectTool) Execute(ctx context.Context, args map[string]any, a
 	key, ok := args["key"].(string)
 	if !ok || key == "" {
 		return nil, fmt.Errorf("key is required")
+	}
+
+	// Authorization: the object must be visible under the caller's RLS
+	// context before any bytes are read from the provider.
+	if err := probeObjectRead(ctx, t.db, authCtx, bucket, key); err != nil {
+		return &mcp.ToolResult{
+			Content: []mcp.Content{mcp.ErrorContent(fmt.Sprintf("Cannot download object: %v", err))},
+			IsError: true,
+		}, nil
 	}
 
 	log.Debug().
@@ -259,12 +282,14 @@ func (t *DownloadObjectTool) Execute(ctx context.Context, args map[string]any, a
 // UploadObjectTool implements the upload_object MCP tool
 type UploadObjectTool struct {
 	service *storage.Service
+	db      *database.Connection
 }
 
 // NewUploadObjectTool creates a new upload_object tool
-func NewUploadObjectTool(service *storage.Service) *UploadObjectTool {
+func NewUploadObjectTool(service *storage.Service, db *database.Connection) *UploadObjectTool {
 	return &UploadObjectTool{
 		service: service,
+		db:      db,
 	}
 }
 
@@ -363,6 +388,15 @@ func (t *UploadObjectTool) Execute(ctx context.Context, args map[string]any, aut
 		}, nil
 	}
 
+	// Authorization: verify write permission under the caller's RLS context
+	// BEFORE any bytes are written to the provider.
+	if err := probeObjectWrite(ctx, t.db, authCtx, bucket, key); err != nil {
+		return &mcp.ToolResult{
+			Content: []mcp.Content{mcp.ErrorContent(fmt.Sprintf("Cannot upload object: %v", err))},
+			IsError: true,
+		}, nil
+	}
+
 	// Upload
 	opts := &storage.UploadOptions{
 		ContentType: contentType,
@@ -399,12 +433,14 @@ func (t *UploadObjectTool) Execute(ctx context.Context, args map[string]any, aut
 // DeleteObjectTool implements the delete_object MCP tool
 type DeleteObjectTool struct {
 	service *storage.Service
+	db      *database.Connection
 }
 
 // NewDeleteObjectTool creates a new delete_object tool
-func NewDeleteObjectTool(service *storage.Service) *DeleteObjectTool {
+func NewDeleteObjectTool(service *storage.Service, db *database.Connection) *DeleteObjectTool {
 	return &DeleteObjectTool{
 		service: service,
+		db:      db,
 	}
 }
 
@@ -446,6 +482,15 @@ func (t *DeleteObjectTool) Execute(ctx context.Context, args map[string]any, aut
 	key, ok := args["key"].(string)
 	if !ok || key == "" {
 		return nil, fmt.Errorf("key is required")
+	}
+
+	// Authorization: verify write permission under the caller's RLS context
+	// before the object is deleted from the provider.
+	if err := probeObjectWrite(ctx, t.db, authCtx, bucket, key); err != nil {
+		return &mcp.ToolResult{
+			Content: []mcp.Content{mcp.ErrorContent(fmt.Sprintf("Cannot delete object: %v", err))},
+			IsError: true,
+		}, nil
 	}
 
 	log.Debug().

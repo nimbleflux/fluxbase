@@ -69,10 +69,10 @@ func (m *MCPModule) Init(ctx context.Context, registry *ServiceRegistry) error {
 	toolRegistry.Register(mcptools.NewExecuteSQLTool(db))
 
 	if storageService != nil {
-		toolRegistry.Register(mcptools.NewListObjectsTool(storageService))
-		toolRegistry.Register(mcptools.NewUploadObjectTool(storageService))
-		toolRegistry.Register(mcptools.NewDownloadObjectTool(storageService))
-		toolRegistry.Register(mcptools.NewDeleteObjectTool(storageService))
+		toolRegistry.Register(mcptools.NewListObjectsTool(storageService, db))
+		toolRegistry.Register(mcptools.NewUploadObjectTool(storageService, db))
+		toolRegistry.Register(mcptools.NewDownloadObjectTool(storageService, db))
+		toolRegistry.Register(mcptools.NewDeleteObjectTool(storageService, db))
 	}
 
 	if functionsHandler != nil && cfg.Functions.Enabled {
