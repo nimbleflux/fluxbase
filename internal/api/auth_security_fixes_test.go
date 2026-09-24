@@ -290,12 +290,16 @@ func TestVerifyTOTPHandler_RequiresMFAChallengeToken(t *testing.T) {
 	status, _ = call(t, fmt.Sprintf(`{"mfa_token": %q, "user_id": %q, "code": "000000"}`, mfaToken, user.ID))
 	assert.Equal(t, http.StatusBadRequest, status)
 
-	// With both the token and a fresh code, sign-in completes.
-	code2, err := totp.GenerateCode(secret, time.Now().Add(31*time.Second))
+	// With both the token and a fresh code, sign-in completes. Generate the
+	// code for exactly the NEXT 30-second step: "now + 31s" would straddle a
+	// step boundary depending on when the test runs.
+	nextStep := time.Now().Unix()/30*30 + 30
+	code2, err := totp.GenerateCode(secret, time.Unix(nextStep+1, 0))
 	require.NoError(t, err)
 	status, payload := call(t, fmt.Sprintf(`{"mfa_token": %q, "user_id": %q, "code": %q}`, mfaToken, user.ID, code2))
-	assert.Equal(t, http.StatusOK, status)
+	require.Equal(t, http.StatusOK, status)
 	assert.NotEmpty(t, payload.AccessToken)
+	require.NotNil(t, payload.User)
 	assert.Equal(t, user.ID, payload.User.ID)
 
 	// A used time step cannot be replayed.
