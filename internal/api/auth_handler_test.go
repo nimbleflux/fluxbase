@@ -1303,19 +1303,24 @@ func TestVerifyTOTP_Validation(t *testing.T) {
 			wantStatus: fiber.StatusBadRequest,
 		},
 		{
-			name:       "missing user_id",
+			name:       "missing mfa_token",
 			body:       `{"code": "123456"}`,
-			wantStatus: fiber.StatusBadRequest,
+			wantStatus: fiber.StatusUnauthorized,
 		},
 		{
 			name:       "missing code",
-			body:       `{"user_id": "user-123"}`,
+			body:       `{"mfa_token": "abc"}`,
 			wantStatus: fiber.StatusBadRequest,
 		},
 		{
 			name:       "empty code",
-			body:       `{"user_id": "user-123", "code": ""}`,
+			body:       `{"mfa_token": "abc", "code": ""}`,
 			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			name:       "invalid mfa_token",
+			body:       `{"mfa_token": "abc", "code": "123456"}`,
+			wantStatus: fiber.StatusUnauthorized,
 		},
 	}
 

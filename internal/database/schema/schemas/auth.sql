@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS users (
     app_metadata jsonb DEFAULT '{}',
     totp_secret varchar(255),
     totp_enabled boolean DEFAULT false,
+    totp_last_used_step bigint DEFAULT 0,
     backup_codes text[],
     failed_login_attempts integer DEFAULT 0,
     is_locked boolean DEFAULT false,
@@ -207,6 +208,9 @@ COMMENT ON COLUMN auth.users.is_locked IS 'Whether the account is locked due to 
 
 
 COMMENT ON COLUMN auth.users.locked_until IS 'When the account lock expires (null = permanent until admin unlocks)';
+
+
+COMMENT ON COLUMN auth.users.totp_last_used_step IS 'Last consumed TOTP time step (RFC 6238). Codes at or before this step are rejected to prevent replay.';
 
 --
 -- Name: auth_users_email_tenant_null_unique; Type: INDEX; Schema: -; Owner: -
@@ -390,7 +394,7 @@ CREATE TABLE IF NOT EXISTS otp_codes (
     id uuid DEFAULT gen_random_uuid(),
     email text,
     phone text,
-    code varchar(10) NOT NULL,
+    code varchar(10),
     code_hash text,
     type text NOT NULL,
     purpose text NOT NULL,
@@ -419,6 +423,9 @@ COMMENT ON COLUMN auth.otp_codes.purpose IS 'Purpose: signin, signup, recovery, 
 
 
 COMMENT ON COLUMN auth.otp_codes.attempts IS 'Number of failed verification attempts. Locked after max_attempts.';
+
+
+COMMENT ON COLUMN auth.otp_codes.code IS 'Deprecated plaintext code column. Kept for backward compatibility only; new codes are stored exclusively as code_hash.';
 
 --
 -- Name: idx_auth_otp_codes_code; Type: INDEX; Schema: -; Owner: -

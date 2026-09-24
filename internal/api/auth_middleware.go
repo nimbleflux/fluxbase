@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -48,14 +47,16 @@ func AuthMiddleware(authService *auth.Service) fiber.Handler {
 			}
 		}
 
-		// Validate token - use tenant-specific secret if available
+		// Validate token - use tenant-specific secret if available.
+		// Bearer credentials accepted here must be access tokens; refresh
+		// tokens are only valid at the refresh endpoint.
 		var claims *auth.TokenClaims
 		var err error
 		tenantSecret := getTenantJWTSecret(c)
 		if tenantSecret != "" {
-			claims, err = authService.JWTManager().ValidateTokenWithSecret(token, tenantSecret)
+			claims, err = authService.JWTManager().ValidateAccessTokenWithSecret(token, tenantSecret)
 		} else {
-			claims, err = authService.JWTManager().ValidateToken(token)
+			claims, err = authService.JWTManager().ValidateAccessToken(token)
 		}
 		if err != nil {
 			log.Debug().Err(err).Msg("Invalid token")
@@ -63,7 +64,7 @@ func AuthMiddleware(authService *auth.Service) fiber.Handler {
 		}
 
 		// Check if token has been revoked
-		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, "", time.Time{})
+		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 		if err != nil {
 			// SECURITY: Fail-closed for sensitive operations
 			// If we cannot verify token revocation status, deny access to sensitive operations
@@ -120,8 +121,8 @@ func OptionalAuthMiddleware(authService *auth.Service) fiber.Handler {
 			}
 		}
 
-		// Validate token
-		claims, err := authService.JWTManager().ValidateToken(token)
+		// Validate token (access tokens only)
+		claims, err := authService.JWTManager().ValidateAccessToken(token)
 		if err != nil {
 			// Invalid token, but continue anyway since auth is optional
 			log.Debug().Err(err).Str("path", c.Path()).Msg("Invalid token in optional auth")
@@ -129,7 +130,7 @@ func OptionalAuthMiddleware(authService *auth.Service) fiber.Handler {
 		}
 
 		// Check if token has been revoked
-		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, "", time.Time{})
+		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to check token revocation status in optional auth")
 			// Continue anyway - revocation check failure shouldn't block valid tokens
@@ -259,13 +260,22 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 			}
 		}
 
-		// First, try to validate as auth.users token
-		claims, err := authService.JWTManager().ValidateToken(token)
+		// First, try to validate as auth.users token (access tokens only)
+		claims, err := authService.JWTManager().ValidateAccessToken(token)
 		if err == nil {
 			// Check if this is a platform admin token (platform.users)
 			// Platform tokens use the same JWT secret but have role="instance_admin"
 			// and store the user ID in Subject instead of UserID
 			if claims.Role == "instance_admin" {
+				// Check if token has been revoked
+				isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
+				if err != nil {
+					log.Error().Err(err).Str("jti", claims.ID).Msg("Failed to check token revocation status")
+				} else if isRevoked {
+					log.Debug().Str("jti", claims.ID).Msg("Token has been revoked")
+					return SendTokenRevoked(c)
+				}
+
 				c.Locals("user_id", claims.Subject)
 				c.Locals("user_email", claims.Email)
 				c.Locals("user_role", claims.Role)
@@ -282,7 +292,7 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 
 			// Successfully validated as auth.users token
 			// Check if token has been revoked
-			isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, "", time.Time{})
+			isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
 			if err != nil {
 				// SECURITY: Fail-closed for sensitive operations
 				// If we cannot verify token revocation status, deny access to sensitive operations
@@ -334,6 +344,15 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 		userID, err := uuid.Parse(dashboardClaims.Subject)
 		if err != nil {
 			return SendUnauthorized(c, "Invalid user ID in token", ErrCodeInvalidUserID)
+		}
+
+		// Check if token has been revoked
+		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), dashboardClaims.ID, dashboardClaims.UserID, dashboardClaims.IssuedAt.Time)
+		if err != nil {
+			log.Error().Err(err).Str("jti", dashboardClaims.ID).Msg("Failed to check token revocation status")
+		} else if isRevoked {
+			log.Debug().Str("jti", dashboardClaims.ID).Msg("Token has been revoked")
+			return SendTokenRevoked(c)
 		}
 
 		// Store user information in context

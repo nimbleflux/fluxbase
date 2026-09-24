@@ -71,6 +71,32 @@ func ClientKeyAuth(clientKeyService *auth.ClientKeyService) fiber.Handler {
 	}
 }
 
+// isWebSocketUpgrade reports whether the request is an actual WebSocket
+// upgrade. Query parameters are only accepted as credentials for WebSocket
+// connections (browsers cannot set custom headers on those).
+func isWebSocketUpgrade(c fiber.Ctx) bool {
+	return strings.EqualFold(c.Get("Upgrade"), "websocket")
+}
+
+// validateUserAccessToken validates a bearer token as an app-user access
+// token. Refresh tokens are rejected here: they are only accepted at the
+// refresh endpoint.
+func validateUserAccessToken(authService *auth.Service, token string) (*auth.TokenClaims, error) {
+	return authService.JWTManager().ValidateAccessToken(token)
+}
+
+// checkTokenRevoked verifies the token is not blacklisted (fail-closed).
+func checkTokenRevoked(authService *auth.Service, c fiber.Ctx, claims *auth.TokenClaims) error {
+	isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
+	if err != nil {
+		return err
+	}
+	if isRevoked {
+		return auth.ErrTokenBlacklisted
+	}
+	return nil
+}
+
 // OptionalClientKeyAuth allows both JWT and client key authentication
 // Tries JWT first, then client key
 func OptionalClientKeyAuth(authService *auth.Service, clientKeyService *auth.ClientKeyService) fiber.Handler {
@@ -80,18 +106,17 @@ func OptionalClientKeyAuth(authService *auth.Service, clientKeyService *auth.Cli
 		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
-			// Validate JWT token
-			claims, err := authService.JWTManager().ValidateToken(token)
+			// Validate JWT token (access tokens only)
+			claims, err := validateUserAccessToken(authService, token)
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
-				if err != nil {
+				if err := checkTokenRevoked(authService, c, claims); err != nil {
+					if errors.Is(err, auth.ErrTokenBlacklisted) {
+						return apperrors.SendTokenRevoked(c)
+					}
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return apperrors.SendServiceUnavailable(c, "Unable to verify token status")
-				}
-				if isRevoked {
-					return apperrors.SendTokenRevoked(c)
 				}
 
 				// Valid JWT token
@@ -146,18 +171,17 @@ func RequireEitherAuth(authService *auth.Service, clientKeyService *auth.ClientK
 		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
-			// Validate JWT token
-			claims, err := authService.JWTManager().ValidateToken(token)
+			// Validate JWT token (access tokens only)
+			claims, err := validateUserAccessToken(authService, token)
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
-				if err != nil {
+				if err := checkTokenRevoked(authService, c, claims); err != nil {
+					if errors.Is(err, auth.ErrTokenBlacklisted) {
+						return apperrors.SendTokenRevoked(c)
+					}
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return apperrors.SendServiceUnavailable(c, "Unable to verify token status")
-				}
-				if isRevoked {
-					return apperrors.SendTokenRevoked(c)
 				}
 
 				// Valid JWT token
@@ -353,12 +377,13 @@ func authOrServiceKey(
 			return apperrors.SendErrorWithCode(c, 401, "Invalid service key", apperrors.ErrCodeInvalidServiceKey)
 		}
 
-		// 2. JWT authentication via Authorization Bearer header or token query param
-		// The token query param is used by WebSocket connections (browsers can't set headers)
+		// 2. JWT authentication via Authorization Bearer header, or the token
+		// query param for actual WebSocket upgrades only (browsers can't set
+		// headers on those). Query-param credentials elsewhere are ignored.
 		token := ""
 		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
 			token = strings.TrimPrefix(authHeader, "Bearer ")
-		} else if queryToken := c.Query("token"); queryToken != "" {
+		} else if queryToken := c.Query("token"); queryToken != "" && isWebSocketUpgrade(c) {
 			token = queryToken
 		}
 
@@ -368,8 +393,8 @@ func authOrServiceKey(
 			// anonymous in that case; see OptionalAuthOrServiceKey doc comment.
 			bearerExpired := false
 
-			// First, try to validate as auth.users token (app users)
-			claims, err := authService.JWTManager().ValidateToken(token)
+			// First, try to validate as auth.users token (app users, access tokens only)
+			claims, err := validateUserAccessToken(authService, token)
 			if err != nil {
 				if isExpiredToken(err) {
 					bearerExpired = true
@@ -394,6 +419,16 @@ func authOrServiceKey(
 						Str("role", claims.Role).
 						Msg("authOrServiceKey: Detected instance_admin token")
 
+					// Check if token has been revoked
+					// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
+					if err := checkTokenRevoked(authService, c, claims); err != nil {
+						if errors.Is(err, auth.ErrTokenBlacklisted) {
+							return apperrors.SendTokenRevoked(c)
+						}
+						log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
+						return apperrors.SendServiceUnavailable(c, "Unable to verify token status")
+					}
+
 					c.Locals("user_id", claims.Subject)
 					c.Locals("user_email", claims.Email)
 					c.Locals("user_name", claims.Name)
@@ -412,13 +447,12 @@ func authOrServiceKey(
 
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
-				if err != nil {
+				if err := checkTokenRevoked(authService, c, claims); err != nil {
+					if errors.Is(err, auth.ErrTokenBlacklisted) {
+						return apperrors.SendTokenRevoked(c)
+					}
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return apperrors.SendServiceUnavailable(c, "Unable to verify token status")
-				}
-				if isRevoked {
-					return apperrors.SendTokenRevoked(c)
 				}
 
 				// Valid JWT token
@@ -457,6 +491,16 @@ func authOrServiceKey(
 					}
 				}
 				if err == nil {
+					// Check if token has been revoked
+					// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
+					if err := checkTokenRevoked(authService, c, dashboardClaims); err != nil {
+						if errors.Is(err, auth.ErrTokenBlacklisted) {
+							return apperrors.SendTokenRevoked(c)
+						}
+						log.Error().Err(err).Str("jti", dashboardClaims.ID).Msg("Token revocation check failed")
+						return apperrors.SendServiceUnavailable(c, "Unable to verify token status")
+					}
+
 					c.Locals("user_id", dashboardClaims.Subject)
 					c.Locals("user_email", dashboardClaims.Email)
 					c.Locals("user_name", dashboardClaims.Name)
@@ -548,7 +592,7 @@ func authOrServiceKey(
 			clientKeyExpired := false
 
 			// Looks like a JWT - first try user JWT (most common), then service role
-			claims, err := authService.JWTManager().ValidateToken(fluxbaseClientKey)
+			claims, err := validateUserAccessToken(authService, fluxbaseClientKey)
 			if err != nil {
 				if isExpiredToken(err) {
 					clientKeyExpired = true
@@ -557,13 +601,12 @@ func authOrServiceKey(
 			if err == nil {
 				// Check if token has been revoked
 				// SECURITY: Fail-closed behavior - reject if we can't verify revocation status
-				isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
-				if err != nil {
+				if err := checkTokenRevoked(authService, c, claims); err != nil {
+					if errors.Is(err, auth.ErrTokenBlacklisted) {
+						return apperrors.SendTokenRevoked(c)
+					}
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Token revocation check failed")
 					return apperrors.SendServiceUnavailable(c, "Unable to verify token status")
-				}
-				if isRevoked {
-					return apperrors.SendTokenRevoked(c)
 				}
 
 				// Valid user JWT token via clientkey header
@@ -639,9 +682,10 @@ func authOrServiceKey(
 				Msg("clientkey header JWT validation failed (tried user JWT then service role JWT)")
 		}
 
-		// 4. Client key authentication (X-Client-Key header, clientkey query param, or clientkey header fallback)
+		// 4. Client key authentication (X-Client-Key header, clientkey query param
+		// for WebSocket upgrades only, or clientkey header fallback)
 		clientKey := c.Get("X-Client-Key")
-		if clientKey == "" {
+		if clientKey == "" && isWebSocketUpgrade(c) {
 			clientKey = c.Query("clientkey")
 		}
 		// Also check lowercase clientkey header if it wasn't a JWT
@@ -905,7 +949,10 @@ func mapKeyTypetoRole(keyType string) string {
 	case keys.KeyTypeGlobalService, "service":
 		return "service_role"
 	case keys.KeyTypePublishable:
-		return "authenticated"
+		// Publishable keys carry no user identity, so they map to the
+		// anonymous role. Policies keyed on the authenticated role require a
+		// real user identity (rls_user_id) which these keys never provide.
+		return "anon"
 	default:
 		log.Warn().Str("key_type", keyType).Msg("mapKeyTypetoRole: unrecognized key type, defaulting to anon")
 		return "anon"
@@ -933,21 +980,28 @@ func updateLastUsedAt(c fiber.Ctx, db *pgxpool.Pool, info *serviceKeyInfo) {
 
 		tx, err := pool.Begin(ctx)
 		if err != nil {
+			log.Debug().Err(err).Str("key_id", keyID).Str("table", table).Msg("Failed to begin transaction for last_used_at update")
 			return
 		}
 		defer func() { _ = tx.Rollback(ctx) }()
 
-		_, err = tx.Exec(ctx, `SET LOCAL ROLE "service_role"`)
-		if err != nil {
+		if _, err := tx.Exec(ctx, `SET LOCAL ROLE "service_role"`); err != nil {
+			log.Debug().Err(err).Str("key_id", keyID).Str("table", table).Msg("Failed to set service role for last_used_at update")
 			return
 		}
 
-		_, _ = tx.Exec(
+		if _, err := tx.Exec(
 			ctx,
 			`UPDATE `+table+` SET last_used_at = NOW() WHERE id = $1`,
 			keyID,
-		)
-		_ = tx.Commit(ctx)
+		); err != nil {
+			log.Debug().Err(err).Str("key_id", keyID).Str("table", table).Msg("Failed to update last_used_at")
+			return
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			log.Debug().Err(err).Str("key_id", keyID).Str("table", table).Msg("Failed to commit last_used_at update")
+		}
 	}()
 }
 

@@ -21,6 +21,21 @@ var (
 	ErrInvalidSignature = errors.New("invalid token signature")
 )
 
+// Token types used in the TokenType claim
+const (
+	TokenTypeAccess     = "access"
+	TokenTypeRefresh    = "refresh"
+	TokenTypeMFAPending = "mfa_pending"
+)
+
+// MFAPendingTokenTTL is how long an mfa_pending token (issued after a
+// password-verified sign-in that requires 2FA) stays valid.
+const MFAPendingTokenTTL = 5 * time.Minute
+
+// MFAPendingPurpose2FA is the purpose value used in mfa_pending tokens
+// issued for TOTP verification during sign-in.
+const MFAPendingPurpose2FA = "2fa"
+
 // TokenClaims represents the JWT claims
 type TokenClaims struct {
 	UserID       string                 `json:"user_id"`
@@ -443,7 +458,22 @@ func (m *JWTManager) ValidateAccessToken(tokenString string) (*TokenClaims, erro
 		return nil, err
 	}
 
-	if claims.TokenType != "access" {
+	if claims.TokenType != TokenTypeAccess {
+		return nil, ErrInvalidToken
+	}
+
+	return claims, nil
+}
+
+// ValidateAccessTokenWithSecret validates an access token signed with a
+// specific secret (tenant scenarios) and requires the access token type.
+func (m *JWTManager) ValidateAccessTokenWithSecret(tokenString, secretKey string) (*TokenClaims, error) {
+	claims, err := m.ValidateTokenWithSecret(tokenString, secretKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if claims.TokenType != TokenTypeAccess {
 		return nil, ErrInvalidToken
 	}
 
@@ -457,7 +487,66 @@ func (m *JWTManager) ValidateRefreshToken(tokenString string) (*TokenClaims, err
 		return nil, err
 	}
 
-	if claims.TokenType != "refresh" {
+	if claims.TokenType != TokenTypeRefresh {
+		return nil, ErrInvalidToken
+	}
+
+	return claims, nil
+}
+
+// GenerateMFAPendingToken issues a short-lived token that binds a 2FA
+// challenge to a password-verified sign-in attempt. purpose identifies the
+// challenge (e.g. MFAPendingPurpose2FA) and is carried in the Audience claim.
+func (m *JWTManager) GenerateMFAPendingToken(userID, purpose string) (string, *TokenClaims, error) {
+	now := time.Now()
+
+	claims := &TokenClaims{
+		UserID:    userID,
+		TokenType: TokenTypeMFAPending,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			Audience:  []string{purpose},
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(MFAPendingTokenTTL)),
+			NotBefore: jwt.NewNumericDate(now),
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(m.secretKey)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return tokenString, claims, nil
+}
+
+// ValidateMFAPendingToken validates a signed mfa_pending token, including its
+// type, expiry, and the expected purpose in the Audience claim.
+func (m *JWTManager) ValidateMFAPendingToken(tokenString, expectedPurpose string) (*TokenClaims, error) {
+	claims, err := m.ValidateToken(tokenString)
+	if err != nil {
+		return nil, err
+	}
+
+	if claims.TokenType != TokenTypeMFAPending {
+		return nil, ErrInvalidToken
+	}
+
+	if claims.UserID == "" {
+		return nil, ErrInvalidToken
+	}
+
+	purposeOK := false
+	for _, aud := range claims.Audience {
+		if aud == expectedPurpose {
+			purposeOK = true
+			break
+		}
+	}
+	if !purposeOK {
 		return nil, ErrInvalidToken
 	}
 

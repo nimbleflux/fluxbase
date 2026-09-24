@@ -89,6 +89,18 @@ func setDefaults() {
 	viper.SetDefault("security.dashboard_login_rate_limit", 60)    // 60 attempts
 	viper.SetDefault("security.dashboard_login_rate_window", "1m") // per minute
 
+	// Auth endpoint rate limit defaults (values match docs/guides/rate-limiting.md)
+	viper.SetDefault("security.auth_signup_rate_limit", 10)             // 10 attempts
+	viper.SetDefault("security.auth_signup_rate_window", "15m")         // per 15 minutes
+	viper.SetDefault("security.auth_password_reset_rate_limit", 5)      // 5 attempts
+	viper.SetDefault("security.auth_password_reset_rate_window", "15m") // per 15 minutes
+	viper.SetDefault("security.auth_2fa_rate_limit", 5)                 // 5 attempts
+	viper.SetDefault("security.auth_2fa_rate_window", "5m")             // per 5 minutes
+	viper.SetDefault("security.auth_refresh_rate_limit", 10)            // 10 attempts
+	viper.SetDefault("security.auth_refresh_rate_window", "1m")         // per minute
+	viper.SetDefault("security.auth_magic_link_rate_limit", 5)          // 5 attempts
+	viper.SetDefault("security.auth_magic_link_rate_window", "15m")     // per 15 minutes
+
 	// service_role rate limiting defaults (H-2: enabled by default to prevent abuse)
 	viper.SetDefault("security.service_role_rate_limit", 10000) // 10000 requests per minute for service_role tokens (H-2)
 	viper.SetDefault("security.service_role_rate_window", "1m") // per minute

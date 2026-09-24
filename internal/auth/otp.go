@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
@@ -94,9 +93,11 @@ func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string
 		CreatedAt:   time.Now(),
 	}
 
+	// The plaintext `code` column is deprecated (kept for backward
+	// compatibility, always empty): codes are only ever persisted as hashes.
 	query := `
 		INSERT INTO auth.otp_codes (id, email, phone, code, code_hash, type, purpose, expires_at, used, attempts, max_attempts, created_at, user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+		VALUES ($1, $2, $3, '', $5, $6, $7, $8, $9, $10, $11, $12,
 			(SELECT id FROM auth.users WHERE email = $2 LIMIT 1))
 		RETURNING id, email, phone, code_hash, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
 	`
@@ -108,7 +109,6 @@ func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string
 			otpCode.ID,
 			otpCode.Email,
 			otpCode.Phone,
-			code,
 			otpCode.CodeHash,
 			otpCode.Type,
 			otpCode.Purpose,
@@ -141,81 +141,31 @@ func (r *OTPRepository) Create(ctx context.Context, email *string, phone *string
 	return &OTPCodeWithPlaintext{OTPCode: otpCode, PlaintextCode: code}, nil
 }
 
-// GetByCode retrieves an OTP code by email/phone and code.
-// It uses hash-based lookup first, with a plaintext fallback for
-// codes created before the hashing migration.
+// GetByCode retrieves an OTP code by email/phone and code using a hash-only
+// lookup. Codes are never stored in plaintext.
 func (r *OTPRepository) GetByCode(ctx context.Context, email *string, phone *string, code string) (*OTPCode, error) {
 	codeHash := hashOTPCode(code)
 
 	otpCode := &OTPCode{}
 
-	// Try hash-based lookup first
-	hashQuery := `
+	query := `
 		SELECT id, email, phone, code_hash, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
 		FROM auth.otp_codes
 		WHERE `
-	var hashArgs []interface{}
+	var args []interface{}
 	if email != nil {
-		hashQuery += `email = $1 AND code_hash = $2 AND used = false`
-		hashArgs = []interface{}{*email, codeHash}
+		query += `email = $1 AND code_hash = $2 AND used = false`
+		args = []interface{}{*email, codeHash}
 	} else if phone != nil {
-		hashQuery += `phone = $1 AND code_hash = $2 AND used = false`
-		hashArgs = []interface{}{*phone, codeHash}
+		query += `phone = $1 AND code_hash = $2 AND used = false`
+		args = []interface{}{*phone, codeHash}
 	} else {
 		return nil, errors.New("either email or phone must be provided")
 	}
-	hashQuery += ` ORDER BY created_at DESC LIMIT 1`
+	query += ` ORDER BY created_at DESC LIMIT 1`
 
 	err := database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, hashQuery, hashArgs...).Scan(
-			&otpCode.ID,
-			&otpCode.Email,
-			&otpCode.Phone,
-			&otpCode.CodeHash,
-			&otpCode.Type,
-			&otpCode.Purpose,
-			&otpCode.ExpiresAt,
-			&otpCode.Used,
-			&otpCode.UsedAt,
-			&otpCode.Attempts,
-			&otpCode.MaxAttempts,
-			&otpCode.IPAddress,
-			&otpCode.UserAgent,
-			&otpCode.CreatedAt,
-		)
-	})
-	if err == nil {
-		return otpCode, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, err
-	}
-
-	// Fallback: plaintext lookup for legacy codes (pre-migration)
-	var fallbackQuery string
-	var fallbackArgs []interface{}
-	if email != nil {
-		fallbackQuery = `
-			SELECT id, email, phone, code_hash, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
-			FROM auth.otp_codes
-			WHERE email = $1 AND code = $2 AND used = false
-			ORDER BY created_at DESC
-			LIMIT 1
-		`
-		fallbackArgs = []interface{}{*email, code}
-	} else {
-		fallbackQuery = `
-			SELECT id, email, phone, code_hash, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
-			FROM auth.otp_codes
-			WHERE phone = $1 AND code = $2 AND used = false
-			ORDER BY created_at DESC
-			LIMIT 1
-		`
-		fallbackArgs = []interface{}{*phone, code}
-	}
-
-	err = database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, fallbackQuery, fallbackArgs...).Scan(
+		return tx.QueryRow(ctx, query, args...).Scan(
 			&otpCode.ID,
 			&otpCode.Email,
 			&otpCode.Phone,
@@ -237,17 +187,6 @@ func (r *OTPRepository) GetByCode(ctx context.Context, email *string, phone *str
 			return nil, ErrOTPNotFound
 		}
 		return nil, err
-	}
-
-	// Lazy migration: backfill hash for this legacy code
-	if otpCode.CodeHash == nil || *otpCode.CodeHash == "" {
-		if migrateErr := database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
-			_, execErr := tx.Exec(ctx, `UPDATE auth.otp_codes SET code_hash = $1 WHERE id = $2`, codeHash, otpCode.ID)
-			return execErr
-		}); migrateErr != nil {
-			log.Debug().Err(migrateErr).Str("otp_id", otpCode.ID).Msg("Failed to lazy-migrate OTP code hash")
-		}
-		otpCode.CodeHash = &codeHash
 	}
 
 	return otpCode, nil

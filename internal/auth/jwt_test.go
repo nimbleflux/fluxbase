@@ -956,3 +956,86 @@ func TestTokenClaims_ImpersonatedByField(t *testing.T) {
 		assert.Empty(t, claims.ImpersonatedBy)
 	})
 }
+
+// =============================================================================
+// Token-type separation tests (refresh tokens must not pass access checks)
+// =============================================================================
+
+func TestValidateAccessToken_RejectsRefreshToken(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	accessToken, refreshToken, _, err := manager.GenerateTokenPair("user-1", "user@example.com", "authenticated", nil, nil)
+	require.NoError(t, err)
+
+	// Access token passes the access-only check
+	claims, err := manager.ValidateAccessToken(accessToken)
+	require.NoError(t, err)
+	assert.Equal(t, "user-1", claims.UserID)
+
+	// Refresh token must NOT pass the access-only check
+	_, err = manager.ValidateAccessToken(refreshToken)
+	assert.ErrorIs(t, err, ErrInvalidToken)
+
+	// Conversely, access token must NOT pass the refresh-only check
+	_, err = manager.ValidateRefreshToken(accessToken)
+	assert.ErrorIs(t, err, ErrInvalidToken)
+
+	// Refresh token passes the refresh-only check
+	refreshClaims, err := manager.ValidateRefreshToken(refreshToken)
+	require.NoError(t, err)
+	assert.Equal(t, TokenTypeRefresh, refreshClaims.TokenType)
+}
+
+func TestValidateAccessTokenWithSecret_RejectsRefreshToken(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	_, refreshToken, _, err := manager.GenerateTokenPair("user-1", "user@example.com", "authenticated", nil, nil)
+	require.NoError(t, err)
+
+	_, err = manager.ValidateAccessTokenWithSecret(refreshToken, testSecretKey)
+	assert.ErrorIs(t, err, ErrInvalidToken)
+}
+
+// =============================================================================
+// MFA pending token tests
+// =============================================================================
+
+func TestGenerateAndValidateMFAPendingToken(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	token, claims, err := manager.GenerateMFAPendingToken("user-1", MFAPendingPurpose2FA)
+	require.NoError(t, err)
+	require.NotNil(t, claims)
+	assert.Equal(t, TokenTypeMFAPending, claims.TokenType)
+	assert.Equal(t, "user-1", claims.UserID)
+	assert.True(t, claims.ExpiresAt.After(time.Now()))
+	// Short-lived: well under the access token TTL
+	ttl := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
+	assert.LessOrEqual(t, ttl, MFAPendingTokenTTL)
+
+	// Correct purpose validates and yields the bound user
+	validated, err := manager.ValidateMFAPendingToken(token, MFAPendingPurpose2FA)
+	require.NoError(t, err)
+	assert.Equal(t, "user-1", validated.UserID)
+
+	// Wrong purpose is rejected
+	_, err = manager.ValidateMFAPendingToken(token, "other-purpose")
+	assert.ErrorIs(t, err, ErrInvalidToken)
+}
+
+func TestValidateMFAPendingToken_RejectsOtherTokenTypes(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	accessToken, refreshToken, _, err := manager.GenerateTokenPair("user-1", "user@example.com", "authenticated", nil, nil)
+	require.NoError(t, err)
+
+	_, err = manager.ValidateMFAPendingToken(accessToken, MFAPendingPurpose2FA)
+	assert.ErrorIs(t, err, ErrInvalidToken)
+
+	_, err = manager.ValidateMFAPendingToken(refreshToken, MFAPendingPurpose2FA)
+	assert.ErrorIs(t, err, ErrInvalidToken)
+}

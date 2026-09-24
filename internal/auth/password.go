@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"sync"
 	"unicode"
 
 	"golang.org/x/crypto/bcrypt"
@@ -21,6 +22,10 @@ const (
 	MaxPasswordLength = 72
 	// DefaultBcryptCost is the default cost for bcrypt hashing
 	DefaultBcryptCost = 12
+
+	// dummyComparePassword is the fixed plaintext used for the timing
+	// equalization comparison below; only its bcrypt timing matters.
+	dummyComparePassword = "fluxbase-timing-equalizer"
 )
 
 // PasswordHasher handles password hashing and validation
@@ -31,6 +36,9 @@ type PasswordHasher struct {
 	requireLower  bool
 	requireDigit  bool
 	requireSymbol bool
+
+	dummyOnce sync.Once
+	dummyHash string
 }
 
 // PasswordHasherConfig configures password requirements
@@ -97,6 +105,22 @@ func (h *PasswordHasher) HashPassword(password string) (string, error) {
 // ComparePassword compares a plain password with a hashed password
 func (h *PasswordHasher) ComparePassword(hashedPassword, plainPassword string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(plainPassword))
+}
+
+// CompareDummyEqualizer runs a bcrypt comparison against a dummy hash with the
+// hasher's own cost. Login flows call this when the user does not exist so the
+// response time matches the unknown-password path and cannot be used to
+// enumerate registered email addresses.
+func (h *PasswordHasher) CompareDummyEqualizer() {
+	h.dummyOnce.Do(func() {
+		hash, err := bcrypt.GenerateFromPassword([]byte(dummyComparePassword), h.cost)
+		if err == nil {
+			h.dummyHash = string(hash)
+		}
+	})
+	if h.dummyHash != "" {
+		_ = bcrypt.CompareHashAndPassword([]byte(h.dummyHash), []byte(dummyComparePassword))
+	}
 }
 
 // ValidatePassword validates a password against configured requirements

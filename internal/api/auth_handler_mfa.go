@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 
+	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
@@ -63,30 +64,50 @@ func (h *AuthHandler) EnableTOTP(c fiber.Ctx) error {
 
 // VerifyTOTP verifies a TOTP code during login and issues JWT tokens
 // POST /auth/2fa/verify
+//
+// The request must include the short-lived mfa_token returned by
+// POST /auth/signin when requires_2fa was true; the user is identified from
+// that signed token rather than the request body.
 func (h *AuthHandler) VerifyTOTP(c fiber.Ctx) error {
 	var req struct {
-		UserID string `json:"user_id"`
-		Code   string `json:"code"`
+		MFAToken string `json:"mfa_token"`
+		UserID   string `json:"user_id"`
+		Code     string `json:"code"`
 	}
 	if err := ParseBody(c, &req); err != nil {
 		return err
 	}
 
-	if req.UserID == "" || req.Code == "" {
-		return SendBadRequest(c, "User ID and code are required", ErrCodeMissingField)
+	if req.MFAToken == "" {
+		return SendUnauthorized(c, "mfa_token is required. Provide the token returned by the sign-in response.", ErrCodeMissingField)
+	}
+	if req.Code == "" {
+		return SendMissingField(c, "Code")
+	}
+
+	// Validate the signed 2FA challenge token bound to the password-verified
+	// sign-in attempt. The user is taken from its claims; the request body
+	// user_id (kept for backward compatibility) must match when provided.
+	claims, err := h.authService.JWTManager().ValidateMFAPendingToken(req.MFAToken, auth.MFAPendingPurpose2FA)
+	if err != nil {
+		log.Warn().Err(err).Msg("Invalid or expired 2FA challenge token")
+		return SendUnauthorized(c, "Invalid or expired 2FA challenge token. Please sign in again.", ErrCodeInvalidToken)
+	}
+	userID := claims.UserID
+	if req.UserID != "" && req.UserID != userID {
+		return SendBadRequest(c, "mfa_token does not match user_id", ErrCodeInvalidInput)
 	}
 
 	// Verify the 2FA code
-	err := h.authService.MFAService().VerifyTOTP(middleware.CtxWithTenant(c), req.UserID, req.Code)
-	if err != nil {
-		log.Warn().Err(err).Str("user_id", req.UserID).Msg("Failed to verify TOTP")
+	if err := h.authService.MFAService().VerifyTOTP(middleware.CtxWithTenant(c), userID, req.Code); err != nil {
+		log.Warn().Err(err).Str("user_id", userID).Msg("Failed to verify TOTP")
 		return SendBadRequest(c, "Invalid 2FA code", ErrCodeInvalidCredentials)
 	}
 
 	// Generate a complete sign-in response with tokens
-	resp, err := h.authService.GenerateTokensForUser(middleware.CtxWithTenant(c), req.UserID)
+	resp, err := h.authService.GenerateTokensForUser(middleware.CtxWithTenant(c), userID)
 	if err != nil {
-		log.Error().Err(err).Str("user_id", req.UserID).Msg("Failed to generate tokens after 2FA verification")
+		log.Error().Err(err).Str("user_id", userID).Msg("Failed to generate tokens after 2FA verification")
 		return SendInternalError(c, "Failed to complete authentication")
 	}
 
