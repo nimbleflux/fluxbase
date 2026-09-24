@@ -44,13 +44,14 @@ test.describe("Storage Page During Tenant Service Impersonation", () => {
     try {
       await adminPage.evaluate(
         ({ token, type, targetUser }) => {
-          localStorage.setItem("fluxbase_impersonation_token", token);
-          localStorage.setItem("fluxbase_impersonation_type", type);
-          localStorage.setItem(
+          // The impersonation store reads sessionStorage (never localStorage).
+          sessionStorage.setItem("fluxbase_impersonation_token", token);
+          sessionStorage.setItem("fluxbase_impersonation_type", type);
+          sessionStorage.setItem(
             "fluxbase_impersonated_user",
             JSON.stringify(targetUser),
           );
-          localStorage.setItem(
+          sessionStorage.setItem(
             "fluxbase_impersonation_session",
             JSON.stringify({
               id: "test-session",
