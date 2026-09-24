@@ -282,6 +282,21 @@ func TestPartitionDestructiveChanges(t *testing.T) {
 		assert.Equal(t, []Change{createCol}, executable)
 		assert.Empty(t, blocked)
 	})
+
+	t.Run("default privilege normalization executes on fresh databases", func(t *testing.T) {
+		t.Parallel()
+		// pgschema marks these destructive, but they only narrow default
+		// privileges for future objects — required for fresh startups.
+		revokeDefaults := Change{
+			Type:        ChangeDrop,
+			SQL:         "ALTER DEFAULT PRIVILEGES FOR ROLE fluxbase IN SCHEMA auth REVOKE SELECT, UPDATE, USAGE ON SEQUENCES FROM service_role;",
+			Destructive: true,
+		}
+		changes := []Change{createCol, revokeDefaults, dropTable}
+		executable, blocked := partitionDestructiveChanges(changes, false)
+		assert.Equal(t, []Change{createCol, revokeDefaults}, executable)
+		assert.Equal(t, []Change{dropTable}, blocked)
+	})
 }
 
 // TestPreviewSQL covers the SQL truncation helper used in destructive-blocked

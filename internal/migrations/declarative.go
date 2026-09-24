@@ -731,13 +731,21 @@ func (s *DeclarativeService) applySchemaDirectFallback(ctx context.Context, sche
 // false. Pure helper so the destructive re-check in applyPlanDirectly is testable.
 func partitionDestructiveChanges(changes []Change, allowDestructive bool) (executable, blocked []Change) {
 	for _, c := range changes {
-		if c.Destructive && !allowDestructive {
+		if c.Destructive && !allowDestructive && !isPrivilegeNormalization(c.SQL) {
 			blocked = append(blocked, c)
 			continue
 		}
 		executable = append(executable, c)
 	}
 	return executable, blocked
+}
+
+// isPrivilegeNormalization reports whether a destructive-flagged change only
+// adjusts default privileges. pgschema flags `ALTER DEFAULT PRIVILEGES ...
+// REVOKE ...` as destructive on fresh databases (it narrows overly broad
+// defaults before the desired-state GRANTs run); it affects no stored data.
+func isPrivilegeNormalization(sql string) bool {
+	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "ALTER DEFAULT PRIVILEGES")
 }
 
 // previewSQL truncates SQL to at most max bytes for error/log messages.
