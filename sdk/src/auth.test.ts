@@ -1049,32 +1049,10 @@ describe("FluxbaseAuth", () => {
 
   describe("Anonymous Authentication", () => {
     describe("signInAnonymously()", () => {
-      it("should create anonymous session", async () => {
-        const authResponse: AuthResponse = {
-          access_token: "anon-token",
-          refresh_token: "anon-refresh-token",
-          expires_in: 3600,
-          token_type: "Bearer",
-          user: {
-            id: "anon-123",
-            email: "anonymous@fluxbase.local",
-            created_at: new Date().toISOString(),
-          },
-        };
-
-        vi.mocked(mockFetch.post).mockResolvedValue(authResponse);
-
-        const { data: session, error } = await auth.signInAnonymously();
-
-        expect(mockFetch.post).toHaveBeenCalledWith(
-          "/api/v1/auth/signin/anonymous",
-        );
-        expect(error).toBeNull();
-        expect(session).toBeDefined();
-        expect(session!.user.email).toBe("anonymous@fluxbase.local");
-        expect(session!.session.access_token).toBe("anon-token");
-        const { data: sessionData } = await auth.getSession();
-        expect(sessionData.session?.access_token).toBe("anon-token");
+      it("is not exposed: the server has no anonymous sign-in endpoint", () => {
+        expect(
+          (auth as unknown as Record<string, unknown>).signInAnonymously
+        ).toBeUndefined();
       });
     });
   });

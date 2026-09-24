@@ -23,7 +23,6 @@ import type {
   ResetPasswordResponse,
   MagicLinkOptions,
   MagicLinkResponse,
-  AnonymousSignInResponse,
   OAuthProvidersResponse,
   OAuthOptions,
   OAuthUrlResponse,
@@ -876,26 +875,6 @@ export class FluxbaseAuth {
         {
           token,
         },
-      );
-
-      const session: AuthSession = {
-        ...response,
-        expires_at: Date.now() + response.expires_in * 1000,
-      };
-
-      this.setSessionInternal(session);
-      return { user: session.user, session };
-    });
-  }
-
-  /**
-   * Sign in anonymously
-   * Creates a temporary anonymous user session
-   */
-  async signInAnonymously(): Promise<FluxbaseAuthResponse> {
-    return wrapAsync(async () => {
-      const response = await this.fetch.post<AnonymousSignInResponse>(
-        "/api/v1/auth/signin/anonymous",
       );
 
       const session: AuthSession = {
