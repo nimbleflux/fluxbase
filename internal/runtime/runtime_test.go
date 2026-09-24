@@ -97,7 +97,9 @@ func TestBuildEnvForFunction(t *testing.T) {
 	t.Setenv("HOME", "/home/user")
 	t.Setenv("RANDOM_VAR", "should-be-excluded")
 
-	env = buildEnv(req, RuntimeTypeFunction, t.TempDir(), "http://localhost:8080", "user-token", "service-token", nil, nil)
+	// The execution directory overrides HOME for the Deno subprocess.
+	execDir := t.TempDir()
+	env = buildEnv(req, RuntimeTypeFunction, execDir, "http://localhost:8080", "user-token", "service-token", nil, nil)
 	envMap = make(map[string]string)
 	for _, e := range env {
 		parts := strings.SplitN(e, "=", 2)
@@ -110,9 +112,10 @@ func TestBuildEnvForFunction(t *testing.T) {
 	if envMap["PATH"] != "/usr/bin" {
 		t.Errorf("Expected PATH=/usr/bin (for subprocess operation), got PATH=%s", envMap["PATH"])
 	}
-	// HOME is intentionally set to /tmp for Deno runtime requirements (overrides any existing value)
-	if envMap["HOME"] != "/tmp" {
-		t.Errorf("Expected HOME=/tmp (for Deno), got HOME=%s", envMap["HOME"])
+	// HOME is scoped to the per-execution directory (Deno cache lives there),
+	// overriding the ambient HOME value.
+	if envMap["HOME"] != execDir {
+		t.Errorf("Expected HOME=%s (execution dir), got HOME=%s", execDir, envMap["HOME"])
 	}
 	// Random non-system, non-FLUXBASE variables should be excluded
 	if _, ok := envMap["RANDOM_VAR"]; ok {

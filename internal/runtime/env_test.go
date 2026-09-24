@@ -457,7 +457,7 @@ func TestBuildEnv_Integration(t *testing.T) {
 	env := buildEnv(
 		req,
 		RuntimeTypeFunction,
-		t.TempDir(),
+		execDir,
 		"https://api.prod.example.com",
 		"user-token-xyz",
 		"service-token-abc",
