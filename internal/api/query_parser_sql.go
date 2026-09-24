@@ -394,6 +394,22 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}, error) {
 		*argCounter++
 		return sql, f.Value, nil
 
+	case OpNotIn:
+		sql := fmt.Sprintf("NOT (%s = ANY($%d))", colExpr, *argCounter)
+		*argCounter++
+		return sql, f.Value, nil
+
+	case OpBetween:
+		// Range filter: col BETWEEN $n AND $n+1. Values are parsed during
+		// filtering into an ordered [lower, upper] pair.
+		bounds, ok := f.Value.([]interface{})
+		if !ok || len(bounds) != 2 {
+			return "", nil, fmt.Errorf("between operator requires exactly two bounds in the form (lower,upper)")
+		}
+		sql := fmt.Sprintf("%s BETWEEN $%d AND $%d", colExpr, *argCounter, *argCounter+1)
+		*argCounter += 2
+		return sql, bounds, nil
+
 	case OpIs:
 		if f.Value == nil {
 			return fmt.Sprintf("%s IS NULL", colExpr), nil, nil
@@ -459,6 +475,13 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}, error) {
 			trimmed := strings.Trim(nestedValue, "()[]")
 			items := strings.Split(trimmed, ",")
 			parsedValue = items
+		case OpBetween:
+			// Parse range values: (1,10)
+			bounds, err := parseBetweenItems(nestedValue)
+			if err != nil {
+				return "", nil, err
+			}
+			parsedValue = bounds
 		case OpIs:
 			switch nestedValue {
 			case "null":
@@ -598,10 +621,25 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}, error) {
 		return sql, vectorVal, nil
 
 	default:
-		sql := fmt.Sprintf("%s = $%d", colExpr, *argCounter)
-		*argCounter++
-		return sql, f.Value, nil
+		// Unknown operators must fail loudly: silently treating them as
+		// equality produced wrong results for callers (e.g. an unrecognized
+		// negated operator matched every row instead of none).
+		return "", nil, fmt.Errorf("unsupported filter operator: %s", f.Operator)
 	}
+}
+
+// parseBetweenItems parses a between range value in nested (not.) position:
+// (1,10). Exactly two bounds are required; they keep their original order.
+func parseBetweenItems(value string) ([]interface{}, error) {
+	trimmed := strings.Trim(value, "()[]")
+	items := strings.Split(trimmed, ",")
+	if len(items) != 2 {
+		return nil, fmt.Errorf("invalid value for between operator: %s (exactly two bounds required, e.g. (1,10))", value)
+	}
+	return []interface{}{
+		strings.Trim(strings.TrimSpace(items[0]), "\"'"),
+		strings.Trim(strings.TrimSpace(items[1]), "\"'"),
+	}, nil
 }
 
 // validateAndFormatVector validates a vector value and returns it in PostgreSQL format

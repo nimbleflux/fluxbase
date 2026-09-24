@@ -62,6 +62,7 @@ const (
 	OpILike          = query.OpILike
 	OpIn             = query.OpIn
 	OpNotIn          = query.OpNotIn
+	OpBetween        = query.OpBetween
 	OpIs             = query.OpIs
 	OpIsNot          = query.OpIsNot
 	OpContains       = query.OpContains

@@ -383,15 +383,14 @@ func TestFilterColumnInjectionRegression(t *testing.T) {
 
 	for _, col := range maliciousColumns {
 		t.Run("column_"+col, func(t *testing.T) {
-			// PostgREST format
-			values, err := url.ParseQuery(col + "=eq.value")
-			require.NoError(t, err)
-			_, err = parser.Parse(values)
+			// PostgREST format (constructed directly: url.ParseQuery rejects
+			// ';' before the parser ever sees the value)
+			values := url.Values{col: []string{"eq.value"}}
+			_, err := parser.Parse(values)
 			assert.Error(t, err, "column %q must be rejected", col)
 
 			// Classic format (column.operator=value)
-			values2, err := url.ParseQuery(col + ".eq=value")
-			require.NoError(t, err)
+			values2 := url.Values{col + ".eq": []string{"value"}}
 			_, err = parser.Parse(values2)
 			assert.Error(t, err, "column %q must be rejected", col)
 		})

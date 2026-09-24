@@ -16,6 +16,7 @@ const (
 	OpILike          FilterOperator = "ilike"
 	OpIn             FilterOperator = "in"
 	OpNotIn          FilterOperator = "nin"
+	OpBetween        FilterOperator = "between"
 	OpIs             FilterOperator = "is"
 	OpIsNot          FilterOperator = "isnot"
 	OpContains       FilterOperator = "cs"    // contains (array/jsonb) @>
