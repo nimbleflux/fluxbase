@@ -287,6 +287,11 @@ func (h *PolicyHandlers) ToggleTableRLS(c fiber.Ctx) error {
 	schema := c.Params("schema")
 	table := c.Params("table")
 
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, schema); err != nil {
+		return err
+	}
+
 	var req struct {
 		Enabled bool `json:"enabled"`
 	}
@@ -370,6 +375,11 @@ func (h *PolicyHandlers) CreatePolicy(c fiber.Ctx) error {
 		return SendBadRequest(c, "schema, table, and name are required", "MISSING_FIELDS")
 	}
 
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, req.Schema); err != nil {
+		return err
+	}
+
 	// Validate policy name format
 	if !validIdentifierRegex.MatchString(req.Name) {
 		return SendBadRequest(c, "Invalid policy name: must start with a letter or underscore, followed by letters, digits, or underscores", "INVALID_NAME")
@@ -432,6 +442,11 @@ func (h *PolicyHandlers) DeletePolicy(c fiber.Ctx) error {
 	table := c.Params("table")
 	policy := c.Params("policy")
 
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, schema); err != nil {
+		return err
+	}
+
 	sql := fmt.Sprintf(
 		"DROP POLICY %s ON %s.%s",
 		quoteIdentifier(policy),
@@ -464,6 +479,11 @@ func (h *PolicyHandlers) UpdatePolicy(c fiber.Ctx) error {
 	schema := c.Params("schema")
 	table := c.Params("table")
 	policyName := c.Params("policy")
+
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, schema); err != nil {
+		return err
+	}
 
 	var req UpdatePolicyRequest
 	if err := ParseBody(c, &req); err != nil {

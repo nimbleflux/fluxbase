@@ -97,7 +97,7 @@ func (h *RESTHandler) HandleDynamicTable(c fiber.Ctx) error {
 
 	// Dispatch based on HTTP method
 	switch c.Method() {
-	case "GET":
+	case "GET", "HEAD":
 		// Scope check is handled by middleware before this handler
 		return h.makeGetHandler(*tableInfo)(c)
 	case "POST":
@@ -150,7 +150,7 @@ func (h *RESTHandler) HandleDynamicTableById(c fiber.Ctx) error {
 
 	// Dispatch based on HTTP method
 	switch c.Method() {
-	case "GET":
+	case "GET", "HEAD":
 		return h.makeGetByIdHandler(*tableInfo)(c)
 	case "PUT":
 		if !isWritable {
@@ -283,6 +283,18 @@ func (h *RESTHandler) HandleGetTables(c fiber.Ctx) error {
 		log.Warn().Err(err).Msg("Failed to get materialized views")
 	} else {
 		tables = append(tables, matViews...)
+	}
+
+	// Filter out protected schemas for callers without instance-level
+	// privileges so internal table metadata is not exposed
+	if !isInstanceAdminCaller(c) {
+		filtered := tables[:0]
+		for _, table := range tables {
+			if !isProtectedSchema(table.Schema) {
+				filtered = append(filtered, table)
+			}
+		}
+		tables = filtered
 	}
 
 	// Filter by schema if requested

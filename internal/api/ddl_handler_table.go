@@ -51,6 +51,11 @@ func (h *DDLHandler) CreateTable(c fiber.Ctx) error {
 		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, req.Schema); err != nil {
+		return err
+	}
+
 	if len(req.Columns) == 0 {
 		return SendBadRequest(c, "At least one column is required", ErrCodeValidationFailed)
 	}
@@ -135,6 +140,11 @@ func (h *DDLHandler) DeleteTable(c fiber.Ctx) error {
 		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, schema); err != nil {
+		return err
+	}
+
 	if err := h.requireDB(c); err != nil {
 		return err
 	}
@@ -181,6 +191,11 @@ func (h *DDLHandler) RenameTable(c fiber.Ctx) error {
 	}
 	if err := validateIdentifier(table, "table"); err != nil {
 		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
+	}
+
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, schema); err != nil {
+		return err
 	}
 
 	var req RenameTableRequest

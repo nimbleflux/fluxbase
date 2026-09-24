@@ -68,6 +68,15 @@ func BuildRESTRoutes(deps *RESTDeps) *RouteGroup {
 				Scopes:  []string{"tables:read"},
 			},
 			{
+				// HEAD is served by the same handler as GET (headers only)
+				Method:  "HEAD",
+				Path:    "/:schema/:table/:id",
+				Handler: deps.HandleById,
+				Summary: "Check single row exists",
+				Auth:    AuthRequired,
+				Scopes:  []string{"tables:read"},
+			},
+			{
 				Method:  "PUT",
 				Path:    "/:schema/:table/:id",
 				Handler: deps.HandleById,
@@ -100,6 +109,32 @@ func BuildRESTRoutes(deps *RESTDeps) *RouteGroup {
 				Scopes:  []string{"tables:read"},
 			},
 			{
+				// HEAD is served by the same handler as GET (headers only)
+				Method:  "HEAD",
+				Path:    "/:schema/:table",
+				Handler: deps.HandleTables,
+				Summary: "Check table rows endpoint",
+				Auth:    AuthRequired,
+				Scopes:  []string{"tables:read"},
+			},
+			{
+				Method:  "GET",
+				Path:    "/:schema",
+				Handler: deps.HandleTables,
+				Summary: "List rows from public schema table",
+				Auth:    AuthRequired,
+				Scopes:  []string{"tables:read"},
+			},
+			{
+				// HEAD is served by the same handler as GET (headers only)
+				Method:  "HEAD",
+				Path:    "/:schema",
+				Handler: deps.HandleTables,
+				Summary: "Check public schema table rows endpoint",
+				Auth:    AuthRequired,
+				Scopes:  []string{"tables:read"},
+			},
+			{
 				Method:  "POST",
 				Path:    "/:schema/:table",
 				Handler: deps.HandleTables,
@@ -122,14 +157,6 @@ func BuildRESTRoutes(deps *RESTDeps) *RouteGroup {
 				Summary: "Batch delete rows",
 				Auth:    AuthRequired,
 				Scopes:  []string{"tables:write"},
-			},
-			{
-				Method:  "GET",
-				Path:    "/:schema",
-				Handler: deps.HandleTables,
-				Summary: "List rows from public schema table",
-				Auth:    AuthRequired,
-				Scopes:  []string{"tables:read"},
 			},
 			{
 				Method:  "POST",

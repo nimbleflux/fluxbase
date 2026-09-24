@@ -183,8 +183,11 @@ func (qp *QueryParser) ParseWithOptions(values url.Values, opts ParseOptions) (*
 			if err != nil {
 				return nil, fmt.Errorf("invalid limit parameter: %w", err)
 			}
+			if limit < 0 {
+				return nil, fmt.Errorf("limit must be a non-negative integer")
+			}
 
-			// Enforce max_page_size (unless it's -1 for unlimited)
+			// Enforce max_page_size
 			if qp.config.API.MaxPageSize > 0 && limit > qp.config.API.MaxPageSize {
 				log.Debug().
 					Int("requested", limit).
@@ -199,6 +202,9 @@ func (qp *QueryParser) ParseWithOptions(values url.Values, opts ParseOptions) (*
 			offset, err := strconv.Atoi(vals[0])
 			if err != nil {
 				return nil, fmt.Errorf("invalid offset parameter: %w", err)
+			}
+			if offset < 0 {
+				return nil, fmt.Errorf("offset must be a non-negative integer")
 			}
 			params.Offset = &offset
 

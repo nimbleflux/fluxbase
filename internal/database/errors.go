@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -154,4 +155,51 @@ func GetConstraintName(err error) string {
 		return pgErr.ConstraintName
 	}
 	return ""
+}
+
+// SanitizeErrorMessage converts a database error into a message that is safe
+// to return to API clients. It preserves the SQLSTATE code and constraint
+// metadata (which carry user-relevant classes of failure) while hiding the
+// raw server message, which can embed SQL fragments, internal schema details,
+// or connection information. Log the original error server-side instead.
+func SanitizeErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case ErrCodeUniqueViolation:
+			if pgErr.ConstraintName != "" {
+				return fmt.Sprintf("unique constraint violation on %q (SQLSTATE %s)", pgErr.ConstraintName, pgErr.Code)
+			}
+			return fmt.Sprintf("unique constraint violation (SQLSTATE %s)", pgErr.Code)
+		case ErrCodeForeignKeyViolation:
+			if pgErr.ConstraintName != "" {
+				return fmt.Sprintf("foreign key constraint violation on %q (SQLSTATE %s)", pgErr.ConstraintName, pgErr.Code)
+			}
+			return fmt.Sprintf("foreign key constraint violation (SQLSTATE %s)", pgErr.Code)
+		case ErrCodeCheckViolation:
+			if pgErr.ConstraintName != "" {
+				return fmt.Sprintf("check constraint violation on %q (SQLSTATE %s)", pgErr.ConstraintName, pgErr.Code)
+			}
+			return fmt.Sprintf("check constraint violation (SQLSTATE %s)", pgErr.Code)
+		}
+
+		// Class-level fallback: class 23 covers integrity violations, class 42
+		// syntax/privilege errors; the raw message for these may embed query
+		// text, so only the category and code are returned.
+		if len(pgErr.Code) >= 2 {
+			switch pgErr.Code[:2] {
+			case "23":
+				return fmt.Sprintf("data integrity violation (SQLSTATE %s)", pgErr.Code)
+			case "42":
+				return fmt.Sprintf("invalid query or insufficient privileges (SQLSTATE %s)", pgErr.Code)
+			}
+		}
+		return fmt.Sprintf("database error (SQLSTATE %s)", pgErr.Code)
+	}
+
+	return "database error"
 }

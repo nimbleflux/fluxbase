@@ -440,3 +440,46 @@ func TestValidIdentifierRegex(t *testing.T) {
 		}
 	})
 }
+
+func TestIsValidColumnReference(t *testing.T) {
+	valid := []string{
+		"name",
+		"_private",
+		"col1",
+		"data->key",
+		"data->>key",
+		"data->nested->>value",
+		"items->0->>name",
+		"geocode->properties->>country",
+	}
+	for _, col := range valid {
+		assert.True(t, isValidColumnReference(col), "%q should be a valid column reference", col)
+	}
+
+	invalid := []string{
+		"",
+		`name"`,
+		"bad col",
+		"col;drop",
+		"data->(select)",
+		"data->key'->'x",
+		"data->",
+		"->key",
+		"data->>>key",
+		"data->a b",
+		"1col",
+	}
+	for _, col := range invalid {
+		assert.False(t, isValidColumnReference(col), "%q should be rejected", col)
+	}
+}
+
+func TestProtectedSchemaGuard(t *testing.T) {
+	t.Run("protected schemas are recognized", func(t *testing.T) {
+		for _, schema := range []string{"auth", "storage", "platform", "jobs", "rpc", "mcp", "logging", "branching", "realtime", "ai", "functions", "app", "_fluxbase", "information_schema", "pg_catalog", "pg_toast"} {
+			assert.True(t, isProtectedSchema(schema), "%q should be protected", schema)
+		}
+		assert.False(t, isProtectedSchema("public"))
+		assert.False(t, isProtectedSchema("my_app"))
+	})
+}

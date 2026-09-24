@@ -46,6 +46,59 @@ func (h *DDLHandler) SetGraphQLInvalidator(invalidator func()) {
 	h.graphQLInvalidator = invalidator
 }
 
+// protectedSchemas are schemas owned by Fluxbase internals or PostgreSQL.
+// DDL and policy changes on these schemas are restricted to callers with
+// instance-level privileges.
+var protectedSchemas = map[string]bool{
+	"auth":               true,
+	"storage":            true,
+	"platform":           true,
+	"jobs":               true,
+	"rpc":                true,
+	"mcp":                true,
+	"logging":            true,
+	"branching":          true,
+	"realtime":           true,
+	"ai":                 true,
+	"functions":          true,
+	"app":                true,
+	"_fluxbase":          true,
+	"information_schema": true,
+	"pg_catalog":         true,
+	"pg_toast":           true,
+}
+
+// isProtectedSchema reports whether the schema is internal or system-managed
+func isProtectedSchema(schema string) bool {
+	return protectedSchemas[schema]
+}
+
+// isInstanceAdminCaller reports whether the caller holds an instance-level
+// role (matching the role set used by the schema listing handlers)
+func isInstanceAdminCaller(c fiber.Ctx) bool {
+	role, ok := GetUserRole(c)
+	if !ok {
+		return false
+	}
+	switch role {
+	case "admin", "instance_admin", "service_role", "tenant_service":
+		return true
+	}
+	return false
+}
+
+// checkProtectedSchema rejects changes to protected schemas from callers
+// without instance-level privileges
+func checkProtectedSchema(c fiber.Ctx, schema string) error {
+	if !isProtectedSchema(schema) {
+		return nil
+	}
+	if isInstanceAdminCaller(c) {
+		return nil
+	}
+	return SendForbidden(c, fmt.Sprintf("Schema '%s' is protected and requires instance admin privileges", schema), ErrCodeAccessDenied)
+}
+
 // Validation patterns
 var (
 	// Reserved PostgreSQL keywords that should not be used as identifiers
@@ -83,6 +136,11 @@ func (h *DDLHandler) CreateSchema(c fiber.Ctx) error {
 	// Validate schema name
 	if err := validateIdentifier(req.Name, "schema"); err != nil {
 		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
+	}
+
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, req.Name); err != nil {
+		return err
 	}
 
 	if err := h.requireDB(c); err != nil {

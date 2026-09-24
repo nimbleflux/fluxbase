@@ -124,8 +124,9 @@ func (qb *QueryBuilder) WithCursor(cursor string, cursorColumn string) error {
 	return nil
 }
 
-// BuildSelect builds a SELECT query and returns the SQL string and arguments.
-func (qb *QueryBuilder) BuildSelect() (string, []interface{}) {
+// BuildSelect builds a SELECT query and returns the SQL string, arguments,
+// and any validation error for invalid filters or ordering columns.
+func (qb *QueryBuilder) BuildSelect() (string, []interface{}, error) {
 	// Build SELECT clause
 	selectClause := "*"
 	if len(qb.columns) > 0 {
@@ -151,7 +152,10 @@ func (qb *QueryBuilder) BuildSelect() (string, []interface{}) {
 
 	// Build WHERE clause from filters
 	if len(qb.filters) > 0 {
-		whereClause, whereArgs := qb.buildWhereClause()
+		whereClause, whereArgs, err := qb.buildWhereClause()
+		if err != nil {
+			return "", nil, err
+		}
 		if whereClause != "" {
 			whereClauses = append(whereClauses, whereClause)
 			args = append(args, whereArgs...)
@@ -160,7 +164,10 @@ func (qb *QueryBuilder) BuildSelect() (string, []interface{}) {
 
 	// Add cursor condition for keyset pagination
 	if qb.cursorData != nil {
-		cursorClause, cursorArg := qb.buildCursorCondition()
+		cursorClause, cursorArg, err := qb.buildCursorCondition()
+		if err != nil {
+			return "", nil, err
+		}
 		if cursorClause != "" {
 			whereClauses = append(whereClauses, cursorClause)
 			args = append(args, cursorArg)
@@ -182,7 +189,10 @@ func (qb *QueryBuilder) BuildSelect() (string, []interface{}) {
 
 	// Build ORDER BY clause
 	if len(qb.orderBy) > 0 {
-		orderClause := qb.buildOrderClause()
+		orderClause, err := qb.buildOrderClause()
+		if err != nil {
+			return "", nil, err
+		}
 		if orderClause != "" {
 			query += " ORDER BY " + orderClause
 		}
@@ -198,11 +208,12 @@ func (qb *QueryBuilder) BuildSelect() (string, []interface{}) {
 		query += fmt.Sprintf(" OFFSET %d", *qb.offset)
 	}
 
-	return query, args
+	return query, args, nil
 }
 
-// BuildCount builds a COUNT query and returns the SQL string and arguments.
-func (qb *QueryBuilder) BuildCount() (string, []interface{}) {
+// BuildCount builds a COUNT query and returns the SQL string, arguments,
+// and any validation error for invalid filters.
+func (qb *QueryBuilder) BuildCount() (string, []interface{}, error) {
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s.%s",
 		quoteIdentifier(qb.schema),
 		quoteIdentifier(qb.table))
@@ -211,14 +222,17 @@ func (qb *QueryBuilder) BuildCount() (string, []interface{}) {
 
 	// Build WHERE clause
 	if len(qb.filters) > 0 {
-		whereClause, whereArgs := qb.buildWhereClause()
+		whereClause, whereArgs, err := qb.buildWhereClause()
+		if err != nil {
+			return "", nil, err
+		}
 		if whereClause != "" {
 			query += " WHERE " + whereClause
 			args = append(args, whereArgs...)
 		}
 	}
 
-	return query, args
+	return query, args, nil
 }
 
 // BuildInsert builds an INSERT query and returns the SQL string, arguments,
@@ -272,10 +286,11 @@ func (qb *QueryBuilder) BuildInsert(data map[string]interface{}) (string, []inte
 	return query, args
 }
 
-// BuildUpdate builds an UPDATE query and returns the SQL string and arguments.
-func (qb *QueryBuilder) BuildUpdate(data map[string]interface{}) (string, []interface{}) {
+// BuildUpdate builds an UPDATE query and returns the SQL string, arguments,
+// and any validation error for invalid filters.
+func (qb *QueryBuilder) BuildUpdate(data map[string]interface{}) (string, []interface{}, error) {
 	if len(data) == 0 {
-		return "", nil
+		return "", nil, nil
 	}
 
 	var setClauses []string
@@ -292,7 +307,7 @@ func (qb *QueryBuilder) BuildUpdate(data map[string]interface{}) (string, []inte
 	}
 
 	if len(setClauses) == 0 {
-		return "", nil
+		return "", nil, nil
 	}
 
 	query := fmt.Sprintf("UPDATE %s.%s SET %s",
@@ -302,7 +317,10 @@ func (qb *QueryBuilder) BuildUpdate(data map[string]interface{}) (string, []inte
 
 	// Build WHERE clause
 	if len(qb.filters) > 0 {
-		whereClause, whereArgs := qb.buildWhereClause()
+		whereClause, whereArgs, err := qb.buildWhereClause()
+		if err != nil {
+			return "", nil, err
+		}
 		if whereClause != "" {
 			query += " WHERE " + whereClause
 			args = append(args, whereArgs...)
@@ -325,11 +343,12 @@ func (qb *QueryBuilder) BuildUpdate(data map[string]interface{}) (string, []inte
 		}
 	}
 
-	return query, args
+	return query, args, nil
 }
 
-// BuildDelete builds a DELETE query and returns the SQL string and arguments.
-func (qb *QueryBuilder) BuildDelete() (string, []interface{}) {
+// BuildDelete builds a DELETE query and returns the SQL string, arguments,
+// and any validation error for invalid filters.
+func (qb *QueryBuilder) BuildDelete() (string, []interface{}, error) {
 	query := fmt.Sprintf("DELETE FROM %s.%s",
 		quoteIdentifier(qb.schema),
 		quoteIdentifier(qb.table))
@@ -338,7 +357,10 @@ func (qb *QueryBuilder) BuildDelete() (string, []interface{}) {
 
 	// Build WHERE clause
 	if len(qb.filters) > 0 {
-		whereClause, whereArgs := qb.buildWhereClause()
+		whereClause, whereArgs, err := qb.buildWhereClause()
+		if err != nil {
+			return "", nil, err
+		}
 		if whereClause != "" {
 			query += " WHERE " + whereClause
 			args = append(args, whereArgs...)
@@ -361,12 +383,12 @@ func (qb *QueryBuilder) BuildDelete() (string, []interface{}) {
 		}
 	}
 
-	return query, args
+	return query, args, nil
 }
 
 // buildWhereClause builds the WHERE clause from filters.
 // This is a simplified version that handles basic AND/OR grouping.
-func (qb *QueryBuilder) buildWhereClause() (string, []interface{}) {
+func (qb *QueryBuilder) buildWhereClause() (string, []interface{}, error) {
 	var args []interface{}
 
 	// Build SQL for each filter
@@ -377,12 +399,13 @@ func (qb *QueryBuilder) buildWhereClause() (string, []interface{}) {
 	filterSQLs := make([]filterSQL, 0, len(qb.filters))
 
 	for _, filter := range qb.filters {
-		condition, arg := qb.filterToSQL(filter)
-		if condition != "" {
-			filterSQLs = append(filterSQLs, filterSQL{condition: condition, filter: filter})
-			if arg != nil {
-				args = append(args, arg)
-			}
+		condition, arg, err := qb.filterToSQL(filter)
+		if err != nil {
+			return "", nil, err
+		}
+		filterSQLs = append(filterSQLs, filterSQL{condition: condition, filter: filter})
+		if arg != nil {
+			args = append(args, arg)
 		}
 	}
 
@@ -411,14 +434,15 @@ func (qb *QueryBuilder) buildWhereClause() (string, []interface{}) {
 		}
 	}
 
-	return strings.Join(finalConditions, " AND "), args
+	return strings.Join(finalConditions, " AND "), args, nil
 }
 
 // filterToSQL converts a single filter to SQL condition and argument.
-func (qb *QueryBuilder) filterToSQL(filter Filter) (string, interface{}) {
+// Returns an error for invalid column names instead of dropping the condition.
+func (qb *QueryBuilder) filterToSQL(filter Filter) (string, interface{}, error) {
 	quotedCol := quoteIdentifier(filter.Column)
 	if quotedCol == "" {
-		return "", nil
+		return "", nil, fmt.Errorf("invalid filter column name: %s", filter.Column)
 	}
 
 	placeholder := fmt.Sprintf("$%d", qb.argCounter)
@@ -426,54 +450,55 @@ func (qb *QueryBuilder) filterToSQL(filter Filter) (string, interface{}) {
 
 	switch filter.Operator {
 	case OpEqual:
-		return fmt.Sprintf("%s = %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s = %s", quotedCol, placeholder), filter.Value, nil
 	case OpNotEqual:
-		return fmt.Sprintf("%s <> %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s <> %s", quotedCol, placeholder), filter.Value, nil
 	case OpGreaterThan:
-		return fmt.Sprintf("%s > %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s > %s", quotedCol, placeholder), filter.Value, nil
 	case OpGreaterOrEqual:
-		return fmt.Sprintf("%s >= %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s >= %s", quotedCol, placeholder), filter.Value, nil
 	case OpLessThan:
-		return fmt.Sprintf("%s < %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s < %s", quotedCol, placeholder), filter.Value, nil
 	case OpLessOrEqual:
-		return fmt.Sprintf("%s <= %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s <= %s", quotedCol, placeholder), filter.Value, nil
 	case OpLike:
-		return fmt.Sprintf("%s LIKE %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s LIKE %s", quotedCol, placeholder), filter.Value, nil
 	case OpILike:
-		return fmt.Sprintf("%s ILIKE %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s ILIKE %s", quotedCol, placeholder), filter.Value, nil
 	case OpIs:
 		qb.argCounter-- // IS doesn't use a placeholder
 		if filter.Value == nil || filter.Value == "null" {
-			return fmt.Sprintf("%s IS NULL", quotedCol), nil
+			return fmt.Sprintf("%s IS NULL", quotedCol), nil, nil
 		}
 		// H-14: Validate OpIs only accepts boolean literals (true/false) to prevent SQL injection
 		// This prevents injection via malicious filter.Value strings
 		valueStr := fmt.Sprintf("%v", filter.Value)
 		if valueStr != "true" && valueStr != "false" {
-			return "", fmt.Errorf("OpIs operator only accepts null, true, or false values, got: %v", filter.Value)
+			return "", nil, fmt.Errorf("OpIs operator only accepts null, true, or false values, got: %v", filter.Value)
 		}
-		return fmt.Sprintf("%s IS %s", quotedCol, valueStr), nil
+		return fmt.Sprintf("%s IS %s", quotedCol, valueStr), nil, nil
 	case OpIn:
-		return fmt.Sprintf("%s = ANY(%s)", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s = ANY(%s)", quotedCol, placeholder), filter.Value, nil
 	case OpContains:
-		return fmt.Sprintf("%s @> %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s @> %s", quotedCol, placeholder), filter.Value, nil
 	case OpContained:
-		return fmt.Sprintf("%s <@ %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s <@ %s", quotedCol, placeholder), filter.Value, nil
 	case OpOverlap:
-		return fmt.Sprintf("%s && %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s && %s", quotedCol, placeholder), filter.Value, nil
 	default:
-		return fmt.Sprintf("%s = %s", quotedCol, placeholder), filter.Value
+		return fmt.Sprintf("%s = %s", quotedCol, placeholder), filter.Value, nil
 	}
 }
 
 // buildOrderClause builds the ORDER BY clause.
-func (qb *QueryBuilder) buildOrderClause() string {
+// Returns an error for invalid column names instead of dropping them.
+func (qb *QueryBuilder) buildOrderClause() (string, error) {
 	var parts []string
 
 	for _, order := range qb.orderBy {
 		quoted := quoteIdentifier(order.Column)
 		if quoted == "" {
-			continue
+			return "", fmt.Errorf("invalid order column name: %s", order.Column)
 		}
 
 		part := quoted
@@ -493,7 +518,7 @@ func (qb *QueryBuilder) buildOrderClause() string {
 		parts = append(parts, part)
 	}
 
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, ", "), nil
 }
 
 // buildGroupByClause builds the GROUP BY clause.
@@ -519,9 +544,9 @@ func (qb *QueryBuilder) buildGroupByClause() string {
 // buildCursorCondition builds a keyset pagination condition.
 // For ascending order: column > value
 // For descending order: column < value
-func (qb *QueryBuilder) buildCursorCondition() (string, interface{}) {
+func (qb *QueryBuilder) buildCursorCondition() (string, interface{}, error) {
 	if qb.cursorData == nil {
-		return "", nil
+		return "", nil, nil
 	}
 
 	// Use cursor column override if provided, otherwise use the column from cursor data
@@ -532,7 +557,7 @@ func (qb *QueryBuilder) buildCursorCondition() (string, interface{}) {
 
 	quoted := quoteIdentifier(column)
 	if quoted == "" {
-		return "", nil
+		return "", nil, fmt.Errorf("invalid cursor column name: %s", column)
 	}
 
 	// Determine comparison operator based on order direction
@@ -545,5 +570,5 @@ func (qb *QueryBuilder) buildCursorCondition() (string, interface{}) {
 	condition := fmt.Sprintf("%s %s $%d", quoted, op, qb.argCounter)
 	qb.argCounter++
 
-	return condition, qb.cursorData.Value
+	return condition, qb.cursorData.Value, nil
 }

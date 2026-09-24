@@ -26,6 +26,11 @@ func (qp *QueryParser) parseFilter(key, value string, params *QueryParams) error
 		column := parts[0]
 		operator := FilterOperator(parts[1])
 
+		// Validate column reference before it is interpolated into SQL
+		if !isValidColumnReference(column) {
+			return fmt.Errorf("invalid filter column name: %s", column)
+		}
+
 		// Parse value based on operator
 		var filterValue interface{}
 		switch operator {
@@ -66,6 +71,11 @@ func (qp *QueryParser) parseFilter(key, value string, params *QueryParams) error
 		column := key
 		operatorStr := value[:dotIndex]
 		filterValue := value[dotIndex+1:]
+
+		// Validate column reference before it is interpolated into SQL
+		if !isValidColumnReference(column) {
+			return fmt.Errorf("invalid filter column name: %s", column)
+		}
 
 		operator := FilterOperator(operatorStr)
 
@@ -160,6 +170,11 @@ func (qp *QueryParser) parseLogicalFilter(value string, params *QueryParams, isO
 		operator := FilterOperator(parts[1])
 		rawValue := parts[2]
 
+		// Validate column reference before it is interpolated into SQL
+		if !isValidColumnReference(column) {
+			return fmt.Errorf("invalid filter column name: %s", column)
+		}
+
 		// Parse value based on operator (same logic as regular filter parsing)
 		var parsedValue interface{}
 		switch operator {
@@ -220,6 +235,11 @@ func (qp *QueryParser) parseNestedOrGroup(value string, params *QueryParams) err
 		column := parts[0]
 		operator := FilterOperator(parts[1])
 		rawValue := parts[2]
+
+		// Validate column reference before it is interpolated into SQL
+		if !isValidColumnReference(column) {
+			return fmt.Errorf("invalid filter column name: %s", column)
+		}
 
 		// Parse value based on operator (same logic as regular filter parsing)
 		var parsedValue interface{}

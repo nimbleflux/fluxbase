@@ -26,6 +26,7 @@ type GraphQLSchemaGenerator struct {
 	orderByTypes    map[string]*graphql.InputObject // "schema_table_order_by" -> GraphQL order by input type
 	introspectionOn bool
 	resolverFactory *GraphQLResolverFactory
+	maxPageSize     int // Upper bound for collection limit arguments (0 = uncapped)
 }
 
 // NewGraphQLSchemaGenerator creates a new schema generator
@@ -46,6 +47,13 @@ func (g *GraphQLSchemaGenerator) SetResolverFactory(factory *GraphQLResolverFact
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.resolverFactory = factory
+}
+
+// SetMaxPageSize sets the upper bound applied to collection limit arguments
+func (g *GraphQLSchemaGenerator) SetMaxPageSize(maxPageSize int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.maxPageSize = maxPageSize
 }
 
 // GetSchema returns the current GraphQL schema, regenerating if needed

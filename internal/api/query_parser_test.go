@@ -336,7 +336,8 @@ func TestQueryParams_ToSQL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sql, args := tt.params.ToSQL("users")
+			sql, args, tosqlErr := tt.params.ToSQL("users")
+			require.NoError(t, tosqlErr)
 			assert.Equal(t, tt.expectedSQL, sql)
 			assert.Equal(t, tt.expectedArgs, args)
 		})
@@ -948,8 +949,9 @@ func TestFilterToSQLWithJSONBPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			argCounter := 1
-			sql, value := filterToSQL(tt.filter, &argCounter)
+			sql, value, ferr := filterToSQL(tt.filter, &argCounter)
 
+			require.NoError(t, ferr)
 			assert.Equal(t, tt.expectedSQL, sql)
 
 			if tt.expectValue {
@@ -1104,7 +1106,8 @@ func TestQueryParser_OrFilterIsNullValueParsing(t *testing.T) {
 
 	// Verify SQL generation produces IS NULL, not IS $1
 	argCounter := 1
-	whereClause, args := params.buildWhereClause(&argCounter)
+	whereClause, args, werr := params.buildWhereClause(&argCounter)
+	require.NoError(t, werr)
 	assert.Contains(t, whereClause, "IS NULL")
 	assert.Contains(t, whereClause, "IS $1") // for true
 	assert.Contains(t, whereClause, "IS $2") // for false
@@ -1185,7 +1188,8 @@ func TestQueryParams_BuildWhereClause_OrGroups(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			params := &QueryParams{Filters: tt.filters}
 			argCounter := 1
-			whereClause, _ := params.buildWhereClause(&argCounter)
+			whereClause, _, werr := params.buildWhereClause(&argCounter)
+			require.NoError(t, werr)
 
 			for _, expected := range tt.expectedParts {
 				assert.Contains(t, whereClause, expected)
@@ -1399,7 +1403,8 @@ func TestSTDWithinFilter(t *testing.T) {
 			require.Len(t, params.Filters, 1)
 
 			argCounter := 1
-			sql, args := params.buildWhereClause(&argCounter)
+			sql, args, werr := params.buildWhereClause(&argCounter)
+			require.NoError(t, werr)
 
 			assert.Equal(t, tt.expectSQL, sql)
 			assert.Equal(t, tt.expectArgs, args)
@@ -1671,11 +1676,13 @@ func TestFilterToSQL_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			argCounter := 1
-			sql, value := filterToSQL(tt.filter, &argCounter)
+			sql, value, ferr := filterToSQL(tt.filter, &argCounter)
 
 			if tt.expectError {
+				assert.Error(t, ferr)
 				assert.Empty(t, sql)
 			} else {
+				assert.NoError(t, ferr)
 				assert.NotEmpty(t, sql)
 			}
 
@@ -1853,9 +1860,9 @@ func TestParseAggregation_EdgeCases(t *testing.T) {
 			expectError: false, // Empty select is valid (means select all)
 		},
 		{
-			name:        "invalid aggregation function - ignored",
+			name:        "unknown function with parens - rejected as embedded resource",
 			query:       "select=invalid_func(column)",
-			expectError: false, // Parser is lenient - unknown functions are ignored
+			expectError: true, // Embedded resources are not supported
 		},
 		{
 			name:        "count with asterisk",
@@ -1913,7 +1920,7 @@ func TestParseSelect_EdgeCases(t *testing.T) {
 		{
 			name:        "select with qualified column",
 			query:       "select=user.profile.name",
-			expectError: false,
+			expectError: true, // Dotted names are not valid identifiers or JSONB paths
 		},
 		{
 			name:        "select with wildcard",
@@ -2344,17 +2351,17 @@ func TestParsePagination_MoreCases(t *testing.T) {
 			name:           "negative limit",
 			config:         testConfig(),
 			query:          "limit=-10",
-			expectedLimit:  intPtr(-10),
+			expectedLimit:  nil,
 			expectedOffset: nil,
-			expectError:    false,
+			expectError:    true,
 		},
 		{
 			name:           "negative offset",
 			config:         testConfig(),
 			query:          "offset=-5",
 			expectedLimit:  nil,
-			expectedOffset: intPtr(-5),
-			expectError:    false,
+			expectedOffset: nil,
+			expectError:    true,
 		},
 		{
 			name:           "invalid limit - not a number",
@@ -2440,9 +2447,9 @@ func TestParseSelect_MoreCases(t *testing.T) {
 		{
 			name:         "qualified columns",
 			query:        "select=user.id,user.profile.name",
-			expectedCols: []string{"user.id", "user.profile.name"},
+			expectedCols: nil,
 			expectedAggs: 0,
-			expectError:  false,
+			expectError:  true, // Dotted names are not valid identifiers or JSONB paths
 		},
 		{
 			name:         "columns with underscores",

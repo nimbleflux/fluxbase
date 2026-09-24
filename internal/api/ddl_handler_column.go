@@ -33,6 +33,11 @@ func (h *DDLHandler) AddColumn(c fiber.Ctx) error {
 		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
 	}
 
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, schema); err != nil {
+		return err
+	}
+
 	var req AddColumnRequest
 	if err := ParseBody(c, &req); err != nil {
 		return err
@@ -121,6 +126,11 @@ func (h *DDLHandler) DropColumn(c fiber.Ctx) error {
 	}
 	if err := validateIdentifier(column, "column"); err != nil {
 		return SendBadRequest(c, err.Error(), ErrCodeValidationFailed)
+	}
+
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, schema); err != nil {
+		return err
 	}
 
 	if err := h.requireDB(c); err != nil {

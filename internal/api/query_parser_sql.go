@@ -7,14 +7,17 @@ import (
 )
 
 // ToSQL converts QueryParams to SQL WHERE, ORDER BY, LIMIT, OFFSET clauses
-func (params *QueryParams) ToSQL(tableName string) (string, []interface{}) {
+func (params *QueryParams) ToSQL(tableName string) (string, []interface{}, error) {
 	var sqlParts []string
 	var args []interface{}
 	argCounter := 1
 
 	// Build WHERE clause
 	if len(params.Filters) > 0 {
-		whereClause, whereArgs := params.buildWhereClause(&argCounter)
+		whereClause, whereArgs, err := params.buildWhereClause(&argCounter)
+		if err != nil {
+			return "", nil, err
+		}
 		if whereClause != "" {
 			sqlParts = append(sqlParts, "WHERE "+whereClause)
 			args = append(args, whereArgs...)
@@ -23,7 +26,10 @@ func (params *QueryParams) ToSQL(tableName string) (string, []interface{}) {
 
 	// Build ORDER BY clause
 	if len(params.Order) > 0 {
-		orderClause, orderArgs := params.buildOrderClause(&argCounter)
+		orderClause, orderArgs, err := params.buildOrderClause(&argCounter)
+		if err != nil {
+			return "", nil, err
+		}
 		if orderClause != "" {
 			sqlParts = append(sqlParts, "ORDER BY "+orderClause)
 			args = append(args, orderArgs...)
@@ -44,37 +50,31 @@ func (params *QueryParams) ToSQL(tableName string) (string, []interface{}) {
 		argCounter++
 	}
 
-	return strings.Join(sqlParts, " "), args
+	return strings.Join(sqlParts, " "), args, nil
 }
 
 // BuildSelectClause builds the SELECT clause, including aggregations
 func (params *QueryParams) BuildSelectClause(tableName string) string {
 	var parts []string
 
-	// Add regular select fields - quote identifiers for safety
+	// Add regular select fields - quote identifiers for safety.
+	// Only validated identifiers and JSONB paths are accepted; arbitrary
+	// expressions are never passed through (validate identifiers before
+	// interpolation).
 	if len(params.Select) > 0 {
 		for _, field := range params.Select {
 			// Skip empty fields
 			if field == "" {
 				continue
 			}
-			// Check if it's already a complex expression (contains operators or functions)
-			// In which case, validate it against SQL injection patterns
-			if strings.ContainsAny(field, "()+-*/ ") {
-				upper := strings.ToUpper(field)
-				for _, kw := range []string{"INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "EXECUTE", "GRANT", "REVOKE", "EXEC", "UNION"} {
-					if strings.Contains(upper, kw) {
-						return ""
-					}
-				}
-				if strings.Contains(upper, "SELECT") {
-					return ""
-				}
-				parts = append(parts, field)
-			} else {
-				// Simple column name - quote it for safety
-				parts = append(parts, quoteIdentifier(field))
+			if field == "*" {
+				parts = append(parts, "*")
+				continue
 			}
+			if !isValidColumnReference(field) {
+				return ""
+			}
+			parts = append(parts, parseJSONBPath(field))
 		}
 	} else if len(params.Aggregations) == 0 && len(params.GroupBy) == 0 {
 		// Default to * if no select, aggregations, or group by
@@ -168,7 +168,7 @@ func (agg *Aggregation) ToSQL() string {
 }
 
 // buildWhereClause builds the WHERE clause from filters
-func (params *QueryParams) buildWhereClause(argCounter *int) (string, []interface{}) {
+func (params *QueryParams) buildWhereClause(argCounter *int) (string, []interface{}, error) {
 	var args []interface{}
 
 	// Build SQL for each filter and collect arguments
@@ -179,7 +179,10 @@ func (params *QueryParams) buildWhereClause(argCounter *int) (string, []interfac
 	filterSQLs := make([]filterSQL, len(params.Filters))
 
 	for i, filter := range params.Filters {
-		condition, arg := filterToSQL(filter, argCounter)
+		condition, arg, err := filterToSQL(filter, argCounter)
+		if err != nil {
+			return "", nil, err
+		}
 		filterSQLs[i] = filterSQL{condition: condition, filter: filter}
 		if arg != nil {
 			// Handle multi-argument operators (e.g., ST_DWithin returns []interface{})
@@ -247,12 +250,12 @@ func (params *QueryParams) buildWhereClause(argCounter *int) (string, []interfac
 		}
 	}
 
-	return strings.Join(finalConditions, " AND "), args
+	return strings.Join(finalConditions, " AND "), args, nil
 }
 
 // buildOrderClause builds the ORDER BY clause with parameterized vector values
 // Returns the clause string and any arguments that need to be passed to the query
-func (params *QueryParams) buildOrderClause(argCounter *int) (string, []interface{}) {
+func (params *QueryParams) buildOrderClause(argCounter *int) (string, []interface{}, error) {
 	var orderParts []string
 	var args []interface{}
 
@@ -260,7 +263,9 @@ func (params *QueryParams) buildOrderClause(argCounter *int) (string, []interfac
 		// Quote column name to prevent SQL injection
 		quotedCol := quoteIdentifier(order.Column)
 		if quotedCol == "" {
-			continue // Skip invalid column names
+			// Reject invalid column names instead of dropping the condition,
+			// which would silently change the result set
+			return "", nil, fmt.Errorf("invalid order column name: %s", order.Column)
 		}
 
 		var part string
@@ -277,13 +282,13 @@ func (params *QueryParams) buildOrderClause(argCounter *int) (string, []interfac
 			case OpVectorIP:
 				opSQL = "<#>"
 			default:
-				continue // Skip unknown vector operators
+				return "", nil, fmt.Errorf("unsupported vector ordering operator: %s", order.VectorOp)
 			}
 
 			// Validate and sanitize vector value before parameterization
 			vectorVal, err := validateAndFormatVector(order.VectorValue)
 			if err != nil {
-				continue // Skip invalid vector values
+				return "", nil, err
 			}
 
 			// Use parameterized query for vector values
@@ -301,18 +306,27 @@ func (params *QueryParams) buildOrderClause(argCounter *int) (string, []interfac
 			part += " ASC"
 		}
 
-		if order.Nulls != "" {
-			part += " NULLS " + strings.ToUpper(order.Nulls)
+		// Only fixed NULLS placement keywords are accepted
+		switch order.Nulls {
+		case "first":
+			part += " NULLS FIRST"
+		case "last":
+			part += " NULLS LAST"
 		}
 
 		orderParts = append(orderParts, part)
 	}
 
-	return strings.Join(orderParts, ", "), args
+	return strings.Join(orderParts, ", "), args, nil
 }
 
 // filterToSQL converts a filter to SQL condition
-func filterToSQL(f Filter, argCounter *int) (string, interface{}) {
+func filterToSQL(f Filter, argCounter *int) (string, interface{}, error) {
+	// Validate the column reference before building SQL
+	if !isValidColumnReference(f.Column) {
+		return "", nil, fmt.Errorf("invalid filter column name: %s", f.Column)
+	}
+
 	// Parse JSONB path for proper SQL formatting
 	colExpr := parseJSONBPath(f.Column)
 
@@ -320,12 +334,12 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}) {
 	case OpEqual:
 		sql := fmt.Sprintf("%s = $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpNotEqual:
 		sql := fmt.Sprintf("%s != $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpGreaterThan:
 		expr := colExpr
@@ -334,7 +348,7 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}) {
 		}
 		sql := fmt.Sprintf("%s > $%d", expr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpGreaterOrEqual:
 		expr := colExpr
@@ -343,7 +357,7 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}) {
 		}
 		sql := fmt.Sprintf("%s >= $%d", expr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpLessThan:
 		expr := colExpr
@@ -352,7 +366,7 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}) {
 		}
 		sql := fmt.Sprintf("%s < $%d", expr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpLessOrEqual:
 		expr := colExpr
@@ -361,77 +375,77 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}) {
 		}
 		sql := fmt.Sprintf("%s <= $%d", expr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpLike:
 		sql := fmt.Sprintf("%s LIKE $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpILike:
 		sql := fmt.Sprintf("%s ILIKE $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpIn:
 		// Use PostgreSQL's ANY() syntax to properly handle array parameters
 		// This avoids the bug where IN ($2,$3) expects multiple args but we pass a single array
 		sql := fmt.Sprintf("%s = ANY($%d)", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpIs:
 		if f.Value == nil {
-			return fmt.Sprintf("%s IS NULL", colExpr), nil
+			return fmt.Sprintf("%s IS NULL", colExpr), nil, nil
 		}
 		// SECURITY: OpIs values are validated during parsing to only accept "true", "false", or "null".
 		// The parsed Go bool value is passed via parameterized query to prevent SQL injection.
 		sql := fmt.Sprintf("%s IS $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpContains:
 		sql := fmt.Sprintf("%s @> $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpContained:
 		sql := fmt.Sprintf("%s <@ $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpOverlap:
 		sql := fmt.Sprintf("%s && $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpTextSearch:
 		sql := fmt.Sprintf("%s @@ plainto_tsquery($%d)", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpPhraseSearch:
 		sql := fmt.Sprintf("%s @@ phraseto_tsquery($%d)", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpWebSearch:
 		sql := fmt.Sprintf("%s @@ websearch_to_tsquery($%d)", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpNot:
 		// NOT operator - negates the condition
 		// Value format: "operator.value" (e.g., "eq.deleted" or "is.null")
 		valueStr, ok := f.Value.(string)
 		if !ok {
-			return "", fmt.Errorf("NOT operator requires string value in format operator.value")
+			return "", nil, fmt.Errorf("NOT operator requires string value in format operator.value")
 		}
 
 		// Parse nested operator and value
 		dotIndex := strings.Index(valueStr, ".")
 		if dotIndex <= 0 {
-			return "", fmt.Errorf("NOT operator value must be in format operator.value, got: %s", valueStr)
+			return "", nil, fmt.Errorf("NOT operator value must be in format operator.value, got: %s", valueStr)
 		}
 
 		nestedOp := FilterOperator(valueStr[:dotIndex])
@@ -468,90 +482,93 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}) {
 		}
 
 		// Generate SQL for the nested filter
-		nestedSQL, nestedArg := filterToSQL(nestedFilter, argCounter)
+		nestedSQL, nestedArg, err := filterToSQL(nestedFilter, argCounter)
+		if err != nil {
+			return "", nil, err
+		}
 
 		// Wrap in NOT
 		sql := fmt.Sprintf("NOT (%s)", nestedSQL)
-		return sql, nestedArg
+		return sql, nestedArg, nil
 
 	case OpAdjacent:
 		sql := fmt.Sprintf("%s << $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpStrictlyLeft:
 		sql := fmt.Sprintf("%s << $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpStrictlyRight:
 		sql := fmt.Sprintf("%s >> $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpNotExtendRight:
 		sql := fmt.Sprintf("%s &< $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpNotExtendLeft:
 		sql := fmt.Sprintf("%s &> $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	// PostGIS spatial operators
 	case OpSTIntersects:
 		sql := fmt.Sprintf("ST_Intersects(%s, ST_GeomFromGeoJSON($%d))", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpSTContains:
 		sql := fmt.Sprintf("ST_Contains(%s, ST_GeomFromGeoJSON($%d))", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpSTWithin:
 		sql := fmt.Sprintf("ST_Within(%s, ST_GeomFromGeoJSON($%d))", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpSTDWithin:
 		// ST_DWithin expects: ST_DWithin(geom1, geom2, distance)
 		// Value format: "distance,{geojson}" (e.g., "1000,{"type":"Point","coordinates":[-122.4,37.8]}")
 		valueStr, ok := f.Value.(string)
 		if !ok {
-			return "", nil
+			return "", nil, nil
 		}
 
 		distance, geometry, err := parseSTDWithinValue(valueStr)
 		if err != nil {
-			return "", nil
+			return "", nil, nil
 		}
 
 		sql := fmt.Sprintf("ST_DWithin(%s, ST_GeomFromGeoJSON($%d), $%d)", colExpr, *argCounter, *argCounter+1)
 		*argCounter += 2
 		// Return a slice with both arguments (geometry first, then distance)
-		return sql, []interface{}{geometry, distance}
+		return sql, []interface{}{geometry, distance}, nil
 
 	case OpSTDistance:
 		sql := fmt.Sprintf("ST_Distance(%s, ST_GeomFromGeoJSON($%d))", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpSTTouches:
 		sql := fmt.Sprintf("ST_Touches(%s, ST_GeomFromGeoJSON($%d))", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpSTCrosses:
 		sql := fmt.Sprintf("ST_Crosses(%s, ST_GeomFromGeoJSON($%d))", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	case OpSTOverlaps:
 		sql := fmt.Sprintf("ST_Overlaps(%s, ST_GeomFromGeoJSON($%d))", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 
 	// pgvector similarity operators
 	// These operators calculate distance - lower values = more similar
@@ -562,7 +579,7 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}) {
 		vectorVal := formatVectorValue(f.Value)
 		sql := fmt.Sprintf("%s <-> $%d::vector", colExpr, *argCounter)
 		*argCounter++
-		return sql, vectorVal
+		return sql, vectorVal, nil
 
 	case OpVectorCosine:
 		// Cosine distance: <=>
@@ -570,7 +587,7 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}) {
 		vectorVal := formatVectorValue(f.Value)
 		sql := fmt.Sprintf("%s <=> $%d::vector", colExpr, *argCounter)
 		*argCounter++
-		return sql, vectorVal
+		return sql, vectorVal, nil
 
 	case OpVectorIP:
 		// Negative inner product: <#>
@@ -578,12 +595,12 @@ func filterToSQL(f Filter, argCounter *int) (string, interface{}) {
 		vectorVal := formatVectorValue(f.Value)
 		sql := fmt.Sprintf("%s <#> $%d::vector", colExpr, *argCounter)
 		*argCounter++
-		return sql, vectorVal
+		return sql, vectorVal, nil
 
 	default:
 		sql := fmt.Sprintf("%s = $%d", colExpr, *argCounter)
 		*argCounter++
-		return sql, f.Value
+		return sql, f.Value, nil
 	}
 }
 
@@ -627,10 +644,15 @@ func validateAndFormatVector(value interface{}) (string, error) {
 //   - "data->nested->>value" -> "data"->'nested'->>'value' (chained)
 //   - "data->0->name" -> "data"->0->'name' (array index)
 func parseJSONBPath(column string) string {
+	// Escape embedded double quotes before wrapping segments as identifiers
+	quoteIdent := func(s string) string {
+		return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+	}
+
 	// Check if column contains JSONB path operators
 	if !strings.Contains(column, "->") {
 		// Simple column name - quote it
-		return fmt.Sprintf(`"%s"`, column)
+		return quoteIdent(column)
 	}
 
 	// Split the path into segments, preserving ->> vs ->
@@ -662,7 +684,7 @@ func parseJSONBPath(column string) string {
 			// No more operators - this is the last key
 			key := remaining
 			if isFirst {
-				fmt.Fprintf(&result, `"%s"`, key)
+				result.WriteString(quoteIdent(key))
 			} else {
 				result.WriteString(formatJSONKey(key))
 			}
@@ -673,7 +695,7 @@ func parseJSONBPath(column string) string {
 		part := remaining[:opIdx]
 		if isFirst {
 			// First part is the column name - quote it as identifier
-			fmt.Fprintf(&result, `"%s"`, part)
+			result.WriteString(quoteIdent(part))
 			isFirst = false
 		} else {
 			// Subsequent parts are JSON keys

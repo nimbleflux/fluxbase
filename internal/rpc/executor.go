@@ -199,7 +199,8 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecuteContext) (*Execu
 			exec.Status = StatusTimeout
 			return e.failExecutionWithContext(ctx, exec, execCtx, start, "Query execution timed out")
 		}
-		return e.failExecutionWithContext(ctx, exec, execCtx, start, fmt.Sprintf("Query execution failed: %s", err.Error()))
+		// Store a sanitized message; the full error is logged by the executor
+		return e.failExecutionWithContext(ctx, exec, execCtx, start, fmt.Sprintf("Query execution failed: %s", database.SanitizeErrorMessage(err)))
 	}
 
 	if !execCtx.DisableExecutionLogs {
@@ -620,7 +621,7 @@ func (e *Executor) executeWithRLS(ctx context.Context, sql string, args []interf
 	// Execute the query with parameterized arguments
 	rows, err := tx.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("query execution failed: %w", err)
+		return nil, 0, fmt.Errorf("query execution failed: %s", database.SanitizeErrorMessage(err))
 	}
 	defer rows.Close()
 

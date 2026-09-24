@@ -250,6 +250,12 @@ func (h *RESTHandler) makeBatchPatchHandler(table database.TableInfo) fiber.Hand
 			return SendBadRequest(c, fmt.Sprintf("Invalid query parameters: %v", err), ErrCodeInvalidInput)
 		}
 
+		// Require at least one filter for safety, consistent with batch delete;
+		// an unfiltered PATCH would update every row in the table
+		if len(params.Filters) == 0 {
+			return SendBadRequest(c, "Batch update requires at least one filter. Use PATCH /:id for single record updates", ErrCodeInvalidInput)
+		}
+
 		// Build SET clause
 		setClauses := make([]string, 0, len(data))
 		values := make([]interface{}, 0, len(data))
@@ -278,7 +284,10 @@ func (h *RESTHandler) makeBatchPatchHandler(table database.TableInfo) fiber.Hand
 		}
 
 		// Build WHERE clause from filters
-		whereSQL, whereArgs := params.buildWhereClause(&argCounter)
+		whereSQL, whereArgs, err := params.buildWhereClause(&argCounter)
+		if err != nil {
+			return SendBadRequest(c, fmt.Sprintf("Invalid query parameters: %v", err), ErrCodeInvalidInput)
+		}
 		values = append(values, whereArgs...)
 
 		// Build UPDATE query
@@ -358,7 +367,10 @@ func (h *RESTHandler) makeBatchDeleteHandler(table database.TableInfo) fiber.Han
 
 		// Build WHERE clause from filters
 		argCounter := 1
-		whereSQL, whereArgs := params.buildWhereClause(&argCounter)
+		whereSQL, whereArgs, err := params.buildWhereClause(&argCounter)
+		if err != nil {
+			return SendBadRequest(c, fmt.Sprintf("Invalid query parameters: %v", err), ErrCodeInvalidInput)
+		}
 
 		// Build DELETE query
 		query := fmt.Sprintf(

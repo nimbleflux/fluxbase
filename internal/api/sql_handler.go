@@ -435,7 +435,9 @@ func (h *SQLHandler) executeStatementInTx(ctx context.Context, tx pgx.Tx, statem
 
 	rows, err := tx.Query(ctx, statement)
 	if err != nil {
-		errorMsg := err.Error()
+		log.Warn().Err(err).Str("statement", util.TruncateString(statement, 100)).Msg("SQL statement failed")
+		// Return a sanitized message to clients; the full error is logged above
+		errorMsg := database.SanitizeErrorMessage(err)
 		result.Error = &errorMsg
 		result.ExecutionTimeMS = float64(time.Since(startTime).Milliseconds())
 		return result
