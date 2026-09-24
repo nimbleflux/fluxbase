@@ -486,6 +486,18 @@ jobs:
           # Current MinIO images default to `minio` (no args), which exits —
           # GitHub Actions service containers cannot override CMD, so run the
           # container from a step with explicit `server /data` args instead.
+          # quay.io anonymous pulls are intermittently rejected; retry.
+          for attempt in 1 2 3 4 5; do
+            if docker pull quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z; then
+              break
+            fi
+            if [ "$attempt" = "5" ]; then
+              echo "::error::Failed to pull MinIO image after $attempt attempts"
+              exit 1
+            fi
+            echo "Pull failed (attempt $attempt) — retrying in 20s"
+            sleep 20
+          done
           docker run -d --name minio \
             -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin \
@@ -804,7 +816,24 @@ jobs:
           psql -h localhost -U postgres -c "CREATE DATABASE fluxbase_go_e2e;"
           psql -h localhost -U postgres -d fluxbase_go_e2e -c "CREATE USER fluxbase_app WITH PASSWORD 'fluxbase_app_password' LOGIN BYPASSRLS CREATEDB CREATEROLE;"
           psql -h localhost -U postgres -d fluxbase_go_e2e -c "GRANT ALL PRIVILEGES ON DATABASE fluxbase_go_e2e TO fluxbase_app;"
+          psql -h localhost -U postgres -d fluxbase_go_e2e -c "GRANT ALL ON SCHEMA public TO fluxbase_app;"
+          psql -h localhost -U postgres -d fluxbase_go_e2e -c "CREATE SCHEMA IF NOT EXISTS _fluxbase;"
+          psql -h localhost -U postgres -d fluxbase_go_e2e -c "GRANT ALL ON SCHEMA _fluxbase TO fluxbase_app;"
           psql -h localhost -U postgres -d fluxbase_go_e2e -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Setup database schema
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # Same provisioning as `make test-setup-db`: the DB-backed package
+          # tests expect the bootstrap roles and full declarative schema.
+          sed "s/{{APP_USER}}/fluxbase_app/g" internal/database/bootstrap/bootstrap.sql | psql -h localhost -U postgres -d fluxbase_go_e2e -v ON_ERROR_STOP=1
+          for schema in platform auth storage jobs functions realtime ai rpc app branching logging mcp; do
+            sed "s/{{APP_USER}}/fluxbase_app/g" internal/database/schema/schemas/$schema.sql | psql -h localhost -U postgres -d fluxbase_go_e2e || true
+          done
+          psql -h localhost -U postgres -d fluxbase_go_e2e -f internal/database/schema/schemas/post-schema-fks.sql || true
+          psql -h localhost -U postgres -d fluxbase_go_e2e -f internal/database/schema/schemas/post-schema.sql || true
+          psql -h localhost -U postgres -d fluxbase_go_e2e -c "GRANT anon, authenticated, service_role, tenant_service TO fluxbase_app;"
 
       - name: Run DB-backed package tests (non-short)
         timeout-minutes: 20
@@ -816,6 +845,7 @@ jobs:
           FLUXBASE_DATABASE_ADMIN_USER: postgres
           FLUXBASE_DATABASE_ADMIN_PASSWORD: postgres
           FLUXBASE_DATABASE_DATABASE: fluxbase_go_e2e
+          FLUXBASE_TEST_DATABASE: fluxbase_go_e2e
           SKIP_MIGRATIONS: "true"
         run: |
           go test -v -timeout=15m ./internal/middleware/... ./internal/api/...
@@ -963,6 +993,18 @@ jobs:
           # Current MinIO images default to `minio` (no args), which exits —
           # GitHub Actions service containers cannot override CMD, so run the
           # container from a step with explicit `server /data` args instead.
+          # quay.io anonymous pulls are intermittently rejected; retry.
+          for attempt in 1 2 3 4 5; do
+            if docker pull quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z; then
+              break
+            fi
+            if [ "$attempt" = "5" ]; then
+              echo "::error::Failed to pull MinIO image after $attempt attempts"
+              exit 1
+            fi
+            echo "Pull failed (attempt $attempt) — retrying in 20s"
+            sleep 20
+          done
           docker run -d --name minio \
             -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin \
