@@ -500,22 +500,16 @@ jobs:
 
       - name: Setup MinIO bucket
         run: |
-          # Wait for MinIO to be ready
-          timeout 30 bash -c 'until curl -f http://localhost:9000/minio/health/live; do sleep 1; done'
-
-          # Install mc (MinIO client) — dl.min.io downloads are gone (410),
-          # so extract the binary from the container image instead.
-          docker create --name mc-extract quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z > /dev/null
-          docker cp mc-extract:/usr/bin/mc ./mc
-          docker rm mc-extract
-          chmod +x mc
-
-          # Configure mc
-          ./mc alias set minio http://localhost:9000 minioadmin minioadmin
-
-          # Create test bucket
-          ./mc mb minio/fluxbase-test || true
-          ./mc anonymous set public minio/fluxbase-test
+          # Pre-create the default test bucket via the SeaweedFS shell
+          # (individual tests create their own buckets as well). The master
+          # needs a few seconds for raft leader election after start, so retry.
+          for i in $(seq 1 10); do
+            if docker exec minio sh -c 'echo "s3.bucket.create -name fluxbase-test" | weed shell -master=localhost:9333' 2>&1 | tee /tmp/bucket.out | grep -qE "created bucket|already exists"; then
+              break
+            fi
+            echo "Bucket setup attempt $i failed — retrying in 3s"
+            sleep 3
+          done
 
       - name: Start Dex OIDC provider
         run: |
