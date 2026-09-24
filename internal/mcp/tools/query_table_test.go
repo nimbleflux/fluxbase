@@ -408,10 +408,13 @@ func TestBuildSelectQuery(t *testing.T) {
 		assert.Contains(t, sql, "OFFSET 50")
 	})
 
-	t.Run("sql expressions in columns", func(t *testing.T) {
+	t.Run("sql expressions in columns are dropped", func(t *testing.T) {
+		// Raw SQL expressions are no longer allowed in select columns; they
+		// are dropped (falling back to SELECT *) instead of interpolated.
 		sql, _ := buildSelectQuery("public", "orders", []string{"COUNT(*)", "sum(total) as revenue"}, nil, nil, 100, 0)
-		assert.Contains(t, sql, "COUNT(*)")
-		assert.Contains(t, sql, "sum(total) as revenue")
+		assert.Contains(t, sql, "SELECT *")
+		assert.NotContains(t, sql, "COUNT(*)")
+		assert.NotContains(t, sql, "sum(total) as revenue")
 	})
 }
 
