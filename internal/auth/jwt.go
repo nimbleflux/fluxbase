@@ -451,14 +451,21 @@ func (m *JWTManager) ValidateTokenWithSecret(tokenString, secretKey string) (*To
 	return claims, nil
 }
 
-// ValidateAccessToken validates an access token specifically
+// ValidateAccessToken validates an access token specifically.
+//
+// Backward compatibility: tokens minted outside Fluxbase (deploy/generate-keys.sh,
+// Terraform, bash one-liners — the documented bootstrap paths) predate the
+// token_type claim and carry none. An ABSENT token_type is treated as "access",
+// the only semantics such legacy keys ever had; a PRESENT but different
+// token_type is still rejected, which is the type-confusion this check guards
+// (platform-issued refresh/mfa_pending tokens always carry their type).
 func (m *JWTManager) ValidateAccessToken(tokenString string) (*TokenClaims, error) {
 	claims, err := m.ValidateToken(tokenString)
 	if err != nil {
 		return nil, err
 	}
 
-	if claims.TokenType != TokenTypeAccess {
+	if claims.TokenType != "" && claims.TokenType != TokenTypeAccess {
 		return nil, ErrInvalidToken
 	}
 
@@ -466,14 +473,15 @@ func (m *JWTManager) ValidateAccessToken(tokenString string) (*TokenClaims, erro
 }
 
 // ValidateAccessTokenWithSecret validates an access token signed with a
-// specific secret (tenant scenarios) and requires the access token type.
+// specific secret (tenant scenarios). Absent token_type is accepted as the
+// legacy "access" semantics; see ValidateAccessToken.
 func (m *JWTManager) ValidateAccessTokenWithSecret(tokenString, secretKey string) (*TokenClaims, error) {
 	claims, err := m.ValidateTokenWithSecret(tokenString, secretKey)
 	if err != nil {
 		return nil, err
 	}
 
-	if claims.TokenType != TokenTypeAccess {
+	if claims.TokenType != "" && claims.TokenType != TokenTypeAccess {
 		return nil, ErrInvalidToken
 	}
 
