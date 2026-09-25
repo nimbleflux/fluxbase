@@ -138,15 +138,23 @@ jobs:
       - name: Boot #2 — restart bounce must come back healthy
         run: |
           ${{ env.COMPOSE }} restart fluxbase
-          # Fail fast on crash-looping instead of waiting out the full timeout
-          # on a regression: any daemon restart or non-running state trips it.
-          if ! timeout 300 bash -c '
+          # /health can go green while per-schema applies are still finishing,
+          # and the container passes through created/starting states on the
+          # way up — only a terminal state or a policy-restart while running
+          # is a real failure. Health AND the final apply marker are both
+          # required, each with its own bounded wait.
+          if ! timeout 420 bash -c '
             until curl -fsS http://localhost:8080/health >/dev/null 2>&1; do
               STATE=$(docker inspect -f "{{.State.Status}}" fluxbase)
-              RC=$(docker inspect -f "{{.RestartCount}}" fluxbase)
-              if [ "$STATE" != "running" ] || [ "$RC" -gt 0 ]; then
-                echo "crash-looping (state=$STATE restarts=$RC)"; exit 1
+              if [ "$STATE" = "exited" ] || [ "$STATE" = "dead" ]; then
+                echo "container $STATE"; exit 1
               fi
+              if [ "$STATE" = "running" ] && [ "$(docker inspect -f "{{.RestartCount}}" fluxbase)" -gt 0 ]; then
+                echo "crash-looping (policy restart while running)"; exit 1
+              fi
+              sleep 5
+            done
+            until ${{ env.COMPOSE }} logs fluxbase | grep -q "Declarative schema applied successfully"; do
               sleep 5
             done'; then
             echo "::error::Boot #2 did not become healthy — startup or declarative-plan failure"
@@ -154,7 +162,7 @@ jobs:
             exit 1
           fi
           echo "Boot #2 healthy"
-          if ${{ env.COMPOSE }} logs fluxbase | grep -q "declarative schema apply failed"; then
+          if ${{ env.COMPOSE }} logs fluxbase | grep -qi "declarative schema apply failed"; then
             echo "::error::Logs contain 'declarative schema apply failed'"
             ${{ env.COMPOSE }} logs --tail=200 fluxbase
             exit 1
@@ -243,21 +251,30 @@ jobs:
       - name: Boot this branch against the previous release's database
         run: |
           ${{ env.COMPOSE }} up -d fluxbase
-          if ! timeout 300 bash -c '
+          # Same tolerant wait as boot #2: the container passes through
+          # created/starting on the way up, and /health can precede the final
+          # "Declarative schema applied successfully" marker — both get their
+          # own bounded wait under one overall timeout.
+          if ! timeout 420 bash -c '
             until curl -fsS http://localhost:8080/health >/dev/null 2>&1; do
               STATE=$(docker inspect -f "{{.State.Status}}" fluxbase)
-              RC=$(docker inspect -f "{{.RestartCount}}" fluxbase)
-              if [ "$STATE" != "running" ] || [ "$RC" -gt 0 ]; then
-                echo "crash-looping (state=$STATE restarts=$RC)"; exit 1
+              if [ "$STATE" = "exited" ] || [ "$STATE" = "dead" ]; then
+                echo "container $STATE"; exit 1
               fi
+              if [ "$STATE" = "running" ] && [ "$(docker inspect -f "{{.RestartCount}}" fluxbase)" -gt 0 ]; then
+                echo "crash-looping (policy restart while running)"; exit 1
+              fi
+              sleep 5
+            done
+            until ${{ env.COMPOSE }} logs fluxbase | grep -q "Declarative schema applied successfully"; do
               sleep 5
             done'; then
             echo "::error::This branch failed to boot the previous release's database"
             ${{ env.COMPOSE }} logs --tail=200 fluxbase
             exit 1
           fi
-          ${{ env.COMPOSE }} logs fluxbase | grep -m1 "Declarative schema applied successfully"
-          if ${{ env.COMPOSE }} logs fluxbase | grep -q "declarative schema apply failed"; then
+          echo "Declarative schema applied successfully on the upgraded database"
+          if ${{ env.COMPOSE }} logs fluxbase | grep -qi "declarative schema apply failed"; then
             echo "::error::Logs contain 'declarative schema apply failed'"
             ${{ env.COMPOSE }} logs --tail=200 fluxbase
             exit 1
