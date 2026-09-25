@@ -157,6 +157,17 @@ export interface AuthResponse {
 }
 
 /**
+ * Request body for account self-service deletion (deleteAccount)
+ */
+export interface DeleteAccountRequest {
+  /**
+   * Current password. Required only when the account has a password
+   * credential; OAuth-only accounts may omit it.
+   */
+  password?: string;
+}
+
+/**
  * MFA Factor (Supabase-compatible)
  */
 export interface Factor {
@@ -3622,6 +3633,8 @@ export interface ChatbotKnowledgeBaseLink {
   id: string;
   chatbot_id: string;
   knowledge_base_id: string;
+  /** Access level: full, filtered (per-user scoping), or tiered */
+  access_level: string;
   enabled: boolean;
   max_chunks: number;
   similarity_threshold: number;
@@ -3634,6 +3647,12 @@ export interface ChatbotKnowledgeBaseLink {
  */
 export interface LinkKnowledgeBaseRequest {
   knowledge_base_id: string;
+  /**
+   * Access level: "full" exposes all chunks to the chatbot, "filtered"
+   * scopes retrieval to the calling user (default when omitted), "tiered"
+   * uses priority-based routing.
+   */
+  access_level?: "full" | "filtered" | "tiered";
   priority?: number;
   max_chunks?: number;
   similarity_threshold?: number;
@@ -3643,6 +3662,8 @@ export interface LinkKnowledgeBaseRequest {
  * Request to update a chatbot-knowledge base link
  */
 export interface UpdateChatbotKnowledgeBaseRequest {
+  /** Omitted leaves the current access level unchanged */
+  access_level?: "full" | "filtered" | "tiered";
   priority?: number;
   max_chunks?: number;
   similarity_threshold?: number;

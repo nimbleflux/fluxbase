@@ -200,6 +200,7 @@ export type {
   SignInCredentials,
   SignUpCredentials,
   UpdateUserAttributes,
+  DeleteAccountRequest,
   AuthResponse,
   TwoFactorSetupResponse,
   TwoFactorEnableResponse,

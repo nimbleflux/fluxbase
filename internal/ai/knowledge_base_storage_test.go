@@ -273,6 +273,24 @@ func TestUpdateChatbotKnowledgeBaseOptions_Struct(t *testing.T) {
 	})
 }
 
+func TestUpdateChatbotKnowledgeBaseRequest_AccessLevelBinding(t *testing.T) {
+	t.Run("binds access_level from the JSON body", func(t *testing.T) {
+		var req UpdateChatbotKnowledgeBaseRequest
+		err := json.Unmarshal([]byte(`{"access_level":"filtered","priority":2}`), &req)
+		require.NoError(t, err)
+		require.NotNil(t, req.AccessLevel)
+		assert.Equal(t, "filtered", *req.AccessLevel)
+		assert.Equal(t, 2, *req.Priority)
+	})
+
+	t.Run("access_level omitted stays nil", func(t *testing.T) {
+		var req UpdateChatbotKnowledgeBaseRequest
+		err := json.Unmarshal([]byte(`{"priority":3}`), &req)
+		require.NoError(t, err)
+		assert.Nil(t, req.AccessLevel)
+	})
+}
+
 func TestEmbeddingLiteralPrecision(t *testing.T) {
 	t.Run("preserves precision for common embedding values", func(t *testing.T) {
 		// Typical embedding values

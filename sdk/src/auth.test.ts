@@ -5,7 +5,11 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { FluxbaseAuth } from "./auth";
 import type { FluxbaseFetch } from "./fetch";
-import type { AuthResponse, ProviderTokenResponse } from "./types";
+import type {
+  AuthResponse,
+  FluxbaseError,
+  ProviderTokenResponse,
+} from "./types";
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -408,6 +412,90 @@ describe("FluxbaseAuth", () => {
       const { error } = await auth.signOut();
 
       expect(error).toBeDefined();
+      const { data: sessionData } = await auth.getSession();
+      expect(sessionData.session).toBeNull();
+    });
+  });
+
+  describe("deleteAccount()", () => {
+    /** Signs in against the mocked fetch so a session exists to delete. */
+    const signInFirst = async () => {
+      const authResponse: AuthResponse = {
+        access_token: "delete-account-token",
+        refresh_token: "delete-account-refresh",
+        expires_in: 3600,
+        token_type: "Bearer",
+        user: { id: "1", email: "user@example.com", created_at: "" },
+      };
+
+      vi.mocked(mockFetch.post).mockResolvedValueOnce(authResponse);
+      await auth.signIn({ email: "user@example.com", password: "password" });
+    };
+
+    it("should delete the account and clear the session on success", async () => {
+      await signInFirst();
+
+      // 204 no-content resolves with an empty body
+      vi.mocked(mockFetch.delete).mockResolvedValue("");
+
+      const { data, error } = await auth.deleteAccount({
+        password: "password",
+      });
+
+      expect(error).toBeNull();
+      expect(data).toBeNull();
+      expect(mockFetch.delete).toHaveBeenCalledWith("/api/v1/auth/account", {
+        body: { password: "password" },
+      });
+      expect(mockFetch.setAuthToken).toHaveBeenCalledWith(null);
+      expect(localStorage.getItem("fluxbase.auth.session")).toBeNull();
+      const { data: sessionData } = await auth.getSession();
+      expect(sessionData.session).toBeNull();
+    });
+
+    it("should surface 403 invalid-password errors and keep the session", async () => {
+      await signInFirst();
+
+      vi.mocked(mockFetch.delete).mockRejectedValue(
+        Object.assign(new Error("Invalid email or password"), { status: 403 }),
+      );
+
+      const { error } = await auth.deleteAccount({ password: "wrong" });
+
+      expect(error).toBeDefined();
+      expect((error as FluxbaseError).status).toBe(403);
+      expect(error!.message).toBe("Invalid email or password");
+      // Failed deletion must not sign the user out: the account still exists.
+      const { data: sessionData } = await auth.getSession();
+      expect(sessionData.session).not.toBeNull();
+      expect(localStorage.getItem("fluxbase.auth.session")).not.toBeNull();
+    });
+
+    it("should surface network failures and keep the session", async () => {
+      await signInFirst();
+
+      vi.mocked(mockFetch.delete).mockRejectedValue(new Error("Network error"));
+
+      const { error } = await auth.deleteAccount({ password: "password" });
+
+      expect(error).toBeDefined();
+      expect(error!.message).toBe("Network error");
+      const { data: sessionData } = await auth.getSession();
+      expect(sessionData.session).not.toBeNull();
+    });
+
+    it("should omit the request body when no password is given", async () => {
+      await signInFirst();
+
+      vi.mocked(mockFetch.delete).mockResolvedValue("");
+
+      const { error } = await auth.deleteAccount();
+
+      expect(error).toBeNull();
+      expect(mockFetch.delete).toHaveBeenCalledWith("/api/v1/auth/account", {
+        body: undefined,
+      });
+      // OAuth-only accounts still get their local session cleared.
       const { data: sessionData } = await auth.getSession();
       expect(sessionData.session).toBeNull();
     });

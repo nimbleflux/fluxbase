@@ -300,6 +300,21 @@ class FluxbaseAuth(
         clearSession()
     }
 
+    /**
+     * Delete the current user's account (self-service account deletion).
+     * DELETEs to `/api/v1/auth/account` with an optional `{password}` body —
+     * required when the account has a password credential; OAuth-only accounts
+     * pass null. On success the local session is cleared so the SDK stops
+     * sending the revoked access token. Failures (403 wrong password, 429 rate
+     * limit) throw and leave the session untouched.
+     *
+     * Port of `deleteAccount()` in `auth.ts`.
+     */
+    suspend fun deleteAccount(password: String? = null) {
+        http.deleteWithHeaders("/api/v1/auth/account", password?.let { mapOf("password" to it) })
+        clearSession()
+    }
+
     // ---- Session management ----
 
     /**
