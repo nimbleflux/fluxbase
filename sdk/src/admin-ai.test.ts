@@ -624,8 +624,18 @@ describe("FluxbaseAdminAI", () => {
       it("should list linked knowledge bases", async () => {
         const response = {
           knowledge_bases: [
-            { chatbot_id: "bot-1", knowledge_base_id: "kb-1", priority: 1 },
-            { chatbot_id: "bot-1", knowledge_base_id: "kb-2", priority: 2 },
+            {
+              chatbot_id: "bot-1",
+              knowledge_base_id: "kb-1",
+              access_level: "filtered",
+              priority: 1,
+            },
+            {
+              chatbot_id: "bot-1",
+              knowledge_base_id: "kb-2",
+              access_level: "full",
+              priority: 2,
+            },
           ] as ChatbotKnowledgeBaseLink[],
           count: 2,
         };
@@ -639,6 +649,9 @@ describe("FluxbaseAdminAI", () => {
         );
         expect(error).toBeNull();
         expect(data).toHaveLength(2);
+        // The access_level column returned by the API is parsed per link.
+        expect(data![0].access_level).toBe("filtered");
+        expect(data![1].access_level).toBe("full");
       });
 
       it("should handle empty response", async () => {
@@ -706,6 +719,37 @@ describe("FluxbaseAdminAI", () => {
         expect(data).toBeNull();
         expect(error).toBeDefined();
       });
+
+      it("should send access_level when linking", async () => {
+        const response: ChatbotKnowledgeBaseLink = {
+          id: "link-1",
+          chatbot_id: "bot-1",
+          knowledge_base_id: "kb-1",
+          access_level: "filtered",
+          enabled: true,
+          max_chunks: 5,
+          similarity_threshold: 0.7,
+          priority: 1,
+          created_at: new Date().toISOString(),
+        };
+
+        vi.mocked(mockFetch.post).mockResolvedValue(response);
+
+        const { data, error } = await ai.linkKnowledgeBase("bot-1", {
+          knowledge_base_id: "kb-1",
+          access_level: "filtered",
+        });
+
+        expect(mockFetch.post).toHaveBeenCalledWith(
+          "/api/v1/admin/ai/chatbots/bot-1/knowledge-bases",
+          {
+            knowledge_base_id: "kb-1",
+            access_level: "filtered",
+          },
+        );
+        expect(error).toBeNull();
+        expect(data!.access_level).toBe("filtered");
+      });
     });
 
     describe("updateChatbotKnowledgeBase()", () => {
@@ -731,6 +775,36 @@ describe("FluxbaseAdminAI", () => {
         );
         expect(error).toBeNull();
         expect(data!.max_chunks).toBe(10);
+      });
+
+      it("should send access_level when updating an existing link", async () => {
+        const response: ChatbotKnowledgeBaseLink = {
+          id: "link-1",
+          chatbot_id: "bot-1",
+          knowledge_base_id: "kb-1",
+          access_level: "filtered",
+          enabled: true,
+          max_chunks: 5,
+          similarity_threshold: 0.7,
+          priority: 1,
+          created_at: new Date().toISOString(),
+        };
+
+        vi.mocked(mockFetch.put).mockResolvedValue(response);
+
+        // Migrate an existing "full" link to "filtered" without unlink/relink.
+        const { data, error } = await ai.updateChatbotKnowledgeBase(
+          "bot-1",
+          "kb-1",
+          { access_level: "filtered" },
+        );
+
+        expect(mockFetch.put).toHaveBeenCalledWith(
+          "/api/v1/admin/ai/chatbots/bot-1/knowledge-bases/kb-1",
+          { access_level: "filtered" },
+        );
+        expect(error).toBeNull();
+        expect(data!.access_level).toBe("filtered");
       });
 
       it("should handle error", async () => {

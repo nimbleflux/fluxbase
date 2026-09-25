@@ -10,6 +10,7 @@ import type {
   SignInCredentials,
   SignUpCredentials,
   UpdateUserAttributes,
+  DeleteAccountRequest,
   User,
   TwoFactorSetupResponse,
   TwoFactorEnableResponse,
@@ -492,6 +493,42 @@ export class FluxbaseAuth {
       } finally {
         this.clearSession();
       }
+    });
+  }
+
+  /**
+   * Delete the current user's account (self-service account deletion)
+   *
+   * Permanently deletes the authenticated account. On success the local
+   * session is cleared so the SDK stops sending the revoked access token.
+   * Unlike signOut(), a failed request (e.g. wrong password) keeps the
+   * session intact since the account still exists.
+   *
+   * @param request - Optional body with the current password. Required when
+   * the account has a password credential; OAuth-only accounts may omit it.
+   * @returns Promise resolving to { data: null, error: null } on success
+   *
+   * @example
+   * ```typescript
+   * const { error } = await client.auth.deleteAccount({ password: 'current-password' })
+   * if (!error) {
+   *   // Account deleted; redirect away from the settings page
+   * }
+   * ```
+   */
+  async deleteAccount(
+    request?: DeleteAccountRequest,
+  ): Promise<FluxbaseResponse<null>> {
+    return wrapAsync(async () => {
+      const body = request?.password
+        ? { password: request.password }
+        : undefined;
+
+      await this.fetch.delete("/api/v1/auth/account", { body });
+
+      this.clearSession();
+
+      return null;
     });
   }
 

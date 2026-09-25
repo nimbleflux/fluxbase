@@ -1,5 +1,6 @@
 package io.github.nimbleflux.fluxbase.auth
 
+import io.github.nimbleflux.fluxbase.core.FluxbaseException
 import io.github.nimbleflux.fluxbase.core.FluxbaseHttpClient
 import io.github.nimbleflux.fluxbase.core.test.RecordingHttp
 import io.github.nimbleflux.fluxbase.getOrNull
@@ -9,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -179,6 +181,61 @@ class FluxbaseAuthTest {
         // Sign-out restores anon key
         assertEquals("Bearer anon-key-123", http.defaultHeaders["Authorization"])
         assertNull(auth.currentSession)
+    }
+
+    @Test
+    fun `deleteAccount sends DELETE with password and clears session`() = runTest {
+        val recording = RecordingHttp(mockResponseBody = signInResponseJson)
+        val http = FluxbaseHttpClient("http://localhost:8080", recording)
+        http.setAnonKey("anon-key-123")
+        val auth = FluxbaseAuth(http, autoRefresh = false)
+        auth.signIn("user@example.com", "password123")
+
+        recording.mockResponseBody = ""
+        auth.deleteAccount("password123")
+
+        assertEquals("DELETE", recording.lastMethod)
+        assertEquals("/api/v1/auth/account", recording.lastPath)
+        val body = recording.lastBody as Map<*, *>
+        assertEquals("password123", body["password"])
+        // Deletion restores anon key and clears the session
+        assertEquals("Bearer anon-key-123", http.defaultHeaders["Authorization"])
+        assertNull(auth.currentSession)
+    }
+
+    @Test
+    fun `deleteAccount omits body for OAuth-only accounts`() = runTest {
+        val recording = RecordingHttp(mockResponseBody = signInResponseJson)
+        val http = FluxbaseHttpClient("http://localhost:8080", recording)
+        val auth = FluxbaseAuth(http, autoRefresh = false)
+        auth.signIn("user@example.com", "password123")
+
+        recording.mockResponseBody = ""
+        auth.deleteAccount()
+
+        assertEquals("DELETE", recording.lastMethod)
+        assertEquals("/api/v1/auth/account", recording.lastPath)
+        assertNull(recording.lastBody)
+        assertNull(auth.currentSession)
+    }
+
+    @Test
+    fun `deleteAccount keeps session when the server rejects the password`() = runTest {
+        val recording = RecordingHttp(mockResponseBody = signInResponseJson)
+        val http = FluxbaseHttpClient("http://localhost:8080", recording)
+        val auth = FluxbaseAuth(http, autoRefresh = false)
+        auth.signIn("user@example.com", "password123")
+
+        recording.mockError = FluxbaseException(403, message = "Invalid email or password")
+
+        val failure = assertFailsWith<FluxbaseException> {
+            auth.deleteAccount("wrong-password")
+        }
+
+        assertEquals(403, failure.status)
+        // The account still exists, so the session must survive.
+        assertNotNull(auth.currentSession)
+        assertEquals("Bearer new-access-token", http.defaultHeaders["Authorization"])
     }
 
     @Test

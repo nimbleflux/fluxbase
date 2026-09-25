@@ -138,6 +138,14 @@ class FluxbaseHttpClient(
         doRequest(HttpMethod.POST, path, body, headers)
 
     /**
+     * DELETE that can carry a JSON [body] and returns response headers — used by
+     * account deletion (`DELETE /api/v1/auth/account` accepts an optional
+     * `{password}`). Mirrors `fetch.delete(path, { body })` in `fetch.ts`.
+     */
+    suspend fun deleteWithHeaders(path: String, body: Any? = null, headers: Map<String, String> = emptyMap()): HttpResponse =
+        doRequest(HttpMethod.DELETE, path, body, headers)
+
+    /**
      * Internal: POST that bypasses the 401-retry path. Used by
      * [io.github.nimbleflux.fluxbase.auth.FluxbaseAuth.refreshSession] so the
      * token-refresh call can't recurse into itself when its token is also expired.

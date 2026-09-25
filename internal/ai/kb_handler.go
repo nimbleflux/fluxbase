@@ -316,6 +316,7 @@ func (h *KnowledgeBaseHandler) LinkKnowledgeBase(c fiber.Ctx) error {
 
 // UpdateChatbotKnowledgeBaseRequest represents a request to update a link
 type UpdateChatbotKnowledgeBaseRequest struct {
+	AccessLevel         *string  `json:"access_level,omitempty"` // full, filtered, tiered
 	Priority            *int     `json:"priority,omitempty"`
 	MaxChunks           *int     `json:"max_chunks,omitempty"`
 	SimilarityThreshold *float64 `json:"similarity_threshold,omitempty"`
@@ -347,6 +348,14 @@ func (h *KnowledgeBaseHandler) UpdateChatbotKnowledgeBase(c fiber.Ctx) error {
 		MaxChunks:           req.MaxChunks,
 		SimilarityThreshold: req.SimilarityThreshold,
 		Enabled:             req.Enabled,
+	}
+
+	// Normalize an explicitly provided access level the same way linking does
+	// (empty or unrecognized → "filtered"); omitted leaves the column
+	// untouched so partial updates don't reset existing links.
+	if req.AccessLevel != nil {
+		normalized := normalizeAccessLevel(*req.AccessLevel)
+		opts.AccessLevel = &normalized
 	}
 
 	link, err := h.storage.UpdateChatbotKnowledgeBaseLink(ctx, chatbotID, kbID, opts)
