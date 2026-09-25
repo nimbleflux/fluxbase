@@ -79,6 +79,18 @@ func IsTransientError(err error) bool {
 		return true
 	}
 
+	// pgconn.ErrConnClosed: pgx closed the connection under us (prior query
+	// cancelled mid-flight, socket went away, or the v5.10 conn-lock detected
+	// a closed conn). pgx itself marks this class SafeToRetry — the next use
+	// of the pool simply opens a fresh connection, so a startup step that
+	// hits it should retry rather than abort the process. This is the exact
+	// error behind bootstrap failures like
+	// "failed to execute bootstrap SQL: conn closed" seen when a container is
+	// bounced while the database is still settling.
+	if errors.Is(err, pgconn.ErrConnClosed) {
+		return true
+	}
+
 	// Network-layer errors: timeouts, refused, reset, closed, EOF.
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
@@ -119,6 +131,11 @@ var transientErrorFragments = []string{
 	"cannot connect now",
 	"eof",
 	"i/o timeout",
+	// Bare pgx closed-connection sentinel (connLockError.Error() == "conn
+	// closed"); matched as a substring so opaque wrappings like
+	// "failed to execute bootstrap SQL: conn closed" are retried even when
+	// the typed sentinel is not preserved by errors.Is.
+	"conn closed",
 }
 
 // IsUniqueViolation checks if an error is a unique constraint violation

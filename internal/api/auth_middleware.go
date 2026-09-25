@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -25,6 +26,21 @@ func getTenantJWTSecret(c fiber.Ctx) string {
 		return tenantConfig.Auth.JWTSecret
 	}
 	return ""
+}
+
+// tokenIssuedAt returns the token's issued-at time, or the zero time when the
+// token carries no iat claim. TokenClaims embeds jwt.RegisteredClaims whose
+// IssuedAt is a *NumericDate; service keys minted outside Fluxbase (e.g. by
+// deploy/generate-keys.sh, which signs {role, token_type, iss} only) have no
+// iat, so dereferencing IssuedAt directly panicked every request presenting
+// such a key (nil pointer dereference recovered as a 500 by the admin auth
+// middleware). A zero issuedAt simply disables the user-wide revocation
+// comparison in IsTokenRevoked; the exact-JTI check still runs.
+func tokenIssuedAt(claims *auth.TokenClaims) time.Time {
+	if claims == nil || claims.IssuedAt == nil {
+		return time.Time{}
+	}
+	return claims.IssuedAt.Time
 }
 
 // AuthMiddleware creates a middleware for JWT authentication
@@ -64,7 +80,7 @@ func AuthMiddleware(authService *auth.Service) fiber.Handler {
 		}
 
 		// Check if token has been revoked
-		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
+		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, tokenIssuedAt(claims))
 		if err != nil {
 			// SECURITY: Fail-closed for sensitive operations
 			// If we cannot verify token revocation status, deny access to sensitive operations
@@ -130,7 +146,7 @@ func OptionalAuthMiddleware(authService *auth.Service) fiber.Handler {
 		}
 
 		// Check if token has been revoked
-		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
+		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, tokenIssuedAt(claims))
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to check token revocation status in optional auth")
 			// Continue anyway - revocation check failure shouldn't block valid tokens
@@ -268,7 +284,7 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 			// and store the user ID in Subject instead of UserID
 			if claims.Role == "instance_admin" {
 				// Check if token has been revoked
-				isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
+				isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, tokenIssuedAt(claims))
 				if err != nil {
 					log.Error().Err(err).Str("jti", claims.ID).Msg("Failed to check token revocation status")
 				} else if isRevoked {
@@ -292,7 +308,7 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 
 			// Successfully validated as auth.users token
 			// Check if token has been revoked
-			isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, claims.IssuedAt.Time)
+			isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), claims.ID, claims.UserID, tokenIssuedAt(claims))
 			if err != nil {
 				// SECURITY: Fail-closed for sensitive operations
 				// If we cannot verify token revocation status, deny access to sensitive operations
@@ -347,7 +363,7 @@ func UnifiedAuthMiddleware(authService *auth.Service, jwtManager *auth.JWTManage
 		}
 
 		// Check if token has been revoked
-		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), dashboardClaims.ID, dashboardClaims.UserID, dashboardClaims.IssuedAt.Time)
+		isRevoked, err := authService.TokenBlacklistService().IsTokenRevoked(c.RequestCtx(), dashboardClaims.ID, dashboardClaims.UserID, tokenIssuedAt(dashboardClaims))
 		if err != nil {
 			log.Error().Err(err).Str("jti", dashboardClaims.ID).Msg("Failed to check token revocation status")
 		} else if isRevoked {

@@ -213,6 +213,15 @@ func (s *DeclarativeService) planForSchemaWithOptions(ctx context.Context, schem
 	// Extract changes from groups/steps structure
 	plan.Changes = extractChangesFromGroups(&plan)
 
+	// Scope drop planning to objects the schema file declares. pgschema diffs
+	// every live object in the schema, including objects Fluxbase manages
+	// outside the declarative schema files (post-schema policies/triggers,
+	// bootstrap tables, the app-schema registry tables). Those live-but-
+	// undeclared objects must never be planned as drops: on every boot after
+	// the first they would produce a destructive-only plan that fails the
+	// allow_destructive=false re-check and crash-loops startup.
+	s.filterUnownedDrops(schema, &plan)
+
 	plan.Duration = time.Since(start)
 	return &plan, nil
 }
@@ -730,8 +739,12 @@ func (s *DeclarativeService) applySchemaDirectFallback(ctx context.Context, sche
 // those that must be skipped because they are destructive and allowDestructive is
 // false. Pure helper so the destructive re-check in applyPlanDirectly is testable.
 func partitionDestructiveChanges(changes []Change, allowDestructive bool) (executable, blocked []Change) {
+	// Constraint replacements (same plan drops and re-adds a constraint of the
+	// same name, e.g. widening a CHECK) are metadata-only: they never delete
+	// stored data, so they are executable even when allowDestructive is false.
+	reAdded := reAddedConstraintNames(changes)
 	for _, c := range changes {
-		if c.Destructive && !allowDestructive && !isPrivilegeNormalization(c.SQL) {
+		if c.Destructive && !allowDestructive && !isPrivilegeNormalization(c.SQL) && !isConstraintReplacement(c.SQL, reAdded) {
 			blocked = append(blocked, c)
 			continue
 		}
@@ -741,11 +754,52 @@ func partitionDestructiveChanges(changes []Change, allowDestructive bool) (execu
 }
 
 // isPrivilegeNormalization reports whether a destructive-flagged change only
-// adjusts default privileges. pgschema flags `ALTER DEFAULT PRIVILEGES ...
-// REVOKE ...` as destructive on fresh databases (it narrows overly broad
-// defaults before the desired-state GRANTs run); it affects no stored data.
+// adjusts privileges. Two statement classes qualify, neither of which can
+// touch stored row data:
+//   - ALTER DEFAULT PRIVILEGES ... REVOKE ... (narrows overly broad defaults
+//     before the desired-state GRANTs run; pgschema flags it destructive on
+//     fresh databases), and
+//   - plain REVOKE ... (privilege withdrawal only). These re-plan on every
+//     boot whenever a bootstrap-created grant precedes the declarative
+//     revoke: the plan blocks them on boot #1, so they are never applied and
+//     then reappear as a destructive-ONLY plan on boot #2, which the
+//     allow_destructive=false re-check turns into a startup crash
+//     (observed: schema "ai", REVOKEs on tool_audit_log/tool_integrations).
 func isPrivilegeNormalization(sql string) bool {
-	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "ALTER DEFAULT PRIVILEGES")
+	upper := strings.ToUpper(strings.TrimSpace(sql))
+	return strings.HasPrefix(upper, "ALTER DEFAULT PRIVILEGES") ||
+		strings.HasPrefix(upper, "REVOKE ")
+}
+
+var (
+	alterDropConstraintRe = regexp.MustCompile(`(?is)^\s*ALTER\s+TABLE\s+(?:ONLY\s+)?"?([\w\.]+)"?\s+DROP\s+CONSTRAINT\s+"?(\w+)"?`)
+	alterAddConstraintRe  = regexp.MustCompile(`(?is)^\s*ALTER\s+TABLE\s+(?:ONLY\s+)?"?([\w\.]+)"?\s+ADD\s+CONSTRAINT\s+"?(\w+)"?`)
+)
+
+// reAddedConstraintNames returns the set of "table|constraint" keys for
+// constraints a plan re-adds via ALTER TABLE ... ADD CONSTRAINT.
+func reAddedConstraintNames(changes []Change) map[string]bool {
+	reAdded := make(map[string]bool)
+	for _, c := range changes {
+		if m := alterAddConstraintRe.FindStringSubmatch(c.SQL); len(m) >= 3 {
+			reAdded[unqualifyIdent(m[1])+"|"+m[2]] = true
+		}
+	}
+	return reAdded
+}
+
+// isConstraintReplacement reports whether a destructive `ALTER TABLE ... DROP
+// CONSTRAINT ...` is part of a same-plan drop+re-add replacement of the same
+// constraint on the same table. Dropping a constraint removes no row data (the
+// ADD re-establishes it, VALIDATE re-checks existing rows), so such pairs are
+// regular declarative schema evolution rather than data loss. Constraint drops
+// that the plan does not re-add stay destructive and remain blocked.
+func isConstraintReplacement(sql string, reAdded map[string]bool) bool {
+	m := alterDropConstraintRe.FindStringSubmatch(sql)
+	if len(m) < 3 {
+		return false
+	}
+	return reAdded[unqualifyIdent(m[1])+"|"+m[2]]
 }
 
 // previewSQL truncates SQL to at most max bytes for error/log messages.
@@ -1064,6 +1118,144 @@ func (s *DeclarativeService) filterManagedFKDrops(changes []Change) []Change {
 		filtered = append(filtered, change)
 	}
 	return filtered
+}
+
+// declaredObjects records the object names a schema file explicitly declares.
+// The declarative applier owns exactly these objects; anything else live in the
+// schema (post-schema policies/triggers, bootstrap tables, app-schema registry
+// tables) is owned by another Fluxbase component and must not be planned as a
+// drop by the per-schema pgschema diff.
+type declaredObjects struct {
+	tables   map[string]bool
+	policies map[string]bool
+	triggers map[string]bool
+	indexes  map[string]bool
+}
+
+// Regexes for the pg_dump-style statements used in the embedded schema files.
+// Object names in these files are unqualified lowercase identifiers, matching
+// how pgschema names them in plan SQL.
+var (
+	declaredTableRe   = regexp.MustCompile(`(?im)^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?\s*\(`)
+	declaredPolicyRe  = regexp.MustCompile(`(?im)^\s*CREATE\s+POLICY\s+"?(\w+)"?\s`)
+	declaredTriggerRe = regexp.MustCompile(`(?im)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?TRIGGER\s+"?(\w+)"?\s`)
+	declaredIndexRe   = regexp.MustCompile(`(?im)^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?`)
+)
+
+// declaredSchemaObjects parses a schema file and returns the objects it
+// declares. It fails only when the file cannot be read; callers fail open
+// (keep all drops) in that case so a broken read never widens the applier's
+// destructive reach.
+func declaredSchemaObjects(schemaFile string) (*declaredObjects, error) {
+	content, err := os.ReadFile(schemaFile)
+	if err != nil {
+		return nil, err
+	}
+	sql := string(content)
+	grab := func(re *regexp.Regexp) map[string]bool {
+		out := make(map[string]bool)
+		for _, m := range re.FindAllStringSubmatch(sql, -1) {
+			out[m[1]] = true
+		}
+		return out
+	}
+	return &declaredObjects{
+		tables:   grab(declaredTableRe),
+		policies: grab(declaredPolicyRe),
+		triggers: grab(declaredTriggerRe),
+		indexes:  grab(declaredIndexRe),
+	}, nil
+}
+
+// Regexes for classifying plan drop statements. pgschema emits unqualified
+// names on drops but schema-qualified table names on some creates, so table
+// names are normalized via unqualifyIdent before comparisons.
+var (
+	dropTableRe      = regexp.MustCompile(`(?is)^\s*DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?"?([\w]+)"?`)
+	dropPolicyRe     = regexp.MustCompile(`(?is)^\s*DROP\s+POLICY\s+(?:IF\s+EXISTS\s+)?"?(\w+)"?`)
+	dropTriggerRe    = regexp.MustCompile(`(?is)^\s*DROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?"?(\w+)"?`)
+	dropIndexRe      = regexp.MustCompile(`(?is)^\s*DROP\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+EXISTS\s+)?"?(\w+)"?`)
+	alterTableDropRe = regexp.MustCompile(`(?is)^\s*ALTER\s+TABLE\s+(?:ONLY\s+)?"?([\w\.]+)"?\s+DROP\s`)
+)
+
+// firstMatch returns the first capture group of the regex match on sql.
+func firstMatch(re *regexp.Regexp, sql string) (string, bool) {
+	m := re.FindStringSubmatch(sql)
+	if len(m) < 2 {
+		return "", false
+	}
+	return m[1], true
+}
+
+// unqualifyIdent strips a leading schema qualifier: "platform.users" -> "users".
+func unqualifyIdent(ident string) string {
+	if i := strings.LastIndex(ident, "."); i >= 0 {
+		return ident[i+1:]
+	}
+	return ident
+}
+
+// ownsDrop reports whether a planned DROP statement targets an object the
+// schema file declares. Unknown statement shapes are treated as owned (kept in
+// the plan) so the filter can only ever narrow pgschema's plan, never widen it.
+func (d *declaredObjects) ownsDrop(sql string) bool {
+	if name, ok := firstMatch(dropTableRe, sql); ok {
+		return d.tables[unqualifyIdent(name)]
+	}
+	if name, ok := firstMatch(dropPolicyRe, sql); ok {
+		return d.policies[name]
+	}
+	if name, ok := firstMatch(dropTriggerRe, sql); ok {
+		return d.triggers[name]
+	}
+	if name, ok := firstMatch(dropIndexRe, sql); ok {
+		return d.indexes[name]
+	}
+	// ALTER TABLE <t> DROP CONSTRAINT|COLUMN ...: owned iff the parent table is
+	// declared; drops against tables we do not declare are not ours to make.
+	if m := alterTableDropRe.FindStringSubmatch(sql); len(m) >= 2 {
+		return d.tables[unqualifyIdent(m[1])]
+	}
+	return true
+}
+
+// filterUnownedDrops prunes DROP steps for objects the schema's declarative
+// file does not declare, keeping plan.Groups and plan.Changes consistent (both
+// are rebuilt from the filtered groups). Objects such as the post-schema RLS
+// policies/triggers (applied by applyPostSchemaPolicies in a later phase) and
+// platform.app_schemas/app_schema_state (created by the app declarative
+// service) are live in the schema but owned by other Fluxbase components;
+// pgschema must never drop them as part of per-schema convergence. If the
+// schema file cannot be read the plan is returned unmodified (fail open).
+func (s *DeclarativeService) filterUnownedDrops(schema string, plan *Plan) {
+	objs, err := declaredSchemaObjects(filepath.Join(s.config.SchemaDir, schema+".sql"))
+	if err != nil {
+		log.Warn().Err(err).Str("schema", schema).Msg("Could not read schema file to determine declared objects; keeping all plan drops")
+		return
+	}
+
+	dropped := 0
+	for gi := range plan.Groups {
+		steps := make([]PlanStep, 0, len(plan.Groups[gi].Steps))
+		for _, step := range plan.Groups[gi].Steps {
+			if step.Operation == "drop" && !objs.ownsDrop(step.SQL) {
+				dropped++
+				log.Info().
+					Str("schema", schema).
+					Str("sql", previewSQL(step.SQL, 120)).
+					Msg("Skipping drop of object not declared in schema file (owned by bootstrap/post-schema/app layers)")
+				continue
+			}
+			steps = append(steps, step)
+		}
+		plan.Groups[gi].Steps = steps
+	}
+	// Always re-derive Changes from the (possibly filtered) groups so both
+	// representations of the plan stay consistent for every consumer.
+	plan.Changes = extractChangesFromGroups(plan)
+	if dropped > 0 {
+		log.Info().Str("schema", schema).Int("skipped_drops", dropped).Msg("Filtered drops of objects not declared in the schema file")
+	}
 }
 
 // makeSQLIdempotent transforms SQL to be idempotent by:

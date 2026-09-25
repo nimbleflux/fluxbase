@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,6 +79,12 @@ func (m *mockRows) RawValues() [][]byte {
 }
 
 func (m *mockRows) Conn() *pgx.Conn {
+	return nil
+}
+
+// TypeMap satisfies the pgx.Rows interface added in pgx v5.11; the mock is
+// only used for JSON conversion tests, which never consult the type map.
+func (m *mockRows) TypeMap() *pgtype.Map {
 	return nil
 }
 
