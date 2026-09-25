@@ -124,12 +124,14 @@ jobs:
             STATUS=$(docker inspect -f '{{.State.Status}}/{{.RestartCount}}' fluxbase)
             if [ "$STATUS" != "running/0" ]; then
               echo "::error::Fluxbase container left running/0 during stability window: $STATUS"
-              ${{ env.COMPOSE }} logs --tail=100 fluxbase
+            docker inspect -f 'fluxbase state: status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}' fluxbase || true
+            ${{ env.COMPOSE }} logs --tail=100 fluxbase
               exit 1
             fi
             curl -fsS http://localhost:8080/health > /dev/null || {
               echo "::error::/health failed during stability window"
-              ${{ env.COMPOSE }} logs --tail=100 fluxbase
+            docker inspect -f 'fluxbase state: status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}' fluxbase || true
+            ${{ env.COMPOSE }} logs --tail=100 fluxbase
               exit 1
             }
           done
@@ -158,13 +160,15 @@ jobs:
               sleep 5
             done'; then
             echo "::error::Boot #2 did not become healthy — startup or declarative-plan failure"
-            ${{ env.COMPOSE }} logs --tail=200 fluxbase
+            docker inspect -f 'fluxbase state: status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}' fluxbase || true
+          ${{ env.COMPOSE }} logs --tail=200 fluxbase
             exit 1
           fi
           echo "Boot #2 healthy"
           if ${{ env.COMPOSE }} logs fluxbase | grep -qi "declarative schema apply failed"; then
             echo "::error::Logs contain 'declarative schema apply failed'"
-            ${{ env.COMPOSE }} logs --tail=200 fluxbase
+            docker inspect -f 'fluxbase state: status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}' fluxbase || true
+          ${{ env.COMPOSE }} logs --tail=200 fluxbase
             exit 1
           fi
 
@@ -178,6 +182,7 @@ jobs:
           if [ "$CODE" != "200" ]; then
             echo "::error::Authenticated admin endpoint returned $CODE (service_role JWT)"
             cat /tmp/admin-body.json || true
+          docker inspect -f 'fluxbase state: status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}' fluxbase || true
             ${{ env.COMPOSE }} logs --tail=100 fluxbase
             exit 1
           fi
@@ -270,13 +275,15 @@ jobs:
               sleep 5
             done'; then
             echo "::error::This branch failed to boot the previous release's database"
-            ${{ env.COMPOSE }} logs --tail=200 fluxbase
+            docker inspect -f 'fluxbase state: status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}' fluxbase || true
+          ${{ env.COMPOSE }} logs --tail=200 fluxbase
             exit 1
           fi
           echo "Declarative schema applied successfully on the upgraded database"
           if ${{ env.COMPOSE }} logs fluxbase | grep -qi "declarative schema apply failed"; then
             echo "::error::Logs contain 'declarative schema apply failed'"
-            ${{ env.COMPOSE }} logs --tail=200 fluxbase
+            docker inspect -f 'fluxbase state: status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}' fluxbase || true
+          ${{ env.COMPOSE }} logs --tail=200 fluxbase
             exit 1
           fi
 

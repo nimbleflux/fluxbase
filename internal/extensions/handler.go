@@ -47,9 +47,26 @@ func getTenantPool(c fiber.Ctx) *pgxpool.Pool {
 	return middleware.GetTenantPool(c)
 }
 
+// ensureService guards every handler: the extensions module is optional and
+// its service may be nil (e.g. minimal deployments where the catalog is not
+// wired). Calling into a nil service panics the whole server (fiber recovers
+// it as a 500 with a nil-pointer log), so answer 503 instead.
+func (h *Handler) ensureService(c fiber.Ctx) bool {
+	if h == nil || h.service == nil {
+		c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": "Extensions service is not available in this deployment",
+		})
+		return false
+	}
+	return true
+}
+
 // ListExtensions returns all available extensions with their status
 // GET /api/v1/admin/extensions
 func (h *Handler) ListExtensions(c fiber.Ctx) error {
+	if !h.ensureService(c) {
+		return nil
+	}
 	ctx := c.RequestCtx()
 
 	response, err := h.service.ListExtensions(ctx)
@@ -66,6 +83,9 @@ func (h *Handler) ListExtensions(c fiber.Ctx) error {
 // GetExtensionStatus returns the status of a specific extension
 // GET /api/v1/admin/extensions/:name/status
 func (h *Handler) GetExtensionStatus(c fiber.Ctx) error {
+	if !h.ensureService(c) {
+		return nil
+	}
 	ctx := c.RequestCtx()
 	name := c.Params("name")
 
@@ -89,6 +109,9 @@ func (h *Handler) GetExtensionStatus(c fiber.Ctx) error {
 // EnableExtension enables a PostgreSQL extension
 // POST /api/v1/admin/extensions/:name/enable
 func (h *Handler) EnableExtension(c fiber.Ctx) error {
+	if !h.ensureService(c) {
+		return nil
+	}
 	ctx := c.RequestCtx()
 	name := c.Params("name")
 
@@ -128,6 +151,9 @@ func (h *Handler) EnableExtension(c fiber.Ctx) error {
 // DisableExtension disables a PostgreSQL extension
 // POST /api/v1/admin/extensions/:name/disable
 func (h *Handler) DisableExtension(c fiber.Ctx) error {
+	if !h.ensureService(c) {
+		return nil
+	}
 	ctx := c.RequestCtx()
 	name := c.Params("name")
 
@@ -163,6 +189,9 @@ func (h *Handler) DisableExtension(c fiber.Ctx) error {
 // SyncExtensions syncs the extension catalog with PostgreSQL
 // POST /api/v1/admin/extensions/sync
 func (h *Handler) SyncExtensions(c fiber.Ctx) error {
+	if !h.ensureService(c) {
+		return nil
+	}
 	count, err := h.service.SyncExtensionCatalog(c.Context())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -182,6 +211,9 @@ func (h *Handler) SyncExtensions(c fiber.Ctx) error {
 // ListExtensionsForTenant returns extensions for the current tenant
 // GET /api/v1/tenants/:tenantId/extensions (or tenant context route)
 func (h *Handler) ListExtensionsForTenant(c fiber.Ctx) error {
+	if !h.ensureService(c) {
+		return nil
+	}
 	ctx := c.RequestCtx()
 	tenantID := getTenantID(c)
 	tenantPool := getTenantPool(c)
@@ -199,6 +231,9 @@ func (h *Handler) ListExtensionsForTenant(c fiber.Ctx) error {
 
 // GetExtensionStatusForTenant returns extension status for the current tenant
 func (h *Handler) GetExtensionStatusForTenant(c fiber.Ctx) error {
+	if !h.ensureService(c) {
+		return nil
+	}
 	ctx := c.RequestCtx()
 	name := c.Params("name")
 
@@ -224,6 +259,9 @@ func (h *Handler) GetExtensionStatusForTenant(c fiber.Ctx) error {
 
 // EnableExtensionForTenant enables an extension for the current tenant
 func (h *Handler) EnableExtensionForTenant(c fiber.Ctx) error {
+	if !h.ensureService(c) {
+		return nil
+	}
 	ctx := c.RequestCtx()
 	name := c.Params("name")
 
@@ -263,6 +301,9 @@ func (h *Handler) EnableExtensionForTenant(c fiber.Ctx) error {
 
 // DisableExtensionForTenant disables an extension for the current tenant
 func (h *Handler) DisableExtensionForTenant(c fiber.Ctx) error {
+	if !h.ensureService(c) {
+		return nil
+	}
 	ctx := c.RequestCtx()
 	name := c.Params("name")
 
