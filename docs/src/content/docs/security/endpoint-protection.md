@@ -51,15 +51,15 @@ Fluxbase supports four authentication methods, each suited for different use cas
 
 **Token delivery**:
 
-- `Authorization: Bearer <token>` header
-- `fluxbase_access_token` cookie (httpOnly, Secure, SameSite=Strict)
-- `token` query parameter (WebSocket connections only)
+- `Authorization: Bearer <token>` header (access tokens only — refresh tokens are rejected)
+- `fluxbase_access_token` cookie (httpOnly, `Secure` when the deployment is served over HTTPS, SameSite=Strict)
+- `token` query parameter (WebSocket upgrade requests only)
 
 **Token types**:
 | Type | Lifetime | Purpose |
 |------|----------|---------|
-| Access Token | 15 minutes | API access |
-| Refresh Token | 7 days | Obtain new access tokens |
+| Access Token | 1 hour (default) | API access |
+| Refresh Token | 90 days (default, sliding) | Obtain new access tokens |
 
 **Claims extracted**:
 
@@ -73,8 +73,8 @@ Fluxbase supports four authentication methods, each suited for different use cas
 
 **Key delivery**:
 
-- `X-Client-Key: <key>` header
-- `clientkey=<key>` query parameter
+- `X-Client-Key: <key>` header (`apikey: <key>` accepted as an alias)
+- `clientkey=<key>` query parameter (WebSocket upgrade requests only)
 
 **Key format**: `fbk_<base64_random_bytes>`
 

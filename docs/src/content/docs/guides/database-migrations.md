@@ -24,7 +24,7 @@ graph LR
 
     subgraph "App Schema (choose one)"
         D1[public.sql desired-state] --> D2[platform.app_schemas]
-        D2 --> D3[App Tables via pgschema diff]
+        D2 --> D3[App Tables via idempotent apply]
         U1[Migration Files] --> U2[platform.migrations]
         U2 --> U3[App Tables imperative]
     end
@@ -39,7 +39,7 @@ graph LR
 | Use Declarative App Schema | Use User Migrations (Imperative) |
 | -------------------------- | -------------------------------- |
 | You want the schema file to be the single source of truth | You need ordered, reversible migrations |
-| You want automatic drift reconciliation on every sync | You need data-transformations / backfills between versions |
+| You want additive, idempotent re-deploys on every sync | You need data-transformations / backfills between versions |
 | You want the deployed schema to be readable at a glance | You prefer explicit up/down rollback files |
 | You want a simpler mental model (no version numbers) | You have complex, stepwise data migrations |
 
@@ -76,11 +76,12 @@ The internal Fluxbase schema (auth, storage, functions, jobs, etc.) is managed d
 
 **Purpose:** Your own application tables managed declaratively from a desired-state SQL file
 
-The declarative app schema applies the same proven pgschema engine used for internal
-platform tables to **your** application schema (e.g. `public`). You commit a single
-desired-state SQL file and sync it; Fluxbase stores the content and reconciles the live
-database to match on every sync. This is an opt-in alternative to imperative user
-migrations.
+The declarative app schema manages **your** application schema (e.g. `public`)
+from a desired-state SQL file, using the same idempotent apply engine as the
+internal platform schemas (with a `pgschema` diff available as a read-only
+preview). You commit a single desired-state SQL file and sync it; Fluxbase
+stores the content and re-applies it idempotently on every sync. This is an
+opt-in alternative to imperative user migrations.
 
 - **Schema file:** `fluxbase/schema/public.sql` (or `<dir>/<schema>.sql`) — a pgschema-style desired-state dump
 - **Storage:** `platform.app_schemas` (content + fingerprint) and `platform.app_schema_state` (last applied)
@@ -107,17 +108,26 @@ Commit a desired-state SQL file and sync it with the CLI:
 
 ```bash
 fluxbase schema sync --dir fluxbase/schema --namespace wayli
-# Reads fluxbase/schema/public.sql, stores it, and applies the diff
+# Reads fluxbase/schema/public.sql, stores it, and applies it idempotently
 ```
+
+:::note
+App-schema sync/apply re-executes the whole desired-state file additively
+(idempotent `CREATE ... IF NOT EXISTS` / `OR REPLACE`), with a `pgschema`
+diff available as a read-only preview via `plan`/`validate`. Out-of-band
+renames and deletions are NOT reconciled — destructive changes require
+`allow_destructive: true` (server config, or the `--allow-destructive`
+CLI flag on sync/apply).
+:::
 
 Other commands:
 
 ```bash
 fluxbase schema status                       # list all stored app schemas
 fluxbase schema status --namespace wayli     # status for one namespace
-fluxbase schema plan --namespace wayli       # preview pending changes
+fluxbase schema plan --namespace wayli       # preview pending changes (read-only diff)
 fluxbase schema validate --namespace wayli --fail-on-drift   # CI drift check
-fluxbase schema apply --namespace wayli      # re-apply stored content (reconcile drift)
+fluxbase schema apply --namespace wayli      # re-apply stored content idempotently
 ```
 
 ### Generating the schema file
@@ -131,7 +141,7 @@ pgschema dump --host $DB_HOST --port 5432 --user $DB_USER --db $DB --schema publ
 
 Then edit the file to keep only your application objects (strip Fluxbase-owned schemas
 like `auth`, `storage`, `platform`, `app`). After the first clean sync, future edits to
-the file are diffed and applied automatically.
+the file are applied idempotently on the next sync/apply/restart.
 
 > **Note:** Extensions (`CREATE EXTENSION`) cannot be managed by pgschema. Keep them in a
 > separate bootstrap step (e.g. a tiny `extensions.sql` applied out-of-band), not in

@@ -69,13 +69,21 @@ database:
   max_conn_lifetime: 1h
   max_conn_idle_time: 30m
   health_check_period: 1m
-  user_migrations_path: /migrations/user # Path to user-provided migrations
+  user_migrations_path: /migrations/user # Path to user-provided migrations (run after declarative apply at startup)
+
+  # Declarative app-schema management (opt-in; see guides/database-migrations)
+  declarative_app_schema:
+    enabled: false            # Enable declarative management of user app schemas
+    schema: public             # PostgreSQL schema holding the registry tables
+    namespaces: []             # Restrict managed namespaces (empty = all stored schemas)
+    on_startup: true           # Apply pending schemas on server startup
+    allow_destructive: false   # Permit DROP/TRUNCATE statements during apply
 
 # Authentication Configuration
 auth:
   jwt_secret: your-secret-key-change-in-production
-  jwt_expiry: 15m
-  refresh_expiry: 168h # 7 days
+  jwt_expiry: 1h
+  refresh_expiry: 2160h # 90 days (sliding window — refresh tokens rotate on every refresh)
   service_role_ttl: 24h # Service role token TTL
   anon_ttl: 24h # Anonymous token TTL
   magic_link_expiry: 15m
@@ -342,8 +350,8 @@ Environment variables take precedence over configuration file values.
 | Variable                               | Description                            | Default         | Example                   |
 | -------------------------------------- | -------------------------------------- | --------------- | ------------------------- |
 | `FLUXBASE_AUTH_JWT_SECRET`             | JWT signing key (64 chars recommended) | **(required)**  | `openssl rand -base64 48` |
-| `FLUXBASE_AUTH_JWT_EXPIRY`             | Access token expiration                | `15m`           | `15m`, `1h`               |
-| `FLUXBASE_AUTH_REFRESH_EXPIRY`         | Refresh token expiration               | `168h` (7 days) | `168h`, `720h`            |
+| `FLUXBASE_AUTH_JWT_EXPIRY`             | Access token expiration                | `1h`            | `15m`, `1h`               |
+| `FLUXBASE_AUTH_REFRESH_EXPIRY`         | Refresh token expiration (sliding)     | `2160h` (90 days) | `168h`, `2160h`          |
 | `FLUXBASE_AUTH_SERVICE_ROLE_TTL`       | Service role token TTL                 | `24h`           | `24h`, `48h`              |
 | `FLUXBASE_AUTH_ANON_TTL`               | Anonymous token TTL                    | `24h`           | `24h`, `48h`              |
 | `FLUXBASE_AUTH_MAGIC_LINK_EXPIRY`      | Magic link expiration                  | `15m`           | `15m`                     |

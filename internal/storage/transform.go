@@ -44,6 +44,7 @@ func NewImageTransformerWithOptions(opts TransformerOptions) *ImageTransformer {
 		maxHeight:      opts.MaxHeight,
 		maxTotalPixels: opts.MaxTotalPixels,
 		bucketSize:     opts.BucketSize,
+		maxSourceBytes: opts.MaxSourceBytes,
 	}
 }
 
@@ -90,6 +91,9 @@ func (t *ImageTransformer) ValidateOptions(opts *TransformOptions) error {
 		if totalPixels > t.maxTotalPixels {
 			return fmt.Errorf("%w: %d pixels exceeds maximum of %d", ErrTooManyPixels, totalPixels, t.maxTotalPixels)
 		}
+	} else if err := t.checkOneDimensionPixels(opts); err != nil {
+		// Single-axis request: bound the derived dimension's worst case.
+		return err
 	}
 
 	// Validate format
@@ -141,18 +145,37 @@ func (t *ImageTransformer) Transform(data io.Reader, contentType string, opts *T
 		return nil, fmt.Errorf("%w: %s", ErrNotAnImage, contentType)
 	}
 
-	// Read all data into memory for vips processing
-	imageData, err := io.ReadAll(data)
+	// Read the source into memory, bounded by the source byte cap. The cap
+	// bounds decoder input independently of any header values (defense in
+	// depth against decompression bombs with lying/truncated headers).
+	limit := t.sourceByteLimit()
+	imageData, err := io.ReadAll(io.LimitReader(data, limit+1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read image data: %w", err)
 	}
+	if int64(len(imageData)) > limit {
+		return nil, fmt.Errorf("%w: source exceeds the maximum of %d bytes", ErrImageTooLarge, limit)
+	}
 
-	// Load the image
+	// Load the image. libvips loads lazily: this only decodes the header —
+	// pixel data is not decoded until a pixel operation runs below, so the
+	// declared-dimension check that follows is cheap and happens BEFORE any
+	// full decode.
 	image, err := vips.NewImageFromBuffer(imageData)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrTransformFailed, err)
 	}
 	defer image.Close()
+
+	// Reject sources whose declared dimensions exceed the pixel cap before
+	// any pixel operation (e.g. 100000x100000 PNGs or oversized SVG canvases).
+	// Note: SVG (image/svg+xml) is a documented transform input; its raster
+	// output stays bounded because every target dimension below is clamped to
+	// maxWidth/maxHeight and checked against maxTotalPixels.
+	if int64(image.Width())*int64(image.Height()) > int64(t.maxTotalPixels) {
+		return nil, fmt.Errorf("%w: source is %dx%d = %d pixels, maximum is %d",
+			ErrTooManyPixels, image.Width(), image.Height(), int64(image.Width())*int64(image.Height()), t.maxTotalPixels)
+	}
 
 	// Get original dimensions
 	origWidth := image.Width()
@@ -160,6 +183,13 @@ func (t *ImageTransformer) Transform(data io.Reader, contentType string, opts *T
 
 	// Calculate target dimensions
 	targetWidth, targetHeight := t.calculateDimensions(origWidth, origHeight, opts.Width, opts.Height, opts.Fit)
+
+	// Exact total-pixel check on the computed target (catches single-axis
+	// upscale requests whose derived dimension pushes past the cap).
+	if int64(targetWidth)*int64(targetHeight) > int64(t.maxTotalPixels) {
+		return nil, fmt.Errorf("%w: target %dx%d = %d pixels exceeds maximum of %d",
+			ErrTooManyPixels, targetWidth, targetHeight, int64(targetWidth)*int64(targetHeight), t.maxTotalPixels)
+	}
 
 	// Resize if needed
 	if targetWidth != origWidth || targetHeight != origHeight {

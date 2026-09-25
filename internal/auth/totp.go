@@ -5,7 +5,9 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"fmt"
+	"time"
 
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
@@ -41,6 +43,34 @@ func GenerateTOTPSecret(issuer, accountName string) (string, string, string, err
 func VerifyTOTPCode(code, secret string) (bool, error) {
 	valid := totp.Validate(code, secret)
 	return valid, nil
+}
+
+// totpPeriodSeconds is the TOTP time step in seconds (RFC 6238 default).
+const totpPeriodSeconds = 30
+
+// VerifyTOTPCodeWithTimestep verifies a TOTP code against a secret and returns
+// the exact time step that matched. It scans the same ±1 step clock-skew
+// window as totp.Validate but reports the matched step so callers can reject
+// replays of an already-consumed time step.
+func VerifyTOTPCodeWithTimestep(code, secret string) (bool, int64, error) {
+	now := time.Now()
+	for delta := int64(-1); delta <= 1; delta++ {
+		t := now.Add(time.Duration(delta) * time.Duration(totpPeriodSeconds) * time.Second)
+		step := t.Unix() / totpPeriodSeconds
+		valid, err := totp.ValidateCustom(code, secret, t, totp.ValidateOpts{
+			Period:    totpPeriodSeconds,
+			Skew:      0,
+			Digits:    otp.DigitsSix,
+			Algorithm: otp.AlgorithmSHA1,
+		})
+		if err != nil {
+			return false, 0, err
+		}
+		if valid {
+			return true, step, nil
+		}
+	}
+	return false, 0, nil
 }
 
 // GenerateBackupCodes generates a set of backup codes for 2FA recovery

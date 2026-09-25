@@ -364,6 +364,10 @@ func (s *Service) SignIn(ctx context.Context, req SignInRequest) (*SignInRespons
 	user, err := s.userRepo.GetByEmail(ctx, req.Email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
+			// Equalize response timing with the wrong-password path so unknown
+			// emails cannot be detected by measuring bcrypt work.
+			s.passwordHasher.CompareDummyEqualizer()
+
 			// Log failed login attempt for non-existent user
 			LogSecurityEvent(ctx, SecurityEvent{
 				Type:  SecurityEventLoginFailed,
@@ -464,6 +468,16 @@ func (s *Service) SignIn(ctx context.Context, req SignInRequest) (*SignInRespons
 		if err := s.userRepo.ResetFailedLoginAttempts(ctx, user.ID); err != nil {
 			// Log error but continue with login
 			_ = err
+		}
+	}
+
+	// Upgrade stale password hashes (e.g. after a bcrypt cost change) so they
+	// don't persist indefinitely. Best-effort: failures don't block the login.
+	if s.passwordHasher.NeedsRehash(user.PasswordHash) {
+		if newHash, hashErr := s.passwordHasher.HashPassword(req.Password); hashErr == nil {
+			if updateErr := s.userRepo.UpdatePassword(ctx, user.ID, newHash); updateErr != nil {
+				log.Debug().Err(updateErr).Str("user_id", user.ID).Msg("Failed to persist rehashed password after login")
+			}
 		}
 	}
 

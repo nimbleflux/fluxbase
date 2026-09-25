@@ -33,7 +33,7 @@ func (h *SystemSettingsHandler) requireService(c fiber.Ctx) error {
 }
 
 func (h *SystemSettingsHandler) ListSettings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	if err := h.requireService(c); err != nil {
 		return err
@@ -58,7 +58,7 @@ func (h *SystemSettingsHandler) ListSettings(c fiber.Ctx) error {
 }
 
 func (h *SystemSettingsHandler) GetSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	key := c.Params("*")
 
 	if key == "" {
@@ -98,7 +98,7 @@ func (h *SystemSettingsHandler) GetSetting(c fiber.Ctx) error {
 }
 
 func (h *SystemSettingsHandler) UpdateSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	key := c.Params("*")
 
 	if key == "" {
@@ -146,7 +146,7 @@ func (h *SystemSettingsHandler) UpdateSetting(c fiber.Ctx) error {
 }
 
 func (h *SystemSettingsHandler) DeleteSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	key := c.Params("*")
 
 	if key == "" {

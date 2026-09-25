@@ -193,7 +193,7 @@ func (m *MFAService) EnableTOTP(ctx context.Context, userID, code string) ([]str
 
 	updateQuery := `
 		UPDATE auth.users
-		SET totp_secret = $1, totp_enabled = TRUE, backup_codes = $2, updated_at = NOW()
+		SET totp_secret = $1, totp_enabled = TRUE, backup_codes = $2, totp_last_used_step = 0, updated_at = NOW()
 		WHERE id = $3
 	`
 
@@ -224,13 +224,14 @@ func (m *MFAService) VerifyTOTPWithContext(ctx context.Context, userID, code, ip
 
 	var storedSecret string
 	var backupCodes []string
+	var lastUsedStep int64
 	query := `
-		SELECT totp_secret, COALESCE(backup_codes, ARRAY[]::text[])
+		SELECT totp_secret, COALESCE(backup_codes, ARRAY[]::text[]), COALESCE(totp_last_used_step, 0)
 		FROM auth.users
 		WHERE id = $1 AND totp_enabled = TRUE
 	`
 
-	err := m.db.QueryRow(ctx, query, userID).Scan(&storedSecret, &backupCodes)
+	err := m.db.QueryRow(ctx, query, userID).Scan(&storedSecret, &backupCodes, &lastUsedStep)
 	if err != nil {
 		return fmt.Errorf("2FA not enabled for this user: %w", err)
 	}
@@ -247,8 +248,27 @@ func (m *MFAService) VerifyTOTPWithContext(ctx context.Context, userID, code, ip
 		}
 	}
 
-	valid, err := VerifyTOTPCode(code, secret)
+	// Replay protection: resolve the exact time step that the code matches and
+	// reject codes at or before the last consumed step.
+	valid, matchedStep, err := VerifyTOTPCodeWithTimestep(code, secret)
 	if err == nil && valid {
+		if matchedStep <= lastUsedStep {
+			if m.totpRateLimiter != nil {
+				_ = m.totpRateLimiter.RecordAttempt(ctx, userID, false, ipAddress, userAgent)
+			}
+			return errors.New("2FA code has already been used")
+		}
+
+		if _, err := m.db.Exec(ctx, `
+			UPDATE auth.users
+			SET totp_last_used_step = $1, updated_at = NOW()
+			WHERE id = $2
+		`, matchedStep, userID); err != nil {
+			// Persisting the consumed step is part of replay protection, so a
+			// failed update must not let the code be accepted silently.
+			return fmt.Errorf("failed to record 2FA code usage: %w", err)
+		}
+
 		if m.totpRateLimiter != nil {
 			_ = m.totpRateLimiter.RecordAttempt(ctx, userID, true, ipAddress, userAgent)
 		}
@@ -306,7 +326,7 @@ func (m *MFAService) DisableTOTP(ctx context.Context, userID, password string) e
 
 	query := `
 		UPDATE auth.users
-		SET totp_enabled = FALSE, totp_secret = NULL, backup_codes = NULL, updated_at = NOW()
+		SET totp_enabled = FALSE, totp_secret = NULL, backup_codes = NULL, totp_last_used_step = 0, updated_at = NOW()
 		WHERE id = $1
 	`
 

@@ -47,6 +47,7 @@ var (
 	schemaSyncDir     string
 	schemaNoApply     bool
 	schemaAllowDest   bool
+	schemaApplyDest   bool
 	schemaFailOnDrift bool
 )
 
@@ -135,6 +136,9 @@ func init() {
 	schemaSyncCmd.Flags().BoolVar(&schemaNoApply, "no-apply", false, "Store content only; do not apply")
 	schemaSyncCmd.Flags().BoolVar(&schemaAllowDest, "allow-destructive", false, "Permit destructive changes during apply")
 
+	// apply flags
+	schemaApplyCmd.Flags().BoolVar(&schemaApplyDest, "allow-destructive", false, "Permit destructive changes during apply")
+
 	// validate flags
 	schemaValidateCmd.Flags().BoolVar(&schemaFailOnDrift, "fail-on-drift", false, "Exit non-zero if drift is detected")
 }
@@ -169,14 +173,14 @@ func runSchemaSync(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	body := map[string]interface{}{
-		"namespace":      schemaNamespace,
-		"schema":         effectiveSchemaName(schemaName),
-		"content":        string(content),
-		"ignore_content": string(ignoreContent),
-		"no_apply":       schemaNoApply,
-		"apply":          !schemaNoApply,
+		"namespace":         schemaNamespace,
+		"schema":            effectiveSchemaName(schemaName),
+		"content":           string(content),
+		"ignore_content":    string(ignoreContent),
+		"no_apply":          schemaNoApply,
+		"apply":             !schemaNoApply,
+		"allow_destructive": schemaAllowDest,
 	}
-	_ = schemaAllowDest // destructive allowance is a server-side config; flagged through for future use
 
 	var result map[string]interface{}
 	if err := apiClient.DoPost(ctx, "/api/v1/admin/app-schema/sync", body, &result); err != nil {
@@ -347,8 +351,9 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	body := map[string]interface{}{
-		"namespace": schemaNamespace,
-		"schema":    effectiveSchemaName(schemaName),
+		"namespace":         schemaNamespace,
+		"schema":            effectiveSchemaName(schemaName),
+		"allow_destructive": schemaApplyDest,
 	}
 	var result map[string]interface{}
 	if err := apiClient.DoPost(ctx, "/api/v1/admin/app-schema/apply", body, &result); err != nil {
@@ -363,6 +368,9 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		note = " (via direct fallback; statement count is approximate)"
 	}
 	fmt.Printf("Applied %d change(s) in %s%s\n", int(applied), duration, note)
+	if message, ok := result["message"].(string); ok && message != "" && message != "Schema applied successfully" {
+		fmt.Printf("Server message: %s\n", message)
+	}
 	return nil
 }
 

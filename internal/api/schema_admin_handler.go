@@ -33,10 +33,17 @@ func (h *SchemaAdminHandlers) GetTables(c fiber.Ctx) error {
 	inspector := h.db.Inspector()
 	tenantPool := middleware.GetTenantPool(c)
 
+	// Callers without instance-level privileges must not see internal or
+	// system schema metadata
+	includeProtected := isInstanceAdminCaller(c)
+
 	var schemasToQuery []string
 	schemaParam := c.Query("schema")
 
 	if schemaParam != "" {
+		if !includeProtected && isProtectedSchema(schemaParam) {
+			return c.JSON([]database.TableInfo{})
+		}
 		schemasToQuery = []string{schemaParam}
 	} else {
 		var schemas []string
@@ -52,6 +59,9 @@ func (h *SchemaAdminHandlers) GetTables(c fiber.Ctx) error {
 
 		for _, schema := range schemas {
 			if schema == "information_schema" || schema == "pg_catalog" || schema == "pg_toast" {
+				continue
+			}
+			if !includeProtected && isProtectedSchema(schema) {
 				continue
 			}
 			schemasToQuery = append(schemasToQuery, schema)

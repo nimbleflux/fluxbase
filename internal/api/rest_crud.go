@@ -74,8 +74,16 @@ func (h *RESTHandler) makeGetHandler(table database.TableInfo) fiber.Handler {
 			return SendBadRequest(c, fmt.Sprintf("Invalid query parameters: %v", err), ErrCodeInvalidInput)
 		}
 
+		// PostgREST compat: honor "Prefer: count=exact" as ?count=exact
+		if params.Count == "" && strings.Contains(c.Get("Prefer"), "count=exact") {
+			params.Count = CountExact
+		}
+
 		// Build SELECT query using fresh metadata
-		query, args := h.buildSelectQuery(table, params)
+		query, args, err := h.buildSelectQuery(table, params)
+		if err != nil {
+			return SendBadRequest(c, fmt.Sprintf("Invalid query parameters: %v", err), ErrCodeInvalidInput)
+		}
 
 		// Set target schema for tenant-aware pool routing
 		middleware.SetTargetSchema(c, table.Schema)
@@ -106,6 +114,9 @@ func (h *RESTHandler) makeGetHandler(table database.TableInfo) fiber.Handler {
 			count, err := h.getCount(ctx, c, table, params)
 			if err != nil {
 				log.Warn().Err(err).Msg("Failed to get count")
+			} else if len(results) == 0 {
+				// PostgREST compat: an empty result set has no range
+				c.Set("Content-Range", "*/0")
 			} else {
 				c.Set("Content-Range", fmt.Sprintf("0-%d/%d", len(results)-1, count))
 			}

@@ -75,6 +75,10 @@ Providers must have `allow_dashboard_login = true` to appear here.
 The admin UI's axios refresh interceptor actually calls the sibling `/api/v1/admin/refresh` endpoint, not `/dashboard/auth/refresh`. Both refresh paths work; the SPA uses the admin one. There is **no logout endpoint** on `/dashboard/auth/*` — logout lives at `/api/v1/admin/logout`.
 :::
 
+### Refresh token cookie
+
+The admin login (`/api/v1/admin/login`) and refresh (`/api/v1/admin/refresh`) endpoints keep the rotated refresh token in an **HttpOnly cookie** named `fluxbase_admin_refresh` (scoped to `Path=/api/v1/admin`, `SameSite=Strict`, `Secure` on HTTPS requests), so it is never exposed to JavaScript. `/api/v1/admin/refresh` prefers that cookie and falls back to the `refresh_token` JSON body field for non-cookie clients; the JSON response continues to return the token for those clients. The admin SPA keeps a session-scoped in-memory copy so it can refresh after a page reload within the same tab.
+
 ## What's intentionally absent
 
 This surface deliberately omits application-only features: magic links, OTP sign-in, anonymous auth, impersonation, identity link/unlink, and open signup. For those, use `/api/v1/auth/*` ([Authentication](/guides/authentication/)).

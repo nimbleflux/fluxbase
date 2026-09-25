@@ -328,6 +328,8 @@ See [Deployment: Scaling](/deployment/scaling#horizontal-scaling) for configurat
 
 **Heartbeat:** Periodic ping/pong to detect stale connections
 
+**Message size limit:** Inbound WebSocket frames are limited by `realtime.max_message_size` (default 64KB). Larger frames are rejected.
+
 **Cleanup:** Always unsubscribe when done to prevent memory leaks
 
 ```typescript

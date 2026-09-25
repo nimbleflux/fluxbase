@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -51,18 +52,32 @@ func (h *InternalSchemaHandler) Initialize(cfg *config.Config, db *database.Conn
 		LockTimeout:      30,
 	}
 
-	// Create services
+	// Create services. Mirror main.go's admin credential fallback (admin
+	// user/password default to the runtime user/password) so plan/apply can
+	// connect when no dedicated admin credentials are configured.
+	adminUser := cfg.Database.AdminUser
+	if adminUser == "" {
+		adminUser = cfg.Database.User
+	}
+	adminPassword := cfg.Database.AdminPassword
+	if adminPassword == "" {
+		adminPassword = cfg.Database.Password
+	}
+
 	h.declarative = migrations.NewDeclarativeService(
 		pgschemaPath,
 		cfg.Database.Host,
 		cfg.Database.Port,
-		cfg.Database.User,
-		cfg.Database.Password,
+		adminUser,
+		adminPassword,
 		cfg.Database.Database,
 		*h.config,
 	)
 
 	h.declarative.SetAppUser(cfg.Database.User)
+	// Record state (platform.declarative_state) so status/apply endpoints see
+	// fingerprints and can record applies.
+	h.declarative.SetPool(db.Pool())
 
 	h.validator = migrations.NewValidator(h.declarative, db.Pool())
 	h.transition = migrations.NewTransitionService(h.declarative, db.Pool())
@@ -83,6 +98,7 @@ func (h *InternalSchemaHandler) DumpSchema(c fiber.Ctx) error {
 
 	var req struct {
 		Dir    string `json:"dir"`
+		File   string `json:"file"`   // Optional: dump a single schema to this file path
 		Schema string `json:"schema"` // Optional: dump a specific schema
 	}
 	if err := c.Bind().Body(&req); err != nil && err != fiber.ErrUnprocessableEntity {
@@ -92,6 +108,28 @@ func (h *InternalSchemaHandler) DumpSchema(c fiber.Ctx) error {
 	schemaDir := h.config.SchemaDir
 	if req.Dir != "" {
 		schemaDir = req.Dir
+	}
+
+	// A --file request dumps a single schema to the given path (schema name is
+	// derived from the file's base name: /path/auth.sql -> auth) and returns sql.
+	if req.File != "" {
+		schemaName := strings.TrimSuffix(filepath.Base(req.File), ".sql")
+		if err := h.declarative.DumpForSchema(ctx, schemaName, req.File); err != nil {
+			return SendInternalError(c, "Failed to dump schema")
+		}
+
+		content, err := os.ReadFile(req.File) //nolint:gosec // path comes from the authenticated admin request
+		if err != nil {
+			return SendInternalError(c, "Failed to read dumped schema")
+		}
+
+		return c.JSON(fiber.Map{
+			"message": "Schema dumped successfully",
+			"schema":  schemaName,
+			"file":    req.File,
+			"sql":     string(content),
+			"size":    len(content),
+		})
 	}
 
 	// If a specific schema is requested, dump just that one
@@ -180,30 +218,21 @@ func (h *InternalSchemaHandler) ApplySchema(c fiber.Ctx) error {
 	ctx := c.Context()
 
 	var req struct {
-		Schema           string `json:"schema"` // Optional: apply a specific schema
-		AutoApprove      bool   `json:"auto_approve"`
+		Schema           string `json:"schema"`       // Optional: apply a specific schema
+		AutoApprove      bool   `json:"auto_approve"` // Accepted for compatibility; ApplyFiltered does not prompt
 		AllowDestructive bool   `json:"allow_destructive"`
 	}
 	if err := c.Bind().Body(&req); err != nil && err != fiber.ErrUnprocessableEntity {
 		return SendBadRequest(c, "Invalid request body", ErrCodeInvalidBody)
 	}
 
-	// Update allow destructive setting temporarily
-	originalDestructive := h.config.AllowDestructive
-	h.config.AllowDestructive = req.AllowDestructive
-	defer func() { h.config.AllowDestructive = originalDestructive }()
-
-	var result *migrations.ApplyResult
-	var err error
-
-	if req.Schema != "" {
-		result, err = h.declarative.ApplyForSchema(ctx, req.Schema, req.AutoApprove)
-	} else {
-		result, err = h.declarative.Apply(ctx, req.AutoApprove)
-	}
-
+	// ApplyFiltered reuses the startup pipeline (plan → managed-FK filtering →
+	// direct apply → cross-schema FKs → post-schema policies → record state) and
+	// takes allow_destructive as an explicit per-request parameter, so the shared
+	// handler config is never mutated (previously racy across requests).
+	result, err := h.declarative.ApplyFiltered(ctx, req.Schema, req.AllowDestructive)
 	if err != nil {
-		return SendInternalError(c, "Failed to apply schema")
+		return SendInternalError(c, fmt.Sprintf("Failed to apply schema: %v", err))
 	}
 
 	return c.JSON(fiber.Map{
@@ -271,6 +300,9 @@ func (h *InternalSchemaHandler) GetSchemaStatus(c fiber.Ctx) error {
 		"pending_changes":           status.PendingChanges,
 		"has_destructive_changes":   status.HasDestructiveChanges,
 		"schema_dir":                h.config.SchemaDir,
+		// "pgschema" or "direct-fallback": surfaces silent permanent degradation
+		// when the pgschema binary is missing or failing.
+		"engine": status.Engine,
 	})
 }
 
@@ -283,8 +315,11 @@ func (h *InternalSchemaHandler) MigrateSchema(c fiber.Ctx) error {
 	ctx := c.Context()
 
 	var req struct {
-		Dir               string `json:"dir"`
-		KeepOldMigrations bool   `json:"keep_old_migrations"`
+		Dir string `json:"dir"`
+		// KeepOldMigrations defaults to true; an explicit false from the request
+		// is honored (the transition service only removes files when a
+		// MigrationsDir is configured, which this handler never sets).
+		KeepOldMigrations *bool `json:"keep_old_migrations"`
 	}
 	if err := c.Bind().Body(&req); err != nil && err != fiber.ErrUnprocessableEntity {
 		return SendBadRequest(c, "Invalid request body", ErrCodeInvalidBody)
@@ -295,10 +330,15 @@ func (h *InternalSchemaHandler) MigrateSchema(c fiber.Ctx) error {
 		schemaDir = req.Dir
 	}
 
+	keepOldMigrations := true
+	if req.KeepOldMigrations != nil {
+		keepOldMigrations = *req.KeepOldMigrations
+	}
+
 	opts := migrations.TransitionOptions{
 		SchemaDir:         schemaDir,
-		KeepOldMigrations: true, // Always keep - internal migrations removed
-		MigrationsDir:     "",   // No longer used - internal migrations removed
+		KeepOldMigrations: keepOldMigrations,
+		MigrationsDir:     "", // No longer used - internal migrations removed
 	}
 
 	result, err := h.transition.Transition(ctx, opts)

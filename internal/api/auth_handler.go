@@ -3,11 +3,13 @@ package api
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
+	"github.com/nimbleflux/fluxbase/internal/ai"
 	"github.com/nimbleflux/fluxbase/internal/auth"
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/middleware"
@@ -26,6 +28,7 @@ type AuthHandler struct {
 	captchaService      *auth.CaptchaService
 	captchaTrustService *auth.CaptchaTrustService
 	samlService         *auth.SAMLService
+	kbStorage           *ai.KnowledgeBaseStorage // used by self-service account deletion cleanup; nil when AI is disabled
 	baseURL             string
 	secureCookie        bool   // Whether to set Secure flag on cookies (true in production)
 	anonKey             string // Publishable anon key (safe to expose to clients); empty when unconfigured
@@ -38,8 +41,12 @@ func NewAuthHandler(db *database.Connection, authService *auth.Service, captchaS
 		authService:    authService,
 		captchaService: captchaService,
 		baseURL:        baseURL,
-		secureCookie:   false, // Will be set based on environment
-		anonKey:        anonKey,
+		// Auth cookies are marked Secure whenever the instance is served over
+		// HTTPS, derived from the configured public base URL. Plain-HTTP
+		// deployments (e.g. local development) intentionally keep Secure off
+		// so browsers still accept the cookies.
+		secureCookie: strings.HasPrefix(baseURL, "https://"),
+		anonKey:      anonKey,
 	}
 }
 
@@ -395,11 +402,19 @@ func (h *AuthHandler) SignIn(c fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(resp)
 	}
 
-	// If 2FA is enabled, return special response requiring 2FA verification
+	// If 2FA is enabled, return special response requiring 2FA verification.
+	// The response carries a short-lived signed mfa_pending token bound to
+	// this password-verified attempt; POST /auth/2fa/verify requires it.
 	if twoFAEnabled {
+		mfaToken, _, err := h.authService.JWTManager().GenerateMFAPendingToken(resp.User.ID, auth.MFAPendingPurpose2FA)
+		if err != nil {
+			log.Error().Err(err).Str("user_id", resp.User.ID).Msg("Failed to issue 2FA challenge token")
+			return SendInternalError(c, "Failed to initiate 2FA verification")
+		}
 		response := fiber.Map{
 			"requires_2fa": true,
 			"user_id":      resp.User.ID,
+			"mfa_token":    mfaToken,
 			"message":      "2FA verification required. Please provide your 2FA code.",
 		}
 		if trustToken != "" {
@@ -558,12 +573,15 @@ func (h *AuthHandler) UpdateUser(c fiber.Ctx) error {
 		return SendMissingAuth(c)
 	}
 
-	var req auth.UpdateUserRequest
+	// Bind the user-safe self-update payload. It only carries email and
+	// user_metadata; Role, EmailVerified and AppMetadata cannot be set
+	// through the self-service path (admin endpoints handle those).
+	var req auth.UpdateSelfUserRequest
 	if err := ParseBody(c, &req); err != nil {
 		return err
 	}
 
-	user, err := h.authService.UpdateUser(middleware.CtxWithTenant(c), userID, req)
+	user, err := h.authService.UpdateSelfUser(middleware.CtxWithTenant(c), userID, req)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", userID).Msg("Failed to update user")
 		return SendBadRequest(c, "Failed to update user", ErrCodeInvalidInput)

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -584,4 +585,127 @@ func BenchmarkBranchContext_MainBranch(b *testing.B) {
 		resp, _ := app.Test(req)
 		_ = resp.Body.Close()
 	}
+}
+
+// =============================================================================
+// Branch privilege / identity helpers (post-auth access checks)
+// =============================================================================
+
+func TestIsBranchPrivileged(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(c fiber.Ctx)
+		expected bool
+	}{
+		{
+			name:     "unauthenticated request is not privileged",
+			setup:    nil,
+			expected: false,
+		},
+		{
+			name: "instance admin is privileged",
+			setup: func(c fiber.Ctx) {
+				c.Locals("is_instance_admin", true)
+			},
+			expected: true,
+		},
+		{
+			name: "service key is privileged",
+			setup: func(c fiber.Ctx) {
+				c.Locals("auth_type", "service_key")
+			},
+			expected: true,
+		},
+		{
+			name: "service role JWT is privileged",
+			setup: func(c fiber.Ctx) {
+				c.Locals("auth_type", "service_role_jwt")
+			},
+			expected: true,
+		},
+		{
+			name: "service_role user role is privileged",
+			setup: func(c fiber.Ctx) {
+				c.Locals("user_role", "service_role")
+			},
+			expected: true,
+		},
+		{
+			name: "regular user JWT is not privileged",
+			setup: func(c fiber.Ctx) {
+				c.Locals("user_id", "user-1")
+				c.Locals("auth_type", "jwt")
+				c.Locals("user_role", "authenticated")
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := fiber.New()
+			var got bool
+			app.Get("/test", func(c fiber.Ctx) error {
+				if tt.setup != nil {
+					tt.setup(c)
+				}
+				got = isBranchPrivileged(c)
+				return c.SendString("OK")
+			})
+
+			req := httptest.NewRequest("GET", "/test", nil)
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer func() { _ = resp.Body.Close() }()
+
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestParseBranchUserID(t *testing.T) {
+	t.Run("nil when unauthenticated", func(t *testing.T) {
+		app := fiber.New()
+		var got *uuid.UUID
+		app.Get("/test", func(c fiber.Ctx) error {
+			got = parseBranchUserID(c)
+			return c.SendString("OK")
+		})
+		req := httptest.NewRequest("GET", "/test", nil)
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Nil(t, got)
+	})
+
+	t.Run("parses valid user id", func(t *testing.T) {
+		app := fiber.New()
+		var got *uuid.UUID
+		app.Get("/test", func(c fiber.Ctx) error {
+			c.Locals("user_id", "00000000-0000-0000-0000-000000000001")
+			got = parseBranchUserID(c)
+			return c.SendString("OK")
+		})
+		req := httptest.NewRequest("GET", "/test", nil)
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		require.NotNil(t, got)
+		assert.Equal(t, uuid.MustParse("00000000-0000-0000-0000-000000000001"), *got)
+	})
+
+	t.Run("nil for non-uuid user id", func(t *testing.T) {
+		app := fiber.New()
+		var got *uuid.UUID
+		app.Get("/test", func(c fiber.Ctx) error {
+			c.Locals("user_id", "not-a-uuid")
+			got = parseBranchUserID(c)
+			return c.SendString("OK")
+		})
+		req := httptest.NewRequest("GET", "/test", nil)
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		assert.Nil(t, got)
+	})
 }

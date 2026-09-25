@@ -170,3 +170,48 @@ func TestVerifyTOTPCode_ExpiredCode(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, valid, "Old TOTP code from outside the time window should not verify")
 }
+
+// =============================================================================
+// VerifyTOTPCodeWithTimestep tests (TOTP replay protection primitive)
+// =============================================================================
+
+func TestVerifyTOTPCodeWithTimestep_MatchesCurrentStep(t *testing.T) {
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "Test", AccountName: "user@example.com"})
+	require.NoError(t, err)
+
+	code, err := totp.GenerateCode(key.Secret(), time.Now())
+	require.NoError(t, err)
+
+	valid, step, err := VerifyTOTPCodeWithTimestep(code, key.Secret())
+	require.NoError(t, err)
+	assert.True(t, valid)
+
+	expectedStep := time.Now().Unix() / 30
+	assert.Equal(t, expectedStep, step)
+}
+
+func TestVerifyTOTPCodeWithTimestep_MatchesPreviousStep(t *testing.T) {
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "Test", AccountName: "user@example.com"})
+	require.NoError(t, err)
+
+	// A code generated for the previous 30s window must still validate
+	// (clock-skew tolerance) and report the previous step.
+	prevTime := time.Now().Add(-30 * time.Second)
+	code, err := totp.GenerateCode(key.Secret(), prevTime)
+	require.NoError(t, err)
+
+	valid, step, err := VerifyTOTPCodeWithTimestep(code, key.Secret())
+	require.NoError(t, err)
+	assert.True(t, valid)
+	assert.Equal(t, prevTime.Unix()/30, step)
+}
+
+func TestVerifyTOTPCodeWithTimestep_RejectsInvalidCode(t *testing.T) {
+	key, err := totp.Generate(totp.GenerateOpts{Issuer: "Test", AccountName: "user@example.com"})
+	require.NoError(t, err)
+
+	valid, step, err := VerifyTOTPCodeWithTimestep("000000", key.Secret())
+	require.NoError(t, err)
+	assert.False(t, valid)
+	assert.Equal(t, int64(0), step)
+}

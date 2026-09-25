@@ -117,12 +117,16 @@ curl -X DELETE \
 
 ## Authentication with Client Keys
 
-Use the `X-Client-Key` header to authenticate requests:
+Use the `X-Client-Key` header to authenticate requests. The Supabase-compatible `apikey` header is accepted as an alias:
 
 ```bash
 curl -H "X-Client-Key: <your-client-key>" \
   http://localhost:8080/api/v1/some-endpoint
 ```
+
+Query-string credentials (`?token=` / `?clientkey=`) are accepted **only** on WebSocket upgrade requests, where browsers cannot set custom headers. On all other requests they are ignored.
+
+Keys issued with the publishable prefix (`fb_pk_`) execute with the `anon` role: they carry no user identity, so RLS policies keyed on the `authenticated` role (or on `app.user_id`) will not match. Use user-scoped keys or JWTs when you need per-user data access.
 
 ## Learn More
 

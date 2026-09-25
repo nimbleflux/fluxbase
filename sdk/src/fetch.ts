@@ -209,6 +209,16 @@ export class FluxbaseFetch {
         error.status = response.status;
         error.details = data;
 
+        // Server error envelopes carry a machine-readable code
+        // (e.g. INVALID_TOKEN, RLS_POLICY_VIOLATION).
+        const code =
+          typeof data === "object" && data && "code" in data
+            ? (data as { code?: unknown }).code
+            : undefined;
+        if (typeof code === "string") {
+          error.code = code;
+        }
+
         throw error;
       }
 

@@ -46,7 +46,15 @@ type ExportTableRequest struct {
 	IncludeForeignKeys bool     `json:"include_foreign_keys"`
 	IncludeIndexes     bool     `json:"include_indexes"`
 	OwnerID            *string  `json:"owner_id,omitempty"` // Document owner (for RLS)
+	// UserIDColumn overrides the source column that marks a table as
+	// per-user data for export metadata purposes. Empty defaults to the
+	// "user_id" convention.
+	UserIDColumn string `json:"user_id_column,omitempty"`
 }
+
+// defaultUserIDColumn is the source column detected on the exported table to
+// stamp per-user scoping metadata onto the exported document.
+const defaultUserIDColumn = "user_id"
 
 // ExportTableResult contains the export results
 type ExportTableResult struct {
@@ -108,6 +116,19 @@ func (e *TableExporter) ExportTable(ctx context.Context, req ExportTableRequest)
 	if len(req.Columns) > 0 {
 		metadataMap["columns"] = req.Columns
 	}
+	// Per-user scoping metadata: when the source table has a per-user column
+	// (default "user_id", overridable via user_id_column) and the export
+	// carries an owner identity, stamp that identity into the document
+	// metadata so the export participates in per-user KB scoping (filtered
+	// chatbot→KB links only match documents whose metadata user_id equals
+	// the caller).
+	columnNames := make([]string, 0, len(tableInfo.Columns))
+	for _, col := range tableInfo.Columns {
+		columnNames = append(columnNames, col.Name)
+	}
+	if uid, ok := exportMetadataUserID(columnNames, req.UserIDColumn, req.OwnerID); ok {
+		metadataMap["user_id"] = uid
+	}
 	metadataJSON, err := metadataToJSON(metadataMap)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
@@ -134,6 +155,31 @@ func (e *TableExporter) ExportTable(ctx context.Context, req ExportTableRequest)
 			Str("table", fmt.Sprintf("%s.%s", req.Schema, req.Table)).
 			Str("document_id", existingDoc.ID).
 			Msg("Updating existing table export document")
+
+		// Content-hash shortcut: when the generated document is byte-identical
+		// to what's already stored, skip the re-embed pipeline entirely
+		// (UpdateDocumentContent flips the document back to 'pending', which
+		// would trigger a full chunk + embedding rebuild for nothing). Only a
+		// metadata change is still written through (metadata-only update does
+		// not touch status, so no re-embed is triggered).
+		if existingDoc.ContentHash == hashContent(docContent) {
+			log.Debug().
+				Str("document_id", existingDoc.ID).
+				Msg("Table export content unchanged; skipping re-embed")
+
+			if string(existingDoc.Metadata) != string(metadataJSON) {
+				if err := e.storage.UpdateDocumentMetadataRaw(ctx, existingDoc.ID, metadataJSON); err != nil {
+					log.Warn().Err(err).Str("document_id", existingDoc.ID).Msg("Failed to refresh export metadata (continuing)")
+				}
+			}
+
+			doc = existingDoc
+			doc.Content = docContent
+			doc.Metadata = metadataJSON
+			doc.Title = docTitle
+
+			return &ExportTableResult{DocumentID: doc.ID}, nil
+		}
 
 		if err := e.storage.UpdateDocumentContent(ctx, existingDoc.ID, docContent, docTitle, metadataJSON); err != nil {
 			return nil, fmt.Errorf("failed to update document: %w", err)
@@ -452,6 +498,26 @@ func (e *TableExporter) generateTableDocument(table *database.TableInfo, req Exp
 	}
 
 	return sb.String()
+}
+
+// exportMetadataUserID resolves the per-user metadata stamp for a table
+// export: returns the owner identity when the exported table has the
+// per-user column (req.UserIDColumn, defaulting to the "user_id" convention)
+// and the export carries an owner identity. Pure function.
+func exportMetadataUserID(columnNames []string, userIDColumn string, ownerID *string) (string, bool) {
+	if ownerID == nil || *ownerID == "" {
+		return "", false
+	}
+	column := userIDColumn
+	if column == "" {
+		column = defaultUserIDColumn
+	}
+	for _, name := range columnNames {
+		if name == column {
+			return *ownerID, true
+		}
+	}
+	return "", false
 }
 
 // metadataToJSON converts a map to JSON bytes using standard json.Marshal

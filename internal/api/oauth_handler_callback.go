@@ -175,6 +175,10 @@ func (h *OAuthHandler) Callback(c fiber.Ctx) error {
 	// Create or link user
 	user, isNewUser, err := h.createOrLinkOAuthUser(ctx, providerName, providerUserID, email, userInfo, token)
 	if err != nil {
+		if errors.Is(err, errOAuthEmailUnverified) {
+			log.Warn().Str("provider", providerName).Str("email", email).Msg("Refused OAuth link: provider email is not verified")
+			return SendErrorWithCode(c, fiber.StatusForbidden, "The email address from this provider is not verified, so it cannot be linked to an existing account. Verify your email with the provider and try again.", "EMAIL_NOT_VERIFIED")
+		}
 		log.Error().Err(err).Str("provider", providerName).Str("email", email).Msg("Failed to create/link OAuth user")
 		return SendInternalError(c, "Failed to create user account")
 	}
@@ -201,6 +205,19 @@ func (h *OAuthHandler) Callback(c fiber.Ctx) error {
 	})
 }
 
+// errOAuthEmailUnverified is returned when the provider did not assert the
+// email as verified and an account already exists with that email. Linking is
+// refused in that case so an attacker cannot claim an email-only identity.
+var errOAuthEmailUnverified = errors.New("email not verified by provider")
+
+// providerEmailVerified reports whether the provider's user-info response
+// asserts the email as verified. Unknown/absent claims are treated as
+// unverified (conservative for custom/generic providers).
+func providerEmailVerified(userInfo map[string]interface{}) bool {
+	verified, ok := userInfo["email_verified"].(bool)
+	return ok && verified
+}
+
 // createOrLinkOAuthUser creates a new user or links OAuth to existing user
 func (h *OAuthHandler) createOrLinkOAuthUser(
 	ctx context.Context,
@@ -212,6 +229,11 @@ func (h *OAuthHandler) createOrLinkOAuthUser(
 ) (*auth.User, bool, error) {
 	var user *auth.User
 	var isNewUser bool
+
+	// Only link/identify an existing account by email when the provider
+	// asserts the email as verified. New accounts inherit the provider's
+	// verification status instead of being trusted unconditionally.
+	emailVerified := providerEmailVerified(userInfo)
 
 	err := database.WrapWithServiceRole(ctx, h.db, func(tx pgx.Tx) error {
 		// Check if OAuth link already exists
@@ -227,13 +249,13 @@ func (h *OAuthHandler) createOrLinkOAuthUser(
 			err = tx.QueryRow(ctx, query, email).Scan(&existingUserID)
 
 			if err != nil && (err.Error() == "no rows in result set" || errors.Is(err, sql.ErrNoRows)) {
-				// Create new user
+				// Create new user (email_verified reflects the provider assertion)
 				userID = uuid.New()
 				query = `
 					INSERT INTO auth.users (id, email, email_verified, role, user_metadata)
-					VALUES ($1, $2, TRUE, 'authenticated', $3)
+					VALUES ($1, $2, $3, 'authenticated', $4)
 				`
-				_, err = tx.Exec(ctx, query, userID, email, userInfo)
+				_, err = tx.Exec(ctx, query, userID, email, emailVerified, userInfo)
 				if err != nil {
 					return fmt.Errorf("failed to create user: %w", err)
 				}
@@ -242,6 +264,10 @@ func (h *OAuthHandler) createOrLinkOAuthUser(
 				switch {
 				case err != nil:
 					return fmt.Errorf("failed to check existing user: %w", err)
+				case !emailVerified:
+					// An unverified provider email must never link to (and
+					// thereby take over) an existing account.
+					return errOAuthEmailUnverified
 				default:
 					// Link to existing user
 					userID = existingUserID

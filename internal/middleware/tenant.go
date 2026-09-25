@@ -177,6 +177,98 @@ func TenantMiddleware(cfg TenantConfig) fiber.Handler {
 	}
 }
 
+// EnsureTenantAccess returns a post-authentication middleware that re-validates
+// tenant access once the auth middleware has run.
+//
+// TenantMiddleware runs before auth on the handler chain (group middlewares are
+// injected first by the route registry), so its ValidateTenantMembership branch
+// can never fire: the user context is still empty when it resolves
+// X-FB-Tenant. This middleware closes that gap. It must be registered AFTER the
+// auth middleware (the route registry injects it in the post-auth position).
+//
+// Behavior:
+//   - Tenant-scoped service keys (fb_tsk_) carry their tenant binding in the
+//     service_key_tenant_id local; a resolved tenant that differs from the key's
+//     tenant is rejected. Other service keys and service-role JWTs keep full access.
+//   - For user JWT principals, only explicit X-FB-Tenant overrides are
+//     re-validated (JWT claims and the default fallback are server-resolved).
+//     The default tenant is always allowed; any other tenant requires membership
+//     (platform.tenant_admin_assignments or instance admin), otherwise 403.
+func EnsureTenantAccess(cfg TenantConfig) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		tenantID := GetTenantIDFromContext(c)
+		if tenantID == "" {
+			return c.Next()
+		}
+
+		authType, _ := c.Locals("auth_type").(string)
+
+		// Service keys: enforce the tenant binding of tenant-scoped keys.
+		if authType == "service_key" {
+			if keyTenant, _ := c.Locals("service_key_tenant_id").(string); keyTenant != "" && keyTenant != tenantID {
+				return fiber.NewError(fiber.StatusForbidden, "service key is not valid for this tenant")
+			}
+			return c.Next()
+		}
+
+		// Service-role JWTs keep full access.
+		if authType == "service_role_jwt" {
+			return c.Next()
+		}
+
+		// Only explicit header overrides need re-validation: "jwt" sources come
+		// from server-issued claims and "default" resolution needs no membership.
+		if GetTenantSourceFromContext(c) != "header" {
+			return c.Next()
+		}
+
+		userID, _ := c.Locals("user_id").(string)
+		if userID == "" {
+			// Anonymous request: TenantMiddleware already verified the tenant exists.
+			return c.Next()
+		}
+
+		if IsInstanceAdminFromContext(c) {
+			return c.Next()
+		}
+
+		// Dashboard/platform instance admins authenticate with JWTs whose
+		// role claim carries instance_admin; they are not tenant members.
+		if role, _ := c.Locals("user_role").(string); role == "instance_admin" {
+			return c.Next()
+		}
+
+		// The default tenant is always accessible.
+		if IsDefaultTenantFromContext(c) {
+			return c.Next()
+		}
+
+		// Everything below needs the database; without one there is nothing to
+		// validate against (only possible in tests/misconfiguration).
+		if cfg.DB == nil {
+			return c.Next()
+		}
+
+		// Belt and braces: if the is_default flag lookup failed earlier, resolve
+		// the default tenant by ID before denying.
+		if defaultID, err := GetDefaultTenantID(c.Context(), cfg.DB); err == nil && defaultID == tenantID {
+			return c.Next()
+		}
+
+		isMember, err := ValidateTenantMembership(c.Context(), cfg.DB, userID, tenantID)
+		if err != nil {
+			log.Error().Err(err).Str("user_id", userID).Str("tenant_id", tenantID).
+				Msg("Failed to validate tenant membership")
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to verify tenant access")
+		}
+		if !isMember {
+			return fiber.NewError(fiber.StatusForbidden, "access denied to this tenant")
+		}
+
+		return c.Next()
+	}
+}
+
 // ValidateTenantMembership checks if user is assigned to manage the specified tenant
 func ValidateTenantMembership(ctx context.Context, db *database.Connection, userID, tenantID string) (bool, error) {
 	var isMember bool

@@ -116,13 +116,13 @@ CREATE POLICY rpc_procedures_instance_admin_read ON procedures FOR SELECT TO aut
 -- Name: rpc_procedures_read_anon; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY rpc_procedures_read_anon ON procedures FOR SELECT TO anon USING ((enabled = true) AND (is_public = true));
+CREATE POLICY rpc_procedures_read_anon ON procedures FOR SELECT TO anon USING ((enabled = true) AND (is_public = true) AND auth.has_tenant_access(tenant_id));
 
 --
 -- Name: rpc_procedures_read_public; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY rpc_procedures_read_public ON procedures FOR SELECT TO authenticated USING ((enabled = true) AND (is_public = true));
+CREATE POLICY rpc_procedures_read_public ON procedures FOR SELECT TO authenticated USING ((enabled = true) AND (is_public = true) AND auth.has_tenant_access(tenant_id));
 
 --
 -- Name: executions; Type: TABLE; Schema: -; Owner: -

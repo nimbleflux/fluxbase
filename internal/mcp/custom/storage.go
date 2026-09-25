@@ -212,10 +212,13 @@ func (s *Storage) ListTools(ctx context.Context, filter ListToolsFilter) ([]*Cus
 	args := []any{}
 	argNum := 1
 
-	// Tenant filter is always first
-	query += fmt.Sprintf(" AND (tenant_id = $%d OR ($%d IS NULL AND tenant_id IS NULL))", argNum, argNum)
-	args = append(args, database.TenantOrNil(tenantID))
-	argNum++
+	// Tenant filter is always first unless the caller explicitly asked for
+	// every tenant's rows (system loader; visibility enforced downstream).
+	if !filter.AllTenants {
+		query += fmt.Sprintf(" AND (tenant_id = $%d OR ($%d IS NULL AND tenant_id IS NULL))", argNum, argNum)
+		args = append(args, database.TenantOrNil(tenantID))
+		argNum++
+	}
 
 	if filter.Namespace != "" {
 		query += fmt.Sprintf(" AND namespace = $%d", argNum)
@@ -595,10 +598,13 @@ func (s *Storage) ListResources(ctx context.Context, filter ListResourcesFilter)
 	args := []any{}
 	argNum := 1
 
-	// Tenant filter is always first
-	query += fmt.Sprintf(" AND (tenant_id = $%d OR ($%d IS NULL AND tenant_id IS NULL))", argNum, argNum)
-	args = append(args, database.TenantOrNil(tenantID))
-	argNum++
+	// Tenant filter is always first unless the caller explicitly asked for
+	// every tenant's rows (system loader; visibility enforced downstream).
+	if !filter.AllTenants {
+		query += fmt.Sprintf(" AND (tenant_id = $%d OR ($%d IS NULL AND tenant_id IS NULL))", argNum, argNum)
+		args = append(args, database.TenantOrNil(tenantID))
+		argNum++
+	}
 
 	if filter.Namespace != "" {
 		query += fmt.Sprintf(" AND namespace = $%d", argNum)

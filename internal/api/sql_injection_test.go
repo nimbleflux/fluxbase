@@ -166,7 +166,8 @@ func TestSQLInjectionPrevention(t *testing.T) {
 
 			// Build SQL query to verify parameterization
 			argCounter := 1
-			whereClause, args := params.buildWhereClause(&argCounter)
+			whereClause, args, werr := params.buildWhereClause(&argCounter)
+			require.NoError(t, werr)
 
 			t.Logf("Test: %s", tt.description)
 			t.Logf("WHERE clause: %s", whereClause)
@@ -348,7 +349,8 @@ func TestOWASPInjectionPayloads(t *testing.T) {
 
 			// Build WHERE clause
 			argCounter := 1
-			whereClause, args := params.buildWhereClause(&argCounter)
+			whereClause, args, werr := params.buildWhereClause(&argCounter)
+			require.NoError(t, werr)
 
 			// Verify it's parameterized
 			assert.Contains(t, whereClause, "$1", "Should use parameterized query")
@@ -360,4 +362,253 @@ func TestOWASPInjectionPayloads(t *testing.T) {
 			t.Logf("Args: %v", args)
 		})
 	}
+}
+
+// TestFilterColumnInjectionRegression verifies that filter columns are
+// validated as identifiers or JSONB paths before being interpolated (F1)
+func TestFilterColumnInjectionRegression(t *testing.T) {
+	parser := NewQueryParser(testConfigForInjectionTests())
+
+	maliciousColumns := []string{
+		`name" IS NULL; DROP TABLE users; --`,
+		`name"='' OR ''!='`,
+		`data->(SELECT 1)`,
+		`name--comment`,
+		`name;DROP TABLE users`,
+		`name OR 1=1`,
+		`(SELECT 1)`,
+		`data->key'->'injected`,
+		"data->key\\",
+	}
+
+	for _, col := range maliciousColumns {
+		t.Run("column_"+col, func(t *testing.T) {
+			// PostgREST format (constructed directly: url.ParseQuery rejects
+			// ';' before the parser ever sees the value)
+			values := url.Values{col: []string{"eq.value"}}
+			_, err := parser.Parse(values)
+			assert.Error(t, err, "column %q must be rejected", col)
+
+			// Classic format (column.operator=value)
+			values2 := url.Values{col + ".eq": []string{"value"}}
+			_, err = parser.Parse(values2)
+			assert.Error(t, err, "column %q must be rejected", col)
+		})
+	}
+
+	// OR/AND logical groups must validate columns too
+	t.Run("logical group columns are validated", func(t *testing.T) {
+		values, err := url.ParseQuery("or=(name\"=eq.x,id.eq.1)")
+		require.NoError(t, err)
+		_, err = parser.Parse(values)
+		assert.Error(t, err)
+
+		values2, err := url.ParseQuery("and=(bad col.eq.x)")
+		require.NoError(t, err)
+		_, err = parser.Parse(values2)
+		assert.Error(t, err)
+
+		values3, err := url.ParseQuery("or=(or(bad->(x).eq.1,id.eq.2))")
+		require.NoError(t, err)
+		_, err = parser.Parse(values3)
+		assert.Error(t, err)
+	})
+
+	// Valid JSONB paths must keep working
+	t.Run("valid jsonb paths are accepted", func(t *testing.T) {
+		for _, col := range []string{"data", "data->key", "data->>key", "geocode->properties->>country", "items->0->>name"} {
+			values, err := url.ParseQuery(url.QueryEscape(col) + "=eq.value")
+			require.NoError(t, err)
+			params, err := parser.Parse(values)
+			require.NoError(t, err, "column %q should be valid", col)
+			require.Len(t, params.Filters, 1)
+		}
+	})
+}
+
+// TestParseJSONBPath_QuoteEscaping verifies embedded double quotes in
+// identifier segments are escaped (defense in depth for F1)
+func TestParseJSONBPath_QuoteEscaping(t *testing.T) {
+	result := parseJSONBPath(`na"me`)
+	assert.Equal(t, `"na""me"`, result)
+
+	result = parseJSONBPath(`da"ta->key`)
+	assert.Equal(t, `"da""ta"->'key'`, result)
+}
+
+// TestSelectFieldPassthroughRestriction verifies select expressions are
+// restricted to validated identifiers and JSONB paths (F2)
+func TestSelectFieldPassthroughRestriction(t *testing.T) {
+	parser := NewQueryParser(testConfigForInjectionTests())
+
+	t.Run("function calls are rejected", func(t *testing.T) {
+		values, err := url.ParseQuery("select=pg_sleep(5)&group_by=id")
+		require.NoError(t, err)
+		_, err = parser.Parse(values)
+		assert.Error(t, err, "raw function expressions must not pass through")
+
+		values2, err := url.ParseQuery("select=pg_sleep(5)&select2=1")
+		require.NoError(t, err)
+		_, err = parser.Parse(values2)
+		// pg_sleep(5) parses as an embedded relation -> also rejected
+		assert.Error(t, err)
+	})
+
+	t.Run("arithmetic expressions are rejected", func(t *testing.T) {
+		values, err := url.ParseQuery("select=price*quantity&group_by=id")
+		require.NoError(t, err)
+		_, err = parser.Parse(values)
+		assert.Error(t, err)
+	})
+
+	t.Run("documented aggregation syntax still works", func(t *testing.T) {
+		values, err := url.ParseQuery("select=category,count(*),sum(price),avg(rating),min(x),max(y)")
+		require.NoError(t, err)
+		params, err := parser.Parse(values)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"category"}, params.Select)
+		assert.Len(t, params.Aggregations, 5)
+	})
+
+	t.Run("identifiers and jsonb paths are accepted", func(t *testing.T) {
+		values, err := url.ParseQuery("select=id,data->>name")
+		require.NoError(t, err)
+		params, err := parser.Parse(values)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"id", "data->>name"}, params.Select)
+	})
+}
+
+// TestBuildSelectClauseRejectsExpressions is a defense-in-depth check that
+// BuildSelectClause never renders unvalidated expressions (F2)
+func TestBuildSelectClauseRejectsExpressions(t *testing.T) {
+	params := &QueryParams{
+		Select:  []string{"pg_sleep(5)"},
+		GroupBy: []string{"id"},
+	}
+	clause := params.BuildSelectClause("t")
+	assert.Empty(t, clause, "unvalidated select expressions must not be rendered")
+}
+
+// TestPostQueryOrderNullsWhitelist verifies ORDER BY nulls placement is
+// whitelisted for POST /query (F3)
+func TestPostQueryOrderNullsWhitelist(t *testing.T) {
+	h := &RESTHandler{}
+
+	t.Run("valid nulls values are accepted", func(t *testing.T) {
+		req := &PostQueryRequest{
+			Order: []PostQueryOrderBy{
+				{Column: "created_at", Direction: "desc", Nulls: "LAST"},
+				{Column: "priority", Direction: "asc", Nulls: "first"},
+			},
+		}
+		params, err := h.convertPostQueryToParams(req)
+		require.NoError(t, err)
+		require.Len(t, params.Order, 2)
+		assert.Equal(t, "last", params.Order[0].Nulls)
+		assert.Equal(t, "first", params.Order[1].Nulls)
+	})
+
+	t.Run("invalid nulls values are rejected", func(t *testing.T) {
+		req := &PostQueryRequest{
+			Order: []PostQueryOrderBy{
+				{Column: "created_at", Direction: "desc", Nulls: "FIRST\"; DROP TABLE users; --"},
+			},
+		}
+		_, err := h.convertPostQueryToParams(req)
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid order columns are rejected", func(t *testing.T) {
+		req := &PostQueryRequest{
+			Order: []PostQueryOrderBy{{Column: `created_at" IS NULL; --`}},
+		}
+		_, err := h.convertPostQueryToParams(req)
+		assert.Error(t, err)
+	})
+}
+
+// TestPostQueryColumnValidation verifies POST /query validates all filter
+// column references (F1)
+func TestPostQueryColumnValidation(t *testing.T) {
+	h := &RESTHandler{}
+
+	t.Run("between filter columns are validated", func(t *testing.T) {
+		req := &PostQueryRequest{
+			BetweenFilters: []PostQueryBetweenFilter{{Column: `age" IS NULL; --`, Min: 1, Max: 2}},
+		}
+		_, err := h.convertPostQueryToParams(req)
+		assert.Error(t, err)
+	})
+
+	t.Run("or filter columns are validated", func(t *testing.T) {
+		req := &PostQueryRequest{
+			OrFilters: []string{`name"=eq.x,id.eq.1`},
+		}
+		_, err := h.convertPostQueryToParams(req)
+		assert.Error(t, err)
+	})
+
+	t.Run("and filter columns are validated", func(t *testing.T) {
+		req := &PostQueryRequest{
+			AndFilters: []string{`bad col.eq.x`},
+		}
+		_, err := h.convertPostQueryToParams(req)
+		assert.Error(t, err)
+	})
+
+	t.Run("jsonb path filters are accepted", func(t *testing.T) {
+		req := &PostQueryRequest{
+			Filters: []PostQueryFilter{{Column: "data->>name", Operator: "eq", Value: "x"}},
+		}
+		params, err := h.convertPostQueryToParams(req)
+		require.NoError(t, err)
+		require.Len(t, params.Filters, 1)
+	})
+}
+
+// TestPostQueryPaginationCaps verifies limit/offset validation and caps for
+// POST /query (F5)
+func TestPostQueryPaginationCaps(t *testing.T) {
+	t.Run("negative limit is rejected", func(t *testing.T) {
+		h := &RESTHandler{}
+		limit := -5
+		_, err := h.convertPostQueryToParams(&PostQueryRequest{Limit: &limit})
+		assert.Error(t, err)
+	})
+
+	t.Run("negative offset is rejected", func(t *testing.T) {
+		h := &RESTHandler{}
+		offset := -5
+		_, err := h.convertPostQueryToParams(&PostQueryRequest{Offset: &offset})
+		assert.Error(t, err)
+	})
+
+	t.Run("limit is capped to max_page_size", func(t *testing.T) {
+		h := &RESTHandler{config: &config.Config{API: config.APIConfig{MaxPageSize: 100, MaxTotalResults: 1000}}}
+		limit := 500
+		params, err := h.convertPostQueryToParams(&PostQueryRequest{Limit: &limit})
+		require.NoError(t, err)
+		require.NotNil(t, params.Limit)
+		assert.Equal(t, 100, *params.Limit)
+	})
+
+	t.Run("offset plus limit is capped to max_total_results", func(t *testing.T) {
+		h := &RESTHandler{config: &config.Config{API: config.APIConfig{MaxPageSize: 1000, MaxTotalResults: 1000}}}
+		limit := 900
+		offset := 500
+		params, err := h.convertPostQueryToParams(&PostQueryRequest{Limit: &limit, Offset: &offset})
+		require.NoError(t, err)
+		require.NotNil(t, params.Limit)
+		assert.Equal(t, 500, *params.Limit) // 1000 - 500 offset
+	})
+
+	t.Run("nil config does not cap", func(t *testing.T) {
+		h := &RESTHandler{}
+		limit := 100000
+		params, err := h.convertPostQueryToParams(&PostQueryRequest{Limit: &limit})
+		require.NoError(t, err)
+		require.NotNil(t, params.Limit)
+		assert.Equal(t, 100000, *params.Limit)
+	})
 }

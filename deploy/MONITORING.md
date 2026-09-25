@@ -39,11 +39,29 @@ Fluxbase includes a comprehensive monitoring stack powered by:
 
 ### Using Docker Compose
 
-Start the full monitoring stack:
+Start Fluxbase:
 
 ```bash
 cd deploy
-docker compose -f docker-compose.production.yml up -d
+docker compose -f docker-compose.yml up -d
+```
+
+The monitoring stack configuration lives in [monitoring/](monitoring/):
+`prometheus.yml` plus Grafana provisioning and dashboards. There is no bundled
+compose file for the stack — attach Prometheus and Grafana to the Fluxbase
+compose network (default: `deploy_fluxbase`) and mount the config:
+
+```bash
+docker run -d --name prometheus --network deploy_fluxbase \
+  -p 9090:9090 \
+  -v "$(pwd)/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+  prom/prometheus:latest
+
+docker run -d --name grafana --network deploy_fluxbase \
+  -p 3000:3000 \
+  -v "$(pwd)/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro" \
+  -v "$(pwd)/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro" \
+  grafana/grafana:latest
 ```
 
 Access the dashboards:
@@ -54,11 +72,16 @@ Access the dashboards:
 
 ### Accessing Metrics
 
-Fluxbase exposes Prometheus metrics at:
+Fluxbase exposes Prometheus metrics on a dedicated metrics server (separate
+from the API on 8080). Default port: `9090` (configurable via
+`FLUXBASE_METRICS_PORT`, path `/metrics`):
 
 ```
-http://localhost:8080/metrics
+http://localhost:9090/metrics
 ```
+
+The port is reachable inside the Docker network as `fluxbase:9090`. To access
+it from the host, publish it in your compose file (e.g. `"9090:9090"`).
 
 ## Grafana Dashboards
 
@@ -267,7 +290,7 @@ jsonData:
 
 1. Check if Prometheus can reach the target:
    ```bash
-   curl http://localhost:8080/metrics
+   curl http://localhost:9090/metrics
    ```
 
 2. Check Prometheus targets:
@@ -276,19 +299,19 @@ jsonData:
 
 3. Check Prometheus logs:
    ```bash
-   docker compose -f docker-compose.production.yml logs prometheus
+   docker logs prometheus
    ```
 
 ### Dashboard Not Loading
 
 1. Verify Grafana is running:
    ```bash
-   docker compose -f docker-compose.production.yml ps grafana
+   docker ps -f name=grafana
    ```
 
 2. Check Grafana logs:
    ```bash
-   docker compose -f docker-compose.production.yml logs grafana
+   docker logs grafana
    ```
 
 3. Verify datasource configuration:
@@ -311,7 +334,7 @@ If Prometheus is using too much memory:
 **Grafana**: Change default credentials immediately:
 
 ```bash
-# In docker-compose.production.yml
+# Via your Grafana container config (compose environment or docker run flags)
 environment:
   - GF_SECURITY_ADMIN_USER=admin
   - GF_SECURITY_ADMIN_PASSWORD=<strong-password>

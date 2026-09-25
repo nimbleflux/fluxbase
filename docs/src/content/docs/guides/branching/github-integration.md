@@ -68,7 +68,7 @@ You should see a new branch named `pr-{number}`.
 
 ### Signature Verification
 
-GitHub signs webhook payloads with HMAC-SHA256. Fluxbase verifies signatures when `webhook_secret` is configured.
+GitHub signs webhook payloads with HMAC-SHA256. Fluxbase verifies the `X-Hub-Signature-256` signature over the raw body **before** parsing the payload, so unsigned or tampered deliveries are never acted upon. The signature also binds the delivery to the repository whose secret validated it — a signed payload cannot redirect the handler at another repository.
 
 **Behavior:**
 
@@ -81,6 +81,10 @@ GitHub signs webhook payloads with HMAC-SHA256. Fluxbase verifies signatures whe
 | No | No | Rejected* |
 
 *Unconfigured repositories are rejected to prevent abuse. Configure the repository first.
+
+:::note[Unsigned deliveries]
+Deliveries without a signature are rejected by default. Setting `branching.allow_unsigned_webhooks: true` (default `false`) permits unsigned deliveries — and even then only for repositories configured **without** a `webhook_secret`. Prefer configuring a secret over enabling this flag.
+:::
 
 ### Best Practices
 

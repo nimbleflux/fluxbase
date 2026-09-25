@@ -447,3 +447,15 @@ func BenchmarkComparePassword(b *testing.B) {
 		_ = hasher.ComparePassword(hash, password)
 	}
 }
+
+// =============================================================================
+// Timing equalization and rehash tests
+// =============================================================================
+
+func TestCompareDummyEqualizer_RepeatedCallsSucceed(t *testing.T) {
+	hasher := NewPasswordHasherWithConfig(PasswordHasherConfig{Cost: 4, MinLength: 8})
+
+	// Must be safe to call repeatedly (lazy dummy hash computed once).
+	hasher.CompareDummyEqualizer()
+	hasher.CompareDummyEqualizer()
+}

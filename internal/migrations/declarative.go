@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -22,6 +23,14 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/database/bootstrap"
 	dbschema "github.com/nimbleflux/fluxbase/internal/database/schema"
+)
+
+// Schema engine outcomes reported by GetSchemaStatus. "pgschema" means the last
+// plan/apply ran through the pgschema binary; "direct-fallback" means pgschema
+// planning failed and the idempotent direct-apply fallback was used instead.
+const (
+	EnginePgschema       = "pgschema"
+	EngineDirectFallback = "direct-fallback"
 )
 
 // DeclarativeService manages Fluxbase internal schema using pgschema
@@ -35,6 +44,9 @@ type DeclarativeService struct {
 	appUser      string // Runtime app user for {{APP_USER}} GRANT substitution
 	config       DeclarativeConfig
 	pool         *pgxpool.Pool // Optional: for recording state
+	// engine tracks the outcome of the last plan/apply attempt
+	// (EnginePgschema=0, EngineDirectFallback=1) for GetSchemaStatus.
+	engine atomic.Int32
 }
 
 // DeclarativeConfig holds configuration for declarative schema management
@@ -77,6 +89,24 @@ func (s *DeclarativeService) SetAppUser(appUser string) {
 	s.appUser = appUser
 }
 
+// setEngine records the outcome of the last plan/apply attempt for GetSchemaStatus.
+func (s *DeclarativeService) setEngine(engine string) {
+	if engine == EngineDirectFallback {
+		s.engine.Store(1)
+	} else {
+		s.engine.Store(0)
+	}
+}
+
+// engineName returns the engine used by the last plan/apply attempt.
+// Defaults to "pgschema" before the first attempt.
+func (s *DeclarativeService) engineName() string {
+	if s.engine.Load() == 1 {
+		return EngineDirectFallback
+	}
+	return EnginePgschema
+}
+
 // preprocessSchemaFile reads a schema SQL file and substitutes {{APP_USER}} placeholders
 // with the configured runtime user. If no substitution is needed, it returns the original
 // file path with a nil cleanup function. Otherwise, it writes a temp file and returns
@@ -117,6 +147,13 @@ func (s *DeclarativeService) preprocessSchemaFile(schemaFile string) (string, fu
 
 // PlanForSchema generates a migration plan for a single schema
 func (s *DeclarativeService) PlanForSchema(ctx context.Context, schema string) (*Plan, error) {
+	return s.planForSchemaWithOptions(ctx, schema, s.config.AllowDestructive)
+}
+
+// planForSchemaWithOptions generates a migration plan for a single schema with an
+// explicit allow-destructive flag, so per-request callers (e.g. the HTTP apply
+// endpoint) do not have to mutate the shared service config.
+func (s *DeclarativeService) planForSchemaWithOptions(ctx context.Context, schema string, allowDestructive bool) (*Plan, error) {
 	schemaFile := filepath.Join(s.config.SchemaDir, schema+".sql")
 
 	// Check if schema file exists
@@ -152,7 +189,7 @@ func (s *DeclarativeService) PlanForSchema(ctx context.Context, schema string) (
 		"--plan-db", s.dbName,
 	}
 
-	if s.config.AllowDestructive {
+	if allowDestructive {
 		args = append(args, "--allow-destructive")
 	}
 
@@ -313,6 +350,72 @@ func (s *DeclarativeService) Apply(ctx context.Context, autoApprove bool) (*Appl
 	}
 
 	// Record in declarative_state table
+	if err := s.recordApply(ctx, combined); err != nil {
+		log.Warn().Err(err).Msg("Failed to record declarative state")
+	}
+
+	return combined, nil
+}
+
+// ApplyFiltered applies pending schema changes using the same pipeline as
+// startup: per-schema plan → filterManagedFKDrops → applyPlanDirectly (with a
+// destructive re-check) → cross-schema FKs → post-schema policies → record apply
+// state. Use this instead of Apply/ApplyForSchema, which regenerate the plan
+// inside pgschema without the managed-FK filtering and skip the post phases.
+//
+// schema applies a single schema; "" applies all configured schemas.
+// allowDestructive is passed through to plan generation and the destructive
+// re-check in applyPlanDirectly; when false, destructive plan changes are
+// skipped and the apply fails with an error listing them.
+func (s *DeclarativeService) ApplyFiltered(ctx context.Context, schema string, allowDestructive bool) (*ApplyResult, error) {
+	schemas := s.config.Schemas
+	if schema != "" {
+		schemas = []string{schema}
+	}
+
+	combined := &ApplyResult{Applied: []Change{}}
+
+	var applyErr error
+	err := WithSchemaApplyLock(ctx, s.pool, s.config.LockTimeout, func() error {
+		for _, sch := range schemas {
+			plan, err := s.planForSchemaWithOptions(ctx, sch, allowDestructive)
+			if err != nil {
+				applyErr = err
+				return applyErr
+			}
+
+			// Filter out FK drops for cross-schema constraints managed by
+			// post-schema-fks.sql, mirroring the startup pipeline.
+			plan.Changes = s.filterManagedFKDrops(plan.Changes)
+
+			if len(plan.Changes) == 0 {
+				continue
+			}
+
+			if err := s.applyPlanDirectly(ctx, sch, plan, allowDestructive); err != nil {
+				applyErr = fmt.Errorf("failed to apply schema %s: %w", sch, err)
+				return applyErr
+			}
+			combined.Applied = append(combined.Applied, plan.Changes...)
+		}
+		return nil
+	})
+	if err != nil {
+		if applyErr != nil {
+			return nil, applyErr
+		}
+		return nil, err
+	}
+
+	// Managed cross-schema FKs and policies are re-applied idempotently so the
+	// per-schema plan/apply above cannot leave them dropped.
+	if err := s.applyCrossSchemaFKs(ctx); err != nil {
+		return combined, fmt.Errorf("failed to apply cross-schema FKs: %w", err)
+	}
+	if err := s.applyPostSchemaPolicies(ctx); err != nil {
+		return combined, fmt.Errorf("failed to apply post-schema: %w", err)
+	}
+
 	if err := s.recordApply(ctx, combined); err != nil {
 		log.Warn().Err(err).Msg("Failed to record declarative state")
 	}
@@ -498,6 +601,16 @@ func (s *DeclarativeService) ApplyDeclarativeWithSource(ctx context.Context, sou
 		return fmt.Errorf("schema directory not found: %s", s.config.SchemaDir)
 	}
 
+	// Serialize schema applies across processes/instances (also guards against
+	// concurrent HTTP internal-schema/app-schema applies).
+	return WithSchemaApplyLock(ctx, s.pool, s.config.LockTimeout, func() error {
+		return s.applyDeclarativeLocked(ctx, source)
+	})
+}
+
+// applyDeclarativeLocked is ApplyDeclarativeWithSource's body, run while holding
+// the schema-apply advisory lock.
+func (s *DeclarativeService) applyDeclarativeLocked(ctx context.Context, source string) error {
 	// Phase 1: Apply each schema using pgschema for proper diffing
 	// pgschema handles schema evolution correctly by:
 	// - Detecting existing tables and only adding new columns
@@ -513,17 +626,25 @@ func (s *DeclarativeService) ApplyDeclarativeWithSource(ctx context.Context, sou
 		}
 
 		// Generate plan first to see if there are any changes
-		plan, err := s.PlanForSchema(ctx, schema)
+		plan, err := s.planForSchemaWithOptions(ctx, schema, s.config.AllowDestructive)
 		if err != nil {
-			// If plan fails (e.g., due to cross-schema FK validation in temporary schema),
-			// fall back to direct schema application with idempotent transforms
-			log.Warn().Err(err).Str("schema", schema).Msg("pgschema plan failed, using direct fallback")
+			// If plan fails (e.g., because the pgschema binary is missing or due to
+			// cross-schema FK validation in temporary schema), fall back to direct
+			// schema application with idempotent transforms. Log at Error level with
+			// an actionable message: silent permanent fallback means upgrades lose
+			// pgschema's diffing (column drops/renames, destructive guards).
+			s.setEngine(EngineDirectFallback)
+			log.Error().
+				Err(err).
+				Str("schema", schema).
+				Msg("pgschema plan failed; using direct-fallback engine. Install pgschema (version pinned in the Dockerfile, currently 1.12.5) to enable proper schema diffing; until then schema evolution is limited to idempotent direct applies")
 			if err := s.applySchemaDirectFallback(ctx, schema); err != nil {
 				return fmt.Errorf("failed to apply schema %s: %w", schema, err)
 			}
 			log.Info().Str("schema", schema).Msg("Schema applied via direct fallback")
 			continue
 		}
+		s.setEngine(EnginePgschema)
 
 		// Filter out FK drops for cross-schema constraints managed by post-schema-fks.sql.
 		// These are applied separately in Phase 2 and should not be dropped during per-schema apply.
@@ -537,7 +658,7 @@ func (s *DeclarativeService) ApplyDeclarativeWithSource(ctx context.Context, sou
 		// Apply the filtered plan directly using SQL execution.
 		// We use applyPlanDirectly instead of ApplyForSchema because ApplyForSchema
 		// regenerates the plan internally, which would not include our FK filtering.
-		if err := s.applyPlanDirectly(ctx, schema, plan); err != nil {
+		if err := s.applyPlanDirectly(ctx, schema, plan, s.config.AllowDestructive); err != nil {
 			return fmt.Errorf("failed to apply schema %s: %w", schema, err)
 		}
 		log.Info().Str("schema", schema).Int("changes", len(plan.Changes)).Msg("Schema changes applied via plan execution")
@@ -605,12 +726,61 @@ func (s *DeclarativeService) applySchemaDirectFallback(ctx context.Context, sche
 	return nil
 }
 
+// partitionDestructiveChanges splits plan changes into those that may execute and
+// those that must be skipped because they are destructive and allowDestructive is
+// false. Pure helper so the destructive re-check in applyPlanDirectly is testable.
+func partitionDestructiveChanges(changes []Change, allowDestructive bool) (executable, blocked []Change) {
+	for _, c := range changes {
+		if c.Destructive && !allowDestructive && !isPrivilegeNormalization(c.SQL) {
+			blocked = append(blocked, c)
+			continue
+		}
+		executable = append(executable, c)
+	}
+	return executable, blocked
+}
+
+// isPrivilegeNormalization reports whether a destructive-flagged change only
+// adjusts default privileges. pgschema flags `ALTER DEFAULT PRIVILEGES ...
+// REVOKE ...` as destructive on fresh databases (it narrows overly broad
+// defaults before the desired-state GRANTs run); it affects no stored data.
+func isPrivilegeNormalization(sql string) bool {
+	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "ALTER DEFAULT PRIVILEGES")
+}
+
+// previewSQL truncates SQL to at most max bytes for error/log messages.
+func previewSQL(sql string, max int) string {
+	sql = strings.TrimSpace(sql)
+	if len(sql) <= max {
+		return sql
+	}
+	return sql[:max-3] + "..."
+}
+
 // applyPlanDirectly executes the SQL statements from a plan directly
-// This is used when pgschema apply fails due to validation issues but the plan is valid
-func (s *DeclarativeService) applyPlanDirectly(ctx context.Context, schema string, plan *Plan) error {
+// This is used when pgschema apply fails due to validation issues but the plan is valid.
+// allowDestructive re-checks each change before execution: when false, destructive
+// changes are skipped and the apply fails with an error listing them, so the
+// invariant is enforced here even if the plan was produced by another path.
+func (s *DeclarativeService) applyPlanDirectly(ctx context.Context, schema string, plan *Plan, allowDestructive bool) error {
 	if len(plan.Changes) == 0 {
 		return nil
 	}
+
+	// Destructive re-check: pgschema only emits destructive steps with
+	// --allow-destructive, but this is the last line of defense before execution.
+	executable, blocked := partitionDestructiveChanges(plan.Changes, allowDestructive)
+	if len(blocked) > 0 {
+		descriptions := make([]string, 0, len(blocked))
+		for _, c := range blocked {
+			descriptions = append(descriptions, fmt.Sprintf("%s %s (%s)", strings.ToLower(string(c.Type)), c.Name, previewSQL(c.SQL, 120)))
+		}
+		return fmt.Errorf(
+			"plan for schema %s contains %d destructive change(s) and allow_destructive is false; nothing was executed. Skipped: %s",
+			schema, len(blocked), strings.Join(descriptions, "; "),
+		)
+	}
+	plan.Changes = executable
 
 	// Create connection
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
@@ -1213,6 +1383,7 @@ func changePriority(c Change) int {
 func (s *DeclarativeService) GetSchemaStatus(ctx context.Context) (*SchemaStatus, error) {
 	status := &SchemaStatus{
 		SchemaFile: s.config.SchemaDir,
+		Engine:     s.engineName(),
 	}
 
 	// Calculate fingerprint
@@ -1269,4 +1440,7 @@ type SchemaStatus struct {
 	Source                 string    `json:"source"`
 	PendingChanges         int       `json:"pending_changes"`
 	HasDestructiveChanges  bool      `json:"has_destructive_changes"`
+	// Engine reports the engine used by the last plan/apply attempt:
+	// "pgschema" or "direct-fallback" (pgschema unavailable/failing).
+	Engine string `json:"engine"`
 }

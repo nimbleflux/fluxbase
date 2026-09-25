@@ -6,6 +6,7 @@ import (
 
 type MonitoringDeps struct {
 	RequireAuth        fiber.Handler
+	RequireRole        func(...string) fiber.Handler
 	RequireScope       func(...string) fiber.Handler
 	TenantMiddleware   fiber.Handler
 	TenantDBMiddleware fiber.Handler
@@ -41,7 +42,10 @@ func BuildMonitoringRoutes(deps *MonitoringDeps) *RouteGroup {
 				Handler: deps.GetMetrics,
 				Summary: "Get system metrics",
 				Auth:    AuthRequired,
-				Scopes:  []string{"monitoring:read"},
+				// System-wide metrics are admin-only (matching the sibling admin
+				// route role model); the handler documents this contract.
+				Roles:  []string{"admin", "instance_admin", "tenant_admin"},
+				Scopes: []string{"monitoring:read"},
 			},
 			{
 				Method:  "GET",
@@ -49,6 +53,7 @@ func BuildMonitoringRoutes(deps *MonitoringDeps) *RouteGroup {
 				Handler: deps.GetHealth,
 				Summary: "Get system health status",
 				Auth:    AuthRequired,
+				Roles:   []string{"admin", "instance_admin", "tenant_admin"},
 				Scopes:  []string{"monitoring:read"},
 			},
 			{
@@ -57,12 +62,14 @@ func BuildMonitoringRoutes(deps *MonitoringDeps) *RouteGroup {
 				Handler: deps.GetLogs,
 				Summary: "Get system logs",
 				Auth:    AuthRequired,
+				Roles:   []string{"admin", "instance_admin", "tenant_admin"},
 				Scopes:  []string{"monitoring:read"},
 			},
 		},
 		AuthMiddlewares: &AuthMiddlewares{
 			Required: deps.RequireAuth,
 		},
+		RequireRole:  deps.RequireRole,
 		RequireScope: deps.RequireScope,
 	}
 }

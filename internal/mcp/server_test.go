@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,7 @@ import (
 func TestMCPVersion(t *testing.T) {
 	t.Run("version is set", func(t *testing.T) {
 		assert.NotEmpty(t, MCPVersion)
-		assert.Equal(t, "2024-11-05", MCPVersion)
+		assert.Equal(t, "2025-06-18", MCPVersion)
 	})
 }
 
@@ -161,18 +162,18 @@ func TestServer_HandleRequest(t *testing.T) {
 		server := NewServer(cfg)
 		authCtx := &AuthContext{}
 
-		reqData := `{
+		reqData := fmt.Sprintf(`{
 			"jsonrpc": "2.0",
 			"id": 1,
 			"method": "initialize",
 			"params": {
-				"protocolVersion": "2024-11-05",
+				"protocolVersion": %q,
 				"clientInfo": {
 					"name": "TestClient",
 					"version": "1.0.0"
 				}
 			}
-		}`
+		}`, MCPVersion)
 		response := server.HandleRequest(context.Background(), []byte(reqData), authCtx)
 
 		require.NotNil(t, response)
@@ -379,10 +380,10 @@ func TestServer_dispatch(t *testing.T) {
 			JSONRPC: "2.0",
 			ID:      1,
 			Method:  MethodInitialize,
-			Params: json.RawMessage(`{
-				"protocolVersion": "2024-11-05",
+			Params: json.RawMessage(fmt.Sprintf(`{
+				"protocolVersion": %q,
 				"clientInfo": {"name": "Test", "version": "1.0"}
-			}`),
+			}`, MCPVersion)),
 		}
 
 		response := server.dispatch(context.Background(), req, &AuthContext{})
@@ -443,15 +444,15 @@ func BenchmarkServer_HandleRequest_Initialize(b *testing.B) {
 	cfg := &config.MCPConfig{}
 	server := NewServer(cfg)
 	authCtx := &AuthContext{}
-	reqData := []byte(`{
+	reqData := []byte(fmt.Sprintf(`{
 		"jsonrpc": "2.0",
 		"id": 1,
 		"method": "initialize",
 		"params": {
-			"protocolVersion": "2024-11-05",
+			"protocolVersion": %q,
 			"clientInfo": {"name": "Test", "version": "1.0"}
 		}
-	}`)
+	}`, MCPVersion))
 	ctx := context.Background()
 
 	b.ResetTimer()

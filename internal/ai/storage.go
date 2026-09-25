@@ -19,8 +19,9 @@ import (
 // Storage handles database operations for AI entities
 type Storage struct {
 	database.TenantAware
-	db     *database.Connection
-	config *config.AIConfig
+	db            *database.Connection
+	config        *config.AIConfig
+	encryptionKey []byte // master key for provider config secrets; nil = encryption off
 }
 
 // NewStorage creates a new AI storage instance
@@ -35,6 +36,13 @@ func NewStorage(db *database.Connection) *Storage {
 // SetConfig sets the AI configuration for the storage
 func (s *Storage) SetConfig(cfg *config.AIConfig) {
 	s.config = cfg
+}
+
+// SetEncryptionKey sets the master key used to encrypt provider config
+// secrets (api_key etc.) at rest. Nil/empty disables encryption (plaintext,
+// matching pre-encryption behavior).
+func (s *Storage) SetEncryptionKey(key []byte) {
+	s.encryptionKey = key
 }
 
 // UserExists checks if a user exists in auth.users

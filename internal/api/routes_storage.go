@@ -32,6 +32,8 @@ func (s *Server) buildStorageRouteDeps() *routes.StorageDeps {
 		UploadFile:             s.Storage.Handler.UploadFile,
 		DownloadFile:           s.Storage.Handler.DownloadFile,
 		DeleteFile:             s.Storage.Handler.DeleteFile,
+		CopyObjectHandler:      s.Storage.Handler.CopyObjectHandler,
+		MoveObjectHandler:      s.Storage.Handler.MoveObjectHandler,
 
 		TenantMiddleware:   s.Middleware.Tenant,
 		TenantDBMiddleware: s.Middleware.TenantDB,

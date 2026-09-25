@@ -78,6 +78,7 @@ type RealtimeConfig struct {
 	ClientMessageQueueSize int           `mapstructure:"client_message_queue_size"` // Size of per-client message queue for async sending (default: 256)
 	SlowClientThreshold    int           `mapstructure:"slow_client_threshold"`     // Queue length threshold for slow client detection (default: 100)
 	SlowClientTimeout      time.Duration `mapstructure:"slow_client_timeout"`       // Duration before disconnecting slow clients (default: 30s)
+	MaxMessageSize         int64         `mapstructure:"max_message_size"`          // Max inbound WebSocket message size in bytes (default: 65536, see config_realtime.go)
 }
 
 // MigrationsConfig contains migrations API security settings

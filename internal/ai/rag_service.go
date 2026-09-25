@@ -173,13 +173,31 @@ func (r *RAGService) retrieveContextWithGraphBoost(ctx context.Context, opts Ret
 			continue
 		}
 
+		// Per-link access-level handling, mirroring
+		// SearchChatbotKnowledgeWithOptions: "filtered" links require a
+		// caller identity and match only that user's documents (global docs
+		// must not leak through); other links keep user's + global.
+		linkFilter := userFilter
+		if link.AccessLevel == "filtered" {
+			if opts.UserID == "" {
+				log.Debug().
+					Str("kb_id", link.KnowledgeBaseID).
+					Msg("Skipping filtered knowledge base link: no caller identity")
+				continue
+			}
+			linkFilter = &MetadataFilter{
+				UserID:        &opts.UserID,
+				IncludeGlobal: false,
+			}
+		}
+
 		graphOpts := GraphBoostOptions{
 			QueryEmbedding:   queryEmbedding,
 			QueryText:        opts.Query,
 			Limit:            maxChunks,
 			Threshold:        threshold,
 			GraphBoostWeight: opts.GraphBoostWeight,
-			Filter:           userFilter,
+			Filter:           linkFilter,
 		}
 
 		results, err := r.storage.SearchChunksWithGraphBoost(ctx, link.KnowledgeBaseID, r.knowledgeGraph, r.entityExtractor, graphOpts)

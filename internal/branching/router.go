@@ -3,12 +3,14 @@ package branching
 import (
 	"container/list"
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
@@ -17,11 +19,21 @@ import (
 
 // poolEntry represents a connection pool with its last access time for LRU eviction
 type poolEntry struct {
+	key        string // composite pool key (tenantID + slug)
 	slug       string
+	tenantID   string // "" for instance-level branches
 	pool       *pgxpool.Pool
 	config     *pgxpool.Config
 	lastAccess time.Time
 	lruElement *list.Element // Pointer to the element in the LRU list
+}
+
+// poolKey builds the composite cache key for a branch pool.
+// Branch slugs are only unique per tenant (UNIQUE(slug, tenant_id)), so pools
+// must be keyed by tenant ID and slug. An empty tenantID denotes instance-level
+// branches (branches.tenant_id IS NULL).
+func poolKey(tenantID, slug string) string {
+	return tenantID + "\x00" + slug
 }
 
 // Router manages connection pools for database branches
@@ -30,7 +42,7 @@ type Router struct {
 	config       config.BranchingConfig
 	mainPool     *pgxpool.Pool
 	mainDBURL    string
-	pools        map[string]*poolEntry // slug -> pool entry
+	pools        map[string]*poolEntry // composite key (tenantID+slug) -> pool entry
 	poolsMu      sync.RWMutex
 	lruList      *list.List   // LRU list of pools (least recently used at front)
 	lruMu        sync.Mutex   // Separate mutex for LRU operations
@@ -72,7 +84,18 @@ func NewRouter(storage *Storage, cfg config.BranchingConfig, mainPool *pgxpool.P
 
 // GetPool returns the connection pool for a branch
 // If the branch is "main" or empty, returns the main pool
+// Legacy instance-level lookup: resolves the branch without a tenant filter.
+// Request-path callers should use GetPoolForBranch with the resolved tenant ID.
 func (r *Router) GetPool(ctx context.Context, slug string) (*pgxpool.Pool, error) {
+	return r.GetPoolForBranch(ctx, "", slug)
+}
+
+// GetPoolForBranch returns the connection pool for a branch scoped to a tenant.
+// Branch slugs are unique per tenant only, so pools are cached under the
+// composite (tenantID, slug) key. An empty tenantID keeps the legacy behavior
+// of resolving the branch without a tenant filter (instance-level branches).
+// If the branch is "main" or empty, returns the main pool.
+func (r *Router) GetPoolForBranch(ctx context.Context, tenantID, slug string) (*pgxpool.Pool, error) {
 	// Empty or "main" slug uses the main pool
 	if slug == "" || slug == "main" {
 		return r.mainPool, nil
@@ -83,25 +106,27 @@ func (r *Router) GetPool(ctx context.Context, slug string) (*pgxpool.Pool, error
 		return nil, ErrBranchingDisabled
 	}
 
+	key := poolKey(tenantID, slug)
+
 	// Check if we already have a pool for this branch
 	r.poolsMu.RLock()
-	entry, exists := r.pools[slug]
+	entry, exists := r.pools[key]
 	r.poolsMu.RUnlock()
 
 	if exists && entry != nil {
 		// Update last access time and move to end of LRU list
-		r.updateAccess(slug)
+		r.updateAccess(key)
 		return entry.pool, nil
 	}
 
 	// Need to create a new pool
-	return r.createPoolForBranch(ctx, slug)
+	return r.createPoolForBranch(ctx, key, tenantID, slug)
 }
 
 // updateAccess updates the last access time for a pool and moves it to the end of the LRU list
-func (r *Router) updateAccess(slug string) {
+func (r *Router) updateAccess(key string) {
 	r.poolsMu.RLock()
-	entry, exists := r.pools[slug]
+	entry, exists := r.pools[key]
 	r.poolsMu.RUnlock()
 
 	if exists && entry != nil {
@@ -115,14 +140,74 @@ func (r *Router) updateAccess(slug string) {
 	}
 }
 
+// resolveBranch finds the branch for a slug scoped to a tenant. When a tenant
+// ID is provided, tenant-scoped branches take precedence; the instance-level
+// (NULL tenant) fallback then only accepts branches that are not owned by a
+// different tenant. An empty tenantID keeps the legacy global lookup.
+func (r *Router) resolveBranch(ctx context.Context, tenantID, slug string) (*Branch, error) {
+	if tenantID != "" {
+		if tid, err := uuid.Parse(tenantID); err == nil {
+			branch, err := r.storage.GetBranchBySlug(ctx, slug, &tid)
+			if err == nil {
+				return branch, nil
+			}
+			if !errors.Is(err, ErrBranchNotFound) {
+				return nil, err
+			}
+		}
+	}
+
+	branch, err := r.storage.GetBranchBySlug(ctx, slug, nil)
+	if err != nil {
+		return nil, err
+	}
+	if branch.TenantID != nil && tenantID != "" && branch.TenantID.String() != tenantID {
+		// The slug belongs to a different tenant's branch.
+		return nil, ErrBranchNotFound
+	}
+	return branch, nil
+}
+
+// UserHasAccessForBranch reports whether a user has access to the branch with
+// the given slug in the given tenant scope. Instance-level (NULL tenant)
+// branches are shared, so they are resolved with the same fallback rules as
+// GetPoolForBranch.
+func (r *Router) UserHasAccessForBranch(ctx context.Context, tenantID, slug string, userID string) (bool, error) {
+	branch, err := r.resolveBranch(ctx, tenantID, slug)
+	if err != nil {
+		if errors.Is(err, ErrBranchNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	// Main branch is accessible to all authenticated users
+	if branch.Type == BranchTypeMain {
+		return true, nil
+	}
+
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return false, nil
+	}
+	return r.storage.HasAccess(ctx, branch.ID, uid, BranchAccessRead)
+}
+
 // createPoolForBranch creates a new connection pool for a branch
-func (r *Router) createPoolForBranch(ctx context.Context, slug string) (*pgxpool.Pool, error) {
+func (r *Router) createPoolForBranch(ctx context.Context, key, tenantID, slug string) (*pgxpool.Pool, error) {
 	r.poolsMu.Lock()
 	defer r.poolsMu.Unlock()
 
 	// Double-check after acquiring write lock
-	if entry, exists := r.pools[slug]; exists && entry != nil {
-		r.updateAccess(slug)
+	if entry, exists := r.pools[key]; exists && entry != nil {
+		// Update recency inline: updateAccess would re-lock poolsMu (already
+		// held here) and self-deadlock.
+		entry.lastAccess = time.Now()
+		r.lruMu.Lock()
+		if entry.lruElement != nil {
+			r.lruList.MoveToBack(entry.lruElement)
+		}
+		r.lruMu.Unlock()
 		return entry.pool, nil
 	}
 
@@ -134,8 +219,8 @@ func (r *Router) createPoolForBranch(ctx context.Context, slug string) (*pgxpool
 		}
 	}
 
-	// Get branch from storage (no tenant filter — router resolves by slug globally)
-	branch, err := r.storage.GetBranchBySlug(ctx, slug, nil)
+	// Get branch from storage, scoped to the resolved tenant when available
+	branch, err := r.resolveBranch(ctx, tenantID, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +263,9 @@ func (r *Router) createPoolForBranch(ctx context.Context, slug string) (*pgxpool
 	// Create pool entry and add to LRU list
 	r.lruMu.Lock()
 	entry := &poolEntry{
+		key:        key,
 		slug:       slug,
+		tenantID:   tenantID,
 		pool:       pool,
 		config:     poolConfig,
 		lastAccess: time.Now(),
@@ -187,13 +274,14 @@ func (r *Router) createPoolForBranch(ctx context.Context, slug string) (*pgxpool
 	r.lruMu.Unlock()
 
 	// Store the pool entry
-	r.pools[slug] = entry
+	r.pools[key] = entry
 
 	// Update current connection count
 	atomic.AddInt32(&r.currentConns, poolConfig.MaxConns)
 
 	log.Info().
 		Str("branch_slug", slug).
+		Str("tenant_id", tenantID).
 		Str("database", branch.DatabaseName).
 		Int32("max_conns", poolConfig.MaxConns).
 		Int32("total_conns", r.getCurrentTotalConns()).
@@ -217,18 +305,24 @@ func (r *Router) getBranchConnectionURL(branch *Branch) (string, error) {
 	return parsedURL.String(), nil
 }
 
-// ClosePool closes and removes the pool for a branch
+// ClosePool closes and removes the pools for a branch slug.
+// Slugs are unique per tenant, so every tenant-scoped pool cached for the slug
+// is closed (branch deletion is tenant-scoped; closing an unrelated same-slug
+// pool in another tenant is safe — the pool is recreated on next use).
 func (r *Router) ClosePool(slug string) {
 	r.poolsMu.Lock()
 	defer r.poolsMu.Unlock()
 
-	if entry, exists := r.pools[slug]; exists {
-		r.closePoolEntry(entry)
-		delete(r.pools, slug)
+	for key, entry := range r.pools {
+		if entry != nil && entry.slug == slug {
+			r.closePoolEntry(entry)
+			delete(r.pools, key)
 
-		log.Info().
-			Str("branch_slug", slug).
-			Msg("Closed connection pool for branch")
+			log.Info().
+				Str("branch_slug", slug).
+				Str("tenant_id", entry.tenantID).
+				Msg("Closed connection pool for branch")
+		}
 	}
 }
 
@@ -270,11 +364,17 @@ func (r *Router) CloseAllPools() {
 
 // RefreshPool recreates the pool for a branch (e.g., after migration)
 func (r *Router) RefreshPool(ctx context.Context, slug string) error {
-	// Close existing pool
+	// Close existing pool(s) for the slug across all tenant scopes
 	r.ClosePool(slug)
 
+	// Resolve the branch to recreate the pool under its own tenant scope
+	tenantID := ""
+	if branch, err := r.storage.GetBranchBySlug(ctx, slug, nil); err == nil && branch.TenantID != nil {
+		tenantID = branch.TenantID.String()
+	}
+
 	// Create new pool
-	_, err := r.createPoolForBranch(ctx, slug)
+	_, err := r.createPoolForBranch(ctx, poolKey(tenantID, slug), tenantID, slug)
 	return err
 }
 
@@ -284,8 +384,10 @@ func (r *Router) GetActivePools() []string {
 	defer r.poolsMu.RUnlock()
 
 	slugs := make([]string, 0, len(r.pools))
-	for slug := range r.pools {
-		slugs = append(slugs, slug)
+	for _, entry := range r.pools {
+		if entry != nil {
+			slugs = append(slugs, entry.slug)
+		}
 	}
 	return slugs
 }
@@ -329,35 +431,47 @@ func (r *Router) getCurrentTotalConns() int32 {
 	return atomic.LoadInt32(&r.currentConns)
 }
 
-// evictLRUPool evicts the least recently used pool to free up connections
+// evictLRUPool evicts the least recently used pool to free up connections.
+// The caller must hold r.poolsMu (createPoolForBranch holds it), so this
+// closes the pool and updates accounting without re-acquiring poolsMu.
 // Returns true if a pool was evicted, false if no pools can be evicted
 func (r *Router) evictLRUPool() bool {
 	r.lruMu.Lock()
-	defer r.lruMu.Unlock()
-
 	// Get the least recently used element (front of list)
 	if r.lruList.Len() == 0 {
+		r.lruMu.Unlock()
 		return false
 	}
 
 	lruElement := r.lruList.Front()
 	if lruElement == nil {
+		r.lruMu.Unlock()
 		return false
 	}
 
 	entry, ok := lruElement.Value.(*poolEntry)
 	if !ok || entry == nil {
+		r.lruMu.Unlock()
 		return false
 	}
 
-	// Close the pool
-	r.poolsMu.Lock()
-	r.closePoolEntry(entry)
-	delete(r.pools, entry.slug)
-	r.poolsMu.Unlock()
+	// Remove from the LRU list while holding lruMu
+	r.lruList.Remove(lruElement)
+	entry.lruElement = nil
+	r.lruMu.Unlock()
+
+	// Close the pool and update accounting (poolsMu is held by the caller)
+	if entry.config != nil {
+		atomic.AddInt32(&r.currentConns, -entry.config.MaxConns)
+	}
+	if entry.pool != nil {
+		entry.pool.Close()
+	}
+	delete(r.pools, entry.key)
 
 	log.Info().
 		Str("branch_slug", entry.slug).
+		Str("tenant_id", entry.tenantID).
 		Int32("freed_conns", entry.config.MaxConns).
 		Int32("total_conns", r.getCurrentTotalConns()).
 		Msg("Evicted LRU branch pool to free connections")
@@ -379,15 +493,16 @@ func (r *Router) evictIdlePools(evictionAge time.Duration) {
 		r.poolsMu.RUnlock()
 
 		now := time.Now()
-		for slug, entry := range poolsCopy {
+		for key, entry := range poolsCopy {
 			if now.Sub(entry.lastAccess) > evictionAge {
 				r.poolsMu.Lock()
 				// Double check the pool still exists and hasn't been accessed recently
-				if currentEntry, exists := r.pools[slug]; exists && now.Sub(currentEntry.lastAccess) > evictionAge {
+				if currentEntry, exists := r.pools[key]; exists && now.Sub(currentEntry.lastAccess) > evictionAge {
 					r.closePoolEntry(currentEntry)
-					delete(r.pools, slug)
+					delete(r.pools, key)
 					log.Info().
-						Str("branch_slug", slug).
+						Str("branch_slug", currentEntry.slug).
+						Str("tenant_id", currentEntry.tenantID).
 						Dur("idle_time", now.Sub(currentEntry.lastAccess)).
 						Msg("Evicted idle branch pool")
 				}
@@ -417,7 +532,7 @@ func (r *Router) GetMainPool() *pgxpool.Pool {
 	return r.mainPool
 }
 
-// HasPool checks if a pool exists for the given branch
+// HasPool checks if a pool exists for the given branch slug in any tenant scope
 func (r *Router) HasPool(slug string) bool {
 	if IsMainBranch(slug) {
 		return true
@@ -426,8 +541,12 @@ func (r *Router) HasPool(slug string) bool {
 	r.poolsMu.RLock()
 	defer r.poolsMu.RUnlock()
 
-	_, exists := r.pools[slug]
-	return exists
+	for _, entry := range r.pools {
+		if entry != nil && entry.slug == slug {
+			return true
+		}
+	}
+	return false
 }
 
 // WarmupPool pre-creates a connection pool for a branch

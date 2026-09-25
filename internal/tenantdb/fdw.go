@@ -295,6 +295,11 @@ func setupFDWAllSchemas(ctx context.Context, tenantPool *pgxpool.Pool, cfg FDWCo
 		return fmt.Errorf("failed to create user mapping: %w", err)
 	}
 
+	// PostgreSQL 18 ignores a user mapping's stored password unless the
+	// mapping explicitly opts out of password_required. Best-effort: older
+	// servers reject the option and keep the pre-18 behavior.
+	allowPasswordUse(ctx, tenantPool, "CURRENT_USER", fdwServerName)
+
 	// 4. Import tables from each FDW schema
 	var failedSchemas []string
 	for _, schema := range fdwSchemas {
@@ -442,7 +447,7 @@ func importSchemaFDW(ctx context.Context, tenantPool *pgxpool.Pool, schema strin
 		return fmt.Errorf("failed to import foreign schema %s: %w", schema, lastErr)
 	}
 
-	for _, role := range []string{"tenant_service", "service_role"} {
+	for _, role := range []string{"tenant_service", "service_role", "authenticated"} {
 		_, err = tenantPool.Exec(ctx, fmt.Sprintf(
 			`GRANT ALL ON ALL TABLES IN SCHEMA %s TO %s`,
 			quoteIdent(schema), quoteIdent(role),
@@ -450,6 +455,14 @@ func importSchemaFDW(ctx context.Context, tenantPool *pgxpool.Pool, schema strin
 		if err != nil {
 			log.Warn().Err(err).Str("schema", schema).Str("role", role).
 				Msg("Failed to grant permissions on imported foreign tables")
+		}
+		_, err = tenantPool.Exec(ctx, fmt.Sprintf(
+			`GRANT USAGE ON SCHEMA %s TO %s`,
+			quoteIdent(schema), quoteIdent(role),
+		))
+		if err != nil {
+			log.Warn().Err(err).Str("schema", schema).Str("role", role).
+				Msg("Failed to grant schema usage on imported foreign tables")
 		}
 	}
 
@@ -482,6 +495,7 @@ func CreateFDWUserMapping(ctx context.Context, tenantPool *pgxpool.Pool, appUser
 		if err != nil {
 			return fmt.Errorf("failed to create FDW user mapping for %s: %w", role, err)
 		}
+		allowPasswordUse(ctx, tenantPool, role, fdwServerName)
 	}
 
 	log.Debug().Str("app_user", appUser).Str("fdw_role", fdwRole.RoleName).
@@ -538,4 +552,25 @@ func filterSlice(slice, exclude []string) []string {
 		}
 	}
 	return result
+}
+
+// allowPasswordUse marks a user mapping so PostgreSQL 18+ will actually use
+// its stored password: since PG18, the password option on a user mapping is
+// ignored unless password_required is explicitly 'false'. Best-effort —
+// pre-18 servers reject the option and already honor stored passwords.
+func allowPasswordUse(ctx context.Context, tenantPool *pgxpool.Pool, role, server string) {
+	var versionNum int
+	if err := tenantPool.QueryRow(ctx, "SELECT current_setting('server_version_num')::int").Scan(&versionNum); err != nil {
+		log.Warn().Err(err).Msg("Could not determine server version for FDW user mapping")
+		return
+	}
+	if versionNum < 180000 {
+		return
+	}
+	if _, err := tenantPool.Exec(ctx, fmt.Sprintf(
+		`ALTER USER MAPPING FOR %s SERVER %s OPTIONS (ADD password_required 'false')`,
+		quoteIdent(role), quoteIdent(server),
+	)); err != nil {
+		log.Warn().Err(err).Str("role", role).Msg("Failed to set password_required on FDW user mapping")
+	}
 }

@@ -88,6 +88,51 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 
 	ctx := c.RequestCtx()
 
+	// Convert metadata header to the JSONB shape used by storage.objects
+	var metadataJSON map[string]interface{}
+	if len(metadata) > 0 {
+		metadataJSON = make(map[string]interface{})
+		for k, v := range metadata {
+			metadataJSON[k] = v
+		}
+	}
+
+	// Authorization runs BEFORE any bytes are written to the provider: either
+	// the caller can overwrite an existing object row (no-op UPDATE under RLS)
+	// or a size=0 placeholder row is inserted under RLS to validate insert
+	// permission and reserve the path. On any post-probe failure we only delete
+	// provider bytes when we created the placeholder — never for a pre-existing
+	// object row.
+	probe, perr := h.AuthorizeUploadWrite(c, bucket, key, contentType, metadataJSON, ownerUUID)
+	if perr != nil {
+		return perr.send(c)
+	}
+	createdPlaceholder := probe.createdPlaceholder
+
+	// Metadata upsert shared by the final write below.
+	upsertMetadata := func() error {
+		tx, err := h.getPool(c).Begin(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		if err := h.setRLSContext(ctx, tx, c); err != nil {
+			return err
+		}
+
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO storage.objects (bucket_id, path, mime_type, size, metadata, owner_id)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (bucket_id, path)
+			DO UPDATE SET mime_type = $3, size = $4, metadata = $5, owner_id = $6, updated_at = NOW()
+		`, bucket, key, contentType, size, metadataJSON, ownerUUID); err != nil {
+			return err
+		}
+
+		return tx.Commit(ctx)
+	}
+
 	// Get the request body as a stream reader
 	// Try streaming first, fall back to buffered body
 	var body io.Reader
@@ -97,6 +142,9 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 		// Fall back to reading the buffered body
 		bodyBytes := c.Body()
 		if len(bodyBytes) == 0 {
+			if createdPlaceholder {
+				h.CleanupUploadPlaceholder(c, svc, bucket, key)
+			}
 			return SendBadRequest(c, "request body is required", ErrCodeMissingField)
 		}
 		body = bytes.NewReader(bodyBytes)
@@ -105,46 +153,18 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 	// Upload the file to storage provider (streaming)
 	object, err := svc.Provider.Upload(ctx, bucket, key, body, size, opts)
 	if err != nil {
+		if createdPlaceholder {
+			h.CleanupUploadPlaceholder(c, svc, bucket, key)
+		}
 		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to upload file (streaming)")
 		return SendInternalError(c, "failed to upload file")
 	}
 
-	// Start database transaction to store metadata
-	tx, err := h.db.Pool().Begin(ctx)
-	if err != nil {
-		// Delete from provider since DB insert failed
-		_ = svc.Provider.Delete(ctx, bucket, key)
-		log.Error().Err(err).Msg("Failed to start transaction for streaming file upload")
-		return SendInternalError(c, "failed to save file metadata")
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	// Set RLS context
-	if err := h.setRLSContext(ctx, tx, c); err != nil {
-		_ = svc.Provider.Delete(ctx, bucket, key)
-		log.Error().Err(err).Msg("Failed to set RLS context")
-		return SendInternalError(c, "failed to save file metadata")
-	}
-
-	// Convert metadata map to JSONB
-	var metadataJSON map[string]interface{}
-	if len(metadata) > 0 {
-		metadataJSON = make(map[string]interface{})
-		for k, v := range metadata {
-			metadataJSON[k] = v
+	// Persist the final metadata (size, mime, metadata, owner)
+	if err := upsertMetadata(); err != nil {
+		if createdPlaceholder {
+			h.CleanupUploadPlaceholder(c, svc, bucket, key)
 		}
-	}
-
-	// Insert object metadata into database (RLS will check permissions)
-	_, err = tx.Exec(ctx, `
-		INSERT INTO storage.objects (bucket_id, path, mime_type, size, metadata, owner_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (bucket_id, path)
-		DO UPDATE SET mime_type = $3, size = $4, metadata = $5, owner_id = $6, updated_at = NOW()
-	`, bucket, key, contentType, size, metadataJSON, ownerUUID)
-	if err != nil {
-		// Delete from provider since DB insert failed
-		_ = svc.Provider.Delete(ctx, bucket, key)
 
 		// Log the full error for debugging
 		errMsg := err.Error()
@@ -159,13 +179,6 @@ func (h *StorageHandler) StreamUpload(c fiber.Ctx) error {
 		if strings.Contains(errMsg, "permission denied") || strings.Contains(errMsg, "policy") {
 			return SendErrorWithDetails(c, fiber.StatusForbidden, "insufficient permissions to upload file", ErrCodeAccessDenied, "", "", errMsg)
 		}
-		return SendInternalError(c, "failed to save file metadata")
-	}
-
-	// Commit transaction
-	if err := tx.Commit(ctx); err != nil {
-		_ = svc.Provider.Delete(ctx, bucket, key)
-		log.Error().Err(err).Str("bucket", bucket).Str("key", key).Msg("Failed to commit streaming file upload")
 		return SendInternalError(c, "failed to save file metadata")
 	}
 

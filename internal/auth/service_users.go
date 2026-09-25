@@ -9,8 +9,8 @@ import (
 
 // GetUser retrieves the current user by access token
 func (s *Service) GetUser(ctx context.Context, accessToken string) (*User, error) {
-	// Validate token
-	claims, err := s.jwtManager.ValidateToken(accessToken)
+	// Validate token (access tokens only; refresh tokens are not credentials)
+	claims, err := s.jwtManager.ValidateAccessToken(accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}
@@ -42,6 +42,36 @@ func (s *Service) UpdateUser(ctx context.Context, userID string, req UpdateUserR
 		}
 	}
 	return s.userRepo.Update(ctx, userID, req)
+}
+
+// UpdateSelfUserRequest is the user-safe self-service update payload. Unlike
+// UpdateUserRequest it carries no Role, EmailVerified or AppMetadata fields,
+// so a self-service caller cannot elevate privileges or bypass verification.
+type UpdateSelfUserRequest struct {
+	Email        *string `json:"email,omitempty"`
+	UserMetadata any     `json:"user_metadata,omitempty"`
+}
+
+// UpdateSelfUser updates a user's own profile (self-service path).
+// It constructs a restricted UpdateUserRequest containing only user-editable
+// fields; Role, EmailVerified and AppMetadata can never be set here. Admin
+// user-management endpoints use a separate service that retains those fields.
+func (s *Service) UpdateSelfUser(ctx context.Context, userID string, req UpdateSelfUserRequest) (*User, error) {
+	// Validate email if provided
+	if req.Email != nil {
+		if err := ValidateEmail(*req.Email); err != nil {
+			return nil, fmt.Errorf("invalid email: %w", err)
+		}
+	}
+
+	// Defense-in-depth: build the internal request explicitly with the
+	// privileged fields left nil so they are excluded from the repository
+	// update regardless of what the caller supplied.
+	updateReq := UpdateUserRequest{
+		Email:        req.Email,
+		UserMetadata: req.UserMetadata,
+	}
+	return s.userRepo.Update(ctx, userID, updateReq)
 }
 
 // SendMagicLink sends a magic link to the specified email
@@ -165,6 +195,18 @@ func (s *Service) SignInWithIDToken(ctx context.Context, provider, idToken, nonc
 	// Require email for user lookup/creation
 	if claims.Email == "" {
 		return nil, fmt.Errorf("ID token does not contain email claim")
+	}
+
+	// Look up existing user by email.
+	// SECURITY: only identify an existing account by email when the provider
+	// asserts the email as verified; otherwise an attacker could sign in to
+	// someone else's account by asserting an unverified email address.
+	if !claims.EmailVerified {
+		if _, err := s.userRepo.GetByEmail(ctx, claims.Email); err == nil {
+			return nil, fmt.Errorf("email not verified by provider; sign-in with an existing account requires a verified email")
+		} else if !errors.Is(err, ErrUserNotFound) {
+			return nil, fmt.Errorf("failed to lookup user: %w", err)
+		}
 	}
 
 	// Look up existing user by email

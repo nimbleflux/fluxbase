@@ -1972,7 +1972,8 @@ func TestBuildSelectQuery_QueryGeneration(t *testing.T) {
 			Select: []string{"id", "name"},
 		}
 
-		query, args := handler.buildSelectQuery(table, params)
+		query, args, err := handler.buildSelectQuery(table, params)
+		require.NoError(t, err)
 		assert.Contains(t, query, "SELECT")
 		assert.Contains(t, query, "FROM")
 		assert.Contains(t, query, `"public"."items"`)
@@ -1988,7 +1989,8 @@ func TestBuildSelectQuery_QueryGeneration(t *testing.T) {
 			Limit:   &limit,
 		}
 
-		query, args := handler.buildSelectQuery(table, params)
+		query, args, err := handler.buildSelectQuery(table, params)
+		require.NoError(t, err)
 		assert.Contains(t, query, "WHERE")
 		assert.NotEmpty(t, args)
 	})
@@ -1999,7 +2001,8 @@ func TestBuildSelectQuery_QueryGeneration(t *testing.T) {
 			Order:  []OrderBy{{Column: "name", Desc: false}},
 		}
 
-		query, args := handler.buildSelectQuery(table, params)
+		query, args, err := handler.buildSelectQuery(table, params)
+		require.NoError(t, err)
 		assert.Contains(t, query, "ORDER BY")
 		_ = args
 	})
@@ -2010,7 +2013,8 @@ func TestBuildSelectQuery_QueryGeneration(t *testing.T) {
 			Order:  []OrderBy{{Column: "name", Desc: true}},
 		}
 
-		query, args := handler.buildSelectQuery(table, params)
+		query, args, err := handler.buildSelectQuery(table, params)
+		require.NoError(t, err)
 		assert.Contains(t, query, "ORDER BY")
 		assert.Contains(t, query, "DESC")
 		_ = args
@@ -2023,7 +2027,8 @@ func TestBuildSelectQuery_QueryGeneration(t *testing.T) {
 			Limit:  &limit,
 		}
 
-		query, args := handler.buildSelectQuery(table, params)
+		query, args, err := handler.buildSelectQuery(table, params)
+		require.NoError(t, err)
 		assert.Contains(t, query, "LIMIT")
 		_ = args
 	})
@@ -2037,7 +2042,8 @@ func TestBuildSelectQuery_QueryGeneration(t *testing.T) {
 			Offset: &offset,
 		}
 
-		query, args := handler.buildSelectQuery(table, params)
+		query, args, err := handler.buildSelectQuery(table, params)
+		require.NoError(t, err)
 		assert.Contains(t, query, "OFFSET")
 		_ = args
 	})

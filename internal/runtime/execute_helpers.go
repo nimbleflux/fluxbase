@@ -21,6 +21,12 @@ type denoArgsConfig struct {
 	MemoryLimitMB int
 	UserToken     string
 	ServiceToken  string
+	// ExecDir is the per-execution directory; file-system permissions are
+	// scoped to it and Deno's cache lives inside it.
+	ExecDir string
+	// EnvVarNames lists the environment variable names actually passed to the
+	// subprocess; --allow-env is scoped to this list.
+	EnvVarNames []string
 }
 
 type outputResult struct {
@@ -65,9 +71,24 @@ func buildDenoArgs(cfg denoArgsConfig, permissions Permissions, secrets map[stri
 		} else {
 			args = append(args, "--allow-net")
 		}
+
+		// Enforce the SSRF blocklist at the Deno level. Deno deny flags take
+		// precedence over allow flags, so this holds even when the function has
+		// an explicit allow list. An explicitly empty BlockedDomains opts out.
+		if len(permissions.BlockedDomains) > 0 {
+			if denied := buildNetworkDenyList(permissions, cfg.PublicURL); len(denied) > 0 {
+				args = append(args, fmt.Sprintf("--deny-net=%s", strings.Join(denied, ",")))
+			}
+		}
 	}
 	if permissions.AllowEnv {
-		args = append(args, "--allow-env")
+		// Scope env access to the variables actually passed to the subprocess
+		// instead of granting the full environment.
+		if len(cfg.EnvVarNames) > 0 {
+			args = append(args, fmt.Sprintf("--allow-env=%s", strings.Join(cfg.EnvVarNames, ",")))
+		} else {
+			args = append(args, "--allow-env")
+		}
 	} else {
 		secretNames := make([]string, 0, len(secrets))
 		for name := range secrets {
@@ -76,10 +97,10 @@ func buildDenoArgs(cfg denoArgsConfig, permissions Permissions, secrets map[stri
 		args = append(args, fmt.Sprintf("--allow-env=%s", allowedEnvVars(cfg.RuntimeType, secretNames)))
 	}
 	if permissions.AllowRead {
-		args = append(args, "--allow-read=/tmp")
+		args = append(args, fmt.Sprintf("--allow-read=%s", cfg.ExecDir))
 	}
 	if permissions.AllowWrite {
-		args = append(args, "--allow-write=/tmp")
+		args = append(args, fmt.Sprintf("--allow-write=%s", cfg.ExecDir))
 	}
 
 	args = append(args, tmpPath)

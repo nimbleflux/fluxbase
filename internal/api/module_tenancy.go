@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/auth"
@@ -48,7 +49,19 @@ func (m *TenancyModule) Init(ctx context.Context, registry *ServiceRegistry) err
 			Background:    cfg.Tenants.Migrations.Background,
 		},
 	}
-	tenantManager := tenantdb.NewManager(tenantStorage, tenantCfg, db.Pool(), dbURL)
+	// Prefer a dedicated admin pool for tenant-database management (FDW role
+	// creation, schema grants): the runtime user typically cannot grant on
+	// bootstrap-owned schemas. Falls back to the application pool when admin
+	// credentials are not configured.
+	tenantAdminPool := db.Pool()
+	if adminDBURL := cfg.Database.AdminConnectionString(); adminDBURL != "" {
+		if pool, err := pgxpool.New(ctx, adminDBURL); err == nil {
+			tenantAdminPool = pool
+		} else {
+			log.Warn().Err(err).Msg("Failed to create admin pool for tenant management; using the application pool")
+		}
+	}
+	tenantManager := tenantdb.NewManager(tenantStorage, tenantCfg, tenantAdminPool, dbURL)
 	tenantManager.SetAdminDBURL(cfg.Database.AdminConnectionString())
 
 	if adminDBURL := cfg.Database.AdminConnectionString(); adminDBURL != "" {

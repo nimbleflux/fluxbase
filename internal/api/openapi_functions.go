@@ -41,19 +41,19 @@ func (h *OpenAPIHandler) addFunctionsEndpoints(spec *OpenAPISpec) {
 		},
 	}
 
-	// POST /api/v1/functions/:namespace/:name - Invoke function
-	spec.Paths["/api/v1/functions/{namespace}/{name}"] = OpenAPIPath{
+	// POST /api/v1/functions/:name/invoke - Invoke function
+	spec.Paths["/api/v1/functions/{name}/invoke"] = OpenAPIPath{
 		"post": OpenAPIOperation{
 			Summary:     "Invoke function",
-			Description: "Invoke an edge function",
+			Description: "Invoke an edge function. Pass the function namespace via the optional `namespace` query parameter (\"default\" selects namespace-less functions).",
 			OperationID: "functions_invoke",
 			Tags:        []string{"Functions"},
 			Security: []map[string][]string{
 				{"bearerAuth": {}},
 			},
 			Parameters: []OpenAPIParameter{
-				{Name: "namespace", In: "path", Required: true, Schema: map[string]string{"type": "string"}},
 				{Name: "name", In: "path", Required: true, Schema: map[string]string{"type": "string"}},
+				{Name: "namespace", In: "query", Required: false, Schema: map[string]string{"type": "string"}},
 			},
 			RequestBody: &OpenAPIRequestBody{
 				Description: "Function input (optional)",
@@ -76,15 +76,15 @@ func (h *OpenAPIHandler) addFunctionsEndpoints(spec *OpenAPISpec) {
 		},
 		"get": OpenAPIOperation{
 			Summary:     "Invoke function (GET)",
-			Description: "Invoke an edge function with GET request",
+			Description: "Invoke an edge function with GET request (useful for health checks). Pass the function namespace via the optional `namespace` query parameter.",
 			OperationID: "functions_invoke_get",
 			Tags:        []string{"Functions"},
 			Security: []map[string][]string{
 				{"bearerAuth": {}},
 			},
 			Parameters: []OpenAPIParameter{
-				{Name: "namespace", In: "path", Required: true, Schema: map[string]string{"type": "string"}},
 				{Name: "name", In: "path", Required: true, Schema: map[string]string{"type": "string"}},
+				{Name: "namespace", In: "query", Required: false, Schema: map[string]string{"type": "string"}},
 			},
 			Responses: map[string]OpenAPIResponse{
 				"200": {

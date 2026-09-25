@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -25,6 +24,50 @@ type AdminAuthHandler struct {
 	dashboardAuth  *auth.DashboardAuthService
 	systemSettings *auth.SystemSettingsService
 	config         *config.Config
+}
+
+// adminRefreshCookieName is the HttpOnly cookie that carries the admin
+// refresh token so it is never exposed to JavaScript. It is scoped to the
+// admin endpoints; the JSON body field remains supported for clients that
+// do not send cookies.
+const adminRefreshCookieName = "fluxbase_admin_refresh"
+
+// adminRefreshCookieMaxAge bounds the cookie lifetime. The refresh token's
+// own server-side expiry governs actual validity; an over-long cookie is
+// harmless because expired tokens are rejected on refresh.
+const adminRefreshCookieMaxAge = 7 * 24 * 60 * 60
+
+// secureRequest reports whether the request arrived over HTTPS, either
+// directly or through a proxy that set X-Forwarded-Proto.
+func secureRequest(c fiber.Ctx) bool {
+	return c.Protocol() == "https" || strings.EqualFold(c.Get("X-Forwarded-Proto"), "https")
+}
+
+// setAdminRefreshCookie stores the refresh token in an HttpOnly cookie scoped
+// to the admin endpoints.
+func setAdminRefreshCookie(c fiber.Ctx, refreshToken string) {
+	c.Cookie(&fiber.Cookie{
+		Name:     adminRefreshCookieName,
+		Value:    refreshToken,
+		Path:     "/api/v1/admin",
+		MaxAge:   adminRefreshCookieMaxAge,
+		Secure:   secureRequest(c),
+		HTTPOnly: true,
+		SameSite: "Strict",
+	})
+}
+
+// clearAdminRefreshCookie expires the refresh token cookie.
+func clearAdminRefreshCookie(c fiber.Ctx) {
+	c.Cookie(&fiber.Cookie{
+		Name:     adminRefreshCookieName,
+		Value:    "",
+		Path:     "/api/v1/admin",
+		MaxAge:   -1,
+		Secure:   secureRequest(c),
+		HTTPOnly: true,
+		SameSite: "Strict",
+	})
 }
 
 // NewAdminAuthHandler creates a new admin auth handler
@@ -104,7 +147,7 @@ type AdminLoginResponse struct {
 // GetSetupStatus checks if initial setup is needed
 // GET /api/v1/admin/setup/status
 func (h *AdminAuthHandler) GetSetupStatus(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	if err := h.requireService(c); err != nil {
 		return err
@@ -132,7 +175,7 @@ func (h *AdminAuthHandler) GetSetupStatus(c fiber.Ctx) error {
 func (h *AdminAuthHandler) InitialSetup(c fiber.Ctx) error {
 	log.Debug().Str("path", c.Path()).Str("method", c.Method()).Msg("InitialSetup handler called")
 
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	if err := h.requireService(c); err != nil {
 		return err
@@ -224,7 +267,7 @@ func (h *AdminAuthHandler) InitialSetup(c fiber.Ctx) error {
 // AdminLogin authenticates an admin user
 // POST /api/v1/admin/login
 func (h *AdminAuthHandler) AdminLogin(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	var req AdminLoginRequest
 	if err := ParseBody(c, &req); err != nil {
@@ -262,6 +305,10 @@ func (h *AdminAuthHandler) AdminLogin(c fiber.Ctx) error {
 		return SendForbidden(c, "Access denied. Admin role required.", ErrCodeAdminRequired)
 	}
 
+	// Also set the refresh token as an HttpOnly cookie; the JSON response
+	// keeps returning it for clients that do not use cookies.
+	setAdminRefreshCookie(c, loginResp.RefreshToken)
+
 	return c.JSON(AdminLoginResponse{
 		User:         user,
 		AccessToken:  loginResp.AccessToken,
@@ -273,7 +320,7 @@ func (h *AdminAuthHandler) AdminLogin(c fiber.Ctx) error {
 // AdminRefreshToken refreshes an admin's access token
 // POST /api/v1/admin/refresh
 func (h *AdminAuthHandler) AdminRefreshToken(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
@@ -287,10 +334,21 @@ func (h *AdminAuthHandler) AdminRefreshToken(c fiber.Ctx) error {
 		return err
 	}
 
-	refreshResp, err := h.dashboardAuth.RefreshToken(ctx, req.RefreshToken)
+	// Prefer the HttpOnly refresh cookie, falling back to the JSON body field
+	// for backward compatibility with clients that do not send cookies.
+	refreshToken := c.Cookies(adminRefreshCookieName)
+	if refreshToken == "" {
+		refreshToken = req.RefreshToken
+	}
+
+	refreshResp, err := h.dashboardAuth.RefreshToken(ctx, refreshToken)
 	if err != nil {
 		return SendUnauthorized(c, "Invalid or expired refresh token", ErrCodeInvalidToken)
 	}
+
+	// Keep the rotated refresh token in the HttpOnly cookie; the JSON response
+	// keeps returning it for clients that do not use cookies.
+	setAdminRefreshCookie(c, refreshResp.RefreshToken)
 
 	// Validate the new access token to get user ID
 	claims, err := h.dashboardAuth.ValidateToken(refreshResp.AccessToken)
@@ -330,7 +388,7 @@ func (h *AdminAuthHandler) AdminRefreshToken(c fiber.Ctx) error {
 // AdminLogout logs out an admin user
 // POST /api/v1/admin/logout
 func (h *AdminAuthHandler) AdminLogout(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	// Get the access token from the Authorization header
 	authHeader := c.Get("Authorization")
@@ -353,6 +411,8 @@ func (h *AdminAuthHandler) AdminLogout(c fiber.Ctx) error {
 	if err := h.authService.SignOut(ctx, token); err != nil {
 		return SendOperationFailed(c, "logout")
 	}
+
+	clearAdminRefreshCookie(c)
 
 	return apperrors.SendSuccess(c, "Logged out successfully")
 }

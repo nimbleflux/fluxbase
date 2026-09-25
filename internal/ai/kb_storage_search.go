@@ -16,6 +16,29 @@ import (
 // Vector Search / Retrieval
 // ============================================================================
 
+// userIsolationCondition builds the SQL predicate that scopes documents to a
+// caller by the metadata "user_id" key. It is a pure function so the
+// include-global vs strict behavior is testable and identical across the
+// keyword, hybrid, vector-with-filter, and delete-by-filter paths.
+//
+// metadataCol is the jsonb metadata column expression (e.g. `d.metadata` or
+// `metadata`). argIndex is the placeholder index that will hold the caller's
+// user ID. When includeGlobal is true, documents without a user_id
+// (legacy/global content) also match; when false, only documents owned by
+// the caller match — used for "filtered" chatbot→KB links and strict deletes
+// where global content must not leak through.
+func userIsolationCondition(metadataCol string, argIndex int, includeGlobal bool) string {
+	userIDExpr := fmt.Sprintf("%s->>'user_id'", metadataCol)
+	if includeGlobal {
+		return fmt.Sprintf(`(
+			%s = $%d OR
+			%s IS NULL OR
+			NOT (%s ? 'user_id')
+		)`, userIDExpr, argIndex, userIDExpr, metadataCol)
+	}
+	return fmt.Sprintf(`%s = $%d`, userIDExpr, argIndex)
+}
+
 // SearchChunks searches for similar chunks in a knowledge base
 func (s *KnowledgeBaseStorage) SearchChunks(ctx context.Context, knowledgeBaseID string, queryEmbedding []float32, limit int, threshold float64) ([]RetrievalResult, error) {
 	// Format embedding as PostgreSQL vector literal
@@ -158,6 +181,32 @@ func (s *KnowledgeBaseStorage) SearchChunksHybrid(ctx context.Context, knowledge
 func (s *KnowledgeBaseStorage) searchKeywordOnly(ctx context.Context, knowledgeBaseID string, opts HybridSearchOptions) ([]RetrievalResult, error) {
 	var results []RetrievalResult
 	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		// Build dynamic filter conditions for user isolation
+		filterConditions := ""
+		args := []interface{}{knowledgeBaseID, opts.Query, opts.Limit}
+		argIndex := 4
+
+		if opts.Filter != nil && opts.Filter.UserID != nil {
+			filterConditions += " AND " + userIsolationCondition("d.metadata", argIndex, opts.Filter.IncludeGlobal)
+			args = append(args, *opts.Filter.UserID)
+			argIndex++
+		}
+
+		if opts.Filter != nil && len(opts.Filter.Tags) > 0 {
+			filterConditions += fmt.Sprintf(" AND d.tags @> $%d", argIndex)
+			args = append(args, opts.Filter.Tags)
+			argIndex++
+		}
+
+		if opts.Filter != nil && len(opts.Filter.Metadata) > 0 {
+			for key, value := range opts.Filter.Metadata {
+				safeKey := sanitizeMetadataKey(key)
+				filterConditions += fmt.Sprintf(" AND d.metadata->>'%s' = $%d", safeKey, argIndex)
+				args = append(args, value)
+				argIndex++
+			}
+		}
+
 		// Prepare the search query for PostgreSQL full-text search
 		// Use plainto_tsquery for simple word matching, or websearch_to_tsquery for more advanced
 		query := `
@@ -174,12 +223,12 @@ func (s *KnowledgeBaseStorage) searchKeywordOnly(ctx context.Context, knowledgeB
 			  AND (
 			    to_tsvector('simple', c.content) @@ plainto_tsquery('simple', $2)
 			    OR c.content ILIKE '%' || $2 || '%'
-			  )
+			  )` + filterConditions + `
 			ORDER BY similarity DESC
 			LIMIT $3
 		`
 
-		rows, err := tx.Query(ctx, query, knowledgeBaseID, opts.Query, opts.Limit)
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			log.Error().Err(err).Str("kb_id", knowledgeBaseID).Msg("Keyword search query failed")
 			return fmt.Errorf("failed to search chunks: %w", err)
@@ -229,12 +278,9 @@ func (s *KnowledgeBaseStorage) searchHybrid(ctx context.Context, knowledgeBaseID
 	argIndex := 8
 
 	if opts.Filter != nil && opts.Filter.UserID != nil {
-		// Include user's content OR content without user_id (global)
-		filterConditions += fmt.Sprintf(` AND (
-			d.metadata->>'user_id' = $%d OR
-			d.metadata->>'user_id' IS NULL OR
-			NOT (d.metadata ? 'user_id')
-		)`, argIndex)
+		// Strict (IncludeGlobal=false) matches only the caller's documents;
+		// otherwise global content without user_id is included too.
+		filterConditions += " AND " + userIsolationCondition("d.metadata", argIndex, opts.Filter.IncludeGlobal)
 		args = append(args, *opts.Filter.UserID)
 		argIndex++
 	}
@@ -875,14 +921,11 @@ func (s *KnowledgeBaseStorage) SearchChunksWithFilter(
 	args := []interface{}{knowledgeBaseID, threshold, limit}
 	argIndex := 4
 
-	// User isolation filter
+	// User isolation filter. Strict (IncludeGlobal=false) matches only the
+	// caller's documents; otherwise global content without user_id is
+	// included too.
 	if filter != nil && filter.UserID != nil {
-		// Include user's content OR content without user_id (global)
-		whereConditions = append(whereConditions, fmt.Sprintf(`(
-			d.metadata->>'user_id' = $%d OR
-			d.metadata->>'user_id' IS NULL OR
-			NOT (d.metadata ? 'user_id')
-		)`, argIndex))
+		whereConditions = append(whereConditions, userIsolationCondition("d.metadata", argIndex, filter.IncludeGlobal))
 		args = append(args, *filter.UserID)
 		argIndex++
 	}
@@ -1016,24 +1059,34 @@ func (s *KnowledgeBaseStorage) SearchChatbotKnowledgeWithOptions(ctx context.Con
 		}
 
 		var results []RetrievalResult
-
-		// Build filter for user isolation and access level
 		var filter *MetadataFilter
-		if opts.UserID != nil || link.AccessLevel == "filtered" {
-			filter = &MetadataFilter{}
 
-			// Apply user isolation if UserID provided
-			if opts.UserID != nil {
-				filter.UserID = opts.UserID
-				filter.IncludeGlobal = true
+		// Build filter for user isolation and access level.
+		// "filtered" links are per-user scoped: they REQUIRE a caller
+		// identity (without one the link yields no rows) and match only the
+		// caller's documents — global docs without a user_id must NOT leak
+		// through. "full" links keep the previous behavior: user's content
+		// plus global when an identity is given, unfiltered otherwise.
+		if link.AccessLevel == "filtered" {
+			if opts.UserID == nil || *opts.UserID == "" {
+				log.Debug().
+					Str("kb_id", link.KnowledgeBaseID).
+					Msg("Skipping filtered knowledge base link: no caller identity")
+				continue
 			}
-
-			// Apply FilterExpression for "filtered" access level
-			if link.AccessLevel == "filtered" && link.FilterExpression != nil {
-				advancedFilter := convertFilterExpression(link.FilterExpression, opts.UserID)
-				if advancedFilter != nil {
+			filter = &MetadataFilter{
+				UserID:        opts.UserID,
+				IncludeGlobal: false,
+			}
+			if link.FilterExpression != nil {
+				if advancedFilter := convertFilterExpression(link.FilterExpression, opts.UserID); advancedFilter != nil {
 					filter.AdvancedFilter = advancedFilter
 				}
+			}
+		} else if opts.UserID != nil && *opts.UserID != "" {
+			filter = &MetadataFilter{
+				UserID:        opts.UserID,
+				IncludeGlobal: true,
 			}
 		}
 

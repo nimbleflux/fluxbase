@@ -281,8 +281,8 @@ fluxbase branch list [flags]
 
 Flags:
   -o, --output string   Output format: table, json, yaml (default "table")
-      --status string   Filter by status
       --type string     Filter by type
+  -m, --mine            Only branches you have access to
 ```
 
 ### branch get

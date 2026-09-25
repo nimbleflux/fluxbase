@@ -92,6 +92,20 @@ func TestMakeBatchPatchHandler_InvalidBody(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		assert.Contains(t, string(body), "Invalid query string")
 	})
+
+	t.Run("requires at least one filter", func(t *testing.T) {
+		req := httptest.NewRequest("PATCH", "/items", strings.NewReader(`{"name":"test"}`))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		assert.Equal(t, 400, resp.StatusCode)
+
+		body, _ := io.ReadAll(resp.Body)
+		assert.Contains(t, string(body), "Batch update requires at least one filter")
+	})
 }
 
 // =============================================================================

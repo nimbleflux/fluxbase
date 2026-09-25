@@ -114,6 +114,9 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 			Tenant: middleware.TenantMiddleware(middleware.TenantConfig{
 				DB: db,
 			}),
+			EnsureTenantAccess: middleware.EnsureTenantAccess(middleware.TenantConfig{
+				DB: db,
+			}),
 		},
 	}
 
@@ -209,6 +212,13 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	s.AI = aiMod.Handlers
 	s.Quota = aiMod.Quota
 
+	// Self-service account deletion cleans up the user's KB documents; the AI
+	// module initializes after auth, so wire the storage in post-init. Nil when
+	// AI is disabled (cleanup pass is skipped).
+	if s.AI != nil && s.AI.KBStorage != nil && s.Auth != nil && s.Auth.Handler != nil {
+		s.Auth.Handler.SetKnowledgeBaseStorage(s.AI.KBStorage)
+	}
+
 	s.Realtime = realtimeMod.Handlers
 	s.Monitoring = realtimeMod.Monitoring
 
@@ -238,6 +248,14 @@ func NewServer(cfg *config.Config, db *database.Connection, version string) *Ser
 	}
 
 	s.setupMiddlewares()
+
+	// Liveness probe endpoint: process-only check that returns 200 as soon as
+	// the HTTP server is up. Unlike /health it never touches the database, so
+	// liveness probes do not restart the server during a Postgres outage
+	// (readiness checks should keep using /health). Registered directly and
+	// BEFORE setupRoutes, whose terminal 404 handler would otherwise shadow it.
+	s.app.Get("/livez", s.handleLiveness)
+
 	s.setupRoutes()
 
 	log.Debug().Msg("Server initialization complete")
@@ -253,13 +271,19 @@ func (s *Server) createMCPAuthMiddleware() fiber.Handler {
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
 			if s.MCP.OAuth != nil {
-				clientID, userID, scopes, err := s.MCP.OAuth.ValidateAccessToken(c, token)
+				clientID, userID, scopes, role, err := s.MCP.OAuth.ValidateAccessToken(c, token)
 				if err == nil {
 					c.Locals("auth_type", "mcp_oauth")
 					c.Locals("client_key_id", clientID)
 					c.Locals("client_key_scopes", scopes)
 					if userID != nil {
 						c.Locals("user_id", *userID)
+					}
+					// Expose the authorizing user's role so MCP tools apply
+					// the same RLS role for OAuth callers as for JWT callers
+					// (without this they silently degrade to "anon").
+					if role != "" {
+						c.Locals("user_role", role)
 					}
 					return c.Next()
 				}
@@ -318,6 +342,18 @@ func (s *Server) handleHealth(c fiber.Ctx) error {
 	}
 
 	return c.Status(httpStatus).JSON(response)
+}
+
+// handleLiveness handles liveness probe requests. It is process-only: it
+// returns 200 for any request the listening server receives and never checks
+// the database or other dependencies, so restarting on its failure indicates
+// a broken process, not a degraded dependency. Dependency health belongs on
+// GET /health.
+func (s *Server) handleLiveness(c fiber.Ctx) error {
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":    "ok",
+		"timestamp": time.Now().UTC(),
+	})
 }
 
 // Start starts the HTTP server

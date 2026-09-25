@@ -1,3 +1,10 @@
 {
-  "versions": [{ "major": 18, "version": "18.1", "imageVersion": "1", "latest": true }]
+  "versions": [
+    {
+      "major": 18,
+      "version": "18.4",
+      "imageVersion": "1",
+      "latest": true
+    }
+  ]
 }

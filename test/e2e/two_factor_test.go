@@ -178,14 +178,19 @@ func Test2FALoginFlow(t *testing.T) {
 	require.Contains(t, loginResult, "user_id", "Should have user_id")
 	userID := loginResult["user_id"].(string)
 
+	// The signed 2FA challenge token issued by the sign-in response
+	mfaToken, hasMFAToken := loginResult["mfa_token"].(string)
+	require.True(t, hasMFAToken && mfaToken != "", "Sign-in with 2FA required should return an mfa_token")
+
 	// Generate a valid TOTP code
 	code, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err, "Should generate TOTP code")
 
 	// Verify 2FA code
 	verifyReq := map[string]interface{}{
-		"user_id": userID,
-		"code":    code,
+		"mfa_token": mfaToken,
+		"user_id":   userID,
+		"code":      code,
 	}
 
 	verifyResp := tc.NewRequest("POST", "/api/v1/auth/2fa/verify").
@@ -238,12 +243,17 @@ func Test2FALoginWithBackupCode(t *testing.T) {
 	require.True(t, loginResult["requires_2fa"].(bool), "Should require 2FA")
 	userID := loginResult["user_id"].(string)
 
+	// The signed 2FA challenge token issued by the sign-in response
+	mfaToken, hasMFAToken := loginResult["mfa_token"].(string)
+	require.True(t, hasMFAToken && mfaToken != "", "Sign-in with 2FA required should return an mfa_token")
+
 	// Use first backup code
 	backupCode := backupCodes[0].(string)
 
 	verifyReq := map[string]interface{}{
-		"user_id": userID,
-		"code":    backupCode,
+		"mfa_token": mfaToken,
+		"user_id":   userID,
+		"code":      backupCode,
 	}
 
 	verifyResp := tc.NewRequest("POST", "/api/v1/auth/2fa/verify").
@@ -268,10 +278,13 @@ func Test2FALoginWithBackupCode(t *testing.T) {
 	loginResp2.JSON(&loginResult2)
 
 	userID2 := loginResult2["user_id"].(string)
+	mfaToken2, hasMFAToken2 := loginResult2["mfa_token"].(string)
+	require.True(t, hasMFAToken2 && mfaToken2 != "", "Second sign-in should also return an mfa_token")
 
 	verifyReq2 := map[string]interface{}{
-		"user_id": userID2,
-		"code":    backupCode,
+		"mfa_token": mfaToken2,
+		"user_id":   userID2,
+		"code":      backupCode,
 	}
 
 	tc.NewRequest("POST", "/api/v1/auth/2fa/verify").
@@ -370,10 +383,15 @@ func Test2FAInvalidCode(t *testing.T) {
 
 	userID := loginResult["user_id"].(string)
 
-	// Try to verify with invalid code
+	// Try to verify with invalid code (the mfa_token binds the attempt to
+	// the password-verified sign-in)
+	mfaToken, hasMFAToken := loginResult["mfa_token"].(string)
+	require.True(t, hasMFAToken && mfaToken != "", "Sign-in with 2FA required should return an mfa_token")
+
 	verifyReq := map[string]interface{}{
-		"user_id": userID,
-		"code":    "000000",
+		"mfa_token": mfaToken,
+		"user_id":   userID,
+		"code":      "000000",
 	}
 
 	tc.NewRequest("POST", "/api/v1/auth/2fa/verify").

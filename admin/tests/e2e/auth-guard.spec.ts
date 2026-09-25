@@ -36,12 +36,11 @@ test.describe("Auth Guard", () => {
     // Navigate to login first to set a real origin and clear tokens
     await page.goto("login", { waitUntil: "networkidle" });
 
-    // Clear any existing tokens (cookies + localStorage)
+    // Clear any existing tokens (cookies, sessionStorage + localStorage)
     await page.evaluate(() => {
       document.cookie =
         "fluxbase_admin_token=; path=/; max-age=0; SameSite=Lax";
-      document.cookie =
-        "fluxbase_admin_refresh_token=; path=/; max-age=0; SameSite=Lax";
+      sessionStorage.removeItem("fluxbase_admin_refresh_token");
       localStorage.removeItem("fluxbase_admin_user");
     });
 

@@ -1472,14 +1472,14 @@ describe("EmailSettingsManager", () => {
   });
 
   describe("test", () => {
-    it("should send test email", async () => {
+    it("should send test email via the provider-specific path", async () => {
       const mockResponse = { success: true, message: "Test email sent" };
       vi.mocked(mockFetch.post).mockResolvedValue(mockResponse);
 
-      const result = await manager.test("admin@app.com");
+      const result = await manager.test("sendgrid", "admin@app.com");
 
       expect(mockFetch.post).toHaveBeenCalledWith(
-        "/api/v1/admin/email/settings/test",
+        "/api/v1/admin/email/settings/sendgrid/test",
         {
           recipient_email: "admin@app.com",
         },

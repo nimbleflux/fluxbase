@@ -226,7 +226,7 @@ fluxbase jobs submit my-job
 fluxbase jobs submit my-job --payload '{"data": "value"}'
 fluxbase jobs submit my-job --file ./payload.json
 fluxbase jobs submit my-job --priority 10
-fluxbase jobs submit my-job --schedule "0 * * * *"
+fluxbase jobs submit my-job --schedule "2026-10-01T09:00:00Z"
 ```
 
 **Flags:**
@@ -234,7 +234,7 @@ fluxbase jobs submit my-job --schedule "0 * * * *"
 - `--payload` - JSON payload to send
 - `--file` - Load payload from file
 - `--priority` - Job priority (higher = more important)
-- `--schedule` - Cron schedule for recurring jobs
+- `--schedule` - Schedule the job to run later (RFC3339 timestamp)
 
 ### `fluxbase jobs status`
 
@@ -252,12 +252,6 @@ fluxbase jobs cancel abc123
 
 ```bash
 fluxbase jobs retry abc123
-```
-
-### `fluxbase jobs logs`
-
-```bash
-fluxbase jobs logs abc123
 ```
 
 ### `fluxbase jobs stats`
@@ -363,8 +357,8 @@ fluxbase chatbots update abc123 --model gpt-4
 # Delete chatbot
 fluxbase chatbots delete abc123
 
-# Interactive chat
-fluxbase chatbots chat abc123
+# Enable or disable a chatbot
+fluxbase chatbots toggle abc123
 
 # Sync chatbots from directory
 fluxbase chatbots sync --dir ./chatbots
@@ -376,7 +370,7 @@ fluxbase chatbots sync --dir ./chatbots
 
 - `--system-prompt` - System prompt for the chatbot
 - `--model` - AI model to use (e.g., `gpt-4`, `gpt-3.5-turbo`)
-- `--temperature` - Response randomness (0.0-2.0)
+- `--temperature` - Response randomness (0.0-1.0, default 0.7)
 - `--max-tokens` - Maximum response length
 - `--knowledge-base` - Knowledge base ID to attach
 
@@ -386,7 +380,7 @@ fluxbase chatbots sync --dir ./chatbots
 
 - `--system-prompt` - System prompt for the chatbot
 - `--model` - AI model to use
-- `--temperature` - Response randomness (0.0-2.0)
+- `--temperature` - Response randomness (0.0-1.0)
 - `--max-tokens` - Maximum response length
 
 ### `fluxbase chatbots sync`
@@ -987,14 +981,6 @@ fluxbase extensions enable pgvector
 
 # Disable extension
 fluxbase extensions disable pgvector
-```
-
-### `fluxbase extensions status`
-
-Get the status of a specific extension.
-
-```bash
-fluxbase extensions status pgvector
 ```
 
 ### `fluxbase extensions enable`
@@ -1922,20 +1908,6 @@ fluxbase admin sessions revoke-all 550e8400-e29b-41d4-a716-446655440000 --force
 **Flags:**
 
 - `--force`, `-f` - Skip confirmation prompt
-
-### Admin Password Reset
-
-#### `fluxbase admin password-reset`
-
-Send a password reset email to an admin user.
-
-```bash
-fluxbase admin password-reset --email admin@example.com
-```
-
-**Flags:**
-
-- `--email` - Email address of the admin user (required)
 
 ---
 

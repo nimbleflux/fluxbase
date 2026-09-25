@@ -8,6 +8,7 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 	"github.com/nimbleflux/fluxbase/internal/mcp"
+	"github.com/nimbleflux/fluxbase/internal/middleware"
 )
 
 // BucketsResource provides storage buckets information
@@ -47,8 +48,27 @@ func (r *BucketsResource) Read(ctx context.Context, authCtx *mcp.AuthContext) ([
 		return nil, fmt.Errorf("database connection not available")
 	}
 
-	// Query buckets from database
-	rows, err := r.db.Query(ctx, `
+	// Query buckets under the CALLER's RLS context (instead of pool
+	// privileges) so tenants only see the buckets their policies expose.
+	tx, err := r.db.Pool().Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	userID := ""
+	if authCtx != nil && authCtx.UserID != nil {
+		userID = *authCtx.UserID
+	}
+	role := "anon"
+	if authCtx != nil && authCtx.UserRole != "" {
+		role = authCtx.UserRole
+	}
+	if err := middleware.SetRLSContext(ctx, tx, userID, role, nil); err != nil {
+		return nil, fmt.Errorf("failed to set RLS context: %w", err)
+	}
+
+	rows, err := tx.Query(ctx, `
 		SELECT id, name, public, allowed_mime_types, max_file_size, created_at, updated_at
 		FROM storage.buckets
 		ORDER BY created_at DESC
@@ -92,6 +112,14 @@ func (r *BucketsResource) Read(ctx context.Context, authCtx *mcp.AuthContext) ([
 		}
 
 		bucketList = append(bucketList, bucketInfo)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan buckets: %w", err)
+	}
+
+	// Commit the RLS transaction (cleanup)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit bucket query: %w", err)
 	}
 
 	result := map[string]any{

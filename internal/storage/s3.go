@@ -356,11 +356,8 @@ func (s3 *S3Storage) GenerateSignedURL(ctx context.Context, bucket, key string, 
 	case "PUT":
 		presignedURL, err = s3.client.PresignedPutObject(ctx, bucket, key, opts.ExpiresIn)
 	case "DELETE":
-		// MinIO SDK doesn't have PresignedDeleteObject, use custom HTTP method
-		reqParams := make(url.Values)
-		reqParams.Set("X-Amz-Expires", fmt.Sprintf("%d", int(opts.ExpiresIn.Seconds())))
-		presignedURL, err = s3.client.PresignedGetObject(ctx, bucket, key, opts.ExpiresIn, reqParams)
-		// Note: DELETE method would need to be set by the client making the request
+		// Presign the actual DELETE verb so the URL only allows deletion.
+		presignedURL, err = s3.client.Presign(ctx, "DELETE", bucket, key, opts.ExpiresIn, nil)
 	default:
 		return "", fmt.Errorf("unsupported method: %s", opts.Method)
 	}
@@ -484,6 +481,14 @@ func (s3s *S3Storage) UploadChunk(ctx context.Context, session *ChunkedUploadSes
 		return nil, fmt.Errorf("invalid chunk index: %d (total chunks: %d)", chunkIndex, session.TotalChunks)
 	}
 
+	// Enforce the per-chunk size cap: non-final chunks hold at most
+	// session.ChunkSize bytes, the final chunk at most the declared remainder,
+	// so accumulated parts can never exceed the declared total size.
+	maxChunk := SessionMaxChunkSize(session, chunkIndex)
+	if size > maxChunk+chunkSizeSlack {
+		return nil, fmt.Errorf("chunk size %d exceeds the maximum of %d bytes for chunk %d", size, maxChunk, chunkIndex)
+	}
+
 	// S3 part numbers are 1-indexed
 	partNumber := chunkIndex + 1
 
@@ -500,6 +505,10 @@ func (s3s *S3Storage) UploadChunk(ctx context.Context, session *ChunkedUploadSes
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload part %d: %w", partNumber, err)
+	}
+
+	if objectPart.Size > maxChunk+chunkSizeSlack {
+		return nil, fmt.Errorf("chunk size %d exceeds the maximum of %d bytes for chunk %d", objectPart.Size, maxChunk, chunkIndex)
 	}
 
 	log.Debug().
@@ -548,6 +557,14 @@ func (s3s *S3Storage) CompleteChunkedUpload(ctx context.Context, session *Chunke
 		return nil, fmt.Errorf("failed to complete multipart upload: %w", err)
 	}
 
+	// The completed object must match the declared total size exactly; a
+	// mismatch means corrupted or tampered parts — abort the multipart upload
+	// rather than keeping an object of the wrong size.
+	if uploadInfo.Size > 0 && uploadInfo.Size != session.TotalSize {
+		_ = s3s.core.AbortMultipartUpload(ctx, session.Bucket, session.Key, session.S3UploadID)
+		return nil, fmt.Errorf("assembled size %d does not match declared total %d", uploadInfo.Size, session.TotalSize)
+	}
+
 	log.Info().
 		Str("uploadID", session.S3UploadID).
 		Str("bucket", session.Bucket).
@@ -583,6 +600,10 @@ func (s3s *S3Storage) AbortChunkedUpload(ctx context.Context, session *ChunkedUp
 
 	return nil
 }
+
+// DefaultMultipartCleanupMaxAge is the default age at which incomplete
+// multipart uploads are aborted by the background cleanup goroutine.
+const DefaultMultipartCleanupMaxAge = 24 * time.Hour
 
 // CleanupExpiredMultipartUploads lists and aborts incomplete multipart uploads
 // that are older than the specified max age. This prevents storage costs from

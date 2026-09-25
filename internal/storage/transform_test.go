@@ -552,7 +552,7 @@ func TestTransformResult_Struct(t *testing.T) {
 
 func TestTransformConstants(t *testing.T) {
 	t.Run("MaxTransformDimension", func(t *testing.T) {
-		assert.Equal(t, 8192, MaxTransformDimension)
+		assert.Equal(t, 4096, MaxTransformDimension)
 	})
 
 	t.Run("DefaultMaxTotalPixels", func(t *testing.T) {

@@ -191,6 +191,11 @@ GRANT USAGE ON SCHEMA platform TO authenticated, service_role, tenant_service;
 -- Tenant migration role - public schema only
 GRANT USAGE, CREATE ON SCHEMA public TO tenant_migration_role;
 
+-- Allow the runtime user to pin the tenant context on FDW roles it creates
+-- (ALTER ROLE ... SET app.current_tenant_id) — PG15+ requires an explicit
+-- parameter grant for non-superusers to set two-part custom GUCs on roles.
+GRANT SET ON PARAMETER app.current_tenant_id TO {{APP_USER}};
+
 -- ============================================================================
 -- ALTER DEFAULT PRIVILEGES
 -- These ensure future tables automatically get correct permissions.

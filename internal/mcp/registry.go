@@ -30,6 +30,35 @@ type ToolRegistry struct {
 	mu    sync.RWMutex
 }
 
+// TenantScoped is implemented by tools and resources that belong to a
+// specific tenant. OwnerTenantID returns the owning tenant ID, or an empty
+// string for operator-installed/legacy registrations without a tenant.
+type TenantScoped interface {
+	OwnerTenantID() string
+}
+
+// tenantAllowsAccess reports whether an auth context may see a tenant-scoped
+// registration. Service roles and instance admins see everything; an empty
+// owner means the registration is not tenant-restricted; otherwise the owner
+// must match the caller's tenant.
+func tenantAllowsAccess(authCtx *AuthContext, handler any) bool {
+	scoped, ok := handler.(TenantScoped)
+	if !ok {
+		return true
+	}
+	if authCtx == nil {
+		return false
+	}
+	if authCtx.IsServiceRole || authCtx.UserRole == "admin" || authCtx.UserRole == "instance_admin" {
+		return true
+	}
+	owner := scoped.OwnerTenantID()
+	if owner == "" {
+		return true
+	}
+	return authCtx.TenantID != "" && owner == authCtx.TenantID
+}
+
 // NewToolRegistry creates a new tool registry
 func NewToolRegistry() *ToolRegistry {
 	return &ToolRegistry{
@@ -65,6 +94,11 @@ func (r *ToolRegistry) ListTools(authCtx *AuthContext) []Tool {
 
 	var tools []Tool
 	for _, handler := range r.tools {
+		// Tenant isolation: hide other tenants' custom tools
+		if !tenantAllowsAccess(authCtx, handler) {
+			continue
+		}
+
 		// Check if user has required scopes
 		if !authCtx.HasScopes(handler.RequiredScopes()...) {
 			continue
@@ -183,6 +217,11 @@ func (r *ResourceRegistry) ListResources(authCtx *AuthContext) []Resource {
 			continue
 		}
 
+		// Tenant isolation: hide other tenants' custom resources
+		if !tenantAllowsAccess(authCtx, provider) {
+			continue
+		}
+
 		// Check if user has required scopes
 		if !authCtx.HasScopes(provider.RequiredScopes()...) {
 			continue
@@ -209,6 +248,11 @@ func (r *ResourceRegistry) ListTemplates(authCtx *AuthContext) []ResourceTemplat
 		// Only include templates
 		tp, ok := provider.(TemplateResourceProvider)
 		if !ok || !tp.IsTemplate() {
+			continue
+		}
+
+		// Tenant isolation: hide other tenants' custom resources
+		if !tenantAllowsAccess(authCtx, provider) {
 			continue
 		}
 

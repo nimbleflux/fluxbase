@@ -223,16 +223,29 @@ func (g *GraphQLSchemaGenerator) makeCollectionResolver(table database.TableInfo
 
 		// Apply limit
 		if limit, ok := p.Args["limit"].(int); ok {
+			// Reject negatives and enforce the configured max_page_size
+			if limit < 0 {
+				return nil, fmt.Errorf("limit must be a non-negative integer")
+			}
+			if g.maxPageSize > 0 && limit > g.maxPageSize {
+				limit = g.maxPageSize
+			}
 			qb.WithLimit(limit)
 		}
 
 		// Apply offset
 		if offset, ok := p.Args["offset"].(int); ok {
+			if offset < 0 {
+				return nil, fmt.Errorf("offset must be a non-negative integer")
+			}
 			qb.WithOffset(offset)
 		}
 
 		// Build and execute query with RLS
-		sql, args := qb.BuildSelect()
+		sql, args, err := qb.BuildSelect()
+		if err != nil {
+			return nil, err
+		}
 		return g.queryWithRLS(ctx, sql, args...)
 	}
 }
@@ -264,12 +277,15 @@ func (g *GraphQLSchemaGenerator) makeSingleResolver(table database.TableInfo) gr
 		qb.WithFilters(filters)
 		qb.WithLimit(1)
 
-		sql, args := qb.BuildSelect()
+		sql, args, err := qb.BuildSelect()
+		if err != nil {
+			return nil, err
+		}
 
 		// Execute with RLS
 		results, err := g.queryWithRLS(ctx, sql, args...)
 		if err != nil {
-			return nil, fmt.Errorf("query failed: %w", err)
+			return nil, fmt.Errorf("query failed: %s", database.SanitizeErrorMessage(err))
 		}
 
 		if len(results) == 0 {
@@ -300,7 +316,7 @@ func (g *GraphQLSchemaGenerator) makeInsertResolver(table database.TableInfo) gr
 		// Execute with RLS
 		results, err := g.execWithRLS(ctx, sql, args...)
 		if err != nil {
-			return nil, fmt.Errorf("insert failed: %w", err)
+			return nil, fmt.Errorf("insert failed: %s", database.SanitizeErrorMessage(err))
 		}
 
 		if len(results) == 0 {
@@ -361,7 +377,7 @@ func (g *GraphQLSchemaGenerator) makeInsertManyResolver(table database.TableInfo
 
 			rows, err := tx.Query(ctx, sql, args...)
 			if err != nil {
-				return nil, fmt.Errorf("insert failed: %w", err)
+				return nil, fmt.Errorf("insert failed: %s", database.SanitizeErrorMessage(err))
 			}
 
 			insertedRows, err := scanRowsToMaps(rows)
@@ -414,12 +430,15 @@ func (g *GraphQLSchemaGenerator) makeUpdateResolver(table database.TableInfo) gr
 		qb := NewQueryBuilder(table.Schema, table.Name)
 		qb.WithFilters(filters)
 		qb.WithReturning([]string{"*"})
-		sql, args := qb.BuildUpdate(dbData)
+		sql, args, err := qb.BuildUpdate(dbData)
+		if err != nil {
+			return nil, err
+		}
 
 		// Execute with RLS
 		results, err := g.execWithRLS(ctx, sql, args...)
 		if err != nil {
-			return nil, fmt.Errorf("update failed: %w", err)
+			return nil, fmt.Errorf("update failed: %s", database.SanitizeErrorMessage(err))
 		}
 
 		if len(results) == 0 {
@@ -450,7 +469,10 @@ func (g *GraphQLSchemaGenerator) makeUpdateManyResolver(table database.TableInfo
 		qb := NewQueryBuilder(table.Schema, table.Name)
 		qb.WithFilters(filters)
 		qb.WithReturning([]string{"*"})
-		sql, args := qb.BuildUpdate(dbData)
+		sql, args, err := qb.BuildUpdate(dbData)
+		if err != nil {
+			return nil, err
+		}
 
 		// Execute with RLS
 		return g.execWithRLS(ctx, sql, args...)
@@ -482,12 +504,15 @@ func (g *GraphQLSchemaGenerator) makeDeleteResolver(table database.TableInfo) gr
 		qb := NewQueryBuilder(table.Schema, table.Name)
 		qb.WithFilters(filters)
 		qb.WithReturning([]string{"*"})
-		sql, args := qb.BuildDelete()
+		sql, args, err := qb.BuildDelete()
+		if err != nil {
+			return nil, err
+		}
 
 		// Execute with RLS
 		results, err := g.execWithRLS(ctx, sql, args...)
 		if err != nil {
-			return nil, fmt.Errorf("delete failed: %w", err)
+			return nil, fmt.Errorf("delete failed: %s", database.SanitizeErrorMessage(err))
 		}
 
 		if len(results) == 0 {
@@ -538,18 +563,24 @@ func (g *GraphQLSchemaGenerator) makeDeleteManyResolver(table database.TableInfo
 		// First count how many will be deleted (within RLS context)
 		qb := NewQueryBuilder(table.Schema, table.Name)
 		qb.WithFilters(filters)
-		countSQL, countArgs := qb.BuildCount()
+		countSQL, countArgs, err := qb.BuildCount()
+		if err != nil {
+			return nil, err
+		}
 
 		var count int
 		err = tx.QueryRow(ctx, countSQL, countArgs...).Scan(&count)
 		if err != nil {
-			return nil, fmt.Errorf("count failed: %w", err)
+			return nil, fmt.Errorf("count failed: %s", database.SanitizeErrorMessage(err))
 		}
 
 		// Now delete
 		qb = NewQueryBuilder(table.Schema, table.Name)
 		qb.WithFilters(filters)
-		sql, args := qb.BuildDelete()
+		sql, args, err := qb.BuildDelete()
+		if err != nil {
+			return nil, err
+		}
 
 		_, err = tx.Exec(ctx, sql, args...)
 		if err != nil {
@@ -592,13 +623,16 @@ func (g *GraphQLSchemaGenerator) makeForeignKeyResolver(table database.TableInfo
 		}})
 		qb.WithLimit(1)
 
-		sql, args := qb.BuildSelect()
+		sql, args, err := qb.BuildSelect()
+		if err != nil {
+			return nil, err
+		}
 
 		// Execute with RLS - this is critical for security
 		// Foreign key traversals must respect RLS policies
 		results, err := g.queryWithRLS(ctx, sql, args...)
 		if err != nil {
-			return nil, fmt.Errorf("query failed: %w", err)
+			return nil, fmt.Errorf("query failed: %s", database.SanitizeErrorMessage(err))
 		}
 
 		if len(results) == 0 {

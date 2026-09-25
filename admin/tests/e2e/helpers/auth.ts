@@ -1,15 +1,18 @@
 /**
  * Auth token helpers for Playwright E2E tests.
  *
- * The admin UI stores tokens in cookies via Zustand (not localStorage):
+ * The admin UI stores the access token in a cookie via Zustand:
  *   - fluxbase_admin_token → JSON.stringify(accessToken)
- *   - fluxbase_admin_refresh_token → JSON.stringify(refreshToken)
+ *
+ * The refresh token lives in sessionStorage (`fluxbase_admin_refresh_token`)
+ * plus an HttpOnly cookie set by the server; it is never written to a
+ * JavaScript-readable cookie anymore.
  *
  * The fluxbase_admin_user object is still stored in localStorage.
  */
 
 const ACCESS_TOKEN_COOKIE = "fluxbase_admin_token";
-const REFRESH_TOKEN_COOKIE = "fluxbase_admin_refresh_token";
+const REFRESH_SESSION_KEY = "fluxbase_admin_refresh_token";
 
 function getCookieValue(cookieStr: string, name: string): string | null {
   const prefix = `${name}=`;
@@ -32,8 +35,8 @@ export function getAccessTokenFromCookies(): string | null {
   }
 }
 
-export function getRefreshTokenFromCookies(): string | null {
-  const raw = getCookieValue(document.cookie, REFRESH_TOKEN_COOKIE);
+export function getRefreshTokenFromSession(): string | null {
+  const raw = sessionStorage.getItem(REFRESH_SESSION_KEY);
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -42,9 +45,9 @@ export function getRefreshTokenFromCookies(): string | null {
   }
 }
 
-export function clearAuthCookies(): void {
+export function clearAuthState(): void {
   document.cookie = `${ACCESS_TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
-  document.cookie = `${REFRESH_TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+  sessionStorage.removeItem(REFRESH_SESSION_KEY);
 }
 
 export function setAccessTokenCookie(token: string): void {

@@ -1178,6 +1178,7 @@ export class EmailSettingsManager {
    *
    * Sends a test email to verify that the current email configuration is working.
    *
+   * @param provider - Configured provider whose settings should be tested (e.g. `smtp`, `sendgrid`)
    * @param recipientEmail - Email address to send the test email to
    * @returns Promise resolving to TestEmailSettingsResponse
    * @throws Error if email sending fails
@@ -1185,16 +1186,19 @@ export class EmailSettingsManager {
    * @example
    * ```typescript
    * try {
-   *   const result = await client.admin.settings.email.test('admin@yourapp.com')
+   *   const result = await client.admin.settings.email.test('smtp', 'admin@yourapp.com')
    *   console.log('Test email sent:', result.message)
    * } catch (error) {
    *   console.error('Email configuration error:', error.message)
    * }
    * ```
    */
-  async test(recipientEmail: string): Promise<TestEmailSettingsResponse> {
+  async test(
+    provider: string,
+    recipientEmail: string
+  ): Promise<TestEmailSettingsResponse> {
     return await this.fetch.post<TestEmailSettingsResponse>(
-      "/api/v1/admin/email/settings/test",
+      `/api/v1/admin/email/settings/${encodeURIComponent(provider)}/test`,
       { recipient_email: recipientEmail },
     );
   }

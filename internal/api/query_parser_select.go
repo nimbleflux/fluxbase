@@ -1,12 +1,24 @@
 package api
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // parseSelect parses the select parameter
 func (qp *QueryParser) parseSelect(value string, params *QueryParams) error {
-	// Parse format: select=id,name,posts(id,title,author(name))
-	// Or with aggregations: select=category,count(*),sum(price),avg(rating)
+	// Parse format: select=id,name or with aggregations: select=category,count(*),sum(price)
 	fields, embedded := qp.parseSelectFields(value)
+
+	// Embedded resource selects (e.g. select=*,rel(*)) are not supported;
+	// reject them instead of silently ignoring the relation
+	if len(embedded) > 0 {
+		names := make([]string, 0, len(embedded))
+		for name := range embedded {
+			names = append(names, name)
+		}
+		return fmt.Errorf("embedded resources are not supported: %s", strings.Join(names, ", "))
+	}
 
 	// Separate regular fields from aggregations
 	regularFields := []string{}
@@ -14,18 +26,16 @@ func (qp *QueryParser) parseSelect(value string, params *QueryParams) error {
 		if agg := qp.parseAggregation(field); agg != nil {
 			params.Aggregations = append(params.Aggregations, *agg)
 		} else {
+			// Restrict select fields to validated identifiers or JSONB paths
+			// (validate identifiers before they are interpolated into SQL)
+			if field != "*" && !isValidColumnReference(field) {
+				return fmt.Errorf("invalid select field: %s", field)
+			}
 			regularFields = append(regularFields, field)
 		}
 	}
 
 	params.Select = regularFields
-
-	for name, subSelect := range embedded {
-		params.Embedded = append(params.Embedded, EmbeddedRelation{
-			Name:   name,
-			Select: subSelect,
-		})
-	}
 
 	return nil
 }

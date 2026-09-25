@@ -82,6 +82,11 @@ func (h *AppSchemaHandler) SyncSchema(c fiber.Ctx) error {
 		Ignore    string `json:"ignore_content"` // optional .pgschemaignore content
 		Apply     bool   `json:"apply"`          // store + apply immediately
 		NoApply   bool   `json:"no_apply"`       // explicit store-only
+		// AllowDestructive permits destructive changes for this apply. Explicit
+		// request values win over the server config
+		// (database.declarative_app_schema.allow_destructive); absent (nil) keeps
+		// the server default.
+		AllowDestructive *bool `json:"allow_destructive"`
 	}
 	if err := c.Bind().Body(&req); err != nil && err != fiber.ErrUnprocessableEntity {
 		return SendBadRequest(c, "Invalid request body", ErrCodeInvalidBody)
@@ -111,17 +116,29 @@ func (h *AppSchemaHandler) SyncSchema(c fiber.Ctx) error {
 
 	// Apply unless explicitly store-only.
 	if !req.NoApply && (req.Apply || changed) {
-		res, err := h.service.ApplyStored(ctx, req.Namespace, req.Schema)
+		res, err := h.service.ApplyStoredOpts(ctx, req.Namespace, req.Schema, req.AllowDestructive)
 		if err != nil {
 			return SendInternalError(c, fmt.Sprintf("Failed to apply schema: %v", err))
+		}
+		// A blocked apply (destructive content with allow_destructive=false) is a
+		// semantic failure, not a success: report it as 422 instead of hiding it
+		// in a 200 body.
+		if res.Error != nil {
+			return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+				"error":       res.Error.Error(),
+				"message":     res.Error.Error(),
+				"namespace":   req.Namespace,
+				"schema":      effectiveSchema(req.Schema),
+				"fingerprint": fingerprint,
+				"stored":      true,
+				"applied":     false,
+				"fallback":    res.Fallback,
+			})
 		}
 		resp["applied"] = true
 		resp["changes"] = len(res.Applied)
 		resp["duration"] = res.Duration.String()
 		resp["fallback"] = res.Fallback
-		if res.Error != nil {
-			resp["message"] = res.Error.Error()
-		}
 	}
 
 	return c.JSON(resp)
@@ -137,6 +154,10 @@ func (h *AppSchemaHandler) ApplySchema(c fiber.Ctx) error {
 	var req struct {
 		Namespace string `json:"namespace"`
 		Schema    string `json:"schema"`
+		// AllowDestructive permits destructive changes for this apply. Explicit
+		// request values win over the server config; absent (nil) keeps the
+		// server default.
+		AllowDestructive *bool `json:"allow_destructive"`
 	}
 	if err := c.Bind().Body(&req); err != nil && err != fiber.ErrUnprocessableEntity {
 		return SendBadRequest(c, "Invalid request body", ErrCodeInvalidBody)
@@ -145,9 +166,20 @@ func (h *AppSchemaHandler) ApplySchema(c fiber.Ctx) error {
 		return SendBadRequest(c, "namespace is required", ErrCodeInvalidBody)
 	}
 
-	res, err := h.service.ApplyStored(c.Context(), req.Namespace, req.Schema)
+	res, err := h.service.ApplyStoredOpts(c.Context(), req.Namespace, req.Schema, req.AllowDestructive)
 	if err != nil {
 		return SendInternalError(c, fmt.Sprintf("Failed to apply schema: %v", err))
+	}
+
+	// A blocked apply (destructive content with allow_destructive=false) is a
+	// semantic failure: report it as 422 instead of a 200 body carrying the error.
+	if res.Error != nil {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"error":    res.Error.Error(),
+			"message":  res.Error.Error(),
+			"applied":  0,
+			"fallback": res.Fallback,
+		})
 	}
 
 	resp := fiber.Map{
@@ -155,9 +187,6 @@ func (h *AppSchemaHandler) ApplySchema(c fiber.Ctx) error {
 		"applied":  len(res.Applied),
 		"duration": res.Duration.String(),
 		"fallback": res.Fallback,
-	}
-	if res.Error != nil {
-		resp["message"] = res.Error.Error()
 	}
 	return c.JSON(resp)
 }

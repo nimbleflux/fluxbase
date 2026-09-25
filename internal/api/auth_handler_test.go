@@ -170,7 +170,8 @@ func TestNewAuthHandler_NilDependencies(t *testing.T) {
 	assert.Nil(t, handler.authService)
 	assert.Nil(t, handler.captchaService)
 	assert.Equal(t, "https://example.com", handler.baseURL)
-	assert.False(t, handler.secureCookie) // Default is false
+	// Secure cookies are derived from the base URL scheme.
+	assert.True(t, handler.secureCookie)
 }
 
 func TestNewAuthHandler_BaseURL(t *testing.T) {
@@ -193,18 +194,16 @@ func TestNewAuthHandler_BaseURL(t *testing.T) {
 }
 
 func TestAuthHandler_SetSecureCookie(t *testing.T) {
+	// HTTPS base URL → secure cookies by default
 	handler := NewAuthHandler(nil, nil, nil, "https://example.com", "")
-
-	// Default is false
-	assert.False(t, handler.secureCookie)
-
-	// Set to true
-	handler.SetSecureCookie(true)
 	assert.True(t, handler.secureCookie)
 
-	// Set back to false
+	// Explicit override to false still works
 	handler.SetSecureCookie(false)
 	assert.False(t, handler.secureCookie)
+
+	handler.SetSecureCookie(true)
+	assert.True(t, handler.secureCookie)
 }
 
 func TestAuthHandler_SetSAMLService(t *testing.T) {
@@ -1303,19 +1302,26 @@ func TestVerifyTOTP_Validation(t *testing.T) {
 			wantStatus: fiber.StatusBadRequest,
 		},
 		{
-			name:       "missing user_id",
+			name:       "missing mfa_token",
 			body:       `{"code": "123456"}`,
-			wantStatus: fiber.StatusBadRequest,
+			wantStatus: fiber.StatusUnauthorized,
 		},
 		{
 			name:       "missing code",
-			body:       `{"user_id": "user-123"}`,
+			body:       `{"mfa_token": "abc"}`,
 			wantStatus: fiber.StatusBadRequest,
 		},
 		{
 			name:       "empty code",
-			body:       `{"user_id": "user-123", "code": ""}`,
+			body:       `{"mfa_token": "abc", "code": ""}`,
 			wantStatus: fiber.StatusBadRequest,
+		},
+		{
+			// With a nil auth service the handler degrades to 503; invalid
+			// tokens with a real service are covered by the security tests.
+			name:       "invalid mfa_token",
+			body:       `{"mfa_token": "abc", "code": "123456"}`,
+			wantStatus: fiber.StatusServiceUnavailable,
 		},
 	}
 

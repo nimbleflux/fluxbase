@@ -222,13 +222,18 @@ export interface TwoFactorDisableResponse {
 }
 
 export interface TwoFactorVerifyRequest {
-  user_id: string;
+  /** Short-lived signed token returned by signIn when requires_2fa is true */
+  mfa_token: string;
+  /** User ID (optional; must match the token's user when provided) */
+  user_id?: string;
   code: string;
 }
 
 export interface SignInWith2FAResponse {
   requires_2fa: boolean;
   user_id: string;
+  /** Short-lived signed token required by verify2FA */
+  mfa_token: string;
   message: string;
 }
 

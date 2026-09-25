@@ -153,3 +153,13 @@ fluxbase users get <user-id>
 fluxbase users invite --email user@example.com
 fluxbase users delete <user-id>
 ```
+
+:::note Deletion completeness is your schema's responsibility
+Deleting a user removes the `auth.users` row. Tenant tables only clean up
+automatically where their schema declares
+`REFERENCES auth.users ON DELETE CASCADE` (or `ON DELETE SET NULL`) — the
+Fluxbase migration does not know about application tables. Tables without
+such a foreign key (notifications, connections, likes/comments on other
+users' content, …) need explicit cleanup in your own delete flow. End users
+can also delete their own account via `DELETE /api/v1/auth/account`.
+:::

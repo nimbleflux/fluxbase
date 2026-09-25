@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"html/template"
 	"time"
@@ -160,7 +159,7 @@ If you didn't request a password reset, you can safely ignore this email. Your p
 }
 
 func (h *EmailTemplateHandler) ListTemplates(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	if err := h.requireDB(c); err != nil {
 		return err
@@ -210,7 +209,7 @@ func (h *EmailTemplateHandler) ListTemplates(c fiber.Ctx) error {
 }
 
 func (h *EmailTemplateHandler) GetTemplate(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	templateType := c.Params("type")
 
 	if _, exists := defaultTemplates[templateType]; !exists {
@@ -252,7 +251,7 @@ func (h *EmailTemplateHandler) GetTemplate(c fiber.Ctx) error {
 }
 
 func (h *EmailTemplateHandler) UpdateTemplate(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	templateType := c.Params("type")
 
 	if _, exists := defaultTemplates[templateType]; !exists {
@@ -295,7 +294,7 @@ func (h *EmailTemplateHandler) UpdateTemplate(c fiber.Ctx) error {
 }
 
 func (h *EmailTemplateHandler) ResetTemplate(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	templateType := c.Params("type")
 
 	defaultTemplate, exists := defaultTemplates[templateType]
@@ -345,7 +344,7 @@ func (h *EmailTemplateHandler) TestTemplate(c fiber.Ctx) error {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	var emailTemplate EmailTemplate
 	err := h.db.QueryRow(ctx, `

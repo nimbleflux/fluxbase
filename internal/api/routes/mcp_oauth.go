@@ -28,8 +28,8 @@ func BuildMCPOAuthRoutes(deps *MCPOAuthDeps) *RouteGroup {
 				Prefix: deps.BasePath + "/oauth",
 				Routes: []Route{
 					{Method: "POST", Path: "/register", Handler: deps.HandleClientRegistration, Summary: "Dynamic client registration", Auth: AuthNone, Public: true},
-					{Method: "GET", Path: "/authorize", Handler: deps.HandleAuthorize, Summary: "OAuth authorization", Auth: AuthNone, Public: true},
-					{Method: "POST", Path: "/authorize", Handler: deps.HandleAuthorizeConsent, Summary: "OAuth authorization consent", Auth: AuthNone, Public: true},
+					{Method: "GET", Path: "/authorize", Handler: deps.HandleAuthorize, Summary: "OAuth authorization (renders consent page)", Auth: AuthNone, Public: true},
+					{Method: "POST", Path: "/authorize/consent", Handler: deps.HandleAuthorizeConsent, Summary: "OAuth authorization consent (approves or denies)", Auth: AuthNone, Public: true},
 					{Method: "POST", Path: "/token", Handler: deps.HandleToken, Summary: "OAuth token exchange", Auth: AuthNone, Public: true},
 					{Method: "POST", Path: "/revoke", Handler: deps.HandleRevoke, Summary: "OAuth token revocation", Auth: AuthNone, Public: true},
 				},

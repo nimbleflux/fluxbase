@@ -697,6 +697,15 @@ COMMENT ON FUNCTION user_can_access_object(uuid, text) IS 'Checks if the current
 CREATE POLICY storage_buckets_admin ON buckets TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin'])));
 
 --
+-- Name: storage_buckets_fdw; Type: POLICY; Schema: -; Owner: -
+-- Access from tenant-database FDW sessions: those run as the per-tenant FDW
+-- role without JWT claims; tenant isolation is enforced by the role's pinned
+-- app.current_tenant_id via has_tenant_access.
+--
+
+CREATE POLICY storage_buckets_fdw ON buckets TO PUBLIC USING (session_user LIKE 'fdw\_tenant\_%' ESCAPE '\' AND has_tenant_access(tenant_id)) WITH CHECK (session_user LIKE 'fdw\_tenant\_%' ESCAPE '\' AND has_tenant_access(tenant_id));
+
+--
 -- Name: storage_buckets_public_view; Type: POLICY; Schema: -; Owner: -
 --
 
@@ -707,6 +716,15 @@ CREATE POLICY storage_buckets_public_view ON buckets FOR SELECT TO PUBLIC USING 
 --
 
 CREATE POLICY storage_chunked_sessions_admin ON chunked_upload_sessions TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin'])));
+
+--
+-- Name: storage_chunked_sessions_fdw; Type: POLICY; Schema: -; Owner: -
+-- Access from tenant-database FDW sessions (no JWT claims remotely); tenant
+-- isolation enforced by the FDW role's pinned app.current_tenant_id.
+--
+
+CREATE POLICY storage_chunked_sessions_fdw ON chunked_upload_sessions TO PUBLIC USING (session_user LIKE 'fdw\_tenant\_%' ESCAPE '\' AND has_tenant_access(tenant_id)) WITH CHECK (session_user LIKE 'fdw\_tenant\_%' ESCAPE '\' AND has_tenant_access(tenant_id));
+
 
 --
 -- Name: storage_chunked_sessions_insert; Type: POLICY; Schema: -; Owner: -
@@ -727,6 +745,15 @@ CREATE POLICY storage_chunked_sessions_owner ON chunked_upload_sessions TO PUBLI
 CREATE POLICY storage_object_permissions_admin ON object_permissions TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin'])));
 
 --
+-- Name: storage_object_permissions_fdw; Type: POLICY; Schema: -; Owner: -
+-- Access from tenant-database FDW sessions (no JWT claims remotely); tenant
+-- isolation enforced by the FDW role's pinned app.current_tenant_id.
+--
+
+CREATE POLICY storage_object_permissions_fdw ON object_permissions TO PUBLIC USING (session_user LIKE 'fdw\_tenant\_%' ESCAPE '\' AND has_tenant_access(tenant_id)) WITH CHECK (session_user LIKE 'fdw\_tenant\_%' ESCAPE '\' AND has_tenant_access(tenant_id));
+
+
+--
 -- Name: storage_object_permissions_owner_manage; Type: POLICY; Schema: -; Owner: -
 --
 
@@ -743,6 +770,15 @@ CREATE POLICY storage_object_permissions_view_shared ON object_permissions FOR S
 --
 
 CREATE POLICY storage_objects_admin ON objects TO PUBLIC USING (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin']))) WITH CHECK (has_tenant_access(tenant_id) AND (auth.current_user_role() = ANY (ARRAY['instance_admin', 'service_role', 'admin', 'tenant_service', 'instance_admin'])));
+
+--
+-- Name: storage_objects_fdw; Type: POLICY; Schema: -; Owner: -
+-- Access from tenant-database FDW sessions (no JWT claims remotely); tenant
+-- isolation enforced by the FDW role's pinned app.current_tenant_id.
+--
+
+CREATE POLICY storage_objects_fdw ON objects TO PUBLIC USING (session_user LIKE 'fdw\_tenant\_%' ESCAPE '\' AND has_tenant_access(tenant_id)) WITH CHECK (session_user LIKE 'fdw\_tenant\_%' ESCAPE '\' AND has_tenant_access(tenant_id));
+
 
 --
 -- Name: storage_objects_insert; Type: POLICY; Schema: -; Owner: -

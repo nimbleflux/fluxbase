@@ -87,6 +87,12 @@ graph TB
 6. **Completion** - Worker updates job status and becomes available for next job
 7. **Shutdown** - Graceful shutdown waits up to 30 seconds for in-flight jobs
 
+### Crash Recovery and Delivery Semantics
+
+On server restart, only jobs whose worker is **provably dead** — a stale heartbeat or a stopped worker registration — are re-queued. A job that was running on a worker that died very recently keeps its `running` status until the worker's heartbeat goes stale (`jobs.worker_timeout`, default `30s`); recovery therefore can take up to the worker timeout after restart.
+
+Because a job may complete on a worker just before its status write is lost, re-queueing is **at-least-once**: job handlers should be idempotent. The stale-worker cleanup loop keeps reaping dead workers and re-queueing their jobs while the server runs.
+
 ### Embedded Workers (Default)
 
 Embedded workers run within the Fluxbase server process:

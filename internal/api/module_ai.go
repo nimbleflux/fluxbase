@@ -32,6 +32,9 @@ func (m *AIModule) Init(ctx context.Context, registry *ServiceRegistry) error {
 
 	aiStorage := ai.NewStorage(db)
 	aiStorage.SetConfig(&cfg.AI)
+	// Master key for encrypting provider config secrets (api_key etc.) at
+	// rest. May be nil — encryption stays off in that case (legacy behavior).
+	aiStorage.SetEncryptionKey(cfg.EncryptionKeyBytes)
 
 	vectorManager := NewVectorManager(&cfg.AI, aiStorage, db.Inspector(), db)
 
@@ -139,11 +142,22 @@ func (m *AIModule) Init(ctx context.Context, registry *ServiceRegistry) error {
 		knowledgeGraph = ai.NewKnowledgeGraph(kbStorage)
 		log.Info().Msg("Knowledge graph initialized")
 
+		quotaService := ai.NewQuotaService(kbStorage)
+
 		entityExtractor := ai.NewRuleBasedExtractor()
 		log.Info().Msg("Entity extractor initialized")
 
 		if vectorHandler != nil && vectorHandler.GetEmbeddingService() != nil {
 			docProcessor = ai.NewDocumentProcessor(kbStorage, vectorHandler.GetEmbeddingService(), entityExtractor, knowledgeGraph)
+		}
+
+		if docProcessor != nil {
+			// KB quota enforcement for the document add/upload paths.
+			docProcessor.SetQuotaService(quotaService)
+
+			// Document processing recovery: periodically requeue documents
+			// stuck in 'processing' (e.g. after a crash) and drain pending.
+			docProcessor.StartProcessingSweeper(context.Background(), 5*time.Minute)
 		}
 
 		if ocrService != nil && ocrService.IsEnabled() {
@@ -175,7 +189,6 @@ func (m *AIModule) Init(ctx context.Context, registry *ServiceRegistry) error {
 			Bool("sync_enabled", true).
 			Msg("Knowledge base handler initialized")
 
-		quotaService := ai.NewQuotaService(kbStorage)
 		quotaHandler = NewQuotaHandler(quotaService, userMgmtSvc)
 		log.Info().Msg("Quota service and handler initialized")
 

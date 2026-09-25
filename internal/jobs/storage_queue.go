@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -11,6 +12,10 @@ import (
 
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
+
+// defaultWorkerRecoveryTimeout is the staleness threshold used by
+// RecoverStaleJobs when no worker timeout is provided.
+const defaultWorkerRecoveryTimeout = 45 * time.Second
 
 // ========== Job Queue ==========
 
@@ -243,25 +248,44 @@ func (s *Storage) InterruptJob(ctx context.Context, jobID uuid.UUID, reason stri
 	return nil
 }
 
-// RecoverStaleJobs resets ALL running jobs back to pending on startup.
-// Called by Manager.Start before workers register. On restart, all
-// previous workers are dead, so any running job is orphaned regardless
-// of its worker_id. This is immediate — doesn't wait for the 15-second
-// staleWorkerCleanupLoop that only resets jobs where worker_id IS NULL.
-func (s *Storage) RecoverStaleJobs(ctx context.Context) (int64, error) {
-	query := `
-		UPDATE jobs.queue
-		SET status = $1,
-		    worker_id = NULL,
-		    started_at = NULL,
-		    last_progress_at = NULL
-		WHERE status = $2
-	`
+// recoverStaleJobsQuery resets running jobs whose owning worker is provably
+// dead. Kept as a package-level var so the worker-liveness scoping is directly
+// assertable in tests.
+var recoverStaleJobsQuery = `
+	UPDATE jobs.queue
+	SET status = $1,
+	    worker_id = NULL,
+	    started_at = NULL,
+	    last_progress_at = NULL
+	WHERE status = $2
+	  AND (
+	      (worker_id IS NULL AND (started_at IS NULL OR started_at < NOW() - $3::INTERVAL))
+	      OR worker_id IN (
+	          SELECT id FROM jobs.workers
+	          WHERE last_heartbeat_at < NOW() - $3::INTERVAL
+	             OR status = $4
+	      )
+	  )
+`
+
+// RecoverStaleJobs resets running jobs whose owning worker is no longer alive.
+// Called by Manager.Start before workers register. A job is only reset when its
+// worker is provably dead: either the worker row is gone and the job has been
+// unclaimed for at least workerTimeout, or the owning worker's heartbeat is
+// older than workerTimeout (or it shut down cleanly). Jobs held by workers
+// with recent heartbeats — e.g. those of other live instances in a
+// multi-instance deployment — are left untouched; the regular
+// staleWorkerCleanupLoop reaps those workers and requeues their jobs once
+// they stop heartbeating.
+func (s *Storage) RecoverStaleJobs(ctx context.Context, workerTimeout time.Duration) (int64, error) {
+	if workerTimeout <= 0 {
+		workerTimeout = defaultWorkerRecoveryTimeout
+	}
 
 	var result pgconn.CommandTag
 	err := database.WrapWithServiceRole(ctx, s.DB, func(tx pgx.Tx) error {
 		var execErr error
-		result, execErr = tx.Exec(ctx, query, JobStatusPending, JobStatusRunning)
+		result, execErr = tx.Exec(ctx, recoverStaleJobsQuery, JobStatusPending, JobStatusRunning, workerTimeout.String(), WorkerStatusStopped)
 		return execErr
 	})
 	if err != nil {

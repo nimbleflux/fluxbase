@@ -346,9 +346,10 @@ func setupMockOAuthServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/userinfo", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":    "mock_user_123",
-			"email": "test@example.com",
-			"name":  "Test User",
+			"id":             "mock_user_123",
+			"email":          "test@example.com",
+			"email_verified": true,
+			"name":           "Test User",
 		})
 	})
 

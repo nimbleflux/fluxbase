@@ -502,7 +502,7 @@ func TestStorageTransform_BucketDimension(t *testing.T) {
 // =============================================================================
 
 func TestStorageTransform_Constants(t *testing.T) {
-	assert.Equal(t, 8192, storage.MaxTransformDimension)
+	assert.Equal(t, 4096, storage.MaxTransformDimension)
 	assert.Equal(t, 16_000_000, storage.DefaultMaxTotalPixels)
 	assert.Equal(t, 50, storage.DefaultBucketSize)
 }

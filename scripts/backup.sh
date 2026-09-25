@@ -46,6 +46,9 @@ RETENTION_DAYS=0
 VERIFY=false
 METRICS_FILE=""
 QUIET=false
+# Path of the cluster-globals dump produced by backup_database (empty when
+# storage-only or before the database backup runs).
+GLOBALS_BACKUP_FILE=""
 
 # Database connection defaults
 PGHOST="${PGHOST:-localhost}"
@@ -64,8 +67,10 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 DATE_ONLY=$(date +%Y%m%d)
 
 log() {
+    # Diagnostics go to stderr so that command substitution in main() (e.g.
+    # `db_backup=$(backup_database)`) captures only the result paths.
     if [ "$QUIET" = false ]; then
-        echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
+        echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1" >&2
     fi
 }
 
@@ -119,6 +124,9 @@ check_dependencies() {
     if [ "$DATABASE_ONLY" = false ] || [ "$STORAGE_ONLY" = false ]; then
         if ! command -v pg_dump &> /dev/null; then
             missing+=("pg_dump")
+        fi
+        if ! command -v pg_dumpall &> /dev/null; then
+            missing+=("pg_dumpall")
         fi
     fi
 
@@ -229,6 +237,30 @@ backup_database() {
         local size
         size=$(du -h "$backup_file" | cut -f1)
         log "Database backup completed: $size"
+
+        # Cluster globals (roles incl. passwords, role settings, tablespaces)
+        # are NOT part of a single-database pg_dump. Capture them separately so
+        # a restore can recreate the RLS roles and grants Fluxbase depends on.
+        # Must be restored with psql (plain SQL) before pg_restore runs.
+        local globals_file="$OUTPUT_DIR/globals_${TIMESTAMP}.sql"
+        if [ "$COMPRESS" = true ]; then
+            globals_file="${globals_file}.gz"
+        fi
+
+        log "Dumping cluster globals (roles)..."
+        if [ "$COMPRESS" = true ]; then
+            if ! pg_dumpall -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" --globals-only | gzip > "$globals_file"; then
+                error "Cluster globals backup failed"
+                return 3
+            fi
+        else
+            if ! pg_dumpall -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" --globals-only -f "$globals_file"; then
+                error "Cluster globals backup failed"
+                return 3
+            fi
+        fi
+        log "Cluster globals backup completed: $(du -h "$globals_file" | cut -f1)"
+        GLOBALS_BACKUP_FILE="$globals_file"
 
         # Update metrics
         if [ -n "$METRICS_FILE" ]; then
@@ -421,6 +453,12 @@ cleanup_old_backups() {
         ((deleted++))
     done < <(find "$OUTPUT_DIR" -name "database_*.dump*" -type f -mtime +"$RETENTION_DAYS" -print0 2>/dev/null)
 
+    # Find and delete old cluster-globals backups
+    while IFS= read -r -d '' file; do
+        rm -f "$file"
+        ((deleted++))
+    done < <(find "$OUTPUT_DIR" -name "globals_*.sql*" -type f -mtime +"$RETENTION_DAYS" -print0 2>/dev/null)
+
     # Find and delete old storage backups
     while IFS= read -r -d '' file; do
         rm -f "$file"
@@ -504,7 +542,7 @@ EOF
 
     # Write manifest
     if [ "$exit_code" -eq 0 ]; then
-        write_manifest "$db_backup" "$storage_backup"
+        write_manifest "$db_backup" "$GLOBALS_BACKUP_FILE" "$storage_backup"
     fi
 
     # Cleanup old backups
@@ -512,6 +550,9 @@ EOF
 
     if [ "$exit_code" -eq 0 ]; then
         log "Backup completed successfully"
+        [ -n "$db_backup" ] && log "  Database dump: $db_backup"
+        [ -n "$GLOBALS_BACKUP_FILE" ] && log "  Cluster globals: $GLOBALS_BACKUP_FILE"
+        [ -n "$storage_backup" ] && log "  Storage archive: $storage_backup"
     else
         error "Backup completed with errors (exit code: $exit_code)"
     fi

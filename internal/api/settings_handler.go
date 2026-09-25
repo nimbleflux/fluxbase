@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -46,7 +45,7 @@ type BatchSettingsResponse struct {
 }
 
 func (h *SettingsHandler) GetSetting(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	key := c.Params("key")
 
 	if key == "" {
@@ -103,7 +102,7 @@ func (h *SettingsHandler) GetSetting(c fiber.Ctx) error {
 }
 
 func (h *SettingsHandler) GetSettings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	var req BatchSettingsRequest
 	if err := ParseBody(c, &req); err != nil {

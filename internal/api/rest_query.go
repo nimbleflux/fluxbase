@@ -68,7 +68,10 @@ func (h *RESTHandler) makePostQueryHandler(table database.TableInfo) fiber.Handl
 		}
 
 		// Build and execute query (reuse existing logic from GET handler)
-		query, args := h.buildSelectQuery(table, params)
+		query, args, err := h.buildSelectQuery(table, params)
+		if err != nil {
+			return SendBadRequest(c, fmt.Sprintf("Invalid query parameters: %v", err), ErrCodeInvalidInput)
+		}
 
 		// Set target schema for tenant-aware pool routing
 		middleware.SetTargetSchema(c, table.Schema)
@@ -125,17 +128,22 @@ func (h *RESTHandler) convertPostQueryToParams(req *PostQueryRequest) (*QueryPar
 		for i := range params.Select {
 			params.Select[i] = strings.TrimSpace(params.Select[i])
 		}
+		// Restrict select fields to validated identifiers or JSONB paths
+		for _, field := range params.Select {
+			if field == "" {
+				continue
+			}
+			if !isValidColumnReference(field) {
+				return nil, fmt.Errorf("invalid select field: %s", field)
+			}
+		}
 	}
 
 	// Convert regular filters
 	for _, f := range req.Filters {
-		// Validate column name (base part, before any ->> JSONB operator)
-		baseCol := f.Column
-		if idx := strings.Index(f.Column, "->"); idx >= 0 {
-			baseCol = strings.TrimSpace(f.Column[:idx])
-		}
-		if !isValidIdentifier(baseCol) {
-			return nil, fmt.Errorf("invalid column name: %s", baseCol)
+		// Validate the full column reference, including JSONB path segments
+		if !isValidColumnReference(f.Column) {
+			return nil, fmt.Errorf("invalid column name: %s", f.Column)
 		}
 		params.Filters = append(params.Filters, Filter{
 			Column:   f.Column,
@@ -147,6 +155,10 @@ func (h *RESTHandler) convertPostQueryToParams(req *PostQueryRequest) (*QueryPar
 
 	// Convert between filters
 	for _, bf := range req.BetweenFilters {
+		// Validate column reference before it is interpolated into SQL
+		if !isValidColumnReference(bf.Column) {
+			return nil, fmt.Errorf("invalid column name: %s", bf.Column)
+		}
 		if bf.Negated {
 			// not.between: (column < min OR column > max)
 			// Create a new OR group for this not.between
@@ -196,6 +208,10 @@ func (h *RESTHandler) convertPostQueryToParams(req *PostQueryRequest) (*QueryPar
 			if len(filterParts) != 3 {
 				return nil, fmt.Errorf("invalid OR filter format: %s", part)
 			}
+			// Validate column reference before it is interpolated into SQL
+			if !isValidColumnReference(filterParts[0]) {
+				return nil, fmt.Errorf("invalid column name: %s", filterParts[0])
+			}
 			params.Filters = append(params.Filters, Filter{
 				Column:    filterParts[0],
 				Operator:  FilterOperator(filterParts[1]),
@@ -214,6 +230,10 @@ func (h *RESTHandler) convertPostQueryToParams(req *PostQueryRequest) (*QueryPar
 			if len(filterParts) != 3 {
 				return nil, fmt.Errorf("invalid AND filter format: %s", part)
 			}
+			// Validate column reference before it is interpolated into SQL
+			if !isValidColumnReference(filterParts[0]) {
+				return nil, fmt.Errorf("invalid column name: %s", filterParts[0])
+			}
 			params.Filters = append(params.Filters, Filter{
 				Column:   filterParts[0],
 				Operator: FilterOperator(filterParts[1]),
@@ -225,17 +245,59 @@ func (h *RESTHandler) convertPostQueryToParams(req *PostQueryRequest) (*QueryPar
 
 	// Convert order
 	for _, o := range req.Order {
+		// Validate column reference before it is interpolated into SQL
+		if !isValidColumnReference(o.Column) {
+			return nil, fmt.Errorf("invalid order column name: %s", o.Column)
+		}
+
+		// Only fixed NULLS placement keywords are accepted
+		nulls := strings.ToLower(o.Nulls)
+		if nulls != "" && nulls != "first" && nulls != "last" {
+			return nil, fmt.Errorf("invalid nulls value: %s (must be first or last)", o.Nulls)
+		}
+
 		orderBy := OrderBy{
 			Column: o.Column,
 			Desc:   strings.ToLower(o.Direction) == "desc",
-			Nulls:  strings.ToLower(o.Nulls),
+			Nulls:  nulls,
 		}
 		params.Order = append(params.Order, orderBy)
 	}
 
-	// Set limit and offset
+	// Set limit and offset, rejecting negatives and enforcing configured caps
+	if req.Limit != nil {
+		if *req.Limit < 0 {
+			return nil, fmt.Errorf("limit must be a non-negative integer")
+		}
+		if h.config != nil && h.config.API.MaxPageSize > 0 && *req.Limit > h.config.API.MaxPageSize {
+			capped := h.config.API.MaxPageSize
+			req.Limit = &capped
+		}
+	}
+	if req.Offset != nil && *req.Offset < 0 {
+		return nil, fmt.Errorf("offset must be a non-negative integer")
+	}
 	params.Limit = req.Limit
 	params.Offset = req.Offset
+
+	// Enforce max_total_results on offset + limit
+	if h.config != nil && h.config.API.MaxTotalResults > 0 {
+		offset := 0
+		if params.Offset != nil {
+			offset = *params.Offset
+		}
+		limit := 0
+		if params.Limit != nil {
+			limit = *params.Limit
+		}
+		if offset+limit > h.config.API.MaxTotalResults {
+			cappedLimit := h.config.API.MaxTotalResults - offset
+			if cappedLimit < 0 {
+				cappedLimit = 0
+			}
+			params.Limit = &cappedLimit
+		}
+	}
 
 	// Set count type
 	if req.Count != "" {
@@ -249,7 +311,7 @@ func (h *RESTHandler) convertPostQueryToParams(req *PostQueryRequest) (*QueryPar
 }
 
 // buildSelectQuery builds a SELECT query from parameters
-func (h *RESTHandler) buildSelectQuery(table database.TableInfo, params *QueryParams) (string, []interface{}) {
+func (h *RESTHandler) buildSelectQuery(table database.TableInfo, params *QueryParams) (string, []interface{}, error) {
 	var selectClause string
 
 	// If we have aggregations, use BuildSelectClause (handles aggregations)
@@ -291,7 +353,10 @@ func (h *RESTHandler) buildSelectQuery(table database.TableInfo, params *QueryPa
 	query := fmt.Sprintf("SELECT %s FROM %s.%s", selectClause, quoteIdentifier(table.Schema), quoteIdentifier(table.Name))
 
 	// Add WHERE, ORDER BY, LIMIT, OFFSET
-	whereAndMore, args := params.ToSQL(table.Name)
+	whereAndMore, args, err := params.ToSQL(table.Name)
+	if err != nil {
+		return "", nil, err
+	}
 	if whereAndMore != "" {
 		query += " " + whereAndMore
 	}
@@ -302,7 +367,7 @@ func (h *RESTHandler) buildSelectQuery(table database.TableInfo, params *QueryPa
 		query += groupByClause
 	}
 
-	return query, args
+	return query, args, nil
 }
 
 // columnExists checks if a column exists in the table using O(1) lookup
@@ -319,7 +384,10 @@ func (h *RESTHandler) getCount(ctx context.Context, c fiber.Ctx, table database.
 	var args []interface{}
 	if len(params.Filters) > 0 {
 		argCounter := 1
-		whereClause, whereArgs := params.buildWhereClause(&argCounter)
+		whereClause, whereArgs, err := params.buildWhereClause(&argCounter)
+		if err != nil {
+			return 0, err
+		}
 		if whereClause != "" {
 			query += " WHERE " + whereClause
 			args = whereArgs

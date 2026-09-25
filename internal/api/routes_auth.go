@@ -31,6 +31,7 @@ func (s *Server) buildAuthRouteDeps() *routes.AuthDeps {
 		"password_reset": middleware.AuthPasswordResetLimiterWithConfig(s.config.Security.AuthPasswordResetRateLimit, s.config.Security.AuthPasswordResetRateWindow, s.sharedMiddlewareStorage),
 		"otp":            middleware.AuthMagicLinkLimiterWithConfig(s.config.Security.AuthMagicLinkRateLimit, s.config.Security.AuthMagicLinkRateWindow, s.sharedMiddlewareStorage),
 		"2fa":            middleware.Auth2FALimiterWithConfig(s.config.Security.Auth2FARateLimit, s.config.Security.Auth2FARateWindow, s.sharedMiddlewareStorage),
+		"account_delete": middleware.AuthAccountDeleteLimiterWithConfig(s.config.Security.AuthPasswordResetRateLimit, s.config.Security.AuthPasswordResetRateWindow, s.sharedMiddlewareStorage),
 	}
 
 	return &routes.AuthDeps{
@@ -61,6 +62,7 @@ func (s *Server) buildAuthRouteDeps() *routes.AuthDeps {
 		SignOut:                   s.Auth.Handler.SignOut,
 		GetUser:                   s.Auth.Handler.GetUser,
 		UpdateUser:                s.Auth.Handler.UpdateUser,
+		DeleteAccount:             s.Auth.Handler.DeleteAccount,
 		StartImpersonation:        s.Auth.Handler.StartImpersonation,
 		StartAnonImpersonation:    s.Auth.Handler.StartAnonImpersonation,
 		StopImpersonation:         s.Auth.Handler.StopImpersonation,

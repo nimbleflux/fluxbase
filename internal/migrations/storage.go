@@ -218,6 +218,21 @@ func (s *Storage) DeleteMigration(ctx context.Context, namespace, name string) e
 
 // UpdateMigrationStatus updates the status of a migration
 func (s *Storage) UpdateMigrationStatus(ctx context.Context, id uuid.UUID, status string, appliedBy *uuid.UUID) error {
+	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
+		return updateMigrationStatusTx(ctx, tx, id, status, appliedBy)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update migration status: %w", err)
+	}
+
+	return nil
+}
+
+// updateMigrationStatusTx writes a migration status change on an existing
+// transaction, so callers can commit the status atomically with the migration
+// SQL (otherwise a SQL commit followed by a failed status write would re-execute
+// the migration on the next apply).
+func updateMigrationStatusTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, status string, appliedBy *uuid.UUID) error {
 	var query string
 	var args []interface{}
 
@@ -235,15 +250,8 @@ func (s *Storage) UpdateMigrationStatus(ctx context.Context, id uuid.UUID, statu
 		return fmt.Errorf("invalid status: %s", status)
 	}
 
-	err := database.WrapWithServiceRole(ctx, s.db, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, query, args...)
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("failed to update migration status: %w", err)
-	}
-
-	return nil
+	_, err := tx.Exec(ctx, query, args...)
+	return err
 }
 
 // LogExecution logs a migration execution attempt

@@ -40,11 +40,6 @@ func TestQueryParser_ParseSelect(t *testing.T) {
 			query:    "select=id, name, email",
 			expected: []string{"id", "name", "email"},
 		},
-		{
-			name:     "select with relation",
-			query:    "select=id,name,posts(id,title)",
-			expected: []string{"id", "name"},
-		},
 	}
 
 	for _, tt := range tests {
@@ -56,6 +51,100 @@ func TestQueryParser_ParseSelect(t *testing.T) {
 			assert.Equal(t, tt.expected, params.Select)
 		})
 	}
+}
+
+// Embedded resources are not supported; they must fail loudly instead of
+// silently returning unembedded rows.
+func TestQueryParser_ParseSelectEmbeddedResourceRejected(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	values, _ := url.ParseQuery("select=id,name,posts(id,title)")
+	_, err := parser.Parse(values)
+	assert.Error(t, err)
+}
+
+// TestBetweenOperator covers the between / not.between range filter grammar.
+func TestBetweenOperator(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	t.Run("postgrest format parses two bounds", func(t *testing.T) {
+		values, _ := url.ParseQuery("price=between.(1,10)")
+		params, err := parser.Parse(values)
+		assert.NoError(t, err)
+		require.Len(t, params.Filters, 1)
+		assert.Equal(t, OpBetween, params.Filters[0].Operator)
+		assert.Equal(t, []interface{}{"1", "10"}, params.Filters[0].Value)
+	})
+
+	t.Run("classic format parses two bounds", func(t *testing.T) {
+		values, _ := url.ParseQuery("price.between=%281%2C10%29")
+		params, err := parser.Parse(values)
+		assert.NoError(t, err)
+		require.Len(t, params.Filters, 1)
+		assert.Equal(t, OpBetween, params.Filters[0].Operator)
+	})
+
+	t.Run("wrong bound count is rejected", func(t *testing.T) {
+		values, _ := url.ParseQuery("price=between.%281%29")
+		_, err := parser.Parse(values)
+		assert.Error(t, err)
+
+		values2, _ := url.ParseQuery("price=between.%281%2C2%2C3%29")
+		_, err = parser.Parse(values2)
+		assert.Error(t, err)
+	})
+
+	t.Run("not.between negates the range", func(t *testing.T) {
+		argCounter := 1
+		sql, value, ferr := filterToSQL(Filter{
+			Column:   "price",
+			Operator: OpNot,
+			Value:    "between.(1,10)",
+		}, &argCounter)
+		assert.NoError(t, ferr)
+		assert.Equal(t, `NOT ("price" BETWEEN $1 AND $2)`, sql)
+		assert.Equal(t, []interface{}{"1", "10"}, value)
+	})
+
+	t.Run("between renders parameterized range", func(t *testing.T) {
+		argCounter := 1
+		sql, value, ferr := filterToSQL(Filter{
+			Column:   "price",
+			Operator: OpBetween,
+			Value:    []interface{}{"1", "10"},
+		}, &argCounter)
+		assert.NoError(t, ferr)
+		assert.Equal(t, `"price" BETWEEN $1 AND $2`, sql)
+		assert.Equal(t, []interface{}{"1", "10"}, value)
+	})
+}
+
+// TestUnknownOperatorFailsLoudly ensures unrecognized operators (including
+// nested ones inside not.) error instead of silently degrading to equality.
+func TestUnknownOperatorFailsLoudly(t *testing.T) {
+	parser := NewQueryParser(testConfig())
+
+	// Parse is permissive; the SQL build step must reject unknown operators.
+	values, _ := url.ParseQuery("status=frobnicate.active")
+	params, err := parser.Parse(values)
+	assert.NoError(t, err)
+	_, _, err = params.ToSQL("public.items")
+	assert.Error(t, err)
+
+	argCounter := 1
+	_, _, ferr := filterToSQL(Filter{
+		Column:   "status",
+		Operator: FilterOperator("frobnicate"),
+		Value:    "active",
+	}, &argCounter)
+	assert.Error(t, ferr)
+
+	_, _, ferr = filterToSQL(Filter{
+		Column:   "status",
+		Operator: OpNot,
+		Value:    "frobnicate.active",
+	}, &argCounter)
+	assert.Error(t, ferr)
 }
 
 func TestQueryParser_ParseFilters(t *testing.T) {
@@ -336,7 +425,8 @@ func TestQueryParams_ToSQL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sql, args := tt.params.ToSQL("users")
+			sql, args, tosqlErr := tt.params.ToSQL("users")
+			require.NoError(t, tosqlErr)
 			assert.Equal(t, tt.expectedSQL, sql)
 			assert.Equal(t, tt.expectedArgs, args)
 		})
@@ -948,8 +1038,9 @@ func TestFilterToSQLWithJSONBPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			argCounter := 1
-			sql, value := filterToSQL(tt.filter, &argCounter)
+			sql, value, ferr := filterToSQL(tt.filter, &argCounter)
 
+			require.NoError(t, ferr)
 			assert.Equal(t, tt.expectedSQL, sql)
 
 			if tt.expectValue {
@@ -1104,7 +1195,8 @@ func TestQueryParser_OrFilterIsNullValueParsing(t *testing.T) {
 
 	// Verify SQL generation produces IS NULL, not IS $1
 	argCounter := 1
-	whereClause, args := params.buildWhereClause(&argCounter)
+	whereClause, args, werr := params.buildWhereClause(&argCounter)
+	require.NoError(t, werr)
 	assert.Contains(t, whereClause, "IS NULL")
 	assert.Contains(t, whereClause, "IS $1") // for true
 	assert.Contains(t, whereClause, "IS $2") // for false
@@ -1185,7 +1277,8 @@ func TestQueryParams_BuildWhereClause_OrGroups(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			params := &QueryParams{Filters: tt.filters}
 			argCounter := 1
-			whereClause, _ := params.buildWhereClause(&argCounter)
+			whereClause, _, werr := params.buildWhereClause(&argCounter)
+			require.NoError(t, werr)
 
 			for _, expected := range tt.expectedParts {
 				assert.Contains(t, whereClause, expected)
@@ -1399,7 +1492,8 @@ func TestSTDWithinFilter(t *testing.T) {
 			require.Len(t, params.Filters, 1)
 
 			argCounter := 1
-			sql, args := params.buildWhereClause(&argCounter)
+			sql, args, werr := params.buildWhereClause(&argCounter)
+			require.NoError(t, werr)
 
 			assert.Equal(t, tt.expectSQL, sql)
 			assert.Equal(t, tt.expectArgs, args)
@@ -1656,13 +1750,13 @@ func TestFilterToSQL_EdgeCases(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "OpNotIn with values - handled as equality",
+			name: "OpNotIn with values",
 			filter: Filter{
 				Column:   "status",
 				Operator: OpNotIn,
 				Value:    []string{"deleted", "archived"},
 			},
-			expectedSQL: `"status" = $1`,
+			expectedSQL: `NOT ("status" = ANY($1))`,
 			expectValue: []string{"deleted", "archived"},
 			expectError: false,
 		},
@@ -1671,11 +1765,13 @@ func TestFilterToSQL_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			argCounter := 1
-			sql, value := filterToSQL(tt.filter, &argCounter)
+			sql, value, ferr := filterToSQL(tt.filter, &argCounter)
 
 			if tt.expectError {
+				assert.Error(t, ferr)
 				assert.Empty(t, sql)
 			} else {
+				assert.NoError(t, ferr)
 				assert.NotEmpty(t, sql)
 			}
 
@@ -1853,9 +1949,9 @@ func TestParseAggregation_EdgeCases(t *testing.T) {
 			expectError: false, // Empty select is valid (means select all)
 		},
 		{
-			name:        "invalid aggregation function - ignored",
+			name:        "unknown function with parens - rejected as embedded resource",
 			query:       "select=invalid_func(column)",
-			expectError: false, // Parser is lenient - unknown functions are ignored
+			expectError: true, // Embedded resources are not supported
 		},
 		{
 			name:        "count with asterisk",
@@ -1913,7 +2009,7 @@ func TestParseSelect_EdgeCases(t *testing.T) {
 		{
 			name:        "select with qualified column",
 			query:       "select=user.profile.name",
-			expectError: false,
+			expectError: true, // Dotted names are not valid identifiers or JSONB paths
 		},
 		{
 			name:        "select with wildcard",
@@ -2344,17 +2440,17 @@ func TestParsePagination_MoreCases(t *testing.T) {
 			name:           "negative limit",
 			config:         testConfig(),
 			query:          "limit=-10",
-			expectedLimit:  intPtr(-10),
+			expectedLimit:  nil,
 			expectedOffset: nil,
-			expectError:    false,
+			expectError:    true,
 		},
 		{
 			name:           "negative offset",
 			config:         testConfig(),
 			query:          "offset=-5",
 			expectedLimit:  nil,
-			expectedOffset: intPtr(-5),
-			expectError:    false,
+			expectedOffset: nil,
+			expectError:    true,
 		},
 		{
 			name:           "invalid limit - not a number",
@@ -2440,9 +2536,9 @@ func TestParseSelect_MoreCases(t *testing.T) {
 		{
 			name:         "qualified columns",
 			query:        "select=user.id,user.profile.name",
-			expectedCols: []string{"user.id", "user.profile.name"},
+			expectedCols: nil,
 			expectedAggs: 0,
-			expectError:  false,
+			expectError:  true, // Dotted names are not valid identifiers or JSONB paths
 		},
 		{
 			name:         "columns with underscores",

@@ -545,14 +545,6 @@ spec:
             - name: FLUXBASE_REALTIME_PONG_TIMEOUT
               value: {{ .Values.config.realtime.pong_timeout | quote }}
             {{- end }}
-            {{- if .Values.config.realtime.write_buffer_size }}
-            - name: FLUXBASE_REALTIME_WRITE_BUFFER_SIZE
-              value: {{ .Values.config.realtime.write_buffer_size | quote }}
-            {{- end }}
-            {{- if .Values.config.realtime.read_buffer_size }}
-            - name: FLUXBASE_REALTIME_READ_BUFFER_SIZE
-              value: {{ .Values.config.realtime.read_buffer_size | quote }}
-            {{- end }}
             {{- if .Values.config.realtime.message_size_limit }}
             - name: FLUXBASE_REALTIME_MESSAGE_SIZE_LIMIT
               value: {{ .Values.config.realtime.message_size_limit | int | quote }}
@@ -1345,14 +1337,15 @@ spec:
             - name: FLUXBASE_DEBUG
               value: {{ .Values.config.debug | quote }}
             {{- end }}
-            {{- if or .Values.config.encryption_key .Values.existingSecret }}
+            {{- /* Always wired: the chart secret generates a key when
+            config.encryption_key is empty (see secret.yaml). optional: true
+            covers custom existingSecret without an encryption-key entry. */}}
             - name: FLUXBASE_ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ include "fluxbase.secretName" . }}
                   key: {{ include "fluxbase.secretKeyRef.encryptionKey" . }}
                   optional: true
-            {{- end }}
 
             # ===========================================
             # Scaling Configuration
@@ -1360,6 +1353,14 @@ spec:
             {{- if ne .Values.scaling.backend "local" }}
             - name: FLUXBASE_SCALING_BACKEND
               value: {{ .Values.scaling.backend | quote }}
+            {{- end }}
+            {{- if .Values.scaling.workerOnly }}
+            - name: FLUXBASE_SCALING_WORKER_ONLY
+              value: "true"
+            {{- end }}
+            {{- if .Values.scaling.disableScheduler }}
+            - name: FLUXBASE_SCALING_DISABLE_SCHEDULER
+              value: "true"
             {{- end }}
             {{- if .Values.scaling.enableLeaderElection }}
             - name: FLUXBASE_SCALING_ENABLE_SCHEDULER_LEADER_ELECTION
@@ -1442,7 +1443,10 @@ spec:
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
-              path: /health
+              # Process-only liveness endpoint: does not touch the database, so
+              # a Postgres outage must not restart the pod (readiness uses
+              # /health for dependency-aware gating).
+              path: /livez
               port: http
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}

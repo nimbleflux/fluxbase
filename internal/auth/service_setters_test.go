@@ -1,9 +1,16 @@
 package auth
 
 import (
+	"context"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/config"
 )
 
 // =============================================================================
@@ -96,4 +103,83 @@ func TestService_RecordAuthToken(t *testing.T) {
 			service.recordAuthToken("service_role")
 		})
 	})
+}
+
+// =============================================================================
+// UpdateSelfUser tests (self-service must not touch privileged fields)
+// =============================================================================
+
+// newSelfUpdateTestService builds a Service wired to the package's shared test
+// database (initialized by TestMain in clientkey_test.go).
+func newSelfUpdateTestService(t *testing.T) *Service {
+	t.Helper()
+	if sharedTestDB == nil {
+		t.Skip("shared test database not initialized")
+	}
+	cfg := &config.AuthConfig{
+		JWTSecret:      "test-secret-key-for-selfupdate-tests-32ch",
+		JWTExpiry:      15 * time.Minute,
+		RefreshExpiry:  7 * 24 * time.Hour,
+		PasswordMinLen: 8,
+		BcryptCost:     4,
+		SignupEnabled:  true,
+	}
+	return NewService(sharedTestDB, cfg, &NoOpOTPSender{}, "http://localhost:3000", nil)
+}
+
+func TestUpdateSelfUser_CannotChangePrivilegedFields(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping database test in short mode")
+	}
+	service := newSelfUpdateTestService(t)
+	ctx := context.Background()
+
+	email := fmt.Sprintf("selfupdate-%s@example.com", uuid.New().String()[:8])
+	user, err := service.CreateUser(ctx, email, "Password123")
+	require.NoError(t, err)
+	require.NotNil(t, user)
+
+	originalRole := user.Role
+	originalEmailVerified := user.EmailVerified
+	originalAppMetadata := user.AppMetadata
+	require.False(t, originalEmailVerified)
+
+	// Self-update with metadata only: role, email_verified and app_metadata
+	// must remain untouched.
+	metadata := map[string]interface{}{"theme": "dark"}
+	updated, err := service.UpdateSelfUser(ctx, user.ID, UpdateSelfUserRequest{
+		UserMetadata: metadata,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, originalRole, updated.Role)
+	assert.Equal(t, originalEmailVerified, updated.EmailVerified)
+	assert.Equal(t, originalAppMetadata, updated.AppMetadata)
+	assert.Equal(t, metadata, updated.UserMetadata)
+}
+
+func TestUpdateSelfUser_EmailUpdate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping database test in short mode")
+	}
+	service := newSelfUpdateTestService(t)
+	ctx := context.Background()
+
+	email := fmt.Sprintf("selfupdate-%s@example.com", uuid.New().String()[:8])
+	user, err := service.CreateUser(ctx, email, "Password123")
+	require.NoError(t, err)
+
+	newEmail := fmt.Sprintf("selfupdate-%s@example.com", uuid.New().String()[:8])
+	updated, err := service.UpdateSelfUser(ctx, user.ID, UpdateSelfUserRequest{Email: &newEmail})
+	require.NoError(t, err)
+	assert.Equal(t, newEmail, updated.Email)
+}
+
+func TestUpdateSelfUser_RejectsInvalidEmail(t *testing.T) {
+	service := newSelfUpdateTestService(t)
+	ctx := context.Background()
+
+	bad := "not-an-email"
+	_, err := service.UpdateSelfUser(ctx, uuid.New().String(), UpdateSelfUserRequest{Email: &bad})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid email")
 }

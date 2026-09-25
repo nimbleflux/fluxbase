@@ -165,13 +165,12 @@ func (s *KnowledgeBaseStorage) DeleteDocumentsByFilter(
 	args := []interface{}{knowledgeBaseID}
 	argIndex := 2
 
-	// User isolation filter
+	// User isolation filter. Strict (IncludeGlobal=false) matches only the
+	// caller's documents — required so a bulk delete can never remove
+	// global content or other users' documents; otherwise global content
+	// without a user_id is included too.
 	if filter != nil && filter.UserID != nil {
-		whereConditions = append(whereConditions, fmt.Sprintf(`(
-			metadata->>'user_id' = $%d OR
-			metadata->>'user_id' IS NULL OR
-			NOT (metadata ? 'user_id')
-		)`, argIndex))
+		whereConditions = append(whereConditions, userIsolationCondition("metadata", argIndex, filter.IncludeGlobal))
 		args = append(args, *filter.UserID)
 		argIndex++
 	}
@@ -216,6 +215,34 @@ func (s *KnowledgeBaseStorage) DeleteDocumentsByFilter(
 		result, err := tx.Exec(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("failed to delete documents by filter: %w", err)
+		}
+
+		rowsAffected = result.RowsAffected()
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return int(rowsAffected), nil
+}
+
+// DeleteUserDocuments deletes every document scoped to a user via the
+// metadata "user_id" key, across ALL knowledge bases. Strict scoping
+// (userIsolationCondition with includeGlobal=false) means global content and
+// other users' documents are never matched — same predicate as the per-KB
+// DeleteDocumentsByFilter path.
+//
+// Used by self-service account deletion (DELETE /api/v1/auth/account): chunks,
+// entities and document permissions cascade via FK from ai.documents.
+func (s *KnowledgeBaseStorage) DeleteUserDocuments(ctx context.Context, userID string) (int, error) {
+	var rowsAffected int64
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		query := fmt.Sprintf(`DELETE FROM ai.documents WHERE %s`, userIsolationCondition("metadata", 1, false))
+
+		result, err := tx.Exec(ctx, query, userID)
+		if err != nil {
+			return fmt.Errorf("failed to delete user documents: %w", err)
 		}
 
 		rowsAffected = result.RowsAffected()
@@ -526,6 +553,75 @@ func (s *KnowledgeBaseStorage) GetPendingDocuments(ctx context.Context, limit in
 	}
 
 	return docs, nil
+}
+
+// ResetStaleProcessingDocuments requeues documents stuck in 'processing'
+// status (e.g. after a crash mid-processing). A document whose updated_at is
+// older than the given timeout is reset to 'pending' so the pending-document
+// sweep picks it up again. Returns the number of requeued documents.
+func (s *KnowledgeBaseStorage) ResetStaleProcessingDocuments(ctx context.Context, olderThan time.Duration) (int, error) {
+	var reset int64
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, `
+			UPDATE ai.documents
+			SET status = 'pending',
+			    error_message = '',
+			    updated_at = NOW()
+			WHERE status = 'processing'
+			  AND updated_at < NOW() - $1::interval
+		`, fmt.Sprintf("%d seconds", int(olderThan.Seconds())))
+		if err != nil {
+			return fmt.Errorf("failed to reset stale processing documents: %w", err)
+		}
+		reset = result.RowsAffected()
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return int(reset), nil
+}
+
+// IncrementDocumentProcessingAttempts atomically bumps the
+// metadata.processing_attempts counter (used by the recovery sweep's
+// max-attempts guard) and returns the new count.
+func (s *KnowledgeBaseStorage) IncrementDocumentProcessingAttempts(ctx context.Context, documentID string) (int, error) {
+	var attempts int
+	err := s.WithTenant(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `
+			UPDATE ai.documents
+			SET metadata = jsonb_set(
+					COALESCE(metadata, '{}'::jsonb),
+					'{processing_attempts}',
+					to_jsonb(COALESCE((metadata->>'processing_attempts')::int, 0) + 1)
+				),
+				updated_at = NOW()
+			WHERE id = $1
+			RETURNING COALESCE((metadata->>'processing_attempts')::int, 0)
+		`, documentID).Scan(&attempts)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to increment processing attempts: %w", err)
+	}
+	return attempts, nil
+}
+
+// UpdateDocumentMetadataRaw replaces a document's metadata JSON without
+// touching status/content (no re-embed trigger). Used by the table exporter
+// to refresh metadata on unchanged documents.
+func (s *KnowledgeBaseStorage) UpdateDocumentMetadataRaw(ctx context.Context, id string, metadataJSON []byte) error {
+	return s.WithTenant(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			UPDATE ai.documents
+			SET metadata = $2,
+			    updated_at = NOW()
+			WHERE id = $1
+		`, id, metadataJSON)
+		if err != nil {
+			return fmt.Errorf("failed to update document metadata: %w", err)
+		}
+		return nil
+	})
 }
 
 // UpdateChunkEmbedding updates the embedding for a single chunk

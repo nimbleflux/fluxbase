@@ -447,18 +447,24 @@ type vectorSearchParams struct {
 func (h *VectorHandler) executeVectorSearch(ctx context.Context, params vectorSearchParams) ([]map[string]interface{}, []float64, error) {
 	vectorStr := formatVectorLiteral(params.queryVector)
 
+	// Qualify the table with the public schema so the query does not depend
+	// on the connection's search_path (validate identifiers before interpolation)
 	query := fmt.Sprintf(`
 		SELECT %s, (%s %s '%s'::vector) as _distance
-		FROM %s
+		FROM %s.%s
 		WHERE 1=1
-	`, params.selectCols, params.column, params.distanceOp, vectorStr, params.table)
+	`, params.selectCols, params.column, params.distanceOp, vectorStr, "public", params.table)
 
 	if params.matchThreshold != nil {
 		query += fmt.Sprintf(" AND (%s %s '%s'::vector) < %f",
 			params.column, params.distanceOp, vectorStr, *params.matchThreshold)
 	}
 
-	for i, filter := range params.filters {
+	// Build filter clauses and placeholder values in a single pass so
+	// placeholder numbering stays aligned with the appended values
+	filterClauses := make([]string, 0, len(params.filters))
+	filterValues := make([]interface{}, 0, len(params.filters))
+	for _, filter := range params.filters {
 		if !isValidIdentifier(filter.Column) {
 			continue
 		}
@@ -466,15 +472,12 @@ func (h *VectorHandler) executeVectorSearch(ctx context.Context, params vectorSe
 		if op == "" {
 			continue
 		}
-		query += fmt.Sprintf(" AND %s %s $%d", filter.Column, op, i+1)
+		filterClauses = append(filterClauses, fmt.Sprintf(" AND %s %s $%d", filter.Column, op, len(filterValues)+1))
+		filterValues = append(filterValues, filter.Value)
 	}
+	query += strings.Join(filterClauses, "")
 
 	query += fmt.Sprintf(" ORDER BY _distance LIMIT %d", params.matchCount)
-
-	filterValues := make([]interface{}, len(params.filters))
-	for i, filter := range params.filters {
-		filterValues[i] = filter.Value
-	}
 
 	tx, err := h.db.Pool().Begin(ctx)
 	if err != nil {

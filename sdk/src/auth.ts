@@ -23,7 +23,6 @@ import type {
   ResetPasswordResponse,
   MagicLinkOptions,
   MagicLinkResponse,
-  AnonymousSignInResponse,
   OAuthProvidersResponse,
   OAuthOptions,
   OAuthUrlResponse,
@@ -713,8 +712,9 @@ export class FluxbaseAuth {
 
   /**
    * Verify 2FA code during login (Supabase-compatible)
-   * Call this after signIn returns requires_2fa: true
-   * @param request - User ID and TOTP code
+   * Call this after signIn returns requires_2fa: true, passing the
+   * mfa_token from that response.
+   * @param request - MFA token from the sign-in response and the TOTP code
    * @returns Promise with access_token, refresh_token, and user
    */
   async verify2FA(
@@ -875,26 +875,6 @@ export class FluxbaseAuth {
         {
           token,
         },
-      );
-
-      const session: AuthSession = {
-        ...response,
-        expires_at: Date.now() + response.expires_in * 1000,
-      };
-
-      this.setSessionInternal(session);
-      return { user: session.user, session };
-    });
-  }
-
-  /**
-   * Sign in anonymously
-   * Creates a temporary anonymous user session
-   */
-  async signInAnonymously(): Promise<FluxbaseAuthResponse> {
-    return wrapAsync(async () => {
-      const response = await this.fetch.post<AnonymousSignInResponse>(
-        "/api/v1/auth/signin/anonymous",
       );
 
       const session: AuthSession = {

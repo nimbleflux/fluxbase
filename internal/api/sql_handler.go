@@ -159,7 +159,7 @@ func (h *SQLHandler) getPoolForQuery(c fiber.Ctx, query string) *pgxpool.Pool {
 }
 
 func (h *SQLHandler) executeWithRLSContext(c fiber.Ctx, pool *pgxpool.Pool, statements []string, claims *auth.TokenClaims, tenantID string, auditUserID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	ctx, cancel := context.WithTimeout(c.RequestCtx(), queryTimeout)
 	defer cancel()
 
 	conn, err := pool.Acquire(ctx)
@@ -263,7 +263,7 @@ func (h *SQLHandler) executeWithRLSContext(c fiber.Ctx, pool *pgxpool.Pool, stat
 }
 
 func (h *SQLHandler) executeAsInstanceAdmin(c fiber.Ctx, pool *pgxpool.Pool, statements []string, auditUserID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	ctx, cancel := context.WithTimeout(c.RequestCtx(), queryTimeout)
 	defer cancel()
 
 	conn, err := pool.Acquire(ctx)
@@ -322,7 +322,7 @@ func (h *SQLHandler) executeAsInstanceAdmin(c fiber.Ctx, pool *pgxpool.Pool, sta
 }
 
 func (h *SQLHandler) executeWithTenantRLS(c fiber.Ctx, pool *pgxpool.Pool, statements []string, claims *auth.TokenClaims, tenantID string, auditUserID string, isInstanceAdmin bool) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	ctx, cancel := context.WithTimeout(c.RequestCtx(), queryTimeout)
 	defer cancel()
 
 	conn, err := pool.Acquire(ctx)
@@ -435,7 +435,10 @@ func (h *SQLHandler) executeStatementInTx(ctx context.Context, tx pgx.Tx, statem
 
 	rows, err := tx.Query(ctx, statement)
 	if err != nil {
-		errorMsg := err.Error()
+		log.Warn().Err(err).Str("statement", util.TruncateString(statement, 100)).Msg("SQL statement failed")
+		// The SQL editor is an admin-only surface: keep the PostgreSQL message
+		// (with SQLSTATE) so admins can debug their queries.
+		errorMsg := database.AdminSQLErrorMessage(err)
 		result.Error = &errorMsg
 		result.ExecutionTimeMS = float64(time.Since(startTime).Milliseconds())
 		return result

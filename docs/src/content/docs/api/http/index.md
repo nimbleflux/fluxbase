@@ -56,7 +56,7 @@ Endpoints for user registration, login, and session management.
 | `POST` | `/auth/password/reset/confirm` | Confirm password reset |
 | `POST` | `/auth/verify-email` | Verify email address |
 | `POST` | `/auth/verify-email/resend` | Resend email verification |
-| `POST` | `/auth/2fa/verify` | Verify 2FA (TOTP) code |
+| `POST` | `/auth/2fa/verify` | Verify 2FA (TOTP) code — requires the `mfa_token` from the sign-in response |
 | `POST` | `/auth/otp/signin` | Send OTP code |
 | `POST` | `/auth/otp/verify` | Verify OTP code |
 | `POST` | `/auth/otp/resend` | Resend OTP code |
@@ -68,6 +68,7 @@ Endpoints for user registration, login, and session management.
 | `POST` | `/auth/signout` | Sign out current session |
 | `GET` | `/auth/user` | Get current user |
 | `PATCH` | `/auth/user` | Update current user |
+| `DELETE` | `/auth/account` | Permanently delete the current user's own account (optional `{ "password": "..." }` body, required when the account has a password) |
 | `POST` | `/auth/reauthenticate` | Reauthenticate current session |
 | `GET` | `/auth/user/identities` | List linked identities |
 | `POST` | `/auth/user/identities` | Link an identity |
@@ -135,7 +136,9 @@ Endpoints for file storage operations.
 | `DELETE` | `/storage/{bucket}/{key}` | Delete file |
 | `POST` | `/storage/{bucket}/multipart` | Multipart file upload |
 | `POST` | `/storage/{bucket}/stream/{key}` | Streaming file upload |
-| `POST` | `/storage/{bucket}/sign/{key}` | Generate signed URL |
+| `POST` | `/storage/{bucket}/sign/{key}` | Generate signed URL (requires RLS visibility of the object) |
+| `POST` | `/storage/{bucket}/copy` | Copy an object (optional `to_bucket`) |
+| `POST` | `/storage/{bucket}/move` | Move an object (copy + delete source) |
 | `POST` | `/storage/{bucket}/{key}/share` | Share file with another user |
 | `DELETE` | `/storage/{bucket}/{key}/share/{user_id}` | Revoke file share |
 | `GET` | `/storage/{bucket}/{key}/shares` | List file shares |
@@ -177,7 +180,7 @@ Batch update/delete use query-parameter filters (see [Query Parameters](#query-p
 
 ### Tenant Management
 
-Manage tenants in multi-tenant deployments. Requires `admin`, `instance_admin`, or `tenant_admin` role.
+Manage tenants in multi-tenant deployments. Listing, creating, and deleting tenants requires the `admin` or `instance_admin` role (`tenant_admin` receives `403`); tenant-scoped operations accept `tenant_admin` as well.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -373,7 +376,7 @@ Public chatbot discovery and the conversational WebSocket. Chat is streaming ove
 | `GET` | `/ai/chatbots` | List enabled (public) chatbots |
 | `GET` | `/ai/chatbots/by-name/{name}` | Look up a chatbot by name |
 | `GET` | `/ai/chatbots/{id}` | Get a public chatbot |
-| `GET` | `/ai/ws` | Chat WebSocket (streaming responses) |
+| `GET` | `/ai/ws` | Chat WebSocket (streaming responses) — root-level path, NOT under `/api/v1` |
 | `GET` | `/ai/conversations` | List the current user's conversations |
 | `GET` | `/ai/conversations/{id}` | Get a conversation |
 | `PATCH` | `/ai/conversations/{id}` | Update a conversation (e.g. title) |
@@ -483,6 +486,10 @@ Public invitation endpoints (token-based, no auth required).
 
 Built-in JSON-RPC 2.0 endpoint for AI assistant integration. The base path is configurable (default: `/mcp`).
 
+:::note[Built-in MCP vs custom-tool API]
+The built-in MCP JSON-RPC endpoint lives at `/mcp` (configurable via `mcp.base_path`) — it is **not** under `/api/v1`. The custom tool/resource management API below lives at `/api/v1/mcp/...`.
+:::
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/mcp` | MCP JSON-RPC requests |
@@ -501,14 +508,14 @@ OAuth 2.0 endpoints for MCP authentication. All endpoints are public (no auth re
 | `GET` | `/mcp/.well-known/oauth-protected-resource` | OAuth protected resource metadata |
 | `GET` | `/mcp/.well-known/oauth-protected-resource/mcp` | OAuth protected resource metadata for MCP |
 | `POST` | `/mcp/oauth/register` | Dynamic client registration |
-| `GET` | `/mcp/oauth/authorize` | OAuth authorization |
-| `POST` | `/mcp/oauth/authorize` | OAuth authorization consent |
+| `GET` | `/mcp/oauth/authorize` | OAuth authorization (renders an interactive consent page) |
+| `POST` | `/mcp/oauth/authorize` | OAuth authorization consent (approve/deny) |
 | `POST` | `/mcp/oauth/token` | OAuth token exchange |
 | `POST` | `/mcp/oauth/revoke` | OAuth token revocation |
 
 ### Custom MCP Tools & Resources
 
-Admin-only management of custom MCP tools and resources. Requires `admin` role.
+Admin-only management of custom MCP tools and resources. Requires `admin` role. Base path is `/api/v1/mcp`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -575,12 +582,15 @@ A parallel auth surface for Fluxbase **operators** (`platform.users`, `instance_
 
 ### Health
 
-Public health check endpoints (no auth required).
+Public health check endpoints (no auth required). These are **root-level paths** — they are not under `/api/v1`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/` | Root health check |
-| `GET` | `/health` | Detailed health check with database status |
+| `GET` | `/health` | Detailed health (readiness) check with database status |
+| `GET` | `/livez` | Process liveness check (never touches the database) |
+
+Prometheus metrics are served on a separate metrics server (default `:9090/metrics`, configurable via `metrics.port` / `metrics.path`) — also not under `/api/v1`.
 
 ## Query Parameters
 
@@ -590,11 +600,15 @@ Table endpoints support PostgREST-compatible query parameters:
 |-----------|-------------|---------|
 | `select` | Columns to return | `?select=id,name,email` |
 | `order` | Sort order | `?order=created_at.desc` |
-| `limit` | Max results | `?limit=10` |
-| `offset` | Pagination offset | `?offset=20` |
+| `limit` | Max results (non-negative) | `?limit=10` |
+| `offset` | Pagination offset (non-negative) | `?offset=20` |
 | `{column}.{op}` | Column filter | `?name.eq=John&age.gt=18` |
 
+Negative `limit`/`offset` values are rejected with `400`.
+
 ### Filter Operators
+
+Both spellings work: PostgREST style `?col=op.value` and classic style `?col.op=value`.
 
 | Operator | Description | Example |
 |----------|-------------|---------|
@@ -607,14 +621,24 @@ Table endpoints support PostgREST-compatible query parameters:
 | `like` | Pattern match | `?name.like=John%` |
 | `ilike` | Case-insensitive pattern | `?name.ilike=john%` |
 | `in` | In list | `?status.in=(active,pending)` |
+| `between` | Inclusive range (exactly two bounds, both parameterized) | `?price=between.(1,10)` |
+| `not.between` | Outside an inclusive range | `?price=not.between.(1,10)` |
 | `is` | Is null/not null | `?deleted_at.is.null` |
+
+Unknown filter operators are rejected with `400` — they are not treated as equality.
+
+:::note[Embedded resource selects]
+Embedded resource selects (`select=*,relation(*)`) are **not supported** and return `400`. Select only columns of the target table; fetch related rows with a second request.
+:::
+
+`POST /tables/{schema}/{table}/query` and the GraphQL API enforce `api.max_page_size` and `api.max_total_results` (GET list requests bypass `max_total_results` for admin users). Batch `PATCH`/`DELETE` on `/tables/{schema}/{table}` require at least one query filter.
 
 ## Common Headers
 
 | Header | Description |
 |--------|-------------|
-| `Authorization` | Bearer token for authentication (`Bearer <jwt>`) |
-| `X-Client-Key` | Client key for key-based authentication |
+| `Authorization` | Bearer token for authentication (access tokens only — refresh tokens are rejected) |
+| `X-Client-Key` | Client key for key-based authentication (`apikey` accepted as an alias) |
 | `X-FB-Tenant` | Tenant slug for multi-tenant context |
 | `X-Fluxbase-Branch` | Branch name for database branching context |
 | `Content-Type` | Request body format (`application/json`, `multipart/form-data`) |

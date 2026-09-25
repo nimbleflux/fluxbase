@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -12,6 +13,24 @@ import (
 	"github.com/nimbleflux/fluxbase/internal/middleware"
 	"github.com/nimbleflux/fluxbase/internal/storage"
 )
+
+// documentAddErrorResponse maps DocumentProcessor.AddDocument failures to a
+// response: quota violations become 422 with quota detail, anything else 500.
+func documentAddErrorResponse(c fiber.Ctx, err error) error {
+	var quotaErr *QuotaError
+	if errors.As(err, &quotaErr) {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"error":         "Knowledge base quota exceeded",
+			"resource_type": quotaErr.ResourceType,
+			"used":          quotaErr.Used,
+			"limit":         quotaErr.Limit,
+			"requested":     quotaErr.Requested,
+		})
+	}
+	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+		"error": "Failed to add document",
+	})
+}
 
 // ============================================================================
 // DOCUMENT ENDPOINTS
@@ -147,9 +166,7 @@ func (h *KnowledgeBaseHandler) AddDocument(c fiber.Ctx) error {
 	doc, err := h.processor.AddDocument(ctx, kbID, docReq, nil)
 	if err != nil {
 		log.Error().Err(err).Str("kb_id", kbID).Msg("Failed to add document")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to add document",
-		})
+		return documentAddErrorResponse(c, err)
 	}
 
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
@@ -327,9 +344,7 @@ func (h *KnowledgeBaseHandler) UploadDocument(c fiber.Ctx) error {
 	doc, err := h.processor.AddDocument(ctx, kbID, docReq, nil)
 	if err != nil {
 		log.Error().Err(err).Str("kb_id", kbID).Msg("Failed to add document")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to add document",
-		})
+		return documentAddErrorResponse(c, err)
 	}
 
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{

@@ -63,6 +63,9 @@ func NewGraphQLHandler(db *database.Connection, schemaCache *database.SchemaCach
 	// Create schema generator
 	schemaGenerator := NewGraphQLSchemaGenerator(schemaCache, db, cfg.Introspection)
 	schemaGenerator.SetResolverFactory(resolverFactory)
+	if baseConfig != nil {
+		schemaGenerator.SetMaxPageSize(baseConfig.API.MaxPageSize)
+	}
 
 	return &GraphQLHandler{
 		schemaGenerator: schemaGenerator,
@@ -106,6 +109,20 @@ func (h *GraphQLHandler) HandleGraphQL(c fiber.Ctx) error {
 				Message: "Query string is required",
 			}},
 		})
+	}
+
+	// Enforce the introspection setting on POST requests as well:
+	// reject queries that reference __schema or __type fields
+	if !h.config.Introspection {
+		hasIntrospection, err := queryContainsIntrospectionFields(req.Query)
+		if err == nil && hasIntrospection {
+			return c.Status(fiber.StatusForbidden).JSON(GraphQLResponse{
+				Errors: []GraphQLError{{
+					Message: "Introspection is disabled",
+				}},
+			})
+		}
+		// On a parse error, fall through: graphql.Do reports the syntax error
 	}
 
 	// Validate query depth
@@ -606,6 +623,62 @@ fragment TypeRef on __Type {
   }
 }
 `
+
+// queryContainsIntrospectionFields reports whether a GraphQL query document
+// references the __schema or __type meta fields
+func queryContainsIntrospectionFields(query string) (bool, error) {
+	if query == "" {
+		return false, fmt.Errorf("query cannot be empty")
+	}
+
+	doc, err := parser.Parse(parser.ParseParams{Source: query})
+	if err != nil {
+		return false, err
+	}
+
+	for _, def := range doc.Definitions {
+		switch d := def.(type) {
+		case *ast.OperationDefinition:
+			if selectionHasIntrospectionFields(d.SelectionSet) {
+				return true, nil
+			}
+		case *ast.FragmentDefinition:
+			if selectionHasIntrospectionFields(d.SelectionSet) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// selectionHasIntrospectionFields recursively checks a selection set for
+// __schema / __type field references, including inside fragments
+func selectionHasIntrospectionFields(selSet *ast.SelectionSet) bool {
+	if selSet == nil {
+		return false
+	}
+
+	for _, sel := range selSet.Selections {
+		switch s := sel.(type) {
+		case *ast.Field:
+			name := s.Name.Value
+			if name == "__schema" || name == "__type" {
+				return true
+			}
+			if selectionHasIntrospectionFields(s.SelectionSet) {
+				return true
+			}
+		case *ast.FragmentSpread:
+			// Fragment definitions are checked separately via the document;
+			// inline definitions cannot be resolved here, so treat conservatively
+		case *ast.InlineFragment:
+			if selectionHasIntrospectionFields(s.SelectionSet) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // hasFragmentSpreads checks if a GraphQL query contains fragment spreads
 func hasFragmentSpreads(query string) (bool, error) {

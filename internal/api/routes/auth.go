@@ -33,6 +33,7 @@ type AuthDeps struct {
 	SignOut                   fiber.Handler
 	GetUser                   fiber.Handler
 	UpdateUser                fiber.Handler
+	DeleteAccount             fiber.Handler
 	StartImpersonation        fiber.Handler
 	StartAnonImpersonation    fiber.Handler
 	StartServiceImpersonation fiber.Handler
@@ -65,7 +66,7 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 	r := []Route{
 		{Method: "GET", Path: "/csrf", Handler: deps.GetCSRFToken, Summary: "Get CSRF token", Auth: AuthNone, Public: true},
 		{Method: "GET", Path: "/captcha/config", Handler: deps.GetCaptchaConfig, Summary: "Get CAPTCHA config", Auth: AuthNone, Public: true},
-		{Method: "POST", Path: "/captcha/check", Handler: deps.CheckCaptcha, Summary: "Check CAPTCHA required", Auth: AuthNone, Public: true},
+		{Method: "POST", Path: "/captcha/check", Handler: deps.CheckCaptcha, Summary: "Check CAPTCHA required", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "login")},
 		{Method: "GET", Path: "/config", Handler: deps.GetAuthConfig, Summary: "Get auth config", Auth: AuthNone, Public: true},
 		{Method: "POST", Path: "/signup", Handler: deps.SignUp, Summary: "Register user", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "signup")},
 		{Method: "POST", Path: "/signin", Handler: deps.SignIn, Summary: "Authenticate user", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "login")},
@@ -74,19 +75,20 @@ func BuildAuthRoutes(deps *AuthDeps) *RouteGroup {
 		{Method: "POST", Path: "/magiclink/verify", Handler: deps.VerifyMagicLink, Summary: "Verify magic link", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "login")},
 		{Method: "POST", Path: "/password/reset", Handler: deps.RequestPasswordReset, Summary: "Request password reset", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "password_reset")},
 		{Method: "POST", Path: "/password/reset/confirm", Handler: deps.ResetPassword, Summary: "Reset password", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "password_reset")},
-		{Method: "POST", Path: "/password/reset/verify", Handler: deps.VerifyPasswordReset, Summary: "Verify reset token", Auth: AuthNone, Public: true},
-		{Method: "POST", Path: "/verify-email", Handler: deps.VerifyEmail, Summary: "Verify email", Auth: AuthNone, Public: true},
+		{Method: "POST", Path: "/password/reset/verify", Handler: deps.VerifyPasswordReset, Summary: "Verify reset token", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "password_reset")},
+		{Method: "POST", Path: "/verify-email", Handler: deps.VerifyEmail, Summary: "Verify email", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "magiclink")},
 		{Method: "POST", Path: "/verify-email/resend", Handler: deps.ResendVerification, Summary: "Resend verification", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "magiclink")},
 		{Method: "POST", Path: "/2fa/verify", Handler: deps.VerifyTOTP, Summary: "Verify 2FA", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "2fa")},
 		{Method: "POST", Path: "/otp/signin", Handler: deps.SendOTP, Summary: "Send OTP", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "otp")},
 		{Method: "POST", Path: "/otp/verify", Handler: deps.VerifyOTP, Summary: "Verify OTP", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "2fa")},
 		{Method: "POST", Path: "/otp/resend", Handler: deps.ResendOTP, Summary: "Resend OTP", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "otp")},
-		{Method: "POST", Path: "/signin/idtoken", Handler: deps.SignInWithIDToken, Summary: "Sign in with ID token", Auth: AuthNone, Public: true},
+		{Method: "POST", Path: "/signin/idtoken", Handler: deps.SignInWithIDToken, Summary: "Sign in with ID token", Auth: AuthNone, Public: true, Middlewares: limiter(deps, "login")},
 	}
 
 	// Authenticated routes - auth middleware is auto-injected based on Auth: AuthRequired
 	r = append(r, []Route{
 		{Method: "POST", Path: "/signout", Handler: deps.SignOut, Summary: "Sign out", Auth: AuthRequired},
+		{Method: "DELETE", Path: "/account", Handler: deps.DeleteAccount, Summary: "Delete own account", Auth: AuthRequired, Middlewares: limiter(deps, "account_delete")},
 		{Method: "GET", Path: "/user", Handler: deps.GetUser, Summary: "Get user", Auth: AuthRequired},
 		{Method: "PATCH", Path: "/user", Handler: deps.UpdateUser, Summary: "Update user", Auth: AuthRequired},
 		{Method: "POST", Path: "/impersonate", Handler: deps.StartImpersonation, Summary: "Start impersonation", Auth: AuthRequired, Roles: []string{"admin", "instance_admin", "tenant_admin"}},

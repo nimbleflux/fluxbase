@@ -46,10 +46,13 @@ func (h *UserKnowledgeBaseHandler) SearchMyKB(c fiber.Ctx) error {
 	}
 
 	// Perform search using hybrid search (keyword-only if embeddings not available)
+	// Per-user isolation: viewers only see their own documents plus global
+	// (user_id-less) content — same semantics as the chat RAG path.
 	opts := HybridSearchOptions{
-		Query: req.Query,
-		Limit: req.Limit,
-		Mode:  SearchModeKeyword, // Default to keyword search for user endpoint
+		Query:  req.Query,
+		Limit:  req.Limit,
+		Mode:   SearchModeKeyword, // Default to keyword search for user endpoint
+		Filter: &MetadataFilter{UserID: &userID, IncludeGlobal: true},
 	}
 
 	// If processor has embedding service, use hybrid search
@@ -113,11 +116,22 @@ func (h *UserKnowledgeBaseHandler) DebugSearchMyKB(c fiber.Ctx) error {
 		})
 	}
 
-	// Perform search with debug info
+	// Perform search with debug info. Per-user isolation matches SearchMyKB
+	// (caller's documents + global). Defaults to keyword mode since no
+	// embedding is required; upgrades to hybrid when one can be generated.
 	opts := HybridSearchOptions{
 		Query:          req.Query,
 		Limit:          10,
 		SemanticWeight: 0.7,
+		Mode:           SearchModeKeyword,
+		Filter:         &MetadataFilter{UserID: &userID, IncludeGlobal: true},
+	}
+
+	if h.processor != nil && h.processor.embeddingService != nil {
+		if embedding, embErr := h.processor.embeddingService.EmbedSingle(ctx, req.Query, ""); embErr == nil && len(embedding) > 0 {
+			opts.QueryEmbedding = embedding
+			opts.Mode = SearchModeHybrid
+		}
 	}
 
 	results, err := h.storage.SearchChunksHybrid(ctx, kbID, opts)
@@ -127,8 +141,13 @@ func (h *UserKnowledgeBaseHandler) DebugSearchMyKB(c fiber.Ctx) error {
 		})
 	}
 
-	// Get KB info for context
-	kb, _ := h.storage.GetKnowledgeBase(ctx, kbID)
+	// Get KB info for context (checked — unknown KB must 404, not nil-deref)
+	kb, err := h.storage.GetKnowledgeBase(ctx, kbID)
+	if err != nil || kb == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Knowledge base not found",
+		})
+	}
 
 	return c.JSON(fiber.Map{
 		"query":          req.Query,

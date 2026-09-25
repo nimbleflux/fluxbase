@@ -107,7 +107,21 @@ func (le *LeaderElector) electionLoop(onBecomeLeader, onLoseLeadership func()) {
 }
 
 func (le *LeaderElector) tryAcquireLock(onBecomeLeader, onLoseLeadership func()) {
+	wasLeaderBefore := false
 	if le.dedicatedConn == nil {
+		// A new connection cannot be holding the advisory lock, so any
+		// lingering leadership claim from a previous connection is stale.
+		le.isLeaderMu.Lock()
+		wasLeaderBefore = le.isLeader
+		le.isLeader = false
+		le.isLeaderMu.Unlock()
+		if wasLeaderBefore {
+			log.Warn().Str("lock", le.lockName).Msg("Leadership state reset - previous lock connection was lost")
+			if onLoseLeadership != nil {
+				le.safeCallback(onLoseLeadership, "onLoseLeadership")
+			}
+		}
+
 		conn, err := le.pool.Acquire(le.ctx)
 		if err != nil {
 			if le.ctx.Err() == nil {
@@ -129,6 +143,18 @@ func (le *LeaderElector) tryAcquireLock(onBecomeLeader, onLoseLeadership func())
 		}
 		le.dedicatedConn.Release()
 		le.dedicatedConn = nil
+		// The lock died with the connection: leadership cannot be assumed to
+		// continue across a failed lock query.
+		le.isLeaderMu.Lock()
+		wasLeader := le.isLeader
+		le.isLeader = false
+		le.isLeaderMu.Unlock()
+		if wasLeader {
+			log.Warn().Str("lock", le.lockName).Msg("Lost leader lock due to connection error - this instance is no longer the leader")
+			if onLoseLeadership != nil {
+				le.safeCallback(onLoseLeadership, "onLoseLeadership")
+			}
+		}
 		return
 	}
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -103,7 +104,12 @@ type GitHubInstallation struct {
 	ID int `json:"id"`
 }
 
-// HandleWebhook handles incoming GitHub webhook requests
+// HandleWebhook handles incoming GitHub webhook requests.
+// The X-Hub-Signature-256 HMAC over the raw body is verified BEFORE the
+// payload is parsed, so attacker-controlled bytes are never unmarshalled or
+// acted upon without a valid signature. Unsigned deliveries are rejected
+// unless branching.allow_unsigned_webhooks is enabled — and even then only for
+// repositories configured without a webhook secret.
 func (h *GitHubWebhookHandler) HandleWebhook(c fiber.Ctx) error {
 	if !h.config.Enabled {
 		return SendErrorWithCode(c, fiber.StatusServiceUnavailable, "Database branching is not enabled", "BRANCHING_DISABLED")
@@ -123,9 +129,25 @@ func (h *GitHubWebhookHandler) HandleWebhook(c fiber.Ctx) error {
 		Str("delivery_id", deliveryID).
 		Msg("Received GitHub webhook")
 
-	// Parse the payload to get repository info for signature verification
+	// Retain the raw body: the signature is computed over it and it must not
+	// be re-read from the (possibly already consumed) request stream.
+	rawBody := c.Body()
+
+	// Verify the signature over the raw body before parsing anything. The
+	// per-repository secret means verification also establishes which
+	// configured repository the delivery can act on.
+	verifiedRepo, err := h.verifySignature(c.RequestCtx(), rawBody, c.Get("X-Hub-Signature-256"))
+	if err != nil {
+		log.Warn().
+			Err(err).
+			Str("delivery_id", deliveryID).
+			Msg("Webhook signature verification failed")
+		return SendErrorWithCode(c, fiber.StatusUnauthorized, "Webhook signature verification failed", "INVALID_SIGNATURE")
+	}
+
+	// Parse the payload only after verification succeeded
 	var payload GitHubWebhookPayload
-	if err := json.Unmarshal(c.Body(), &payload); err != nil {
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
 		return SendErrorWithCode(c, fiber.StatusBadRequest, "Failed to parse webhook payload: "+err.Error(), "INVALID_PAYLOAD")
 	}
 
@@ -136,13 +158,24 @@ func (h *GitHubWebhookHandler) HandleWebhook(c fiber.Ctx) error {
 
 	repoFullName := payload.Repository.FullName
 
-	// Verify webhook signature if configured
-	if err := h.verifySignature(c, repoFullName); err != nil {
+	// A signature-verified delivery may only act on the repository whose
+	// secret validated it — the payload cannot redirect it elsewhere.
+	if verifiedRepo != "" && repoFullName != verifiedRepo {
 		log.Warn().
-			Err(err).
+			Str("delivery_id", deliveryID).
+			Str("signed_repository", verifiedRepo).
+			Str("payload_repository", repoFullName).
+			Msg("Webhook payload repository does not match the signed repository")
+		return SendErrorWithCode(c, fiber.StatusUnauthorized, "Webhook signature verification failed", "INVALID_SIGNATURE")
+	}
+
+	// Unsigned deliveries (accepted only under allow_unsigned_webhooks) are
+	// further restricted to repositories configured without a webhook secret.
+	if verifiedRepo == "" && !h.shouldAcceptUnsigned(c.RequestCtx(), repoFullName) {
+		log.Warn().
 			Str("repository", repoFullName).
 			Str("delivery_id", deliveryID).
-			Msg("Webhook signature verification failed")
+			Msg("Unsigned webhook rejected - repository not configured for unsigned webhooks")
 		return SendErrorWithCode(c, fiber.StatusUnauthorized, "Webhook signature verification failed", "INVALID_SIGNATURE")
 	}
 
@@ -167,61 +200,86 @@ func (h *GitHubWebhookHandler) HandleWebhook(c fiber.Ctx) error {
 	}
 }
 
-// verifySignature verifies the webhook signature using the configured secret
-func (h *GitHubWebhookHandler) verifySignature(c fiber.Ctx, repository string) error {
-	signature := c.Get("X-Hub-Signature-256")
-
-	// Get the webhook configuration for this repository
-	ghConfig, err := h.manager.GetStorage().GetGitHubConfig(c.RequestCtx(), repository)
-	if err != nil && !errors.Is(err, branching.ErrGitHubConfigNotFound) {
-		return fmt.Errorf("failed to get GitHub config: %w", err)
+// verifySignature verifies the X-Hub-Signature-256 header over the raw body
+// BEFORE any payload parsing. It returns the repository whose configured
+// webhook secret validated the signature, or "" when the delivery is accepted
+// unsigned under the explicit allow_unsigned_webhooks opt-in. An error means
+// the delivery must be rejected.
+func (h *GitHubWebhookHandler) verifySignature(ctx context.Context, rawBody []byte, signature string) (string, error) {
+	if h.manager == nil {
+		return "", fmt.Errorf("GitHub webhook integration is not configured")
 	}
 
-	// Check if webhook secret is configured
-	hasSecret := ghConfig != nil && ghConfig.WebhookSecret != nil && *ghConfig.WebhookSecret != ""
+	configs, err := h.manager.GetStorage().ListGitHubConfigs(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to list GitHub configs: %w", err)
+	}
+
+	// Separate configs into those with and without a configured secret
+	var secretRepos, unsignedRepos []string
+	for _, cfg := range configs {
+		if cfg == nil {
+			continue
+		}
+		if cfg.WebhookSecret != nil && *cfg.WebhookSecret != "" {
+			secretRepos = append(secretRepos, cfg.Repository)
+		} else {
+			unsignedRepos = append(unsignedRepos, cfg.Repository)
+		}
+	}
 
 	if signature == "" {
-		// No signature provided
-		if hasSecret {
-			// Secret is configured but no signature provided - reject
-			return fmt.Errorf("webhook signature required but not provided")
+		// No signature provided. Unsigned deliveries are rejected unless the
+		// explicit opt-in is set, and even then only accepted for repositories
+		// configured without a webhook secret (checked by the caller via
+		// shouldAcceptUnsigned once the repository is known from the payload).
+		if !h.config.AllowUnsignedWebhooks {
+			return "", fmt.Errorf("webhook signature required but not provided")
 		}
-
-		// No config or no secret configured - log warning and reject
-		// This prevents unauthenticated webhook abuse
-		if ghConfig == nil {
-			log.Warn().
-				Str("repository", repository).
-				Msg("GitHub webhook received for unconfigured repository - rejecting. Configure repository in /admin/branches/github/configs to enable webhooks.")
-			return fmt.Errorf("repository not configured for webhooks: %s", repository)
+		if len(unsignedRepos) == 0 {
+			return "", fmt.Errorf("no repository is configured for unsigned webhooks")
 		}
-
-		// Config exists but no secret - log warning and allow (explicit opt-in to insecure mode)
 		log.Warn().
-			Str("repository", repository).
-			Msg("GitHub webhook accepted without signature verification - configure webhook_secret for security")
-		return nil
+			Strs("repositories", unsignedRepos).
+			Msg("GitHub webhook accepted without signature verification - allow_unsigned_webhooks is enabled; configure webhook_secret to require signatures")
+		return "", nil
 	}
 
-	// Signature was provided - verify it if we have a secret
-	if !hasSecret {
-		// Signature provided but no secret configured - accept (GitHub is sending signatures)
-		// Log info to encourage configuring the secret
-		log.Info().
-			Str("repository", repository).
-			Msg("GitHub webhook signature ignored - no webhook_secret configured. Configure secret to enable verification.")
-		return nil
+	// Signature provided: try every configured secret against the raw body.
+	// The repo identity comes from whichever secret verifies, not from the
+	// (untrusted) payload.
+	for _, cfg := range configs {
+		if cfg == nil || cfg.WebhookSecret == nil || *cfg.WebhookSecret == "" {
+			continue
+		}
+		expected := computeHMACSHA256(rawBody, *cfg.WebhookSecret)
+		expectedSignature := "sha256=" + expected
+		if hmac.Equal([]byte(signature), []byte(expectedSignature)) {
+			return cfg.Repository, nil
+		}
 	}
 
-	// Verify the signature
-	expected := computeHMACSHA256(c.Body(), *ghConfig.WebhookSecret)
-	expectedSignature := "sha256=" + expected
-
-	if !hmac.Equal([]byte(signature), []byte(expectedSignature)) {
-		return fmt.Errorf("signature mismatch")
+	if len(secretRepos) == 0 {
+		return "", fmt.Errorf("signature provided but no repository has a webhook secret configured")
 	}
+	return "", fmt.Errorf("signature mismatch for any configured repository")
+}
 
-	return nil
+// shouldAcceptUnsigned reports whether an unsigned delivery for the given
+// repository may be processed: only when the repository is configured without
+// a webhook secret (explicit opt-in to insecure mode).
+func (h *GitHubWebhookHandler) shouldAcceptUnsigned(ctx context.Context, repository string) bool {
+	ghConfig, err := h.manager.GetStorage().GetGitHubConfig(ctx, repository)
+	if err != nil {
+		if !errors.Is(err, branching.ErrGitHubConfigNotFound) {
+			log.Error().Err(err).Str("repository", repository).Msg("Failed to get GitHub config for unsigned webhook check")
+		}
+		return false
+	}
+	if ghConfig == nil {
+		return false
+	}
+	return ghConfig.WebhookSecret == nil || *ghConfig.WebhookSecret == ""
 }
 
 // computeHMACSHA256 computes HMAC-SHA256 of data with the given key

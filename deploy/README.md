@@ -4,4 +4,4 @@ This directory contains everything you need to deploy Fluxbase in various enviro
 
 ## Quick Start
 
-See For more information about Fluxbase, look into [the docs](https://fluxbase.eu/getting-started/quick-start/). for the quick start guide.
+For more information about Fluxbase, see [the quick start guide](https://fluxbase.eu/getting-started/quick-start/) in the docs.

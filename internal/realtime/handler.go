@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
+	"github.com/nimbleflux/fluxbase/internal/config"
 	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
@@ -110,6 +111,14 @@ func NewRealtimeHandler(manager *Manager, authService AuthService, subManager *S
 	}
 }
 
+// maxMessageSize returns the configured inbound WebSocket message size cap.
+func (h *RealtimeHandler) maxMessageSize() int64 {
+	if h.manager != nil && h.manager.baseConfig != nil {
+		return h.manager.baseConfig.Realtime.GetMaxMessageSize()
+	}
+	return config.DefaultRealtimeMaxMessageSize
+}
+
 // HandleWebSocket handles WebSocket upgrade and communication
 func (h *RealtimeHandler) HandleWebSocket(c fiber.Ctx) error {
 	// Check if WebSocket upgrade
@@ -176,6 +185,11 @@ func (h *RealtimeHandler) HandleWebSocket(c fiber.Ctx) error {
 
 // handleConnection handles an individual WebSocket connection
 func (h *RealtimeHandler) handleConnection(c *websocket.Conn) {
+	// Enforce an inbound message size limit so a single oversized frame from a
+	// client cannot exhaust memory. Exceeding the limit fails the read loop
+	// and closes the connection.
+	c.SetReadLimit(h.maxMessageSize())
+
 	// Generate connection ID
 	connectionID := uuid.New().String()
 

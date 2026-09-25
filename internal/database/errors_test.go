@@ -2,6 +2,7 @@ package database
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -294,4 +295,92 @@ func BenchmarkGetConstraintName_NilError(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		GetConstraintName(nil)
 	}
+}
+
+func TestSanitizeErrorMessage(t *testing.T) {
+	t.Run("nil error returns empty string", func(t *testing.T) {
+		assert.Equal(t, "", SanitizeErrorMessage(nil))
+	})
+
+	t.Run("unique violation preserves constraint name and code", func(t *testing.T) {
+		err := &pgconn.PgError{
+			Code:           ErrCodeUniqueViolation,
+			Message:        `duplicate key value violates unique constraint "users_email_key"`,
+			ConstraintName: "users_email_key",
+		}
+		msg := SanitizeErrorMessage(err)
+		assert.Contains(t, msg, "unique constraint violation")
+		assert.Contains(t, msg, "users_email_key")
+		assert.Contains(t, msg, "23505")
+		assert.NotContains(t, msg, "duplicate key value violates")
+	})
+
+	t.Run("foreign key violation preserves constraint name", func(t *testing.T) {
+		err := &pgconn.PgError{
+			Code:           ErrCodeForeignKeyViolation,
+			Message:        `insert or update on table "orders" violates foreign key constraint "orders_user_id_fkey"`,
+			ConstraintName: "orders_user_id_fkey",
+			Detail:         "Key (user_id)=(1) is not present in table \"users\".",
+		}
+		msg := SanitizeErrorMessage(err)
+		assert.Contains(t, msg, "foreign key constraint violation")
+		assert.Contains(t, msg, "orders_user_id_fkey")
+		assert.NotContains(t, msg, "users\".")
+	})
+
+	t.Run("check violation preserves constraint name", func(t *testing.T) {
+		err := &pgconn.PgError{
+			Code:           ErrCodeCheckViolation,
+			Message:        `new row for relation "items" violates check constraint "items_price_check"`,
+			ConstraintName: "items_price_check",
+		}
+		msg := SanitizeErrorMessage(err)
+		assert.Contains(t, msg, "check constraint violation")
+		assert.Contains(t, msg, "items_price_check")
+	})
+
+	t.Run("syntax error hides query text but keeps code", func(t *testing.T) {
+		err := &pgconn.PgError{
+			Code:    "42601",
+			Message: `syntax error at or near "DROP"`,
+		}
+		msg := SanitizeErrorMessage(err)
+		assert.Contains(t, msg, "42601")
+		assert.NotContains(t, msg, "DROP")
+	})
+
+	t.Run("insufficient privilege hides message", func(t *testing.T) {
+		err := &pgconn.PgError{
+			Code:    "42501",
+			Message: "permission denied for table auth_users",
+		}
+		msg := SanitizeErrorMessage(err)
+		assert.Contains(t, msg, "42501")
+		assert.NotContains(t, msg, "auth_users")
+	})
+
+	t.Run("integrity class fallback keeps only category and code", func(t *testing.T) {
+		err := &pgconn.PgError{
+			Code:    "23502",
+			Message: `null value in column "email" of relation "users" violates not-null constraint`,
+		}
+		msg := SanitizeErrorMessage(err)
+		assert.Contains(t, msg, "data integrity violation")
+		assert.Contains(t, msg, "23502")
+		assert.NotContains(t, msg, "email")
+	})
+
+	t.Run("non-pg errors get a generic message", func(t *testing.T) {
+		err := errors.New("failed to connect to postgres://admin:secret@10.0.0.1:5432/db")
+		msg := SanitizeErrorMessage(err)
+		assert.Equal(t, "database error", msg)
+		assert.NotContains(t, msg, "secret")
+	})
+
+	t.Run("wrapped pg errors are sanitized", func(t *testing.T) {
+		inner := &pgconn.PgError{Code: ErrCodeUniqueViolation, ConstraintName: "c"}
+		wrapped := fmt.Errorf("outer: %w", inner)
+		msg := SanitizeErrorMessage(wrapped)
+		assert.Contains(t, msg, "unique constraint violation")
+	})
 }

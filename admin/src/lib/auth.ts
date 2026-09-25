@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/stores/auth-store";
+import { useImpersonationStore } from "@/stores/impersonation-store";
 
 const USER_KEY = "fluxbase_admin_user";
 
@@ -72,6 +73,8 @@ export function setTokens(tokens: TokenPair, user: AdminUser): void {
 
 export function clearTokens(): void {
   if (typeof window === "undefined") return;
+  // End any active impersonation session when the admin logs out
+  useImpersonationStore.getState().stopImpersonation();
   useAuthStore.getState().auth.reset();
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem("user");

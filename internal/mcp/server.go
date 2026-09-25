@@ -4,14 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/rs/zerolog/log"
 
 	"github.com/nimbleflux/fluxbase/internal/config"
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 // MCPVersion is the MCP protocol version supported by this server
-const MCPVersion = "2024-11-05"
+const MCPVersion = "2025-06-18"
 
 // FluxbaseVersion should be set at build time
 var FluxbaseVersion = "unknown"
@@ -22,6 +24,7 @@ type Server struct {
 	transport *Transport
 	tools     *ToolRegistry
 	resources *ResourceRegistry
+	db        *database.Connection // optional; enables the MCP audit trail
 }
 
 // NewServer creates a new MCP server
@@ -32,6 +35,11 @@ func NewServer(cfg *config.MCPConfig) *Server {
 		tools:     NewToolRegistry(),
 		resources: NewResourceRegistry(),
 	}
+}
+
+// SetDB attaches a database connection used for best-effort audit logging.
+func (s *Server) SetDB(db *database.Connection) {
+	s.db = db
 }
 
 // ToolRegistry returns the tool registry for registration
@@ -178,8 +186,16 @@ func (s *Server) handleToolsCall(ctx context.Context, req *Request, authCtx *Aut
 		return NewToolNotFound(req.ID, params.Name)
 	}
 
+	// Tenant isolation: deny tools owned by another tenant
+	if !tenantAllowsAccess(authCtx, tool) {
+		return NewToolNotFound(req.ID, params.Name)
+	}
+
+	start := time.Now()
+
 	// Check if user has required scopes
 	if !authCtx.HasScopes(tool.RequiredScopes()...) {
+		s.writeAudit(ctx, authCtx, params.Name, params.Arguments, 0, false, "missing required scopes")
 		return NewForbidden(req.ID, fmt.Sprintf("missing required scopes for tool %s", params.Name))
 	}
 
@@ -190,14 +206,17 @@ func (s *Server) handleToolsCall(ctx context.Context, req *Request, authCtx *Aut
 		Msg("MCP: Executing tool")
 
 	result, err := tool.Execute(ctx, params.Arguments, authCtx)
+	durationMs := time.Since(start).Milliseconds()
 	if err != nil {
 		log.Error().
 			Err(err).
 			Str("tool", params.Name).
 			Msg("MCP: Tool execution failed")
-		return NewToolExecutionError(req.ID, err.Error())
+		s.writeAudit(ctx, authCtx, params.Name, params.Arguments, durationMs, false, err.Error())
+		return NewToolExecutionError(req.ID, sanitizeMCPError(err))
 	}
 
+	s.writeAudit(ctx, authCtx, params.Name, params.Arguments, durationMs, true, "")
 	return NewResult(req.ID, result)
 }
 
@@ -252,8 +271,16 @@ func (s *Server) handleResourcesRead(ctx context.Context, req *Request, authCtx 
 		return NewResourceNotFound(req.ID, params.URI)
 	}
 
+	// Tenant isolation: deny resources owned by another tenant
+	if !tenantAllowsAccess(authCtx, provider) {
+		return NewResourceNotFound(req.ID, params.URI)
+	}
+
+	start := time.Now()
+
 	// Check if user has required scopes
 	if !authCtx.HasScopes(provider.RequiredScopes()...) {
+		s.writeAudit(ctx, authCtx, "resources/read:"+params.URI, nil, 0, false, "missing required scopes")
 		return NewForbidden(req.ID, fmt.Sprintf("missing required scopes for resource %s", params.URI))
 	}
 
@@ -272,13 +299,17 @@ func (s *Server) handleResourcesRead(ctx context.Context, req *Request, authCtx 
 		contents, err = provider.Read(ctx, authCtx)
 	}
 
+	durationMs := time.Since(start).Milliseconds()
 	if err != nil {
 		log.Error().
 			Err(err).
 			Str("uri", params.URI).
 			Msg("MCP: Resource read failed")
-		return NewInternalError(req.ID, err.Error())
+		s.writeAudit(ctx, authCtx, "resources/read:"+params.URI, nil, durationMs, false, err.Error())
+		return NewInternalError(req.ID, sanitizeMCPError(err))
 	}
+
+	s.writeAudit(ctx, authCtx, "resources/read:"+params.URI, nil, durationMs, true, "")
 
 	// Convert Content to ResourceContents
 	resourceContents := make([]ResourceContents, 0, len(contents))

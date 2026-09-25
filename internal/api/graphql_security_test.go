@@ -1,7 +1,14 @@
 package api
 
 import (
+	"context"
 	"testing"
+
+	"github.com/graphql-go/graphql"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/nimbleflux/fluxbase/internal/database"
 )
 
 func TestCalculateQueryDepth_Security(t *testing.T) {
@@ -371,4 +378,119 @@ func TestRLSContextKey(t *testing.T) {
 	if GraphQLRLSContextKey != "graphql_rls_context" {
 		t.Errorf("GraphQLRLSContextKey = %q, want %q", GraphQLRLSContextKey, "graphql_rls_context")
 	}
+}
+
+// TestQueryContainsIntrospectionFields verifies the POST introspection guard (F7)
+func TestQueryContainsIntrospectionFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		query    string
+		expected bool
+		wantErr  bool
+	}{
+		{
+			name:     "plain query",
+			query:    `{ users { id } }`,
+			expected: false,
+		},
+		{
+			name:     "__schema reference",
+			query:    `{ __schema { queryType { name } } }`,
+			expected: true,
+		},
+		{
+			name:     "__type reference",
+			query:    `{ __type(name: "User") { name } }`,
+			expected: true,
+		},
+		{
+			name:     "nested __schema",
+			query:    `{ users { id __schema { queryType { name } } } }`,
+			expected: true,
+		},
+		{
+			name:     "introspection via named fragment",
+			query:    `query Q { ...F } fragment F on Query { __schema { queryType { name } } }`,
+			expected: true,
+		},
+		{
+			name:     "introspection via inline fragment",
+			query:    `{ ... on Query { __type(name: "X") { name } } }`,
+			expected: true,
+		},
+		{
+			name:     "field merely containing the word schema",
+			query:    `{ schema { name } }`,
+			expected: false,
+		},
+		{
+			name:     "syntax error",
+			query:    `{ users {`,
+			expected: false,
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := queryContainsIntrospectionFields(tt.query)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// TestGraphQLCollectionResolverLimitCap verifies the limit argument cap (F5/F7)
+func TestGraphQLCollectionResolverLimitCap(t *testing.T) {
+	gen := NewGraphQLSchemaGenerator(nil, nil, true)
+	gen.SetMaxPageSize(10)
+
+	table := database.TableInfo{
+		Schema: "public",
+		Name:   "users",
+		Columns: []database.ColumnInfo{
+			{Name: "id", DataType: "uuid"},
+		},
+		PrimaryKey: []string{"id"},
+	}
+
+	resolver := gen.makeCollectionResolver(table)
+
+	t.Run("limit is capped", func(t *testing.T) {
+		_, err := resolver(graphql.ResolveParams{
+			Context: context.Background(),
+			Args: map[string]interface{}{
+				"limit": 500,
+			},
+		})
+		// No DB configured, so execution fails after the query is built;
+		// the point is the cap does not panic and no error about limit occurs
+		assert.Error(t, err)
+	})
+
+	t.Run("negative limit is rejected", func(t *testing.T) {
+		_, err := resolver(graphql.ResolveParams{
+			Context: context.Background(),
+			Args: map[string]interface{}{
+				"limit": -1,
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "non-negative")
+	})
+
+	t.Run("negative offset is rejected", func(t *testing.T) {
+		_, err := resolver(graphql.ResolveParams{
+			Context: context.Background(),
+			Args: map[string]interface{}{
+				"offset": -1,
+			},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "non-negative")
+	})
 }

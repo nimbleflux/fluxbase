@@ -137,3 +137,7 @@ admin/playwright-report/
 # other path component named "fluxbase".
 /fluxbase
 .zcode/
+
+# Compiled binaries accidentally committed (kept locally, never tracked)
+/cmd/cli
+/cmd/cmd

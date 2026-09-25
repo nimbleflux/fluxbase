@@ -35,6 +35,7 @@ func NewImageTransformerWithOptions(opts TransformerOptions) *ImageTransformer {
 		maxHeight:      opts.MaxHeight,
 		maxTotalPixels: opts.MaxTotalPixels,
 		bucketSize:     opts.BucketSize,
+		maxSourceBytes: opts.MaxSourceBytes,
 	}
 }
 
@@ -63,6 +64,12 @@ func (t *ImageTransformer) ValidateOptions(opts *TransformOptions) error {
 	if totalPixels > 0 && totalPixels > t.maxTotalPixels {
 		return fmt.Errorf("%w: %dx%d = %d pixels exceeds maximum %d",
 			ErrTooManyPixels, opts.Width, opts.Height, totalPixels, t.maxTotalPixels)
+	}
+
+	// Single-axis requests: bound the derived other dimension by its static
+	// maximum (the exact check against the decoded source runs in Transform).
+	if err := t.checkOneDimensionPixels(opts); err != nil {
+		return err
 	}
 
 	// Validate format

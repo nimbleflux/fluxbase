@@ -11,6 +11,10 @@ type AuthContext struct {
 	// UserID is the authenticated user's ID (nil for anonymous or service key auth)
 	UserID *string
 
+	// TenantID is the tenant this request resolved to (empty when unknown).
+	// Used to scope tenant-owned custom tools/resources to their owner tenant.
+	TenantID string
+
 	// UserEmail is the authenticated user's email (empty for service key auth)
 	UserEmail string
 
@@ -213,9 +217,37 @@ func ExtractAuthContext(c fiber.Ctx) *AuthContext {
 		ctx.UserRole = userRole.(string)
 	}
 
-	// Check for service role
-	if ctx.UserRole == "service_role" || ctx.AuthType == "service_key" {
+	// Extract tenant from Fiber locals (set by tenant middleware)
+	if tenantID := c.Locals("tenant_id"); tenantID != nil {
+		if id, ok := tenantID.(string); ok {
+			ctx.TenantID = id
+		}
+	}
+
+	// Extract scopes from client key or service key. This must happen before
+	// the service-role determination below: a key with explicit scopes is not
+	// scope-exempt.
+	if scopes := c.Locals("client_key_scopes"); scopes != nil {
+		if scopeSlice, ok := scopes.([]string); ok {
+			ctx.Scopes = scopeSlice
+		}
+	}
+
+	if scopes := c.Locals("service_key_scopes"); scopes != nil {
+		if scopeSlice, ok := scopes.([]string); ok {
+			ctx.Scopes = scopeSlice
+		}
+	}
+
+	// Check for service role.
+	// A service key with an empty/NULL scope list is unrestricted (legacy
+	// keys); a key carrying explicit scopes must pass scope checks like any
+	// other caller, otherwise the key scopes would be decorative.
+	if ctx.UserRole == "service_role" {
 		ctx.IsServiceRole = true
+	}
+	if ctx.AuthType == "service_key" {
+		ctx.IsServiceRole = len(ctx.Scopes) == 0
 	}
 
 	// Extract client key info
@@ -227,17 +259,12 @@ func ExtractAuthContext(c fiber.Ctx) *AuthContext {
 		ctx.ClientKeyName = clientKeyName.(string)
 	}
 
-	// Extract scopes from client key or service key
-	if scopes := c.Locals("client_key_scopes"); scopes != nil {
-		if scopeSlice, ok := scopes.([]string); ok {
-			ctx.Scopes = scopeSlice
-		}
-	}
-
-	if scopes := c.Locals("service_key_scopes"); scopes != nil {
-		if scopeSlice, ok := scopes.([]string); ok {
-			ctx.Scopes = scopeSlice
-		}
+	// Mirror the clientkey middleware's RLS mapping: a client key bound to a
+	// user acts with the "authenticated" role (see rls_role in clientkey
+	// auth). Without this, tools would fall back to "anon" for client-key
+	// callers while REST requests run as "authenticated".
+	if ctx.AuthType == "clientkey" && ctx.UserRole == "" && ctx.UserID != nil && *ctx.UserID != "" {
+		ctx.UserRole = "authenticated"
 	}
 
 	// If no explicit scopes but authenticated via JWT, infer default scopes based on role

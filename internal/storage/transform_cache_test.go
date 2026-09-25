@@ -527,8 +527,9 @@ func TestTransformCache_evictUntilSize(t *testing.T) {
 
 	// Trigger eviction to reach target 200 bytes
 	cache.mu.Lock()
-	cache.evictUntilSize(ctx, 200)
+	victims := cache.evictVictimsUntilSize(200)
 	cache.mu.Unlock()
+	assert.NotEmpty(t, victims)
 
 	// Check eviction worked
 	size, _, _ = cache.Stats()

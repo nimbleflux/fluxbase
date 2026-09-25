@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,11 +17,12 @@ func TestBuildEnv_BasicEnvironmentSetup(t *testing.T) {
 		Namespace: "default",
 	}
 
-	env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, nil)
+	execDir := t.TempDir()
+	env := buildEnv(req, RuntimeTypeFunction, execDir, "", "", "", nil, nil)
 
-	// Verify essential Deno variables are set
-	assert.Contains(t, env, "DENO_DIR=/tmp/deno")
-	assert.Contains(t, env, "HOME=/tmp")
+	// Verify essential Deno variables are set and scoped to the execution dir
+	assert.Contains(t, env, "DENO_DIR="+filepath.Join(execDir, "deno-cache"))
+	assert.Contains(t, env, "HOME="+execDir)
 }
 
 func TestBuildEnv_RuntimeTypeFunction(t *testing.T) {
@@ -34,7 +36,7 @@ func TestBuildEnv_RuntimeTypeFunction(t *testing.T) {
 	userToken := "user-token-123"
 	serviceToken := "service-token-456"
 
-	env := buildEnv(req, RuntimeTypeFunction, "https://api.example.com", userToken, serviceToken, nil, nil)
+	env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "https://api.example.com", userToken, serviceToken, nil, nil)
 
 	// Verify function-specific variables
 	assert.Contains(t, env, "FLUXBASE_URL=https://api.example.com")
@@ -57,7 +59,7 @@ func TestBuildEnv_RuntimeTypeJob(t *testing.T) {
 	userToken := "job-token-789"
 	serviceToken := "service-token-abc"
 
-	env := buildEnv(req, RuntimeTypeJob, "https://api.example.com", userToken, serviceToken, nil, nil)
+	env := buildEnv(req, RuntimeTypeJob, t.TempDir(), "https://api.example.com", userToken, serviceToken, nil, nil)
 
 	// Verify job-specific variables
 	assert.Contains(t, env, "FLUXBASE_URL=https://api.example.com")
@@ -78,32 +80,32 @@ func TestBuildEnv_CancellationSignal(t *testing.T) {
 
 	t.Run("function not cancelled", func(t *testing.T) {
 		cancelSignal := NewCancelSignal()
-		env := buildEnv(req, RuntimeTypeFunction, "", "", "", cancelSignal, nil)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", cancelSignal, nil)
 		assert.Contains(t, env, "FLUXBASE_FUNCTION_CANCELLED=false")
 	})
 
 	t.Run("function cancelled", func(t *testing.T) {
 		cancelSignal := NewCancelSignal()
 		cancelSignal.Cancel()
-		env := buildEnv(req, RuntimeTypeFunction, "", "", "", cancelSignal, nil)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", cancelSignal, nil)
 		assert.Contains(t, env, "FLUXBASE_FUNCTION_CANCELLED=true")
 	})
 
 	t.Run("job not cancelled", func(t *testing.T) {
 		cancelSignal := NewCancelSignal()
-		env := buildEnv(req, RuntimeTypeJob, "", "", "", cancelSignal, nil)
+		env := buildEnv(req, RuntimeTypeJob, t.TempDir(), "", "", "", cancelSignal, nil)
 		assert.Contains(t, env, "FLUXBASE_JOB_CANCELLED=false")
 	})
 
 	t.Run("job cancelled", func(t *testing.T) {
 		cancelSignal := NewCancelSignal()
 		cancelSignal.Cancel()
-		env := buildEnv(req, RuntimeTypeJob, "", "", "", cancelSignal, nil)
+		env := buildEnv(req, RuntimeTypeJob, t.TempDir(), "", "", "", cancelSignal, nil)
 		assert.Contains(t, env, "FLUXBASE_JOB_CANCELLED=true")
 	})
 
 	t.Run("nil cancel signal", func(t *testing.T) {
-		env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, nil)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, nil)
 		assert.Contains(t, env, "FLUXBASE_FUNCTION_CANCELLED=false")
 	})
 }
@@ -122,7 +124,7 @@ func TestBuildEnv_Secrets(t *testing.T) {
 			"api_secret": "secret-789",
 		}
 
-		env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, secrets)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, secrets)
 
 		assert.Contains(t, env, "FLUXBASE_SECRET_API_KEY=key-123")
 		assert.Contains(t, env, "FLUXBASE_SECRET_DB_PASS=pass-456")
@@ -135,7 +137,7 @@ func TestBuildEnv_Secrets(t *testing.T) {
 			"FLUXBASE_SETTING_MAX_SIZE": "1000",
 		}
 
-		env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, secrets)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, secrets)
 
 		assert.Contains(t, env, "FLUXBASE_USER_API_KEY=user-key")
 		assert.Contains(t, env, "FLUXBASE_SETTING_MAX_SIZE=1000")
@@ -149,7 +151,7 @@ func TestBuildEnv_Secrets(t *testing.T) {
 			"FLUXBASE_USER_TOKEN_EXTRA": "extra",
 		}
 
-		env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, secrets)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, secrets)
 
 		assert.Contains(t, env, "FLUXBASE_SECRET_API_KEY=key-123")
 		assert.Contains(t, env, "FLUXBASE_CUSTOM_SETTING=value")
@@ -158,7 +160,7 @@ func TestBuildEnv_Secrets(t *testing.T) {
 	})
 
 	t.Run("empty secrets", func(t *testing.T) {
-		env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, map[string]string{})
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, map[string]string{})
 
 		// Should not contain any FLUXBASE_SECRET_ variables
 		for _, e := range env {
@@ -167,7 +169,7 @@ func TestBuildEnv_Secrets(t *testing.T) {
 	})
 
 	t.Run("nil secrets", func(t *testing.T) {
-		env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, nil)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, nil)
 
 		// Should not contain any FLUXBASE_SECRET_ variables
 		for _, e := range env {
@@ -199,7 +201,7 @@ func TestBuildEnv_BlockedVariables(t *testing.T) {
 		t.Setenv(v, "secret-value")
 	}
 
-	env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, nil)
+	env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, nil)
 
 	// Verify blocked variables are not in the environment
 	for _, blockedVar := range blockedVars {
@@ -223,7 +225,7 @@ func TestBuildEnv_AllowedFluxbaseVariables(t *testing.T) {
 	t.Setenv("FLUXBASE_CUSTOM_VAR", "custom-value")
 	t.Setenv("FLUXBASE_TIMEOUT", "30s")
 
-	env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, nil)
+	env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, nil)
 
 	// Verify allowed variables are passed through
 	assert.Contains(t, env, "FLUXBASE_DEBUG=true")
@@ -243,7 +245,7 @@ func TestBuildEnv_SystemVariables(t *testing.T) {
 	t.Setenv("SSL_CERT_FILE", "/etc/ssl/certs/ca-certificates.crt")
 	t.Setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
 
-	env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, nil)
+	env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, nil)
 
 	// Verify system variables are included
 	assert.Contains(t, env, "PATH=/usr/bin:/bin")
@@ -259,7 +261,7 @@ func TestBuildEnv_EmptyTokens(t *testing.T) {
 	}
 
 	t.Run("function with empty tokens", func(t *testing.T) {
-		env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, nil)
+		env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, nil)
 
 		// Verify token variables are not present when empty
 		for _, e := range env {
@@ -269,7 +271,7 @@ func TestBuildEnv_EmptyTokens(t *testing.T) {
 	})
 
 	t.Run("job with empty tokens", func(t *testing.T) {
-		env := buildEnv(req, RuntimeTypeJob, "", "", "", nil, nil)
+		env := buildEnv(req, RuntimeTypeJob, t.TempDir(), "", "", "", nil, nil)
 
 		// Verify token variables are not present when empty
 		for _, e := range env {
@@ -286,7 +288,7 @@ func TestBuildEnv_EmptyPublicURL(t *testing.T) {
 		Namespace: "default",
 	}
 
-	env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, nil)
+	env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, nil)
 
 	// Verify FLUXBASE_URL is not present when empty
 	for _, e := range env {
@@ -444,6 +446,7 @@ func TestBuildEnv_Integration(t *testing.T) {
 		"FLUXBASE_FEATURE_FLAG": "true",
 	}
 
+	execDir := t.TempDir()
 	cancelSignal := NewCancelSignal()
 
 	// Set some environment variables
@@ -454,6 +457,7 @@ func TestBuildEnv_Integration(t *testing.T) {
 	env := buildEnv(
 		req,
 		RuntimeTypeFunction,
+		execDir,
 		"https://api.prod.example.com",
 		"user-token-xyz",
 		"service-token-abc",
@@ -461,9 +465,9 @@ func TestBuildEnv_Integration(t *testing.T) {
 		secrets,
 	)
 
-	// Verify everything is present and correct
-	assert.Contains(t, env, "DENO_DIR=/tmp/deno")
-	assert.Contains(t, env, "HOME=/tmp")
+	// Verify everything is present and correct (Deno state scoped to the execution dir)
+	assert.Contains(t, env, "DENO_DIR="+filepath.Join(execDir, "deno-cache"))
+	assert.Contains(t, env, "HOME="+execDir)
 	assert.Contains(t, env, "PATH=/usr/local/bin")
 	assert.Contains(t, env, "FLUXBASE_DEBUG=true")
 	assert.Contains(t, env, "FLUXBASE_URL=https://api.prod.example.com")
@@ -508,7 +512,7 @@ func TestBuildEnv_SystemVariablesNotSetIfMissing(t *testing.T) {
 		_ = os.Unsetenv(v)
 	}
 
-	env := buildEnv(req, RuntimeTypeFunction, "", "", "", nil, nil)
+	env := buildEnv(req, RuntimeTypeFunction, t.TempDir(), "", "", "", nil, nil)
 
 	// Verify system variables are not in env when not set
 	for _, sysVar := range systemVars {

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 
@@ -120,7 +119,7 @@ type TestEmailSettingsRequest struct {
 // GetSettings returns the current email settings
 // GET /api/v1/admin/email/settings
 func (h *EmailSettingsHandler) GetSettings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	if err := h.requireService(c); err != nil {
 		return err
@@ -226,7 +225,7 @@ func (h *EmailSettingsHandler) GetSettings(c fiber.Ctx) error {
 // UpdateSettings updates email settings
 // PUT /api/v1/admin/email/settings
 func (h *EmailSettingsHandler) UpdateSettings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 
 	var req UpdateEmailSettingsRequest
 	if err := ParseBody(c, &req); err != nil {
@@ -409,7 +408,7 @@ func (h *EmailSettingsHandler) TestSettings(c fiber.Ctx) error {
 	}
 
 	// Send test email
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	subject := "Fluxbase Email Configuration Test"
 	body := `<html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -455,7 +454,7 @@ func (h *EmailSettingsHandler) GetSettingsForTenant(c fiber.Ctx) error {
 	isDefaultTenant, _ := c.Locals("is_default_tenant").(bool)
 	tenantSlug, _ := c.Locals("tenant_slug").(string)
 
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	response := TenantEmailSettingsResponse{
 		EmailSettingsResponse: EmailSettingsResponse{
 			Overrides: make(map[string]OverrideInfo),
@@ -581,7 +580,7 @@ func (h *EmailSettingsHandler) UpdateSettingsForTenant(c fiber.Ctx) error {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	var updatedKeys []string
 
 	// Helper to update a non-secret setting via UnifiedService
@@ -704,7 +703,7 @@ func (h *EmailSettingsHandler) DeleteSettingForTenant(c fiber.Ctx) error {
 		return SendBadRequest(c, "field parameter required", ErrCodeMissingField)
 	}
 
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	if err := h.unifiedService.DeleteTenantSetting(ctx, tenantID, "email."+field); err != nil {
 		log.Error().Err(err).Str("field", field).Msg("Failed to delete tenant email setting")
 		return SendInternalError(c, "Failed to delete tenant email setting override")
@@ -749,7 +748,7 @@ func (h *EmailSettingsHandler) TestSettingsForTenant(c fiber.Ctx) error {
 		return SendErrorWithCode(c, 503, "Failed to create email service for tenant", ErrCodeFeatureDisabled)
 	}
 
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	subject := "Fluxbase Email Configuration Test"
 	body := `<html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">

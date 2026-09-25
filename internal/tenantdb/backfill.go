@@ -10,6 +10,20 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// tenantIDDedupTables lists tables that have a per-tenant uniqueness partition
+// key (e.g. UNIQUE(email, tenant_id)). Before backfilling NULL tenant_id rows
+// to the default tenant, only the oldest row per key is updated — see
+// buildDedupBackfillUpdate.
+var tenantIDDedupTables = map[string][]string{
+	"auth.users":               {"email"},
+	"functions.edge_functions": {"name, namespace"},
+	"storage.buckets":          {"name"},
+	"branching.branches":       {"name", "slug"},
+	"branching.github_config":  {"repository"},
+	"mcp.custom_tools":         {"name, namespace"},
+	"mcp.custom_resources":     {"uri, namespace"},
+}
+
 // BackfillTenantIDToDefault assigns NULL tenant_id rows to the default tenant.
 // This handles the upgrade path from pre-multi-tenant Fluxbase where all data
 // was created without tenant context.
@@ -28,16 +42,6 @@ func BackfillTenantIDToDefault(pool *pgxpool.Pool) error {
 			return nil
 		}
 		return fmt.Errorf("failed to get default tenant: %w", err)
-	}
-
-	tenantIDDedupTables := map[string][]string{
-		"auth.users":               {"email"},
-		"functions.edge_functions": {"name, namespace"},
-		"storage.buckets":          {"name"},
-		"branching.branches":       {"name", "slug"},
-		"branching.github_config":  {"repository"},
-		"mcp.custom_tools":         {"name, namespace"},
-		"mcp.custom_resources":     {"uri, namespace"},
 	}
 
 	tables := []string{
@@ -125,24 +129,18 @@ func BackfillTenantIDToDefault(pool *pgxpool.Pool) error {
 	for _, table := range tables {
 		if dedupSets, needsDedup := tenantIDDedupTables[table]; needsDedup {
 			for _, dedupCols := range dedupSets {
-				dedupQuery := fmt.Sprintf(
-					"DELETE FROM %s WHERE id IN (SELECT id FROM (SELECT id, row_number() OVER (PARTITION BY %s ORDER BY created_at DESC) AS rn FROM %s WHERE tenant_id IS NULL) sub WHERE rn > 1)",
-					table, dedupCols, table,
-				)
-				if dedupResult, err := pool.Exec(ctx, dedupQuery); err != nil {
+				// Least-destructive dedupe: instead of deleting rows, only the
+				// oldest NULL-tenant row per partition key is backfilled — and
+				// only when the key is not already occupied by an existing
+				// default-tenant row. Sibling rows keep tenant_id NULL (they
+				// stay preserved and invisible to tenant-scoped queries) rather
+				// than being deleted, so pre-existing distinct users that share
+				// an email (or other partition key) are never destroyed.
+				dedupQuery := buildDedupBackfillUpdate(table, dedupCols)
+				if dedupResult, err := pool.Exec(ctx, dedupQuery, defaultTenantID); err != nil {
 					log.Warn().Err(err).Str("table", table).Str("cols", dedupCols).Msg("Failed to dedup NULL-tenant rows before backfill")
 				} else if n := dedupResult.RowsAffected(); n > 0 {
-					log.Info().Str("table", table).Str("cols", dedupCols).Int64("duplicates_removed", n).Msg("Removed duplicate NULL-tenant rows before backfill")
-				}
-
-				conflictQuery := fmt.Sprintf(
-					"DELETE FROM %s WHERE id IN (SELECT n.id FROM %s n WHERE n.tenant_id IS NULL AND EXISTS (SELECT 1 FROM %s e WHERE e.tenant_id = $1 AND (%s)))",
-					table, table, table, buildJoinCondition(dedupCols, "n", "e"),
-				)
-				if conflictResult, err := pool.Exec(ctx, conflictQuery, defaultTenantID); err != nil {
-					log.Warn().Err(err).Str("table", table).Str("cols", dedupCols).Msg("Failed to remove NULL-tenant rows conflicting with existing tenant rows")
-				} else if n := conflictResult.RowsAffected(); n > 0 {
-					log.Info().Str("table", table).Str("cols", dedupCols).Int64("conflicts_removed", n).Msg("Removed NULL-tenant rows that would conflict with existing tenant rows")
+					log.Info().Str("table", table).Str("cols", dedupCols).Int64("rows_backfilled", n).Msg("Backfilled oldest NULL-tenant row per partition key")
 				}
 			}
 		}
@@ -169,6 +167,28 @@ func BackfillTenantIDToDefault(pool *pgxpool.Pool) error {
 	}
 
 	return nil
+}
+
+// buildDedupBackfillUpdate builds the guarded backfill UPDATE for tables with
+// a per-tenant partition key (e.g. auth.users keyed by email). The UPDATE:
+//  1. only touches rows with tenant_id IS NULL,
+//  2. skips a key entirely when a default-tenant row already occupies it
+//     (avoids unique-convention conflicts without deleting the NULL rows),
+//  3. updates only the oldest NULL-tenant row per key (lowest id), so the row
+//     most likely to own related data survives; duplicate siblings keep
+//     tenant_id NULL instead of being deleted.
+//
+// No DELETE is ever emitted.
+func buildDedupBackfillUpdate(table string, cols string) string {
+	keyOccupied := buildJoinCondition(cols, "e", "t") // e.col = t.col
+	hasOlderSibling := buildJoinCondition(cols, "x", "t")
+	return fmt.Sprintf(
+		`UPDATE %s t SET tenant_id = $1::uuid
+WHERE t.tenant_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM %s e WHERE e.tenant_id = $1::uuid AND (%s))
+  AND NOT EXISTS (SELECT 1 FROM %s x WHERE x.tenant_id IS NULL AND (%s) AND x.id < t.id)`,
+		table, table, keyOccupied, table, hasOlderSibling,
+	)
 }
 
 func buildJoinCondition(cols, leftAlias, rightAlias string) string {

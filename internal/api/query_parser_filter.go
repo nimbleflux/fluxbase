@@ -26,12 +26,24 @@ func (qp *QueryParser) parseFilter(key, value string, params *QueryParams) error
 		column := parts[0]
 		operator := FilterOperator(parts[1])
 
+		// Validate column reference before it is interpolated into SQL
+		if !isValidColumnReference(column) {
+			return fmt.Errorf("invalid filter column name: %s", column)
+		}
+
 		// Parse value based on operator
 		var filterValue interface{}
 		switch operator {
 		case OpIn:
 			// Parse array values: (1,2,3) or ["a","b","c"]
 			filterValue = qp.parseArrayValue(value)
+		case OpBetween:
+			// Parse range values: (1,10)
+			bounds, err := qp.parseBetweenValue(value)
+			if err != nil {
+				return err
+			}
+			filterValue = bounds
 		case OpIs:
 			// Parse null/true/false - H-14: Validate boolean values
 			switch value {
@@ -67,6 +79,11 @@ func (qp *QueryParser) parseFilter(key, value string, params *QueryParams) error
 		operatorStr := value[:dotIndex]
 		filterValue := value[dotIndex+1:]
 
+		// Validate column reference before it is interpolated into SQL
+		if !isValidColumnReference(column) {
+			return fmt.Errorf("invalid filter column name: %s", column)
+		}
+
 		operator := FilterOperator(operatorStr)
 
 		// Parse value based on operator
@@ -75,6 +92,13 @@ func (qp *QueryParser) parseFilter(key, value string, params *QueryParams) error
 		case OpIn:
 			// Parse array values: (1,2,3) or ["a","b","c"]
 			parsedValue = qp.parseArrayValue(filterValue)
+		case OpBetween:
+			// Parse range values: (1,10)
+			bounds, err := qp.parseBetweenValue(filterValue)
+			if err != nil {
+				return err
+			}
+			parsedValue = bounds
 		case OpIs:
 			// Parse null/true/false - H-14: Validate boolean values
 			switch filterValue {
@@ -160,12 +184,24 @@ func (qp *QueryParser) parseLogicalFilter(value string, params *QueryParams, isO
 		operator := FilterOperator(parts[1])
 		rawValue := parts[2]
 
+		// Validate column reference before it is interpolated into SQL
+		if !isValidColumnReference(column) {
+			return fmt.Errorf("invalid filter column name: %s", column)
+		}
+
 		// Parse value based on operator (same logic as regular filter parsing)
 		var parsedValue interface{}
 		switch operator {
 		case OpIn:
 			// Parse array values: (1,2,3) or ["a","b","c"]
 			parsedValue = qp.parseArrayValue(rawValue)
+		case OpBetween:
+			// Parse range values: (1,10)
+			bounds, err := qp.parseBetweenValue(rawValue)
+			if err != nil {
+				return err
+			}
+			parsedValue = bounds
 		case OpIs:
 			// Parse null/true/false - H-14: Validate boolean values
 			switch rawValue {
@@ -221,12 +257,24 @@ func (qp *QueryParser) parseNestedOrGroup(value string, params *QueryParams) err
 		operator := FilterOperator(parts[1])
 		rawValue := parts[2]
 
+		// Validate column reference before it is interpolated into SQL
+		if !isValidColumnReference(column) {
+			return fmt.Errorf("invalid filter column name: %s", column)
+		}
+
 		// Parse value based on operator (same logic as regular filter parsing)
 		var parsedValue interface{}
 		switch operator {
 		case OpIn:
 			// Parse array values: (1,2,3) or ["a","b","c"]
 			parsedValue = qp.parseArrayValue(rawValue)
+		case OpBetween:
+			// Parse range values: (1,10)
+			bounds, err := qp.parseBetweenValue(rawValue)
+			if err != nil {
+				return err
+			}
+			parsedValue = bounds
 		case OpIs:
 			// Parse null/true/false - H-14: Validate boolean values
 			switch rawValue {
@@ -312,4 +360,14 @@ func (qp *QueryParser) parseArrayValue(value string) []string {
 	}
 
 	return result
+}
+
+// parseBetweenValue parses a between range value: (1,10) or ["a","z"].
+// Exactly two bounds are required; they keep their original order.
+func (qp *QueryParser) parseBetweenValue(value string) ([]interface{}, error) {
+	items := qp.parseArrayValue(value)
+	if len(items) != 2 {
+		return nil, fmt.Errorf("invalid value for between operator: %s (exactly two bounds required, e.g. (1,10))", value)
+	}
+	return []interface{}{items[0], items[1]}, nil
 }

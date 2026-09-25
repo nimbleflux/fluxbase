@@ -33,13 +33,68 @@ type StorageHandler struct {
 	transformConfig *config.TransformConfig
 	transformCache  *storage.TransformCache
 
-	transformLimiters   map[string]*rate.Limiter
+	transformLimiters   map[string]*limiterEntry
 	transformLimitersMu sync.Mutex
 	transformRateLimit  rate.Limit
 	transformBurst      int
 
 	transformSem     chan struct{}
 	signedURLLimiter *ipRateLimiter
+}
+
+// limiterEntry tracks a per-key transform rate limiter along with the last
+// time it was used, so idle entries can be evicted (bounded memory).
+type limiterEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+// transformLimiterIdleTTL is how long an unused transform rate limiter entry
+// is kept before the periodic sweep evicts it.
+const transformLimiterIdleTTL = time.Hour
+
+// maintenanceInterval is how often the handler's background sweeper runs.
+const maintenanceInterval = 10 * time.Minute
+
+// StartMaintenance launches the handler's background maintenance goroutine:
+// it periodically evicts idle rate-limiter entries (bounded maps) and removes
+// expired transform-cache entries. Cancel ctx to stop it.
+func (h *StorageHandler) StartMaintenance(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(maintenanceInterval)
+		defer ticker.Stop()
+
+		cacheTicker := time.NewTicker(1 * time.Hour)
+		defer cacheTicker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				h.sweepRateLimiters()
+			case <-cacheTicker.C:
+				if h.transformCache != nil {
+					h.transformCache.Cleanup(ctx)
+				}
+			}
+		}
+	}()
+}
+
+// sweepRateLimiters evicts expired signed-URL limiter entries and transform
+// limiter entries that have been idle longer than transformLimiterIdleTTL.
+func (h *StorageHandler) sweepRateLimiters() {
+	h.signedURLLimiter.sweep()
+
+	h.transformLimitersMu.Lock()
+	now := time.Now()
+	for key, entry := range h.transformLimiters {
+		if now.Sub(entry.lastSeen) > transformLimiterIdleTTL {
+			delete(h.transformLimiters, key)
+		}
+	}
+	h.transformLimitersMu.Unlock()
 }
 
 // NewStorageHandler creates a new storage handler with automatic cache initialization
@@ -120,7 +175,7 @@ func NewStorageHandlerWithCache(storageMgr *storage.Manager, db *database.Connec
 		transformer:        transformer,
 		transformConfig:    transformCfg,
 		transformCache:     cache,
-		transformLimiters:  make(map[string]*rate.Limiter),
+		transformLimiters:  make(map[string]*limiterEntry),
 		transformRateLimit: rateLimit,
 		transformBurst:     burst,
 		transformSem:       transformSem,
@@ -158,12 +213,13 @@ func (h *StorageHandler) getTransformLimiter(key string) *rate.Limiter {
 	h.transformLimitersMu.Lock()
 	defer h.transformLimitersMu.Unlock()
 
-	limiter, exists := h.transformLimiters[key]
+	entry, exists := h.transformLimiters[key]
 	if !exists {
-		limiter = rate.NewLimiter(h.transformRateLimit, h.transformBurst)
-		h.transformLimiters[key] = limiter
+		entry = &limiterEntry{limiter: rate.NewLimiter(h.transformRateLimit, h.transformBurst)}
+		h.transformLimiters[key] = entry
 	}
-	return limiter
+	entry.lastSeen = time.Now()
+	return entry.limiter
 }
 
 // acquireTransformSlot attempts to acquire a slot for transform processing

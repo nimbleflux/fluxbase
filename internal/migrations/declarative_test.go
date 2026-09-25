@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -234,6 +235,89 @@ func TestHasDestructiveChanges(t *testing.T) {
 			assert.Equal(t, tt.want, hasDestructiveChanges(tt.changes))
 		})
 	}
+}
+
+// =============================================================================
+// partitionDestructiveChanges Tests
+// =============================================================================
+//
+// Contract source: declarative.go partitionDestructiveChanges. Splits plan
+// changes into executable vs blocked; a change is blocked iff it is destructive
+// and allowDestructive is false. This is the destructive re-check that
+// applyPlanDirectly runs before executing any SQL (finding: the invariant was
+// previously held only by pgschema's plan flag).
+
+func TestPartitionDestructiveChanges(t *testing.T) {
+	t.Parallel()
+	createCol := Change{Type: ChangeCreate, SQL: "ALTER TABLE t ADD COLUMN c int"}
+	dropTable := Change{Type: ChangeDrop, SQL: "DROP TABLE t", Destructive: true}
+	dropIdx := Change{Type: ChangeDrop, SQL: "DROP INDEX idx", Destructive: true}
+
+	t.Run("nil changes", func(t *testing.T) {
+		t.Parallel()
+		executable, blocked := partitionDestructiveChanges(nil, false)
+		assert.Empty(t, executable)
+		assert.Empty(t, blocked)
+	})
+
+	t.Run("destructive blocked when disallowed", func(t *testing.T) {
+		t.Parallel()
+		changes := []Change{createCol, dropTable, dropIdx}
+		executable, blocked := partitionDestructiveChanges(changes, false)
+		assert.Equal(t, []Change{createCol}, executable)
+		assert.Equal(t, []Change{dropTable, dropIdx}, blocked)
+	})
+
+	t.Run("destructive allowed passes through", func(t *testing.T) {
+		t.Parallel()
+		changes := []Change{createCol, dropTable}
+		executable, blocked := partitionDestructiveChanges(changes, true)
+		assert.Equal(t, changes, executable)
+		assert.Empty(t, blocked)
+	})
+
+	t.Run("non-destructive never blocked", func(t *testing.T) {
+		t.Parallel()
+		executable, blocked := partitionDestructiveChanges([]Change{createCol}, false)
+		assert.Equal(t, []Change{createCol}, executable)
+		assert.Empty(t, blocked)
+	})
+
+	t.Run("default privilege normalization executes on fresh databases", func(t *testing.T) {
+		t.Parallel()
+		// pgschema marks these destructive, but they only narrow default
+		// privileges for future objects — required for fresh startups.
+		revokeDefaults := Change{
+			Type:        ChangeDrop,
+			SQL:         "ALTER DEFAULT PRIVILEGES FOR ROLE fluxbase IN SCHEMA auth REVOKE SELECT, UPDATE, USAGE ON SEQUENCES FROM service_role;",
+			Destructive: true,
+		}
+		changes := []Change{createCol, revokeDefaults, dropTable}
+		executable, blocked := partitionDestructiveChanges(changes, false)
+		assert.Equal(t, []Change{createCol, revokeDefaults}, executable)
+		assert.Equal(t, []Change{dropTable}, blocked)
+	})
+}
+
+// TestPreviewSQL covers the SQL truncation helper used in destructive-blocked
+// error messages.
+func TestPreviewSQL(t *testing.T) {
+	t.Parallel()
+	t.Run("short sql unchanged", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "DROP TABLE t", previewSQL("DROP TABLE t", 120))
+	})
+	t.Run("trimmed", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "x", previewSQL("  x  ", 120))
+	})
+	t.Run("long sql truncated with ellipsis", func(t *testing.T) {
+		t.Parallel()
+		long := strings.Repeat("a", 200)
+		got := previewSQL(long, 120)
+		assert.Len(t, got, 120)
+		assert.True(t, strings.HasSuffix(got, "..."))
+	})
 }
 
 // =============================================================================

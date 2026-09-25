@@ -47,6 +47,8 @@ DRY_RUN=false
 NO_STOP=false
 FORCE=false
 PARALLEL_JOBS=4
+NO_OWNER=false
+NO_PRIVILEGES=false
 
 # Database connection defaults
 PGHOST="${PGHOST:-localhost}"
@@ -91,6 +93,9 @@ Options:
   --no-stop           Don't stop Fluxbase during restore
   --force             Skip confirmation prompts
   --parallel N        Number of parallel jobs for pg_restore (default: 4)
+  --no-owner          pg_restore: skip ownership commands (use when PGUSER is
+                      not a superuser or the original roles do not exist)
+  --no-privileges     pg_restore: skip GRANT/REVOKE commands
   -h, --help          Show this help message
 
 Environment Variables:
@@ -173,6 +178,14 @@ parse_args() {
                 PARALLEL_JOBS="$2"
                 shift 2
                 ;;
+            --no-owner)
+                NO_OWNER=true
+                shift
+                ;;
+            --no-privileges)
+                NO_PRIVILEGES=true
+                shift
+                ;;
             -h|--help)
                 usage
                 ;;
@@ -203,6 +216,7 @@ find_backup_files() {
     local backup_dir="$1"
     local db_file=""
     local storage_file=""
+    local globals_file=""
 
     # If a specific file was provided, use it
     if [ -f "$backup_dir" ]; then
@@ -210,15 +224,20 @@ find_backup_files() {
             db_file="$backup_dir"
         elif [[ "$backup_dir" == *.tar* ]]; then
             storage_file="$backup_dir"
+        elif [[ "$backup_dir" == *.sql* ]]; then
+            globals_file="$backup_dir"
         fi
     elif [ -d "$backup_dir" ]; then
         # Find most recent database backup
         db_file=$(find "$backup_dir" -name "database_*.dump*" -type f 2>/dev/null | sort -r | head -1)
         # Find most recent storage backup
         storage_file=$(find "$backup_dir" -name "storage_*.tar*" -type f 2>/dev/null | sort -r | head -1)
+        # Find matching cluster-globals backup (roles/passwords; produced by
+        # backup.sh alongside the database dump)
+        globals_file=$(find "$backup_dir" -name "globals_*.sql*" -type f 2>/dev/null | sort -r | head -1)
     fi
 
-    echo "$db_file|$storage_file"
+    echo "$db_file|$storage_file|$globals_file"
 }
 
 verify_backup() {
@@ -402,8 +421,22 @@ restore_database() {
     # Restore
     log "Restoring data (this may take a while)..."
 
+    # This script connects as PGUSER (default: postgres) and creates/drops
+    # databases, i.e. it assumes a superuser connection. By default ownership
+    # and privilege (GRANT/REVOKE) commands are preserved so RLS roles and
+    # grants are restored exactly as backed up — the cluster-globals dump is
+    # applied first so the referenced roles exist. Pass --no-owner and/or
+    # --no-privileges when restoring as a non-superuser or into a cluster
+    # where the original roles must not be touched.
     local restore_args=(-h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$TARGET_DB")
-    restore_args+=(--no-owner --no-privileges)
+
+    if [ "$NO_OWNER" = true ]; then
+        restore_args+=(--no-owner)
+    fi
+
+    if [ "$NO_PRIVILEGES" = true ]; then
+        restore_args+=(--no-privileges)
+    fi
 
     if [ "$PARALLEL_JOBS" -gt 1 ]; then
         restore_args+=(-j "$PARALLEL_JOBS")
@@ -425,6 +458,37 @@ restore_database() {
             return 3
         fi
     fi
+}
+
+restore_globals() {
+    local globals_file="$1"
+
+    log "Restoring cluster globals (roles) from: $globals_file"
+
+    # Globals are plain SQL produced by `pg_dumpall --globals-only` and must be
+    # applied before pg_restore so the roles referenced by ownership/GRANT
+    # statements exist. Applied against the `postgres` database; errors for
+    # roles that already exist on the target cluster are expected and harmless
+    # (ON_ERROR_STOP stays off, so psql keeps going and exits 0).
+    local out
+    if [[ "$globals_file" == *.gz ]]; then
+        if ! out=$(gunzip -c "$globals_file" | psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -v ON_ERROR_STOP=0 2>&1); then
+            error "Failed to apply cluster globals: $globals_file"
+            return 3
+        fi
+    else
+        if ! out=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -v ON_ERROR_STOP=0 -f "$globals_file" 2>&1); then
+            error "Failed to apply cluster globals: $globals_file"
+            return 3
+        fi
+    fi
+
+    # Surface anything other than benign "already exists" notices.
+    if [ -n "$out" ]; then
+        echo "$out" | grep -v "already exists" >&2 || true
+    fi
+
+    log "Cluster globals restore completed"
 }
 
 restore_storage_local() {
@@ -561,7 +625,7 @@ main() {
     check_dependencies
 
     # Find backup files
-    IFS='|' read -r db_file storage_file <<< "$(find_backup_files "$BACKUP_PATH")"
+    IFS='|' read -r db_file storage_file globals_file <<< "$(find_backup_files "$BACKUP_PATH")"
 
     log "Backup discovery:"
     if [ -n "$db_file" ]; then
@@ -570,6 +634,15 @@ main() {
         if [ "$STORAGE_ONLY" = false ]; then
             error "No database backup found in: $BACKUP_PATH"
             exit 5
+        fi
+    fi
+
+    if [ -n "$globals_file" ]; then
+        info "  Cluster globals: $globals_file"
+    else
+        if [ "$STORAGE_ONLY" = false ]; then
+            warn "No cluster-globals backup found in: $BACKUP_PATH"
+            warn "  Roles/passwords from the backup will NOT be recreated; ownership/grants may fail (or use --no-owner --no-privileges)"
         fi
     fi
 
@@ -603,6 +676,12 @@ main() {
     stop_fluxbase
 
     local exit_code=0
+
+    # Restore cluster globals (roles) FIRST so pg_restore can apply ownership
+    # and grants against the recreated roles.
+    if [ "$STORAGE_ONLY" = false ] && [ -n "$globals_file" ]; then
+        restore_globals "$globals_file" || exit_code=$?
+    fi
 
     # Restore database
     if [ "$STORAGE_ONLY" = false ] && [ -n "$db_file" ]; then

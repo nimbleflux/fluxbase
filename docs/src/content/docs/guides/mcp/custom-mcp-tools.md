@@ -65,6 +65,9 @@ Configure your chatbot to use the custom tool. Custom tools use a colon-separate
 - Default namespace: `custom:tool_name`
 - Other namespaces: `custom:namespace:tool_name`
 
+:::note[Per-tenant tool registry]
+Custom tools are **tenant-scoped**. A tool created within a tenant context is invisible to other tenants, and tenant-owned tool names carry a tenant suffix (`custom:name@{tenant-prefix}`) so two tenants can safely define same-named tools in the shared registry. Tools registered without a tenant (operator-installed) are visible to everyone.
+
 ```typescript
 // order_assistant.ts
 /**

@@ -1,4 +1,4 @@
-.PHONY: help dev dev-full ensure-embed-placeholder ensure-embedded-sdk ensure-sdks build build-lite build-full clean fmt lint test migrate-up migrate-down migrate-create db-reset db-reset-full db-grants deps setup-dev install-hooks uninstall-hooks docs docs-build docs-check-links version docker-build docker-push release cli cli-install cli-completions viz-deps viz-deps-svg viz-internal viz-callgraph viz-callgraph-svg viz-uml viz-uml-api viz-uml-auth viz-module-deps viz-all test-cleanup test-cli
+.PHONY: help dev dev-full ensure-embed-placeholder ensure-embedded-sdk ensure-sdks build build-lite build-full clean fmt lint lint-go lint-typescript test migrate-up migrate-down migrate-create db-reset db-reset-full db-grants deps setup-dev install-hooks uninstall-hooks docs docs-build docs-check-links version docker-build docker-push release cli cli-install cli-completions viz-deps viz-deps-svg viz-internal viz-callgraph viz-callgraph-svg viz-uml viz-uml-api viz-uml-auth viz-module-deps viz-all test-cleanup test-cli
 
 # Variables
 BINARY_NAME=fluxbase-server
@@ -256,6 +256,13 @@ lint: ## Run golangci-lint with all enabled linters
 	@command -v golangci-lint >/dev/null 2>&1 || curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$(go env GOPATH)/bin v2.10.0
 	@golangci-lint run --timeout 10m ./...
 	@echo "${GREEN}Linting complete!${NC}"
+
+lint-go: lint ## Alias for lint (Go golangci-lint)
+
+lint-typescript: ## Lint Admin UI TypeScript (same as the CI lint-typescript job)
+	@echo "${YELLOW}Linting Admin UI (TypeScript)...${NC}"
+	@cd admin && unset NODE_OPTIONS && bun run lint
+	@echo "${GREEN}TypeScript linting complete!${NC}"
 
 test: ## Run all tests with race detector (short mode - skips slow tests, excludes e2e)
 	@FLUXBASE_LOG_LEVEL=info ./scripts/test-runner.sh go test -timeout 2m -v -race -short -cover $(shell go list ./... | grep -v '/test/e2e')
@@ -723,25 +730,26 @@ docker-push: docker-build-production ## Push Docker image to registry (FLAVOR=fu
 	@docker push $(DOCKER_IMAGE):latest$(FLAVOR_SUFFIX)
 	@echo "${GREEN}Docker images pushed!${NC}"
 
-bump-patch: ## Bump patch version (0.1.0 -> 0.1.1)
+# Bump targets update ONLY the VERSION file. Compose image defaults, the Helm
+# Chart appVersion, and SDK package.json versions are updated by the release
+# workflow (update-version-files job); keeping copies in sync here drifted
+# (and the old `sed -i ''` edits were BSD-only, failing on GNU sed).
+bump-patch: ## Bump patch version (2026.9.2 -> 2026.9.3)
 	@echo "${YELLOW}Bumping patch version...${NC}"
 	@NEW_VERSION=$$(echo $(VERSION) | awk -F. '{$$3 = $$3 + 1;} 1' | sed 's/ /./g'); \
 	echo $$NEW_VERSION > VERSION; \
-	sed -i '' 's/$${FLUXBASE_VERSION:-$(VERSION)}/$${FLUXBASE_VERSION:-'"$$NEW_VERSION"'}/g' deploy/docker-compose.minimal.yaml; \
 	echo "${GREEN}Version bumped to $$NEW_VERSION${NC}"
 
-bump-minor: ## Bump minor version (0.1.0 -> 0.2.0)
+bump-minor: ## Bump minor version (2026.9.2 -> 2027.0.0)
 	@echo "${YELLOW}Bumping minor version...${NC}"
 	@NEW_VERSION=$$(echo $(VERSION) | awk -F. '{$$2 = $$2 + 1; $$3 = 0;} 1' | sed 's/ /./g'); \
 	echo $$NEW_VERSION > VERSION; \
-	sed -i '' 's/$${FLUXBASE_VERSION:-$(VERSION)}/$${FLUXBASE_VERSION:-'"$$NEW_VERSION"'}/g' deploy/docker-compose.minimal.yaml; \
 	echo "${GREEN}Version bumped to $$NEW_VERSION${NC}"
 
-bump-major: ## Bump major version (0.1.0 -> 1.0.0)
+bump-major: ## Bump major version (2026.9.2 -> 2027.9.2)
 	@echo "${YELLOW}Bumping major version...${NC}"
 	@NEW_VERSION=$$(echo $(VERSION) | awk -F. '{$$1 = $$1 + 1; $$2 = 0; $$3 = 0;} 1' | sed 's/ /./g'); \
 	echo $$NEW_VERSION > VERSION; \
-	sed -i '' 's/$${FLUXBASE_VERSION:-$(VERSION)}/$${FLUXBASE_VERSION:-'"$$NEW_VERSION"'}/g' deploy/docker-compose.minimal.yaml; \
 	echo "${GREEN}Version bumped to $$NEW_VERSION${NC}"
 
 release-tag: ## Create and push git tag for current version

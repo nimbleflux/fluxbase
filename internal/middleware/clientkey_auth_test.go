@@ -627,7 +627,7 @@ func TestMapKeyTypetoRole(t *testing.T) {
 		{"anon constant", keys.KeyTypeAnon, "anon"},
 		{"tenant_service constant", keys.KeyTypeTenantService, "tenant_service"},
 		{"global_service constant", keys.KeyTypeGlobalService, "service_role"},
-		{"publishable constant", keys.KeyTypePublishable, "authenticated"},
+		{"publishable constant", keys.KeyTypePublishable, "anon"},
 		{"legacy service type", "service", "service_role"},
 		{"unknown type defaults to anon", "unknown", "anon"},
 		{"empty type defaults to anon", "", "anon"},
@@ -933,5 +933,71 @@ func TestRequireAuth_ExpiredBearerStillRejects(t *testing.T) {
 
 	require.NoError(t, err)
 	// Required routes do NOT degrade — expiry still 401s.
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+// =============================================================================
+// Query-param credential restriction (WebSocket-only) tests
+// =============================================================================
+
+func TestQueryToken_IgnoredForNonWebSocketRequests(t *testing.T) {
+	app, authService := authTestApp(t, false)
+
+	// A perfectly valid user access token in the query string must be ignored
+	// for plain HTTP requests.
+	accessToken, _, _, err := authService.JWTManager().GenerateTokenPair("user-1", "user@example.com", "authenticated", nil, nil)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/settings/k?token="+accessToken, nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(body), `"has_user_id":false`, "query-param token must not authenticate plain requests")
+}
+
+func TestQueryToken_AcceptedForWebSocketUpgrade(t *testing.T) {
+	app, authService := authTestApp(t, false)
+
+	accessToken, _, _, err := authService.JWTManager().GenerateTokenPair("user-1", "user@example.com", "authenticated", nil, nil)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/settings/k?token="+accessToken, nil)
+	req.Header.Set("Upgrade", "WebSocket")
+	req.Header.Set("Connection", "Upgrade")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(body), `"has_user_id":true`, "query-param token must authenticate WebSocket upgrades")
+}
+
+// =============================================================================
+// Refresh tokens are not bearer credentials tests
+// =============================================================================
+
+func TestOptionalAuth_RefreshTokenAsBearerRejected(t *testing.T) {
+	app, authService := authTestApp(t, false)
+
+	_, refreshToken, _, err := authService.JWTManager().GenerateTokenPair("user-1", "user@example.com", "authenticated", nil, nil)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/settings/k", nil)
+	req.Header.Set("Authorization", "Bearer "+refreshToken)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "refresh tokens must not authenticate as bearer credentials")
+}
+
+func TestRequireAuth_RefreshTokenAsBearerRejected(t *testing.T) {
+	app, authService := authTestApp(t, true)
+
+	_, refreshToken, _, err := authService.JWTManager().GenerateTokenPair("user-1", "user@example.com", "authenticated", nil, nil)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/settings/k", nil)
+	req.Header.Set("Authorization", "Bearer "+refreshToken)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

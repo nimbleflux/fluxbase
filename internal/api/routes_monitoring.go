@@ -8,6 +8,7 @@ import (
 func (s *Server) buildMonitoringRouteDeps() *routes.MonitoringDeps {
 	return &routes.MonitoringDeps{
 		RequireAuth:        s.requireAuth,
+		RequireRole:        RequireRole,
 		RequireScope:       middleware.RequireScope,
 		TenantMiddleware:   s.Middleware.Tenant,
 		TenantDBMiddleware: s.Middleware.TenantDB,

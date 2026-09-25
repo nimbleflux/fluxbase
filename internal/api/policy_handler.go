@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -70,7 +69,7 @@ func NewPolicyHandlers(db *database.Connection) *PolicyHandlers {
 // ListPolicies returns all RLS policies
 // GET /api/v1/admin/policies
 func (h *PolicyHandlers) ListPolicies(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	pool := tenantPool(c, h.db)
 	schema := c.Query("schema", "")
 
@@ -122,7 +121,7 @@ func (h *PolicyHandlers) ListPolicies(c fiber.Ctx) error {
 // GetTablesWithRLS returns all tables with their RLS status and policies
 // GET /api/v1/admin/tables/rls
 func (h *PolicyHandlers) GetTablesWithRLS(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	pool := tenantPool(c, h.db)
 	schema := c.Query("schema", "public")
 
@@ -229,7 +228,7 @@ func (h *PolicyHandlers) GetTablesWithRLS(c fiber.Ctx) error {
 // GetTableRLSStatus returns RLS status and policies for a specific table
 // GET /api/v1/admin/tables/:schema/:table/rls
 func (h *PolicyHandlers) GetTableRLSStatus(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	pool := tenantPool(c, h.db)
 	schema := c.Params("schema")
 	table := c.Params("table")
@@ -282,10 +281,15 @@ func (h *PolicyHandlers) GetTableRLSStatus(c fiber.Ctx) error {
 // ToggleTableRLS enables or disables RLS on a table
 // POST /api/v1/admin/tables/:schema/:table/rls/toggle
 func (h *PolicyHandlers) ToggleTableRLS(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	pool := tenantPool(c, h.db)
 	schema := c.Params("schema")
 	table := c.Params("table")
+
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, schema); err != nil {
+		return err
+	}
 
 	var req struct {
 		Enabled bool `json:"enabled"`
@@ -357,7 +361,7 @@ func (h *PolicyHandlers) ToggleTableRLS(c fiber.Ctx) error {
 // CreatePolicy creates a new RLS policy
 // POST /api/v1/admin/policies
 func (h *PolicyHandlers) CreatePolicy(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	pool := tenantPool(c, h.db)
 
 	var req CreatePolicyRequest
@@ -368,6 +372,11 @@ func (h *PolicyHandlers) CreatePolicy(c fiber.Ctx) error {
 	// Validate inputs
 	if req.Schema == "" || req.Table == "" || req.Name == "" {
 		return SendBadRequest(c, "schema, table, and name are required", "MISSING_FIELDS")
+	}
+
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, req.Schema); err != nil {
+		return err
 	}
 
 	// Validate policy name format
@@ -426,11 +435,16 @@ func (h *PolicyHandlers) CreatePolicy(c fiber.Ctx) error {
 // DeletePolicy drops an RLS policy
 // DELETE /api/v1/admin/policies/:schema/:table/:policy
 func (h *PolicyHandlers) DeletePolicy(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	pool := tenantPool(c, h.db)
 	schema := c.Params("schema")
 	table := c.Params("table")
 	policy := c.Params("policy")
+
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, schema); err != nil {
+		return err
+	}
 
 	sql := fmt.Sprintf(
 		"DROP POLICY %s ON %s.%s",
@@ -459,11 +473,16 @@ type UpdatePolicyRequest struct {
 // Note: PostgreSQL's ALTER POLICY can only change roles, USING, and WITH CHECK.
 // It cannot change the policy name, command type, or permissive/restrictive mode.
 func (h *PolicyHandlers) UpdatePolicy(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	pool := tenantPool(c, h.db)
 	schema := c.Params("schema")
 	table := c.Params("table")
 	policyName := c.Params("policy")
+
+	// Protected schemas require instance-level privileges
+	if err := checkProtectedSchema(c, schema); err != nil {
+		return err
+	}
 
 	var req UpdatePolicyRequest
 	if err := ParseBody(c, &req); err != nil {
@@ -520,7 +539,7 @@ func (h *PolicyHandlers) UpdatePolicy(c fiber.Ctx) error {
 // GetSecurityWarnings scans for security issues
 // GET /api/v1/admin/security/warnings
 func (h *PolicyHandlers) GetSecurityWarnings(c fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.RequestCtx()
 	pool := tenantPool(c, h.db)
 	warnings := []SecurityWarning{}
 

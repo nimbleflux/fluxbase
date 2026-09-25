@@ -301,3 +301,89 @@ GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE mcp.custom_resources TO tenant_ser
 
 GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE mcp.custom_tools TO tenant_service;
 
+
+--
+-- Name: audit_log; Type: TABLE; Schema: -; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id uuid DEFAULT gen_random_uuid(),
+    tenant_id uuid,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    auth_type varchar(32),
+    user_id uuid,
+    client_key_id text,
+    tool text NOT NULL,
+    arguments jsonb,
+    duration_ms integer,
+    success boolean NOT NULL,
+    error text,
+    CONSTRAINT audit_log_pkey PRIMARY KEY (id)
+);
+
+
+COMMENT ON TABLE audit_log IS 'Durable audit trail for MCP tool calls and resource reads (best-effort, one row per operation)';
+
+
+COMMENT ON COLUMN mcp.audit_log.tool IS 'Tool name, or "resources/read:<uri>" for resource reads';
+
+
+--
+-- Name: idx_audit_log_created_at; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log (created_at);
+
+--
+-- Name: idx_audit_log_tenant_id; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant_id ON audit_log (tenant_id);
+
+--
+-- Name: idx_audit_log_tool; Type: INDEX; Schema: -; Owner: -
+--
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_tool ON audit_log (tool);
+
+--
+-- Name: audit_log; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: audit_log; Type: RLS; Schema: -; Owner: -
+--
+
+ALTER TABLE audit_log FORCE ROW LEVEL SECURITY;
+
+--
+-- Name: audit_log_tenant; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY audit_log_tenant ON audit_log
+    FOR ALL TO tenant_service
+    USING (auth.has_tenant_access(tenant_id))
+    WITH CHECK (auth.has_tenant_access(tenant_id));
+
+--
+-- Name: audit_log_admin; Type: POLICY; Schema: -; Owner: -
+--
+
+CREATE POLICY audit_log_admin ON audit_log
+    FOR ALL TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+--
+-- Name: audit_log; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE audit_log TO service_role;
+
+--
+-- Name: audit_log; Type: PRIVILEGE; Schema: privileges; Owner: -
+--
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE mcp.audit_log TO tenant_service;

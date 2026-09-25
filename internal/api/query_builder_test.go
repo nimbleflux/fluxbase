@@ -130,7 +130,7 @@ func TestQueryBuilder_BuildSelect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := tt.setup()
-			sql, args := qb.BuildSelect()
+			sql, args, _ := qb.BuildSelect()
 			assert.Equal(t, tt.expectedSQL, sql)
 			assert.Equal(t, tt.expectedArgs, args)
 		})
@@ -168,7 +168,7 @@ func TestQueryBuilder_BuildCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := tt.setup()
-			sql, args := qb.BuildCount()
+			sql, args, _ := qb.BuildCount()
 			assert.Equal(t, tt.expectedSQL, sql)
 			assert.Equal(t, tt.expectedArgs, args)
 		})
@@ -295,7 +295,7 @@ func TestQueryBuilder_BuildUpdate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := tt.setup()
-			sql, args := qb.BuildUpdate(tt.data)
+			sql, args, _ := qb.BuildUpdate(tt.data)
 
 			if tt.expectedArgs == 0 && len(tt.data) == 0 {
 				assert.Empty(t, sql)
@@ -354,7 +354,7 @@ func TestQueryBuilder_BuildDelete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := tt.setup()
-			sql, args := qb.BuildDelete()
+			sql, args, _ := qb.BuildDelete()
 			assert.Equal(t, tt.expectedSQL, sql)
 			assert.Equal(t, tt.expectedArgs, args)
 		})
@@ -422,7 +422,7 @@ func TestQueryBuilder_FilterOperators(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder("public", "t").
 				WithFilters([]Filter{tt.filter})
-			sql, args := qb.BuildSelect()
+			sql, args, _ := qb.BuildSelect()
 			assert.Equal(t, tt.expectedSQL, sql)
 			assert.Equal(t, tt.expectedArgs, args)
 		})
@@ -430,26 +430,42 @@ func TestQueryBuilder_FilterOperators(t *testing.T) {
 }
 
 func TestQueryBuilder_InvalidIdentifiers(t *testing.T) {
-	t.Run("invalid column name is skipped", func(t *testing.T) {
+	t.Run("invalid column name is skipped in select list", func(t *testing.T) {
 		qb := NewQueryBuilder("public", "users").
 			WithColumns([]string{"valid_col", "invalid col", "another_valid"})
-		sql, _ := qb.BuildSelect()
+		sql, _, _ := qb.BuildSelect()
 		// Invalid column should be skipped
 		assert.Contains(t, sql, `"valid_col"`)
 		assert.Contains(t, sql, `"another_valid"`)
 		assert.NotContains(t, sql, "invalid col")
 	})
 
-	t.Run("filter with invalid column is skipped", func(t *testing.T) {
+	t.Run("filter with invalid column returns an error", func(t *testing.T) {
 		qb := NewQueryBuilder("public", "users").
 			WithFilters([]Filter{
 				{Column: "valid", Operator: OpEqual, Value: 1},
 				{Column: "has space", Operator: OpEqual, Value: 2},
 			})
-		sql, args := qb.BuildSelect()
-		assert.Contains(t, sql, `"valid" = $1`)
-		assert.NotContains(t, sql, "has space")
-		assert.Equal(t, 1, len(args))
+		sql, args, err := qb.BuildSelect()
+		require.Error(t, err)
+		assert.Empty(t, sql)
+		assert.Nil(t, args)
+	})
+
+	t.Run("order with invalid column returns an error", func(t *testing.T) {
+		qb := NewQueryBuilder("public", "users").
+			WithOrder([]OrderBy{{Column: "bad col", Desc: true}})
+		sql, _, err := qb.BuildSelect()
+		require.Error(t, err)
+		assert.Empty(t, sql)
+	})
+
+	t.Run("cursor with invalid column returns an error", func(t *testing.T) {
+		qb := NewQueryBuilder("public", "users")
+		require.NoError(t, qb.WithCursor(EncodeCursor("bad col", "x", false), ""))
+		sql, _, err := qb.BuildSelect()
+		require.Error(t, err)
+		assert.Empty(t, sql)
 	})
 }
 
@@ -458,7 +474,7 @@ func TestNewQueryBuilder(t *testing.T) {
 		qb := NewQueryBuilder("myschema", "mytable")
 		assert.NotNil(t, qb)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 		assert.Equal(t, `SELECT * FROM "myschema"."mytable"`, sql)
 		assert.Nil(t, args)
 	})
@@ -536,7 +552,7 @@ func TestQueryBuilder_WithCursor(t *testing.T) {
 		err := qb.WithCursor(cursor, "")
 		assert.NoError(t, err)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 		assert.Contains(t, sql, `WHERE "id" > $1`)
 		assert.Len(t, args, 1)
 		assert.Equal(t, "last123", args[0])
@@ -549,7 +565,7 @@ func TestQueryBuilder_WithCursor(t *testing.T) {
 		err := qb.WithCursor(cursor, "")
 		assert.NoError(t, err)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 		assert.Contains(t, sql, `WHERE "created_at" < $1`)
 		assert.Len(t, args, 1)
 	})
@@ -561,7 +577,7 @@ func TestQueryBuilder_WithCursor(t *testing.T) {
 		err := qb.WithCursor(cursor, "new_column")
 		assert.NoError(t, err)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 		assert.Contains(t, sql, `WHERE "new_column" > $1`)
 		assert.Len(t, args, 1)
 	})
@@ -574,7 +590,7 @@ func TestQueryBuilder_WithCursor(t *testing.T) {
 		err := qb.WithCursor(cursor, "")
 		assert.NoError(t, err)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 		assert.Contains(t, sql, "WHERE")
 		assert.Contains(t, sql, `"status" = $1`)
 		assert.Contains(t, sql, `"id" > $2`)
@@ -586,7 +602,7 @@ func TestQueryBuilder_WithCursor(t *testing.T) {
 		err := qb.WithCursor("", "")
 		assert.NoError(t, err)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 		assert.Equal(t, `SELECT * FROM "public"."users"`, sql)
 		assert.Nil(t, args)
 	})
@@ -617,7 +633,7 @@ func TestQueryBuilder_ComplexQueries(t *testing.T) {
 			WithLimit(50).
 			WithOffset(100)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, `SELECT "id", "customer_id", "total", "status"`)
 		assert.Contains(t, sql, `FROM "public"."orders"`)
@@ -637,7 +653,7 @@ func TestQueryBuilder_ComplexQueries(t *testing.T) {
 				{Column: "category", Operator: OpEqual, Value: "computers", OrGroupID: 1},
 			})
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, `("category" = $1 OR "category" = $2)`)
 		assert.Equal(t, []interface{}{"electronics", "computers"}, args)
@@ -653,7 +669,7 @@ func TestQueryBuilder_ComplexQueries(t *testing.T) {
 				{Column: "priority", Operator: OpEqual, Value: "urgent", OrGroupID: 2},
 			})
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, `"status" =`)
 		assert.Contains(t, sql, `("type" =`)
@@ -670,7 +686,7 @@ func TestQueryBuilder_ComplexQueries(t *testing.T) {
 				{Column: "deleted_at", Operator: OpIs, Value: nil},
 			})
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, `WHERE "deleted_at" IS NULL`)
 		assert.Nil(t, args)
@@ -682,7 +698,7 @@ func TestQueryBuilder_ComplexQueries(t *testing.T) {
 				{Column: "published_at", Operator: OpIsNot, Value: nil},
 			})
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		// OpIsNot is handled as != comparison, not IS NOT NULL
 		assert.Contains(t, sql, `WHERE "published_at" =`)
@@ -695,7 +711,7 @@ func TestQueryBuilder_ComplexQueries(t *testing.T) {
 				{Column: "status", Operator: OpIn, Value: []string{"pending", "in_progress", "queued"}},
 			})
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, `WHERE "status" = ANY($1)`)
 		assert.Equal(t, []string{"pending", "in_progress", "queued"}, args[0])
@@ -707,7 +723,7 @@ func TestQueryBuilder_ComplexQueries(t *testing.T) {
 				{Column: "name", Operator: OpLike, Value: "%iPhone%"},
 			})
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, `WHERE "name" LIKE $1`)
 		assert.Equal(t, "%iPhone%", args[0])
@@ -719,7 +735,7 @@ func TestQueryBuilder_ComplexQueries(t *testing.T) {
 				{Column: "email", Operator: OpILike, Value: "*@gmail.com"},
 			})
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, `WHERE "email" ILIKE $1`)
 		assert.Equal(t, "*@gmail.com", args[0])
@@ -730,7 +746,7 @@ func TestQueryBuilder_ComplexQueries(t *testing.T) {
 func TestQueryBuilder_EdgeCases(t *testing.T) {
 	t.Run("empty query builder", func(t *testing.T) {
 		qb := NewQueryBuilder("public", "users")
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Equal(t, `SELECT * FROM "public"."users"`, sql)
 		assert.Nil(t, args)
@@ -740,7 +756,7 @@ func TestQueryBuilder_EdgeCases(t *testing.T) {
 		qb := NewQueryBuilder("public", "items").
 			WithLimit(10)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Equal(t, `SELECT * FROM "public"."items" LIMIT 10`, sql)
 		assert.Nil(t, args)
@@ -750,7 +766,7 @@ func TestQueryBuilder_EdgeCases(t *testing.T) {
 		qb := NewQueryBuilder("public", "data").
 			WithOrder([]OrderBy{{Column: "id", Desc: false}})
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Equal(t, `SELECT * FROM "public"."data" ORDER BY "id" ASC`, sql)
 		assert.Nil(t, args)
@@ -760,7 +776,7 @@ func TestQueryBuilder_EdgeCases(t *testing.T) {
 		qb := NewQueryBuilder("public", "records").
 			WithOffset(100)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Equal(t, `SELECT * FROM "public"."records" OFFSET 100`, sql)
 		assert.Nil(t, args)
@@ -770,7 +786,7 @@ func TestQueryBuilder_EdgeCases(t *testing.T) {
 		qb := NewQueryBuilder("public", "items").
 			WithLimit(0)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, "LIMIT 0")
 		assert.Nil(t, args)
@@ -780,7 +796,7 @@ func TestQueryBuilder_EdgeCases(t *testing.T) {
 		qb := NewQueryBuilder("public", "items").
 			WithOffset(0)
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, "OFFSET 0")
 		assert.Nil(t, args)
@@ -790,38 +806,40 @@ func TestQueryBuilder_EdgeCases(t *testing.T) {
 		qb := NewQueryBuilder("public", "users").
 			WithColumns([]string{"valid_col", "invalid-col", "another_valid"})
 
-		sql, _ := qb.BuildSelect()
+		sql, _, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, `"valid_col"`)
 		assert.Contains(t, sql, `"another_valid"`)
 		assert.NotContains(t, sql, "invalid-col")
 	})
 
-	t.Run("query with invalid column in filter", func(t *testing.T) {
+	t.Run("query with invalid column in filter errors", func(t *testing.T) {
 		qb := NewQueryBuilder("public", "users").
 			WithFilters([]Filter{
 				{Column: "valid", Operator: OpEqual, Value: 1},
 				{Column: "invalid-col", Operator: OpEqual, Value: 2},
 			})
 
-		sql, args := qb.BuildSelect()
+		// Invalid filter columns must fail loudly, never silently produce
+		// an unfiltered query.
+		sql, args, err := qb.BuildSelect()
 
-		assert.Contains(t, sql, `"valid" =`)
-		assert.NotContains(t, sql, "invalid-col")
-		assert.Equal(t, 1, len(args))
+		assert.Error(t, err)
+		assert.Empty(t, sql)
+		assert.Empty(t, args)
 	})
 
-	t.Run("query with invalid column in order", func(t *testing.T) {
+	t.Run("query with invalid column in order errors", func(t *testing.T) {
 		qb := NewQueryBuilder("public", "users").
 			WithOrder([]OrderBy{
 				{Column: "valid_col", Desc: true},
 				{Column: "invalid-col", Desc: false},
 			})
 
-		sql, _ := qb.BuildSelect()
+		sql, _, err := qb.BuildSelect()
 
-		assert.Contains(t, sql, `"valid_col" DESC`)
-		assert.NotContains(t, sql, "invalid-col")
+		assert.Error(t, err)
+		assert.Empty(t, sql)
 	})
 
 	t.Run("insert with all types of values", func(t *testing.T) {
@@ -854,7 +872,7 @@ func TestQueryBuilder_EdgeCases(t *testing.T) {
 			"age":   30,
 		}
 
-		sql, args := qb.BuildUpdate(data)
+		sql, args, _ := qb.BuildUpdate(data)
 
 		assert.Contains(t, sql, `UPDATE "public"."users" SET`)
 		assert.Contains(t, sql, `WHERE "id" =`)
@@ -867,7 +885,7 @@ func TestQueryBuilder_EdgeCases(t *testing.T) {
 				{Column: "created_at", Operator: OpLessThan, Value: "2024-01-01"},
 			})
 
-		sql, args := qb.BuildDelete()
+		sql, args, _ := qb.BuildDelete()
 
 		assert.Equal(t, `DELETE FROM "public"."logs" WHERE "created_at" < $1`, sql)
 		assert.Equal(t, "2024-01-01", args[0])
@@ -879,7 +897,7 @@ func TestQueryBuilder_EdgeCases(t *testing.T) {
 				{Column: "status", Operator: OpEqual, Value: "completed"},
 			})
 
-		sql, args := qb.BuildCount()
+		sql, args, _ := qb.BuildCount()
 
 		assert.Equal(t, `SELECT COUNT(*) FROM "public"."orders" WHERE "status" = $1`, sql)
 		assert.Equal(t, "completed", args[0])
@@ -913,7 +931,7 @@ func TestQueryBuilder_WithReturning(t *testing.T) {
 			"name": "Updated",
 		}
 
-		sql, args := qb.BuildUpdate(data)
+		sql, args, _ := qb.BuildUpdate(data)
 
 		assert.Contains(t, sql, "RETURNING")
 		assert.Contains(t, sql, `"id"`)
@@ -929,7 +947,7 @@ func TestQueryBuilder_WithReturning(t *testing.T) {
 			}).
 			WithReturning([]string{"id", "name"})
 
-		sql, args := qb.BuildDelete()
+		sql, args, _ := qb.BuildDelete()
 
 		assert.Contains(t, sql, "RETURNING")
 		assert.Contains(t, sql, `"id"`)
@@ -982,7 +1000,7 @@ func TestQueryBuilder_OrderWithNulls(t *testing.T) {
 			qb := NewQueryBuilder("public", "items").
 				WithOrder([]OrderBy{tt.order})
 
-			sql, _ := qb.BuildSelect()
+			sql, _, _ := qb.BuildSelect()
 
 			assert.Contains(t, sql, "ORDER BY")
 			assert.Contains(t, sql, tt.expected)
@@ -999,7 +1017,7 @@ func TestQueryBuilder_MultipleOrderColumns(t *testing.T) {
 			{Column: "name", Desc: false, Nulls: "last"},
 		})
 
-	sql, _ := qb.BuildSelect()
+	sql, _, _ := qb.BuildSelect()
 
 	assert.Contains(t, sql, `ORDER BY "category" ASC, "price" DESC, "name" ASC NULLS LAST`)
 }
@@ -1014,7 +1032,7 @@ func TestQueryBuilder_FilterCombinations(t *testing.T) {
 				{Column: "stock", Operator: OpGreaterThan, Value: 0},
 			})
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, `WHERE "price" >= $1`)
 		assert.Contains(t, sql, `AND "price" <= $2`)
@@ -1030,7 +1048,7 @@ func TestQueryBuilder_FilterCombinations(t *testing.T) {
 				{Column: "priority", Operator: OpEqual, Value: "urgent", OrGroupID: 1},
 			})
 
-		sql, args := qb.BuildSelect()
+		sql, args, _ := qb.BuildSelect()
 
 		assert.Contains(t, sql, `"status" =`)
 		assert.Contains(t, sql, `("priority" =`)

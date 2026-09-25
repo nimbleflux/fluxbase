@@ -135,16 +135,22 @@ type UpdateResourceRequest struct {
 type ListToolsFilter struct {
 	Namespace   string
 	EnabledOnly bool
-	Limit       int
-	Offset      int
+	// AllTenants disables the tenant filter so system loaders can register
+	// every tenant's tools (per-tenant visibility is then enforced by the
+	// MCP registries at list/execution time).
+	AllTenants bool
+	Limit      int
+	Offset     int
 }
 
 // ListResourcesFilter represents filters for listing custom resources.
 type ListResourcesFilter struct {
 	Namespace   string
 	EnabledOnly bool
-	Limit       int
-	Offset      int
+	// AllTenants disables the tenant filter; see ListToolsFilter.
+	AllTenants bool
+	Limit      int
+	Offset     int
 }
 
 // ToolExecutionResult represents the result of executing a custom tool.

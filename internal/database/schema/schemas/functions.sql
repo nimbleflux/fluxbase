@@ -176,7 +176,7 @@ CREATE POLICY functions_edge_functions_owner ON edge_functions TO PUBLIC USING (
 -- Name: functions_edge_functions_public_read; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY functions_edge_functions_public_read ON edge_functions FOR SELECT TO PUBLIC USING ((is_public = true) AND (enabled = true));
+CREATE POLICY functions_edge_functions_public_read ON edge_functions FOR SELECT TO PUBLIC USING ((is_public = true) AND (enabled = true) AND auth.has_tenant_access(tenant_id));
 
 --
 -- Name: functions_edge_functions_service; Type: POLICY; Schema: -; Owner: -
@@ -578,7 +578,7 @@ CREATE POLICY functions_shared_modules_owner ON shared_modules TO PUBLIC USING (
 -- Name: functions_shared_modules_read; Type: POLICY; Schema: -; Owner: -
 --
 
-CREATE POLICY functions_shared_modules_read ON shared_modules FOR SELECT TO PUBLIC USING (auth.current_user_id() IS NOT NULL);
+CREATE POLICY functions_shared_modules_read ON shared_modules FOR SELECT TO PUBLIC USING ((auth.current_user_id() IS NOT NULL) AND auth.has_tenant_access(tenant_id));
 
 --
 -- Name: functions_shared_modules_service; Type: POLICY; Schema: -; Owner: -

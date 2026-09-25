@@ -8,15 +8,16 @@ import (
 
 // FunctionsConfig contains edge functions settings
 type FunctionsConfig struct {
-	Enabled             bool     `mapstructure:"enabled"`
-	FunctionsDir        string   `mapstructure:"functions_dir"`
-	AutoLoadOnBoot      bool     `mapstructure:"auto_load_on_boot"`      // Load functions from filesystem at boot
-	DefaultTimeout      int      `mapstructure:"default_timeout"`        // seconds
-	MaxTimeout          int      `mapstructure:"max_timeout"`            // seconds
-	DefaultMemoryLimit  int      `mapstructure:"default_memory_limit"`   // MB
-	MaxMemoryLimit      int      `mapstructure:"max_memory_limit"`       // MB
-	MaxOutputSize       int      `mapstructure:"max_output_size"`        // Max output size in bytes (0 = unlimited, default: 10MB)
-	SyncAllowedIPRanges []string `mapstructure:"sync_allowed_ip_ranges"` // IP CIDR ranges allowed to sync functions
+	Enabled                 bool     `mapstructure:"enabled"`
+	FunctionsDir            string   `mapstructure:"functions_dir"`
+	AutoLoadOnBoot          bool     `mapstructure:"auto_load_on_boot"`         // Load functions from filesystem at boot
+	DefaultTimeout          int      `mapstructure:"default_timeout"`           // seconds
+	MaxTimeout              int      `mapstructure:"max_timeout"`               // seconds
+	DefaultMemoryLimit      int      `mapstructure:"default_memory_limit"`      // MB
+	MaxMemoryLimit          int      `mapstructure:"max_memory_limit"`          // MB
+	MaxOutputSize           int      `mapstructure:"max_output_size"`           // Max output size in bytes (0 = unlimited, default: 10MB)
+	MaxConcurrentExecutions int      `mapstructure:"max_concurrent_executions"` // Global cap on concurrent function executions (0 = default 32)
+	SyncAllowedIPRanges     []string `mapstructure:"sync_allowed_ip_ranges"`    // IP CIDR ranges allowed to sync functions
 }
 
 // Validate validates functions configuration
@@ -46,6 +47,11 @@ func (fc *FunctionsConfig) Validate() error {
 	}
 	if fc.DefaultMemoryLimit > fc.MaxMemoryLimit {
 		return fmt.Errorf("default_memory_limit (%d) cannot be greater than max_memory_limit (%d)", fc.DefaultMemoryLimit, fc.MaxMemoryLimit)
+	}
+
+	// Validate global execution concurrency cap (0 means "use default")
+	if fc.MaxConcurrentExecutions < 0 {
+		return fmt.Errorf("max_concurrent_executions cannot be negative, got: %d", fc.MaxConcurrentExecutions)
 	}
 
 	// Warn if max_timeout is very high (over 5 minutes)
