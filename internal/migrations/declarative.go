@@ -754,11 +754,21 @@ func partitionDestructiveChanges(changes []Change, allowDestructive bool) (execu
 }
 
 // isPrivilegeNormalization reports whether a destructive-flagged change only
-// adjusts default privileges. pgschema flags `ALTER DEFAULT PRIVILEGES ...
-// REVOKE ...` as destructive on fresh databases (it narrows overly broad
-// defaults before the desired-state GRANTs run); it affects no stored data.
+// adjusts privileges. Two statement classes qualify, neither of which can
+// touch stored row data:
+//   - ALTER DEFAULT PRIVILEGES ... REVOKE ... (narrows overly broad defaults
+//     before the desired-state GRANTs run; pgschema flags it destructive on
+//     fresh databases), and
+//   - plain REVOKE ... (privilege withdrawal only). These re-plan on every
+//     boot whenever a bootstrap-created grant precedes the declarative
+//     revoke: the plan blocks them on boot #1, so they are never applied and
+//     then reappear as a destructive-ONLY plan on boot #2, which the
+//     allow_destructive=false re-check turns into a startup crash
+//     (observed: schema "ai", REVOKEs on tool_audit_log/tool_integrations).
 func isPrivilegeNormalization(sql string) bool {
-	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "ALTER DEFAULT PRIVILEGES")
+	upper := strings.ToUpper(strings.TrimSpace(sql))
+	return strings.HasPrefix(upper, "ALTER DEFAULT PRIVILEGES") ||
+		strings.HasPrefix(upper, "REVOKE ")
 }
 
 var (

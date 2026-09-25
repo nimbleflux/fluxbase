@@ -338,3 +338,34 @@ func firstIdentifier(dropSQL string) string {
 	}
 	return ""
 }
+
+// The schema "ai" ships explicit REVOKE statements whose privilege state is
+// re-created by bootstrap on every boot. Partition must classify them as
+// privilege normalization (executable under allow_destructive=false): the
+// observed v2026.9.4 failure was exactly these three REVOKEs re-planned on
+// boot #2 as a destructive-ONLY plan, which the re-check turned into a
+// startup crash. Also pins the mixed-plan case: executable changes proceed,
+// genuinely destructive drops stay blocked.
+func TestPartitionDestructiveChanges_PrivilegeRevokesExecutable(t *testing.T) {
+	changes := []Change{
+		{SQL: "REVOKE SELECT ON TABLE tool_audit_log FROM authenticated", Destructive: true},
+		{SQL: "REVOKE DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE tool_integrations FROM service_role", Destructive: true},
+		{SQL: "REVOKE ALL ON FUNCTION get_embedding_stats(uuid) FROM authenticated", Destructive: true},
+		{SQL: "DROP TABLE IF EXISTS legacy_table CASCADE", Destructive: true},
+	}
+
+	executable, blocked := partitionDestructiveChanges(changes, false)
+
+	assert.Len(t, executable, 3, "REVOKEs are privilege normalization and must execute")
+	assert.Len(t, blocked, 1, "genuine destructive drops stay blocked")
+	assert.Equal(t, "DROP TABLE IF EXISTS legacy_table CASCADE", blocked[0].SQL)
+}
+
+func TestIsPrivilegeNormalization(t *testing.T) {
+	assert.True(t, isPrivilegeNormalization("ALTER DEFAULT PRIVILEGES FOR ROLE fluxbase IN SCHEMA auth REVOKE SELECT ON SEQUENCES FROM service_role"))
+	assert.True(t, isPrivilegeNormalization("  revoke select on table tool_audit_log from authenticated"))
+	assert.True(t, isPrivilegeNormalization("REVOKE ALL ON FUNCTION get_embedding_stats(uuid) FROM authenticated"))
+	assert.False(t, isPrivilegeNormalization("DROP TABLE IF EXISTS app_schemas CASCADE"))
+	assert.False(t, isPrivilegeNormalization("DELETE FROM users"))
+	assert.False(t, isPrivilegeNormalization("TRUNCATE sessions"))
+}
