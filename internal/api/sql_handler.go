@@ -436,8 +436,9 @@ func (h *SQLHandler) executeStatementInTx(ctx context.Context, tx pgx.Tx, statem
 	rows, err := tx.Query(ctx, statement)
 	if err != nil {
 		log.Warn().Err(err).Str("statement", util.TruncateString(statement, 100)).Msg("SQL statement failed")
-		// Return a sanitized message to clients; the full error is logged above
-		errorMsg := database.SanitizeErrorMessage(err)
+		// The SQL editor is an admin-only surface: keep the PostgreSQL message
+		// (with SQLSTATE) so admins can debug their queries.
+		errorMsg := database.AdminSQLErrorMessage(err)
 		result.Error = &errorMsg
 		result.ExecutionTimeMS = float64(time.Since(startTime).Milliseconds())
 		return result

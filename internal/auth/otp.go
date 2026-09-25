@@ -184,12 +184,73 @@ func (r *OTPRepository) GetByCode(ctx context.Context, email *string, phone *str
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrOTPNotFound
+			return r.migrateLegacyOTP(ctx, email, phone, code)
 		}
 		return nil, err
 	}
 
 	return otpCode, nil
+}
+
+// migrateLegacyOTP handles pre-upgrade rows that stored plaintext codes with
+// no hash: if the supplied code matches such a row, the code is hashed and
+// the row is upgraded in place (one-time lazy migration).
+func (r *OTPRepository) migrateLegacyOTP(ctx context.Context, email *string, phone *string, code string) (*OTPCode, error) {
+	codeHash := hashOTPCode(code)
+
+	query := `
+		SELECT id, email, phone, type, purpose, expires_at, used, used_at, attempts, max_attempts, ip_address, user_agent, created_at
+		FROM auth.otp_codes
+		WHERE code_hash IS NULL AND code = $1 AND used = false
+	`
+	var args []interface{}
+	if email != nil {
+		query += ` AND email = $2`
+		args = append(args, *email, code)
+	} else if phone != nil {
+		query += ` AND phone = $2`
+		args = append(args, *phone, code)
+	} else {
+		query += ` AND email IS NOT NULL`
+		args = append(args, code)
+	}
+	query += ` ORDER BY created_at DESC LIMIT 1`
+
+	legacy := &OTPCode{}
+	err := database.WrapWithServiceRole(ctx, r.db, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, args...).Scan(
+			&legacy.ID,
+			&legacy.Email,
+			&legacy.Phone,
+			&legacy.Type,
+			&legacy.Purpose,
+			&legacy.ExpiresAt,
+			&legacy.Used,
+			&legacy.UsedAt,
+			&legacy.Attempts,
+			&legacy.MaxAttempts,
+			&legacy.IPAddress,
+			&legacy.UserAgent,
+			&legacy.CreatedAt,
+		)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrOTPNotFound
+		}
+		return nil, err
+	}
+
+	// Upgrade the row to the hashed representation.
+	if _, err := r.db.Exec(ctx,
+		`UPDATE auth.otp_codes SET code_hash = $2, code = '' WHERE id = $1`,
+		legacy.ID, codeHash,
+	); err != nil {
+		return nil, err
+	}
+	legacy.CodeHash = &codeHash
+
+	return legacy, nil
 }
 
 // IncrementAttempts increments the attempt counter for an OTP code

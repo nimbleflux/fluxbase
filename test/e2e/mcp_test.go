@@ -28,7 +28,7 @@ func TestMCPHealthCheck(t *testing.T) {
 	resp.JSON(&result)
 
 	assert.Equal(t, "healthy", result["status"], "MCP server should be healthy")
-	assert.Equal(t, "2024-11-05", result["protocolVersion"], "MCP protocol version should match the constant")
+	assert.Equal(t, "2025-06-18", result["protocolVersion"], "MCP protocol version should match the constant")
 	assert.Contains(t, result, "serverVersion", "Server version should be present")
 }
 
@@ -50,7 +50,7 @@ func TestMCPInitialize(t *testing.T) {
 		"method":  "initialize",
 		"id":      1,
 		"params": map[string]interface{}{
-			"protocolVersion": "2024-11-05",
+			"protocolVersion": "2025-06-18",
 			"capabilities":    map[string]interface{}{},
 			"clientInfo": map[string]interface{}{
 				"name":    "e2e-test-client",
@@ -74,7 +74,7 @@ func TestMCPInitialize(t *testing.T) {
 
 	resultInfo, ok := result["result"].(map[string]interface{})
 	require.True(t, ok, "result should be a map")
-	assert.Equal(t, "2024-11-05", resultInfo["protocolVersion"])
+	assert.Equal(t, "2025-06-18", resultInfo["protocolVersion"])
 
 	serverInfo, ok := resultInfo["serverInfo"].(map[string]interface{})
 	require.True(t, ok, "serverInfo should be a map")

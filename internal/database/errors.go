@@ -157,6 +157,19 @@ func GetConstraintName(err error) string {
 	return ""
 }
 
+// AdminSQLErrorMessage is like SanitizeErrorMessage but preserves the
+// PostgreSQL message for admin-only raw-SQL surfaces (SQL editor), where the
+// detail is essential for debugging and the caller is already trusted.
+func AdminSQLErrorMessage(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		if pgErr.Message != "" {
+			return fmt.Sprintf("%s (SQLSTATE %s)", pgErr.Message, pgErr.Code)
+		}
+	}
+	return SanitizeErrorMessage(err)
+}
+
 // SanitizeErrorMessage converts a database error into a message that is safe
 // to return to API clients. It preserves the SQLSTATE code and constraint
 // metadata (which carry user-relevant classes of failure) while hiding the
