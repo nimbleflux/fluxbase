@@ -8,6 +8,7 @@ import (
 	"net"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
@@ -95,6 +96,47 @@ func TestIsTransientError_MessageFragments(t *testing.T) {
 	for _, msg := range cases {
 		assert.Truef(t, IsTransientError(errors.New(msg)), "expected transient: %s", msg)
 	}
+}
+
+// TestIsTransientError_PgConnClosed pins the v2026.9.4 upgrade-job failure:
+// a container bounce while the database was still settling made the bootstrap
+// admin pool's connection die with pgconn's "conn closed" (connLockError,
+// SafeToRetry per pgx). IsTransientError reported it non-transient, so
+// runStartupStep os.Exit(1)-ed on the FIRST boot after the bounce and the
+// restart policy's bounce was counted as a crash loop. It must retry instead.
+func TestIsTransientError_PgConnClosed(t *testing.T) {
+	// The typed sentinel.
+	assert.True(t, IsTransientError(pgconn.ErrConnClosed))
+
+	// Typed sentinel wrapped by callers, as in bootstrap.go's
+	// "failed to execute bootstrap SQL: %w".
+	wrapped := fmt.Errorf("failed to execute bootstrap SQL: %w", pgconn.ErrConnClosed)
+	assert.True(t, IsTransientError(wrapped))
+
+	// The exact error text from the failing upgrade-job log, as an opaque
+	// error with no typed cause (e.g. older pgx or a lossy wrapper).
+	assert.True(t, IsTransientError(errors.New("failed to execute bootstrap SQL: conn closed")))
+
+	// A bare connLockError-shaped error (status string only).
+	assert.True(t, IsTransientError(errors.New("conn closed")))
+}
+
+// TestRetryTransient_RetriesConnClosed pins the behavior end to end at the
+// retry layer: a startup step whose first attempt fails with the bootstrap
+// "conn closed" error must be retried (not failed fast), succeeding once the
+// pool opens a fresh connection.
+func TestRetryTransient_RetriesConnClosed(t *testing.T) {
+	attempts := 0
+	rc := RetryConfig{MaxAttempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Millisecond}
+	err := RetryTransient(context.Background(), "database bootstrap", rc, func() error {
+		attempts++
+		if attempts == 1 {
+			return fmt.Errorf("failed to execute bootstrap SQL: %w", pgconn.ErrConnClosed)
+		}
+		return nil
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 2, attempts)
 }
 
 func TestIsTransientError_NonTransientPlainError(t *testing.T) {
