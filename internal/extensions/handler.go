@@ -53,7 +53,7 @@ func getTenantPool(c fiber.Ctx) *pgxpool.Pool {
 // it as a 500 with a nil-pointer log), so answer 503 instead.
 func (h *Handler) ensureService(c fiber.Ctx) bool {
 	if h == nil || h.service == nil {
-		c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+		_ = c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"error": "Extensions service is not available in this deployment",
 		})
 		return false

@@ -782,6 +782,7 @@ func newTestAuthService(t *testing.T) *auth.Service {
 
 	db, err := database.NewConnection(dbConfig)
 	require.NoError(t, err)
+	t.Cleanup(db.Close)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
