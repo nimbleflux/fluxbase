@@ -206,10 +206,10 @@ func (r *OTPRepository) migrateLegacyOTP(ctx context.Context, email *string, pho
 	var args []interface{}
 	if email != nil {
 		query += ` AND email = $2`
-		args = append(args, *email, code)
+		args = append(args, code, *email)
 	} else if phone != nil {
 		query += ` AND phone = $2`
-		args = append(args, *phone, code)
+		args = append(args, code, *phone)
 	} else {
 		query += ` AND email IS NOT NULL`
 		args = append(args, code)

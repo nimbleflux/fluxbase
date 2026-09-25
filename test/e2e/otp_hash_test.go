@@ -76,11 +76,13 @@ func TestOTPLazyMigration(t *testing.T) {
 		}).
 		Send()
 
-	rowsAfter := tc.QuerySQL("SELECT code_hash FROM auth.otp_codes WHERE email = $1 AND code = $2", legacyEmail, legacyCode)
+	// The migrated row is hashed and the plaintext cleared.
+	rowsAfter := tc.QuerySQL("SELECT code_hash, code FROM auth.otp_codes WHERE email = $1", legacyEmail)
 	require.Len(t, rowsAfter, 1)
 	codeHash, ok := rowsAfter[0]["code_hash"].(string)
 	assert.True(t, ok, "code_hash should be a string after lazy migration")
 	assert.NotEmpty(t, codeHash, "code_hash should be populated after lazy migration")
+	assert.Equal(t, "", rowsAfter[0]["code"], "plaintext code should be cleared after lazy migration")
 
 	tc.ExecuteSQL("DELETE FROM auth.otp_codes WHERE email = $1", legacyEmail)
 }
