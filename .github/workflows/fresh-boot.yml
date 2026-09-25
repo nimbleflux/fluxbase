@@ -1,0 +1,299 @@
+name: Fresh Boot & Upgrade
+
+# Guard for the bootstrap -> declarative-schema startup composition.
+#
+# Why this exists: v2026.9.4 shipped with unit tests for the declarative diff
+# logic green, yet every fresh deployment crash-looped. The failure mode needs
+# TWO server boots to appear: boot #1 applies the declarative schema and then
+# creates objects the per-schema pgschema diff does not declare (post-schema
+# RLS policies/triggers, app-schema registry tables). Boot #2 plans DROPs for
+# those live-but-undeclared objects and — with allow_destructive=false — exits.
+# The docker-smoke job in ci.yml only exercises boot #1, so it cannot catch
+# this class of regression.
+#
+# These jobs run the full server image against real Postgres and assert the
+# composition no unit test sees:
+#
+#   fresh-boot:  fresh volume -> boot #1 -> 60s stability window -> restart
+#                bounce -> boot #2 healthy -> authenticated admin endpoint 200.
+#                Fails on the exact v2026.9.4 regression.
+#
+#   upgrade:     initialize a volume with the PREVIOUS release's image, then
+#                boot THIS branch's image against it (restart-bounce included).
+#                Fresh boot and upgrade can fail independently; upgrade
+#                additionally exercises declarative evolution of objects that
+#                already exist (e.g. CHECK constraint widening).
+#
+# Stack mechanics are shared with the docker-smoke job: deploy/docker-compose.yml
+# + deploy/docker-compose.smoke.yml (isolated project name, locally built image
+# tag fluxbase-smoke:local-$FLAVOR, pinned ports, disabled healthcheck) and
+# deploy/generate-keys.sh secrets. The fluxbase container keeps its production
+# `container_name: fluxbase` and `restart: unless-stopped`, so a startup exit
+# shows up as daemon restarts (RestartCount) and failed /health probes.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      run: ${{ steps.filter.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            run:
+              - '**.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'internal/**'
+              - 'cmd/**'
+              - 'Dockerfile'
+              - 'docker-compose.yml'
+              - 'deploy/**'
+              - 'scripts/smoke-test.sh'
+              - '.github/workflows/fresh-boot.yml'
+
+  # ===========================================================================
+  # Shared step fragments (inline; YAML anchors are not supported across
+  # jobs by GH Actions).
+  # ===========================================================================
+  fresh-boot:
+    name: Fresh Boot (boot, stabilize, restart, admin)
+    needs: changes
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      FLAVOR: full
+      TARGET: runtime-full
+      # deploy/docker-compose.smoke.yml tags the locally built image
+      # fluxbase-smoke:local-full; compose reuses it without rebuilding.
+      COMPOSE: >-
+        docker compose
+        -f deploy/docker-compose.yml
+        -f deploy/docker-compose.smoke.yml
+        --env-file deploy/.smoke.env
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build Fluxbase image from source
+        run: |
+          docker build \
+            --build-arg FLAVOR=full \
+            --target runtime-full \
+            -t fluxbase-smoke:local-full \
+            -f Dockerfile .
+
+      - name: Generate stack secrets
+        run: |
+          bash deploy/generate-keys.sh --stdout > deploy/.smoke.env
+          grep -q '^FLUXBASE_SERVICE_ROLE_KEY=' deploy/.smoke.env
+
+      - name: Boot #1 — bring up the stack on a fresh volume
+        run: ${{ env.COMPOSE }} up -d
+
+      - name: Boot #1 — wait for /health and confirm declarative apply
+        run: |
+          timeout 300 bash -c 'until curl -fsS http://localhost:8080/health >/dev/null 2>&1; do sleep 5; done'
+          echo "Boot #1 healthy"
+          ${{ env.COMPOSE }} logs fluxbase | grep -m1 "Declarative schema applied successfully"
+
+      # The v2026.9.4 crash happened on the SECOND boot: after boot #1 created
+      # the post-schema policies/triggers and app-schema registry tables, boot
+      # #2's declarative plan for schema "platform" contained 47 destructive
+      # drops and the server exited (os.Exit) with allow_destructive=false.
+      # Assert the server stays up past that point before forcing a bounce.
+      - name: 60s stability window past first health
+        run: |
+          for i in $(seq 1 12); do
+            sleep 5
+            STATUS=$(docker inspect -f '{{.State.Status}}/{{.RestartCount}}' fluxbase)
+            if [ "$STATUS" != "running/0" ]; then
+              echo "::error::Fluxbase container left running/0 during stability window: $STATUS"
+              ${{ env.COMPOSE }} logs --tail=100 fluxbase
+              exit 1
+            fi
+            curl -fsS http://localhost:8080/health > /dev/null || {
+              echo "::error::/health failed during stability window"
+              ${{ env.COMPOSE }} logs --tail=100 fluxbase
+              exit 1
+            }
+          done
+          echo "Stable for 60s past first health (status=$STATUS)"
+
+      - name: Boot #2 — restart bounce must come back healthy
+        run: |
+          ${{ env.COMPOSE }} restart fluxbase
+          # Fail fast on crash-looping instead of waiting out the full timeout
+          # on a regression: any daemon restart or non-running state trips it.
+          if ! timeout 300 bash -c '
+            until curl -fsS http://localhost:8080/health >/dev/null 2>&1; do
+              STATE=$(docker inspect -f "{{.State.Status}}" fluxbase)
+              RC=$(docker inspect -f "{{.RestartCount}}" fluxbase)
+              if [ "$STATE" != "running" ] || [ "$RC" -gt 0 ]; then
+                echo "crash-looping (state=$STATE restarts=$RC)"; exit 1
+              fi
+              sleep 5
+            done'; then
+            echo "::error::Boot #2 did not become healthy — startup or declarative-plan failure"
+            ${{ env.COMPOSE }} logs --tail=200 fluxbase
+            exit 1
+          fi
+          echo "Boot #2 healthy"
+          if ${{ env.COMPOSE }} logs fluxbase | grep -q "declarative schema apply failed"; then
+            echo "::error::Logs contain 'declarative schema apply failed'"
+            ${{ env.COMPOSE }} logs --tail=200 fluxbase
+            exit 1
+          fi
+
+      - name: Authenticated admin endpoint responds 200
+        run: |
+          SRK=$(grep '^FLUXBASE_SERVICE_ROLE_KEY=' deploy/.smoke.env | cut -d= -f2-)
+          CODE=$(curl -s -o /tmp/admin-body.json -w '%{http_code}' \
+            -H "Authorization: Bearer $SRK" \
+            http://localhost:8080/api/v1/admin/extensions)
+          echo "GET /api/v1/admin/extensions -> $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "::error::Authenticated admin endpoint returned $CODE (service_role JWT)"
+            cat /tmp/admin-body.json || true
+            ${{ env.COMPOSE }} logs --tail=100 fluxbase
+            exit 1
+          fi
+
+      - name: Dump stack logs on failure
+        if: failure()
+        run: ${{ env.COMPOSE }} logs --tail=300 || true
+
+      - name: Tear down the stack
+        if: always()
+        run: ${{ env.COMPOSE }} down -v --remove-orphans || true
+
+  upgrade:
+    name: Upgrade from previous release
+    needs: changes
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FLAVOR: full
+      TARGET: runtime-full
+      # The release that regressed; its DB state (post-schema policies,
+      # app-schema registry tables, pre-widening valid_module_path CHECK) is
+      # exactly the upgrade surface this job protects. Bump on each release.
+      PREVIOUS_RELEASE_IMAGE: ghcr.io/nimbleflux/fluxbase:2026.9.4
+      COMPOSE: >-
+        docker compose
+        -f deploy/docker-compose.yml
+        -f deploy/docker-compose.smoke.yml
+        --env-file deploy/.smoke.env
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build this branch's Fluxbase image
+        run: |
+          docker build \
+            --build-arg FLAVOR=full \
+            --target runtime-full \
+            -t fluxbase-smoke:local-full \
+            -f Dockerfile .
+
+      - name: Generate stack secrets
+        run: |
+          bash deploy/generate-keys.sh --stdout > deploy/.smoke.env
+          grep -q '^FLUXBASE_SERVICE_ROLE_KEY=' deploy/.smoke.env
+
+      # Run the PREVIOUS release's image against the same compose stack to
+      # initialize the database volume the way a real deployment would have it.
+      - name: Write previous-release compose override
+        run: |
+          cat > /tmp/previous-release.yml <<EOF
+          services:
+            fluxbase:
+              image: ${PREVIOUS_RELEASE_IMAGE}
+          EOF
+          cat /tmp/previous-release.yml
+
+      - name: Initialize volume with previous release
+        run: |
+          ${{ env.COMPOSE }} -f /tmp/previous-release.yml up -d
+          timeout 300 bash -c 'until curl -fsS http://localhost:8080/health >/dev/null 2>&1; do sleep 5; done'
+          echo "Previous release healthy on fresh volume"
+          # Let the first boot finish writing its post-first-health state, then
+          # stop the previous release WITHOUT touching the volume.
+          sleep 10
+          ${{ env.COMPOSE }} -f /tmp/previous-release.yml stop fluxbase
+
+      - name: Boot this branch against the previous release's database
+        run: |
+          ${{ env.COMPOSE }} up -d fluxbase
+          if ! timeout 300 bash -c '
+            until curl -fsS http://localhost:8080/health >/dev/null 2>&1; do
+              STATE=$(docker inspect -f "{{.State.Status}}" fluxbase)
+              RC=$(docker inspect -f "{{.RestartCount}}" fluxbase)
+              if [ "$STATE" != "running" ] || [ "$RC" -gt 0 ]; then
+                echo "crash-looping (state=$STATE restarts=$RC)"; exit 1
+              fi
+              sleep 5
+            done'; then
+            echo "::error::This branch failed to boot the previous release's database"
+            ${{ env.COMPOSE }} logs --tail=200 fluxbase
+            exit 1
+          fi
+          ${{ env.COMPOSE }} logs fluxbase | grep -m1 "Declarative schema applied successfully"
+          if ${{ env.COMPOSE }} logs fluxbase | grep -q "declarative schema apply failed"; then
+            echo "::error::Logs contain 'declarative schema apply failed'"
+            ${{ env.COMPOSE }} logs --tail=200 fluxbase
+            exit 1
+          fi
+
+      - name: Restart bounce on upgraded database must stay healthy
+        run: |
+          ${{ env.COMPOSE }} restart fluxbase
+          timeout 300 bash -c '
+            until curl -fsS http://localhost:8080/health >/dev/null 2>&1; do
+              STATE=$(docker inspect -f "{{.State.Status}}" fluxbase)
+              RC=$(docker inspect -f "{{.RestartCount}}" fluxbase)
+              if [ "$STATE" != "running" ] || [ "$RC" -gt 0 ]; then
+                echo "crash-looping (state=$STATE restarts=$RC)"; exit 1
+              fi
+              sleep 5
+            done'
+          echo "Post-upgrade restart healthy"
+
+      - name: Authenticated admin endpoint responds 200 after upgrade
+        run: |
+          SRK=$(grep '^FLUXBASE_SERVICE_ROLE_KEY=' deploy/.smoke.env | cut -d= -f2-)
+          CODE=$(curl -s -o /tmp/admin-body.json -w '%{http_code}' \
+            -H "Authorization: Bearer $SRK" \
+            http://localhost:8080/api/v1/admin/extensions)
+          echo "GET /api/v1/admin/extensions -> $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "::error::Authenticated admin endpoint returned $CODE after upgrade"
+            cat /tmp/admin-body.json || true
+            exit 1
+          fi
+
+      - name: Dump stack logs on failure
+        if: failure()
+        run: ${{ env.COMPOSE }} logs --tail=300 || true
+
+      - name: Tear down the stack
+        if: always()
+        run: ${{ env.COMPOSE }} down -v --remove-orphans || true

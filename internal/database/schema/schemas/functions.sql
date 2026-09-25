@@ -538,7 +538,7 @@ CREATE TABLE IF NOT EXISTS shared_modules (
     tenant_id uuid,
     CONSTRAINT shared_modules_pkey PRIMARY KEY (id),
     CONSTRAINT shared_modules_module_path_key UNIQUE (module_path),
-    CONSTRAINT valid_module_path CHECK (module_path ~ '^_shared/[a-zA-Z0-9_/-]+\.(ts|js|mts|mjs)$'::text AND module_path !~~ '%/../%'::text)
+    CONSTRAINT valid_module_path CHECK (module_path ~ '^_shared/[a-zA-Z0-9_/.-]+\.(ts|js|mts|mjs)$'::text AND module_path !~~ '%/../%'::text)
 );
 
 
