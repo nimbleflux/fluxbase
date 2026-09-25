@@ -447,7 +447,7 @@ func importSchemaFDW(ctx context.Context, tenantPool *pgxpool.Pool, schema strin
 		return fmt.Errorf("failed to import foreign schema %s: %w", schema, lastErr)
 	}
 
-	for _, role := range []string{"tenant_service", "service_role"} {
+	for _, role := range []string{"tenant_service", "service_role", "authenticated"} {
 		_, err = tenantPool.Exec(ctx, fmt.Sprintf(
 			`GRANT ALL ON ALL TABLES IN SCHEMA %s TO %s`,
 			quoteIdent(schema), quoteIdent(role),
@@ -455,6 +455,14 @@ func importSchemaFDW(ctx context.Context, tenantPool *pgxpool.Pool, schema strin
 		if err != nil {
 			log.Warn().Err(err).Str("schema", schema).Str("role", role).
 				Msg("Failed to grant permissions on imported foreign tables")
+		}
+		_, err = tenantPool.Exec(ctx, fmt.Sprintf(
+			`GRANT USAGE ON SCHEMA %s TO %s`,
+			quoteIdent(schema), quoteIdent(role),
+		))
+		if err != nil {
+			log.Warn().Err(err).Str("schema", schema).Str("role", role).
+				Msg("Failed to grant schema usage on imported foreign tables")
 		}
 	}
 

@@ -253,6 +253,7 @@ func (r *DenoRuntime) Execute(
 		EnvVarNames:   envVarNames,
 	}
 	args, memoryLimitMB, availableMemoryMB := buildDenoArgs(argsConfig, permissions, secrets, tmpPath)
+	log.Debug().Strs("args", args).Msg("Deno invocation arguments")
 
 	// Create command
 	cmd := exec.CommandContext(execCtx, r.denoPath, args...)
@@ -624,9 +625,11 @@ func buildNetworkDenyList(permissions Permissions, selfURL string) []string {
 	add("kubernetes.default.svc")
 	add("kubernetes.default")
 	// Loopback, always denied (except when it is the instance's own host).
+	// IPv6 loopback is bracketed: a bare "::1" is parsed by Deno as an empty
+	// host with port 1 and fails the flag with "invalid empty host".
 	add("localhost")
 	add("127.0.0.1")
-	add("::1")
+	add("[::1]")
 
 	for _, d := range permissions.BlockedDomains {
 		add(d)

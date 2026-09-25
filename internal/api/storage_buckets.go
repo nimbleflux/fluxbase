@@ -51,8 +51,8 @@ func (h *StorageHandler) CreateBucket(c fiber.Ctx) error {
 	}
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO storage.buckets (id, name, public, allowed_mime_types, max_file_size)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO storage.buckets (id, name, public, allowed_mime_types, max_file_size, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
 	`, bucket, bucket, req.Public, req.AllowedMimeTypes, req.MaxFileSize)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "already exists") {
