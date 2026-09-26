@@ -1039,3 +1039,84 @@ func TestValidateMFAPendingToken_RejectsOtherTokenTypes(t *testing.T) {
 	_, err = manager.ValidateMFAPendingToken(refreshToken, MFAPendingPurpose2FA)
 	assert.ErrorIs(t, err, ErrInvalidToken)
 }
+
+// =============================================================================
+// Legacy token_type backcompatibility
+//
+// Tokens minted outside Fluxbase (deploy/generate-keys.sh, Terraform, bash
+// one-liners — the documented bootstrap paths) predate the token_type claim
+// and carry none. The 2026-09 hardening made ValidateAccessToken reject any
+// token whose token_type != "access", breaking every existing installation's
+// static service/anon keys on upgrade. Backcompat: ABSENT token_type is
+// treated as "access" (the only semantics such keys ever had); a PRESENT but
+// different type is still rejected — platform-issued refresh/mfa_pending
+// tokens always carry their type, so the type-confusion guard is intact.
+// =============================================================================
+
+func mintLegacyToken(t *testing.T, manager *JWTManager, role string) string {
+	t.Helper()
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"role": role,
+		"iss":  "fluxbase",
+		"iat":  now.Unix(),
+		"exp":  now.Add(10 * 365 * 24 * time.Hour).Unix(),
+		// deliberately NO token_type
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(testSecretKey))
+	require.NoError(t, err)
+	return signed
+}
+
+func TestValidateAccessToken_LegacyTokenWithoutTokenType(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	token := mintLegacyToken(t, manager, "service_role")
+
+	claims, err := manager.ValidateAccessToken(token)
+	require.NoError(t, err, "legacy stateless keys must keep working after the 2026-09 hardening")
+	assert.Equal(t, "service_role", claims.Role)
+}
+
+func TestValidateAccessTokenWithSecret_LegacyTokenWithoutTokenType(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	token := mintLegacyToken(t, manager, "service_role")
+
+	_, err = manager.ValidateAccessTokenWithSecret(token, testSecretKey)
+	require.NoError(t, err)
+}
+
+func TestValidateAccessToken_ExplicitWrongTypeStillRejected(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	for _, tt := range []string{TokenTypeRefresh, TokenTypeMFAPending} {
+		now := time.Now()
+		claims := jwt.MapClaims{
+			"role":       "authenticated",
+			"iss":        "fluxbase",
+			"token_type": tt,
+			"iat":        now.Unix(),
+			"exp":        now.Add(time.Hour).Unix(),
+		}
+		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(testSecretKey))
+		require.NoError(t, err)
+
+		_, err = manager.ValidateAccessToken(token)
+		assert.ErrorIs(t, err, ErrInvalidToken, "present token_type %q must still be rejected", tt)
+	}
+}
+
+func TestValidateRefreshToken_LegacyTokenWithoutTokenTypeStillRejected(t *testing.T) {
+	manager, err := NewJWTManager(testSecretKey, 15*time.Minute, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	token := mintLegacyToken(t, manager, "authenticated")
+
+	_, err = manager.ValidateRefreshToken(token)
+	assert.ErrorIs(t, err, ErrInvalidToken, "absent token_type must NOT grant refresh semantics")
+}
