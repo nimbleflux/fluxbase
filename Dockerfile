@@ -40,7 +40,7 @@ FROM denoland/deno:bin-2.6.4 AS deno-bin
 # ------------------------------------------------------------------------------
 # Stage 1: Build SDKs and Admin UI
 # ------------------------------------------------------------------------------
-FROM oven/bun:1.4.1-debian AS admin-builder
+FROM oven/bun:1.4.2-debian AS admin-builder
 
 WORKDIR /build
 
@@ -164,7 +164,7 @@ FROM debian:bookworm-slim AS pgschema-fetcher
 # is pinned below and verified before install. When bumping PGSCHEMA_VERSION,
 # recompute and update both ARGs:
 #   curl -fsSL "https://github.com/pgplex/pgschema/releases/download/v<ver>/pgschema-<ver>-linux-<arch>" | sha256sum
-ARG PGSCHEMA_VERSION=1.12.5
+ARG PGSCHEMA_VERSION=1.13.0
 ARG PGSCHEMA_SHA256_AMD64=bcef715edb71321c6a27886fcc74a423f923c62d731852668314efcce1402698
 ARG PGSCHEMA_SHA256_ARM64=a347cda5ce428109cd949ff2fcaccda380296016338722efa4488cd8e2f681ec
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* \
