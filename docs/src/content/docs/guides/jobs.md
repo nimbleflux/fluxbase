@@ -529,6 +529,7 @@ export async function handler(
 
 Control job behavior with JSDoc-style annotations:
 
+- `@fluxbase:name <name>` - Override the job name (defaults to the filename without extension; overrides the filename during `fluxbase jobs sync` / `fluxbase sync`)
 - `@fluxbase:namespace <name>` - Specify namespace (overrides CLI `--namespace` flag)
 - `@fluxbase:require-role <role>` - Require specific user role (admin, authenticated, custom)
 - `@fluxbase:timeout <seconds>` - Maximum execution time (default: 300)

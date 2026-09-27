@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/nimbleflux/fluxbase/cli/annotations"
 	"github.com/nimbleflux/fluxbase/cli/output"
 )
 
@@ -275,6 +276,12 @@ func runRPCSync(cmd *cobra.Command, args []string) error {
 
 		// Remove .sql extension for procedure name
 		procName := strings.TrimSuffix(name, ".sql")
+
+		// @fluxbase:name annotation overrides the filename-derived name
+		// (same contract as server-side filesystem sync)
+		if annName := annotations.ParseRPCName(string(content)); annName != nil {
+			procName = *annName
+		}
 
 		procedures = append(procedures, map[string]interface{}{
 			"name": procName,

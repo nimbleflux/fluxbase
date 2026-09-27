@@ -169,6 +169,13 @@ func syncRPCFromDir(ctx context.Context, dir, namespace string, dryRun, deleteMi
 		}
 
 		procName := strings.TrimSuffix(name, ".sql")
+
+		// @fluxbase:name annotation overrides the filename-derived name
+		// (same contract as server-side filesystem sync)
+		if annName := annotations.ParseRPCName(string(content)); annName != nil {
+			procName = *annName
+		}
+
 		if IsDebug() {
 			fmt.Printf("  DEBUG: %s → read %d bytes, sending for sync\n", name, len(content))
 		}

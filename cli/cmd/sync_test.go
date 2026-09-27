@@ -63,6 +63,36 @@ func TestSyncRPCFromDir_SendsAllFilesAsProcedures(t *testing.T) {
 	assert.True(t, names["b"])
 }
 
+// TestSyncRPCFromDir_UsesNameAnnotation is the regression test for issue
+// #363: `fluxbase sync` (umbrella command) registered RPC procedures under
+// the filename stem and silently ignored the @fluxbase:name annotation.
+func TestSyncRPCFromDir_UsesNameAnnotation(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ensure-user-profile.sql"),
+		[]byte("-- @fluxbase:name ensure_user_profile\nSELECT 1;"), 0o644))
+
+	var capturedBody map[string]interface{}
+	_, _, cleanup := setupTestEnvWithHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Contains(t, r.URL.Path, "/api/v1/admin/rpc/sync")
+		readRequestBody(t, r, &capturedBody)
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"summary": map[string]interface{}{
+				"created": 1, "updated": 0, "deleted": 0, "unchanged": 0, "errors": 0,
+			},
+		})
+	})
+	defer cleanup()
+
+	require.NoError(t, syncRPCFromDir(context.Background(), dir, "test", false, false))
+
+	procs, ok := capturedBody["procedures"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, procs, 1)
+	proc := procs[0].(map[string]interface{})
+	assert.Equal(t, "ensure_user_profile", proc["name"])
+}
+
 // TestSyncChatbotsFromDir_FlatFile_SendsNameAndCode verifies the chatbot
 // sync reads flat .ts files and sends them to the API. Locks in the CLI
 // side of the tenant_id fix: the CLI sends name+code, the server attaches

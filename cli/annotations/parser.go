@@ -11,6 +11,7 @@ import (
 
 // FunctionConfig contains parsed @fluxbase: annotations for edge functions
 type FunctionConfig struct {
+	Name                 *string // @fluxbase:name my_function (defaults to filename)
 	Namespace            *string // @fluxbase:namespace production
 	AllowUnauthenticated bool
 	IsPublic             bool
@@ -27,6 +28,7 @@ type FunctionConfig struct {
 
 // JobConfig contains parsed @fluxbase: annotations for background jobs
 type JobConfig struct {
+	Name                 *string // @fluxbase:name my_job (defaults to filename)
 	Namespace            *string // @fluxbase:namespace production
 	Schedule             *string
 	TimeoutSeconds       *int
@@ -49,6 +51,13 @@ func ParseFunctionAnnotations(code string) FunctionConfig {
 		AllowUnauthenticated: false, // Secure by default
 		IsPublic:             true,  // Public by default
 		DisableExecutionLogs: false, // Logging enabled by default
+	}
+
+	// Match @fluxbase:name with value (procedure/function name overrides filename)
+	namePattern := regexp.MustCompile(`(?m)^\s*(?://|/\*|\*)\s*@fluxbase:name\s+(\S+)`)
+	if matches := namePattern.FindStringSubmatch(code); len(matches) > 1 {
+		value := strings.TrimSpace(matches[1])
+		config.Name = &value
 	}
 
 	// Match @fluxbase:namespace with value
@@ -142,6 +151,12 @@ func ParseFunctionAnnotations(code string) FunctionConfig {
 func ParseJobAnnotations(code string) JobConfig {
 	config := JobConfig{}
 
+	// Parse name
+	if match := regexp.MustCompile(`@fluxbase:name\s+(\S+)`).FindStringSubmatch(code); match != nil {
+		name := strings.TrimSpace(match[1])
+		config.Name = &name
+	}
+
 	// Parse namespace
 	if match := regexp.MustCompile(`@fluxbase:namespace\s+(\S+)`).FindStringSubmatch(code); match != nil {
 		namespace := strings.TrimSpace(match[1])
@@ -234,6 +249,11 @@ func ParseJobAnnotations(code string) JobConfig {
 // ApplyFunctionConfig applies the parsed function configuration to a map.
 // Only non-default values are added to avoid overriding server defaults.
 func ApplyFunctionConfig(fn map[string]interface{}, config FunctionConfig) {
+	// Name (if specified in annotation, it overrides the filename-derived name)
+	if config.Name != nil {
+		fn["name"] = *config.Name
+	}
+
 	// Namespace (if specified in annotation, it overrides CLI flag)
 	if config.Namespace != nil {
 		fn["namespace"] = *config.Namespace
@@ -282,6 +302,10 @@ func ApplyFunctionConfig(fn map[string]interface{}, config FunctionConfig) {
 // ApplyJobConfig applies the parsed job configuration to a map.
 // Only non-nil values are added to avoid overriding server defaults.
 func ApplyJobConfig(job map[string]interface{}, config JobConfig) {
+	// Name (if specified in annotation, it overrides the filename-derived name)
+	if config.Name != nil {
+		job["name"] = *config.Name
+	}
 	// Namespace (if specified in annotation, it overrides CLI flag)
 	if config.Namespace != nil {
 		job["namespace"] = *config.Namespace
@@ -322,4 +346,19 @@ func ApplyJobConfig(job map[string]interface{}, config JobConfig) {
 	if config.DisableExecutionLogs {
 		job["disable_execution_logs"] = true
 	}
+}
+
+// ParseRPCName extracts the @fluxbase:name annotation from SQL procedure code
+// (`-- @fluxbase:name my_procedure`). Returns nil when the annotation is
+// absent, in which case the caller keeps the filename-derived name. Mirrors
+// the server-side namePattern in internal/rpc/parser.go.
+func ParseRPCName(code string) *string {
+	namePattern := regexp.MustCompile(`(?m)^\s*--\s*@fluxbase:name\s+(.+)$`)
+	if matches := namePattern.FindStringSubmatch(code); len(matches) > 1 {
+		value := strings.TrimSpace(matches[1])
+		if value != "" {
+			return &value
+		}
+	}
+	return nil
 }
