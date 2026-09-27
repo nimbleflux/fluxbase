@@ -94,6 +94,9 @@ func mergeStorageConfig(base StorageConfig, override StorageConfig) StorageConfi
 	if override.DefaultBuckets != nil {
 		merged.DefaultBuckets = override.DefaultBuckets
 	}
+	if override.DefaultPublicBuckets != nil {
+		merged.DefaultPublicBuckets = override.DefaultPublicBuckets
+	}
 
 	return merged
 }
@@ -107,6 +110,10 @@ func DeepCopyStorageConfig(src *StorageConfig) *StorageConfig {
 	if src.DefaultBuckets != nil {
 		cpy.DefaultBuckets = make([]string, len(src.DefaultBuckets))
 		copy(cpy.DefaultBuckets, src.DefaultBuckets)
+	}
+	if src.DefaultPublicBuckets != nil {
+		cpy.DefaultPublicBuckets = make([]string, len(src.DefaultPublicBuckets))
+		copy(cpy.DefaultPublicBuckets, src.DefaultPublicBuckets)
 	}
 	return &cpy
 }

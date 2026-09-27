@@ -34,7 +34,7 @@ func (m *StorageModule) Init(ctx context.Context, registry *ServiceRegistry) err
 		log.Warn().Err(err).Msg("Failed to ensure default buckets")
 	}
 
-	if err := EnsureDefaultBucketRecords(ctx, db.Pool(), m.Service.DefaultBuckets()); err != nil {
+	if err := EnsureDefaultBucketRecords(ctx, db.Pool(), m.Service.DefaultBuckets(), m.Service.DefaultPublicBuckets()); err != nil {
 		log.Warn().Err(err).Msg("Failed to ensure default bucket DB records")
 	}
 
