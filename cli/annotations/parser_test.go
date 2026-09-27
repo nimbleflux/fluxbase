@@ -466,6 +466,158 @@ func TestApplyJobConfig(t *testing.T) {
 	}
 }
 
+// TestParseFunctionAnnotations_Name verifies @fluxbase:name extraction for
+// edge functions (all supported comment styles).
+func TestParseFunctionAnnotations_Name(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     string
+		expected *string
+	}{
+		{
+			name:     "no name annotation",
+			code:     `export function handler() {}`,
+			expected: nil,
+		},
+		{
+			name: "single line comment name",
+			code: `// @fluxbase:name process_order
+export function handler() {}`,
+			expected: stringPtr("process_order"),
+		},
+		{
+			name: "JSDoc style name",
+			code: `/**
+ * My function
+ * @fluxbase:name kebab-name
+ */
+export function handler() {}`,
+			expected: stringPtr("kebab-name"),
+		},
+		{
+			name: "block comment name",
+			code: `/* @fluxbase:name snake_name */
+export function handler() {}`,
+			expected: stringPtr("snake_name"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := ParseFunctionAnnotations(tt.code)
+			if tt.expected == nil {
+				if config.Name != nil {
+					t.Errorf("Name = %v, want nil", *config.Name)
+				}
+			} else {
+				if config.Name == nil {
+					t.Errorf("Name = nil, want %v", *tt.expected)
+				} else if *config.Name != *tt.expected {
+					t.Errorf("Name = %v, want %v", *config.Name, *tt.expected)
+				}
+			}
+		})
+	}
+}
+
+// TestParseJobAnnotations_Name verifies @fluxbase:name extraction for jobs.
+func TestParseJobAnnotations_Name(t *testing.T) {
+	code := `// @fluxbase:name nightly_rollup
+// @fluxbase:schedule 0 2 * * *
+export function handler() {}`
+
+	config := ParseJobAnnotations(code)
+	if config.Name == nil || *config.Name != "nightly_rollup" {
+		t.Errorf("Name = %v, want nightly_rollup", config.Name)
+	}
+}
+
+// TestApplyFunctionConfig_NameOverridesFilename verifies the annotation name
+// replaces the filename-derived name in the sync payload.
+func TestApplyFunctionConfig_NameOverridesFilename(t *testing.T) {
+	fn := map[string]interface{}{
+		"name": "filename-name",
+		"code": "export function handler() {}",
+	}
+
+	config := ParseFunctionAnnotations("// @fluxbase:name annotated_name\nexport function handler() {}")
+	ApplyFunctionConfig(fn, config)
+
+	if fn["name"] != "annotated_name" {
+		t.Errorf("name = %v, want annotated_name", fn["name"])
+	}
+}
+
+// TestApplyJobConfig_NameOverridesFilename verifies the annotation name
+// replaces the filename-derived name in the job sync payload.
+func TestApplyJobConfig_NameOverridesFilename(t *testing.T) {
+	job := map[string]interface{}{
+		"name": "filename-name",
+		"code": "export function handler() {}",
+	}
+
+	config := ParseJobAnnotations("// @fluxbase:name annotated_name\nexport function handler() {}")
+	ApplyJobConfig(job, config)
+
+	if job["name"] != "annotated_name" {
+		t.Errorf("name = %v, want annotated_name", job["name"])
+	}
+}
+
+// TestParseRPCName verifies @fluxbase:name extraction from SQL procedure
+// headers, mirroring the server-side namePattern in internal/rpc/parser.go.
+func TestParseRPCName(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     string
+		expected *string
+	}{
+		{
+			name:     "no name annotation",
+			code:     "CREATE FUNCTION f() RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;",
+			expected: nil,
+		},
+		{
+			name: "snake_case name overrides kebab filename",
+			code: `-- @fluxbase:name ensure_user_profile
+-- @fluxbase:description Ensures a profile row exists
+CREATE OR REPLACE FUNCTION ensure_user_profile() ...`,
+			expected: stringPtr("ensure_user_profile"),
+		},
+		{
+			name:     "indented annotation line",
+			code:     "  -- @fluxbase:name indented_proc\nSELECT 1;",
+			expected: stringPtr("indented_proc"),
+		},
+		{
+			name: "annotation inside procedure body is ignored (first match wins)",
+			code: `-- @fluxbase:name outer_proc
+CREATE FUNCTION f() RETURNS void AS $$
+BEGIN
+  -- @fluxbase:name inner_decoy
+END; $$ LANGUAGE plpgsql;`,
+			expected: stringPtr("outer_proc"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ParseRPCName(tt.code)
+			if tt.expected == nil {
+				if got != nil {
+					t.Errorf("ParseRPCName() = %v, want nil", *got)
+				}
+			} else {
+				if got == nil {
+					t.Errorf("ParseRPCName() = nil, want %v", *tt.expected)
+				} else if *got != *tt.expected {
+					t.Errorf("ParseRPCName() = %v, want %v", *got, *tt.expected)
+				}
+			}
+		})
+	}
+}
+
 // Helper functions
 func intPtr(i int) *int {
 	return &i

@@ -312,8 +312,17 @@ func (h *Handler) SyncProcedures(c fiber.Ctx) error {
 				}})
 				continue
 			}
+			// The @fluxbase:name annotation is the source of truth for the
+			// procedure name (same as the filesystem loader path). Use it for
+			// the sync item identity too, so existing-lookup, create-vs-update
+			// matching, and delete_missing all key off the annotated name
+			// rather than the client-supplied (often filename-derived) one.
+			name := spec.Name
+			if annotations.Name != "" {
+				name = annotations.Name
+			}
 			items = append(items, procedureSyncItem{loaded: &LoadedProcedure{
-				Name: spec.Name, Namespace: namespace,
+				Name: name, Namespace: namespace,
 				Code: spec.Code, SQLQuery: sqlQuery, Annotations: annotations,
 			}})
 		}

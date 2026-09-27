@@ -1030,6 +1030,22 @@ async function handler(req) {
 
 Fluxbase supports special `@fluxbase:` directives in function code comments to configure function behavior. These annotations provide a convenient way to set function-level configuration without API calls.
 
+### Name Annotation
+
+**`@fluxbase:name`** - Override the function name (defaults to the filename without extension). Honored by `fluxbase functions sync` and `fluxbase sync`:
+
+```typescript
+/**
+ * Order processor
+ *
+ * @fluxbase:name process_order
+ */
+async function handler(req) {
+  // Deployed as 'process_order' regardless of the file name
+  return { status: 200, body: "OK" };
+}
+```
+
 ### Namespace Annotation
 
 **`@fluxbase:namespace`** - Specify which namespace the function belongs to (overrides CLI `--namespace` flag):

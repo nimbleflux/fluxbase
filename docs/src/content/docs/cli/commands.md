@@ -788,6 +788,8 @@ fluxbase rpc sync --dir ./rpc --namespace production --dry-run
 - `--keep` - Keep procedures not in local directory
 - `--delete-missing` - Delete procedures not in local directory
 
+**Naming:** Each procedure is registered under its filename (without `.sql`). A `-- @fluxbase:name <name>` annotation in the SQL header overrides the filename, so `ensure-user-profile.sql` annotated with `-- @fluxbase:name ensure_user_profile` is registered as `ensure_user_profile`.
+
 ---
 
 ## Webhook Commands
