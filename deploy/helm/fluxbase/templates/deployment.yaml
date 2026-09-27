@@ -491,6 +491,10 @@ spec:
             - name: FLUXBASE_STORAGE_DEFAULT_BUCKETS
               value: {{ .Values.config.storage.default_buckets | join "," | quote }}
             {{- end }}
+            {{- if .Values.config.storage.default_public_buckets }}
+            - name: FLUXBASE_STORAGE_DEFAULT_PUBLIC_BUCKETS
+              value: {{ .Values.config.storage.default_public_buckets | join "," | quote }}
+            {{- end }}
             {{- if eq .Values.config.storage.provider "s3" }}
             - name: FLUXBASE_STORAGE_S3_ENDPOINT
               value: {{ .Values.config.storage.s3_endpoint | quote }}

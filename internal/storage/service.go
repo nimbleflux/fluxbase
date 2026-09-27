@@ -174,6 +174,12 @@ func (s *Service) DefaultBuckets() []string {
 	return s.config.DefaultBuckets
 }
 
+// DefaultPublicBuckets returns the default buckets configured for
+// public-read access from config
+func (s *Service) DefaultPublicBuckets() []string {
+	return s.config.DefaultPublicBuckets
+}
+
 // EnsureDefaultBuckets creates the default buckets if they don't exist
 func (s *Service) EnsureDefaultBuckets(ctx context.Context) error {
 	for _, bucket := range s.config.DefaultBuckets {

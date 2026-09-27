@@ -17,7 +17,12 @@ type StorageConfig struct {
 	S3Region         string   `mapstructure:"s3_region"`
 	S3ForcePathStyle bool     `mapstructure:"s3_force_path_style"` // Use path-style addressing (required for MinIO, R2, Spaces, etc.)
 	DefaultBuckets   []string `mapstructure:"default_buckets"`     // Buckets to auto-create on startup
-	MaxUploadSize    int64    `mapstructure:"max_upload_size"`
+	// Default buckets that serve public-read URLs (object GETs without auth).
+	// Kept separate from default_buckets so private-by-default remains the
+	// zero-config behavior; apps rendering public object URLs declare their
+	// content buckets here.
+	DefaultPublicBuckets []string `mapstructure:"default_public_buckets"`
+	MaxUploadSize        int64    `mapstructure:"max_upload_size"`
 
 	// Image transformation settings
 	Transforms TransformConfig `mapstructure:"transforms"`

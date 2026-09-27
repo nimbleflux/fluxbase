@@ -179,6 +179,7 @@ func setDefaults() {
 	viper.SetDefault("storage.s3_region", "")
 	viper.SetDefault("storage.s3_force_path_style", true) // Default true for S3-compatible services (MinIO, R2, Spaces, etc.)
 	viper.SetDefault("storage.default_buckets", []string{"uploads", "temp-files", "public"})
+	viper.SetDefault("storage.default_public_buckets", []string{})
 	viper.SetDefault("storage.max_upload_size", 2*1024*1024*1024) // 2GB
 
 	// Storage transform defaults
