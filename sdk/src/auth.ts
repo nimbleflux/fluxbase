@@ -211,7 +211,7 @@ export class FluxbaseAuth {
     // claims identify the invoker. Tokens without a sub claim (anon/service
     // keys) must yield null. The signature is not verified here — the runtime
     // minted the token server-side moments before invocation.
-    const authHeader = this.fetch.getDefaultHeaders?.().Authorization;
+    const authHeader = this.fetch.getDefaultHeaders?.()?.Authorization;
     return { data: { user: this.userFromBearerToken(authHeader) }, error: null };
   }
 
@@ -219,7 +219,7 @@ export class FluxbaseAuth {
     if (!header) return null;
     const token = header.startsWith("Bearer ") ? header.slice(7) : header;
     const parts = token.split(".");
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3 || !parts[1]) return null;
     try {
       const payload = JSON.parse(
         atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
