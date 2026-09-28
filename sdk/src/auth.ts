@@ -203,7 +203,39 @@ export class FluxbaseAuth {
    * For server-side validation, use getCurrentUser() instead
    */
   async getUser(): Promise<FluxbaseResponse<{ user: User | null }>> {
-    return { data: { user: this.session?.user ?? null }, error: null };
+    if (this.session?.user) {
+      return { data: { user: this.session.user }, error: null };
+    }
+    // Stateless runtimes (edge functions, jobs) never sign in: their client's
+    // Authorization header carries the server-minted execution token whose
+    // claims identify the invoker. Tokens without a sub claim (anon/service
+    // keys) must yield null. The signature is not verified here — the runtime
+    // minted the token server-side moments before invocation.
+    const authHeader = this.fetch.getDefaultHeaders?.().Authorization;
+    return { data: { user: this.userFromBearerToken(authHeader) }, error: null };
+  }
+
+  private userFromBearerToken(header: string | undefined): User | null {
+    if (!header) return null;
+    const token = header.startsWith("Bearer ") ? header.slice(7) : header;
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    try {
+      const payload = JSON.parse(
+        atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
+      );
+      if (typeof payload.sub !== "string" || !payload.sub) return null;
+      return {
+        id: payload.sub,
+        email: typeof payload.email === "string" ? payload.email : "",
+        email_verified: false,
+        role: typeof payload.role === "string" ? payload.role : "authenticated",
+        created_at: "",
+        updated_at: "",
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**

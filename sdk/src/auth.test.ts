@@ -2337,6 +2337,56 @@ describe("FluxbaseAuth", () => {
       expect(data?.user).toBeNull();
     });
 
+    function base64url(payload: object): string {
+      return btoa(JSON.stringify(payload))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+    }
+
+    it("should decode the runtime execution token when no session exists", async () => {
+      const token = `h.${base64url({
+        iss: "fluxbase",
+        sub: "user-123",
+        email: "fn@example.com",
+        role: "authenticated",
+        exp: Math.floor(Date.now() / 1000) + 60,
+      })}.s`;
+      const runtimeFetch = {
+        ...mockFetch,
+        getDefaultHeaders: () => ({ Authorization: `Bearer ${token}` }),
+      };
+      const runtimeAuth = new FluxbaseAuth(
+        runtimeFetch as unknown as FluxbaseFetch,
+        true,
+        false
+      );
+
+      const { data, error } = await runtimeAuth.getUser();
+
+      expect(error).toBeNull();
+      expect(data?.user?.id).toBe("user-123");
+      expect(data?.user?.email).toBe("fn@example.com");
+    });
+
+    it("should return null user for a token without a sub claim (anon key)", async () => {
+      const anonKey = `h.${base64url({ iss: "fluxbase", role: "anon" })}.s`;
+      const anonFetch = {
+        ...mockFetch,
+        getDefaultHeaders: () => ({ Authorization: `Bearer ${anonKey}` }),
+      };
+      const anonAuth = new FluxbaseAuth(
+        anonFetch as unknown as FluxbaseFetch,
+        true,
+        false
+      );
+
+      const { data, error } = await anonAuth.getUser();
+
+      expect(error).toBeNull();
+      expect(data?.user).toBeNull();
+    });
+
     it("should return user when session exists", async () => {
       // Sign in first
       const authResponse: AuthResponse = {
