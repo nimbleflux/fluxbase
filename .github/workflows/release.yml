@@ -725,12 +725,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.20.0"
+          node-version: "24.21.0"
 
       - name: Update version in files
         run: |
@@ -838,12 +838,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.20.0"
+          node-version: "24.21.0"
 
       - name: Install dependencies (workspace)
         run: bun install --frozen-lockfile
@@ -1121,12 +1121,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.20.0"
+          node-version: "24.21.0"
 
       - name: Install dependencies (workspace)
         run: bun install --frozen-lockfile
@@ -1189,12 +1189,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.20.0"
+          node-version: "24.21.0"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies (workspace)
@@ -1232,12 +1232,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.20.0"
+          node-version: "24.21.0"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies (workspace)
@@ -1283,12 +1283,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.20.0"
+          node-version: "24.21.0"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies (workspace)
@@ -1334,12 +1334,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.20.0"
+          node-version: "24.21.0"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies (workspace)
@@ -1385,12 +1385,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.20.0"
+          node-version: "24.21.0"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies (workspace)
@@ -1791,7 +1791,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.20.0"
+          node-version: "24.21.0"
 
       - name: Test Docker image availability
         if: needs.publish-docker-manifest.result == 'success'
