@@ -44,17 +44,17 @@
   },
   "peerDependencies": {
     "@nimbleflux/fluxbase-sdk": "^2026.9.10",
-    "vue": "^3.5.42"
+    "vue": "^3.5.43"
   },
   "devDependencies": {
     "@nimbleflux/fluxbase-sdk": "workspace:*",
-    "@types/node": "^26.4.1",
-    "prettier": "^3.9.6",
+    "@types/node": "^26.6.3",
+    "prettier": "^3.9.9",
     "tsup": "^8.5.1",
-    "typescript": "^6.0.3",
-    "vitest": "^5.0.0"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
   },
   "engines": {
-    "node": ">=24.20.0"
+    "node": ">=24.21.0"
   }
 }

@@ -145,7 +145,7 @@ services:
 
   # Grafana Loki Service (for logging backend testing)
   loki:
-    image: grafana/loki:3.7.7
+    image: grafana/loki:3.7.8
     container_name: fluxbase-loki-dev
     restart: unless-stopped
     ports:
