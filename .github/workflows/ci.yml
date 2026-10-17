@@ -50,9 +50,9 @@ jobs:
       ocr-go: ${{ steps.filter.outputs.ocr-go }}
       version-files: ${{ steps.filter.outputs.version-files }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         id: filter
         with:
           filters: |
@@ -220,10 +220,10 @@ jobs:
       needs.changes.outputs.ci-config == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -234,9 +234,9 @@ jobs:
           go mod verify
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js for embedded SDK generation
         uses: actions/setup-node@v7
@@ -256,7 +256,7 @@ jobs:
 
       - name: Run golangci-lint
         # Action adds module + build caches over the raw binary install.
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout 10m ./internal/... ./cmd/... ./cli/...
@@ -265,7 +265,7 @@ jobs:
         # Lint ./test/... with the `integration` build tag so type errors in
         # the tag-gated e2e tree surface here instead of only in release-time
         # test runs.
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --build-tags integration --timeout 10m ./test/...
@@ -297,12 +297,12 @@ jobs:
       needs.changes.outputs.ci-config == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -330,12 +330,12 @@ jobs:
       needs.changes.outputs.ci-config == 'true')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -360,7 +360,7 @@ jobs:
         run: bun run test:ci
 
       - name: Upload SDK coverage to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./sdk/coverage/coverage-final.json
@@ -454,16 +454,16 @@ jobs:
         # We'll do this via a step that restarts postgres after configuration
 
       mailhog:
-        image: mailhog/mailhog:latest
+        image: mailhog/mailhog:latest@sha256:8d76a3d4ffa32a3661311944007a415332c4bb855657f4f6c57996405c009bea
         ports:
           - 1025:1025 # SMTP
           - 8025:8025 # Web UI
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -474,9 +474,9 @@ jobs:
           go mod verify
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js for embedded SDK generation
         uses: actions/setup-node@v7
@@ -492,7 +492,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.6.4
+          deno-version: v2.9.7
 
       - name: Create dist directory with placeholder for embed directive
         run: |
@@ -680,7 +680,7 @@ jobs:
           fi
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.out
@@ -727,16 +727,16 @@ jobs:
         # We'll do this via a step that restarts postgres after configuration
 
       mailhog:
-        image: mailhog/mailhog:latest
+        image: mailhog/mailhog:latest@sha256:8d76a3d4ffa32a3661311944007a415332c4bb855657f4f6c57996405c009bea
         ports:
           - 1025:1025 # SMTP
           - 8025:8025 # Web UI
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -747,9 +747,9 @@ jobs:
           go mod verify
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js for embedded SDK generation
         uses: actions/setup-node@v7
@@ -765,7 +765,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.6.4
+          deno-version: v2.9.7
 
       - name: Create dist directory with placeholder for embed directive
         run: |
@@ -925,10 +925,10 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -939,9 +939,9 @@ jobs:
           go mod verify
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js for embedded SDK generation
         uses: actions/setup-node@v7
@@ -1038,10 +1038,10 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -1052,9 +1052,9 @@ jobs:
           go mod verify
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js for embedded SDK generation
         uses: actions/setup-node@v7
@@ -1073,7 +1073,7 @@ jobs:
         # not found").
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.6.4
+          deno-version: v2.9.7
 
       - name: Create dist directory with placeholder for embed directive
         run: |
@@ -1226,7 +1226,7 @@ jobs:
       needs.changes.outputs.version-files == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0 # tags: the expected tree state is "matches latest release tag"
 
@@ -1275,16 +1275,16 @@ jobs:
           - 5432:5432
 
       mailhog:
-        image: mailhog/mailhog:latest
+        image: mailhog/mailhog:latest@sha256:8d76a3d4ffa32a3661311944007a415332c4bb855657f4f6c57996405c009bea
         ports:
           - 1025:1025
           - 8025:8025
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -1295,9 +1295,9 @@ jobs:
           go mod verify
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -1307,7 +1307,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.6.4
+          deno-version: v2.9.7
 
       - name: Install workspace dependencies
         run: bun install --frozen-lockfile
@@ -1503,7 +1503,7 @@ jobs:
           done
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('admin/bun.lock') }}
@@ -1564,12 +1564,12 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -1601,7 +1601,7 @@ jobs:
           cp -r admin/dist/* internal/adminui/dist/
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -1654,13 +1654,13 @@ jobs:
         # (CGO + ocr/vips tags); lite is the distroless static build.
         flavor: [full, lite]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Build Docker image (test only, no push)
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           platforms: linux/amd64
@@ -1684,12 +1684,12 @@ jobs:
        needs.changes.outputs.sdk == 'true' ||
        needs.changes.outputs.ci-config == 'true')
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -1712,7 +1712,7 @@ jobs:
         run: bun run build
 
       - name: Check for broken links
-        uses: lycheeverse/lychee-action@v2
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
           args: --config .lychee.toml --root-dir ${{ github.workspace }}/docs/dist docs/dist
           fail: true
@@ -1724,10 +1724,10 @@ jobs:
           echo "Build output verified: ./docs/dist/index.html exists"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Build docs Docker image (test only, no push)
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: ./Dockerfile.docs
@@ -1756,10 +1756,10 @@ jobs:
       needs.changes.outputs.docker == 'true' ||
       needs.changes.outputs.ci-config == 'true'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
@@ -1769,9 +1769,9 @@ jobs:
       # build-generated artifacts that a fresh checkout does not have. Generate
       # them before building — same approach the test-go job uses.
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
 
       - name: Generate embedded SDK for Jobs runtime
         run: |
@@ -1824,7 +1824,7 @@ jobs:
       matrix:
         flavor: [full, lite]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Build Fluxbase image from source
         run: |
