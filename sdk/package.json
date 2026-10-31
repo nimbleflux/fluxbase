@@ -69,23 +69,23 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.4.1",
-    "@vitest/coverage-v8": "^5.0.0",
-    "docusaurus-plugin-typedoc": "^1.4.2",
-    "eslint": "^10.10.0",
+    "@types/node": "^26.6.5",
+    "@vitest/coverage-v8": "^5.0.5",
+    "docusaurus-plugin-typedoc": "^1.4.3",
+    "eslint": "^10.13.0",
     "esbuild": "^0.28.2",
     "ts-node": "^10.9.2",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "typedoc": "^0.28.20",
-    "typedoc-plugin-markdown": "^4.13.0",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.69.0",
-    "vitest": "^5.0.0"
+    "typedoc-plugin-markdown": "^4.14.0",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.5"
   },
   "engines": {
-    "node": ">=24.20.0"
+    "node": ">=24.22.0"
   },
   "optionalDependencies": {
-    "@rollup/rollup-darwin-arm64": "^4.63.1"
+    "@rollup/rollup-darwin-arm64": "^4.64.8"
   }
 }

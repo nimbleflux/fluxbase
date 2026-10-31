@@ -4,7 +4,7 @@
 # This Dockerfile generates TypeDoc API documentation from the SDK source files
 # and builds the complete documentation site.
 
-FROM oven/bun:1.4.1-debian AS builder
+FROM oven/bun:1.4.3-debian@sha256:923bedb355f7746666659f71e724998159a5c8c54bd1cb1030e1975a0698415b AS builder
 
 WORKDIR /app
 
@@ -40,7 +40,7 @@ ENV NODE_OPTIONS="--localstorage-file=/tmp/localstorage.db"
 RUN cd docs && bun run build
 
 # Production image - serve with nginx
-FROM nginx:alpine AS runner
+FROM nginx:alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606 AS runner
 
 # Create necessary directories with correct permissions for non-root user
 RUN mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp \

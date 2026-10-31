@@ -12,18 +12,18 @@
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
-    "@astrojs/starlight": "^0.42.0",
-    "astro": "^7.3.8",
+    "@astrojs/starlight": "^0.42.6",
+    "astro": "^7.4.0",
     "sharp": "^0.35.5",
     "starlight-typedoc": "0.23.1",
-    "zod": "^4.6.6"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "typedoc": "0.28.20",
-    "typedoc-plugin-markdown": "4.13.0",
-    "typescript": "6.0.3"
+    "typedoc-plugin-markdown": "4.14.0",
+    "typescript": "7.0.2"
   },
   "engines": {
-    "node": ">=24.20.0"
+    "node": ">=24.22.0"
   }
 }

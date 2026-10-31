@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Fluxbase monorepo - Backend-as-a-Service platform",
-  "packageManager": "bun@1.4.1",
+  "packageManager": "bun@1.4.3",
   "workspaces": [
     "admin",
     "sdk",
@@ -22,12 +22,12 @@
   },
   "overrides": {
     "esbuild": "^0.28.2",
-    "h3": "^1.15.11",
-    "smol-toml": "^1.9.0",
+    "h3": "^2.0.2",
+    "smol-toml": "^1.9.1",
     "picomatch": "^4.0.7",
     "form-data": "^4.0.6",
-    "postcss": "^8.5.28",
-    "vue": "^3.5.43",
+    "postcss": "^8.5.30",
+    "vue": "^3.5.44",
     "http-cache-semantics": "^4.3.0",
     "source-map-js": "^1.2.2",
     "sharp": "^0.35.5"

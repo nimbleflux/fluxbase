@@ -35,12 +35,12 @@
 
 ARG FLAVOR=full
 
-FROM denoland/deno:bin-2.6.4 AS deno-bin
+FROM denoland/deno:bin-2.6.4@sha256:6da792238fa246d07e7a4f4ade1ffe43bd8b72a0a7bebb5bc91d437734fd9d42 AS deno-bin
 
 # ------------------------------------------------------------------------------
 # Stage 1: Build SDKs and Admin UI
 # ------------------------------------------------------------------------------
-FROM oven/bun:1.4.1-debian AS admin-builder
+FROM oven/bun:1.4.3-debian@sha256:923bedb355f7746666659f71e724998159a5c8c54bd1cb1030e1975a0698415b AS admin-builder
 
 WORKDIR /build
 
@@ -153,7 +153,7 @@ RUN set -eux; \
 # ------------------------------------------------------------------------------
 # Stage 3a: Fetch pgschema (shared by both runtime images)
 # ------------------------------------------------------------------------------
-FROM debian:bookworm-slim AS pgschema-fetcher
+FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 AS pgschema-fetcher
 
 # Install pgschema for declarative schema management
 # Bumped from 1.7.4 to 1.12.5: fixes plan validation for LANGUAGE sql functions
@@ -164,7 +164,7 @@ FROM debian:bookworm-slim AS pgschema-fetcher
 # is pinned below and verified before install. When bumping PGSCHEMA_VERSION,
 # recompute and update both ARGs:
 #   curl -fsSL "https://github.com/pgplex/pgschema/releases/download/v<ver>/pgschema-<ver>-linux-<arch>" | sha256sum
-ARG PGSCHEMA_VERSION=1.12.5
+ARG PGSCHEMA_VERSION=1.13.3
 ARG PGSCHEMA_SHA256_AMD64=bcef715edb71321c6a27886fcc74a423f923c62d731852668314efcce1402698
 ARG PGSCHEMA_SHA256_ARM64=a347cda5ce428109cd949ff2fcaccda380296016338722efa4488cd8e2f681ec
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* \
@@ -188,7 +188,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 # LocalStorage.Health probe cannot write .health_check, and validateStorageHealth
 # aborts startup (see cmd/fluxbase/main.go).
 # ------------------------------------------------------------------------------
-FROM debian:bookworm-slim AS lite-dirs
+FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 AS lite-dirs
 RUN mkdir -p /appdir/storage /appdir/config /appdir/data /appdir/logs \
     && chown -R 65532:65532 /appdir
 
@@ -196,7 +196,7 @@ RUN mkdir -p /appdir/storage /appdir/config /appdir/data /appdir/logs \
 # ------------------------------------------------------------------------------
 # Stage 3c: Lite Production Runtime Image (distroless, glibc CGO binary)
 # ------------------------------------------------------------------------------
-FROM gcr.io/distroless/base-debian12:nonroot AS runtime-lite
+FROM gcr.io/distroless/base-debian12:nonroot@sha256:7f0c72cd138b442ae0deeb69c08b1acf5525439ba251a49ad93c320a061567e5 AS runtime-lite
 
 ARG VERSION=dev
 ARG COMMIT=unknown
@@ -258,7 +258,7 @@ ENTRYPOINT ["fluxbase-server"]
 # `docker build` with no --target), preserving the historical default behavior.
 # The lite image is produced with `docker build --target runtime-lite`.
 # ------------------------------------------------------------------------------
-FROM debian:bookworm-slim AS runtime-full
+FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 AS runtime-full
 
 ARG VERSION=dev
 ARG COMMIT=unknown
