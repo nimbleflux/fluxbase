@@ -67,7 +67,7 @@ require (
 require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/ClickHouse/ch-go v0.74.0 // indirect
-	github.com/andybalholm/brotli v1.2.2 // indirect
+	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.40 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.40 // indirect
 	github.com/aws/smithy-go v1.28.1 // indirect
