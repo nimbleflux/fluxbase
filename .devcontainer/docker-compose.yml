@@ -76,14 +76,14 @@ services:
       retries: 5
 
   mailhog:
-    image: mailhog/mailhog:latest
+    image: mailhog/mailhog:latest@sha256:8d76a3d4ffa32a3661311944007a415332c4bb855657f4f6c57996405c009bea
     container_name: fluxbase-mailhog-dev
     restart: unless-stopped
     networks:
       - fluxbase-dev-network
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     container_name: fluxbase-minio-dev
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -102,7 +102,7 @@ services:
 
   # Elasticsearch Service (for logging backend testing)
   elasticsearch:
-    image: elasticsearch:9.5.2
+    image: elasticsearch:9.5.3@sha256:e23d4758358a4e356cc2ef3259a5a6f345cacc1722c10dffe6d7150a1a78e52f
     container_name: fluxbase-elasticsearch-dev
     restart: unless-stopped
     environment:
@@ -124,7 +124,7 @@ services:
 
   # ClickHouse Service (for logging backend testing)
   clickhouse:
-    image: clickhouse:26.6
+    image: clickhouse:26.7@sha256:d7a4d5fd8b9c680ac48b4317bec3dd21c7ccb908a57746a3c51a6a3c47a2e88d
     container_name: fluxbase-clickhouse-dev
     restart: unless-stopped
     ports:
@@ -147,7 +147,7 @@ services:
 
   # Grafana Loki Service (for logging backend testing)
   loki:
-    image: grafana/loki:3.7.7
+    image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
     container_name: fluxbase-loki-dev
     restart: unless-stopped
     ports:
@@ -166,7 +166,7 @@ services:
 
   # Dex - OIDC provider for OAuth E2E testing
   dex:
-    image: ghcr.io/dexidp/dex:latest
+    image: ghcr.io/dexidp/dex:latest@sha256:95d0bdf941d112a1e26d52b457e99158d6bef0a505106856efc2ab51b75c0dcb
     container_name: fluxbase-dex-dev
     restart: unless-stopped
     command: dex serve /etc/dex/config.yaml
