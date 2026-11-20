@@ -181,9 +181,8 @@
       }
     },
     {
-      "description": "Hold majors back until deliberate migrations: react-table v9 is an API rewrite of 16 admin files; h3 v2 breaks the docs stack (unstorage consumes v1); Dokka 2.3+ removed V1 mode required by the dokkaGfm docs pipeline",
+      "description": "Hold majors back until deliberate migrations: h3 v2 needs docs-stack validation (unstorage consumes v1, and CI's docs build does not run for lockfile changes); Dokka 2.3+ removed the V1 mode required by the dokkaGfm docs pipeline",
       "matchPackageNames": [
-        "@tanstack/react-table",
         "h3",
         "org.jetbrains.dokka"
       ],
@@ -197,16 +196,6 @@
         "com.vanniktech.maven.publish"
       ],
       "enabled": false
-    },
-    {
-      "description": "Hold majors that need deliberate migration: tsup 9 changes the embedded-SDK bundle consumed by the edge-functions/jobs runtimes; node 24->26 rides into engines fields, .nvmrc files and CI generation steps",
-      "matchPackageNames": [
-        "tsup",
-        "node"
-      ],
-      "major": {
-        "enabled": false
-      }
     },
     {
       "description": "Hold deno runtime updates for deliberate bumps against the function test suite. The 2.6.4 -> 2.9.8 breakage itself was fixed by exempting the loopback family from the SSRF deny list when the instance is loopback-hosted (deno >=2.7 checks net permissions against resolved addresses); keep the hold because the deno runtime executes user functions and minor bumps deserve full e2e scrutiny.",
