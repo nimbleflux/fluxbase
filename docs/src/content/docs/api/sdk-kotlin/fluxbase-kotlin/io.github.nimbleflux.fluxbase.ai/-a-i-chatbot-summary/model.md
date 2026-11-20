@@ -1,0 +1,13 @@
+---
+title: "model"
+editUrl: false
+next: false
+prev: false
+---
+
+//[fluxbase-kotlin](../../../../)/[io.github.nimbleflux.fluxbase.ai](../../)/[AIChatbotSummary](../)/[model](./)
+
+# model
+
+[jvm]\
+val [model](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

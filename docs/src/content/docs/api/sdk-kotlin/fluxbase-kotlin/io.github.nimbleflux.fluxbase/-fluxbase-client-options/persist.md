@@ -18,4 +18,4 @@ jvm
 
 | | |
 |---|---|
-| persist | whether to persist the session to the storage adapter (default true). |
+| persist | whether to persist the session to the [storage](../storage/) adapter (default true). |

@@ -1,0 +1,16 @@
+---
+title: "updatedAt"
+editUrl: false
+next: false
+prev: false
+---
+
+//[fluxbase-kotlin](../../../../)/[io.github.nimbleflux.fluxbase.ai](../../)/[AIConversationSummary](../)/[updatedAt](./)
+
+# updatedAt
+
+[jvm]\
+
+@SerialName(value = &quot;updated_at&quot;)
+
+val [updatedAt](./): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)?

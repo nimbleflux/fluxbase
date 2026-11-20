@@ -181,7 +181,7 @@
       }
     },
     {
-      "description": "Hold majors back until deliberate migrations: h3 v2 needs docs-stack validation (unstorage consumes v1, and CI's docs build does not run for lockfile changes); Dokka 2.3+ removed the V1 mode required by the dokkaGfm docs pipeline",
+      "description": "Hold majors back until deliberate migrations: h3 v2 needs docs-stack validation (unstorage consumes v1, and CI's docs build does not run for lockfile changes); dokka runs the Kotlin SDK docs-generation pipeline (GFM wired via the DokkaMarkdownPlugin format plugin, which upstream no longer officially supports), so bumps deserve full docs-regeneration scrutiny",
       "matchPackageNames": [
         "h3",
         "org.jetbrains.dokka"
@@ -189,13 +189,6 @@
       "major": {
         "enabled": false
       }
-    },
-    {
-      "description": "maven-publish 0.31+ requires Dokka V2 mode, which dropped the GFM output format the sdk-kotlin docs pipeline depends on. Pin at 0.30.x until a deliberate Dokka V2 migration; enabled=false because allowedVersions pins have proven unreliable in this repo.",
-      "matchPackageNames": [
-        "com.vanniktech.maven.publish"
-      ],
-      "enabled": false
     },
     {
       "description": "Hold deno runtime updates for deliberate bumps against the function test suite. The 2.6.4 -> 2.9.8 breakage itself was fixed by exempting the loopback family from the SSRF deny list when the instance is loopback-hosted (deno >=2.7 checks net permissions against resolved addresses); keep the hold because the deno runtime executes user functions and minor bumps deserve full e2e scrutiny.",

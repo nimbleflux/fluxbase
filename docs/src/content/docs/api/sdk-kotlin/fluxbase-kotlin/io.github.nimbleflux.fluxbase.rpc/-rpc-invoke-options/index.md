@@ -26,4 +26,4 @@ Options for [FluxbaseRpc.invoke](../-fluxbase-rpc/invoke/). Port of `RPCInvokeOp
 |---|---|
 | [async](async/) | [jvm]<br>val [async](async/): [Boolean](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html) |
 | [namespace](namespace/) | [jvm]<br>val [namespace](namespace/): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html) |
-| [timeout](timeout/) | [jvm]<br>val [timeout](timeout/): [Long](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html)? |
+| [timeout](timeout/) | [jvm]<br>val [timeout](timeout/): [Long](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html)?<br>Per-request timeout in milliseconds. When it elapses, invoke fails with a 408 &quot;Request timeout&quot; error. The client-wide `FluxbaseClientOptions.timeout` still applies at the transport level, so a value larger than that is capped by it. |

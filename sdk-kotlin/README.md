@@ -83,7 +83,7 @@ surprise.
 ./gradlew detekt               # static analysis (config: detekt.yml)
 ./gradlew integrationTest      # contract tests vs localhost:8080 (live server)
 ./gradlew build -x test        # assemble JARs (sources + javadoc)
-./gradlew dokkaGfm             # regenerate API docs into ../docs/.../api/sdk-kotlin
+./gradlew dokkaGenerateMarkdown             # regenerate API docs into ../docs/.../api/sdk-kotlin
 ```
 
 ### Architecture
