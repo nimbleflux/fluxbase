@@ -192,9 +192,9 @@
       }
     },
     {
-      "description": "Disable gradle-wrapper auto-updates: Gradle 9.8+ is rejected by Dokka's V1 mode (required for the dokkaGfm docs pipeline). Bump deliberately together with a Dokka V2 migration.",
-      "matchManagers": [
-        "gradle-wrapper"
+      "description": "maven-publish 0.31+ requires Dokka V2 mode, which dropped the GFM output format the sdk-kotlin docs pipeline depends on. Pin at 0.30.x until a deliberate Dokka V2 migration; enabled=false because allowedVersions pins have proven unreliable in this repo.",
+      "matchPackageNames": [
+        "com.vanniktech.maven.publish"
       ],
       "enabled": false
     }
