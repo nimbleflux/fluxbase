@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 FROM golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0
 
 # Avoid warnings by switching to noninteractive
@@ -89,7 +89,7 @@ RUN ARCH=$(dpkg --print-architecture) \
 # =============================================================================
 # LAYER 6: pgschema - Declarative schema migration tool
 # =============================================================================
-ARG PGSCHEMA_VERSION=1.12.5
+ARG PGSCHEMA_VERSION=1.14.0
 RUN ARCH=$(dpkg --print-architecture) \
     && if [ "$ARCH" = "amd64" ]; then PGSCHEMA_ARCH="linux-amd64"; \
     elif [ "$ARCH" = "arm64" ]; then PGSCHEMA_ARCH="linux-arm64"; \
