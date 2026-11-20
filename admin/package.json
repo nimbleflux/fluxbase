@@ -45,7 +45,7 @@
     "@tailwindcss/vite": "^4.3.4",
     "@tanstack/react-query": "^5.106.1",
     "@tanstack/react-router": "^1.170.46",
-    "@tanstack/react-table": "^9.3.1",
+    "@tanstack/react-table": "^8.21.3",
     "@xyflow/react": "^12.12.1",
     "axios": "^1.21.0",
     "class-variance-authority": "^0.7.1",
@@ -93,7 +93,7 @@
     "pg": "^8.23.1",
     "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
-    "typescript": "~7.0.2",
+    "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"
