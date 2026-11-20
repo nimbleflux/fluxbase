@@ -75,7 +75,7 @@
     "eslint": "^10.14.0",
     "esbuild": "^0.28.2",
     "ts-node": "^10.9.2",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "typedoc": "^0.28.20",
     "typedoc-plugin-markdown": "^4.14.1",
     "typescript": "^6.0.3",
@@ -83,7 +83,7 @@
     "vitest": "^5.1.0"
   },
   "engines": {
-    "node": ">=24.20.0"
+    "node": ">=26.13.0"
   },
   "optionalDependencies": {
     "@rollup/rollup-darwin-arm64": "^4.67.5"
