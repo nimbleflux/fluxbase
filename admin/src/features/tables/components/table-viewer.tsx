@@ -6,11 +6,9 @@ import {
   type SortingState,
   type RowSelectionState,
   flexRender,
-  getCoreRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table";
+import { createAppTableFeatures, type AppTableFeatures } from "@/lib/table-features";
 import {
   useTable as useFluxbaseTable,
   useUpdate,
@@ -277,7 +275,7 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
   const deleteMutate = deleteMutation.mutate;
 
   // Generate columns dynamically
-  const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
+  const columns = useMemo<ColumnDef<AppTableFeatures, Record<string, unknown>>[]>(() => {
     // Use table schema if available, otherwise fall back to data keys
     let columnKeys: string[];
     const columnTypes: Record<string, string> = {};
@@ -296,7 +294,7 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
     }
 
     // Add selection column at the beginning (hidden for views — read-only)
-    const allColumns: ColumnDef<Record<string, unknown>>[] = isView
+    const allColumns: ColumnDef<AppTableFeatures, Record<string, unknown>>[] = isView
       ? []
       : [
           {
@@ -322,7 +320,7 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
           },
         ];
 
-    const dataColumns: ColumnDef<Record<string, unknown>>[] = columnKeys.map(
+    const dataColumns: ColumnDef<AppTableFeatures, Record<string, unknown>>[] = columnKeys.map(
       (key) => ({
         accessorKey: key,
         header: ({ column }) => (
@@ -377,8 +375,8 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
     return allColumns;
   }, [data, deleteMutate, updateMutateAsync, tableColumns, isView]);
 
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table returns non-memoizable functions by design
-  const table = useReactTable<Record<string, unknown>>({
+  const table = useTable({
+    features: useMemo(() => createAppTableFeatures(), []),
     data: (data || []) as Record<string, unknown>[],
     columns,
     state: {
@@ -390,9 +388,6 @@ export function TableViewer({ tableName, schema }: TableViewerProps) {
     enableRowSelection: !isView,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
     onPaginationChange,
     onGlobalFilterChange,
     manualPagination: true,

@@ -14,14 +14,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import type { AppTableFeatures, TableRowData } from "@/lib/table-features"
 
-type DataTableColumnHeaderProps<TData, TValue> =
+type DataTableColumnHeaderProps<TData extends TableRowData, TValue> =
   React.HTMLAttributes<HTMLDivElement> & {
-    column: Column<TData, TValue>
+    column: Column<AppTableFeatures, TData, TValue>
     title: string
   }
 
-export function DataTableColumnHeader<TData, TValue>({
+export function DataTableColumnHeader<TData extends TableRowData, TValue>({
   column,
   title,
   className,

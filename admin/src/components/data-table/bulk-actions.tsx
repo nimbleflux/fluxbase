@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { type Table } from '@tanstack/react-table'
+import { type ReactTable } from '@tanstack/react-table'
+import type { AppTableFeatures, TableRowData } from "@/lib/table-features"
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -11,8 +12,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
-type DataTableBulkActionsProps<TData> = {
-  table: Table<TData>
+type DataTableBulkActionsProps<TData extends TableRowData> = {
+  table: ReactTable<AppTableFeatures, TData>
   entityName: string
   children: React.ReactNode
 }
@@ -27,7 +28,7 @@ type DataTableBulkActionsProps<TData> = {
  * @param {React.ReactNode} props.children The action buttons to be rendered inside the toolbar.
  * @returns {React.ReactNode | null} The rendered component or null if no rows are selected.
  */
-export function DataTableBulkActions<TData>({
+export function DataTableBulkActions<TData extends TableRowData>({
   table,
   entityName,
   children,

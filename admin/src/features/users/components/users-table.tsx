@@ -1,17 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import {
   type SortingState,
-  type VisibilityState,
+  type ColumnVisibilityState,
   flexRender,
-  getCoreRowModel,
-  getFacetedRowModel,
-  getFacetedUniqueValues,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table";
+import { createAppTableFeatures } from "@/lib/table-features";
 import { cn } from "@/lib/utils";
 import { useTableUrlState } from "@/hooks/use-table-url-state";
 import {
@@ -39,7 +34,7 @@ export function UsersTable({ data }: DataTableProps) {
   const navigate = route.useNavigate();
   // Local UI-only states
   const [rowSelection, setRowSelection] = useState({});
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>({});
   const [sorting, setSorting] = useState<SortingState>([]);
 
   // Get columns dynamically based on tenant context
@@ -69,8 +64,8 @@ export function UsersTable({ data }: DataTableProps) {
     ],
   });
 
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const table = useReactTable({
+  const table = useTable({
+    features: useMemo(() => createAppTableFeatures(), []),
     data,
     columns,
     state: {
@@ -86,12 +81,6 @@ export function UsersTable({ data }: DataTableProps) {
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
-    getPaginationRowModel: getPaginationRowModel(),
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
   });
 
   useEffect(() => {
