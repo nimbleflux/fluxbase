@@ -248,7 +248,7 @@
     "next": ">=15.5.28",
     "picomatch": "^4.0.7",
     "postcss": "^8.5.28",
-    "seroval": ">=1.6.8",
+    "seroval": ">=1.7.7",
     "sharp": "^0.35.5",
     "smol-toml": "^1.9.0",
     "source-map-js": "^1.2.2",
