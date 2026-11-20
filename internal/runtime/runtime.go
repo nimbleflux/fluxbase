@@ -608,8 +608,20 @@ func buildNetworkDenyList(permissions Permissions, selfURL string) []string {
 	seen := make(map[string]bool)
 
 	selfHost := extractHost(selfURL)
+	// When the instance itself is loopback-hosted, the whole loopback family
+	// is reachable self-territory: SDK self-calls must keep working no matter
+	// which shape FLUXBASE_URL uses. Deno >=2.7 checks net permissions against
+	// the resolved address instead of the hostname, so denying the sibling
+	// loopback entries while allowing the hostname would make every self-call
+	// fail with an opaque "fetch failed". Exposure is unchanged versus an
+	// IP-shaped selfURL, which already leaves its own entry out of the deny
+	// list.
+	isLoopbackSelf := selfHost == "localhost" || selfHost == "127.0.0.1" || selfHost == "::1"
 	add := func(domain string) {
 		if domain == "" || domain == selfHost || seen[domain] {
+			return
+		}
+		if isLoopbackSelf && (domain == "localhost" || domain == "127.0.0.1" || domain == "[::1]") {
 			return
 		}
 		seen[domain] = true

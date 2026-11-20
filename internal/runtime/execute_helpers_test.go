@@ -150,7 +150,11 @@ func TestBuildDenoArgs_ScopedFilesystem(t *testing.T) {
 }
 
 // TestBuildNetworkDenyList verifies deny list construction: always-deny
-// entries, configured entries, and self-host exemption.
+// entries, configured entries, and self-host exemption. When the instance
+// itself is loopback-hosted the whole loopback family is exempt: Deno >=2.7
+// checks net permissions against the resolved address, so denying the sibling
+// loopback entries while allowing the hostname would break every SDK
+// self-call with an opaque fetch error.
 func TestBuildNetworkDenyList(t *testing.T) {
 	denied := buildNetworkDenyList(Permissions{
 		BlockedDomains: []string{"169.254.169.254", "internal.example.com"},
@@ -160,9 +164,13 @@ func TestBuildNetworkDenyList(t *testing.T) {
 	assert.Contains(t, denied, "internal.example.com")
 	assert.Contains(t, denied, "metadata.google.internal")
 	// Self host is exempt so SDK callbacks to the configured URL keep working
-	// (it may legitimately be loopback in development).
+	// (it may legitimately be loopback in development). Loopback-shaped
+	// sibling entries are exempt too, or resolved-IP permission checks in
+	// Deno >=2.7 would deny the connection despite the hostname being
+	// allowed.
 	assert.NotContains(t, denied, "localhost")
-	assert.Contains(t, denied, "127.0.0.1")
+	assert.NotContains(t, denied, "127.0.0.1")
+	assert.NotContains(t, denied, "[::1]")
 
 	// No duplicates
 	count := 0
@@ -176,6 +184,28 @@ func TestBuildNetworkDenyList(t *testing.T) {
 	// Self host is exempt (dev deployments expose the instance on loopback)
 	denied = buildNetworkDenyList(Permissions{}, "http://127.0.0.1:8080")
 	assert.NotContains(t, denied, "127.0.0.1")
+	assert.NotContains(t, denied, "localhost")
+	assert.NotContains(t, denied, "[::1]")
+
+	// Non-loopback self URL keeps loopback denied
+	denied = buildNetworkDenyList(Permissions{}, "https://fluxbase.example.com")
+	assert.Contains(t, denied, "localhost")
+	assert.Contains(t, denied, "127.0.0.1")
+	assert.Contains(t, denied, "[::1]")
+	assert.NotContains(t, denied, "fluxbase.example.com")
+
+	// IPv6 loopback self URL is also treated as loopback-hosted
+	denied = buildNetworkDenyList(Permissions{}, "http://[::1]:8080")
+	assert.NotContains(t, denied, "[::1]")
+	assert.NotContains(t, denied, "localhost")
+	assert.NotContains(t, denied, "127.0.0.1")
+	assert.Contains(t, denied, "169.254.169.254")
+
+	// No self URL denies the full loopback family
+	denied = buildNetworkDenyList(Permissions{}, "")
+	assert.Contains(t, denied, "localhost")
+	assert.Contains(t, denied, "127.0.0.1")
+	assert.Contains(t, denied, "[::1]")
 }
 
 // TestBuildEnv_PerExecutionDirs verifies Deno cache and HOME live inside the
