@@ -40,7 +40,9 @@ ENV NODE_OPTIONS="--localstorage-file=/tmp/localstorage.db"
 RUN cd docs && bun run build
 
 # Production image - serve with nginx
-FROM nginx:alpine AS runner
+# Pinned to 1.31.9: contains the fix for the HTTP/2 integer-underflow RCE
+# (CVE-2026-123007, fixed in 1.30.7/1.31.9). Revisit the pin when bumping.
+FROM nginx:1.31.9-alpine AS runner
 
 # Create necessary directories with correct permissions for non-root user
 RUN mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp \
