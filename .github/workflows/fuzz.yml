@@ -43,6 +43,15 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # These files are generated during the actual build, but the embed
+      # directives need stubs for `go test` to compile the packages that
+      # transitively import internal/adminui and internal/runtime.
+      - name: Create embedded asset stubs
+        run: |
+          mkdir -p internal/adminui/dist
+          echo "<!DOCTYPE html><html><body>placeholder</body></html>" > internal/adminui/dist/index.html
+          echo "// placeholder SDK" > internal/runtime/embedded_sdk.js
+
       - name: Get dependencies
         run: |
           go mod download
