@@ -215,6 +215,13 @@
         "denoland/deno"
       ],
       "enabled": false
+    },
+    {
+      "description": "Disable pgschema auto-bumps: the version bump rides a regexManager that cannot update the pinned sha256 ARGs in the Dockerfile, so every auto-bump failed image-build checksum verification. Bump deliberately with scripts/bump-pgschema.sh <version>, which rewrites version and both checksums in one step.",
+      "matchPackageNames": [
+        "pgplex/pgschema"
+      ],
+      "enabled": false
     }
   ]
 }
