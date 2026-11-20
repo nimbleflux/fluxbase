@@ -245,7 +245,7 @@
     "form-data": "^4.0.6",
     "h3": "^1.15.11",
     "http-cache-semantics": "^4.3.0",
-    "next": ">=15.5.28",
+    "next": ">=16.4.5",
     "picomatch": "^4.0.7",
     "postcss": "^8.5.28",
     "seroval": ">=1.7.7",
