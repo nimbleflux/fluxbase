@@ -14,7 +14,7 @@ prev: false
 
 data class [UserSetting](./)(val id: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), val key: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html), val value: JsonElement, val description: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)? = null, val userId: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html) = &quot;&quot;, val createdAt: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html) = &quot;&quot;, val updatedAt: [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html) = &quot;&quot;)
 
-A non-encrypted user setting. Port of `UserSetting` from `sdk/src/types.ts:1539`. The value is an arbitrary JSON object (the server stores it as JSONB).
+A non-encrypted user setting. Port of `UserSetting` from `sdk/src/types.ts:1539`. The [value](value/) is an arbitrary JSON object (the server stores it as JSONB).
 
 ## Constructors
 

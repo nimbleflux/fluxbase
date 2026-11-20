@@ -29,7 +29,7 @@ A normalized postgres_changes payload — the Supabase-compatible shape the TS S
 | [commitTimestamp](commit-timestamp/) | [jvm]<br>@SerialName(value = &quot;commit_timestamp&quot;)<br>val [commitTimestamp](commit-timestamp/): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)? |
 | [errors](errors/) | [jvm]<br>val [errors](errors/): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html)? |
 | [eventType](event-type/) | [jvm]<br>val [eventType](event-type/): [String](https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html) |
-| [new](new/) | [jvm]<br>val [new](new/): JsonElement?<br>Convenience accessor — the TS SDK exposes `new` and `old`; in Kotlin those are keywords, so we use newRecord / oldRecord. |
+| [new](new/) | [jvm]<br>val [new](new/): JsonElement?<br>Convenience accessor — the TS SDK exposes `new` and `old`; in Kotlin those are keywords, so we use [newRecord](new-record/) / [oldRecord](old-record/). |
 | [newRecord](new-record/) | [jvm]<br>val [newRecord](new-record/): JsonElement? |
 | [old](old/) | [jvm]<br>val [old](old/): JsonElement? |
 | [oldRecord](old-record/) | [jvm]<br>val [oldRecord](old-record/): JsonElement? |

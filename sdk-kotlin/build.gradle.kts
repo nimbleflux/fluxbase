@@ -7,6 +7,9 @@
  * io.github.nimbleflux.fluxbase for the fastest TDD loop.
  */
 
+import org.jetbrains.dokka.gradle.formats.DokkaFormatPlugin
+import org.jetbrains.dokka.gradle.internal.InternalDokkaGradlePluginApi
+
 plugins {
     `maven-publish`
     alias(libs.plugins.kotlin.jvm)
@@ -16,6 +19,29 @@ plugins {
     alias(libs.plugins.dokka)
     alias(libs.plugins.mavenPublish)
 }
+
+// ---- GFM format for Dokka Gradle Plugin v2 ----
+// DGP v2 only ships HTML and Javadoc formats; Markdown lives in the separately
+// published gfm-plugin, wired through a Dokka Format plugin exactly as
+// documented by upstream (dokka-subprojects/plugin-gfm/README.md). Applying
+// this registers the `dokkaGenerateMarkdown` task and a `markdown` entry in
+// `dokkaPublications`.
+@OptIn(InternalDokkaGradlePluginApi::class)
+abstract class DokkaMarkdownPlugin : DokkaFormatPlugin(formatName = "markdown") {
+    override fun DokkaFormatPlugin.DokkaFormatPluginContext.configure() {
+        project.dependencies {
+            // Sets up generation for the current project
+            dokkaPlugin(dokka("gfm-plugin"))
+
+            // Sets up multi-project generation
+            formatDependencies.dokkaPublicationPluginClasspathApiOnly.dependencies.addLater(
+                dokka("gfm-template-processing-plugin")
+            )
+        }
+    }
+}
+
+apply<DokkaMarkdownPlugin>()
 
 group = "io.github.nimbleflux"
 
@@ -105,9 +131,10 @@ detekt {
 // which Astro's content collection + sidebar `autogenerate` picks up automatically.
 // The generated output is committed to git, matching the 395 committed TS API docs.
 //
-// Regenerate with:  ./gradlew dokkaGfm
+// Regenerate with:  ./gradlew dokkaGenerateMarkdown
 // Then commit the changed files under docs/src/content/docs/api/sdk-kotlin/.
-// (gradle.properties enables Dokka V1 mode — V2 dropped the GFM format.)
+// (Runs on Dokka Gradle Plugin v2 mode; GFM comes from the gfm-plugin wired
+// through the DokkaMarkdownPlugin format plugin declared above.)
 
 /**
  * Slug a Dokka path segment the way Starlight slugifies content-collection
@@ -148,8 +175,13 @@ fun normalizeRelative(path: String): String {
     return if (out.isEmpty()) "." else out.joinToString("/")
 }
 
-tasks.named<org.jetbrains.dokka.gradle.DokkaTask>("dokkaGfm").configure {
-    outputDirectory.set(file("../docs/src/content/docs/api/sdk-kotlin"))
+dokka {
+    dokkaPublications.named("markdown") {
+        outputDirectory.set(file("../docs/src/content/docs/api/sdk-kotlin"))
+    }
+}
+
+tasks.named("dokkaGenerateMarkdown") {
     // Post-process: inject Starlight frontmatter into every generated .md file,
     // then rewrite Dokka's GitHub-flavored .md links to Starlight directory URLs.
     //

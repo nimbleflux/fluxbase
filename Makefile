@@ -666,7 +666,7 @@ docs-build: ## Build static documentation site for production
 
 sdk-kotlin-docs: ## Regenerate Kotlin SDK API docs (Dokka GFM → docs/src/content/docs/api/sdk-kotlin/)
 	@echo "${YELLOW}Generating Kotlin SDK API documentation...${NC}"
-	@cd sdk-kotlin && ./gradlew dokkaGfm
+	@cd sdk-kotlin && ./gradlew dokkaGenerateMarkdown
 	@echo "${GREEN}Kotlin SDK docs generated!${NC}"
 	@echo "${YELLOW}Output:${NC} docs/src/content/docs/api/sdk-kotlin/"
 	@echo "${YELLOW}Commit the generated files to update the docs site.${NC}"
