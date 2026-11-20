@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { type Table } from "@tanstack/react-table";
+import { type ReactTable } from "@tanstack/react-table";
 import { Trash2, UserX, UserCheck, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { sleep } from "@/lib/utils";
@@ -12,12 +12,13 @@ import {
 import { DataTableBulkActions as BulkActionsToolbar } from "@/components/data-table";
 import { type User } from "../data/schema";
 import { UsersMultiDeleteDialog } from "./users-multi-delete-dialog";
+import type { AppTableFeatures, TableRowData } from "@/lib/table-features"
 
-type DataTableBulkActionsProps<TData> = {
-  table: Table<TData>;
+type DataTableBulkActionsProps<TData extends TableRowData> = {
+  table: ReactTable<AppTableFeatures, TData>;
 };
 
-export function DataTableBulkActions<TData>({
+export function DataTableBulkActions<TData extends TableRowData>({
   table,
 }: DataTableBulkActionsProps<TData>) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);

@@ -19,14 +19,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { AppTableFeatures, TableRowData } from "@/lib/table-features"
 
-interface TableRowActionsProps<TData> {
-  row: Row<TData>;
+interface TableRowActionsProps<TData extends TableRowData> {
+  row: Row<AppTableFeatures, TData>;
   onEdit: (row: TData) => void;
   onDelete: (row: TData) => void;
 }
 
-export function TableRowActions<TData extends Record<string, unknown>>({
+export function TableRowActions<TData extends TableRowData>({
   row,
   onEdit,
   onDelete,

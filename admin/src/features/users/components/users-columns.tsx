@@ -10,14 +10,15 @@ import { LongText } from "@/components/long-text";
 import { providerColors, providerLabels, roles } from "../data/data";
 import { type User } from "../data/schema";
 import { DataTableRowActions } from "./data-table-row-actions";
+import type { AppTableFeatures } from "@/lib/table-features"
 
 /**
  * Hook that returns user table columns with conditional tenants column.
  * The tenants column is only shown when no tenant is selected (instance admin mode).
  */
-export function useUsersColumns(): ColumnDef<User>[] {
+export function useUsersColumns(): ColumnDef<AppTableFeatures, User>[] {
   return useMemo(() => {
-    const columns: ColumnDef<User>[] = [
+    const columns: ColumnDef<AppTableFeatures, User>[] = [
       {
         id: "select",
         header: ({ table }) => (

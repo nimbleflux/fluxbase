@@ -6,14 +6,9 @@ import {
   type SortingState,
   type ColumnFiltersState,
   flexRender,
-  getCoreRowModel,
-  getFacetedRowModel,
-  getFacetedUniqueValues,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table";
+import { createAppTableFeatures, type AppTableFeatures } from "@/lib/table-features";
 import {
   Bot,
   RefreshCw,
@@ -111,7 +106,7 @@ function ChatbotActions({
 }
 
 function useChatbotColumns(toggle: (chatbot: AIChatbotSummary) => void) {
-  return useMemo<ColumnDef<AIChatbotSummary>[]>(
+  return useMemo<ColumnDef<AppTableFeatures, AIChatbotSummary>[]>(
     () => [
       {
         accessorKey: "name",
@@ -224,18 +219,13 @@ const ChatbotsPage = () => {
     return namespaces.map((ns) => ({ label: ns, value: ns }));
   }, [chatbots]);
 
-  const table = useReactTable({
+  const table = useTable({
+    features: useMemo(() => createAppTableFeatures(), []),
     data: chatbots,
     columns,
     state: { sorting, columnFilters },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
   });
 
   if (loading) {

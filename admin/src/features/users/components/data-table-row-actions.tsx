@@ -14,9 +14,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { type User } from '../data/schema'
 import { useUsers } from './users-provider'
+import type { AppTableFeatures } from "@/lib/table-features"
 
 type DataTableRowActionsProps = {
-  row: Row<User>
+  row: Row<AppTableFeatures, User>
 }
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {

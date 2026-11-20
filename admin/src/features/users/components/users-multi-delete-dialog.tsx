@@ -11,16 +11,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { type User } from '../data/schema'
+import type { AppTableFeatures, TableRowData } from "@/lib/table-features"
 
-type UserMultiDeleteDialogProps<TData> = {
+type UserMultiDeleteDialogProps<TData extends TableRowData> = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  table: Table<TData>
+  table: Table<AppTableFeatures, TData>
 }
 
 const CONFIRM_WORD = 'DELETE'
 
-export function UsersMultiDeleteDialog<TData>({
+export function UsersMultiDeleteDialog<TData extends TableRowData>({
   open,
   onOpenChange,
   table,

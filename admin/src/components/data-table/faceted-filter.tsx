@@ -19,9 +19,10 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Separator } from '@/components/ui/separator'
+import type { AppTableFeatures, TableRowData } from "@/lib/table-features"
 
-type DataTableFacetedFilterProps<TData, TValue> = {
-  column?: Column<TData, TValue>
+type DataTableFacetedFilterProps<TData extends TableRowData, TValue> = {
+  column?: Column<AppTableFeatures, TData, TValue>
   title?: string
   options: {
     label: string
@@ -30,7 +31,7 @@ type DataTableFacetedFilterProps<TData, TValue> = {
   }[]
 }
 
-export function DataTableFacetedFilter<TData, TValue>({
+export function DataTableFacetedFilter<TData extends TableRowData, TValue>({
   column,
   title,
   options,
