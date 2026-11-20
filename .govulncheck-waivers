@@ -1,5 +1,11 @@
 # Vulnerabilities accepted as known risks. Each entry needs a documented
 # reason and must be re-reviewed when a new upstream release is available.
-# (Empty — GO-2026-6452 was retired: excelize v2.11.1-0.20261003 fixed it and
-# the related CVE-2026-1072xx set; the Go toolchain floor was raised to 1.26.9
-# for the stdlib GO-2026-66xx set.)
+#
+# GO-2026-6909 — github.com/crewjam/saml v0.5.1: nil-pointer panic in
+# validateAssertion and namespace-blind Subject.NameID handling in
+# ServiceProvider.ParseXMLResponse (reached via internal/auth/saml.go).
+# No upstream fix is available yet (Fixed in: N/A as of 2026-11-20).
+# Impact is limited to SAML SSO assertion parsing (authenticated-flows
+# surface); re-review and remove as soon as crewjam/saml publishes a
+# release with the fix, and prefer pinning the patched version.
+GO-2026-6909
