@@ -197,6 +197,16 @@
         "com.vanniktech.maven.publish"
       ],
       "enabled": false
+    },
+    {
+      "description": "Hold majors that need deliberate migration: tsup 9 changes the embedded-SDK bundle consumed by the edge-functions/jobs runtimes; node 24->26 rides into engines fields, .nvmrc files and CI generation steps",
+      "matchPackageNames": [
+        "tsup",
+        "node"
+      ],
+      "major": {
+        "enabled": false
+      }
     }
   ]
 }
