@@ -151,25 +151,23 @@
       "automerge": true
     },
     {
-      "description": "Pin eslint to v9 until typescript-eslint v9 is stable",
+      "description": "Hold eslint majors (v11+) until typescript-eslint supports them",
       "matchPackageNames": [
         "eslint",
         "@eslint/js"
       ],
-      "allowedVersions": "9.x",
-      "matchManagers": [
-        "npm"
-      ]
+      "major": {
+        "enabled": false
+      }
     },
     {
-      "description": "Pin typescript to v6 until typescript-eslint and rollup-plugin-dts support v7",
+      "description": "Hold typescript v7 until typescript-eslint (peer <6.1.0) and rollup-plugin-dts support it",
       "matchPackageNames": [
         "typescript"
       ],
-      "allowedVersions": "6.x",
-      "matchManagers": [
-        "npm"
-      ]
+      "major": {
+        "enabled": false
+      }
     },
     {
       "description": "Allow both elasticsearch v8 and v9 as separate major versions",
@@ -192,6 +190,13 @@
       "major": {
         "enabled": false
       }
+    },
+    {
+      "description": "Disable gradle-wrapper auto-updates: Gradle 9.8+ is rejected by Dokka's V1 mode (required for the dokkaGfm docs pipeline). Bump deliberately together with a Dokka V2 migration.",
+      "matchManagers": [
+        "gradle-wrapper"
+      ],
+      "enabled": false
     }
   ]
 }
