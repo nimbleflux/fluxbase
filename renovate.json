@@ -209,7 +209,7 @@
       }
     },
     {
-      "description": "Hold deno runtime updates: the 2.6.4 -> 2.9.8 bump broke edge-function fetches in integration e2e (opaque 'fetch failed' where 2.6.4 surfaces detailed connect errors). The deno runtime executes user functions; bump deliberately against the function test suite.",
+      "description": "Hold deno runtime updates for deliberate bumps against the function test suite. The 2.6.4 -> 2.9.8 breakage itself was fixed by exempting the loopback family from the SSRF deny list when the instance is loopback-hosted (deno >=2.7 checks net permissions against resolved addresses); keep the hold because the deno runtime executes user functions and minor bumps deserve full e2e scrutiny.",
       "matchPackageNames": [
         "deno",
         "denoland/deno"

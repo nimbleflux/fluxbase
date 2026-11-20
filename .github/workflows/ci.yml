@@ -492,7 +492,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.6.4
+          deno-version: v2.9.8
 
       - name: Create dist directory with placeholder for embed directive
         run: |
@@ -765,7 +765,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.6.4
+          deno-version: v2.9.8
 
       - name: Create dist directory with placeholder for embed directive
         run: |
@@ -1073,7 +1073,7 @@ jobs:
         # not found").
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.6.4
+          deno-version: v2.9.8
 
       - name: Create dist directory with placeholder for embed directive
         run: |
@@ -1307,7 +1307,7 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: 2.6.4
+          deno-version: v2.9.8
 
       - name: Install workspace dependencies
         run: bun install --frozen-lockfile
