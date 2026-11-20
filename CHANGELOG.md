@@ -7,6 +7,75 @@ This file is generated from the conventional-commit history by
 [git-cliff](https://github.com/orhun/git-cliff) at release time — do not
 hand-edit release sections. See RELEASING.md for the release process.
 
+## v2026.11.1 (2026-11-20)
+
+
+### Bug fixes
+
+
+- **postgres:** Upgrade base packages on every build; derive CI defaults from versions.json (#444) @bartcode
+
+- **security:** Clear remaining Security Scan findings, pin nginx 1.31.9 (CVE-2026-123007), fix Fuzz setup (#459) @bartcode
+
+- **runtime:** Exempt loopback family from deny list for loopback self URLs (#462) @bartcode
+
+
+### Dependencies
+
+
+- **deps:** Update dependency vite to ^8.3.3 [security] (#446) @renovate[bot]
+
+- **deps:** Update dependency zod to ^4.6.6 [security] (#448) @renovate[bot]
+
+- **deps:** Update dependency astro to ^7.3.8 [security] (#447) @renovate[bot]
+
+- **deps:** Pin golang docker tag to d9c68c2 (#449) @renovate[bot]
+
+- **deps:** Update module golang.org/x/net to v0.62.0 [security] (#451) @renovate[bot]
+
+- **deps:** Update module github.com/go-jose/go-jose/v4 to v4.1.6 [security] (#450) @renovate[bot]
+
+- **deps:** Update module github.com/andybalholm/brotli to v1.2.7 [security] (#452) @renovate[bot]
+
+- **deps:** Update module github.com/klauspost/compress to v1.20.2 [security] (#453) @renovate[bot]
+
+- **deps:** Update module golang.org/x/crypto to v0.59.0 [security] (#455) @renovate[bot]
+
+- **deps:** Update module go.opentelemetry.io/otel/sdk to v1.47.0 [security] (#457) @renovate[bot]
+
+- **deps:** Update dependency astro to ^7.4.7 [security] (#456) @renovate[bot]
+
+- **deps:** Update dependency seroval to >=1.7.7 [security] (#460) @renovate[bot]
+
+- **deps:** Update dependency next to v16 [security] (#461) @renovate[bot]
+
+- **deps:** Update all dependencies (#454) @renovate[bot]
+
+- **deps:** Bump tsup to v9 and node to 26.13.0 (#465) @bartcode
+
+
+### Features
+
+
+- **admin:** Migrate @tanstack/react-table to v9 (#464) @bartcode
+
+- **kotlin:** Migrate to Dokka Gradle Plugin v2, bump maven-publish to 0.37.0 (#466) @bartcode
+
+
+### Miscellaneous
+
+
+- Update version to 2026.10.2 in deployment files @github-actions[bot]
+
+- **docker:** Pgschema bump script; stop renovate auto-bumps (#463) @bartcode
+
+
+### Refactoring
+
+
+- **api:** Extract vector domain into internal/api/vector (#445) @bartcode
+
+
 ## v2026.10.2 (2026-10-13)
 
 
