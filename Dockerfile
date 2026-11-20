@@ -161,9 +161,10 @@ FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d
 # schema-qualified function-body references (pgplex/pgschema#399).
 #
 # Upstream publishes no checksums file, so the sha256 of each release binary
-# is pinned below and verified before install. When bumping PGSCHEMA_VERSION,
-# recompute and update both ARGs:
-#   curl -fsSL "https://github.com/pgplex/pgschema/releases/download/v<ver>/pgschema-<ver>-linux-<arch>" | sha256sum
+# is pinned below and verified before install. Renovate no longer proposes
+# pgschema updates (it cannot update the checksum ARGs, so auto-bumps always
+# failed the build). Bump deliberately instead:
+#   scripts/bump-pgschema.sh <version>
 ARG PGSCHEMA_VERSION=1.14.0
 ARG PGSCHEMA_SHA256_AMD64=4454e4be42984368d2443265c7b433994d5fd86a5bb311192053126afd23979f
 ARG PGSCHEMA_SHA256_ARM64=f94f7b0a46d996d93d2fb2a9fb0d089e5b144b776ea47a26770d78962b2a2f25
