@@ -6,7 +6,7 @@ kotlinx-datetime = "0.8.0-0.6.x-compat"
 ktor = "3.6.1"
 kover = "0.9.11"
 detekt = "1.23.8"
-dokka = "2.3.0"
+dokka = "2.2.0"
 mavenPublish = "0.37.0"
 
 [libraries]
