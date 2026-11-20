@@ -207,6 +207,14 @@
       "major": {
         "enabled": false
       }
+    },
+    {
+      "description": "Hold deno runtime updates: the 2.6.4 -> 2.9.8 bump broke edge-function fetches in integration e2e (opaque 'fetch failed' where 2.6.4 surfaces detailed connect errors). The deno runtime executes user functions; bump deliberately against the function test suite.",
+      "matchPackageNames": [
+        "deno",
+        "denoland/deno"
+      ],
+      "enabled": false
     }
   ]
 }
