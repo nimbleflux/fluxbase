@@ -165,8 +165,8 @@ FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d
 # recompute and update both ARGs:
 #   curl -fsSL "https://github.com/pgplex/pgschema/releases/download/v<ver>/pgschema-<ver>-linux-<arch>" | sha256sum
 ARG PGSCHEMA_VERSION=1.14.0
-ARG PGSCHEMA_SHA256_AMD64=bcef715edb71321c6a27886fcc74a423f923c62d731852668314efcce1402698
-ARG PGSCHEMA_SHA256_ARM64=a347cda5ce428109cd949ff2fcaccda380296016338722efa4488cd8e2f681ec
+ARG PGSCHEMA_SHA256_AMD64=4454e4be42984368d2443265c7b433994d5fd86a5bb311192053126afd23979f
+ARG PGSCHEMA_SHA256_ARM64=f94f7b0a46d996d93d2fb2a9fb0d089e5b144b776ea47a26770d78962b2a2f25
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* \
     && ARCH=$(dpkg --print-architecture) \
     && if [ "$ARCH" = "amd64" ]; then PGSCHEMA_ARCH="linux-amd64"; PGSCHEMA_SHA256="$PGSCHEMA_SHA256_AMD64"; \
