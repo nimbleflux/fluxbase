@@ -6,14 +6,18 @@
     ":semanticCommitTypeAll(chore)",
     "group:all"
   ],
-  "labels": ["dependencies"],
+  "labels": [
+    "dependencies"
+  ],
   "rangeStrategy": "bump",
   "minimumReleaseAge": "14 days",
   "internalChecksFilter": "strict",
   "prCreation": "not-pending",
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "labels": ["security"]
+    "labels": [
+      "security"
+    ]
   },
   "pinDigests": true,
   "lockFileMaintenance": {
@@ -22,15 +26,23 @@
   "regexManagers": [
     {
       "description": "Update go-version in GitHub Actions workflows",
-      "fileMatch": ["^\\.github/workflows/[^/]+\\.ya?ml$"],
-      "matchStrings": ["go-version:\\s*['\"]?(?<currentValue>[0-9.]+)['\"]?"],
+      "fileMatch": [
+        "^\\.github/workflows/[^/]+\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "go-version:\\s*['\"]?(?<currentValue>[0-9.]+)['\"]?"
+      ],
       "depNameTemplate": "go",
       "datasourceTemplate": "golang-version"
     },
     {
       "description": "Update GO_VERSION env var in CI workflows",
-      "fileMatch": ["^\\.github/workflows/[^/]+\\.ya?ml$"],
-      "matchStrings": ["GO_VERSION:\\s*['\"]?(?<currentValue>[0-9.]+)['\"]?"],
+      "fileMatch": [
+        "^\\.github/workflows/[^/]+\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "GO_VERSION:\\s*['\"]?(?<currentValue>[0-9.]+)['\"]?"
+      ],
       "depNameTemplate": "go",
       "datasourceTemplate": "golang-version"
     },
@@ -41,7 +53,9 @@
         "Dockerfile\\..+",
         "^\\.devcontainer/Dockerfile"
       ],
-      "matchStrings": ["FROM\\s+golang:(?<currentValue>[0-9.]+)(?:-[a-z]+)?"],
+      "matchStrings": [
+        "FROM\\s+golang:(?<currentValue>[0-9.]+)(?:-[a-z]+)?"
+      ],
       "depNameTemplate": "golang",
       "datasourceTemplate": "docker"
     },
@@ -52,13 +66,19 @@
         "Dockerfile\\..+",
         "^\\.devcontainer/Dockerfile"
       ],
-      "matchStrings": ["ARG\\s+PGSCHEMA_VERSION=(?<currentValue>[0-9.]+)"],
+      "matchStrings": [
+        "ARG\\s+PGSCHEMA_VERSION=(?<currentValue>[0-9.]+)"
+      ],
       "depNameTemplate": "pgplex/pgschema",
       "datasourceTemplate": "github-releases"
     },
     {
       "description": "Update pinned golangci-lint version (Makefile + lefthook + CI must stay in lockstep)",
-      "fileMatch": ["^Makefile$", "^lefthook\\.yml$", "^\\.github/workflows/[^/]+\\.ya?ml$"],
+      "fileMatch": [
+        "^Makefile$",
+        "^lefthook\\.yml$",
+        "^\\.github/workflows/[^/]+\\.ya?ml$"
+      ],
       "matchStrings": [
         "golangci/golangci-lint/HEAD/install\\.sh \\| sh -s -- -b [^ ]+ v(?<currentValue>[0-9.]+)",
         "golangci-lint-version:\\s*v?(?<currentValue>[0-9.]+)"
@@ -68,7 +88,10 @@
     },
     {
       "description": "Update pinned git-cliff version (release notes generator; Makefile + release.yml)",
-      "fileMatch": ["^Makefile$", "^\\.github/workflows/[^/]+\\.ya?ml$"],
+      "fileMatch": [
+        "^Makefile$",
+        "^\\.github/workflows/[^/]+\\.ya?ml$"
+      ],
       "matchStrings": [
         "GIT_CLIFF_VERSION \\?= v(?<currentValue>[0-9.]+)",
         "GIT_CLIFF_VERSION:\\s*v(?<currentValue>[0-9.]+)"
@@ -80,44 +103,71 @@
   "packageRules": [
     {
       "description": "Pin Go to 1.26.x",
-      "matchPackageNames": ["go", "golang"],
-      "matchDatasources": ["golang-version", "gomod", "docker"],
+      "matchPackageNames": [
+        "go",
+        "golang"
+      ],
+      "matchDatasources": [
+        "golang-version",
+        "gomod",
+        "docker"
+      ],
       "allowedVersions": "1.26.x",
       "groupName": "go"
     },
     {
       "description": "Group Go module dependencies",
-      "matchManagers": ["gomod"],
-      "matchPackageNames": ["!go"],
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchPackageNames": [
+        "!go"
+      ],
       "groupName": "go dependencies"
     },
     {
       "description": "Group all NPM dependencies",
-      "matchManagers": ["npm"],
+      "matchManagers": [
+        "npm"
+      ],
       "groupName": "npm dependencies"
     },
     {
       "description": "Group Helm chart dependencies",
-      "matchManagers": ["helmv3"],
+      "matchManagers": [
+        "helmv3"
+      ],
       "groupName": "helm dependencies"
     },
     {
       "description": "Automerge minor and patch updates for dev dependencies",
-      "matchDepTypes": ["devDependencies"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": [
+        "devDependencies"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
       "automerge": true
     },
     {
-      "description": "Pin eslint to v9 until typescript-eslint v9 is stable",
-      "matchPackageNames": ["eslint", "@eslint/js"],
-      "allowedVersions": "9.x",
-      "matchManagers": ["npm"]
+      "description": "Hold eslint majors (v11+) until typescript-eslint supports them",
+      "matchPackageNames": [
+        "eslint",
+        "@eslint/js"
+      ],
+      "major": {
+        "enabled": false
+      }
     },
     {
-      "description": "Pin typescript to v6 until typescript-eslint and rollup-plugin-dts support v7",
-      "matchPackageNames": ["typescript"],
-      "allowedVersions": "6.x",
-      "matchManagers": ["npm"]
+      "description": "Hold typescript v7 until typescript-eslint (peer <6.1.0) and rollup-plugin-dts support it",
+      "matchPackageNames": [
+        "typescript"
+      ],
+      "major": {
+        "enabled": false
+      }
     },
     {
       "description": "Allow both elasticsearch v8 and v9 as separate major versions",
@@ -129,6 +179,42 @@
       "major": {
         "enabled": false
       }
+    },
+    {
+      "description": "Hold majors back until deliberate migrations: react-table v9 is an API rewrite of 16 admin files; h3 v2 breaks the docs stack (unstorage consumes v1); Dokka 2.3+ removed V1 mode required by the dokkaGfm docs pipeline",
+      "matchPackageNames": [
+        "@tanstack/react-table",
+        "h3",
+        "org.jetbrains.dokka"
+      ],
+      "major": {
+        "enabled": false
+      }
+    },
+    {
+      "description": "maven-publish 0.31+ requires Dokka V2 mode, which dropped the GFM output format the sdk-kotlin docs pipeline depends on. Pin at 0.30.x until a deliberate Dokka V2 migration; enabled=false because allowedVersions pins have proven unreliable in this repo.",
+      "matchPackageNames": [
+        "com.vanniktech.maven.publish"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Hold majors that need deliberate migration: tsup 9 changes the embedded-SDK bundle consumed by the edge-functions/jobs runtimes; node 24->26 rides into engines fields, .nvmrc files and CI generation steps",
+      "matchPackageNames": [
+        "tsup",
+        "node"
+      ],
+      "major": {
+        "enabled": false
+      }
+    },
+    {
+      "description": "Hold deno runtime updates: the 2.6.4 -> 2.9.8 bump broke edge-function fetches in integration e2e (opaque 'fetch failed' where 2.6.4 surfaces detailed connect errors). The deno runtime executes user functions; bump deliberately against the function test suite.",
+      "matchPackageNames": [
+        "deno",
+        "denoland/deno"
+      ],
+      "enabled": false
     }
   ]
 }
