@@ -1710,11 +1710,14 @@ serviceAccount:
 ##   ingress: app port (service.ports.http, default 8080) from any source
 ##            (+ the metrics port when metrics.enabled, for Prometheus scraping)
 ##   egress:  DNS (53 UDP/TCP), PostgreSQL (5432), Redis/Dragonfly (6379, when
-##            the scaling backend uses it)
-## NOTE: the egress allowlist is deliberately minimal. Fluxbase features that
-## call out to the internet — S3-compatible storage, SMTP/SendGrid email,
-## AI providers, edge functions downloading Deno/npm modules, OAuth providers —
-## need additional egress rules. Add them via networkPolicy.extraEgress, e.g.:
+##            the scaling backend uses it), HTTPS (443 TCP)
+## NOTE: HTTPS is in the default allowlist because Fluxbase core features call
+## out to the internet — S3 object storage, AI providers, OAuth providers,
+## edge functions downloading Deno/npm modules, jobs with allow-net. Default-
+## deny drops unmatched packets instead of rejecting them, so omitting 443
+## would not fail these features fast: every fetch would hang on a TCP connect
+## timeout. Non-HTTPS protocols (e.g. SMTP on 25/465/587) still need
+## additional egress rules via networkPolicy.extraEgress, e.g.:
 ##   networkPolicy:
 ##     extraEgress:
 ##       - to:
@@ -1722,7 +1725,7 @@ serviceAccount:
 ##               cidr: 0.0.0.0/0
 ##         ports:
 ##           - protocol: TCP
-##             port: 443
+##             port: 587
 ##
 networkPolicy:
   ## @param networkPolicy.enabled Enable the default-deny NetworkPolicy
@@ -1731,7 +1734,7 @@ networkPolicy:
   ## @param networkPolicy.extraIngress Extra ingress rules (appended to the allowlist)
   ##
   extraIngress: []
-  ## @param networkPolicy.extraEgress Extra egress rules (appended to the allowlist; use for S3/SMTP/AI/etc.)
+  ## @param networkPolicy.extraEgress Extra egress rules (appended to the allowlist; use for non-HTTPS protocols like SMTP, or IP-restricted destinations)
   ##
   extraEgress: []
 
