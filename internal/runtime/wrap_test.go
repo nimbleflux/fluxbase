@@ -97,6 +97,16 @@ func TestWrapFunctionCode_BasicStructure(t *testing.T) {
 		assert.Contains(t, result, "getRequired(key)")
 	})
 
+	// A secret that isn't configured is never injected into the execution env,
+	// and with a scoped --allow-env its name isn't permitted — the shim must
+	// catch the NotCapable and return undefined instead of crashing user code
+	// that probes an absent tier (get()'s user→system fallback relies on it).
+	t.Run("secrets reads survive permission errors", func(t *testing.T) {
+		assert.Contains(t, result, "getUser(key) {\n    try {")
+		assert.Contains(t, result, "getSystem(key) {\n    try {")
+		assert.Contains(t, result, "return undefined;")
+	})
+
 	t.Run("contains SDK clients", func(t *testing.T) {
 		assert.Contains(t, result, "_createFluxbaseClient")
 		assert.Contains(t, result, "UserClient")

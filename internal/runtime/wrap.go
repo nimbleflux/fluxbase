@@ -42,13 +42,26 @@ const secrets = {
   },
 
   // Get user-specific secret only (no fallback)
+  // A secret that isn't configured was never injected into the execution
+  // env, and with a scoped --allow-env its name isn't permitted either —
+  // Deno.env.get THROWS NotCapable instead of returning undefined. Treat
+  // that as absent so get()'s user→system fallback and getRequired()'s
+  // clean "not found" error keep working.
   getUser(key) {
-    return Deno.env.get('FLUXBASE_USER_' + this._normalize(key));
+    try {
+      return Deno.env.get('FLUXBASE_USER_' + this._normalize(key));
+    } catch {
+      return undefined;
+    }
   },
 
   // Get system-level secret only (no fallback)
   getSystem(key) {
-    return Deno.env.get('FLUXBASE_SETTING_' + this._normalize(key));
+    try {
+      return Deno.env.get('FLUXBASE_SETTING_' + this._normalize(key));
+    } catch {
+      return undefined;
+    }
   },
 
   // Get with automatic fallback: user -> system
@@ -326,13 +339,26 @@ const secrets = {
   },
 
   // Get user-specific secret only (no fallback)
+  // A secret that isn't configured was never injected into the execution
+  // env, and with a scoped --allow-env its name isn't permitted either —
+  // Deno.env.get THROWS NotCapable instead of returning undefined. Treat
+  // that as absent so get()'s user→system fallback and getRequired()'s
+  // clean "not found" error keep working.
   getUser(key) {
-    return Deno.env.get('FLUXBASE_USER_' + this._normalize(key));
+    try {
+      return Deno.env.get('FLUXBASE_USER_' + this._normalize(key));
+    } catch {
+      return undefined;
+    }
   },
 
   // Get system-level secret only (no fallback)
   getSystem(key) {
-    return Deno.env.get('FLUXBASE_SETTING_' + this._normalize(key));
+    try {
+      return Deno.env.get('FLUXBASE_SETTING_' + this._normalize(key));
+    } catch {
+      return undefined;
+    }
   },
 
   // Get with automatic fallback: user -> system
