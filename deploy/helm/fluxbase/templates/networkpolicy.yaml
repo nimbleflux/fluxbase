@@ -47,6 +47,15 @@ spec:
         - protocol: TCP
           port: {{ default 6379 .Values.scaling.externalRedis.port }}
     {{- end }}
+    # Outbound HTTPS — AI providers, OAuth, S3 object storage, edge
+    # functions downloading Deno/npm modules, jobs with allow-net. Default-deny
+    # DROPS unmatched packets rather than rejecting them, so an allowlist
+    # without 443 does not fail these features fast — every fetch hangs on a
+    # TCP connect timeout (a reverse-geocoding job burned its whole 2h timeout
+    # geocoding nothing this way).
+    - ports:
+        - protocol: TCP
+          port: 443
     {{- if .Values.networkPolicy.extraEgress }}
     {{- toYaml .Values.networkPolicy.extraEgress | nindent 4 }}
     {{- end }}
