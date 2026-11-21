@@ -48,7 +48,7 @@
   },
   "peerDependencies": {
     "@nimbleflux/fluxbase-sdk": "^2026.11.1",
-    "@tanstack/svelte-query": "^6.3.11",
+    "@tanstack/svelte-query": "^6.4.1",
     "svelte": "^4.0.0 || ^5.0.0"
   },
   "devDependencies": {
@@ -56,7 +56,7 @@
     "@nimbleflux/fluxbase-sdk": "workspace:*",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@testing-library/svelte": "^5.4.2",
-    "@tanstack/svelte-query": "^6.3.11",
+    "@tanstack/svelte-query": "^6.4.1",
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^10.14.0",

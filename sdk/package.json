@@ -86,6 +86,6 @@
     "node": ">=26.13.0"
   },
   "optionalDependencies": {
-    "@rollup/rollup-darwin-arm64": "^4.67.5"
+    "@rollup/rollup-darwin-arm64": "^4.68.0"
   }
 }
