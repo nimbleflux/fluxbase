@@ -7,9 +7,9 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.44.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.39
 	github.com/aws/aws-sdk-go-v2/service/ses v1.38.0
-	github.com/beevik/etree v1.7.1
+	github.com/beevik/etree v1.8.1
 	github.com/coreos/go-oidc/v3 v3.20.0
-	github.com/crewjam/saml v0.5.1
+	github.com/crewjam/saml v0.5.2
 	github.com/davidbyttow/govips/v2 v2.18.0
 	github.com/elastic/go-elasticsearch/v8 v8.19.3
 	github.com/elastic/go-elasticsearch/v9 v9.5.1
