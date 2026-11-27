@@ -2,8 +2,8 @@
   "versions": [
     {
       "major": 18,
-      "version": "18.4",
-      "imageVersion": "2",
+      "version": "18.7",
+      "imageVersion": "3",
       "latest": true
     }
   ]
