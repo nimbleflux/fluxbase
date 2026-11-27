@@ -1638,7 +1638,7 @@ postgresql:
   image:
     registry: ghcr.io
     repository: nimbleflux/fluxbase-postgres
-    tag: "18.4-v2"
+    tag: "18.7-v3"
     pullPolicy: IfNotPresent
 
   ## @param postgresql.persistence.enabled Enable persistence for PostgreSQL

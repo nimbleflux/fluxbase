@@ -11,7 +11,7 @@
     },
     "admin": {
       "name": "shadcn-admin",
-      "version": "2026.11.1",
+      "version": "2026.11.2",
       "dependencies": {
         "@hookform/resolvers": "^7.0.3",
         "@monaco-editor/react": "^4.7.0",
@@ -113,7 +113,7 @@
     },
     "sdk": {
       "name": "@nimbleflux/fluxbase-sdk",
-      "version": "2026.11.1",
+      "version": "2026.11.2",
       "dependencies": {
         "cross-fetch": "^4.1.0",
       },
@@ -144,7 +144,7 @@
     },
     "sdk-next": {
       "name": "@nimbleflux/fluxbase-sdk-next",
-      "version": "2026.11.1",
+      "version": "2026.11.2",
       "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@nimbleflux/fluxbase-sdk": "workspace:*",
@@ -158,14 +158,14 @@
         "vitest": "^5.1.0",
       },
       "peerDependencies": {
-        "@nimbleflux/fluxbase-sdk": "^2026.11.1",
+        "@nimbleflux/fluxbase-sdk": "^2026.11.2",
         "next": "^14.0.0 || ^15.0.0 || ^16.0.0",
         "react": "^18.0.0 || ^19.0.0",
       },
     },
     "sdk-react": {
       "name": "@nimbleflux/fluxbase-sdk-react",
-      "version": "2026.11.1",
+      "version": "2026.11.2",
       "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@nimbleflux/fluxbase-sdk": "workspace:*",
@@ -186,14 +186,14 @@
         "vitest": "^5.1.0",
       },
       "peerDependencies": {
-        "@nimbleflux/fluxbase-sdk": "^2026.11.1",
+        "@nimbleflux/fluxbase-sdk": "^2026.11.2",
         "@tanstack/react-query": "^5.106.1",
         "react": "^18.0.0 || ^19.0.0",
       },
     },
     "sdk-svelte": {
       "name": "@nimbleflux/fluxbase-sdk-svelte",
-      "version": "2026.11.1",
+      "version": "2026.11.2",
       "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@nimbleflux/fluxbase-sdk": "workspace:*",
@@ -214,14 +214,14 @@
         "vitest": "^5.1.0",
       },
       "peerDependencies": {
-        "@nimbleflux/fluxbase-sdk": "^2026.11.1",
+        "@nimbleflux/fluxbase-sdk": "^2026.11.2",
         "@tanstack/svelte-query": "^6.3.11",
         "svelte": "^4.0.0 || ^5.0.0",
       },
     },
     "sdk-vue": {
       "name": "@nimbleflux/fluxbase-sdk-vue",
-      "version": "2026.11.1",
+      "version": "2026.11.2",
       "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@nimbleflux/fluxbase-sdk": "workspace:*",
@@ -234,7 +234,7 @@
         "vitest": "^5.1.0",
       },
       "peerDependencies": {
-        "@nimbleflux/fluxbase-sdk": "^2026.11.1",
+        "@nimbleflux/fluxbase-sdk": "^2026.11.2",
         "vue": "^3.5.45",
       },
     },

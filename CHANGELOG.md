@@ -7,6 +7,31 @@ This file is generated from the conventional-commit history by
 [git-cliff](https://github.com/orhun/git-cliff) at release time — do not
 hand-edit release sections. See RELEASING.md for the release process.
 
+## v2026.11.2 (2026-11-27)
+
+
+### Bug fixes
+
+
+- **helm:** Allow outbound HTTPS in the default egress allowlist (#467) @bartcode
+
+- **runtime:** Secrets shim must not crash on unconfigured secrets (#468) @bartcode
+
+
+### Dependencies
+
+
+- **deps:** Update module github.com/crewjam/saml to v0.5.2 [security] (#469) @renovate[bot]
+
+
+### Miscellaneous
+
+
+- Update version to 2026.11.1 in deployment files @github-actions[bot]
+
+- **postgres:** Rebuild the image base on postgres 18.7 (imageVersion 3) @bartcode
+
+
 ## v2026.11.1 (2026-11-20)
 
 
