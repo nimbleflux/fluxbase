@@ -48,7 +48,7 @@
   },
   "peerDependencies": {
     "@nimbleflux/fluxbase-sdk": "^2026.11.2",
-    "@tanstack/svelte-query": "^6.3.11",
+    "@tanstack/svelte-query": "^6.4.1",
     "svelte": "^4.0.0 || ^5.0.0"
   },
   "devDependencies": {
@@ -56,21 +56,21 @@
     "@nimbleflux/fluxbase-sdk": "workspace:*",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@testing-library/svelte": "^5.4.2",
-    "@tanstack/svelte-query": "^6.3.11",
+    "@tanstack/svelte-query": "^6.4.1",
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.1.0",
-    "eslint": "^10.14.0",
-    "jsdom": "^31.0.0",
-    "prettier": "^3.9.10",
+    "eslint": "^10.15.0",
+    "jsdom": "^31.0.1",
+    "prettier": "^3.10.1",
     "svelte": "^5.57.3",
     "svelte-check": "^4.7.8",
     "tsup": "^9.0.0",
     "typedoc": "^0.28.20",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.1",
+    "typescript-eslint": "^8.72.2",
     "vitest": "^5.1.0"
   },
   "engines": {
-    "node": ">=26.13.0"
+    "node": ">=26.13.1"
   }
 }
